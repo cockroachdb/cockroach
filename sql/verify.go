@@ -21,9 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
-func expectDescriptorID(systemConfig config.SystemConfig, idKey roachpb.Key, id ID) error {
+func expectDescriptorID(systemConfig config.SystemConfig, idKey roachpb.Key, id sqlbase.ID) error {
 	idValue := systemConfig.GetValue(idKey)
 	if idValue == nil {
 		return errStaleMetadata
@@ -32,18 +33,20 @@ func expectDescriptorID(systemConfig config.SystemConfig, idKey roachpb.Key, id 
 	if err != nil {
 		return err
 	}
-	if ID(cachedID) != id {
+	if sqlbase.ID(cachedID) != id {
 		return errStaleMetadata
 	}
 	return nil
 }
 
-func expectDescriptor(systemConfig config.SystemConfig, idKey roachpb.Key, desc *Descriptor) error {
+func expectDescriptor(
+	systemConfig config.SystemConfig, idKey roachpb.Key, desc *sqlbase.Descriptor,
+) error {
 	descValue := systemConfig.GetValue(idKey)
 	if descValue == nil {
 		return errStaleMetadata
 	}
-	var cachedDesc Descriptor
+	var cachedDesc sqlbase.Descriptor
 	if err := descValue.GetProto(&cachedDesc); err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"errors"
@@ -58,7 +58,8 @@ const (
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
-const invalidMutationID MutationID = 0
+// InvalidMutationID is the uninitialised mutation id.
+const InvalidMutationID MutationID = 0
 
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
@@ -80,8 +81,11 @@ const (
 	DescriptorActive
 )
 
-var errMissingColumns = errors.New("table must contain at least 1 column")
-var errMissingPrimaryKey = errors.New("table must contain a primary key")
+// ErrMissingColumns indicates a table with no columns.
+var ErrMissingColumns = errors.New("table must contain at least 1 column")
+
+// ErrMissingPrimaryKey indicates a table with no primary key.
+var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {
@@ -91,8 +95,8 @@ func validateName(name, typ string) error {
 	return nil
 }
 
-// toEncodingDirection converts a direction from the proto to an encoding.Direction.
-func (dir IndexDescriptor_Direction) toEncodingDirection() (encoding.Direction, error) {
+// ToEncodingDirection converts a direction from the proto to an encoding.Direction.
+func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, error) {
 	switch dir {
 	case IndexDescriptor_ASC:
 		return encoding.Ascending, nil
@@ -103,7 +107,7 @@ func (dir IndexDescriptor_Direction) toEncodingDirection() (encoding.Direction, 
 	}
 }
 
-// allocateName sets desc.Name to a value that is not equalName to any
+// allocateName sets desc.Name to a value that is not EqualName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
 func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
@@ -132,8 +136,8 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	desc.Name = name
 }
 
-// Fill in column names and directions.
-func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
+// FillColumns sets the column names and directions in desc.
+func (desc *IndexDescriptor) FillColumns(elems parser.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
@@ -150,10 +154,10 @@ func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
 	return nil
 }
 
-// containsColumnID returns true if the index descriptor contains the specified
+// ContainsColumnID returns true if the index descriptor contains the specified
 // column ID either in its explicit column IDs or the implicit "extra" column
 // IDs.
-func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
+func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 	for _, id := range desc.ColumnIDs {
 		if id == colID {
 			return true
@@ -167,13 +171,13 @@ func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
 	return false
 }
 
-// fullColumnIDs returns the index column IDs including any implicit column IDs
+// FullColumnIDs returns the index column IDs including any implicit column IDs
 // for non-unique indexes. It also returns the direction with which each column
 // was encoded.
-func (desc *IndexDescriptor) fullColumnIDs() ([]ColumnID, []encoding.Direction) {
+func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) {
 	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
 	for _, dir := range desc.ColumnDirections {
-		convertedDir, err := dir.toEncodingDirection()
+		convertedDir, err := dir.ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
@@ -193,7 +197,7 @@ func (desc *IndexDescriptor) fullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	return columnIDs, dirs
 }
 
-// SetID implements the descriptorProto interface.
+// SetID implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
 }
@@ -203,7 +207,7 @@ func (desc *TableDescriptor) TypeName() string {
 	return "table"
 }
 
-// SetName implements the descriptorProto interface.
+// SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
@@ -223,9 +227,9 @@ func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
 	return cols
 }
 
-// allNonDropIndexes returns all the indexes, including those being added
+// AllNonDropIndexes returns all the indexes, including those being added
 // in the mutations.
-func (desc *TableDescriptor) allNonDropIndexes() []IndexDescriptor {
+func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 	indexes := make([]IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
 	indexes = append(indexes, desc.PrimaryIndex)
 	indexes = append(indexes, desc.Indexes...)
@@ -251,7 +255,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.Version == 0 {
 		desc.Version = 1
 	}
-	if desc.NextMutationID == invalidMutationID {
+	if desc.NextMutationID == InvalidMutationID {
 		desc.NextMutationID = 1
 	}
 
@@ -315,11 +319,11 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		}
 		if index != &desc.PrimaryIndex {
 			// Need to clear ImplicitColumnIDs because it is used by
-			// containsColumnID.
+			// ContainsColumnID.
 			index.ImplicitColumnIDs = nil
 			var implicitColumnIDs []ColumnID
 			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
-				if !index.containsColumnID(primaryColID) {
+				if !index.ContainsColumnID(primaryColID) {
 					implicitColumnIDs = append(implicitColumnIDs, primaryColID)
 				}
 			}
@@ -336,10 +340,10 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				} else {
 					col = desc.Mutations[i].GetColumn()
 				}
-				if desc.PrimaryIndex.containsColumnID(col.ID) {
+				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
 					continue
 				}
-				if index.containsColumnID(col.ID) {
+				if index.ContainsColumnID(col.ID) {
 					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
 				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
@@ -384,7 +388,7 @@ func (desc *TableDescriptor) Validate() error {
 	}
 
 	if len(desc.Columns) == 0 {
-		return errMissingColumns
+		return ErrMissingColumns
 	}
 
 	columnNames := map[string]ColumnID{}
@@ -436,12 +440,12 @@ func (desc *TableDescriptor) Validate() error {
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
 	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
-		return errMissingPrimaryKey
+		return ErrMissingPrimaryKey
 	}
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[IndexID]string{}
-	for _, index := range desc.allNonDropIndexes() {
+	for _, index := range desc.AllNonDropIndexes() {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
 		}
@@ -597,7 +601,8 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
-func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {
+// MakeMutationComplete updates the descriptor upon completion of a mutation.
+func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		switch t := m.Descriptor_.(type) {
@@ -617,12 +622,14 @@ func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {
 	}
 }
 
-func (desc *TableDescriptor) addColumnMutation(c ColumnDescriptor, direction DescriptorMutation_Direction) {
+// AddColumnMutation adds a column mutation to desc.Mutations.
+func (desc *TableDescriptor) AddColumnMutation(c ColumnDescriptor, direction DescriptorMutation_Direction) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
 	desc.addMutation(m)
 }
 
-func (desc *TableDescriptor) addIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
+// AddIndexMutation adds an index mutation to desc.Mutations.
+func (desc *TableDescriptor) AddIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
 	desc.addMutation(m)
 }
@@ -639,21 +646,21 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
-// finalizeMutation returns the id that has been used by mutations appended
+// FinalizeMutation returns the id that has been used by mutations appended
 // with addMutation() since the last time this function was called.
 // Future mutations will use a new ID.
-func (desc *TableDescriptor) finalizeMutation() (MutationID, error) {
-	if err := desc.setUpVersion(); err != nil {
-		return invalidMutationID, err
+func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
+	if err := desc.SetUpVersion(); err != nil {
+		return InvalidMutationID, err
 	}
 	mutationID := desc.NextMutationID
 	desc.NextMutationID++
 	return mutationID, nil
 }
 
-// setUpVersion sets the up_version marker on the table descriptor (see the proto
+// SetUpVersion sets the up_version marker on the table descriptor (see the proto
 // for comments).
-func (desc *TableDescriptor) setUpVersion() error {
+func (desc *TableDescriptor) SetUpVersion() error {
 	if desc.Deleted {
 		// We don't allow the version to be incremented any more once a table
 		// has been deleted. This will block new mutations from being queued on the
@@ -676,7 +683,9 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	return cols
 }
 
-func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
+// AllColumnsSelector geneartes a Select expression for all columns of the
+// table.
+func (desc *TableDescriptor) AllColumnsSelector() parser.SelectExprs {
 	exprs := make(parser.SelectExprs, len(desc.Columns))
 	qnames := make([]parser.QualifiedName, len(desc.Columns))
 	for i, col := range desc.Columns {
@@ -686,7 +695,8 @@ func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
 	return exprs
 }
 
-func (desc *TableDescriptor) isEmpty() bool {
+// IsEmpty checks if the descriptor is uninitialized.
+func (desc *TableDescriptor) IsEmpty() bool {
 	// Valid tables cannot have an ID of 0.
 	return desc.ID == 0
 }
@@ -715,9 +725,9 @@ func (c *ColumnType) SQLString() string {
 	return c.Kind.String()
 }
 
-// toDatum converts the ColumnType to a dummy Datum of the correct type, or nil
-// if there is no correspondence.
-func (c *ColumnType) toDatumType() parser.Datum {
+// ToDatumType converts the ColumnType to a dummy Datum of the correct type, or
+// nil if there is no correspondence.
+func (c *ColumnType) ToDatumType() parser.Datum {
 	switch c.Kind {
 	case ColumnType_BOOL:
 		return parser.DummyBool
@@ -743,7 +753,7 @@ func (c *ColumnType) toDatumType() parser.Datum {
 	return nil
 }
 
-// SetID implements the descriptorProto interface.
+// SetID implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
 }
@@ -753,7 +763,7 @@ func (desc *DatabaseDescriptor) TypeName() string {
 	return "database"
 }
 
-// SetName implements the descriptorProto interface.
+// SetName implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetName(name string) {
 	desc.Name = name
 }

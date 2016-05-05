@@ -14,7 +14,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/config"
@@ -74,8 +74,8 @@ CREATE TABLE system.ui (
 )
 
 var (
-	// systemDB is the descriptor for the system database.
-	systemDB = DatabaseDescriptor{
+	// SystemDB is the descriptor for the system database.
+	SystemDB = DatabaseDescriptor{
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
@@ -86,8 +86,8 @@ var (
 	// namespaceTable is the descriptor for the namespace table.
 	namespaceTable = createSystemTable(keys.NamespaceTableID, namespaceTableSchema)
 
-	// descriptorTable is the descriptor for the descriptor table.
-	descriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
+	// DescriptorTable is the descriptor for the descriptor table.
+	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
 	// usersTable is the descriptor for the users table.
 	usersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
@@ -133,7 +133,7 @@ func createTableDescriptor(id, parentID ID, schema string, privileges *Privilege
 		log.Fatal(err)
 	}
 
-	desc, pErr := makeTableDesc(stmt.(*parser.CreateTable), parentID)
+	desc, pErr := MakeTableDesc(stmt.(*parser.CreateTable), parentID)
 	if pErr != nil {
 		log.Fatal(pErr)
 	}
@@ -169,11 +169,11 @@ func createDefaultZoneConfig() []roachpb.KeyValue {
 // descriptors to the cockroach store.
 func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddDescriptor(keys.RootNamespaceID, &systemDB)
+	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
 	// Add system config tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &namespaceTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &descriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &usersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
 
@@ -184,7 +184,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
 
-// isSystemConfigID returns true if this ID is for a system config object.
-func isSystemConfigID(id ID) bool {
+// IsSystemConfigID returns true if this ID is for a system config object.
+func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
 }

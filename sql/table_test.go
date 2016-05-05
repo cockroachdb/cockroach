@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -30,72 +31,72 @@ func TestMakeTableDescColumns(t *testing.T) {
 
 	testData := []struct {
 		sqlType  string
-		colType  ColumnType
+		colType  sqlbase.ColumnType
 		nullable bool
 	}{
 		{
 			"BIT(1)",
-			ColumnType{Kind: ColumnType_INT, Width: 1},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 1},
 			true,
 		},
 		{
 			"BOOLEAN",
-			ColumnType{Kind: ColumnType_BOOL},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL},
 			true,
 		},
 		{
 			"INT",
-			ColumnType{Kind: ColumnType_INT},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
 			true,
 		},
 		{
 			"FLOAT(3)",
-			ColumnType{Kind: ColumnType_FLOAT, Precision: 3},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_FLOAT, Precision: 3},
 			true,
 		},
 		{
 			"DECIMAL(6,5)",
-			ColumnType{Kind: ColumnType_DECIMAL, Precision: 6, Width: 5},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL, Precision: 6, Width: 5},
 			true,
 		},
 		{
 			"DATE",
-			ColumnType{Kind: ColumnType_DATE},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_DATE},
 			true,
 		},
 		{
 			"TIMESTAMP",
-			ColumnType{Kind: ColumnType_TIMESTAMP},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_TIMESTAMP},
 			true,
 		},
 		{
 			"INTERVAL",
-			ColumnType{Kind: ColumnType_INTERVAL},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INTERVAL},
 			true,
 		},
 		{
 			"CHAR",
-			ColumnType{Kind: ColumnType_STRING},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING},
 			true,
 		},
 		{
 			"TEXT",
-			ColumnType{Kind: ColumnType_STRING},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING},
 			true,
 		},
 		{
 			"BLOB",
-			ColumnType{Kind: ColumnType_BYTES},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_BYTES},
 			true,
 		},
 		{
 			"INT NOT NULL",
-			ColumnType{Kind: ColumnType_INT},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
 			false,
 		},
 		{
 			"INT NULL",
-			ColumnType{Kind: ColumnType_INT},
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
 			true,
 		},
 	}
@@ -109,7 +110,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, pErr := makeTableDesc(create, 1)
+		schema, pErr := sqlbase.MakeTableDesc(create, 1)
 		if pErr != nil {
 			t.Fatalf("%d: %v", i, pErr)
 		}
@@ -133,72 +134,72 @@ func TestMakeTableDescIndexes(t *testing.T) {
 
 	testData := []struct {
 		sql     string
-		primary IndexDescriptor
-		indexes []IndexDescriptor
+		primary sqlbase.IndexDescriptor
+		indexes []sqlbase.IndexDescriptor
 	}{
 		{
 			"a INT PRIMARY KEY",
-			IndexDescriptor{
-				Name:             PrimaryKeyIndexName,
+			sqlbase.IndexDescriptor{
+				Name:             sqlbase.PrimaryKeyIndexName,
 				Unique:           true,
 				ColumnNames:      []string{"a"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 			},
-			[]IndexDescriptor{},
+			[]sqlbase.IndexDescriptor{},
 		},
 		{
 			"a INT UNIQUE, b INT PRIMARY KEY",
-			IndexDescriptor{
+			sqlbase.IndexDescriptor{
 				Name:             "primary",
 				Unique:           true,
 				ColumnNames:      []string{"b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 			},
-			[]IndexDescriptor{
+			[]sqlbase.IndexDescriptor{
 				{
 					Name:             "",
 					Unique:           true,
 					ColumnNames:      []string{"a"},
-					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 				},
 			},
 		},
 		{
 			"a INT, b INT, CONSTRAINT c PRIMARY KEY (a, b)",
-			IndexDescriptor{
+			sqlbase.IndexDescriptor{
 				Name:             "c",
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
-			[]IndexDescriptor{},
+			[]sqlbase.IndexDescriptor{},
 		},
 		{
 			"a INT, b INT, CONSTRAINT c UNIQUE (b), PRIMARY KEY (a, b)",
-			IndexDescriptor{
+			sqlbase.IndexDescriptor{
 				Name:             "primary",
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
-			[]IndexDescriptor{
+			[]sqlbase.IndexDescriptor{
 				{
 					Name:             "c",
 					Unique:           true,
 					ColumnNames:      []string{"b"},
-					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 				},
 			},
 		},
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
-			IndexDescriptor{
-				Name:             PrimaryKeyIndexName,
+			sqlbase.IndexDescriptor{
+				Name:             sqlbase.PrimaryKeyIndexName,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
-			[]IndexDescriptor{},
+			[]sqlbase.IndexDescriptor{},
 		},
 	}
 	for i, d := range testData {
@@ -210,14 +211,14 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, pErr := makeTableDesc(create, 1)
+		schema, pErr := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
 			t.Fatalf("%d: %v", i, pErr)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
 		}
-		if !reflect.DeepEqual(d.indexes, append([]IndexDescriptor{}, schema.Indexes...)) {
+		if !reflect.DeepEqual(d.indexes, append([]sqlbase.IndexDescriptor{}, schema.Indexes...)) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.indexes, schema.Indexes)
 		}
 
@@ -235,12 +236,12 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err := create.Table.NormalizeTableName(""); err != nil {
 		t.Fatal(err)
 	}
-	desc, pErr := makeTableDesc(create, 1)
+	desc, pErr := sqlbase.MakeTableDesc(create, 1)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 	err = desc.AllocateIDs()
-	if !testutils.IsError(err, errMissingPrimaryKey.Error()) {
+	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }

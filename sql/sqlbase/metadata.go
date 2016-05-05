@@ -14,7 +14,7 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"fmt"
@@ -25,7 +25,47 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
+
+var _ DescriptorProto = &DatabaseDescriptor{}
+var _ DescriptorProto = &TableDescriptor{}
+
+// DescriptorKey is the interface implemented by both
+// databaseKey and tableKey. It is used to easily get the
+// descriptor key and plain name.
+type DescriptorKey interface {
+	Key() roachpb.Key
+	Name() string
+}
+
+// DescriptorProto is the interface implemented by both DatabaseDescriptor
+// and TableDescriptor.
+// TODO(marc): this is getting rather large.
+type DescriptorProto interface {
+	proto.Message
+	GetPrivileges() *PrivilegeDescriptor
+	GetID() ID
+	SetID(ID)
+	TypeName() string
+	GetName() string
+	SetName(string)
+	Validate() error
+}
+
+// WrapDescriptor fills in a Descriptor.
+func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
+	desc := &Descriptor{}
+	switch t := descriptor.(type) {
+	case *TableDescriptor:
+		desc.Union = &Descriptor_Table{Table: t}
+	case *DatabaseDescriptor:
+		desc.Union = &Descriptor_Database{Database: t}
+	default:
+		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
+	}
+	return desc
+}
 
 // MetadataSchema is used to construct the initial sql schema for a new
 // CockroachDB cluster being bootstrapped. Tables and databases must be
@@ -39,7 +79,7 @@ type MetadataSchema struct {
 
 type metadataDescriptor struct {
 	parentID ID
-	desc     descriptorProto
+	desc     DescriptorProto
 }
 
 type metadataTable struct {
@@ -58,7 +98,7 @@ func MakeMetadataSchema() MetadataSchema {
 
 // AddDescriptor adds a new descriptor to the system schema. Used only for
 // SystemConfig tables and databases. Prefer AddTable for most uses.
-func (ms *MetadataSchema) AddDescriptor(parentID ID, desc descriptorProto) {
+func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }
 
@@ -117,7 +157,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID ID, desc descriptorProto) {
+	addDescriptor := func(parentID ID, desc DescriptorProto) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
@@ -128,7 +168,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
-		wrappedDesc := wrapDescriptor(desc)
+		wrappedDesc := WrapDescriptor(desc)
 		if err := value.SetProto(wrappedDesc); err != nil {
 			log.Fatalf("could not marshal %v", desc)
 		}

@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -36,7 +36,7 @@ func TestRenameTable(t *testing.T) {
 	counter := int64(keys.MaxReservedDescID + 1)
 
 	// Table creation should fail, and nothing should have been written.
-	oldDBID := sql.ID(counter)
+	oldDBID := sqlbase.ID(counter)
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func TestRenameTable(t *testing.T) {
 	counter++
 
 	// Check the table descriptor.
-	desc := &sql.Descriptor{}
-	tableDescKey := sql.MakeDescMetadataKey(sql.ID(tableCounter))
+	desc := &sqlbase.Descriptor{}
+	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(tableCounter))
 	if err := kvDB.GetProto(tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Create database test2.
-	newDBID := sql.ID(counter)
+	newDBID := sqlbase.ID(counter)
 	if _, err := sqlDB.Exec(`CREATE DATABASE test2`); err != nil {
 		t.Fatal(err)
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -47,8 +48,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	var lease csql.TableDescriptor_SchemaChangeLease
-	var id = csql.ID(keys.MaxReservedDescID + 2)
+	var lease sqlbase.TableDescriptor_SchemaChangeLease
+	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	db := server.DB()
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *db, nil)
@@ -64,7 +65,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	var newLease csql.TableDescriptor_SchemaChangeLease
+	var newLease sqlbase.TableDescriptor_SchemaChangeLease
 	newLease, pErr = changer.AcquireLease()
 	if pErr == nil {
 		t.Fatalf("acquired new lease: %v, while unexpired lease exists: %v", newLease, lease)
@@ -125,7 +126,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	defer csql.TestDisableAsyncSchemaChangeExec()()
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
-	var id = csql.ID(keys.MaxReservedDescID + 2)
+	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	db := server.DB()
 	leaseMgr := csql.NewLeaseManager(0, *db, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{})
@@ -140,7 +141,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Read table descriptor for version.
-	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -148,8 +149,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if !gr.Exists() {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
-	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
-	desc := &csql.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 
 	// Check that MaybeIncrementVersion doesn't increment the version
 	// when the up_version bit is not set.
@@ -192,7 +193,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if err != nil {
 		t.Fatal(err)
 	}
-	savedDesc := &csql.Descriptor{}
+	savedDesc := &sqlbase.Descriptor{}
 	if err := kvDB.GetProto(descKey, savedDesc); err != nil {
 		t.Fatal(err)
 	}
@@ -232,30 +233,30 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	table := desc.GetTable()
 	expectedVersion = table.Version
 	// Make a copy of the index for use in a mutation.
-	index := protoutil.Clone(&table.Indexes[0]).(*csql.IndexDescriptor)
+	index := protoutil.Clone(&table.Indexes[0]).(*sqlbase.IndexDescriptor)
 	index.Name = "bar"
 	index.ID = table.NextIndexID
 	table.NextIndexID++
 	changer = csql.NewSchemaChangerForTesting(id, table.NextMutationID, node, *db, leaseMgr)
-	table.Mutations = append(table.Mutations, csql.DescriptorMutation{
-		Descriptor_: &csql.DescriptorMutation_Index{Index: index},
-		Direction:   csql.DescriptorMutation_ADD,
-		State:       csql.DescriptorMutation_DELETE_ONLY,
+	table.Mutations = append(table.Mutations, sqlbase.DescriptorMutation{
+		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
+		Direction:   sqlbase.DescriptorMutation_ADD,
+		State:       sqlbase.DescriptorMutation_DELETE_ONLY,
 		MutationID:  table.NextMutationID,
 	})
 	table.NextMutationID++
 
 	// Run state machine in both directions.
-	for _, direction := range []csql.DescriptorMutation_Direction{csql.DescriptorMutation_ADD, csql.DescriptorMutation_DROP} {
+	for _, direction := range []sqlbase.DescriptorMutation_Direction{sqlbase.DescriptorMutation_ADD, sqlbase.DescriptorMutation_DROP} {
 		table.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(descKey, desc); err != nil {
 			t.Fatal(err)
 		}
 		// The expected end state.
-		expectedState := csql.DescriptorMutation_WRITE_ONLY
-		if direction == csql.DescriptorMutation_DROP {
-			expectedState = csql.DescriptorMutation_DELETE_ONLY
+		expectedState := sqlbase.DescriptorMutation_WRITE_ONLY
+		if direction == sqlbase.DescriptorMutation_DROP {
+			expectedState = sqlbase.DescriptorMutation_DELETE_ONLY
 		}
 		// Run two times to ensure idempotency of operations.
 		for i := 0; i < 2; i++ {
@@ -315,7 +316,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Read table descriptor for version.
-	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -323,8 +324,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if !gr.Exists() {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
-	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
-	desc := &csql.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if err := kvDB.GetProto(descKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +436,7 @@ func runSchemaChangeWithOperations(
 	descKey roachpb.Key,
 	backfillNotification chan bool,
 ) {
-	desc := &csql.Descriptor{}
+	desc := &sqlbase.Descriptor{}
 	if err := kvDB.GetProto(descKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +569,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	// Read table descriptor for version.
-	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
 	gr, err := kvDB.Get(nameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -576,8 +577,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if !gr.Exists() {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
-	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
-	desc := &csql.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if err := kvDB.GetProto(descKey, desc); err != nil {
 		t.Fatal(err)
 	}

@@ -24,14 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 type dropDatabaseNode struct {
 	p      *planner
 	n      *parser.DropDatabase
-	dbDesc *DatabaseDescriptor
-	td     []*TableDescriptor
+	dbDesc *sqlbase.DatabaseDescriptor
+	td     []*sqlbase.TableDescriptor
 }
 
 // DropDatabase drops a database.
@@ -69,7 +70,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, err
 	}
 
-	td := make([]*TableDescriptor, len(tbNames))
+	td := make([]*sqlbase.TableDescriptor, len(tbNames))
 	for i, tbName := range tbNames {
 		tbDesc, err := p.dropTablePrepare(tbName)
 		if err != nil {
@@ -201,20 +202,20 @@ func (n *dropIndexNode) Start() error {
 		}
 		// Queue the mutation.
 		switch status {
-		case DescriptorActive:
-			tableDesc.addIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
+		case sqlbase.DescriptorActive:
+			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 
-		case DescriptorIncomplete:
+		case sqlbase.DescriptorIncomplete:
 			switch tableDesc.Mutations[i].Direction {
-			case DescriptorMutation_ADD:
+			case sqlbase.DescriptorMutation_ADD:
 				return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 
-			case DescriptorMutation_DROP:
+			case sqlbase.DescriptorMutation_DROP:
 				continue
 			}
 		}
-		mutationID, err := tableDesc.finalizeMutation()
+		mutationID, err := tableDesc.FinalizeMutation()
 		if err != nil {
 			return err
 		}
@@ -245,7 +246,7 @@ func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 type dropTableNode struct {
 	p  *planner
 	n  *parser.DropTable
-	td []*TableDescriptor
+	td []*sqlbase.TableDescriptor
 }
 
 // DropTable drops a table.
@@ -253,7 +254,7 @@ type dropTableNode struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
-	td := make([]*TableDescriptor, 0, len(n.Names))
+	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		droppedDesc, err := p.dropTablePrepare(name)
 		if err != nil {
@@ -325,7 +326,7 @@ func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) dropTablePrepare(name *parser.QualifiedName,
-) (*TableDescriptor, error) {
+) (*sqlbase.TableDescriptor, error) {
 	tableDesc, err := p.getTableDesc(name)
 	if err != nil {
 		return nil, err
@@ -340,17 +341,17 @@ func (p *planner) dropTablePrepare(name *parser.QualifiedName,
 	return tableDesc, nil
 }
 
-func (p *planner) dropTableImpl(tableDesc *TableDescriptor) error {
-	if err := tableDesc.setUpVersion(); err != nil {
+func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
+	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
 	tableDesc.Deleted = true
 	if err := p.writeTableDesc(tableDesc); err != nil {
 		return err
 	}
-	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID ID) error {
+	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID sqlbase.ID) error {
 		desc, err := GetTableDesc(systemConfig, tableID)
 		if err != nil {
 			return err
@@ -373,7 +374,7 @@ func (p *planner) dropTableImpl(tableDesc *TableDescriptor) error {
 // truncateAndDropTable batches all the commands required for truncating and deleting the
 // table descriptor.
 // It is called from a mutation, async wrt the DROP statement.
-func truncateAndDropTable(tableDesc *TableDescriptor, db *client.DB) error {
+func truncateAndDropTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) error {
 	return db.Txn(func(txn *client.Txn) error {
 		if err := truncateTable(tableDesc, txn); err != nil {
 			return err

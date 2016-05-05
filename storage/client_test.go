@@ -49,7 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -149,7 +149,8 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	}
 	stores.AddStore(store)
 	if bootstrap {
-		if err := store.BootstrapRange(sql.MakeMetadataSchema().GetInitialValues()); err != nil {
+		err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues())
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -597,7 +598,8 @@ func (m *multiTestContext) addStore() {
 
 		// Bootstrap the initial range on the first store
 		if idx == 0 {
-			if err := store.BootstrapRange(sql.MakeMetadataSchema().GetInitialValues()); err != nil {
+			err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues())
+			if err != nil {
 				m.t.Fatal(err)
 			}
 		}

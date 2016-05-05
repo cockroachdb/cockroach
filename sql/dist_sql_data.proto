@@ -19,7 +19,7 @@ package cockroach.sql;
 option go_package = "sql";
 
 import "cockroach/roachpb/data.proto";
-import "cockroach/sql/structured.proto";
+import "cockroach/sql/sqlbase/structured.proto";
 import weak "gogoproto/gogo.proto";
 
 message Expression {
@@ -43,7 +43,7 @@ message TableReaderSpan {
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 message TableReaderSpec {
-  optional TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];

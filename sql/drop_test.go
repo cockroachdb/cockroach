@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -45,7 +45,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := sql.MakeNameMetadataKey(keys.RootNamespaceID, "t")
+	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
 	r, pErr := kvDB.Get(dbNameKey)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -53,14 +53,14 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbDescKey := sql.MakeDescMetadataKey(sql.ID(r.ValueInt()))
-	desc := &sql.Descriptor{}
+	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if pErr := kvDB.GetProto(dbDescKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
 	dbDesc := desc.GetDatabase()
 
-	tbNameKey := sql.MakeNameMetadataKey(dbDesc.ID, "kv")
+	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv")
 	gr, pErr := kvDB.Get(tbNameKey)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -68,7 +68,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
-	tbDescKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
+	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
 	if pErr := kvDB.GetProto(tbDescKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -87,8 +87,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	tbZoneKey := sql.MakeZoneKey(tbDesc.ID)
-	dbZoneKey := sql.MakeZoneKey(dbDesc.ID)
+	tbZoneKey := sqlbase.MakeZoneKey(tbDesc.ID)
+	dbZoneKey := sqlbase.MakeZoneKey(dbDesc.ID)
 	if gr, err := kvDB.Get(tbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
@@ -170,7 +170,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
 	gr, pErr := kvDB.Get(nameKey)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -180,8 +180,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 
-	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
-	desc := &sql.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -191,10 +191,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != sql.DescriptorActive {
+	if status != sqlbase.DescriptorActive {
 		t.Fatal("Index 'foo' is not active.")
 	}
-	indexPrefix := sql.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.Indexes[i].ID)
+	indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.Indexes[i].ID)
 
 	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()
@@ -239,7 +239,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
 	gr, pErr := kvDB.Get(nameKey)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -249,8 +249,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 
-	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
-	desc := &sql.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -266,7 +266,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	zoneKey := sql.MakeZoneKey(tableDesc.ID)
+	zoneKey := sqlbase.MakeZoneKey(tableDesc.ID)
 	if gr, err := kvDB.Get(zoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {

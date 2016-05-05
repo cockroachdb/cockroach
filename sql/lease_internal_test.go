@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -30,14 +31,14 @@ func TestLeaseSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type data struct {
-		version    DescriptorVersion
+		version    sqlbase.DescriptorVersion
 		expiration int64
 	}
 	type insert data
 	type remove data
 
 	type newest struct {
-		version DescriptorVersion
+		version sqlbase.DescriptorVersion
 	}
 
 	testData := []struct {

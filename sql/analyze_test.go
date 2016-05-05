@@ -21,32 +21,33 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func testTableDesc() *TableDescriptor {
-	return &TableDescriptor{
+func testTableDesc() *sqlbase.TableDescriptor {
+	return &sqlbase.TableDescriptor{
 		Name:     "test",
 		ID:       1001,
 		ParentID: 1000,
-		Columns: []ColumnDescriptor{
-			{Name: "a", Type: ColumnType{Kind: ColumnType_INT}},
-			{Name: "b", Type: ColumnType{Kind: ColumnType_INT}},
-			{Name: "c", Type: ColumnType{Kind: ColumnType_BOOL}},
-			{Name: "d", Type: ColumnType{Kind: ColumnType_BOOL}},
-			{Name: "e", Type: ColumnType{Kind: ColumnType_BOOL}},
-			{Name: "f", Type: ColumnType{Kind: ColumnType_BOOL}},
-			{Name: "g", Type: ColumnType{Kind: ColumnType_BOOL}},
-			{Name: "h", Type: ColumnType{Kind: ColumnType_FLOAT}},
-			{Name: "i", Type: ColumnType{Kind: ColumnType_STRING}},
-			{Name: "j", Type: ColumnType{Kind: ColumnType_INT}},
+		Columns: []sqlbase.ColumnDescriptor{
+			{Name: "a", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}},
+			{Name: "b", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}},
+			{Name: "c", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}},
+			{Name: "d", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}},
+			{Name: "e", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}},
+			{Name: "f", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}},
+			{Name: "g", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}},
+			{Name: "h", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_FLOAT}},
+			{Name: "i", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING}},
+			{Name: "j", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}},
 		},
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 		},
-		Privileges:    NewDefaultPrivilegeDescriptor(),
-		FormatVersion: BaseFormatVersion,
+		Privileges:    sqlbase.NewDefaultPrivilegeDescriptor(),
+		FormatVersion: sqlbase.BaseFormatVersion,
 	}
 }
 

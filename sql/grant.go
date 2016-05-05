@@ -19,12 +19,13 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 func (p *planner) changePrivileges(
 	targets parser.TargetList,
 	grantees parser.NameList,
-	changePrivilege func(*PrivilegeDescriptor, string),
+	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
 ) (planNode, error) {
 	descriptors, err := p.getDescriptorsFromTargetList(targets)
 	if err != nil {
@@ -44,20 +45,20 @@ func (p *planner) changePrivileges(
 			return nil, err
 		}
 
-		tableDesc, updatingTable := descriptor.(*TableDescriptor)
+		tableDesc, updatingTable := descriptor.(*sqlbase.TableDescriptor)
 		if updatingTable {
-			if err := tableDesc.setUpVersion(); err != nil {
+			if err := tableDesc.SetUpVersion(); err != nil {
 				return nil, err
 			}
-			p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+			p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 		}
 	}
 
 	// Now update the descriptors transactionally.
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
-		descKey := MakeDescMetadataKey(descriptor.GetID())
-		b.Put(descKey, wrapDescriptor(descriptor))
+		descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
+		b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
 	}
 	if pErr := p.txn.Run(b); pErr != nil {
 		return nil, pErr
@@ -75,7 +76,7 @@ func (p *planner) changePrivileges(
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(n *parser.Grant) (planNode, error) {
-	return p.changePrivileges(n.Targets, n.Grantees, func(privDesc *PrivilegeDescriptor, grantee string) {
+	return p.changePrivileges(n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Grant(grantee, n.Privileges)
 	})
 }
@@ -90,7 +91,7 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
-	return p.changePrivileges(n.Targets, n.Grantees, func(privDesc *PrivilegeDescriptor, grantee string) {
+	return p.changePrivileges(n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Revoke(grantee, n.Privileges)
 	})
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -111,7 +112,7 @@ func (*errTransactionCommitted) Code() string {
 }
 
 type errUniquenessConstraintViolation struct {
-	index *IndexDescriptor
+	index *sqlbase.IndexDescriptor
 	vals  []parser.Datum
 }
 
@@ -131,7 +132,7 @@ func (e *errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roachpb.Error) error {
+func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origPErr *roachpb.Error) error {
 	if origPErr.Index == nil {
 		return origPErr.GoError()
 	}
@@ -157,7 +158,7 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 			}
 			dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 			for _, dir := range index.ColumnDirections {
-				convertedDir, err := dir.toEncodingDirection()
+				convertedDir, err := dir.ToEncodingDirection()
 				if err != nil {
 					return err
 				}

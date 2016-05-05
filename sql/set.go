@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 // Set sets session variables.
@@ -65,10 +66,10 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch NormalizeName(s) {
-		case NormalizeName(parser.Modern.String()):
+		switch sqlbase.NormalizeName(s) {
+		case sqlbase.NormalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
-		case NormalizeName(parser.Traditional.String()):
+		case sqlbase.NormalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)

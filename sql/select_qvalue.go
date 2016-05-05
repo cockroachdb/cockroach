@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
@@ -65,10 +66,10 @@ func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error
 	// TODO(radu): when we support multiple FROMs, we will find the node with the correct alias; if
 	// no alias is given, we will search for the column in all FROMs and make sure there is only
 	// one.  For now we just check that the name matches (if given).
-	if qname.Base == "" || equalName(qt.table.alias, string(qname.Base)) {
-		colName := NormalizeName(qname.Column())
+	if qname.Base == "" || sqlbase.EqualName(qt.table.alias, string(qname.Base)) {
+		colName := sqlbase.NormalizeName(qname.Column())
 		for idx, col := range qt.table.columns {
-			if NormalizeName(col.Name) == colName {
+			if sqlbase.NormalizeName(col.Name) == colName {
 				ref.table = qt.table
 				ref.colIdx = idx
 				return ref, nil

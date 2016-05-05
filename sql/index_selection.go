@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -84,7 +85,7 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 func selectIndex(
 	s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) (planNode, error) {
-	if s.desc.isEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
+	if s.desc.IsEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
 		// No table or no where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
 		return s, nil
@@ -312,8 +313,8 @@ func (oic orIndexConstraints) String() string {
 }
 
 type indexInfo struct {
-	desc        *TableDescriptor
-	index       *IndexDescriptor
+	desc        *sqlbase.TableDescriptor
+	index       *sqlbase.IndexDescriptor
 	constraints orIndexConstraints
 	cost        float64
 	covering    bool // Does the index cover the required qvalues?
@@ -504,7 +505,7 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 		colID := v.index.ColumnIDs[i]
 		var colDir encoding.Direction
 		var err error
-		if colDir, err = v.index.ColumnDirections[i].toEncodingDirection(); err != nil {
+		if colDir, err = v.index.ColumnDirections[i].ToEncodingDirection(); err != nil {
 			return nil, err
 		}
 
@@ -768,7 +769,7 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 	for i, needed := range scan.valNeededForCol {
 		if needed {
 			colID := v.desc.Columns[i].ID
-			if !v.index.containsColumnID(colID) {
+			if !v.index.ContainsColumnID(colID) {
 				return false
 			}
 		}
@@ -1023,7 +1024,7 @@ func encodeInclusiveEndValue(
 //
 // Returns the exploded spans.
 func applyInConstraint(spans []span, c indexConstraint, firstCol int,
-	index *IndexDescriptor, isLastEndConstraint bool) []span {
+	index *sqlbase.IndexDescriptor, isLastEndConstraint bool) []span {
 	var e *parser.ComparisonExpr
 	// It might be that the IN constraint is a start constraint, an
 	// end constraint, or both, depending on how whether we had
@@ -1048,7 +1049,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			for j, tupleIdx := range c.tupleMap {
 				var err error
 				var colDir encoding.Direction
-				if colDir, err = index.ColumnDirections[firstCol+j].toEncodingDirection(); err != nil {
+				if colDir, err = index.ColumnDirections[firstCol+j].ToEncodingDirection(); err != nil {
 					panic(err)
 				}
 
@@ -1063,7 +1064,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			// a IN (1,2).
 			var colDir encoding.Direction
 			var err error
-			if colDir, err = index.ColumnDirections[firstCol].toEncodingDirection(); err != nil {
+			if colDir, err = index.ColumnDirections[firstCol].ToEncodingDirection(); err != nil {
 				panic(err)
 			}
 			if start, err = encodeTableKey(nil, datum, colDir); err != nil {
@@ -1113,7 +1114,9 @@ func (a spanEvents) Less(i, j int) bool {
 // makeSpans constructs the spans for an index given the orIndexConstraints by
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
-func makeSpans(constraints orIndexConstraints, tableID ID, index *IndexDescriptor) spans {
+func makeSpans(
+	constraints orIndexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
+) spans {
 	if len(constraints) == 0 {
 		return makeSpansForIndexConstraints(nil, tableID, index)
 	}
@@ -1171,9 +1174,10 @@ func mergeAndSortSpans(s spans) spans {
 // makeSpansForIndexConstraints constructs the spans for an index given an
 // instance of indexConstraints. The resulting spans are non-overlapping (by
 // virtue of the input constraints being disjunct).
-func makeSpansForIndexConstraints(constraints indexConstraints, tableID ID,
-	index *IndexDescriptor) spans {
-	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
+func makeSpansForIndexConstraints(
+	constraints indexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
+) spans {
+	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableID, index.ID))
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.
 	// But we also have (...) IN <tuple> constraints that span multiple columns.
@@ -1196,7 +1200,7 @@ func makeSpansForIndexConstraints(constraints indexConstraints, tableID ID,
 			(c.end != nil && c.end.Operator == parser.In) {
 			resultSpans = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
 		} else {
-			dir, err := index.ColumnDirections[colIdx].toEncodingDirection()
+			dir, err := index.ColumnDirections[colIdx].ToEncodingDirection()
 			if err != nil {
 				panic(err)
 			}

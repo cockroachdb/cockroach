@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -529,7 +530,7 @@ func checkRenderStar(
 	}
 
 	// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
-	if tableName := qname.Table(); tableName != "" && !equalName(table.alias, tableName) {
+	if tableName := qname.Table(); tableName != "" && !sqlbase.EqualName(table.alias, tableName) {
 		return false, nil, nil, fmt.Errorf("table \"%s\" not found", tableName)
 	}
 

@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package sql
+package sqlbase
 
 import (
 	"strings"
@@ -64,8 +64,8 @@ func NormalizeName(name string) string {
 	return norm.NFC.String(lower)
 }
 
-// equalName returns true iff the normalizations of a and b are equal.
-func equalName(a, b string) bool {
+// EqualName returns true iff the normalizations of a and b are equal.
+func EqualName(a, b string) bool {
 	return NormalizeName(a) == NormalizeName(b)
 }
 
@@ -95,10 +95,10 @@ func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(descriptorTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(descriptorTable.PrimaryIndex.ID))
+	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
-	return keys.MakeColumnKey(k, uint32(descriptorTable.Columns[1].ID))
+	return keys.MakeColumnKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
@@ -116,7 +116,8 @@ func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
 	return key
 }
 
-func stripColumnIDLength(key roachpb.Key) roachpb.Key {
+// StripColumnIDLength strips off a one byte suffix from the key.
+func StripColumnIDLength(key roachpb.Key) roachpb.Key {
 	if n := len(key); n > 0 {
 		return key[:n-1]
 	}

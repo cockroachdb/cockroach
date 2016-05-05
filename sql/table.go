@@ -18,7 +18,6 @@ package sql
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -50,237 +50,25 @@ func tableDoesNotExistError(name string) error {
 	return fmt.Errorf("table %q does not exist", name)
 }
 
-// tableKey implements descriptorKey.
+// tableKey implements sqlbase.DescriptorKey.
 type tableKey struct {
-	parentID ID
+	parentID sqlbase.ID
 	name     string
 }
 
 func (tk tableKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(tk.parentID, tk.name)
+	return sqlbase.MakeNameMetadataKey(tk.parentID, tk.name)
 }
 
 func (tk tableKey) Name() string {
 	return tk.name
 }
 
-func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
-	desc := TableDescriptor{}
-	if err := p.Table.NormalizeTableName(""); err != nil {
-		return desc, err
-	}
-	desc.Name = p.Table.Table()
-	desc.ParentID = parentID
-	desc.FormatVersion = BaseFormatVersion
-	// We don't use version 0.
-	desc.Version = 1
-
-	var primaryIndexColumnSet map[parser.Name]struct{}
-	for _, def := range p.Defs {
-		switch d := def.(type) {
-		case *parser.ColumnTableDef:
-			col, idx, err := makeColumnDefDescs(d)
-			if err != nil {
-				return desc, err
-			}
-			desc.AddColumn(*col)
-			if idx != nil {
-				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
-					return desc, err
-				}
-			}
-		case *parser.IndexTableDef:
-			idx := IndexDescriptor{
-				Name:             string(d.Name),
-				StoreColumnNames: d.Storing,
-			}
-			if err := idx.fillColumns(d.Columns); err != nil {
-				return desc, err
-			}
-			if err := desc.AddIndex(idx, false); err != nil {
-				return desc, err
-			}
-		case *parser.UniqueConstraintTableDef:
-			idx := IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           true,
-				StoreColumnNames: d.Storing,
-			}
-			if err := idx.fillColumns(d.Columns); err != nil {
-				return desc, err
-			}
-			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
-				return desc, err
-			}
-			if d.PrimaryKey {
-				primaryIndexColumnSet = make(map[parser.Name]struct{})
-				for _, c := range d.Columns {
-					primaryIndexColumnSet[c.Column] = struct{}{}
-				}
-			}
-		default:
-			return desc, util.Errorf("unsupported table def: %T", def)
-		}
-	}
-
-	if primaryIndexColumnSet != nil {
-		// Primary index columns are not nullable.
-		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[parser.Name(desc.Columns[i].Name)]; ok {
-				desc.Columns[i].Nullable = false
-			}
-		}
-	}
-
-	return desc, nil
-}
-
-func defaultContainsPlaceholdersError(typedExpr parser.TypedExpr) error {
-	return fmt.Errorf("default expression '%s' may not contain placeholders", typedExpr)
-}
-
-func incompatibleColumnDefaultTypeError(colDatumType parser.Datum, defaultType parser.Datum) error {
-	return fmt.Errorf("incompatible column type and default expression: %s vs %s",
-		colDatumType.Type(), defaultType.Type())
-}
-
-func sanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
-	typedExpr, err := parser.TypeCheck(expr, nil, colDatumType)
-	if err != nil {
-		return err
-	}
-	if defaultType := typedExpr.ReturnType(); colDatumType != defaultType {
-		return incompatibleColumnDefaultTypeError(colDatumType, defaultType)
-	}
-	if parser.ContainsVars(typedExpr) {
-		return defaultContainsPlaceholdersError(typedExpr)
-	}
-	return nil
-}
-
-func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
-	col := &ColumnDescriptor{
-		Name:     string(d.Name),
-		Nullable: d.Nullable != parser.NotNull && !d.PrimaryKey,
-	}
-
-	var colDatumType parser.Datum
-	switch t := d.Type.(type) {
-	case *parser.BoolType:
-		col.Type.Kind = ColumnType_BOOL
-		colDatumType = parser.DummyBool
-	case *parser.IntType:
-		col.Type.Kind = ColumnType_INT
-		col.Type.Width = int32(t.N)
-		colDatumType = parser.DummyInt
-	case *parser.FloatType:
-		col.Type.Kind = ColumnType_FLOAT
-		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.DummyFloat
-	case *parser.DecimalType:
-		col.Type.Kind = ColumnType_DECIMAL
-		col.Type.Width = int32(t.Scale)
-		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.DummyDecimal
-	case *parser.DateType:
-		col.Type.Kind = ColumnType_DATE
-		colDatumType = parser.DummyDate
-	case *parser.TimestampType:
-		col.Type.Kind = ColumnType_TIMESTAMP
-		colDatumType = parser.DummyTimestamp
-	case *parser.TimestampTZType:
-		col.Type.Kind = ColumnType_TIMESTAMPTZ
-		colDatumType = parser.DummyTimestampTZ
-	case *parser.IntervalType:
-		col.Type.Kind = ColumnType_INTERVAL
-		colDatumType = parser.DummyInterval
-	case *parser.StringType:
-		col.Type.Kind = ColumnType_STRING
-		col.Type.Width = int32(t.N)
-		colDatumType = parser.DummyString
-	case *parser.BytesType:
-		col.Type.Kind = ColumnType_BYTES
-		colDatumType = parser.DummyBytes
-	default:
-		return nil, nil, util.Errorf("unexpected type %T", t)
-	}
-
-	if col.Type.Kind == ColumnType_DECIMAL {
-		switch {
-		case col.Type.Precision == 0 && col.Type.Width > 0:
-			// TODO (seif): Find right range for error message.
-			return nil, nil, errors.New("invalid NUMERIC precision 0")
-		case col.Type.Precision < col.Type.Width:
-			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				col.Type.Width, col.Type.Precision)
-		}
-	}
-
-	if d.DefaultExpr != nil {
-		// Verify the default expression type is compatible with the column type.
-		if err := sanitizeDefaultExpr(d.DefaultExpr, colDatumType); err != nil {
-			return nil, nil, err
-		}
-		s := d.DefaultExpr.String()
-		col.DefaultExpr = &s
-	}
-
-	// CHECK expressions seem to vary across databases. Wikipedia's entry on
-	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
-	// that if the constraint refers to a single column only, it is possible to
-	// specify the constraint as part of the column definition. Postgres allows
-	// specifying them anywhere about any columns, but it moves all constraints to
-	// the table level (i.e., columns never have a check constraint themselves). We
-	// will adhere to the stricter definition.
-	if d.CheckExpr != nil {
-		s := d.CheckExpr.String()
-		col.CheckExpr = &s
-
-		preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-			qname, ok := expr.(*parser.QualifiedName)
-			if !ok {
-				// Not a qname, don't do anything to this node.
-				return nil, true, expr
-			}
-			if err := qname.NormalizeColumnName(); err != nil {
-				return err, false, nil
-			}
-			if qname.IsStar() || qname.Base != "" || qname.Column() != col.Name {
-				err := fmt.Errorf("argument of CHECK cannot refer to other columns: \"%s\"", qname)
-				return err, false, nil
-			}
-			// Convert to a dummy datum of the correct type.
-			return nil, false, colDatumType
-		}
-
-		expr, err := parser.SimpleVisit(d.CheckExpr, preFn)
-		if err != nil {
-			return nil, nil, err
-		}
-		if typedExpr, err := expr.TypeCheck(nil, parser.DummyBool); err != nil {
-			return nil, nil, err
-		} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.DummyBool) {
-			return nil, nil, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
-		}
-	}
-
-	var idx *IndexDescriptor
-	if d.PrimaryKey || d.Unique {
-		idx = &IndexDescriptor{
-			Unique:           true,
-			ColumnNames:      []string{string(d.Name)},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
-		}
-	}
-
-	return col, idx, nil
-}
-
 // getTableDesc returns a table descriptor, or nil if the descriptor is not
 // found.
 // If you want to transform the not found condition into an error, use
 // tableDoesNotExistError().
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, error) {
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
@@ -292,7 +80,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 		return nil, databaseDoesNotExistError(qname.Database())
 	}
 
-	desc := TableDescriptor{}
+	desc := sqlbase.TableDescriptor{}
 	found, err := p.getDescriptor(tableKey{parentID: dbDesc.ID, name: qname.Table()}, &desc)
 	if err != nil {
 		return nil, err
@@ -306,9 +94,9 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 // get the table descriptor for the ID passed in using an existing txn.
 // returns an error if the descriptor doesn't exist or if it exists and is not
 // a table.
-func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
-	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(id)
+func getTableDescFromID(txn *client.Txn, id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
+	desc := &sqlbase.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(id)
 
 	if err := txn.GetProto(descKey, desc); err != nil {
 		return nil, err
@@ -321,11 +109,11 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
 }
 
 func getKeysForTableDescriptor(
-	tableDesc *TableDescriptor,
+	tableDesc *sqlbase.TableDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = MakeZoneKey(tableDesc.ID)
-	nameKey = MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
-	descKey = MakeDescMetadataKey(tableDesc.ID)
+	zoneKey = sqlbase.MakeZoneKey(tableDesc.ID)
+	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
+	descKey = sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	return
 }
 
@@ -340,29 +128,29 @@ func updateCommitBy(commitBy time.Time, lease *LeaseState) time.Time {
 // released when the planner closes. Note that a shallow copy of the table
 // descriptor is returned. It is safe to mutate fields of the returned
 // descriptor, but the values those fields point to should not be modified.
-func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, error) {
+func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return TableDescriptor{}, err
+		return sqlbase.TableDescriptor{}, err
 	}
 
-	if qname.Database() == systemDB.Name || testDisableTableLeases {
+	if qname.Database() == sqlbase.SystemDB.Name || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for system tables. The
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
 		// chicken&egg problem.
 		desc, err := p.getTableDesc(qname)
 		if err != nil {
-			return TableDescriptor{}, err
+			return sqlbase.TableDescriptor{}, err
 		}
 		if desc == nil {
-			return TableDescriptor{}, tableDoesNotExistError(qname.String())
+			return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
 		}
 		return *desc, nil
 	}
 
 	tableID, err := p.getTableID(qname)
 	if err != nil {
-		return TableDescriptor{}, err
+		return sqlbase.TableDescriptor{}, err
 	}
 
 	var lease *LeaseState
@@ -380,9 +168,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, e
 			if _, ok := err.(*roachpb.DescriptorNotFoundError); ok {
 				// Transform the descriptor error into an error that references the
 				// table's name.
-				return TableDescriptor{}, tableDoesNotExistError(qname.String())
+				return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
 			}
-			return TableDescriptor{}, err
+			return sqlbase.TableDescriptor{}, err
 		}
 		p.leases = append(p.leases, lease)
 		commitBy = updateCommitBy(commitBy, lease)
@@ -394,7 +182,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, e
 // getTableID retrieves the table ID for the specified table. It uses the
 // descriptor cache to perform lookups, falling back to the KV store when
 // necessary.
-func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
+func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return 0, err
 	}
@@ -415,7 +203,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
 		id, err := nameVal.GetInt()
-		return ID(id), err
+		return sqlbase.ID(id), err
 	}
 
 	gr, err := p.txn.Get(key)
@@ -425,11 +213,11 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	if !gr.Exists() {
 		return 0, tableDoesNotExistError(qname.String())
 	}
-	return ID(gr.ValueInt()), nil
+	return sqlbase.ID(gr.ValueInt()), nil
 }
 
-func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, error) {
-	prefix := MakeNameMetadataKey(dbDesc.ID, "")
+func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.QualifiedNames, error) {
+	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -456,11 +244,11 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 // encodeIndexKey doesn't deal with ImplicitColumnIDs, so it doesn't always produce
 // a full index key.
-func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
+func encodeIndexKey(index *sqlbase.IndexDescriptor, colMap map[sqlbase.ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 	for _, dir := range index.ColumnDirections {
-		convertedDir, err := dir.toEncodingDirection()
+		convertedDir, err := dir.ToEncodingDirection()
 		if err != nil {
 			return nil, false, err
 		}
@@ -469,8 +257,8 @@ func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
 	return encodeColumns(index.ColumnIDs, dirs, colMap, values, indexKey)
 }
 
-// Version of encodeIndexKey that takes ColumnIDs and directions explicitly.
-func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap map[ColumnID]int,
+// Version of encodeIndexKey that takes sqlbase.ColumnIDs and directions explicitly.
+func encodeColumns(columnIDs []sqlbase.ColumnID, directions []encoding.Direction, colMap map[sqlbase.ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
@@ -599,7 +387,7 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 	return nil, util.Errorf("unable to encode table key: %T", val)
 }
 
-func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, error) {
+func makeKeyVals(desc *sqlbase.TableDescriptor, columnIDs []sqlbase.ColumnID) ([]parser.Datum, error) {
 	vals := make([]parser.Datum, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
@@ -607,14 +395,16 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			return nil, err
 		}
 
-		if vals[i] = col.Type.toDatumType(); vals[i] == nil {
+		if vals[i] = col.Type.ToDatumType(); vals[i] == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
 		}
 	}
 	return vals, nil
 }
 
-func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
+func decodeIndexKeyPrefix(desc *sqlbase.TableDescriptor, key []byte) (
+	sqlbase.IndexID, []byte, error,
+) {
 	if encoding.PeekType(key) != encoding.Int {
 		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -628,11 +418,12 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 		return 0, nil, err
 	}
 
-	if ID(tableID) != desc.ID {
-		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+	if sqlbase.ID(tableID) != desc.ID {
+		return sqlbase.IndexID(indexID), nil,
+			util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
-	return IndexID(indexID), key, nil
+	return sqlbase.IndexID(indexID), key, nil
 }
 
 // decodeIndexKey decodes the values that are a part of the specified index
@@ -640,8 +431,14 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(a *datumAlloc, desc *TableDescriptor, indexID IndexID,
-	valTypes, vals []parser.Datum, colDirs []encoding.Direction, key []byte) ([]byte, error) {
+func decodeIndexKey(
+	a *datumAlloc,
+	desc *sqlbase.TableDescriptor,
+	indexID sqlbase.IndexID,
+	valTypes, vals []parser.Datum,
+	colDirs []encoding.Direction,
+	key []byte,
+) ([]byte, error) {
 	decodedIndexID, remaining, err := decodeIndexKeyPrefix(desc, key)
 	if err != nil {
 		return nil, err
@@ -904,11 +701,15 @@ type indexEntry struct {
 }
 
 // colMap maps ColumnIds to indexes in `values`.
-func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
-	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, error) {
+func encodeSecondaryIndexes(
+	tableID sqlbase.ID,
+	indexes []sqlbase.IndexDescriptor,
+	colMap map[sqlbase.ColumnID]int,
+	values []parser.Datum,
+) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
-		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
+		secondaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, containsNull, err := encodeIndexKey(
 			&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
@@ -956,7 +757,7 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 // checkColumnType verifies that a given value is compatible
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
-func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) error {
+func checkColumnType(col sqlbase.ColumnDescriptor, val parser.Datum, args parser.MapArgs) error {
 	if val == parser.DNull {
 		return nil
 	}
@@ -965,37 +766,37 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 	var err error
 	var set parser.Datum
 	switch col.Type.Kind {
-	case ColumnType_BOOL:
+	case sqlbase.ColumnType_BOOL:
 		_, ok = val.(*parser.DBool)
 		set, err = args.SetInferredType(val, parser.DummyBool)
-	case ColumnType_INT:
+	case sqlbase.ColumnType_INT:
 		_, ok = val.(*parser.DInt)
 		set, err = args.SetInferredType(val, parser.DummyInt)
-	case ColumnType_FLOAT:
+	case sqlbase.ColumnType_FLOAT:
 		_, ok = val.(*parser.DFloat)
 		set, err = args.SetInferredType(val, parser.DummyFloat)
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		_, ok = val.(*parser.DDecimal)
 		set, err = args.SetInferredType(val, parser.DummyDecimal)
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		_, ok = val.(*parser.DString)
 		set, err = args.SetInferredType(val, parser.DummyString)
-	case ColumnType_BYTES:
+	case sqlbase.ColumnType_BYTES:
 		_, ok = val.(*parser.DBytes)
 		if !ok {
 			_, ok = val.(*parser.DString)
 		}
 		set, err = args.SetInferredType(val, parser.DummyBytes)
-	case ColumnType_DATE:
+	case sqlbase.ColumnType_DATE:
 		_, ok = val.(*parser.DDate)
 		set, err = args.SetInferredType(val, parser.DummyDate)
-	case ColumnType_TIMESTAMP:
+	case sqlbase.ColumnType_TIMESTAMP:
 		_, ok = val.(*parser.DTimestamp)
 		set, err = args.SetInferredType(val, parser.DummyTimestamp)
-	case ColumnType_TIMESTAMPTZ:
+	case sqlbase.ColumnType_TIMESTAMPTZ:
 		_, ok = val.(*parser.DTimestampTZ)
 		set, err = args.SetInferredType(val, parser.DummyTimestampTZ)
-	case ColumnType_INTERVAL:
+	case sqlbase.ColumnType_INTERVAL:
 		_, ok = val.(*parser.DInterval)
 		set, err = args.SetInferredType(val, parser.DummyInterval)
 	default:
@@ -1014,7 +815,7 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 // marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, error) {
+func marshalColumnValue(col sqlbase.ColumnDescriptor, val parser.Datum) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if val == parser.DNull {
@@ -1022,7 +823,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 	}
 
 	switch col.Type.Kind {
-	case ColumnType_BOOL:
+	case sqlbase.ColumnType_BOOL:
 		if v, ok := val.(*parser.DBool); ok {
 			if *v {
 				r.SetInt(1)
@@ -1031,27 +832,27 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			}
 			return r, nil
 		}
-	case ColumnType_INT:
+	case sqlbase.ColumnType_INT:
 		if v, ok := val.(*parser.DInt); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case ColumnType_FLOAT:
+	case sqlbase.ColumnType_FLOAT:
 		if v, ok := val.(*parser.DFloat); ok {
 			r.SetFloat(float64(*v))
 			return r, nil
 		}
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
 			err := r.SetDecimal(&v.Dec)
 			return r, err
 		}
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {
 			r.SetString(string(*v))
 			return r, nil
 		}
-	case ColumnType_BYTES:
+	case sqlbase.ColumnType_BYTES:
 		if v, ok := val.(*parser.DBytes); ok {
 			r.SetString(string(*v))
 			return r, nil
@@ -1060,22 +861,22 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetString(string(*v))
 			return r, nil
 		}
-	case ColumnType_DATE:
+	case sqlbase.ColumnType_DATE:
 		if v, ok := val.(*parser.DDate); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case ColumnType_TIMESTAMP:
+	case sqlbase.ColumnType_TIMESTAMP:
 		if v, ok := val.(*parser.DTimestamp); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case ColumnType_TIMESTAMPTZ:
+	case sqlbase.ColumnType_TIMESTAMPTZ:
 		if v, ok := val.(*parser.DTimestampTZ); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case ColumnType_INTERVAL:
+	case sqlbase.ColumnType_INTERVAL:
 		if v, ok := val.(*parser.DInterval); ok {
 			err := r.SetDuration(v.Duration)
 			return r, err
@@ -1091,32 +892,32 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
 func unmarshalColumnValue(
-	a *datumAlloc, kind ColumnType_Kind, value *roachpb.Value,
+	a *datumAlloc, kind sqlbase.ColumnType_Kind, value *roachpb.Value,
 ) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}
 
 	switch kind {
-	case ColumnType_BOOL:
+	case sqlbase.ColumnType_BOOL:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return parser.MakeDBool(parser.DBool(v != 0)), nil
-	case ColumnType_INT:
+	case sqlbase.ColumnType_INT:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDInt(parser.DInt(v)), nil
-	case ColumnType_FLOAT:
+	case sqlbase.ColumnType_FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDFloat(parser.DFloat(v)), nil
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
 			return nil, err
@@ -1124,37 +925,37 @@ func unmarshalColumnValue(
 		dd := a.newDDecimal(parser.DDecimal{})
 		dd.Set(v)
 		return dd, nil
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDString(parser.DString(v)), nil
-	case ColumnType_BYTES:
+	case sqlbase.ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDBytes(parser.DBytes(v)), nil
-	case ColumnType_DATE:
+	case sqlbase.ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDDate(parser.DDate(v)), nil
-	case ColumnType_TIMESTAMP:
+	case sqlbase.ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDTimestamp(parser.DTimestamp{Time: v}), nil
-	case ColumnType_TIMESTAMPTZ:
+	case sqlbase.ColumnType_TIMESTAMPTZ:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDTimestampTZ(parser.DTimestampTZ{Time: v}), nil
-	case ColumnType_INTERVAL:
+	case sqlbase.ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
@@ -1168,15 +969,15 @@ func unmarshalColumnValue(
 // checkValueWidth checks that the width (for strings/byte arrays) and
 // scale (for decimals) of the value fits the specified column type.
 // Used by INSERT and UPDATE.
-func checkValueWidth(col ColumnDescriptor, val parser.Datum) error {
+func checkValueWidth(col sqlbase.ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {
 			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)", col.Type.SQLString(), col.Name)
 			}
 		}
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
 			if col.Type.Precision > 0 {
 				// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html

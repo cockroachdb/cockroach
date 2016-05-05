@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -60,7 +61,7 @@ func (t *leaseTest) cleanup() {
 	cleanup(t.server, t.db)
 }
 
-func (t *leaseTest) getLeases(descID csql.ID) string {
+func (t *leaseTest) getLeases(descID sqlbase.ID) string {
 	sql := `
 SELECT version, nodeID FROM system.lease WHERE descID = $1 ORDER BY version, nodeID
 `
@@ -87,14 +88,14 @@ SELECT version, nodeID FROM system.lease WHERE descID = $1 ORDER BY version, nod
 	return buf.String()
 }
 
-func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
+func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 	leases := t.getLeases(descID)
 	if expected != leases {
 		t.Fatalf("expected %s, but found %s", expected, leases)
 	}
 }
 
-func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
+func (t *leaseTest) acquire(nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := t.server.DB().Txn(func(txn *client.Txn) error {
 		var err error
@@ -104,7 +105,7 @@ func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.Descript
 	return lease, err
 }
 
-func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) *csql.LeaseState {
+func (t *leaseTest) mustAcquire(nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion) *csql.LeaseState {
 	lease, err := t.acquire(nodeID, descID, version)
 	if err != nil {
 		t.Fatal(err)
@@ -122,15 +123,15 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 	}
 }
 
-func (t *leaseTest) publish(nodeID uint32, descID csql.ID) error {
+func (t *leaseTest) publish(nodeID uint32, descID sqlbase.ID) error {
 	_, err := t.node(nodeID).Publish(descID,
-		func(*csql.TableDescriptor) error {
+		func(*sqlbase.TableDescriptor) error {
 			return nil
 		})
 	return err
 }
 
-func (t *leaseTest) mustPublish(nodeID uint32, descID csql.ID) {
+func (t *leaseTest) mustPublish(nodeID uint32, descID sqlbase.ID) {
 	if err := t.publish(nodeID, descID); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +312,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n1.Publish(descID, func(*sqlbase.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -332,7 +333,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n2.Publish(descID, func(*sqlbase.TableDescriptor) error {
 			return nil
 		})
 		if err != nil {
@@ -348,8 +349,8 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
-func getTableDescriptor(db *client.DB, database string, table string) *csql.TableDescriptor {
-	dbNameKey := csql.MakeNameMetadataKey(keys.RootNamespaceID, database)
+func getTableDescriptor(db *client.DB, database string, table string) *sqlbase.TableDescriptor {
+	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, database)
 	gr, err := db.Get(dbNameKey)
 	if err != nil {
 		panic(err)
@@ -357,9 +358,9 @@ func getTableDescriptor(db *client.DB, database string, table string) *csql.Tabl
 	if !gr.Exists() {
 		panic("database missing")
 	}
-	dbDescID := csql.ID(gr.ValueInt())
+	dbDescID := sqlbase.ID(gr.ValueInt())
 
-	tableNameKey := csql.MakeNameMetadataKey(dbDescID, table)
+	tableNameKey := sqlbase.MakeNameMetadataKey(dbDescID, table)
 	gr, err = db.Get(tableNameKey)
 	if err != nil {
 		panic(err)
@@ -368,8 +369,8 @@ func getTableDescriptor(db *client.DB, database string, table string) *csql.Tabl
 		panic("table missing")
 	}
 
-	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
-	desc := &csql.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if err := db.GetProto(descKey, desc); err != nil {
 		panic("proto missing")
 	}
@@ -428,13 +429,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-func isDeleted(tableID csql.ID, cfg config.SystemConfig) bool {
-	descKey := csql.MakeDescMetadataKey(tableID)
+func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
+	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	val := cfg.GetValue(descKey)
 	if val == nil {
 		return false
 	}
-	var descriptor csql.Descriptor
+	var descriptor sqlbase.Descriptor
 	if err := val.GetProto(&descriptor); err != nil {
 		panic("unable to unmarshal table descriptor")
 	}
@@ -442,7 +443,7 @@ func isDeleted(tableID csql.ID, cfg config.SystemConfig) bool {
 	return table.Deleted
 }
 
-func acquire(s server.TestServer, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
+func acquire(s server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := s.DB().Txn(func(txn *client.Txn) error {
 		var err error
@@ -471,7 +472,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			}
 		}
-	var waitTableID csql.ID
+	var waitTableID sqlbase.ID
 	deleted := make(chan bool)
 	lmKnobs.TestingLeasesRefreshedEvent =
 		func(cfg config.SystemConfig) {

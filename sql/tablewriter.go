@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -152,8 +153,8 @@ type tableUpserter struct {
 
 	// Set by init.
 	txn                   *client.Txn
-	tableDesc             *TableDescriptor
-	updateColIDtoRowIndex map[ColumnID]int
+	tableDesc             *sqlbase.TableDescriptor
+	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	fetcher               rowFetcher
 
 	// Batched up in run/flush.
@@ -169,9 +170,9 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
 
 	tu.tableDesc = tu.ri.helper.tableDesc
-	tu.indexKeyPrefix = MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
 
-	tu.updateColIDtoRowIndex = make(map[ColumnID]int)
+	tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
 	for i, updateCol := range tu.ru.updateCols {
 		tu.updateColIDtoRowIndex[updateCol.ID] = i
 	}

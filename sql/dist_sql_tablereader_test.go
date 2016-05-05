@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -77,7 +78,7 @@ func TestTableReader(t *testing.T) {
 
 	// Read using the bc index
 	var span roachpb.Span
-	span.Key = roachpb.Key(sql.MakeIndexKeyPrefix(td.ID, td.Indexes[0].ID))
+	span.Key = roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.ID, td.Indexes[0].ID))
 	span.EndKey = append(span.Key, encoding.EncodeVarintAscending(nil, 50)...)
 
 	ts = sql.TableReaderSpec{

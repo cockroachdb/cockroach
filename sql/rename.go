@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 var (
@@ -61,7 +62,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	}
 
 	// Now update the nameMetadataKey and the descriptor.
-	descKey := MakeDescMetadataKey(dbDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(dbDesc.GetID())
 	dbDesc.SetName(string(n.NewName))
 
 	if err := dbDesc.Validate(); err != nil {
@@ -71,7 +72,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	newKey := databaseKey{string(n.NewName)}.Key()
 	oldKey := databaseKey{string(n.Name)}.Key()
 	descID := dbDesc.GetID()
-	descDesc := wrapDescriptor(dbDesc)
+	descDesc := sqlbase.WrapDescriptor(dbDesc)
 
 	b := client.Batch{}
 	b.CPut(newKey, descID, nil)
@@ -172,7 +173,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	tableDesc.SetName(n.NewName.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 
 	if err := tableDesc.Validate(); err != nil {
@@ -180,7 +181,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	}
 
 	descID := tableDesc.GetID()
-	descDesc := wrapDescriptor(tableDesc)
+	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
 	b := client.Batch{}
 	b.Put(descKey, descDesc)
@@ -244,7 +245,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
-	if equalName(idxName, newIdxName) {
+	if sqlbase.EqualName(idxName, newIdxName) {
 		// Noop.
 		return &emptyNode{}, nil
 	}
@@ -253,23 +254,23 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
-	if status == DescriptorActive {
+	if status == sqlbase.DescriptorActive {
 		tableDesc.Indexes[i].Name = newIdxName
 	} else {
 		tableDesc.Mutations[i].GetIndex().Name = newIdxName
 	}
 
-	if err := tableDesc.setUpVersion(); err != nil {
+	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
-	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
+	if err := p.txn.Put(descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
 }
 
@@ -324,8 +325,8 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	var column *ColumnDescriptor
-	if status == DescriptorActive {
+	var column *sqlbase.ColumnDescriptor
+	if status == sqlbase.DescriptorActive {
 		column = &tableDesc.Columns[i]
 	} else {
 		column = tableDesc.Mutations[i].GetColumn()
@@ -335,7 +336,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 
-	if equalName(colName, newColName) {
+	if sqlbase.EqualName(colName, newColName) {
 		// Noop.
 		return &emptyNode{}, nil
 	}
@@ -345,7 +346,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	// Rename the column in the indexes.
-	renameColumnInIndex := func(idx *IndexDescriptor) {
+	renameColumnInIndex := func(idx *sqlbase.IndexDescriptor) {
 		for i, id := range idx.ColumnIDs {
 			if id == column.ID {
 				idx.ColumnNames[i] = newColName
@@ -361,17 +362,17 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		}
 	}
 	column.Name = newColName
-	if err := tableDesc.setUpVersion(); err != nil {
+	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
 
-	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
+	if err := p.txn.Put(descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
 }

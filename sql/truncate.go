@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -51,7 +52,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 // truncateTable truncates the data of a table.
 // It deletes a range of data for the table, which includes the PK and all
 // indexes.
-func truncateTable(tableDesc *TableDescriptor, txn *client.Txn) error {
+func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 	// Delete rows and indexes starting with the table's prefix.

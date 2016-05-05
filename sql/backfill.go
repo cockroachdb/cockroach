@@ -25,14 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
-func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
+func makeColIDtoRowIndex(row planNode, desc *sqlbase.TableDescriptor) (
+	map[sqlbase.ColumnID]int, error,
+) {
 	columns := row.Columns()
-	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(columns))
 	for i, column := range columns {
 		col, err := desc.FindActiveColumnByName(column.Name)
 		if err != nil {
@@ -46,7 +49,7 @@ func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int,
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
-type columnsByID []ColumnDescriptor
+type columnsByID []sqlbase.ColumnDescriptor
 
 func (cds columnsByID) Len() int {
 	return len(cds)
@@ -58,7 +61,7 @@ func (cds columnsByID) Swap(i, j int) {
 	cds[i], cds[j] = cds[j], cds[i]
 }
 
-type indexesByID []IndexDescriptor
+type indexesByID []sqlbase.IndexDescriptor
 
 func (ids indexesByID) Len() int {
 	return len(ids)
@@ -71,7 +74,7 @@ func (ids indexesByID) Swap(i, j int) {
 }
 
 func convertBackfillError(
-	tableDesc *TableDescriptor, b *client.Batch, pErr *roachpb.Error,
+	tableDesc *sqlbase.TableDescriptor, b *client.Batch, pErr *roachpb.Error,
 ) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
@@ -86,13 +89,13 @@ func convertBackfillError(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		tableDesc.makeMutationComplete(mutation)
+		tableDesc.MakeMutationComplete(mutation)
 	}
 	return convertBatchError(tableDesc, *b, pErr)
 }
 
 // runBackfill runs the backfill for the schema changer.
-func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) error {
+func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChangeLease) error {
 	l, err := sc.ExtendLease(*lease)
 	if err != nil {
 		return err
@@ -101,10 +104,10 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) e
 
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
-	var droppedColumnDescs []ColumnDescriptor
-	var droppedIndexDescs []IndexDescriptor
-	var addedColumnDescs []ColumnDescriptor
-	var addedIndexDescs []IndexDescriptor
+	var droppedColumnDescs []sqlbase.ColumnDescriptor
+	var droppedIndexDescs []sqlbase.IndexDescriptor
+	var addedColumnDescs []sqlbase.ColumnDescriptor
+	var addedIndexDescs []sqlbase.IndexDescriptor
 	if err := sc.db.Txn(func(txn *client.Txn) error {
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -116,21 +119,21 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) e
 				break
 			}
 			switch m.Direction {
-			case DescriptorMutation_ADD:
+			case sqlbase.DescriptorMutation_ADD:
 				switch t := m.Descriptor_.(type) {
-				case *DescriptorMutation_Column:
+				case *sqlbase.DescriptorMutation_Column:
 					addedColumnDescs = append(addedColumnDescs, *t.Column)
-				case *DescriptorMutation_Index:
+				case *sqlbase.DescriptorMutation_Index:
 					addedIndexDescs = append(addedIndexDescs, *t.Index)
 				default:
 					return util.Errorf("unsupported mutation: %+v", m)
 				}
 
-			case DescriptorMutation_DROP:
+			case sqlbase.DescriptorMutation_DROP:
 				switch t := m.Descriptor_.(type) {
-				case *DescriptorMutation_Column:
+				case *sqlbase.DescriptorMutation_Column:
 					droppedColumnDescs = append(droppedColumnDescs, *t.Column)
-				case *DescriptorMutation_Index:
+				case *sqlbase.DescriptorMutation_Index:
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				default:
 					return util.Errorf("unsupported mutation: %+v", m)
@@ -164,7 +167,7 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) e
 
 // getTableSpan returns a span containing the start and end key for a table.
 func (sc *SchemaChanger) getTableSpan() (span, error) {
-	var tableDesc *TableDescriptor
+	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = getTableDescFromID(txn, sc.tableID)
@@ -172,7 +175,7 @@ func (sc *SchemaChanger) getTableSpan() (span, error) {
 	}); err != nil {
 		return span{}, err
 	}
-	prefix := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
+	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
 	return span{
 		start: prefix,
 		end:   prefix.PrefixEnd(),
@@ -188,9 +191,9 @@ func (sc *SchemaChanger) getTableSpan() (span, error) {
 const ColumnTruncateAndBackfillChunkSize = 600
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
-	lease *TableDescriptor_SchemaChangeLease,
-	added []ColumnDescriptor,
-	dropped []ColumnDescriptor,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	added []sqlbase.ColumnDescriptor,
+	dropped []sqlbase.ColumnDescriptor,
 ) error {
 	evalCtx := parser.EvalContext{}
 	// Set the eval context timestamps.
@@ -240,8 +243,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
-	added []ColumnDescriptor,
-	dropped []ColumnDescriptor,
+	added []sqlbase.ColumnDescriptor,
+	dropped []sqlbase.ColumnDescriptor,
 	nonNullableColumn string,
 	defaultExprs []parser.TypedExpr,
 	evalCtx parser.EvalContext,
@@ -288,7 +291,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 					// Sentinel keys have a 0 suffix indicating 0 bytes of
 					// column ID. Strip off that suffix to determine the
 					// prefix shared with the other keys for the row.
-					sentinelKey = stripColumnIDLength(kv.Key)
+					sentinelKey = sqlbase.StripColumnIDLength(kv.Key)
 					// Store away key for the next table row as the point from
 					// which to start from.
 					curSentinel = sentinelKey
@@ -355,8 +358,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 }
 
 func (sc *SchemaChanger) truncateIndexes(
-	lease *TableDescriptor_SchemaChangeLease,
-	dropped []IndexDescriptor,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	dropped []sqlbase.IndexDescriptor,
 ) error {
 	for _, desc := range dropped {
 		// First extend the schema change lease.
@@ -375,7 +378,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				return nil
 			}
 
-			indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, desc.ID)
+			indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, desc.ID)
 
 			// Delete the index.
 			indexStartKey := roachpb.Key(indexPrefix)
@@ -406,8 +409,8 @@ func (sc *SchemaChanger) truncateIndexes(
 const IndexBackfillChunkSize = 100
 
 func (sc *SchemaChanger) backfillIndexes(
-	lease *TableDescriptor_SchemaChangeLease,
-	added []IndexDescriptor,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	added []sqlbase.IndexDescriptor,
 ) error {
 	if len(added) == 0 {
 		return nil
@@ -437,7 +440,7 @@ func (sc *SchemaChanger) backfillIndexes(
 }
 
 func (sc *SchemaChanger) backfillIndexesChunk(
-	added []IndexDescriptor,
+	added []sqlbase.IndexDescriptor,
 	sp span,
 ) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
@@ -456,7 +459,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// Get the next set of rows.
 		// TODO(tamird): Support partial indexes?
 		//
-		// Use a scanNode with SELECT to pass in a TableDescriptor to the
+		// Use a scanNode with SELECT to pass in a sqlbase.TableDescriptor to the
 		// SELECT without needing to use a parser.QualifiedName, because we
 		// want to run schema changes from a gossip feed of table IDs. Running
 		// the scan and applying the changes in many transactions is fine
@@ -487,7 +490,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 
 			for _, desc := range added {
 				secondaryIndexEntries, err := encodeSecondaryIndexes(
-					tableDesc.ID, []IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
+					tableDesc.ID, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
 				if err != nil {
 					return err
 				}

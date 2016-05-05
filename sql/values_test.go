@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -179,7 +180,7 @@ func TestGolangParams(t *testing.T) {
 
 		// Primitive type aliases.
 		{roachpb.NodeID(1), reflect.TypeOf(parser.DummyInt)},
-		{ID(1), reflect.TypeOf(parser.DummyInt)},
+		{sqlbase.ID(1), reflect.TypeOf(parser.DummyInt)},
 		{floatAlias(1), reflect.TypeOf(parser.DummyFloat)},
 		{boolAlias(true), reflect.TypeOf(parser.DummyBool)},
 		{stringAlias("string"), reflect.TypeOf(parser.DummyString)},

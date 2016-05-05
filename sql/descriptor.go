@@ -20,14 +20,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -37,33 +35,8 @@ var (
 	errNoTable           = errors.New("no table specified")
 )
 
-var _ descriptorProto = &DatabaseDescriptor{}
-var _ descriptorProto = &TableDescriptor{}
-
-// descriptorKey is the interface implemented by both
-// databaseKey and tableKey. It is used to easily get the
-// descriptor key and plain name.
-type descriptorKey interface {
-	Key() roachpb.Key
-	Name() string
-}
-
-// descriptorProto is the interface implemented by both DatabaseDescriptor
-// and TableDescriptor.
-// TODO(marc): this is getting rather large.
-type descriptorProto interface {
-	proto.Message
-	GetPrivileges() *PrivilegeDescriptor
-	GetID() ID
-	SetID(ID)
-	TypeName() string
-	GetName() string
-	SetName(string)
-	Validate() error
-}
-
 // checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
-func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
+func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error {
 	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
 		return nil
 	}
@@ -74,7 +47,7 @@ func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege
 // createDescriptor takes a Table or Database descriptor and creates it if
 // needed, incrementing the descriptor counter. Returns true if the descriptor
 // is actually created, false if it already existed.
-func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) (bool, error) {
+func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error) {
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
 	gr, err := p.txn.Get(idKey)
@@ -93,7 +66,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 
 	// Increment unique descriptor counter.
 	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
-		descriptor.SetID(ID(ir.ValueInt() - 1))
+		descriptor.SetID(sqlbase.ID(ir.ValueInt() - 1))
 	} else {
 		return false, err
 	}
@@ -107,11 +80,11 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	// but not going through the normal INSERT logic and not performing a precise
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
-	descKey := MakeDescMetadataKey(descriptor.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 
 	b := client.Batch{}
 	descID := descriptor.GetID()
-	descDesc := wrapDescriptor(descriptor)
+	descDesc := sqlbase.WrapDescriptor(descriptor)
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
@@ -130,7 +103,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 // If `plainKey` doesn't exist, returns false and nil error.
 // In most cases you'll want to use wrappers: `getDatabaseDesc` or
 // `getTableDesc`.
-func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto,
+func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
@@ -140,20 +113,20 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 		return false, nil
 	}
 
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	desc := &Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if err := p.txn.GetProto(descKey, desc); err != nil {
 		return false, err
 	}
 
 	switch t := descriptor.(type) {
-	case *TableDescriptor:
+	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
 			return false, util.Errorf("%q is not a table", plainKey.Name())
 		}
 		*t = *table
-	case *DatabaseDescriptor:
+	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
 			return false, util.Errorf("%q is not a database", plainKey.Name())
@@ -170,12 +143,12 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 // getDescriptorsFromTargetList examines a TargetList and fetches the
 // appropriate descriptors.
 func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
-	[]descriptorProto, error) {
+	[]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
 		}
-		descs := make([]descriptorProto, 0, len(targets.Databases))
+		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
 			descriptor, err := p.getDatabaseDesc(database)
 			if err != nil {
@@ -192,7 +165,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 	if len(targets.Tables) == 0 {
 		return nil, errNoTable
 	}
-	descs := make([]descriptorProto, 0, len(targets.Tables))
+	descs := make([]sqlbase.DescriptorProto, 0, len(targets.Tables))
 	for _, tableGlob := range targets.Tables {
 		tables, err := p.expandTableGlob(tableGlob)
 		if err != nil {
@@ -252,17 +225,4 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 	default:
 		return nil, fmt.Errorf("invalid table glob: %s", expr)
 	}
-}
-
-func wrapDescriptor(descriptor descriptorProto) *Descriptor {
-	desc := &Descriptor{}
-	switch t := descriptor.(type) {
-	case *TableDescriptor:
-		desc.Union = &Descriptor_Table{Table: t}
-	case *DatabaseDescriptor:
-		desc.Union = &Descriptor_Database{Database: t}
-	default:
-		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
-	}
-	return desc
 }

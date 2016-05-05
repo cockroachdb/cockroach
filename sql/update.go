@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -34,7 +35,7 @@ import (
 type editNodeBase struct {
 	p          *planner
 	rh         returningHelper
-	tableDesc  *TableDescriptor
+	tableDesc  *sqlbase.TableDescriptor
 	autoCommit bool
 }
 
@@ -72,7 +73,7 @@ type editNodeRun struct {
 }
 
 func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWriter) error {
-	if isSystemConfigID(en.tableDesc.GetID()) {
+	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}
@@ -89,7 +90,7 @@ type updateNode struct {
 	n            *parser.Update
 	desiredTypes []parser.Datum
 
-	updateCols []ColumnDescriptor
+	updateCols []sqlbase.ColumnDescriptor
 	tw         tableUpdater
 
 	run struct {
@@ -172,7 +173,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// "*, 1, 2", not "*, (1, 2)".
 	// TODO(radu): we only need to select columns necessary to generate primary and
 	// secondary indexes keys, and columns needed by returningHelper.
-	targets := en.tableDesc.allColumnsSelector()
+	targets := en.tableDesc.AllColumnsSelector()
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
@@ -181,7 +182,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					typ := updateCols[i].Type.toDatumType()
+					typ := updateCols[i].Type.ToDatumType()
 					e := fillDefault(e, typ, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -189,7 +190,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 				}
 			}
 		} else {
-			typ := updateCols[i].Type.toDatumType()
+			typ := updateCols[i].Type.ToDatumType()
 			e := fillDefault(expr.Expr, typ, i, defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -221,7 +222,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.toDatumType())
+		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.ToDatumType())
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +264,7 @@ func (u *updateNode) Start() error {
 	// Really generate the list of select targets.
 	// TODO(radu): we only need to select columns necessary to generate primary and
 	// secondary indexes keys, and columns needed by returningHelper.
-	targets := u.tableDesc.allColumnsSelector()
+	targets := u.tableDesc.AllColumnsSelector()
 	i := 0
 	for _, expr := range exprs {
 		if expr.Tuple {

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -268,7 +269,7 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount() int {
-	return GetBootstrapSchema().DescriptorCount() - sql.NumSystemDescriptors + 1
+	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemDescriptors + 1
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial

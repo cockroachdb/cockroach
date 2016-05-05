@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -172,7 +173,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	//
 	//   SELECT id FROM system.namespace WHERE parentID = 0
 
-	prefix := MakeNameMetadataKey(keys.RootNamespaceID, "")
+	prefix := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -266,7 +267,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		},
 	}
 
-	appendRow := func(index IndexDescriptor, colName string, sequence int,
+	appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
 		direction string, isStored bool) {
 		v.rows = append(v.rows, []parser.Datum{
 			parser.NewDString(n.Table.Table()),
@@ -278,7 +279,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			parser.MakeDBool(parser.DBool(isStored)),
 		})
 	}
-	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
+	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		sequence := 1
 		for i, col := range index.ColumnNames {
 			appendRow(index, col, sequence, index.ColumnDirections[i].String(), false)

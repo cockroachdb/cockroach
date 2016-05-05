@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -43,7 +43,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := sql.MakeNameMetadataKey(keys.RootNamespaceID, "test")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "test")
 	if gr, err := kvDB.Get(nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -51,13 +51,13 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sql.MakeDescMetadataKey(sql.ID(expectedCounter))
-	dbDesc := &sql.Descriptor{
-		Union: &sql.Descriptor_Database{
-			Database: &sql.DatabaseDescriptor{
+	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(expectedCounter))
+	dbDesc := &sqlbase.Descriptor{
+		Union: &sqlbase.Descriptor_Database{
+			Database: &sqlbase.DatabaseDescriptor{
 				Name:       "sentinel",
-				ID:         sql.ID(expectedCounter),
-				Privileges: &sql.PrivilegeDescriptor{},
+				ID:         sqlbase.ID(expectedCounter),
+				Privileges: &sqlbase.PrivilegeDescriptor{},
 			},
 		},
 	}

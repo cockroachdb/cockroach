@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -55,7 +56,7 @@ var (
 
 // LeaseState holds the state for a lease. Exported only for testing.
 type LeaseState struct {
-	TableDescriptor
+	sqlbase.TableDescriptor
 	expiration parser.DTimestamp
 	refcount   int
 }
@@ -91,7 +92,7 @@ func jitteredLeaseDuration() time.Duration {
 // Acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
 // being deleted, the error detail will be DescriptorDeletedError.
-func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, error) {
+func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlbase.DescriptorVersion) (*LeaseState, error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
 		Time: time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration()),
@@ -111,7 +112,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	if values == nil {
 		return nil, &roachpb.DescriptorNotFoundError{DescriptorId: uint32(tableID)}
 	}
-	desc := &Descriptor{}
+	desc := &sqlbase.Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
 		return nil, err
 	}
@@ -189,10 +190,12 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 // returned verson. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
-func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (DescriptorVersion, error) {
-	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(tableID)
-	var tableDesc *TableDescriptor
+func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Options) (
+	sqlbase.DescriptorVersion, error,
+) {
+	desc := &sqlbase.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(tableID)
+	var tableDesc *sqlbase.TableDescriptor
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Get the current version of the table descriptor non-transactionally.
 		//
@@ -231,8 +234,8 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 // not have side effects.
 // Returns the updated version of the descriptor.
 func (s LeaseStore) Publish(
-	tableID ID, update func(*TableDescriptor) error,
-) (*Descriptor, error) {
+	tableID sqlbase.ID, update func(*sqlbase.TableDescriptor) error,
+) (*sqlbase.Descriptor, error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
@@ -248,11 +251,11 @@ func (s LeaseStore) Publish(
 			return nil, err
 		}
 
-		desc := &Descriptor{}
+		desc := &sqlbase.Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		err = s.db.Txn(func(txn *client.Txn) error {
-			descKey := MakeDescMetadataKey(tableID)
+			descKey := sqlbase.MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
@@ -314,7 +317,9 @@ func (s LeaseStore) Publish(
 
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
-func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, error) {
+func (s LeaseStore) countLeases(
+	descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
+) (int, error) {
 	var count int
 	err := s.db.Txn(func(txn *client.Txn) error {
 		p := makePlanner()
@@ -376,14 +381,14 @@ func (l *leaseSet) remove(s *LeaseState) {
 	l.data = append(l.data[:i], l.data[i+1:]...)
 }
 
-func (l *leaseSet) find(version DescriptorVersion, expiration parser.DTimestamp) *LeaseState {
+func (l *leaseSet) find(version sqlbase.DescriptorVersion, expiration parser.DTimestamp) *LeaseState {
 	if i, match := l.findIndex(version, expiration); match {
 		return l.data[i]
 	}
 	return nil
 }
 
-func (l *leaseSet) findIndex(version DescriptorVersion, expiration parser.DTimestamp) (int, bool) {
+func (l *leaseSet) findIndex(version sqlbase.DescriptorVersion, expiration parser.DTimestamp) (int, bool) {
 	i := sort.Search(len(l.data), func(i int) bool {
 		s := l.data[i]
 		if s.Version == version {
@@ -401,7 +406,7 @@ func (l *leaseSet) findIndex(version DescriptorVersion, expiration parser.DTimes
 	return i, false
 }
 
-func (l *leaseSet) findNewest(version DescriptorVersion) *LeaseState {
+func (l *leaseSet) findNewest(version sqlbase.DescriptorVersion) *LeaseState {
 	if len(l.data) == 0 {
 		return nil
 	}
@@ -426,7 +431,7 @@ func (l *leaseSet) findNewest(version DescriptorVersion) *LeaseState {
 }
 
 type tableState struct {
-	id ID
+	id sqlbase.ID
 	// Protects both active and acquiring.
 	mu sync.Mutex
 	// The active leases for the table: sorted by their version and expiration
@@ -445,7 +450,7 @@ type tableState struct {
 	deleted bool
 }
 
-func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquire(txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -530,7 +535,7 @@ func (t *tableState) acquireWait() {
 // If the lease cannot be obtained because the descriptor is in the process of
 // being deleted, the error detail will be DescriptorDeletedError.
 func (t *tableState) acquireNodeLease(
-	txn *client.Txn, minVersion DescriptorVersion, store LeaseStore,
+	txn *client.Txn, minVersion sqlbase.DescriptorVersion, store LeaseStore,
 ) (*LeaseState, error) {
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
@@ -588,7 +593,7 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error
 // they're not in use any more.
 // If t has no active leases, nothing is done.
 func (t *tableState) purgeOldLeases(
-	db *client.DB, deleted bool, minVersion DescriptorVersion, store LeaseStore,
+	db *client.DB, deleted bool, minVersion sqlbase.DescriptorVersion, store LeaseStore,
 ) error {
 	t.mu.Lock()
 	empty := len(t.active.data) == 0
@@ -651,7 +656,7 @@ func (*LeaseManagerTestingKnobs) ModuleTestingKnobs() {}
 type LeaseManager struct {
 	LeaseStore
 	mu           sync.Mutex
-	tables       map[ID]*tableState
+	tables       map[sqlbase.ID]*tableState
 	testingKnobs LeaseManagerTestingKnobs
 }
 
@@ -671,7 +676,7 @@ func NewLeaseManager(
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		tables:       make(map[ID]*tableState),
+		tables:       make(map[sqlbase.ID]*tableState),
 		testingKnobs: testingKnobs,
 	}
 }
@@ -680,7 +685,9 @@ func NewLeaseManager(
 // non-zero the lease is grabbed for the specified version. Otherwise it is
 // grabbed for the most recent version of the descriptor that the lease manager
 // knows about.
-func (m *LeaseManager) Acquire(txn *client.Txn, tableID ID, version DescriptorVersion) (*LeaseState, error) {
+func (m *LeaseManager) Acquire(
+	txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
+) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
 	return t.acquire(txn, version, m.LeaseStore)
 }
@@ -700,7 +707,7 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	return t.release(lease, m.LeaseStore)
 }
 
-func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
+func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.tables[tableID]
@@ -715,7 +722,7 @@ func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
 // leases for tables received in the latest system configuration via gossip.
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
 	s.RunWorker(func() {
-		descKeyPrefix := keys.MakeTablePrefix(uint32(descriptorTable.ID))
+		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := gossip.RegisterSystemConfigChannel()
 		for {
 			select {
@@ -732,13 +739,13 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						continue
 					}
 					// Attempt to unmarshal config into a table/database descriptor.
-					var descriptor Descriptor
+					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf("%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
-					case *Descriptor_Table:
+					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						if err := table.Validate(); err != nil {
 							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
@@ -756,7 +763,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 									table.ID, table.Name, err)
 							}
 						}
-					case *Descriptor_Database:
+					case *sqlbase.Descriptor_Database:
 						// Ignore.
 					}
 				}
