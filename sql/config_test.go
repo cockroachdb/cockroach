@@ -24,15 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
-var configID = sql.ID(1)
-var configDescKey = sql.MakeDescMetadataKey(keys.MaxReservedDescID)
+var configID = sqlbase.ID(1)
+var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
@@ -60,7 +59,7 @@ func forceNewConfig(t *testing.T, s *testServer) config.SystemConfig {
 }
 
 func waitForConfigChange(t *testing.T, s *testServer) config.SystemConfig {
-	var foundDesc sql.Descriptor
+	var foundDesc sqlbase.Descriptor
 	var cfg config.SystemConfig
 	util.SucceedsSoon(t, func() error {
 		var ok bool
