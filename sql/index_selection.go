@@ -505,7 +505,7 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 		colID := v.index.ColumnIDs[i]
 		var colDir encoding.Direction
 		var err error
-		if colDir, err = v.index.ColumnDirections[i].toEncodingDirection(); err != nil {
+		if colDir, err = v.index.ColumnDirections[i].ToEncodingDirection(); err != nil {
 			return nil, err
 		}
 
@@ -1049,7 +1049,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			for j, tupleIdx := range c.tupleMap {
 				var err error
 				var colDir encoding.Direction
-				if colDir, err = index.ColumnDirections[firstCol+j].toEncodingDirection(); err != nil {
+				if colDir, err = index.ColumnDirections[firstCol+j].ToEncodingDirection(); err != nil {
 					panic(err)
 				}
 
@@ -1064,7 +1064,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			// a IN (1,2).
 			var colDir encoding.Direction
 			var err error
-			if colDir, err = index.ColumnDirections[firstCol].toEncodingDirection(); err != nil {
+			if colDir, err = index.ColumnDirections[firstCol].ToEncodingDirection(); err != nil {
 				panic(err)
 			}
 			if start, err = encodeTableKey(nil, datum, colDir); err != nil {
@@ -1200,7 +1200,7 @@ func makeSpansForIndexConstraints(
 			(c.end != nil && c.end.Operator == parser.In) {
 			resultSpans = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
 		} else {
-			dir, err := index.ColumnDirections[colIdx].toEncodingDirection()
+			dir, err := index.ColumnDirections[colIdx].ToEncodingDirection()
 			if err != nil {
 				panic(err)
 			}

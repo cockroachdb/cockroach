@@ -313,7 +313,7 @@ func TestMakeConstraints(t *testing.T) {
 func indexToDirs(index *sqlbase.IndexDescriptor) []encoding.Direction {
 	var dirs []encoding.Direction
 	for _, dir := range index.ColumnDirections {
-		d, err := dir.toEncodingDirection()
+		d, err := dir.ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
