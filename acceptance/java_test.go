@@ -69,9 +69,8 @@ public class main {
 		if (a != 42) {
 		    throw new Exception("unexpected: SELECT can't find inserted value: read " + a + ", expecting 42");
 		}
-		Timestamp ts = rs.getTimestamp(2);
-		String tsStr = rs.getString(2);
-		if (!tsStr.equals("2015-05-07 18:20:00")) {
+		String tsStr = rs.getTimestamp(2).toString();
+		if (!ts.toString().equals("2015-05-07 18:20:00")) {
 			throw new Exception("unexpected value for ts: "+tsStr);
 		}
 		stmt = conn.prepareStatement("DROP TABLE test.f");
