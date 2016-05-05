@@ -14,7 +14,7 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"fmt"
@@ -25,7 +25,46 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
+
+var _ descriptorProto = &DatabaseDescriptor{}
+var _ descriptorProto = &TableDescriptor{}
+
+// descriptorKey is the interface implemented by both
+// databaseKey and tableKey. It is used to easily get the
+// descriptor key and plain name.
+type descriptorKey interface {
+	Key() roachpb.Key
+	Name() string
+}
+
+// descriptorProto is the interface implemented by both DatabaseDescriptor
+// and TableDescriptor.
+// TODO(marc): this is getting rather large.
+type descriptorProto interface {
+	proto.Message
+	GetPrivileges() *PrivilegeDescriptor
+	GetID() ID
+	SetID(ID)
+	TypeName() string
+	GetName() string
+	SetName(string)
+	Validate() error
+}
+
+func wrapDescriptor(descriptor descriptorProto) *Descriptor {
+	desc := &Descriptor{}
+	switch t := descriptor.(type) {
+	case *TableDescriptor:
+		desc.Union = &Descriptor_Table{Table: t}
+	case *DatabaseDescriptor:
+		desc.Union = &Descriptor_Database{Database: t}
+	default:
+		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
+	}
+	return desc
+}
 
 // MetadataSchema is used to construct the initial sql schema for a new
 // CockroachDB cluster being bootstrapped. Tables and databases must be

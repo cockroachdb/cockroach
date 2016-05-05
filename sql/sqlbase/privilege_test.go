@@ -21,47 +21,46 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	descriptor := sql.NewDefaultPrivilegeDescriptor()
+	descriptor := NewDefaultPrivilegeDescriptor()
 
 	testCases := []struct {
 		grantee       string // User to grant/revoke privileges on.
 		grant, revoke privilege.List
-		show          []sql.UserPrivilegeString
+		show          []UserPrivilegeString
 	}{
 		{"", nil, nil,
-			[]sql.UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, "ALL"}},
 		},
 		{security.RootUser, privilege.List{privilege.ALL}, nil,
-			[]sql.UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, "ALL"}},
 		},
 		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]sql.UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, "ALL"}},
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]sql.UserPrivilegeString{{"foo", "DROP,INSERT"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", "DROP,INSERT"}, {security.RootUser, "ALL"}},
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
-			[]sql.UserPrivilegeString{{"foo", "DROP,INSERT"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", "DROP,INSERT"}, {security.RootUser, "ALL"}},
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
-			[]sql.UserPrivilegeString{{"foo", "ALL"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", "ALL"}, {security.RootUser, "ALL"}},
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
-			[]sql.UserPrivilegeString{{"foo", "CREATE,DELETE,DROP,GRANT,UPDATE"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", "CREATE,DELETE,DROP,GRANT,UPDATE"}, {security.RootUser, "ALL"}},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
-			[]sql.UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, "ALL"}},
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{security.RootUser, nil, privilege.List{privilege.ALL},
-			[]sql.UserPrivilegeString{},
+			[]UserPrivilegeString{},
 		},
 	}
 
@@ -91,8 +90,8 @@ func TestPrivilege(t *testing.T) {
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := sql.ID(keys.MaxReservedDescID + 1)
-	descriptor := sql.NewDefaultPrivilegeDescriptor()
+	id := ID(keys.MaxReservedDescID + 1)
+	descriptor := NewDefaultPrivilegeDescriptor()
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +123,8 @@ func TestPrivilegeValidate(t *testing.T) {
 // We use 1 (the system database ID).
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := sql.ID(1)
-	allowedPrivileges := sql.SystemAllowedPrivileges[id]
+	id := ID(1)
+	allowedPrivileges := SystemAllowedPrivileges[id]
 
 	hasPrivilege := func(pl privilege.List, p privilege.Kind) bool {
 		for _, i := range pl {
@@ -139,7 +138,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	// Exhaustively grant/revoke all privileges.
 	// Due to the way validation is done after Grant/Revoke,
 	// we need to revert the just-performed change after errors.
-	descriptor := sql.NewPrivilegeDescriptor(security.RootUser, allowedPrivileges)
+	descriptor := NewPrivilegeDescriptor(security.RootUser, allowedPrivileges)
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
