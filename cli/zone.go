@@ -31,8 +31,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
@@ -44,7 +44,7 @@ func unmarshalProto(val driver.Value, msg proto.Message) error {
 	return proto.Unmarshal(raw, msg)
 }
 
-func queryZones(conn *sqlConn) (map[sql.ID]config.ZoneConfig, error) {
+func queryZones(conn *sqlConn) (map[sqlbase.ID]config.ZoneConfig, error) {
 	rows, err := makeQuery(`SELECT * FROM system.zones`)(conn)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func queryZones(conn *sqlConn) (map[sql.ID]config.ZoneConfig, error) {
 	defer func() { _ = rows.Close() }()
 
 	vals := make([]driver.Value, len(rows.Columns()))
-	zones := make(map[sql.ID]config.ZoneConfig)
+	zones := make(map[sqlbase.ID]config.ZoneConfig)
 
 	for {
 		if err := rows.Next(vals); err != nil {
@@ -70,12 +70,12 @@ func queryZones(conn *sqlConn) (map[sql.ID]config.ZoneConfig, error) {
 		if err := unmarshalProto(vals[1], &zone); err != nil {
 			return nil, err
 		}
-		zones[sql.ID(id)] = zone
+		zones[sqlbase.ID(id)] = zone
 	}
 	return zones, nil
 }
 
-func queryZone(conn *sqlConn, id sql.ID) (*config.ZoneConfig, error) {
+func queryZone(conn *sqlConn, id sqlbase.ID) (*config.ZoneConfig, error) {
 	rows, err := makeQuery(`SELECT config FROM system.zones WHERE id = $1`, id)(conn)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func queryZone(conn *sqlConn, id sql.ID) (*config.ZoneConfig, error) {
 	return zone, nil
 }
 
-func queryZonePath(conn *sqlConn, path []sql.ID) (sql.ID, *config.ZoneConfig, error) {
+func queryZonePath(conn *sqlConn, path []sqlbase.ID) (sqlbase.ID, *config.ZoneConfig, error) {
 	for i := len(path) - 1; i >= 0; i-- {
 		zone, err := queryZone(conn, path[i])
 		if err != nil || zone != nil {
@@ -111,7 +111,7 @@ func queryZonePath(conn *sqlConn, path []sql.ID) (sql.ID, *config.ZoneConfig, er
 	return 0, nil, nil
 }
 
-func queryDescriptors(conn *sqlConn) (map[sql.ID]*sql.Descriptor, error) {
+func queryDescriptors(conn *sqlConn) (map[sqlbase.ID]*sqlbase.Descriptor, error) {
 	rows, err := makeQuery(`SELECT descriptor FROM system.descriptor`)(conn)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func queryDescriptors(conn *sqlConn) (map[sql.ID]*sql.Descriptor, error) {
 	defer func() { _ = rows.Close() }()
 
 	vals := make([]driver.Value, len(rows.Columns()))
-	descs := map[sql.ID]*sql.Descriptor{}
+	descs := map[sqlbase.ID]*sqlbase.Descriptor{}
 
 	for {
 		if err := rows.Next(vals); err != nil {
@@ -129,7 +129,7 @@ func queryDescriptors(conn *sqlConn) (map[sql.ID]*sql.Descriptor, error) {
 			return nil, err
 		}
 
-		desc := &sql.Descriptor{}
+		desc := &sqlbase.Descriptor{}
 		if err := unmarshalProto(vals[0], desc); err != nil {
 			return nil, err
 		}
@@ -139,10 +139,10 @@ func queryDescriptors(conn *sqlConn) (map[sql.ID]*sql.Descriptor, error) {
 	return descs, nil
 }
 
-func queryNamespace(conn *sqlConn, parentID sql.ID, name string) (sql.ID, error) {
+func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID, error) {
 	rows, err := makeQuery(
 		`SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`,
-		parentID, sql.NormalizeName(name))(conn)
+		parentID, sqlbase.NormalizeName(name))(conn)
 	if err != nil {
 		return 0, err
 	}
@@ -160,14 +160,14 @@ func queryNamespace(conn *sqlConn, parentID sql.ID, name string) (sql.ID, error)
 	}
 	switch t := vals[0].(type) {
 	case int64:
-		return sql.ID(t), nil
+		return sqlbase.ID(t), nil
 	default:
 		return 0, fmt.Errorf("unexpected result type: %T", vals[0])
 	}
 }
 
-func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sql.ID, error) {
-	path := []sql.ID{keys.RootNamespaceID}
+func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {
+	path := []sqlbase.ID{keys.RootNamespaceID}
 	for _, name := range names {
 		id, err := queryNamespace(conn, path[len(path)-1], name)
 		if err != nil {
