@@ -64,8 +64,8 @@ func NormalizeName(name string) string {
 	return norm.NFC.String(lower)
 }
 
-// equalName returns true iff the normalizations of a and b are equal.
-func equalName(a, b string) bool {
+// EqualName returns true iff the normalizations of a and b are equal.
+func EqualName(a, b string) bool {
 	return NormalizeName(a) == NormalizeName(b)
 }
 

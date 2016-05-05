@@ -93,7 +93,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				if err := qname.NormalizeColumnName(); err != nil {
 					return nil, err
 				}
-				if qname.Table() == "" || equalName(s.table.alias, qname.Table()) {
+				if qname.Table() == "" || sqlbase.EqualName(s.table.alias, qname.Table()) {
 					qnameCol := sqlbase.NormalizeName(qname.Column())
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {

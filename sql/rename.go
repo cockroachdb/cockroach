@@ -245,7 +245,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
-	if equalName(idxName, newIdxName) {
+	if sqlbase.EqualName(idxName, newIdxName) {
 		// Noop.
 		return &emptyNode{}, nil
 	}
@@ -336,7 +336,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 
-	if equalName(colName, newColName) {
+	if sqlbase.EqualName(colName, newColName) {
 		// Noop.
 		return &emptyNode{}, nil
 	}
