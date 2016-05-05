@@ -84,7 +84,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 
 	b := client.Batch{}
 	descID := descriptor.GetID()
-	descDesc := wrapDescriptor(descriptor)
+	descDesc := sqlbase.WrapDescriptor(descriptor)
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 

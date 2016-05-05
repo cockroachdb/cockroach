@@ -146,7 +146,9 @@ func (n *createIndexNode) Start() error {
 		return err
 	}
 
-	if err := n.p.txn.Put(MakeDescMetadataKey(n.tableDesc.GetID()), wrapDescriptor(n.tableDesc)); err != nil {
+	if err := n.p.txn.Put(
+		sqlbase.MakeDescMetadataKey(n.tableDesc.GetID()),
+		sqlbase.WrapDescriptor(n.tableDesc)); err != nil {
 		return err
 	}
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
