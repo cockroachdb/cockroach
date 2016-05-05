@@ -36,7 +36,7 @@ var (
 )
 
 // checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
-func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
+func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error {
 	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
 		return nil
 	}
@@ -47,7 +47,7 @@ func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege
 // createDescriptor takes a Table or Database descriptor and creates it if
 // needed, incrementing the descriptor counter. Returns true if the descriptor
 // is actually created, false if it already existed.
-func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) (bool, error) {
+func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error) {
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
 	gr, err := p.txn.Get(idKey)
@@ -103,7 +103,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 // If `plainKey` doesn't exist, returns false and nil error.
 // In most cases you'll want to use wrappers: `getDatabaseDesc` or
 // `getTableDesc`.
-func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto,
+func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
@@ -143,12 +143,12 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 // getDescriptorsFromTargetList examines a TargetList and fetches the
 // appropriate descriptors.
 func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
-	[]descriptorProto, error) {
+	[]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
 		}
-		descs := make([]descriptorProto, 0, len(targets.Databases))
+		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
 			descriptor, err := p.getDatabaseDesc(database)
 			if err != nil {
@@ -165,7 +165,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 	if len(targets.Tables) == 0 {
 		return nil, errNoTable
 	}
-	descs := make([]descriptorProto, 0, len(targets.Tables))
+	descs := make([]sqlbase.DescriptorProto, 0, len(targets.Tables))
 	for _, tableGlob := range targets.Tables {
 		tables, err := p.expandTableGlob(tableGlob)
 		if err != nil {
