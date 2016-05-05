@@ -350,9 +350,14 @@ func (cli resilientDockerClient) ContainerCreate(
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 			}
 		}
-		return response, fmt.Errorf("error indicated existing container %s, "+
+		log.Warningf("error indicated existing container %s, "+
 			"but none found:\nerror: %s\ncontainers: %+v",
 			containerName, err, containers)
+		// We likely raced with a previous (late) removal of the container.
+		// Return a timeout so a higher level can retry and hopefully
+		// succeed (or get stuck in an infinite loop, at which point at
+		// least we'll have gathered an additional bit of information).
+		return response, context.DeadlineExceeded
 	}
 	return response, err
 }
