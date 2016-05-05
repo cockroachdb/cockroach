@@ -145,7 +145,9 @@ func (n *createIndexNode) Start() *roachpb.Error {
 		return roachpb.NewError(err)
 	}
 
-	if err := n.p.txn.Put(MakeDescMetadataKey(n.tableDesc.GetID()), wrapDescriptor(n.tableDesc)); err != nil {
+	if err := n.p.txn.Put(
+		sqlbase.MakeDescMetadataKey(n.tableDesc.GetID()),
+		sqlbase.WrapDescriptor(n.tableDesc)); err != nil {
 		return roachpb.NewError(err)
 	}
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)

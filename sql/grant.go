@@ -58,7 +58,7 @@ func (p *planner) changePrivileges(
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
 		descKey := MakeDescMetadataKey(descriptor.GetID())
-		b.Put(descKey, wrapDescriptor(descriptor))
+		b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
 	}
 	if pErr := p.txn.Run(b); pErr != nil {
 		return nil, pErr

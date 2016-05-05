@@ -53,7 +53,8 @@ type DescriptorProto interface {
 	Validate() error
 }
 
-func wrapDescriptor(descriptor DescriptorProto) *Descriptor {
+// WrapDescriptor fills in a Descriptor.
+func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 	desc := &Descriptor{}
 	switch t := descriptor.(type) {
 	case *TableDescriptor:
@@ -167,7 +168,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
-		wrappedDesc := wrapDescriptor(desc)
+		wrappedDesc := WrapDescriptor(desc)
 		if err := value.SetProto(wrappedDesc); err != nil {
 			log.Fatalf("could not marshal %v", desc)
 		}

@@ -72,7 +72,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	newKey := databaseKey{string(n.NewName)}.Key()
 	oldKey := databaseKey{string(n.Name)}.Key()
 	descID := dbDesc.GetID()
-	descDesc := wrapDescriptor(dbDesc)
+	descDesc := sqlbase.WrapDescriptor(dbDesc)
 
 	b := client.Batch{}
 	b.CPut(newKey, descID, nil)
@@ -181,7 +181,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	}
 
 	descID := tableDesc.GetID()
-	descDesc := wrapDescriptor(tableDesc)
+	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
 	b := client.Batch{}
 	b.Put(descKey, descDesc)
@@ -267,7 +267,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
+	if err := p.txn.Put(descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
@@ -370,7 +370,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
+	if err := p.txn.Put(descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
