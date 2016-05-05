@@ -203,7 +203,7 @@ func (n *dropIndexNode) Start() error {
 		// Queue the mutation.
 		switch status {
 		case DescriptorActive:
-			tableDesc.addIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
+			tableDesc.AddIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 
 		case DescriptorIncomplete:
@@ -215,7 +215,7 @@ func (n *dropIndexNode) Start() error {
 				continue
 			}
 		}
-		mutationID, err := tableDesc.finalizeMutation()
+		mutationID, err := tableDesc.FinalizeMutation()
 		if err != nil {
 			return err
 		}
@@ -342,7 +342,7 @@ func (p *planner) dropTablePrepare(name *parser.QualifiedName,
 }
 
 func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
-	if err := tableDesc.setUpVersion(); err != nil {
+	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
 	tableDesc.Deleted = true

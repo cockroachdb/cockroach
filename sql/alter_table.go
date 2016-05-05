@@ -86,9 +86,9 @@ func (n *alterTableNode) Start() error {
 					return fmt.Errorf("column %q being dropped, try again later", col.Name)
 				}
 			}
-			n.tableDesc.addColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
+			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
-				n.tableDesc.addIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
+				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
 			}
 
 		case *parser.AlterTableAddConstraint:
@@ -113,7 +113,7 @@ func (n *alterTableNode) Start() error {
 						return fmt.Errorf("index %q being dropped, try again later", name)
 					}
 				}
-				n.tableDesc.addIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
+				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
 
 			default:
 				return fmt.Errorf("unsupported constraint: %T", t.ConstraintDef)
@@ -139,7 +139,7 @@ func (n *alterTableNode) Start() error {
 						return fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
 					}
 				}
-				n.tableDesc.addColumnMutation(col, sqlbase.DescriptorMutation_DROP)
+				n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
 				n.tableDesc.Columns = append(n.tableDesc.Columns[:i], n.tableDesc.Columns[i+1:]...)
 
 			case sqlbase.DescriptorIncomplete:
@@ -220,9 +220,9 @@ func (n *alterTableNode) Start() error {
 	mutationID := invalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = n.tableDesc.finalizeMutation()
+		mutationID, err = n.tableDesc.FinalizeMutation()
 	} else {
-		err = n.tableDesc.setUpVersion()
+		err = n.tableDesc.SetUpVersion()
 	}
 	if err != nil {
 		return err

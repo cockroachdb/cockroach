@@ -345,7 +345,7 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
-			desc.makeMutationComplete(mutation)
+			desc.MakeMutationComplete(mutation)
 			i++
 		}
 		if i == 0 {

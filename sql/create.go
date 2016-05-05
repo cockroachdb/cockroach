@@ -137,8 +137,8 @@ func (n *createIndexNode) Start() error {
 		return err
 	}
 
-	n.tableDesc.addIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
-	mutationID, err := n.tableDesc.finalizeMutation()
+	n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
+	mutationID, err := n.tableDesc.FinalizeMutation()
 	if err != nil {
 		return err
 	}

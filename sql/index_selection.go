@@ -85,7 +85,7 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 func selectIndex(
 	s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) (planNode, error) {
-	if s.desc.isEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
+	if s.desc.IsEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
 		// No table or no where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
 		return s, nil
