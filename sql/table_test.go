@@ -110,7 +110,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, pErr := makeTableDesc(create, 1)
+		schema, pErr := sqlbase.MakeTableDesc(create, 1)
 		if pErr != nil {
 			t.Fatalf("%d: %v", i, pErr)
 		}
@@ -211,7 +211,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, pErr := makeTableDesc(create, 1)
+		schema, pErr := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
 			t.Fatalf("%d: %v", i, pErr)
 		}
@@ -236,7 +236,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err := create.Table.NormalizeTableName(""); err != nil {
 		t.Fatal(err)
 	}
-	desc, pErr := makeTableDesc(create, 1)
+	desc, pErr := sqlbase.MakeTableDesc(create, 1)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
