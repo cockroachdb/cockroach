@@ -199,11 +199,6 @@ message LeaseVersionChangedError {
 message DidntUpdateDescriptorError {
 }
 
-// An ExistingSchemaChangeLeaseError indicates that an outstanding
-// schema change lease exists.
-message ExistingSchemaChangeLeaseError {
-}
-
 // A DescriptorDeletedError indicates that an outstanding schema change is no
 // longer applicable because the descriptor in question has been dropped.
 message DescriptorDeletedError {
@@ -243,7 +238,6 @@ message ErrorDetail {
   optional ReplicaCorruptionError replica_corruption = 17;
   optional LeaseVersionChangedError lease_version_changed = 18;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
-  optional ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
   optional DescriptorDeletedError descriptor_deleted = 23;
   optional DescriptorNotFoundError descriptor_not_found = 24;
 }
