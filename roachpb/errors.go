@@ -584,16 +584,6 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
 
-func (e *LeaseVersionChangedError) Error() string {
-	return e.message(nil)
-}
-
-func (*LeaseVersionChangedError) message(_ *Error) string {
-	return "lease version changed"
-}
-
-var _ ErrorDetailInterface = &LeaseVersionChangedError{}
-
 func (e *DidntUpdateDescriptorError) Error() string {
 	return e.message(nil)
 }
