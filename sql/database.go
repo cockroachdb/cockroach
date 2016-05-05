@@ -95,8 +95,8 @@ func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, err
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
 // descriptor cache.
 func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if name == systemDB.Name {
-		return &systemDB, nil
+	if name == sqlbase.SystemDB.Name {
+		return &sqlbase.SystemDB, nil
 	}
 
 	nameKey := databaseKey{name}

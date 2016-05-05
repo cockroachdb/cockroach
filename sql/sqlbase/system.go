@@ -74,8 +74,8 @@ CREATE TABLE system.ui (
 )
 
 var (
-	// systemDB is the descriptor for the system database.
-	systemDB = DatabaseDescriptor{
+	// SystemDB is the descriptor for the system database.
+	SystemDB = DatabaseDescriptor{
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
@@ -169,7 +169,7 @@ func createDefaultZoneConfig() []roachpb.KeyValue {
 // descriptors to the cockroach store.
 func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddDescriptor(keys.RootNamespaceID, &systemDB)
+	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
 	// Add system config tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &namespaceTable)
