@@ -224,7 +224,10 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 func (n *scanNode) initTable(
 	p *planner, tableName *parser.QualifiedName, indexHints *parser.IndexHints,
 ) (string, *roachpb.Error) {
-	if n.desc, n.pErr = p.getTableLease(tableName); n.pErr != nil {
+	var err error
+	n.desc, err = p.getTableLease(tableName)
+	if err != nil {
+		n.pErr = roachpb.NewError(err)
 		return "", n.pErr
 	}
 

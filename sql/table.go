@@ -340,9 +340,9 @@ func updateCommitBy(commitBy time.Time, lease *LeaseState) time.Time {
 // released when the planner closes. Note that a shallow copy of the table
 // descriptor is returned. It is safe to mutate fields of the returned
 // descriptor, but the values those fields point to should not be modified.
-func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *roachpb.Error) {
+func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return TableDescriptor{}, roachpb.NewError(err)
+		return TableDescriptor{}, err
 	}
 
 	if qname.Database() == systemDB.Name || testDisableTableLeases {
@@ -352,17 +352,17 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		// chicken&egg problem.
 		desc, err := p.getTableDesc(qname)
 		if err != nil {
-			return TableDescriptor{}, roachpb.NewError(err)
+			return TableDescriptor{}, err
 		}
 		if desc == nil {
-			return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
+			return TableDescriptor{}, tableDoesNotExistError(qname.String())
 		}
 		return *desc, nil
 	}
 
 	tableID, err := p.getTableID(qname)
 	if err != nil {
-		return TableDescriptor{}, roachpb.NewError(err)
+		return TableDescriptor{}, err
 	}
 
 	var lease *LeaseState
@@ -374,15 +374,15 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		}
 	}
 	if lease == nil {
-		var pErr *roachpb.Error
-		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
-		if pErr != nil {
-			if _, ok := pErr.GetDetail().(*roachpb.DescriptorNotFoundError); ok {
+		var err error
+		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		if err != nil {
+			if _, ok := err.(*roachpb.DescriptorNotFoundError); ok {
 				// Transform the descriptor error into an error that references the
 				// table's name.
-				return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
+				return TableDescriptor{}, tableDoesNotExistError(qname.String())
 			}
-			return TableDescriptor{}, pErr
+			return TableDescriptor{}, err
 		}
 		p.leases = append(p.leases, lease)
 		commitBy = updateCommitBy(commitBy, lease)
