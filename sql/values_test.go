@@ -147,47 +147,47 @@ func TestGolangParams(t *testing.T) {
 		{nil, reflect.TypeOf(parser.DNull)},
 
 		// Bool type.
-		{true, reflect.TypeOf(parser.DummyBool)},
+		{true, reflect.TypeOf(parser.TypeBool)},
 
 		// Primitive Integer types.
-		{int(1), reflect.TypeOf(parser.DummyInt)},
-		{int8(1), reflect.TypeOf(parser.DummyInt)},
-		{int16(1), reflect.TypeOf(parser.DummyInt)},
-		{int32(1), reflect.TypeOf(parser.DummyInt)},
-		{int64(1), reflect.TypeOf(parser.DummyInt)},
-		{uint(1), reflect.TypeOf(parser.DummyInt)},
-		{uint8(1), reflect.TypeOf(parser.DummyInt)},
-		{uint16(1), reflect.TypeOf(parser.DummyInt)},
-		{uint32(1), reflect.TypeOf(parser.DummyInt)},
-		{uint64(1), reflect.TypeOf(parser.DummyInt)},
+		{int(1), reflect.TypeOf(parser.TypeInt)},
+		{int8(1), reflect.TypeOf(parser.TypeInt)},
+		{int16(1), reflect.TypeOf(parser.TypeInt)},
+		{int32(1), reflect.TypeOf(parser.TypeInt)},
+		{int64(1), reflect.TypeOf(parser.TypeInt)},
+		{uint(1), reflect.TypeOf(parser.TypeInt)},
+		{uint8(1), reflect.TypeOf(parser.TypeInt)},
+		{uint16(1), reflect.TypeOf(parser.TypeInt)},
+		{uint32(1), reflect.TypeOf(parser.TypeInt)},
+		{uint64(1), reflect.TypeOf(parser.TypeInt)},
 
 		// Primitive Float types.
-		{float32(1.0), reflect.TypeOf(parser.DummyFloat)},
-		{float64(1.0), reflect.TypeOf(parser.DummyFloat)},
+		{float32(1.0), reflect.TypeOf(parser.TypeFloat)},
+		{float64(1.0), reflect.TypeOf(parser.TypeFloat)},
 
 		// Decimal type.
-		{inf.NewDec(55, 1), reflect.TypeOf(parser.DummyDecimal)},
+		{inf.NewDec(55, 1), reflect.TypeOf(parser.TypeDecimal)},
 
 		// String type.
-		{"test", reflect.TypeOf(parser.DummyString)},
+		{"test", reflect.TypeOf(parser.TypeString)},
 
 		// Bytes type.
-		{[]byte("abc"), reflect.TypeOf(parser.DummyBytes)},
+		{[]byte("abc"), reflect.TypeOf(parser.TypeBytes)},
 
 		// Interval and timestamp.
-		{time.Duration(1), reflect.TypeOf(parser.DummyInterval)},
-		{timeutil.Now(), reflect.TypeOf(parser.DummyTimestamp)},
+		{time.Duration(1), reflect.TypeOf(parser.TypeInterval)},
+		{timeutil.Now(), reflect.TypeOf(parser.TypeTimestamp)},
 
 		// Primitive type aliases.
-		{roachpb.NodeID(1), reflect.TypeOf(parser.DummyInt)},
-		{sqlbase.ID(1), reflect.TypeOf(parser.DummyInt)},
-		{floatAlias(1), reflect.TypeOf(parser.DummyFloat)},
-		{boolAlias(true), reflect.TypeOf(parser.DummyBool)},
-		{stringAlias("string"), reflect.TypeOf(parser.DummyString)},
+		{roachpb.NodeID(1), reflect.TypeOf(parser.TypeInt)},
+		{sqlbase.ID(1), reflect.TypeOf(parser.TypeInt)},
+		{floatAlias(1), reflect.TypeOf(parser.TypeFloat)},
+		{boolAlias(true), reflect.TypeOf(parser.TypeBool)},
+		{stringAlias("string"), reflect.TypeOf(parser.TypeString)},
 
 		// Byte slice aliases.
-		{roachpb.Key("key"), reflect.TypeOf(parser.DummyBytes)},
-		{roachpb.RKey("key"), reflect.TypeOf(parser.DummyBytes)},
+		{roachpb.Key("key"), reflect.TypeOf(parser.TypeBytes)},
+		{roachpb.RKey("key"), reflect.TypeOf(parser.TypeBytes)},
 	}
 
 	for i, tcase := range testCases {

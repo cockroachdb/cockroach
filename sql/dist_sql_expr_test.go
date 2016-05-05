@@ -27,7 +27,7 @@ import (
 type testVarContainer struct{}
 
 func (d testVarContainer) IndexedVarReturnType(idx int) parser.Datum {
-	return parser.DummyInt
+	return parser.TypeInt
 }
 
 func (d testVarContainer) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {

@@ -139,7 +139,7 @@ func (node *AndExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedAndExpr returns a new AndExpr that is verified to be well-typed.
 func NewTypedAndExpr(left, right TypedExpr) *AndExpr {
 	node := &AndExpr{Left: left, Right: right}
-	node.typ = DummyBool
+	node.typ = TypeBool
 	return node
 }
 
@@ -170,7 +170,7 @@ func (node *OrExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedOrExpr returns a new OrExpr that is verified to be well-typed.
 func NewTypedOrExpr(left, right TypedExpr) *OrExpr {
 	node := &OrExpr{Left: left, Right: right}
-	node.typ = DummyBool
+	node.typ = TypeBool
 	return node
 }
 
@@ -202,7 +202,7 @@ func (node *NotExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedNotExpr returns a new NotExpr that is verified to be well-typed.
 func NewTypedNotExpr(expr TypedExpr) *NotExpr {
 	node := &NotExpr{Expr: expr}
-	node.typ = DummyBool
+	node.typ = TypeBool
 	return node
 }
 
@@ -298,7 +298,7 @@ func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
 func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
-	node.typ = DummyBool
+	node.typ = TypeBool
 	return node
 }
 

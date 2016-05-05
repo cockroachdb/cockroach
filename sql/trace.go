@@ -39,11 +39,11 @@ type explainTraceNode struct {
 }
 
 var traceColumns = append([]ResultColumn{
-	{Name: "Cumulative Time", Typ: parser.DummyString},
-	{Name: "Duration", Typ: parser.DummyString},
-	{Name: "Span Pos", Typ: parser.DummyInt},
-	{Name: "Operation", Typ: parser.DummyString},
-	{Name: "Event", Typ: parser.DummyString},
+	{Name: "Cumulative Time", Typ: parser.TypeString},
+	{Name: "Duration", Typ: parser.TypeString},
+	{Name: "Span Pos", Typ: parser.TypeInt},
+	{Name: "Operation", Typ: parser.TypeString},
+	{Name: "Event", Typ: parser.TypeString},
 }, debugColumns...)
 
 func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }

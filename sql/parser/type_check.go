@@ -84,7 +84,7 @@ func (expr *AndExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -173,15 +173,15 @@ func (expr *CaseExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 }
 
 var (
-	boolCastTypes      = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	intCastTypes       = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	floatCastTypes     = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	decimalCastTypes   = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	stringCastTypes    = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes}
-	bytesCastTypes     = []Datum{DNull, DummyBytes, DummyString}
-	dateCastTypes      = []Datum{DNull, DummyString, DummyDate, DummyTimestamp}
-	timestampCastTypes = []Datum{DNull, DummyString, DummyDate, DummyTimestamp, DummyTimestampTZ}
-	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt, DummyInterval}
+	boolCastTypes      = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	intCastTypes       = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	floatCastTypes     = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	decimalCastTypes   = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	stringCastTypes    = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes}
+	bytesCastTypes     = []Datum{DNull, TypeBytes, TypeString}
+	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp}
+	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
+	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
 )
 
 // TypeCheck implements the Expr interface.
@@ -190,48 +190,48 @@ func (expr *CastExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	var validTypes []Datum
 	switch expr.Type.(type) {
 	case *BoolType:
-		returnDatum = DummyBool
+		returnDatum = TypeBool
 		validTypes = boolCastTypes
 
 	case *IntType:
-		returnDatum = DummyInt
+		returnDatum = TypeInt
 		validTypes = intCastTypes
 
 	case *FloatType:
-		returnDatum = DummyFloat
+		returnDatum = TypeFloat
 		validTypes = floatCastTypes
 
 	case *DecimalType:
-		returnDatum = DummyDecimal
+		returnDatum = TypeDecimal
 		validTypes = decimalCastTypes
 
 	case *StringType:
-		returnDatum = DummyString
+		returnDatum = TypeString
 		validTypes = stringCastTypes
 
 	case *BytesType:
-		returnDatum = DummyBytes
+		returnDatum = TypeBytes
 		validTypes = bytesCastTypes
 
 	case *DateType:
-		returnDatum = DummyDate
+		returnDatum = TypeDate
 		validTypes = dateCastTypes
 
 	case *TimestampType:
-		returnDatum = DummyTimestamp
+		returnDatum = TypeTimestamp
 		validTypes = timestampCastTypes
 
 	case *TimestampTZType:
-		returnDatum = DummyTimestampTZ
+		returnDatum = TypeTimestampTZ
 		validTypes = timestampCastTypes
 
 	case *IntervalType:
-		returnDatum = DummyInterval
+		returnDatum = TypeInterval
 		validTypes = intervalCastTypes
 	}
 
 	if args.IsUnresolvedArgument(expr.Expr) {
-		desired = DummyString
+		desired = TypeString
 	} else if desired != nil && desired.TypeEqual(returnDatum) {
 		desired = nil
 	}
@@ -274,7 +274,7 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, e
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, err
 }
 
@@ -285,7 +285,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -362,7 +362,7 @@ func (expr *IsOfTypeExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, err
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -373,7 +373,7 @@ func (expr *NotExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -400,7 +400,7 @@ func (expr *OrExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -428,7 +428,7 @@ func (expr *RangeCond) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 	}
 
 	expr.Left, expr.From, expr.To = typedSubExprs[0], typedSubExprs[1], typedSubExprs[2]
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -580,7 +580,7 @@ func (d dNull) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { retur
 func (d *DValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 func typeCheckAndRequireBoolean(args MapArgs, expr Expr, op string) (TypedExpr, error) {
-	return typeCheckAndRequire(args, expr, DummyBool, op)
+	return typeCheckAndRequire(args, expr, TypeBool, op)
 }
 
 func typeCheckAndRequire(args MapArgs, expr Expr, required Datum, op string) (TypedExpr, error) {
@@ -620,7 +620,7 @@ func typeCheckComparisonOp(
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
 			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
-			// dummyLeft.TypeEquals(DummyBool). We currently can't distinguish NULL from
+			// TypeLeft.TypeEquals(TypeBool). We currently can't distinguish NULL from
 			// UNKNOWN. Is it important to do so?
 			return leftExpr, rightExpr, CmpOp{}, nil
 		default:
@@ -634,11 +634,11 @@ func typeCheckComparisonOp(
 	}
 
 	cmpOp := fn.(CmpOp)
-	if op == In && cmpOp.RightType.TypeEqual(dummyTuple) {
+	if op == In && cmpOp.RightType.TypeEqual(TypeTuple) {
 		if err := verifyTupleIN(args, leftReturn, rightReturn); err != nil {
 			return nil, nil, CmpOp{}, err
 		}
-	} else if cmpOp.LeftType.TypeEqual(dummyTuple) && cmpOp.RightType.TypeEqual(dummyTuple) {
+	} else if cmpOp.LeftType.TypeEqual(TypeTuple) && cmpOp.RightType.TypeEqual(TypeTuple) {
 		if err := verifyTupleCmp(args, leftReturn, rightReturn); err != nil {
 			return nil, nil, CmpOp{}, err
 		}

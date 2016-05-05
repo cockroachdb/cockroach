@@ -63,15 +63,15 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		return &BinaryExpr{Operator: Plus, Left: left, Right: right}
 	}
 
-	unaryIntFn := makeTestOverload(DummyInt, DummyInt)
-	unaryFloatFn := makeTestOverload(DummyFloat, DummyFloat)
-	unaryStringFn := makeTestOverload(DummyString, DummyString)
-	binaryIntFn := makeTestOverload(DummyInt, DummyInt, DummyInt)
-	binaryFloatFn := makeTestOverload(DummyFloat, DummyFloat, DummyFloat)
-	binaryStringFn := makeTestOverload(DummyString, DummyString, DummyString)
-	binaryStringFloatFn1 := makeTestOverload(DummyInt, DummyString, DummyFloat)
-	binaryStringFloatFn2 := makeTestOverload(DummyFloat, DummyString, DummyFloat)
-	binaryIntDateFn := makeTestOverload(DummyDate, DummyInt, DummyDate)
+	unaryIntFn := makeTestOverload(TypeInt, TypeInt)
+	unaryFloatFn := makeTestOverload(TypeFloat, TypeFloat)
+	unaryStringFn := makeTestOverload(TypeString, TypeString)
+	binaryIntFn := makeTestOverload(TypeInt, TypeInt, TypeInt)
+	binaryFloatFn := makeTestOverload(TypeFloat, TypeFloat, TypeFloat)
+	binaryStringFn := makeTestOverload(TypeString, TypeString, TypeString)
+	binaryStringFloatFn1 := makeTestOverload(TypeInt, TypeString, TypeFloat)
+	binaryStringFloatFn2 := makeTestOverload(TypeFloat, TypeString, TypeFloat)
+	binaryIntDateFn := makeTestOverload(TypeDate, TypeInt, TypeDate)
 
 	testData := []struct {
 		args             MapArgs
@@ -114,15 +114,15 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, nil, []Expr{NewDFloat(1), NewDString("a")}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, nil},
 		{nil, nil, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, nil},
 		// Desired type with ambiguity.
-		{nil, DummyInt, []Expr{intConst("1"), floatConst("1.0")}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryIntFn},
-		{nil, DummyInt, []Expr{intConst("1"), NewDFloat(1)}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn},
-		{nil, DummyInt, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1},
-		{nil, DummyFloat, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2},
-		{nil, DummyFloat, []Expr{ValArg{"a"}, ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
+		{nil, TypeInt, []Expr{intConst("1"), floatConst("1.0")}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryIntFn},
+		{nil, TypeInt, []Expr{intConst("1"), NewDFloat(1)}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn},
+		{nil, TypeInt, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1},
+		{nil, TypeFloat, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2},
+		{nil, TypeFloat, []Expr{ValArg{"a"}, ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
 		// Sub-expressions.
 		{nil, nil, []Expr{floatConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn},
 		{nil, nil, []Expr{floatConst("1.1"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
-		{nil, DummyFloat, []Expr{floatConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn},           // Limitation.
+		{nil, TypeFloat, []Expr{floatConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn},            // Limitation.
 		{nil, nil, []Expr{plus(intConst("1"), intConst("2")), plus(floatConst("1.1"), floatConst("2.2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, nil}, // Limitation.
 		{nil, nil, []Expr{plus(floatConst("1.1"), floatConst("2.2")), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
 		// Homogenous preference.
@@ -130,10 +130,10 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, nil, []Expr{NewDFloat(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
 		{nil, nil, []Expr{intConst("1"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn},
 		{nil, nil, []Expr{floatConst("1.0"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil}, // Limitation.
-		{nil, DummyDate, []Expr{NewDInt(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
-		{nil, DummyDate, []Expr{NewDFloat(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
-		{nil, DummyDate, []Expr{intConst("1"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
-		{nil, DummyDate, []Expr{floatConst("1.0"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
+		{nil, TypeDate, []Expr{NewDInt(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
+		{nil, TypeDate, []Expr{NewDFloat(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
+		{nil, TypeDate, []Expr{intConst("1"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
+		{nil, TypeDate, []Expr{floatConst("1.0"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
 	}
 	for i, d := range testData {
 		_, fn, err := typeCheckOverloadedExprs(d.args, d.desired, d.overloads, d.exprs...)

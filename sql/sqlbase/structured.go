@@ -730,25 +730,25 @@ func (c *ColumnType) SQLString() string {
 func (c *ColumnType) ToDatumType() parser.Datum {
 	switch c.Kind {
 	case ColumnType_BOOL:
-		return parser.DummyBool
+		return parser.TypeBool
 	case ColumnType_INT:
-		return parser.DummyInt
+		return parser.TypeInt
 	case ColumnType_FLOAT:
-		return parser.DummyFloat
+		return parser.TypeFloat
 	case ColumnType_DECIMAL:
-		return parser.DummyDecimal
+		return parser.TypeDecimal
 	case ColumnType_STRING:
-		return parser.DummyString
+		return parser.TypeString
 	case ColumnType_BYTES:
-		return parser.DummyBytes
+		return parser.TypeBytes
 	case ColumnType_DATE:
-		return parser.DummyDate
+		return parser.TypeDate
 	case ColumnType_TIMESTAMP:
-		return parser.DummyTimestamp
+		return parser.TypeTimestamp
 	case ColumnType_TIMESTAMPTZ:
-		return parser.DummyTimestampTZ
+		return parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
-		return parser.DummyInterval
+		return parser.TypeInterval
 	}
 	return nil
 }

@@ -64,7 +64,7 @@ func (a ArgTypes) matchAt(typ Datum, i int) bool {
 		return false
 	}
 	if _, ok := typ.(*DTuple); ok {
-		typ = dummyTuple
+		typ = TypeTuple
 	}
 	return a[i].TypeEqual(typ)
 }
