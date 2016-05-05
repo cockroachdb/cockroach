@@ -18,6 +18,7 @@ package cli
 
 import (
 	"flag"
+	"go/build"
 	"strings"
 	"testing"
 
@@ -40,6 +41,12 @@ func TestStdFlagToPflag(t *testing.T) {
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Skip test if source is not available.
+	if build.Default.GOPATH == "" {
+		t.Skip("GOPATH isn't set")
+	}
+
 	// Verify that the cockroach binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach", true,

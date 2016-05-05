@@ -17,6 +17,7 @@
 package kv_test
 
 import (
+	"go/build"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -33,6 +34,12 @@ func init() {
 
 func TestForbiddenDeps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Skip test if source is not available.
+	if build.Default.GOPATH == "" {
+		t.Skip("GOPATH isn't set")
+	}
+
 	// Verify kv does not depend on storage (or any of its subpackages).
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/kv", true,
