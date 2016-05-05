@@ -191,10 +191,6 @@ message ReplicaCorruptionError {
   optional bool processed = 2 [(gogoproto.nullable) = false];;
 }
 
-// A LeaseVersionChangedError indicates that the lease version has changed.
-message LeaseVersionChangedError {
-}
-
 // A DidntUpdateDescriptorError indicates that a table descriptor was not updated.
 message DidntUpdateDescriptorError {
 }
@@ -236,7 +232,6 @@ message ErrorDetail {
   // converting Go errors from/to proto Errors. Revisit this design.
   optional RaftGroupDeletedError raft_group_deleted = 16;
   optional ReplicaCorruptionError replica_corruption = 17;
-  optional LeaseVersionChangedError lease_version_changed = 18;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
   optional DescriptorDeletedError descriptor_deleted = 23;
   optional DescriptorNotFoundError descriptor_not_found = 24;

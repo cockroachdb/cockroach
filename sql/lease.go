@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -242,7 +243,8 @@ func (s LeaseStore) Publish(
 		Multiplier:     2,
 	}
 
-	// Retry while getting LeaseVersionChangedError.
+	errLeaseVersionChanged := errors.New("lease version changed")
+	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
@@ -272,7 +274,7 @@ func (s LeaseStore) Publish(
 				if log.V(3) {
 					log.Infof("publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
 				}
-				return &roachpb.LeaseVersionChangedError{}
+				return errLeaseVersionChanged
 			}
 
 			// Run the update closure.
@@ -299,16 +301,18 @@ func (s LeaseStore) Publish(
 			return txn.CommitInBatch(b)
 		})
 
-		switch err.(type) {
-		case *roachpb.LeaseVersionChangedError:
+		if err == errLeaseVersionChanged {
 			// will loop around to retry
-		case *roachpb.DidntUpdateDescriptorError:
-			return desc, nil
-		default:
-			if err == nil {
+		} else {
+			switch err.(type) {
+			case *roachpb.DidntUpdateDescriptorError:
 				return desc, nil
+			default:
+				if err == nil {
+					return desc, nil
+				}
+				return nil, err
 			}
-			return nil, err
 		}
 	}
 
