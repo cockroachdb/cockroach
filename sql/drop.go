@@ -71,9 +71,9 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 
 	td := make([]*TableDescriptor, len(tbNames))
 	for i, tbName := range tbNames {
-		tbDesc, pErr := p.dropTablePrepare(tbName)
-		if pErr != nil {
-			return nil, pErr
+		tbDesc, err := p.dropTablePrepare(tbName)
+		if err != nil {
+			return nil, err
 		}
 		if tbDesc == nil {
 			// Database claims to have this table, but it does not exist.
@@ -86,11 +86,11 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	return &dropDatabaseNode{n: n, p: p, dbDesc: dbDesc, td: td}, nil
 }
 
-func (n *dropDatabaseNode) Start() *roachpb.Error {
+func (n *dropDatabaseNode) Start() error {
 	tbNameStrings := make([]string, len(n.td))
 	for i, tbDesc := range n.td {
 		if err := n.p.dropTableImpl(tbDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		tbNameStrings[i] = tbDesc.Name
 	}
@@ -113,7 +113,7 @@ func (n *dropDatabaseNode) Start() *roachpb.Error {
 	})
 
 	if err := n.p.txn.Run(b); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Log Drop Database event.
@@ -128,7 +128,7 @@ func (n *dropDatabaseNode) Start() *roachpb.Error {
 			DroppedTables []string
 		}{n.n.Name.String(), n.n.String(), n.p.session.User, tbNameStrings},
 	); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	return nil
 }
@@ -139,7 +139,7 @@ func (n *dropDatabaseNode) Ordering() orderingInfo              { return orderin
 func (n *dropDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropDatabaseNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropDatabaseNode) ExplainTypes(_ func(string, string)) {}
-func (n *dropDatabaseNode) PErr() *roachpb.Error                { return nil }
+func (n *dropDatabaseNode) Err() error                          { return nil }
 func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *dropDatabaseNode) MarkDebug(mode explainMode)          {}
 func (n *dropDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -176,14 +176,14 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 	return &dropIndexNode{n: n, p: p}, nil
 }
 
-func (n *dropIndexNode) Start() *roachpb.Error {
+func (n *dropIndexNode) Start() error {
 	for _, index := range n.n.IndexList {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, pErr := n.p.getTableDesc(index.Table)
-		if pErr != nil || tableDesc == nil {
+		tableDesc, err := n.p.getTableDesc(index.Table)
+		if err != nil || tableDesc == nil {
 			// makePlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during makePlan(), we
 			// must have it here too.
@@ -197,7 +197,7 @@ func (n *dropIndexNode) Start() *roachpb.Error {
 				continue
 			}
 			// Index does not exist, but we want it to: error out.
-			return roachpb.NewError(err)
+			return err
 		}
 		// Queue the mutation.
 		switch status {
@@ -208,7 +208,7 @@ func (n *dropIndexNode) Start() *roachpb.Error {
 		case DescriptorIncomplete:
 			switch tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_ADD:
-				return roachpb.NewUErrorf("index %q in the middle of being added, try again later", idxName)
+				return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 
 			case DescriptorMutation_DROP:
 				continue
@@ -216,13 +216,13 @@ func (n *dropIndexNode) Start() *roachpb.Error {
 		}
 		mutationID, err := tableDesc.finalizeMutation()
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		if err := tableDesc.Validate(); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		if err := n.p.writeTableDesc(tableDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		n.p.notifySchemaChange(tableDesc.ID, mutationID)
 	}
@@ -235,7 +235,7 @@ func (n *dropIndexNode) Ordering() orderingInfo              { return orderingIn
 func (n *dropIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropIndexNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropIndexNode) ExplainTypes(_ func(string, string)) {}
-func (n *dropIndexNode) PErr() *roachpb.Error                { return nil }
+func (n *dropIndexNode) Err() error                          { return nil }
 func (n *dropIndexNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *dropIndexNode) MarkDebug(mode explainMode)          {}
 func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -274,13 +274,13 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 	return &dropTableNode{p: p, n: n, td: td}, nil
 }
 
-func (n *dropTableNode) Start() *roachpb.Error {
+func (n *dropTableNode) Start() error {
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
 		}
 		if err := n.p.dropTableImpl(droppedDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		// Log a Drop Table event for this table.
 		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
@@ -293,7 +293,7 @@ func (n *dropTableNode) Start() *roachpb.Error {
 				User      string
 			}{droppedDesc.Name, n.n.String(), n.p.session.User},
 		); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 	}
 	return nil
@@ -305,7 +305,7 @@ func (n *dropTableNode) Ordering() orderingInfo              { return orderingIn
 func (n *dropTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *dropTableNode) DebugValues() debugValues            { return debugValues{} }
-func (n *dropTableNode) PErr() *roachpb.Error                { return nil }
+func (n *dropTableNode) Err() error                          { return nil }
 func (n *dropTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *dropTableNode) MarkDebug(mode explainMode)          {}
 func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {

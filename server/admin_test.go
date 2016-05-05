@@ -233,8 +233,8 @@ func TestAdminAPIDatabases(t *testing.T) {
 	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, s.sqlExecutor, nil)
 	query := "CREATE DATABASE " + testdb
 	createRes := s.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
-	if createRes.ResultList[0].PErr != nil {
-		t.Fatal(createRes.ResultList[0].PErr)
+	if createRes.ResultList[0].Err != nil {
+		t.Fatal(createRes.ResultList[0].Err)
 	}
 
 	var resp DatabasesResponse
@@ -260,8 +260,8 @@ func TestAdminAPIDatabases(t *testing.T) {
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
 	grantRes := s.sqlExecutor.ExecuteStatements(context.Background(), session, grantQuery, nil)
-	if grantRes.ResultList[0].PErr != nil {
-		t.Fatal(grantRes.ResultList[0].PErr)
+	if grantRes.ResultList[0].Err != nil {
+		t.Fatal(grantRes.ResultList[0].Err)
 	}
 
 	var details DatabaseDetailsResponse
@@ -367,8 +367,8 @@ CREATE TABLE test.tbl (
 
 	for _, q := range setupQueries {
 		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
-		if res.ResultList[0].PErr != nil {
-			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].PErr)
+		if res.ResultList[0].Err != nil {
+			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
 	}
 
@@ -450,8 +450,8 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	res := s.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
 	if a, e := len(res.ResultList), 1; a != e {
 		t.Fatalf("len(results) %d != %d", a, e)
-	} else if res.ResultList[0].PErr != nil {
-		t.Fatal(res.ResultList[0].PErr)
+	} else if res.ResultList[0].Err != nil {
+		t.Fatal(res.ResultList[0].Err)
 	}
 
 	// Query the API for users.
@@ -491,8 +491,8 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 	for _, q := range setupQueries {
 		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
-		if res.ResultList[0].PErr != nil {
-			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].PErr)
+		if res.ResultList[0].Err != nil {
+			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
 	}
 

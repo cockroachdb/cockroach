@@ -302,8 +302,8 @@ func (s *adminServer) checkQueryResults(results []sql.Result, numResults int) er
 	}
 
 	for _, result := range results {
-		if result.PErr != nil {
-			return util.Errorf("%s", result.PErr.String())
+		if result.Err != nil {
+			return util.Errorf("%s", result.Err)
 		}
 	}
 
@@ -312,12 +312,12 @@ func (s *adminServer) checkQueryResults(results []sql.Result, numResults int) er
 
 // firstNotFoundError returns the first table/database not found error in the
 // provided results.
-func (s *adminServer) firstNotFoundError(results []sql.Result) *roachpb.Error {
+func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 	for _, res := range results {
 		// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
 		// more structured errors.
-		if pErr := res.PErr; pErr != nil && strings.HasSuffix(pErr.String(), "does not exist") {
-			return pErr
+		if res.Err != nil && strings.HasSuffix(res.Err.Error(), "does not exist") {
+			return res.Err
 		}
 	}
 
@@ -356,8 +356,8 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsR
 	escDBName := parser.Name(req.Database).String()
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
 	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
-	if pErr := s.firstNotFoundError(r.ResultList); pErr != nil {
-		return nil, grpc.Errorf(codes.NotFound, "%s", pErr)
+	if err := s.firstNotFoundError(r.ResultList); err != nil {
+		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
 	if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 		return nil, s.serverError(err)
@@ -420,8 +420,8 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s",
 		escQualTable, escQualTable, escQualTable)
 	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
-	if pErr := s.firstNotFoundError(r.ResultList); pErr != nil {
-		return nil, grpc.Errorf(codes.NotFound, "%s", pErr)
+	if err := s.firstNotFoundError(r.ResultList); err != nil {
+		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
 	if err := s.checkQueryResults(r.ResultList, 3); err != nil {
 		return nil, err

@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -96,7 +95,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 	return v, nil
 }
 
-func (n *valuesNode) Start() *roachpb.Error {
+func (n *valuesNode) Start() error {
 	if n.n == nil {
 		return nil
 	}
@@ -119,7 +118,7 @@ func (n *valuesNode) Start() *roachpb.Error {
 			// TODO(knz): see comment above about expandSubqueries in ValuesClause().
 			expr, err := n.p.expandSubqueries(expr, 1)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			desired := parser.NoTypePreference
 			if len(n.desiredTypes) > i {
@@ -127,16 +126,16 @@ func (n *valuesNode) Start() *roachpb.Error {
 			}
 			typedExpr, err := parser.TypeCheck(expr, n.p.evalCtx.Args, desired)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			typedExpr, err = n.p.parser.NormalizeExpr(n.p.evalCtx, typedExpr)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
 			row[i], err = typedExpr.Eval(n.p.evalCtx)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 		}
 		n.rows = append(n.rows, row)
@@ -175,7 +174,7 @@ func (n *valuesNode) Next() bool {
 	return true
 }
 
-func (*valuesNode) PErr() *roachpb.Error {
+func (*valuesNode) Err() error {
 	return nil
 }
 

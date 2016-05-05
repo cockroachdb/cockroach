@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -83,7 +82,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 	return dn, nil
 }
 
-func (d *deleteNode) Start() *roachpb.Error {
+func (d *deleteNode) Start() error {
 	// TODO(knz): See the comment above in Delete().
 	rows, err := d.p.SelectClause(&parser.SelectClause{
 		Exprs: d.tableDesc.allColumnsSelector(),
@@ -91,15 +90,15 @@ func (d *deleteNode) Start() *roachpb.Error {
 		Where: d.n.Where,
 	}, nil)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
-	if pErr := rows.Start(); pErr != nil {
-		return pErr
+	if err := rows.Start(); err != nil {
+		return err
 	}
 
 	if err := d.run.startEditNode(&d.editNodeBase, rows, &d.tw); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Check if we can avoid doing a round-trip to read the values and just
@@ -109,9 +108,9 @@ func (d *deleteNode) Start() *roachpb.Error {
 	sel := rows.(*selectNode)
 	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 		d.run.fastPath = true
-		d.run.pErr = roachpb.NewError(d.fastDelete())
+		d.run.err = d.fastDelete()
 		d.run.done = true
-		return d.run.pErr
+		return d.run.err
 	}
 
 	return nil
@@ -125,13 +124,13 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 }
 
 func (d *deleteNode) Next() bool {
-	if d.run.done || d.run.pErr != nil {
+	if d.run.done || d.run.err != nil {
 		return false
 	}
 
 	if !d.run.rows.Next() {
 		// We're done. Finish the batch.
-		d.run.pErr = roachpb.NewError(d.tw.finalize())
+		d.run.err = d.tw.finalize()
 		d.run.done = true
 		return false
 	}
@@ -139,14 +138,14 @@ func (d *deleteNode) Next() bool {
 	rowVals := d.run.rows.Values()
 
 	_, err := d.tw.row(rowVals)
-	d.run.pErr = roachpb.NewError(err)
-	if d.run.pErr != nil {
+	d.run.err = err
+	if d.run.err != nil {
 		return false
 	}
 
 	resultRow, err := d.rh.cookResultRow(rowVals)
 	if err != nil {
-		d.run.pErr = roachpb.NewError(err)
+		d.run.err = err
 		return false
 	}
 	d.run.resultRow = resultRow
@@ -216,8 +215,8 @@ func (d *deleteNode) Ordering() orderingInfo {
 	return d.run.rows.Ordering()
 }
 
-func (d *deleteNode) PErr() *roachpb.Error {
-	return d.run.pErr
+func (d *deleteNode) Err() error {
+	return d.run.err
 }
 
 func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []planNode) {

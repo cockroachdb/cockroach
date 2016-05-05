@@ -65,8 +65,8 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 	//     to the TypeCheck() method once the prepare and execute phase are separated
 	//     for select nodes.
 	planMaker := *v.planner
-	plan, pErr := planMaker.makePlan(subquery.Select, nil, false)
-	if pErr != nil {
+	plan, err := planMaker.makePlan(subquery.Select, nil, false)
+	if err != nil {
 		return false, expr
 	}
 
@@ -74,7 +74,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		return false, expr
 	}
 
-	if v.err = plan.Start().GoError(); v.err != nil {
+	if v.err = plan.Start(); v.err != nil {
 		return false, expr
 	}
 
@@ -84,7 +84,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		if plan.Next() {
 			return true, parser.MakeDBool(true)
 		}
-		v.err = plan.PErr().GoError()
+		v.err = plan.Err()
 		if v.err != nil {
 			return false, expr
 		}
@@ -143,7 +143,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		}
 	}
 
-	v.err = plan.PErr().GoError()
+	v.err = plan.Err()
 	if v.err != nil {
 		return false, expr
 	}

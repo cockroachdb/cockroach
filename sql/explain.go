@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -43,7 +42,7 @@ const (
 // info about a DELETE, INSERT, SELECT or UPDATE statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) {
 	mode := explainNone
 	verbose := false
 	for _, opt := range n.Options {
@@ -59,11 +58,11 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 		} else if strings.EqualFold(opt, "VERBOSE") {
 			verbose = true
 		} else {
-			return nil, roachpb.NewUErrorf("unsupported EXPLAIN option: %s", opt)
+			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
 		if newMode != explainNone {
 			if mode != explainNone {
-				return nil, roachpb.NewUErrorf("cannot set EXPLAIN mode more than once: %s", opt)
+				return nil, fmt.Errorf("cannot set EXPLAIN mode more than once: %s", opt)
 			}
 			mode = newMode
 		}
@@ -77,7 +76,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 			p.txn.CollectedSpans = append(p.txn.CollectedSpans, sp)
 		})
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
 	}
@@ -125,7 +124,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 		}).wrap(&explainTraceNode{plan: plan, txn: p.txn}), nil
 
 	default:
-		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
+		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
 	}
 }
 
@@ -140,16 +139,16 @@ func (e *explainTypesNode) Columns() []ResultColumn              { return e.resu
 func (e *explainTypesNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
-func (e *explainTypesNode) PErr() *roachpb.Error                 { return e.results.PErr() }
+func (e *explainTypesNode) Err() error                           { return e.results.Err() }
 func (e *explainTypesNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainTypesNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
 func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return e.plan.ExplainPlan(v)
 }
 
-func (e *explainTypesNode) Start() *roachpb.Error {
-	if pErr := e.plan.Start(); pErr != nil {
-		return pErr
+func (e *explainTypesNode) Start() error {
+	if err := e.plan.Start(); err != nil {
+		return err
 	}
 	populateTypes(e.results, e.plan, 0)
 	return nil
@@ -208,16 +207,16 @@ func (e *explainPlanNode) Columns() []ResultColumn              { return e.resul
 func (e *explainPlanNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues             { return e.results.DebugValues() }
-func (e *explainPlanNode) PErr() *roachpb.Error                 { return e.results.PErr() }
+func (e *explainPlanNode) Err() error                           { return e.results.Err() }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainPlanNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
 func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return e.plan.ExplainPlan(v)
 }
 
-func (e *explainPlanNode) Start() *roachpb.Error {
-	if pErr := e.plan.Start(); pErr != nil {
-		return pErr
+func (e *explainPlanNode) Start() error {
+	if err := e.plan.Start(); err != nil {
+		return err
 	}
 	populateExplain(e.verbose, e.results, e.plan, 0)
 	return nil
@@ -325,10 +324,10 @@ var debugColumns = []ResultColumn{
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
 
-func (n *explainDebugNode) PErr() *roachpb.Error { return n.plan.PErr() }
-func (n *explainDebugNode) Start() *roachpb.Error {
-	if pErr := n.plan.Start(); pErr != nil {
-		return pErr
+func (n *explainDebugNode) Err() error { return n.plan.Err() }
+func (n *explainDebugNode) Start() error {
+	if err := n.plan.Start(); err != nil {
+		return err
 	}
 	n.plan.MarkDebug(explainDebug)
 	return nil

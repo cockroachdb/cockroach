@@ -104,9 +104,9 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	p.session.User = security.RootUser
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
-	values, pErr := p.queryRow(getDescriptor, int(tableID))
-	if pErr != nil {
-		return nil, pErr.GoError()
+	values, err := p.queryRow(getDescriptor, int(tableID))
+	if err != nil {
+		return nil, err
 	}
 	if values == nil {
 		return nil, &roachpb.DescriptorNotFoundError{DescriptorId: uint32(tableID)}
@@ -144,15 +144,15 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	// there is no harm in that as no other transaction will be attempting to
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
-	err := s.db.Txn(func(txn *client.Txn) error {
+	err = s.db.Txn(func(txn *client.Txn) error {
 		p := makePlanner()
 		p.txn = txn
 		p.session.User = security.RootUser
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		count, epErr := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
-		if epErr != nil {
-			return epErr.GoError()
+		count, err := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
+		if err != nil {
+			return err
 		}
 		if count != 1 {
 			return util.Errorf("%s: expected 1 result, found %d", insertLease, count)
@@ -171,9 +171,9 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-		count, pErr := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
-		if pErr != nil {
-			return pErr.GoError()
+		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
+		if err != nil {
+			return err
 		}
 		if count != 1 {
 			return util.Errorf("%s: expected 1 result, found %d", deleteLease, count)
@@ -325,7 +325,7 @@ func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
 		values, err := p.queryRow(countLeases, descID, int(version), expiration)
 		if err != nil {
-			return err.GoError()
+			return err
 		}
 		count = int(*(values[0].(*parser.DInt)))
 		return nil

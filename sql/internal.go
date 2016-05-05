@@ -44,8 +44,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 	p.setTxn(txn)
 	p.session.User = security.RootUser
 	p.leaseMgr = ie.LeaseManager
-	rowsAffected, pErr := p.exec(statement, params...)
-	return rowsAffected, pErr.GoError()
+	return p.exec(statement, params...)
 }
 
 // GetTableSpan gets the key span for a SQL table, including any indices.

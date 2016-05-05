@@ -36,7 +36,7 @@ type indexJoinNode struct {
 	table            *scanNode
 	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[ColumnID]int
-	pErr             *roachpb.Error
+	err              error
 	explain          explainMode
 	debugVals        debugValues
 }
@@ -136,7 +136,7 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *indexJoinNode) Start() *roachpb.Error {
+func (n *indexJoinNode) Start() error {
 	if err := n.table.Start(); err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func (n *indexJoinNode) Next() bool {
 			}
 			return true
 		}
-		if n.pErr = n.table.PErr(); n.pErr != nil {
+		if n.err = n.table.Err(); n.err != nil {
 			return false
 		}
 
@@ -168,7 +168,7 @@ func (n *indexJoinNode) Next() bool {
 		for len(n.table.spans) < joinBatchSize {
 			if !n.index.Next() {
 				// The index is out of rows or an error occurred.
-				if n.pErr = n.index.PErr(); n.pErr != nil {
+				if n.err = n.index.Err(); n.err != nil {
 					return false
 				}
 				if len(n.table.spans) == 0 {
@@ -188,8 +188,8 @@ func (n *indexJoinNode) Next() bool {
 			vals := n.index.Values()
 			primaryIndexKey, _, err := encodeIndexKey(
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
-			n.pErr = roachpb.NewError(err)
-			if n.pErr != nil {
+			n.err = err
+			if n.err != nil {
 				return false
 			}
 			key := roachpb.Key(primaryIndexKey)
@@ -212,8 +212,8 @@ func (n *indexJoinNode) Next() bool {
 	return false
 }
 
-func (n *indexJoinNode) PErr() *roachpb.Error {
-	return n.pErr
+func (n *indexJoinNode) Err() error {
+	return n.err
 }
 
 func (n *indexJoinNode) ExplainPlan(_ bool) (name, description string, children []planNode) {

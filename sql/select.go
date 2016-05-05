@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -105,7 +104,7 @@ func (s *selectNode) DebugValues() debugValues {
 	return s.debugVals
 }
 
-func (s *selectNode) Start() *roachpb.Error {
+func (s *selectNode) Start() error {
 	return s.table.node.Start()
 }
 
@@ -143,11 +142,11 @@ func (s *selectNode) Next() bool {
 	}
 }
 
-func (s *selectNode) PErr() *roachpb.Error {
+func (s *selectNode) Err() error {
 	if s.err != nil {
-		return roachpb.NewError(s.err)
+		return s.err
 	}
-	return s.table.node.PErr()
+	return s.table.node.Err()
 }
 
 func (s *selectNode) ExplainTypes(regTypes func(string, string)) {
@@ -214,9 +213,9 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
 	default:
-		plan, pErr := p.makePlan(s, desiredTypes, autoCommit)
-		if pErr != nil {
-			return nil, pErr.GoError()
+		plan, err := p.makePlan(s, desiredTypes, autoCommit)
+		if err != nil {
+			return nil, err
 		}
 		sort, err := p.orderBy(orderBy, plan)
 		if err != nil {
@@ -401,10 +400,8 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 				return fmt.Errorf("subquery in FROM must have an alias")
 			}
 
-			var pErr *roachpb.Error
-			s.table.node, pErr = p.makePlan(expr.Select, nil, false)
-			if pErr != nil {
-				s.err = pErr.GoError()
+			s.table.node, s.err = p.makePlan(expr.Select, nil, false)
+			if s.err != nil {
 				return s.err
 			}
 

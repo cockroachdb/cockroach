@@ -352,9 +352,9 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	cols, pErr := c.executor.Prepare(ctx, query, c.session, args)
-	if pErr != nil {
-		return c.sendPError(pErr)
+	cols, err := c.executor.Prepare(ctx, query, c.session, args)
+	if err != nil {
+		return c.sendError(err)
 	}
 	pq := preparedStatement{
 		query:       query,
@@ -651,25 +651,25 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendPError(pErr *roachpb.Error) error {
+func (c *v3Conn) sendError(err error) error {
 	var errCode string
-	if sqlErr, ok := pErr.GetDetail().(*roachpb.ErrorWithPGCode); ok {
+	if sqlErr, ok := err.(*roachpb.ErrorWithPGCode); ok {
 		errCode = sqlErr.ErrorCode
 	} else {
 		errCode = sql.CodeInternalError
 	}
-	return c.sendError(errCode, pErr.String())
+	return c.sendErrorWithCode(errCode, err.Error())
 }
 
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendError(sql.CodeInternalError, errToSend)
+	return c.sendErrorWithCode(sql.CodeInternalError, errToSend)
 }
 
 // errCode is a postgres error code, plus our extensions.
 // See http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-func (c *v3Conn) sendError(errCode string, errToSend string) error {
+func (c *v3Conn) sendErrorWithCode(errCode string, errToSend string) error {
 	if c.doingExtendedQueryMessage {
 		c.ignoreTillSync = true
 	}
@@ -707,8 +707,8 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 		return c.sendCommandComplete(nil)
 	}
 	for _, result := range results {
-		if result.PErr != nil {
-			if err := c.sendPError(result.PErr); err != nil {
+		if result.Err != nil {
+			if err := c.sendError(result.Err); err != nil {
 				return err
 			}
 			break
