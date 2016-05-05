@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
+// MakeTableDesc creates a table descriptor from a CreateTable statement.
+func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
 	desc := TableDescriptor{}
 	if err := p.Table.NormalizeTableName(""); err != nil {
 		return desc, err

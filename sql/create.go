@@ -199,7 +199,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 }
 
 func (n *createTableNode) Start() error {
-	desc, err := makeTableDesc(n.n, n.dbDesc.ID)
+	desc, err := sqlbase.MakeTableDesc(n.n, n.dbDesc.ID)
 	if err != nil {
 		return err
 	}
