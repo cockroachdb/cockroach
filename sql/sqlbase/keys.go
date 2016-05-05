@@ -95,10 +95,10 @@ func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(descriptorTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(descriptorTable.PrimaryIndex.ID))
+	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
-	return keys.MakeColumnKey(k, uint32(descriptorTable.Columns[1].ID))
+	return keys.MakeColumnKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
