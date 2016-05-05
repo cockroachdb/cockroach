@@ -25,6 +25,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -283,7 +284,7 @@ func (n *groupNode) Next() bool {
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
-		encoded, err := encodeDTuple(scratch, groupedValues)
+		encoded, err := sqlbase.EncodeDTuple(scratch, groupedValues)
 		if err != nil {
 			n.err = err
 			return false
@@ -621,7 +622,7 @@ func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
 	if a.seen != nil {
-		encoded, err := encodeDatum(bucket, d)
+		encoded, err := sqlbase.EncodeDatum(bucket, d)
 		if err != nil {
 			return err
 		}

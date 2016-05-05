@@ -141,10 +141,10 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origP
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
-	var alloc datumAlloc
+	var alloc sqlbase.DatumAlloc
 	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
-			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
+			indexID, key, err := sqlbase.DecodeIndexKeyPrefix(tableDesc, row.Key)
 			if err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origP
 			if err != nil {
 				return err
 			}
-			valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
+			valTypes, err := sqlbase.MakeKeyVals(tableDesc, index.ColumnIDs)
 			if err != nil {
 				return err
 			}
@@ -165,7 +165,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origP
 				dirs = append(dirs, convertedDir)
 			}
 			vals := make([]parser.Datum, len(valTypes))
-			if _, err := decodeKeyVals(&alloc, valTypes, vals, dirs, key); err != nil {
+			if _, err := sqlbase.DecodeKeyVals(&alloc, valTypes, vals, dirs, key); err != nil {
 				return err
 			}
 

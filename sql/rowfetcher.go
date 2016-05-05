@@ -81,7 +81,7 @@ type rowFetcher struct {
 	kvEnd bool
 
 	// Buffered allocation of decoded datums.
-	alloc datumAlloc
+	alloc sqlbase.DatumAlloc
 }
 
 // init sets up a rowFetcher for a given table and index. If we are using a
@@ -120,7 +120,7 @@ func (rf *rowFetcher) init(
 
 	var err error
 	// Prepare our index key vals slice.
-	rf.keyValTypes, err = makeKeyVals(rf.desc, indexColumnIDs)
+	rf.keyValTypes, err = sqlbase.MakeKeyVals(rf.desc, indexColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (rf *rowFetcher) init(
 		// key. Prepare implicitVals for use in decoding this value.
 		// Primary indexes only contain ascendingly-encoded values. If this
 		// ever changes, we'll probably have to figure out the directions here too.
-		rf.implicitValTypes, err = makeKeyVals(desc, index.ImplicitColumnIDs)
+		rf.implicitValTypes, err = sqlbase.MakeKeyVals(desc, index.ImplicitColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -228,7 +228,7 @@ func prettyDatums(vals []parser.Datum) string {
 }
 
 func (rf *rowFetcher) readIndexKey(k roachpb.Key) (remaining []byte, err error) {
-	return decodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyValTypes, rf.keyVals,
+	return sqlbase.DecodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyValTypes, rf.keyVals,
 		rf.indexColumnDirs, k)
 }
 
@@ -275,7 +275,7 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 			}
 			kind := rf.desc.Columns[idx].Type.Kind
-			value, err := unmarshalColumnValue(&rf.alloc, kind, kv.Value)
+			value, err := sqlbase.UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
@@ -298,7 +298,7 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 		if rf.implicitVals != nil {
 			// This is a unique index; decode the implicit column values from
 			// the value.
-			_, err := decodeKeyVals(&rf.alloc, rf.implicitValTypes, rf.implicitVals, nil,
+			_, err := sqlbase.DecodeKeyVals(&rf.alloc, rf.implicitValTypes, rf.implicitVals, nil,
 				kv.ValueBytes())
 			if err != nil {
 				return "", "", err

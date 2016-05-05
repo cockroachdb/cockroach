@@ -321,7 +321,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 						if err != nil {
 							return err
 						}
-						marshalled[i], err = marshalColumnValue(col, d)
+						marshalled[i], err = sqlbase.MarshalColumnValue(col, d)
 						if err != nil {
 							return err
 						}
@@ -489,17 +489,17 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			rowVals := rows.Values()
 
 			for _, desc := range added {
-				secondaryIndexEntries, err := encodeSecondaryIndexes(
+				secondaryIndexEntries, err := sqlbase.EncodeSecondaryIndexes(
 					tableDesc.ID, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
 				if err != nil {
 					return err
 				}
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
-						log.Infof("InitPut %s -> %v", secondaryIndexEntry.key,
-							secondaryIndexEntry.value)
+						log.Infof("InitPut %s -> %v", secondaryIndexEntry.Key,
+							secondaryIndexEntry.Value)
 					}
-					b.InitPut(secondaryIndexEntry.key, secondaryIndexEntry.value)
+					b.InitPut(secondaryIndexEntry.Key, secondaryIndexEntry.Value)
 				}
 			}
 		}

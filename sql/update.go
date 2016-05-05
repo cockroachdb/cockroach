@@ -226,7 +226,8 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if err != nil {
 			return nil, err
 		}
-		if err := checkColumnType(updateCols[i], typedTarget.ReturnType(), p.evalCtx.Args); err != nil {
+		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ReturnType(), p.evalCtx.Args)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -334,7 +335,7 @@ func (u *updateNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := checkValueWidth(u.updateCols[i], updateValues[i]); err != nil {
+		if err := sqlbase.CheckValueWidth(u.updateCols[i], updateValues[i]); err != nil {
 			u.run.err = err
 			return false
 		}

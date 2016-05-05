@@ -197,7 +197,7 @@ func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
 	// TODO(dan): The presence of OnConflict currently implies the short form
 	// (primary index and update the values being inserted). Implement the long
 	// form.
-	upsertRowPK, _, err := encodeIndexKey(
+	upsertRowPK, _, err := sqlbase.EncodeIndexKey(
 		&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 	if err != nil {
 		return nil, err
@@ -231,7 +231,7 @@ func (tu *tableUpserter) flush() error {
 
 		// TODO(dan): Can we do this without encoding an index key for every row we
 		// get back?
-		rowPK, _, err := encodeIndexKey(
+		rowPK, _, err := sqlbase.EncodeIndexKey(
 			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return err

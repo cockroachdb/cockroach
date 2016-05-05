@@ -187,7 +187,7 @@ func (n *indexJoinNode) Next() bool {
 			}
 
 			vals := n.index.Values()
-			primaryIndexKey, _, err := encodeIndexKey(
+			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
 			n.err = err
 			if n.err != nil {
