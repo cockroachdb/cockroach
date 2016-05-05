@@ -146,7 +146,7 @@ func (p *planner) Insert(
 			if err != nil {
 				return nil, err
 			}
-			typedExpr, err := parser.TypeCheck(expr, nil, parser.DummyBool)
+			typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeBool)
 			if err != nil {
 				return nil, err
 			}

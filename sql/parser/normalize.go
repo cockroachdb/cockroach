@@ -120,7 +120,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					Left:     expr.Right,
 					Right:    expr.Left,
 					typeAnnotation: typeAnnotation{
-						typ: DummyBool,
+						typ: TypeBool,
 					},
 				}
 			} else if !v.isConst(expr.Right) {

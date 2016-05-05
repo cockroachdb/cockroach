@@ -88,7 +88,7 @@ func canConstantBecome(c Constant, typ Datum) bool {
 // past the decimal point as an DInt. This is possible, but it is not desirable.
 func shouldConstantBecome(c Constant, typ Datum) bool {
 	if num, ok := c.(*NumVal); ok {
-		if typ.TypeEqual(DummyInt) && num.Kind() == constant.Float {
+		if typ.TypeEqual(TypeInt) && num.Kind() == constant.Float {
 			return false
 		}
 	}
@@ -158,11 +158,11 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 	return nil, false
 }
 
-var numValAvailIntFloatDec = []Datum{DummyInt, DummyFloat, DummyDecimal}
-var numValAvailFloatIntDec = []Datum{DummyFloat, DummyInt, DummyDecimal}
-var numValAvailFloatDec = []Datum{DummyFloat, DummyDecimal}
+var numValAvailIntFloatDec = []Datum{TypeInt, TypeFloat, TypeDecimal}
+var numValAvailFloatIntDec = []Datum{TypeFloat, TypeInt, TypeDecimal}
+var numValAvailFloatDec = []Datum{TypeFloat, TypeDecimal}
 
-// var numValAvailDec = []Datum{DummyDecimal}
+// var numValAvailDec = []Datum{TypeDecimal}
 
 // AvailableTypes implements the Constant interface.
 //
@@ -183,16 +183,16 @@ func (expr *NumVal) AvailableTypes() []Datum {
 // ResolveAsType implements the Constant interface.
 func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 	switch {
-	case typ.TypeEqual(DummyInt):
+	case typ.TypeEqual(TypeInt):
 		i, exact := constant.Int64Val(constant.ToInt(expr.Value))
 		if !exact {
 			return nil, fmt.Errorf("integer value out of range: %v", expr.Value)
 		}
 		return NewDInt(DInt(i)), nil
-	case typ.TypeEqual(DummyFloat):
+	case typ.TypeEqual(TypeFloat):
 		f, _ := constant.Float64Val(constant.ToFloat(expr.Value))
 		return NewDFloat(DFloat(f)), nil
-	case typ.TypeEqual(DummyDecimal):
+	case typ.TypeEqual(TypeDecimal):
 		dd := &DDecimal{}
 		s := expr.ExactString()
 		if idx := strings.IndexRune(s, '/'); idx != -1 {
@@ -221,7 +221,7 @@ func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 	}
 }
 
-var numValTypePriority = []Datum{DummyInt, DummyFloat, DummyDecimal}
+var numValTypePriority = []Datum{TypeInt, TypeFloat, TypeDecimal}
 
 // commonNumericConstantType returns the best constant type which is shared
 // between a set of provided numeric constants. Here, "best" is defined as
@@ -259,9 +259,9 @@ func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-var strValAvailStringBytes = []Datum{DummyString, DummyBytes}
-var strValAvailBytesString = []Datum{DummyBytes, DummyString}
-var strValAvailBytes = []Datum{DummyBytes}
+var strValAvailStringBytes = []Datum{TypeString, TypeBytes}
+var strValAvailBytesString = []Datum{TypeBytes, TypeString}
+var strValAvailBytes = []Datum{TypeBytes}
 
 // AvailableTypes implements the Constant interface.
 func (expr *StrVal) AvailableTypes() []Datum {
@@ -277,9 +277,9 @@ func (expr *StrVal) AvailableTypes() []Datum {
 // ResolveAsType implements the Constant interface.
 func (expr *StrVal) ResolveAsType(typ Datum) (Datum, error) {
 	switch typ {
-	case DummyString:
+	case TypeString:
 		return NewDString(expr.s), nil
-	case DummyBytes:
+	case TypeBytes:
 		return NewDBytes(DBytes(expr.s)), nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)

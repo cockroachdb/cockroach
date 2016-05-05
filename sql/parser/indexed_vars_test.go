@@ -71,7 +71,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	d := typedExpr.ReturnType()
-	if !d.TypeEqual(DummyInt) {
+	if !d.TypeEqual(TypeInt) {
 		t.Errorf("invalid expression type %s", d.Type())
 	}
 	d, err = typedExpr.Eval(defaultContext)

@@ -37,7 +37,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	name := strings.ToUpper(n.Name.String())
 	typedValues := make([]parser.TypedExpr, len(n.Values))
 	for i, expr := range n.Values {
-		typedValue, err := parser.TypeCheck(expr, nil, parser.DummyString)
+		typedValue, err := parser.TypeCheck(expr, nil, parser.TypeString)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,7 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 }
 
 func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
-	typedValue, err := parser.TypeCheck(n.Value, nil, parser.DummyInt)
+	typedValue, err := parser.TypeCheck(n.Value, nil, parser.TypeInt)
 	if err != nil {
 		return nil, err
 	}
