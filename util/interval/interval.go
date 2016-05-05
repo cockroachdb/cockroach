@@ -317,13 +317,13 @@ func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root 
 
 	switch c := min.Compare(n.Elem.Range().Start); {
 	case c == 0:
-		switch cid := id - n.Elem.ID(); {
-		case cid == 0:
+		switch {
+		case id == n.Elem.ID():
 			n.Elem = e
 			if !fast {
 				n.Range.End = e.Range().End
 			}
-		case cid < 0:
+		case id < n.Elem.ID():
 			n.Left, d = n.Left.insert(e, min, id, fast)
 		default:
 			n.Right, d = n.Right.insert(e, min, id, fast)
@@ -525,10 +525,10 @@ func (n *Node) floor(m Comparable, id uintptr) *Node {
 	}
 	switch c := m.Compare(n.Elem.Range().Start); {
 	case c == 0:
-		switch cid := id - n.Elem.ID(); {
-		case cid == 0:
+		switch {
+		case id == n.Elem.ID():
 			return n
-		case cid < 0:
+		case id < n.Elem.ID():
 			return n.Left.floor(m, id)
 		default:
 			if r := n.Right.floor(m, id); r != nil {
@@ -564,10 +564,10 @@ func (n *Node) ceil(m Comparable, id uintptr) *Node {
 	}
 	switch c := m.Compare(n.Elem.Range().Start); {
 	case c == 0:
-		switch cid := id - n.Elem.ID(); {
-		case cid == 0:
+		switch {
+		case id == n.Elem.ID():
 			return n
-		case cid > 0:
+		case id > n.Elem.ID():
 			return n.Right.ceil(m, id)
 		default:
 			if l := n.Left.ceil(m, id); l != nil {
