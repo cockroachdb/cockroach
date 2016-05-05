@@ -1547,6 +1547,13 @@ class Transaction : public ::google::protobuf::Message {
   bool write_too_old() const;
   void set_write_too_old(bool value);
 
+  // optional bool retry_on_push = 13;
+  bool has_retry_on_push() const;
+  void clear_retry_on_push();
+  static const int kRetryOnPushFieldNumber = 13;
+  bool retry_on_push() const;
+  void set_retry_on_push(bool value);
+
   // repeated .cockroach.roachpb.Span intents = 11;
   int intents_size() const;
   void clear_intents();
@@ -1577,6 +1584,8 @@ class Transaction : public ::google::protobuf::Message {
   inline void clear_has_writing();
   inline void set_has_write_too_old();
   inline void clear_has_write_too_old();
+  inline void set_has_retry_on_push();
+  inline void clear_has_retry_on_push();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1586,9 +1595,6 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* last_heartbeat_;
   ::cockroach::roachpb::Timestamp* orig_timestamp_;
   ::cockroach::roachpb::Timestamp* max_timestamp_;
-  int status_;
-  bool writing_;
-  bool write_too_old_;
   typedef ::google::protobuf::internal::MapEntryLite<
       ::google::protobuf::int32, ::cockroach::roachpb::Timestamp,
       ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
@@ -1600,6 +1606,10 @@ class Transaction : public ::google::protobuf::Message {
       ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
       ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
       0 > observed_timestamps_;
+  int status_;
+  bool writing_;
+  bool write_too_old_;
+  bool retry_on_push_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
@@ -3561,6 +3571,30 @@ inline void Transaction::set_write_too_old(bool value) {
   set_has_write_too_old();
   write_too_old_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
+}
+
+// optional bool retry_on_push = 13;
+inline bool Transaction::has_retry_on_push() const {
+  return (_has_bits_[0] & 0x00000200u) != 0;
+}
+inline void Transaction::set_has_retry_on_push() {
+  _has_bits_[0] |= 0x00000200u;
+}
+inline void Transaction::clear_has_retry_on_push() {
+  _has_bits_[0] &= ~0x00000200u;
+}
+inline void Transaction::clear_retry_on_push() {
+  retry_on_push_ = false;
+  clear_has_retry_on_push();
+}
+inline bool Transaction::retry_on_push() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.retry_on_push)
+  return retry_on_push_;
+}
+inline void Transaction::set_retry_on_push(bool value) {
+  set_has_retry_on_push();
+  retry_on_push_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.retry_on_push)
 }
 
 // repeated .cockroach.roachpb.Span intents = 11;

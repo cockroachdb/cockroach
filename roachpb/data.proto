@@ -290,6 +290,12 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   optional bool write_too_old = 12 [(gogoproto.nullable) = false];
+  // If retry_on_push is true, the transaction must retry in the event
+  // that the commit timestamp is pushed forward. This flag is set if
+  // the transaction contains any calls to DeleteRange, in order to
+  // prevent the LostDeleteRange anomaly. This flag is relevant only
+  // for SNAPSHOT transactions.
+  optional bool retry_on_push = 13 [(gogoproto.nullable) = false];
   repeated Span intents = 11 [(gogoproto.nullable) = false];
 }
 
