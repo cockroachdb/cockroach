@@ -25,6 +25,8 @@ import (
 
 // TODO(nvanbenschoten) These can be removed and DummyT can be replaced by TypeT.
 var (
+	// TypeBool returns a bool datum.
+	TypeBool = DummyBool
 	// TypeBytes returns a bytes datum.
 	TypeBytes = DummyBytes
 	// TypeDate returns a date datum.

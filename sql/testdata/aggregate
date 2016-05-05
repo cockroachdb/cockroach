@@ -637,3 +637,35 @@ query B
 SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
 ----
 true
+
+statement ok
+CREATE TABLE bools (b BOOL)
+
+query BB
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+----
+NULL NULL
+
+statement OK
+INSERT INTO bools VALUES (true), (true), (true)
+
+query BB
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+----
+true true
+
+statement OK
+INSERT INTO bools VALUES (false), (false)
+
+query BB
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+----
+false true
+
+statement OK
+DELETE FROM bools WHERE b
+
+query BB
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+----
+false false

@@ -641,6 +641,20 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"bool_and": {
+		Builtin{
+			Types:      ArgTypes{DummyBool},
+			ReturnType: TypeBool,
+		},
+	},
+
+	"bool_or": {
+		Builtin{
+			Types:      ArgTypes{DummyBool},
+			ReturnType: TypeBool,
+		},
+	},
+
 	"count": countImpls(),
 
 	"max": aggregateImpls(DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes, DummyDate, DummyTimestamp, DummyInterval),
