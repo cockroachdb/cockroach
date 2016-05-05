@@ -96,8 +96,8 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	},
 	reflect.TypeOf(&roachpb.Transaction{}): {
 		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedTransaction(r, false) },
-		emptySum:             1224176153607079475,
-		populatedSum:         154941000985571253,
+		emptySum:             8650182997796107667,
+		populatedSum:         85604713557216790,
 	},
 }
 
