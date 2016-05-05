@@ -55,8 +55,6 @@ const (
 	AltYAMLContentType = "application/x-yaml"
 	// PlaintextContentType is the plaintext content type.
 	PlaintextContentType = "text/plain"
-	// SnappyEncoding is the snappy encoding.
-	SnappyEncoding = "snappy"
 	// GzipEncoding is the gzip encoding.
 	GzipEncoding = "gzip"
 )

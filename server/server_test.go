@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -191,11 +190,6 @@ func TestAcceptEncoding(t *testing.T) {
 					t.Fatalf("could not create new gzip reader: %s", err)
 				}
 				return r
-			},
-		},
-		{util.SnappyEncoding,
-			func(b io.Reader) io.Reader {
-				return snappy.NewReader(b)
 			},
 		},
 	}

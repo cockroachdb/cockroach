@@ -33,7 +33,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 
-	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -57,8 +56,6 @@ import (
 var (
 	// Allocation pool for gzip writers.
 	gzipWriterPool sync.Pool
-	// Allocation pool for snappy writers.
-	snappyWriterPool sync.Pool
 
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
@@ -499,8 +496,7 @@ func (s *Server) Stop() {
 	s.stopper.Stop()
 }
 
-// ServeHTTP is necessary to implement the http.Handler interface. It
-// will snappy a response if the appropriate request headers are set.
+// ServeHTTP is necessary to implement the http.Handler interface.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This is our base handler, so catch all panics and make sure they stick.
 	defer log.FatalOnPanic()
@@ -510,11 +506,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ae := r.Header.Get(util.AcceptEncodingHeader)
 	switch {
-	case strings.Contains(ae, util.SnappyEncoding):
-		w.Header().Set(util.ContentEncodingHeader, util.SnappyEncoding)
-		s := newSnappyResponseWriter(w)
-		defer s.Close()
-		w = s
 	case strings.Contains(ae, util.GzipEncoding):
 		w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
 		gzw := newGzipResponseWriter(w)
@@ -549,36 +540,6 @@ func (w *gzipResponseWriter) Close() {
 		w.WriteCloser.Close()
 		gzipWriterPool.Put(w.WriteCloser)
 		w.WriteCloser = nil
-	}
-}
-
-type snappyResponseWriter struct {
-	io.Writer
-	http.ResponseWriter
-}
-
-func newSnappyResponseWriter(w http.ResponseWriter) *snappyResponseWriter {
-	var s *snappy.Writer
-	if sI := snappyWriterPool.Get(); sI == nil {
-		// TODO(pmattis): It would be better to use the C++ snappy code
-		// like rpc/codec is doing. Would have to copy the snappy.Writer
-		// implementation from snappy-go.
-		s = snappy.NewWriter(w)
-	} else {
-		s = sI.(*snappy.Writer)
-		s.Reset(w)
-	}
-	return &snappyResponseWriter{Writer: s, ResponseWriter: w}
-}
-
-func (w *snappyResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
-}
-
-func (w *snappyResponseWriter) Close() {
-	if w.Writer != nil {
-		snappyWriterPool.Put(w.Writer)
-		w.Writer = nil
 	}
 }
 
