@@ -2598,19 +2598,19 @@ simple_typename:
 | const_interval '(' ICONST ')' { unimplemented() }
 | BLOB
   {
-    $$.val = bytesTypeBlob
+    $$.val = bytesColTypeBlob
   }
 | BYTES
   {
-    $$.val = bytesTypeBytes
+    $$.val = bytesColTypeBytes
   }
 | BYTEA
   {
-    $$.val = bytesTypeBytea
+    $$.val = bytesColTypeBytea
   }
 | TEXT
   {
-    $$.val = stringTypeText
+    $$.val = stringColTypeText
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types
@@ -2636,7 +2636,7 @@ opt_numeric_modifiers:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalType{Prec: int(prec)}
+    $$.val = &DecimalColType{Prec: int(prec)}
   }
 | '(' ICONST ',' ICONST ')'
   {
@@ -2650,7 +2650,7 @@ opt_numeric_modifiers:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalType{Prec: int(prec), Scale: int(scale)}
+    $$.val = &DecimalColType{Prec: int(prec), Scale: int(scale)}
   }
 | /* EMPTY */
   {
@@ -2661,27 +2661,27 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = intTypeInt
+    $$.val = intColTypeInt
   }
 | INT64
   {
-    $$.val = intTypeInt64
+    $$.val = intColTypeInt64
   }
 | INTEGER
   {
-    $$.val = intTypeInteger
+    $$.val = intColTypeInteger
   }
 | SMALLINT
   {
-    $$.val = intTypeSmallInt
+    $$.val = intColTypeSmallInt
   }
 | BIGINT
   {
-    $$.val = intTypeBigInt
+    $$.val = intColTypeBigInt
   }
 | REAL
   {
-    $$.val = floatTypeReal
+    $$.val = floatColTypeReal
   }
 | FLOAT opt_float
   {
@@ -2690,46 +2690,46 @@ numeric:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newFloatType(int(prec))
+    $$.val = newFloatColType(int(prec))
   }
 | DOUBLE PRECISION
   {
-    $$.val = floatTypeDouble
+    $$.val = floatColTypeDouble
   }
 | DECIMAL opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = decimalTypeDecimal
+      $$.val = decimalColTypeDecimal
     } else {
-      $$.val.(*DecimalType).Name = "DECIMAL"
+      $$.val.(*DecimalColType).Name = "DECIMAL"
     }
   }
 | DEC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = decimalTypeDec
+      $$.val = decimalColTypeDec
     } else {
-      $$.val.(*DecimalType).Name = "DEC"
+      $$.val.(*DecimalColType).Name = "DEC"
     }
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = decimalTypeNumeric
+      $$.val = decimalColTypeNumeric
     } else {
-      $$.val.(*DecimalType).Name = "NUMERIC"
+      $$.val.(*DecimalColType).Name = "NUMERIC"
     }
   }
 | BOOLEAN
   {
-    $$.val = boolTypeBoolean
+    $$.val = boolColTypeBoolean
   }
 | BOOL
   {
-    $$.val = boolTypeBool
+    $$.val = boolColTypeBool
   }
 
 opt_float:
@@ -2768,7 +2768,7 @@ bit_with_length:
 bit_without_length:
   BIT opt_varying
   {
-    $$.val = intTypeBit
+    $$.val = intColTypeBit
   }
 
 // SQL character data types
@@ -2791,8 +2791,8 @@ character_with_length:
     }
     $$.val = $1.colType()
     if n != 0 {
-      strType := &StringType{N: int(n)}
-      strType.Name = $$.val.(*StringType).Name
+      strType := &StringColType{N: int(n)}
+      strType.Name = $$.val.(*StringColType).Name
       $$.val = strType
     }
   }
@@ -2806,19 +2806,19 @@ character_without_length:
 character_base:
   CHARACTER opt_varying
   {
-    $$.val = stringTypeChar
+    $$.val = stringColTypeChar
   }
 | CHAR opt_varying
   {
-    $$.val = stringTypeChar
+    $$.val = stringColTypeChar
   }
 | VARCHAR
   {
-    $$.val = stringTypeVarChar
+    $$.val = stringColTypeVarChar
   }
 | STRING
   {
-    $$.val = stringTypeString
+    $$.val = stringColTypeString
   }
 
 opt_varying:
@@ -2829,24 +2829,24 @@ opt_varying:
 const_datetime:
   DATE
   {
-    $$.val = dateTypeDate
+    $$.val = dateColTypeDate
   }
 | TIMESTAMP
   {
-    $$.val = timestampTypeTimestamp
+    $$.val = timestampColTypeTimestamp
   }
 | TIMESTAMPTZ
   {
-    $$.val = timestampTzTypeTimestampWithTZ
+    $$.val = timestampTzColTypeTimestampWithTZ
   }
 | TIMESTAMP WITH_LA TIME ZONE
   {
-    $$.val = timestampTzTypeTimestampWithTZ
+    $$.val = timestampTzColTypeTimestampWithTZ
   }
 
 const_interval:
   INTERVAL {
-    $$.val = intervalTypeInterval
+    $$.val = intervalColTypeInterval
   }
 
 opt_interval:

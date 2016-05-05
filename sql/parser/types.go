@@ -28,58 +28,58 @@ type ColumnType interface {
 	columnType()
 }
 
-func (*BoolType) columnType()        {}
-func (*IntType) columnType()         {}
-func (*FloatType) columnType()       {}
-func (*DecimalType) columnType()     {}
-func (*DateType) columnType()        {}
-func (*TimestampType) columnType()   {}
-func (*TimestampTZType) columnType() {}
-func (*IntervalType) columnType()    {}
-func (*StringType) columnType()      {}
-func (*BytesType) columnType()       {}
+func (*BoolColType) columnType()        {}
+func (*IntColType) columnType()         {}
+func (*FloatColType) columnType()       {}
+func (*DecimalColType) columnType()     {}
+func (*DateColType) columnType()        {}
+func (*TimestampColType) columnType()   {}
+func (*TimestampTZColType) columnType() {}
+func (*IntervalColType) columnType()    {}
+func (*StringColType) columnType()      {}
+func (*BytesColType) columnType()       {}
 
 // Pre-allocated immutable boolean column types.
 var (
-	boolTypeBool    = &BoolType{Name: "BOOL"}
-	boolTypeBoolean = &BoolType{Name: "BOOLEAN"}
+	boolColTypeBool    = &BoolColType{Name: "BOOL"}
+	boolColTypeBoolean = &BoolColType{Name: "BOOLEAN"}
 )
 
-// BoolType represents a BOOLEAN type.
-type BoolType struct {
+// BoolColType represents a BOOLEAN type.
+type BoolColType struct {
 	Name string
 }
 
 // Format implements the NodeFormatter interface.
-func (node *BoolType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
 // Pre-allocated immutable integer column types.
 var (
-	intTypeBit      = &IntType{Name: "BIT"}
-	intTypeInt      = &IntType{Name: "INT"}
-	intTypeInt64    = &IntType{Name: "INT64"}
-	intTypeInteger  = &IntType{Name: "INTEGER"}
-	intTypeSmallInt = &IntType{Name: "SMALLINT"}
-	intTypeBigInt   = &IntType{Name: "BIGINT"}
+	intColTypeBit      = &IntColType{Name: "BIT"}
+	intColTypeInt      = &IntColType{Name: "INT"}
+	intColTypeInt64    = &IntColType{Name: "INT64"}
+	intColTypeInteger  = &IntColType{Name: "INTEGER"}
+	intColTypeSmallInt = &IntColType{Name: "SMALLINT"}
+	intColTypeBigInt   = &IntColType{Name: "BIGINT"}
 )
 
-func newIntBitType(n int) *IntType {
+func newIntBitType(n int) *IntColType {
 	if n == 0 {
-		return intTypeBit
+		return intColTypeBit
 	}
-	return &IntType{Name: "BIT", N: n}
+	return &IntColType{Name: "BIT", N: n}
 }
 
-// IntType represents an INT, INTEGER, SMALLINT or BIGINT type.
-type IntType struct {
+// IntColType represents an INT, INTEGER, SMALLINT or BIGINT type.
+type IntColType struct {
 	Name string
 	N    int
 }
 
 // Format implements the NodeFormatter interface.
-func (node *IntType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *IntColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(buf, "(%d)", node.N)
@@ -88,26 +88,26 @@ func (node *IntType) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Pre-allocated immutable float column types.
 var (
-	floatTypeReal   = &FloatType{Name: "REAL"}
-	floatTypeFloat  = &FloatType{Name: "FLOAT"}
-	floatTypeDouble = &FloatType{Name: "DOUBLE PRECISION"}
+	floatColTypeReal   = &FloatColType{Name: "REAL"}
+	floatColTypeFloat  = &FloatColType{Name: "FLOAT"}
+	floatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION"}
 )
 
-// FloatType represents a REAL, DOUBLE or FLOAT type.
-type FloatType struct {
+// FloatColType represents a REAL, DOUBLE or FLOAT type.
+type FloatColType struct {
 	Name string
 	Prec int
 }
 
-func newFloatType(prec int) *FloatType {
+func newFloatColType(prec int) *FloatColType {
 	if prec == 0 {
-		return floatTypeFloat
+		return floatColTypeFloat
 	}
-	return &FloatType{Name: "FLOAT", Prec: prec}
+	return &FloatColType{Name: "FLOAT", Prec: prec}
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FloatType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *FloatColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d)", node.Prec)
@@ -116,20 +116,20 @@ func (node *FloatType) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Pre-allocated immutable decimal column types.
 var (
-	decimalTypeDec     = &DecimalType{Name: "DEC"}
-	decimalTypeDecimal = &DecimalType{Name: "DECIMAL"}
-	decimalTypeNumeric = &DecimalType{Name: "NUMERIC"}
+	decimalColTypeDec     = &DecimalColType{Name: "DEC"}
+	decimalColTypeDecimal = &DecimalColType{Name: "DECIMAL"}
+	decimalColTypeNumeric = &DecimalColType{Name: "NUMERIC"}
 )
 
-// DecimalType represents a DECIMAL or NUMERIC type.
-type DecimalType struct {
+// DecimalColType represents a DECIMAL or NUMERIC type.
+type DecimalColType struct {
 	Name  string
 	Prec  int
 	Scale int
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DecimalType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *DecimalColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d", node.Prec)
@@ -141,69 +141,69 @@ func (node *DecimalType) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // Pre-allocated immutable date column type.
-var dateTypeDate = &DateType{}
+var dateColTypeDate = &DateColType{}
 
-// DateType represents a DATE type.
-type DateType struct {
+// DateColType represents a DATE type.
+type DateColType struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DateType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *DateColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DATE")
 }
 
 // Pre-allocated immutable timestamp column type.
-var timestampTypeTimestamp = &TimestampType{}
+var timestampColTypeTimestamp = &TimestampColType{}
 
-// TimestampType represents a TIMESTAMP type.
-type TimestampType struct {
+// TimestampColType represents a TIMESTAMP type.
+type TimestampColType struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *TimestampType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *TimestampColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("TIMESTAMP")
 }
 
 // Pre-allocated immutable timestamp with time zone column type.
-var timestampTzTypeTimestampWithTZ = &TimestampTZType{}
+var timestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
 
-// TimestampTZType represents a TIMESTAMP type.
-type TimestampTZType struct {
+// TimestampTZColType represents a TIMESTAMP type.
+type TimestampTZColType struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *TimestampTZType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *TimestampTZColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("TIMESTAMP WITH TIME ZONE")
 }
 
 // Pre-allocated immutable interval column type.
-var intervalTypeInterval = &IntervalType{}
+var intervalColTypeInterval = &IntervalColType{}
 
-// IntervalType represents an INTERVAL type
-type IntervalType struct {
+// IntervalColType represents an INTERVAL type
+type IntervalColType struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *IntervalType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *IntervalColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("INTERVAL")
 }
 
 // Pre-allocated immutable string column types.
 var (
-	stringTypeChar    = &StringType{Name: "CHAR"}
-	stringTypeVarChar = &StringType{Name: "VARCHAR"}
-	stringTypeString  = &StringType{Name: "STRING"}
-	stringTypeText    = &StringType{Name: "TEXT"}
+	stringColTypeChar    = &StringColType{Name: "CHAR"}
+	stringColTypeVarChar = &StringColType{Name: "VARCHAR"}
+	stringColTypeString  = &StringColType{Name: "STRING"}
+	stringColTypeText    = &StringColType{Name: "TEXT"}
 )
 
-// StringType represents a STRING, CHAR or VARCHAR type.
-type StringType struct {
+// StringColType represents a STRING, CHAR or VARCHAR type.
+type StringColType struct {
 	Name string
 	N    int
 }
 
 // Format implements the NodeFormatter interface.
-func (node *StringType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *StringColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(buf, "(%d)", node.N)
@@ -212,28 +212,28 @@ func (node *StringType) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Pre-allocated immutable bytes column types.
 var (
-	bytesTypeBlob  = &BytesType{Name: "BLOB"}
-	bytesTypeBytes = &BytesType{Name: "BYTES"}
-	bytesTypeBytea = &BytesType{Name: "BYTEA"}
+	bytesColTypeBlob  = &BytesColType{Name: "BLOB"}
+	bytesColTypeBytes = &BytesColType{Name: "BYTES"}
+	bytesColTypeBytea = &BytesColType{Name: "BYTEA"}
 )
 
-// BytesType represents a BYTES or BLOB type.
-type BytesType struct {
+// BytesColType represents a BYTES or BLOB type.
+type BytesColType struct {
 	Name string
 }
 
 // Format implements the NodeFormatter interface.
-func (node *BytesType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *BytesColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-func (node *BoolType) String() string        { return AsString(node) }
-func (node *IntType) String() string         { return AsString(node) }
-func (node *FloatType) String() string       { return AsString(node) }
-func (node *DecimalType) String() string     { return AsString(node) }
-func (node *DateType) String() string        { return AsString(node) }
-func (node *TimestampType) String() string   { return AsString(node) }
-func (node *TimestampTZType) String() string { return AsString(node) }
-func (node *IntervalType) String() string    { return AsString(node) }
-func (node *StringType) String() string      { return AsString(node) }
-func (node *BytesType) String() string       { return AsString(node) }
+func (node *BoolColType) String() string        { return AsString(node) }
+func (node *IntColType) String() string         { return AsString(node) }
+func (node *FloatColType) String() string       { return AsString(node) }
+func (node *DecimalColType) String() string     { return AsString(node) }
+func (node *DateColType) String() string        { return AsString(node) }
+func (node *TimestampColType) String() string   { return AsString(node) }
+func (node *TimestampTZColType) String() string { return AsString(node) }
+func (node *IntervalColType) String() string    { return AsString(node) }
+func (node *StringColType) String() string      { return AsString(node) }
+func (node *BytesColType) String() string       { return AsString(node) }

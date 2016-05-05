@@ -1360,7 +1360,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 
 	switch expr.Type.(type) {
-	case *BoolType:
+	case *BoolColType:
 		switch v := d.(type) {
 		case *DBool:
 			return d, nil
@@ -1380,7 +1380,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return MakeDBool(DBool(b)), nil
 		}
 
-	case *IntType:
+	case *IntColType:
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
@@ -1411,7 +1411,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return NewDInt(DInt(i)), nil
 		}
 
-	case *FloatType:
+	case *FloatColType:
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
@@ -1436,7 +1436,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return NewDFloat(DFloat(f)), nil
 		}
 
-	case *DecimalType:
+	case *DecimalColType:
 		dd := &DDecimal{}
 		switch v := d.(type) {
 		case *DBool:
@@ -1459,7 +1459,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return dd, nil
 		}
 
-	case *StringType:
+	case *StringColType:
 		var s DString
 		switch t := d.(type) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
@@ -1472,7 +1472,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			}
 			s = DString(*t)
 		}
-		if c, ok := expr.Type.(*StringType); ok {
+		if c, ok := expr.Type.(*StringColType); ok {
 			// If the CHAR type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			if c.N > 0 && c.N < len(s) {
@@ -1481,7 +1481,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		}
 		return &s, nil
 
-	case *BytesType:
+	case *BytesColType:
 		switch t := d.(type) {
 		case *DString:
 			return NewDBytes(DBytes(*t)), nil
@@ -1489,7 +1489,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return d, nil
 		}
 
-	case *DateType:
+	case *DateColType:
 		switch d := d.(type) {
 		case *DString:
 			return ParseDate(*d)
@@ -1499,7 +1499,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return ctx.makeDDate(d.Time)
 		}
 
-	case *TimestampType:
+	case *TimestampColType:
 		switch d := d.(type) {
 		case *DString:
 			return ctx.ParseTimestamp(*d)
@@ -1513,7 +1513,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return &DTimestamp{d.Time}, nil
 		}
 
-	case *TimestampTZType:
+	case *TimestampTZColType:
 		switch d := d.(type) {
 		case *DString:
 			t, err := ctx.ParseTimestamp(*d)
@@ -1527,7 +1527,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return d, nil
 		}
 
-	case *IntervalType:
+	case *IntervalColType:
 		switch v := d.(type) {
 		case *DString:
 			// At this time the only supported interval formats are:
@@ -1720,70 +1720,70 @@ func (expr *IsOfTypeExpr) Eval(ctx EvalContext) (Datum, error) {
 	switch d.(type) {
 	case *DBool:
 		for _, t := range expr.Types {
-			if _, ok := t.(*BoolType); ok {
+			if _, ok := t.(*BoolColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DInt:
 		for _, t := range expr.Types {
-			if _, ok := t.(*IntType); ok {
+			if _, ok := t.(*IntColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DFloat:
 		for _, t := range expr.Types {
-			if _, ok := t.(*FloatType); ok {
+			if _, ok := t.(*FloatColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DDecimal:
 		for _, t := range expr.Types {
-			if _, ok := t.(*DecimalType); ok {
+			if _, ok := t.(*DecimalColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DString:
 		for _, t := range expr.Types {
-			if _, ok := t.(*StringType); ok {
+			if _, ok := t.(*StringColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DBytes:
 		for _, t := range expr.Types {
-			if _, ok := t.(*BytesType); ok {
+			if _, ok := t.(*BytesColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DDate:
 		for _, t := range expr.Types {
-			if _, ok := t.(*DateType); ok {
+			if _, ok := t.(*DateColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DTimestamp:
 		for _, t := range expr.Types {
-			if _, ok := t.(*TimestampType); ok {
+			if _, ok := t.(*TimestampColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DTimestampTZ:
 		for _, t := range expr.Types {
-			if _, ok := t.(*TimestampTZType); ok {
+			if _, ok := t.(*TimestampTZColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
 
 	case *DInterval:
 		for _, t := range expr.Types {
-			if _, ok := t.(*IntervalType); ok {
+			if _, ok := t.(*IntervalColType); ok {
 				return MakeDBool(result), nil
 			}
 		}
