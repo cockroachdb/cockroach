@@ -80,8 +80,8 @@ const (
 	DescriptorActive
 )
 
-var errMissingColumns = errors.New("table must contain at least 1 column")
-var errMissingPrimaryKey = errors.New("table must contain a primary key")
+var ErrMissingColumns = errors.New("table must contain at least 1 column")
+var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {
@@ -384,7 +384,7 @@ func (desc *TableDescriptor) Validate() error {
 	}
 
 	if len(desc.Columns) == 0 {
-		return errMissingColumns
+		return ErrMissingColumns
 	}
 
 	columnNames := map[string]ColumnID{}
@@ -436,7 +436,7 @@ func (desc *TableDescriptor) Validate() error {
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
 	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
-		return errMissingPrimaryKey
+		return ErrMissingPrimaryKey
 	}
 
 	indexNames := map[string]struct{}{}
