@@ -73,7 +73,7 @@ type editNodeRun struct {
 }
 
 func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWriter) error {
-	if isSystemConfigID(en.tableDesc.GetID()) {
+	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}

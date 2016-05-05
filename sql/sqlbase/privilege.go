@@ -171,7 +171,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	if !ok {
 		return fmt.Errorf("user %s does not have privileges", security.RootUser)
 	}
-	if isSystemConfigID(id) {
+	if IsSystemConfigID(id) {
 		// System databases and tables have custom maximum allowed privileges.
 		objectPrivileges, ok := SystemAllowedPrivileges[id]
 		if !ok {

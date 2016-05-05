@@ -184,7 +184,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
 
-// isSystemConfigID returns true if this ID is for a system config object.
-func isSystemConfigID(id ID) bool {
+// IsSystemConfigID returns true if this ID is for a system config object.
+func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
 }
