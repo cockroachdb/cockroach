@@ -55,9 +55,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *db, nil)
 
 	// Acquire a lease.
-	lease, pErr := changer.AcquireLease()
-	if pErr != nil {
-		t.Fatal(pErr)
+	lease, err := changer.AcquireLease()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if !validExpirationTime(lease.ExpirationTime) {
@@ -65,9 +65,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	var newLease sqlbase.TableDescriptor_SchemaChangeLease
-	newLease, pErr = changer.AcquireLease()
-	if pErr == nil {
+	if newLease, err := changer.AcquireLease(); err == nil {
 		t.Fatalf("acquired new lease: %v, while unexpired lease exists: %v", newLease, lease)
 	}
 
@@ -106,9 +104,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// acquiring the lease succeeds
-	lease, pErr = changer.AcquireLease()
-	if pErr != nil {
-		t.Fatal(pErr)
+	lease, err = changer.AcquireLease()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

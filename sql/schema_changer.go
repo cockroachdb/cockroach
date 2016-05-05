@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"errors"
 	"math"
 	"time"
 
@@ -80,10 +81,12 @@ func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_Schem
 		NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(jitteredLeaseDuration()).UnixNano()}
 }
 
+var errExistingSchemaChangeLease = errors.New(
+	"an outstanding schema change lease exists")
+
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
-// TODO(andrei): change to error
-func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLease, error) {
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
@@ -101,7 +104,7 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 
 		if tableDesc.Lease != nil {
 			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
-				return &roachpb.ExistingSchemaChangeLeaseError{}
+				return errExistingSchemaChangeLease
 			}
 			log.Infof("Overriding existing expired lease %v", tableDesc.Lease)
 		}
@@ -109,7 +112,7 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 		tableDesc.Lease = &lease
 		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
-	return lease, roachpb.NewError(err)
+	return lease, err
 }
 
 func (sc *SchemaChanger) findTableWithLease(
@@ -132,9 +135,9 @@ func (sc *SchemaChanger) findTableWithLease(
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChangeLease) error {
 	err := sc.db.Txn(func(txn *client.Txn) error {
-		tableDesc, pErr := sc.findTableWithLease(txn, lease)
-		if pErr != nil {
-			return pErr
+		tableDesc, err := sc.findTableWithLease(txn, lease)
+		if err != nil {
+			return err
 		}
 		tableDesc.Lease = nil
 		txn.SetSystemConfigTrigger()
@@ -165,9 +168,9 @@ func (sc *SchemaChanger) ExtendLease(
 // called before the backfill starts; it can be nil.
 func (sc SchemaChanger) exec(startBackfillNotification func()) error {
 	// Acquire lease.
-	lease, pErr := sc.AcquireLease()
-	if pErr != nil {
-		return pErr.GoError()
+	lease, err := sc.AcquireLease()
+	if err != nil {
+		return err
 	}
 	needRelease := true
 	// Always try to release lease.
@@ -239,7 +242,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) error {
 	if err := sc.runBackfill(&lease); err != nil {
 		// Purge the mutations if the application of the mutations fail.
 		if errPurge := sc.purgeMutations(&lease); errPurge != nil {
-			return util.Errorf("error purging mutation: %s, after error: %s", errPurge, pErr)
+			return util.Errorf("error purging mutation: %s, after error: %s", errPurge, err)
 		}
 		return err
 	}
@@ -605,14 +608,13 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					if timeutil.Since(sc.execAfter) > 0 {
 						err := sc.exec(nil)
 						if err != nil {
-							switch err.(type) {
-							case *roachpb.ExistingSchemaChangeLeaseError:
-							case *roachpb.DescriptorNotFoundError:
+							if err == errExistingSchemaChangeLease {
+							} else if _, ok := err.(*roachpb.DescriptorNotFoundError); ok {
 								// Someone deleted this table. Don't try to run the schema
 								// changer again. Note that there's no gossip update for the
 								// deletion which would remove this schemaChanger.
 								delete(s.schemaChangers, tableID)
-							default:
+							} else {
 								log.Warningf("Error executing schema change: %s", err)
 							}
 						}

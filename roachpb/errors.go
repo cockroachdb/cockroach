@@ -604,16 +604,6 @@ func (*DidntUpdateDescriptorError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &DidntUpdateDescriptorError{}
 
-func (e *ExistingSchemaChangeLeaseError) Error() string {
-	return e.message(nil)
-}
-
-func (*ExistingSchemaChangeLeaseError) message(_ *Error) string {
-	return "an outstanding schema change lease exists"
-}
-
-var _ ErrorDetailInterface = &ExistingSchemaChangeLeaseError{}
-
 func (e *DescriptorDeletedError) Error() string {
 	return e.message(nil)
 }

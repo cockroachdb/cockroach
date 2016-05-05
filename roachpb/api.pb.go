@@ -111,7 +111,6 @@
 		ReplicaCorruptionError
 		LeaseVersionChangedError
 		DidntUpdateDescriptorError
-		ExistingSchemaChangeLeaseError
 		DescriptorDeletedError
 		DescriptorNotFoundError
 		ErrorDetail
