@@ -476,13 +476,18 @@ func (l *LocalCluster) startNode(node *testNode) {
 	env := []string{"COCKROACH_SCAN_MAX_IDLE_TIME=200ms", "COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true"}
 	l.createRoach(node, l.vols, env, cmd...)
 	maybePanic(node.Start())
+	httpAddr := node.Addr(defaultHTTP)
+
 	log.Infof(`*** started %[1]s ***
   ui:        %[2]s
   trace:     %[2]s/debug/requests
   logs:      %[3]s/cockroach.INFO
   pprof:     docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'
-  cockroach: %[6]s`,
-		node.Name(), "https://"+node.Addr(DefaultTCP).String(), locallogDir, node.Container.id[:5], base.DefaultHTTPPort, cmd)
+  cockroach: %[6]s
+
+  cli-env:   COCKROACH_INSECURE=false COCKROACH_CA_CERT=%[7]s/ca.crt COCKROACH_CERT=%[7]s/node.crt COCKROACH_KEY=%[7]s/node.key COCKROACH_HOST=%s COCKROACH_PORT=%d`,
+		node.Name(), "https://"+httpAddr.String(), locallogDir, node.Container.id[:5],
+		base.DefaultHTTPPort, cmd, l.CertsDir, httpAddr.IP, httpAddr.Port)
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {

@@ -339,6 +339,24 @@ func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, er
 	return db.scan(begin, end, maxRows, true, roachpb.CONSISTENT)
 }
 
+// ChangeFrozen sets the supplied frozen status on all Ranges whose StartKey is
+// contained in the specified key range. Returns the number of Ranges whose
+// state changed, and the first included (not necessarily affected) Range's
+// StartKey.
+func (db *DB) ChangeFrozen(begin, end interface{}, mustVersion string, frozen bool) (int64, roachpb.RKey, error) {
+	b := db.NewBatch()
+	b.ChangeFrozen(begin, end, mustVersion, frozen)
+	r, err := runOneResult(db, b)
+	if err != nil {
+		return 0, nil, err
+	}
+	var resp roachpb.ChangeFrozenResponse
+	if err := r.Rows[0].ValueProto(&resp); err != nil {
+		return 0, nil, err
+	}
+	return resp.RangesAffected, resp.MinStartKey, nil
+}
+
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.

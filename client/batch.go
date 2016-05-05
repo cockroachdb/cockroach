@@ -121,10 +121,10 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 					if br != nil && offset+k < len(br.Responses) {
 						reply = br.Responses[offset+k].GetInner()
 					} else if args.Method() != roachpb.EndTransaction {
-						// TODO(tschottdorf): EndTransaction is excepted here
-						// because it may be elided (r/o txns). Might prefer to
-						// simulate an EndTransaction response instead; this
-						// effectively just leaks here.
+						// TODO(tschottdorf): EndTransaction is special-cased
+						// here because it may be elided (r/o txns). Might
+						// prefer to simulate an EndTransaction response
+						// instead; this effectively just leaks here.
 						panic("not enough responses for calls")
 					}
 				}
@@ -194,6 +194,24 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
+			case *roachpb.ChangeFrozenRequest:
+				row := &result.Rows[k]
+				row.Key = []byte(req.Key)
+				if result.PErr == nil {
+					t := reply.(*roachpb.ChangeFrozenResponse)
+					row.Value = &roachpb.Value{}
+					if err := row.Value.SetProto(t); err != nil {
+						panic(err)
+					}
+				}
+
+			default:
+				if result.PErr == nil {
+					result.PErr = roachpb.NewErrorf("unsupported reply: %T", reply)
+				}
+
+				// Nothing to do for all methods below as they do not generate
+				// any rows.
 			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
@@ -208,13 +226,6 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.LeaderLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
-				// Nothing to do for these methods as they do not generate any
-				// rows.
-
-			default:
-				if result.PErr == nil {
-					result.PErr = roachpb.NewErrorf("unsupported reply: %T", reply)
-				}
 			}
 		}
 		offset += result.calls
@@ -436,6 +447,24 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 	}
 	b.reqs = append(b.reqs, roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
 	b.initResult(1, 0, nil)
+}
+
+// ChangeFrozen attempts to freeze or unfreeze all Ranges with StartKey
+// covered by the given key range.
+func (b *Batch) ChangeFrozen(s, e interface{}, mustVersion string, frozen bool) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return
+	}
+	b.reqs = append(b.reqs,
+		roachpb.NewChangeFrozen(roachpb.Key(begin), roachpb.Key(end), frozen, mustVersion))
+	b.initResult(1, 1, nil)
 }
 
 // Del deletes one or more keys.
