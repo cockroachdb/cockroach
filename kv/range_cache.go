@@ -385,11 +385,13 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 	// It rarely may be possible that we somehow got grouped in with the
 	// wrong RangeLookup (eg. from a double split), so if we did, return
 	// a retryable lookupMismatchError with an unmodified eviction token.
-	if res.desc != nil && !res.desc.ContainsKey(key) {
-		return nil, evictToken, roachpb.NewError(lookupMismatchError{
-			desiredKey:     key,
-			mismatchedDesc: res.desc,
-		})
+	if res.desc != nil {
+		if (!useReverseScan && !res.desc.ContainsKey(key)) || (useReverseScan && !res.desc.ContainsExclusiveEndKey(key)) {
+			return nil, evictToken, roachpb.NewError(lookupMismatchError{
+				desiredKey:     key,
+				mismatchedDesc: res.desc,
+			})
+		}
 	}
 	return res.desc, res.evictToken, res.pErr
 }
