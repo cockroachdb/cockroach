@@ -33,6 +33,8 @@ import (
 
 var aggregates = map[string]func() aggregateImpl{
 	"avg":      newAvgAggregate,
+	"bool_and": newBoolAndAggregate,
+	"bool_or":  newBoolOrAggregate,
 	"count":    newCountAggregate,
 	"max":      newMaxAggregate,
 	"min":      newMinAggregate,
@@ -755,6 +757,70 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 	default:
 		return nil, util.Errorf("unexpected SUM result type: %s", t.Type())
 	}
+}
+
+type boolAndAggregate struct {
+	sawNonNull bool
+	sawFalse   bool
+}
+
+func newBoolAndAggregate() aggregateImpl {
+	return &boolAndAggregate{}
+}
+
+func (a *boolAndAggregate) add(datum parser.Datum) error {
+	if datum == parser.DNull {
+		return nil
+	}
+	a.sawNonNull = true
+	switch t := datum.(type) {
+	case *parser.DBool:
+		if !a.sawFalse {
+			a.sawFalse = !bool(*t)
+		}
+		return nil
+	default:
+		return util.Errorf("unexpected BOOL_AND argument type: %s", t.Type())
+	}
+}
+
+func (a *boolAndAggregate) result() (parser.Datum, error) {
+	if !a.sawNonNull {
+		return parser.DNull, nil
+	}
+	return parser.MakeDBool(parser.DBool(!a.sawFalse)), nil
+}
+
+type boolOrAggregate struct {
+	sawNonNull bool
+	sawTrue    bool
+}
+
+func newBoolOrAggregate() aggregateImpl {
+	return &boolOrAggregate{}
+}
+
+func (a *boolOrAggregate) add(datum parser.Datum) error {
+	if datum == parser.DNull {
+		return nil
+	}
+	a.sawNonNull = true
+	switch t := datum.(type) {
+	case *parser.DBool:
+		if !a.sawTrue {
+			a.sawTrue = bool(*t)
+		}
+		return nil
+	default:
+		return util.Errorf("unexpected BOOL_OR argument type: %s", t.Type())
+	}
+}
+
+func (a *boolOrAggregate) result() (parser.Datum, error) {
+	if !a.sawNonNull {
+		return parser.DNull, nil
+	}
+	return parser.MakeDBool(parser.DBool(a.sawTrue)), nil
 }
 
 type countAggregate struct {
