@@ -56,7 +56,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
 	_, err = p.SelectClause(&parser.SelectClause{
-		Exprs: en.tableDesc.allColumnsSelector(),
+		Exprs: en.tableDesc.AllColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
 	}, nil)
@@ -86,7 +86,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 func (d *deleteNode) Start() *roachpb.Error {
 	// TODO(knz): See the comment above in Delete().
 	rows, err := d.p.SelectClause(&parser.SelectClause{
-		Exprs: d.tableDesc.allColumnsSelector(),
+		Exprs: d.tableDesc.AllColumnsSelector(),
 		From:  []parser.TableExpr{d.n.Table},
 		Where: d.n.Where,
 	}, nil)

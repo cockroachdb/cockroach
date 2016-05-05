@@ -175,7 +175,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// "*, 1, 2", not "*, (1, 2)".
 	// TODO(radu): we only need to select columns necessary to generate primary and
 	// secondary indexes keys, and columns needed by returningHelper.
-	targets := en.tableDesc.allColumnsSelector()
+	targets := en.tableDesc.AllColumnsSelector()
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
@@ -266,7 +266,7 @@ func (u *updateNode) Start() *roachpb.Error {
 	// Really generate the list of select targets.
 	// TODO(radu): we only need to select columns necessary to generate primary and
 	// secondary indexes keys, and columns needed by returningHelper.
-	targets := u.tableDesc.allColumnsSelector()
+	targets := u.tableDesc.AllColumnsSelector()
 	i := 0
 	for _, expr := range exprs {
 		if expr.Tuple {
