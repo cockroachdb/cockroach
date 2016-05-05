@@ -260,7 +260,7 @@ func (sc *SchemaChanger) MaybeIncrementVersion() (*sqlbase.Descriptor, error) {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		if !desc.UpVersion {
 			// Return error so that Publish() doesn't increment the version.
-			return &roachpb.DidntUpdateDescriptorError{}
+			return errDidntUpdateDescriptor
 		}
 		desc.UpVersion = false
 		// Publish() will increment the version.
@@ -311,7 +311,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 		}
 		if !modified {
 			// Return error so that Publish() doesn't increment the version.
-			return &roachpb.DidntUpdateDescriptorError{}
+			return errDidntUpdateDescriptor
 		}
 		return nil
 	}); err != nil {
@@ -354,7 +354,7 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 		if i == 0 {
 			// The table descriptor is unchanged. Don't let Publish() increment
 			// the version.
-			return &roachpb.DidntUpdateDescriptorError{}
+			return errDidntUpdateDescriptor
 		}
 		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]

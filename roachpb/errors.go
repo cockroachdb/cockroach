@@ -584,16 +584,6 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
 
-func (e *DidntUpdateDescriptorError) Error() string {
-	return e.message(nil)
-}
-
-func (*DidntUpdateDescriptorError) message(_ *Error) string {
-	return "didn't update the table descriptor"
-}
-
-var _ ErrorDetailInterface = &DidntUpdateDescriptorError{}
-
 func (e *DescriptorDeletedError) Error() string {
 	return e.message(nil)
 }

@@ -224,6 +224,8 @@ func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Option
 	return tableDesc.Version, nil
 }
 
+var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
+
 // Publish updates a table descriptor. It also maintains the invariant that
 // there are at most two versions of the descriptor out in the wild at any time
 // by first waiting for all nodes to be on the current (pre-update) version of
@@ -301,18 +303,13 @@ func (s LeaseStore) Publish(
 			return txn.CommitInBatch(b)
 		})
 
-		if err == errLeaseVersionChanged {
+		switch err {
+		case nil, errDidntUpdateDescriptor:
+			return desc, nil
+		case errLeaseVersionChanged:
 			// will loop around to retry
-		} else {
-			switch err.(type) {
-			case *roachpb.DidntUpdateDescriptorError:
-				return desc, nil
-			default:
-				if err == nil {
-					return desc, nil
-				}
-				return nil, err
-			}
+		default:
+			return nil, err
 		}
 	}
 

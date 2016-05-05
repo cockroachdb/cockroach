@@ -109,7 +109,6 @@
 		SendError
 		RaftGroupDeletedError
 		ReplicaCorruptionError
-		DidntUpdateDescriptorError
 		DescriptorDeletedError
 		DescriptorNotFoundError
 		ErrorDetail
