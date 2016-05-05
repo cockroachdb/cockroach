@@ -133,7 +133,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		return sqlbase.TableDescriptor{}, err
 	}
 
-	if qname.Database() == systemDB.Name || testDisableTableLeases {
+	if qname.Database() == sqlbase.SystemDB.Name || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for system tables. The
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
