@@ -16,7 +16,10 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/sql/parser"
+import (
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
+)
 
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
@@ -36,7 +39,7 @@ func (p *planner) makeReturningHelper(
 	r parser.ReturningExprs,
 	desiredTypes []parser.Datum,
 	alias string,
-	tablecols []ColumnDescriptor,
+	tablecols []sqlbase.ColumnDescriptor,
 ) (returningHelper, error) {
 	rh := returningHelper{
 		p:            p,

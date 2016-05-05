@@ -19,6 +19,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 func init() {
@@ -30,7 +31,7 @@ func init() {
 // GetZoneConfig returns the zone config for the object with 'id'.
 func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
 	// Look in the zones table.
-	if zoneVal := cfg.GetValue(MakeZoneKey(ID(id))); zoneVal != nil {
+	if zoneVal := cfg.GetValue(sqlbase.MakeZoneKey(sqlbase.ID(id))); zoneVal != nil {
 		zone := &config.ZoneConfig{}
 		if err := zoneVal.GetProto(zone); err != nil {
 			return nil, err
@@ -41,9 +42,9 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, erro
 
 	// No zone config for this ID. We need to figure out if it's a database
 	// or table. Lookup its descriptor.
-	if descVal := cfg.GetValue(MakeDescMetadataKey(ID(id))); descVal != nil {
+	if descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); descVal != nil {
 		// Determine whether this is a database or table.
-		desc := &Descriptor{}
+		desc := &sqlbase.Descriptor{}
 		if err := descVal.GetProto(desc); err != nil {
 			return nil, err
 		}
@@ -66,9 +67,9 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, erro
 // GetTableDesc returns the table descriptor for the table with 'id'.
 // Returns nil if the descriptor is not present, or is present but is not a
 // table.
-func GetTableDesc(cfg config.SystemConfig, id ID) (*TableDescriptor, error) {
-	if descVal := cfg.GetValue(MakeDescMetadataKey(id)); descVal != nil {
-		desc := &Descriptor{}
+func GetTableDesc(cfg config.SystemConfig, id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
+	if descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(id)); descVal != nil {
+		desc := &sqlbase.Descriptor{}
 		if err := descVal.GetProto(desc); err != nil {
 			return nil, err
 		}

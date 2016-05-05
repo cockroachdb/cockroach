@@ -25,21 +25,22 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
-	tableDesc *TableDescriptor
-	indexes   []IndexDescriptor
+	tableDesc *sqlbase.TableDescriptor
+	indexes   []sqlbase.IndexDescriptor
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-	primaryIndexCols      map[ColumnID]struct{}
+	primaryIndexCols      map[sqlbase.ColumnID]struct{}
 }
 
-func (rh *rowHelper) encodeIndexes(colIDtoRowIndex map[ColumnID]int, values []parser.Datum) (
+func (rh *rowHelper) encodeIndexes(colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum) (
 	primaryIndexKey []byte,
 	secondaryIndexEntries []indexEntry,
 	err error,
@@ -61,11 +62,11 @@ func (rh *rowHelper) encodeIndexes(colIDtoRowIndex map[ColumnID]int, values []pa
 	return primaryIndexKey, secondaryIndexEntries, nil
 }
 
-// TODO(dan): This logic is common and being moved into TableDescriptor (see
+// TODO(dan): This logic is common and being moved into sqlbase.TableDescriptor (see
 // #6233). Once it is, use the shared one.
-func (rh *rowHelper) columnInPK(colID ColumnID) bool {
+func (rh *rowHelper) columnInPK(colID sqlbase.ColumnID) bool {
 	if rh.primaryIndexCols == nil {
-		rh.primaryIndexCols = make(map[ColumnID]struct{})
+		rh.primaryIndexCols = make(map[sqlbase.ColumnID]struct{})
 		for _, colID := range rh.tableDesc.PrimaryIndex.ColumnIDs {
 			rh.primaryIndexCols[colID] = struct{}{}
 		}
@@ -77,8 +78,8 @@ func (rh *rowHelper) columnInPK(colID ColumnID) bool {
 // rowInserter abstracts the key/value operations for inserting table rows.
 type rowInserter struct {
 	helper                rowHelper
-	insertCols            []ColumnDescriptor
-	insertColIDtoRowIndex map[ColumnID]int
+	insertCols            []sqlbase.ColumnDescriptor
+	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 
 	// For allocation avoidance.
 	marshalled    []roachpb.Value
@@ -90,8 +91,8 @@ type rowInserter struct {
 //
 // insertCols must contain every column in the primary key.
 func makeRowInserter(
-	tableDesc *TableDescriptor,
-	insertCols []ColumnDescriptor,
+	tableDesc *sqlbase.TableDescriptor,
+	insertCols []sqlbase.ColumnDescriptor,
 ) (rowInserter, error) {
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
@@ -197,9 +198,9 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 // rowUpdater abstracts the key/value operations for updating table rows.
 type rowUpdater struct {
 	helper               rowHelper
-	fetchCols            []ColumnDescriptor
-	fetchColIDtoRowIndex map[ColumnID]int
-	updateCols           []ColumnDescriptor
+	fetchCols            []sqlbase.ColumnDescriptor
+	fetchColIDtoRowIndex map[sqlbase.ColumnID]int
+	updateCols           []sqlbase.ColumnDescriptor
 	deleteOnlyIndex      map[int]struct{}
 	primaryKeyColChange  bool
 
@@ -220,8 +221,8 @@ type rowUpdater struct {
 // The returned rowUpdater contains a fetchCols field that defines the
 // expectation of which values are passed as oldValues to updateRow.
 func makeRowUpdater(
-	tableDesc *TableDescriptor,
-	updateCols []ColumnDescriptor,
+	tableDesc *sqlbase.TableDescriptor,
+	updateCols []sqlbase.ColumnDescriptor,
 ) (rowUpdater, error) {
 	// TODO(dan): makeRowUpdater should take a param for the sql rows needed for
 	// returningHelper, etc.
@@ -229,7 +230,7 @@ func makeRowUpdater(
 
 	updateColIDtoRowIndex := colIDtoRowIndexFromCols(updateCols)
 
-	primaryIndexCols := make(map[ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
+	primaryIndexCols := make(map[sqlbase.ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
 	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		primaryIndexCols[colID] = struct{}{}
 	}
@@ -243,7 +244,7 @@ func makeRowUpdater(
 	}
 
 	// Secondary indexes needing updating.
-	needsUpdate := func(index IndexDescriptor) bool {
+	needsUpdate := func(index sqlbase.IndexDescriptor) bool {
 		// If the primary key changed, we need to update all of them.
 		if primaryKeyColChange {
 			return true
@@ -256,7 +257,7 @@ func makeRowUpdater(
 		return false
 	}
 
-	indexes := make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	indexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
 	for _, index := range tableDesc.Indexes {
 		if needsUpdate(index) {
 			indexes = append(indexes, index)
@@ -436,8 +437,8 @@ func (ru *rowUpdater) updateRow(
 // rowDeleter abstracts the key/value operations for deleting table rows.
 type rowDeleter struct {
 	helper               rowHelper
-	fetchCols            []ColumnDescriptor
-	fetchColIDtoRowIndex map[ColumnID]int
+	fetchCols            []sqlbase.ColumnDescriptor
+	fetchColIDtoRowIndex map[sqlbase.ColumnID]int
 
 	// For allocation avoidance.
 	startKey roachpb.Key
@@ -449,7 +450,7 @@ type rowDeleter struct {
 // The returned rowDeleter contains a fetchCols field that defines the
 // expectation of which values are passed as values to deleteRow.
 func makeRowDeleter(
-	tableDesc *TableDescriptor,
+	tableDesc *sqlbase.TableDescriptor,
 ) (rowDeleter, error) {
 	// TODO(dan): makeRowDeleter should take a param for the sql rows needed for
 	// returningHelper, etc.
@@ -513,8 +514,8 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 	return nil
 }
 
-func colIDtoRowIndexFromCols(cols []ColumnDescriptor) map[ColumnID]int {
-	colIDtoRowIndex := make(map[ColumnID]int, len(cols))
+func colIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.ColumnID]int {
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(cols))
 	for i, col := range cols {
 		colIDtoRowIndex[col.ID] = i
 	}

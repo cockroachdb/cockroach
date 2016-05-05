@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -87,8 +88,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	tbZoneKey := sql.MakeZoneKey(tbDesc.ID)
-	dbZoneKey := sql.MakeZoneKey(dbDesc.ID)
+	tbZoneKey := sqlbase.MakeZoneKey(tbDesc.ID)
+	dbZoneKey := sqlbase.MakeZoneKey(dbDesc.ID)
 	if gr, err := kvDB.Get(tbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {

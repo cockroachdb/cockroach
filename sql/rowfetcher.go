@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -48,8 +49,8 @@ import (
 type rowFetcher struct {
 	// -- Fields initialized once --
 
-	desc             *TableDescriptor
-	index            *IndexDescriptor
+	desc             *sqlbase.TableDescriptor
+	index            *sqlbase.IndexDescriptor
 	reverse          bool
 	isSecondaryIndex bool
 	indexColumnDirs  []encoding.Direction
@@ -59,7 +60,7 @@ type rowFetcher struct {
 	valNeededForCol []bool
 
 	// Map used to get the index for columns in desc.Columns.
-	colIdxMap map[ColumnID]int
+	colIdxMap map[sqlbase.ColumnID]int
 
 	// One value per column that is part of the key; each value is a column
 	// index (into desc.Columns).
@@ -87,9 +88,9 @@ type rowFetcher struct {
 // non-primary index, valNeededForCol can only be true for the columns in the
 // index.
 func (rf *rowFetcher) init(
-	desc *TableDescriptor,
-	colIdxMap map[ColumnID]int,
-	index *IndexDescriptor,
+	desc *sqlbase.TableDescriptor,
+	colIdxMap map[sqlbase.ColumnID]int,
+	index *sqlbase.IndexDescriptor,
 	reverse, isSecondaryIndex bool,
 	valNeededForCol []bool,
 ) error {
@@ -101,8 +102,8 @@ func (rf *rowFetcher) init(
 	rf.valNeededForCol = valNeededForCol
 	rf.row = make([]parser.Datum, len(rf.desc.Columns))
 
-	var indexColumnIDs []ColumnID
-	indexColumnIDs, rf.indexColumnDirs = index.fullColumnIDs()
+	var indexColumnIDs []sqlbase.ColumnID
+	indexColumnIDs, rf.indexColumnDirs = index.FullColumnIDs()
 
 	rf.indexColIdx = make([]int, len(indexColumnIDs))
 	for i, id := range indexColumnIDs {
@@ -111,7 +112,7 @@ func (rf *rowFetcher) init(
 
 	if isSecondaryIndex {
 		for i, needed := range valNeededForCol {
-			if needed && !index.containsColumnID(desc.Columns[i].ID) {
+			if needed && !index.ContainsColumnID(desc.Columns[i].ID) {
 				return util.Errorf("requested column %s not in index", desc.Columns[i].Name)
 			}
 		}
@@ -268,7 +269,7 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 			return "", "", err
 		}
 
-		idx, ok := rf.colIdxMap[ColumnID(colID)]
+		idx, ok := rf.colIdxMap[sqlbase.ColumnID(colID)]
 		if ok && (debugStrings || rf.valNeededForCol[idx]) {
 			if debugStrings {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -36,8 +37,8 @@ type insertNode struct {
 
 	desiredTypes []parser.Datum // This will go away when we only type check once.
 
-	insertCols            []ColumnDescriptor
-	insertColIDtoRowIndex map[ColumnID]int
+	insertCols            []sqlbase.ColumnDescriptor
+	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 	tw                    tableWriter
 
 	run struct {
@@ -70,7 +71,7 @@ func (p *planner) Insert(
 		}
 	}
 
-	var cols []ColumnDescriptor
+	var cols []sqlbase.ColumnDescriptor
 	// Determine which columns we're inserting into.
 	if n.DefaultValues() {
 		cols = en.tableDesc.Columns
@@ -84,13 +85,13 @@ func (p *planner) Insert(
 	// columns receiving a default value.
 	numInputColumns := len(cols)
 
-	colIDSet := make(map[ColumnID]struct{}, len(cols))
+	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(cols))
 	for _, col := range cols {
 		colIDSet[col.ID] = struct{}{}
 	}
 
 	// Add the column if it has a DEFAULT expression.
-	addIfDefault := func(col ColumnDescriptor) {
+	addIfDefault := func(col sqlbase.ColumnDescriptor) {
 		if col.DefaultExpr != nil {
 			if _, ok := colIDSet[col.ID]; !ok {
 				colIDSet[col.ID] = struct{}{}
@@ -207,7 +208,7 @@ func (p *planner) Insert(
 		upsertConflictIndex := en.tableDesc.PrimaryIndex
 		insertCols := ri.insertCols
 
-		indexColSet := make(map[ColumnID]struct{}, len(upsertConflictIndex.ColumnIDs))
+		indexColSet := make(map[sqlbase.ColumnID]struct{}, len(upsertConflictIndex.ColumnIDs))
 		for _, colID := range upsertConflictIndex.ColumnIDs {
 			indexColSet[colID] = struct{}{}
 		}
@@ -217,7 +218,7 @@ func (p *planner) Insert(
 		// minus any columns in the conflict index. Example:
 		// `UPSERT INTO abc VALUES (1, 2, 3)` is syntactic sugar for
 		// `INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT a DO UPDATE SET b = 2, c = 3`.
-		updateCols := make([]ColumnDescriptor, 0, len(insertCols))
+		updateCols := make([]sqlbase.ColumnDescriptor, 0, len(insertCols))
 		for _, c := range insertCols {
 			if _, ok := indexColSet[c.ID]; !ok {
 				updateCols = append(updateCols, c)
@@ -280,7 +281,7 @@ func (n *insertNode) Start() error {
 			n.run.rowTemplate[i] = parser.DNull
 		}
 
-		colIDToRetIndex := map[ColumnID]int{}
+		colIDToRetIndex := map[sqlbase.ColumnID]int{}
 		for i, col := range n.tableDesc.Columns {
 			colIDToRetIndex[col.ID] = i
 		}
@@ -346,9 +347,9 @@ func (n *insertNode) Next() bool {
 		// Populate qvals.
 		for ref, qval := range n.qvals {
 			// The colIdx is 0-based, we need to change it to 1-based.
-			ri, has := n.insertColIDtoRowIndex[ColumnID(ref.colIdx+1)]
+			ri, has := n.insertColIDtoRowIndex[sqlbase.ColumnID(ref.colIdx+1)]
 			if !has {
-				n.run.err = fmt.Errorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
+				n.run.err = fmt.Errorf("failed to to find column %d in row", sqlbase.ColumnID(ref.colIdx+1))
 				return false
 			}
 			qval.datum = rowVals[ri]
@@ -390,8 +391,8 @@ func (n *insertNode) Next() bool {
 	return true
 }
 
-func (p *planner) processColumns(tableDesc *TableDescriptor,
-	node parser.QualifiedNames) ([]ColumnDescriptor, error) {
+func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
+	node parser.QualifiedNames) ([]sqlbase.ColumnDescriptor, error) {
 	if node == nil {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
 		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
@@ -400,8 +401,8 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		return tableDesc.VisibleColumns(), nil
 	}
 
-	cols := make([]ColumnDescriptor, len(node))
-	colIDSet := make(map[ColumnID]struct{}, len(node))
+	cols := make([]sqlbase.ColumnDescriptor, len(node))
+	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
 	for i, n := range node {
 		// TODO(pmattis): If the name is qualified, verify the table name matches
 		// tableDesc.Name.
@@ -423,7 +424,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 }
 
 func (p *planner) fillDefaults(defaultExprs []parser.TypedExpr,
-	cols []ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, error) {
+	cols []sqlbase.ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, error) {
 	if n.DefaultValues() {
 		row := make(parser.Exprs, 0, len(cols))
 		for i := range cols {
@@ -467,7 +468,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.TypedExpr,
 }
 
 func makeDefaultExprs(
-	cols []ColumnDescriptor, parse *parser.Parser, evalCtx parser.EvalContext,
+	cols []sqlbase.ColumnDescriptor, parse *parser.Parser, evalCtx parser.EvalContext,
 ) ([]parser.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
@@ -509,7 +510,7 @@ func makeDefaultExprs(
 	return defaultExprs, nil
 }
 
-func (p *planner) makeCheckExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
+func (p *planner) makeCheckExprs(cols []sqlbase.ColumnDescriptor) ([]parser.Expr, error) {
 	// Check to see if any of the columns have CHECK expressions. If there are
 	// no CHECK expressions, we don't bother with constructing it.
 	numCheck := 0

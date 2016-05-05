@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -31,11 +32,11 @@ import (
 type scanNode struct {
 	planner *planner
 	txn     *client.Txn
-	desc    TableDescriptor
-	index   *IndexDescriptor
+	desc    sqlbase.TableDescriptor
+	index   *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
-	specifiedIndex *IndexDescriptor
+	specifiedIndex *sqlbase.IndexDescriptor
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
@@ -49,7 +50,7 @@ type scanNode struct {
 	valNeededForCol []bool
 
 	// Map used to get the index for columns in desc.Columns.
-	colIdxMap map[ColumnID]int
+	colIdxMap map[sqlbase.ColumnID]int
 
 	spans            []span
 	isSecondaryIndex bool
@@ -258,11 +259,11 @@ func (n *scanNode) initTable(
 	return alias, nil
 }
 
-// makeResultColumns converts ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
+// makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
+func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
 	for _, colDesc := range colDescs {
-		// Convert the ColumnDescriptor to ResultColumn.
+		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
 		typ := colDesc.Type.toDatumType()
 		if typ == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
@@ -288,7 +289,7 @@ func (n *scanNode) initDescDefaults() {
 	n.index = &n.desc.PrimaryIndex
 	cols := n.desc.Columns
 	n.resultColumns = makeResultColumns(cols)
-	n.colIdxMap = make(map[ColumnID]int, len(cols))
+	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
 	for i, c := range cols {
 		n.colIdxMap[c.ID] = i
 	}
@@ -314,11 +315,11 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 //    - the first `exactPrefix` columns of the index each have an exact (single value) match
 //      (see orderingInfo).
 func (n *scanNode) computeOrdering(
-	index *IndexDescriptor, exactPrefix int, reverse bool,
+	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool,
 ) orderingInfo {
 	var ordering orderingInfo
 
-	columnIDs, dirs := index.fullColumnIDs()
+	columnIDs, dirs := index.FullColumnIDs()
 
 	for i, colID := range columnIDs {
 		idx, ok := n.colIdxMap[colID]

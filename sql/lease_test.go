@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -124,7 +125,7 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 
 func (t *leaseTest) publish(nodeID uint32, descID csql.ID) error {
 	_, err := t.node(nodeID).Publish(descID,
-		func(*csql.TableDescriptor) error {
+		func(*sqlbase.TableDescriptor) error {
 			return nil
 		})
 	return err
@@ -311,7 +312,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n1.Publish(descID, func(*sqlbase.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -332,7 +333,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n2.Publish(descID, func(*sqlbase.TableDescriptor) error {
 			return nil
 		})
 		if err != nil {
@@ -348,7 +349,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
-func getTableDescriptor(db *client.DB, database string, table string) *csql.TableDescriptor {
+func getTableDescriptor(db *client.DB, database string, table string) *sqlbase.TableDescriptor {
 	dbNameKey := csql.MakeNameMetadataKey(keys.RootNamespaceID, database)
 	gr, err := db.Get(dbNameKey)
 	if err != nil {

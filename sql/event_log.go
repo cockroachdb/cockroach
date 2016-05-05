@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -61,7 +62,7 @@ CREATE TABLE system.eventlog (
 
 // AddEventLogToMetadataSchema adds the event log table to the supplied
 // MetadataSchema.
-func AddEventLogToMetadataSchema(schema *MetadataSchema) {
+func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
 	schema.AddTable(keys.EventLogTableID, eventTableSchema, privilege.List{privilege.ALL})
 }
 

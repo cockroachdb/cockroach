@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -30,7 +31,7 @@ import (
 // pass a filter expression.
 // See docs/RFCS/distributed_sql.md
 type TableReader struct {
-	desc       TableDescriptor
+	desc       sqlbase.TableDescriptor
 	spans      spans
 	outputCols []int
 
@@ -101,7 +102,7 @@ func NewTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 		valNeededForCol[c] = valNeededForCol[c] || tr.filterVars.IndexedVarUsed(c)
 	}
 
-	var index *IndexDescriptor
+	var index *sqlbase.IndexDescriptor
 	var isSecondaryIndex bool
 	switch {
 	case spec.IndexIdx == 0:
@@ -113,7 +114,7 @@ func NewTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 		return nil, fmt.Errorf("Invalid indexIdx %d", spec.IndexIdx)
 	}
 
-	colIdxMap := make(map[ColumnID]int, len(tr.desc.Columns))
+	colIdxMap := make(map[sqlbase.ColumnID]int, len(tr.desc.Columns))
 	for i, c := range tr.desc.Columns {
 		colIdxMap[c.ID] = i
 	}

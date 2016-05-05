@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -35,7 +36,7 @@ type indexJoinNode struct {
 	index            *scanNode
 	table            *scanNode
 	primaryKeyPrefix roachpb.Key
-	colIDtoRowIndex  map[ColumnID]int
+	colIDtoRowIndex  map[sqlbase.ColumnID]int
 	err              error
 	explain          explainMode
 	debugVals        debugValues
@@ -48,7 +49,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	table.initDescDefaults()
 	table.initOrdering(0)
 
-	colIDtoRowIndex := map[ColumnID]int{}
+	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
 		idx, ok := indexScan.colIdxMap[colID]
 		if !ok {
