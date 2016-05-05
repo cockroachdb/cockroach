@@ -150,7 +150,7 @@ func (tr *TableReader) Run() error {
 			// No more rows.
 			break
 		}
-		passesFilter, err := runFilter(tr.filter, tr.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(tr.filter, tr.evalCtx)
 		if err != nil {
 			return err
 		}

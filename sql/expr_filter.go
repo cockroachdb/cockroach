@@ -255,17 +255,3 @@ func splitFilter(
 	}
 	return restricted, remainder
 }
-
-// runFilter runs a filter expression and returns whether the filter passes.
-func runFilter(filter parser.TypedExpr, evalCtx parser.EvalContext) (bool, error) {
-	if filter == nil {
-		return true, nil
-	}
-
-	d, err := filter.Eval(evalCtx)
-	if err != nil {
-		return false, err
-	}
-
-	return d != parser.DNull && bool(*d.(*parser.DBool)), nil
-}
