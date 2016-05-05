@@ -52,7 +52,7 @@ var _ parser.IndexedVarContainer = &TableReader{}
 
 // IndexedVarReturnType is part of the parser.IndexedVarContaine interface.
 func (tr *TableReader) IndexedVarReturnType(idx int) parser.Datum {
-	return tr.desc.Columns[idx].Type.toDatumType()
+	return tr.desc.Columns[idx].Type.ToDatumType()
 }
 
 // IndexedVarEval is part of the parser.IndexedVarContaine interface.
