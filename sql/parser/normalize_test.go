@@ -25,7 +25,6 @@ func TestNormalizeExpr(t *testing.T) {
 	}{
 		{`(a)`, `a`},
 		{`((((a))))`, `a`},
-		{`ROW(a)`, `(a)`},
 		{`a BETWEEN b AND c`, `(a >= b) AND (a <= c)`},
 		{`a NOT BETWEEN b AND c`, `(a < b) OR (a > c)`},
 		{`1+1`, `2`},

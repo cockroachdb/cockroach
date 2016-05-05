@@ -756,11 +756,15 @@ func (n TableNameWithIndexList) Format(buf *bytes.Buffer, f FmtFlags) {
 type Tuple struct {
 	Exprs Exprs
 
+	row   bool // indicates whether or not the tuple should be textually represented as a row.
 	types DTuple
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Tuple) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.row {
+		buf.WriteString("ROW")
+	}
 	buf.WriteByte('(')
 	FormatNode(buf, f, node.Exprs)
 	buf.WriteByte(')')
@@ -768,26 +772,6 @@ func (node *Tuple) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ReturnType implements the TypedExpr interface.
 func (node *Tuple) ReturnType() Datum {
-	return &node.types
-}
-
-// Row represents a parenthesized list of expressions. Similar to Tuple except
-// in how it is textually represented.
-type Row struct {
-	Exprs Exprs
-
-	types DTuple
-}
-
-// Format implements the NodeFormatter interface.
-func (node *Row) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ROW(")
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(')')
-}
-
-// ReturnType implements the TypedExpr interface.
-func (node *Row) ReturnType() Datum {
 	return &node.types
 }
 
@@ -1101,7 +1085,6 @@ func (node *OverlayExpr) String() string      { return AsString(node) }
 func (node *ParenExpr) String() string        { return AsString(node) }
 func (node *QualifiedName) String() string    { return AsString(node) }
 func (node *RangeCond) String() string        { return AsString(node) }
-func (node *Row) String() string              { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
