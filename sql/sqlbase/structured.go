@@ -678,7 +678,9 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	return cols
 }
 
-func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
+// AllColumnsSelector geneartes a Select expression for all columns of the
+// table.
+func (desc *TableDescriptor) AllColumnsSelector() parser.SelectExprs {
 	exprs := make(parser.SelectExprs, len(desc.Columns))
 	qnames := make([]parser.QualifiedName, len(desc.Columns))
 	for i, col := range desc.Columns {
