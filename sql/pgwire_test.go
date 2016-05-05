@@ -501,6 +501,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b": {
 			base.Params(5, 6).Results(-6, 11),
 		},
+		"UPDATE d.two SET a = 6 WHERE a = -6 AND b = 11 RETURNING a, b": {
+			base.Results(6, 11),
+		},
 		"INSERT INTO d.str (s) VALUES (LEFT($1, 3)) RETURNING s": {
 			base.Params("abcdef").Results("abc"),
 			base.Params("123456").Results("123"),
