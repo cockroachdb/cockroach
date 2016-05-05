@@ -262,15 +262,36 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 	considerIntents bool,
 	useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *evictionToken, *roachpb.Error) {
+	return rdc.lookupRangeDescriptorInternal(key, evictToken, considerIntents, useReverseScan, nil)
+}
+
+// lookupRangeDescriptorInternal is called from LookupRangeDescriptor or from tests.
+//
+// If a WaitGroup is supplied, it is signaled when the lookup request
+// hits the cache, it is merged into an existing in-flight request, or
+// a RangeLookup is performed. Used for testing.
+func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
+	key roachpb.RKey,
+	evictToken *evictionToken,
+	considerIntents bool,
+	useReverseScan bool,
+	wg *sync.WaitGroup,
+) (*roachpb.RangeDescriptor, *evictionToken, *roachpb.Error) {
 	rdc.rangeCache.RLock()
 	if _, desc, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCache.RUnlock()
+		if wg != nil {
+			wg.Done()
+		}
 		return nil, nil, roachpb.NewError(err)
 	} else if desc != nil {
 		rdc.rangeCache.RUnlock()
 		returnToken := rdc.makeEvictionToken(desc, func() error {
 			return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 		})
+		if wg != nil {
+			wg.Done()
+		}
 		return desc, returnToken, nil
 	}
 
@@ -289,12 +310,18 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 		rdc.lookupRequests.inflight[requestKey] = req
 		rdc.lookupRequests.Unlock()
 		rdc.rangeCache.RUnlock()
+		if wg != nil {
+			wg.Done()
+		}
 
 		res = <-resC
 	} else {
 		rdc.lookupRequests.inflight[requestKey] = req
 		rdc.lookupRequests.Unlock()
 		rdc.rangeCache.RUnlock()
+		if wg != nil {
+			wg.Done()
+		}
 
 		rs, preRs, pErr := rdc.performRangeLookup(key, considerIntents, useReverseScan)
 		if pErr != nil {

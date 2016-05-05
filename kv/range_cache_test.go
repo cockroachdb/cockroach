@@ -392,17 +392,22 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	// - "an" and "ao" will get the right range back
 	// - "at" and "az" will make a second lookup
 	//   + will lookup the ["at"-"b") desc
-	var wg sync.WaitGroup
+	var wg, waitJoin sync.WaitGroup
 	db.pauseRangeLookups()
+	hasRetry := false
 	for _, k := range []string{"aa", "an", "ao", "at", "az"} {
 		wg.Add(1)
+		waitJoin.Add(1)
 		go func(key string) {
 			reqEvictToken := evictToken
+			waitJoinCopied := &waitJoin
 			for {
 				// Each request goes to a different key.
 				var pErr *roachpb.Error
-				if _, reqEvictToken, pErr = db.cache.LookupRangeDescriptor(roachpb.RKey(key), reqEvictToken, false /* considerIntents */, false /* useReverseScan */); pErr != nil {
+				if _, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(roachpb.RKey(key), reqEvictToken, false /* considerIntents */, false /* useReverseScan */, waitJoinCopied); pErr != nil {
 					if pErr.CanRetry() {
+						waitJoinCopied = nil
+						hasRetry = true
 						continue
 					}
 					panic(fmt.Sprintf("Unexpected error from LookupRangeDescriptor: %s", pErr))
@@ -412,9 +417,15 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 			wg.Done()
 		}(k)
 	}
+	// Wait until all lookup requests hit the cache or join into a coalesced request.
+	waitJoin.Wait()
 	db.resumeRangeLookups()
+
 	wg.Wait()
 	db.assertLookupCount(t, 3, "an and az")
+	if !hasRetry {
+		t.Error("expected retry on desc lookup")
+	}
 
 	// All three descriptors are now correctly cached.
 	doLookup(t, db.cache, "aa")
