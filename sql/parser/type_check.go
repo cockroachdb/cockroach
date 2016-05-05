@@ -23,26 +23,29 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// TODO(nvanbenschoten) These can be removed and DummyT can be replaced by TypeT.
 var (
-	// TypeBool returns a bool datum.
-	TypeBool = DummyBool
-	// TypeBytes returns a bytes datum.
-	TypeBytes = DummyBytes
-	// TypeDate returns a date datum.
-	TypeDate = DummyDate
-	// TypeFloat returns a float datum.
-	TypeFloat = DummyFloat
-	// TypeDecimal returns a decimal datum.
-	TypeDecimal = DummyDecimal
-	// TypeInt returns an int datum.
-	TypeInt = DummyInt
-	// TypeInterval returns an interval datum.
-	TypeInterval = DummyInterval
-	// TypeString returns a string datum.
-	TypeString = DummyString
-	// TypeTimestamp returns a timestamp datum.
-	TypeTimestamp = DummyTimestamp
+	// TypeBool is the type of a DBool.
+	TypeBool Datum = DBoolFalse
+	// TypeInt is the type of a DInt.
+	TypeInt Datum = NewDInt(0)
+	// TypeFloat is the type of a DFloat.
+	TypeFloat Datum = NewDFloat(0)
+	// TypeDecimal is the type of a DDecimal.
+	TypeDecimal Datum = &DDecimal{}
+	// TypeString is the type of a DString.
+	TypeString Datum = NewDString("")
+	// TypeBytes is the type of a DBytes.
+	TypeBytes Datum = NewDBytes("")
+	// TypeDate is the type of a DDate.
+	TypeDate Datum = NewDDate(0)
+	// TypeTimestamp is the type of a DTimestamp.
+	TypeTimestamp Datum = &DTimestamp{}
+	// TypeTimestampTZ is the type of a DTimestamp.
+	TypeTimestampTZ Datum = &DTimestampTZ{}
+	// TypeInterval is the type of a DInterval.
+	TypeInterval Datum = &DInterval{}
+	// TypeTuple is the type of a DTuple.
+	TypeTuple Datum = &DTuple{}
 )
 
 type parameterTypeAmbiguityError struct {
@@ -81,7 +84,7 @@ func (expr *AndExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -170,15 +173,15 @@ func (expr *CaseExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 }
 
 var (
-	boolCastTypes      = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	intCastTypes       = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	floatCastTypes     = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	decimalCastTypes   = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
-	stringCastTypes    = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes}
-	bytesCastTypes     = []Datum{DNull, DummyBytes, DummyString}
-	dateCastTypes      = []Datum{DNull, DummyString, DummyDate, DummyTimestamp}
-	timestampCastTypes = []Datum{DNull, DummyString, DummyDate, DummyTimestamp, DummyTimestampTZ}
-	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt, DummyInterval}
+	boolCastTypes      = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	intCastTypes       = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	floatCastTypes     = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	decimalCastTypes   = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	stringCastTypes    = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes}
+	bytesCastTypes     = []Datum{DNull, TypeBytes, TypeString}
+	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp}
+	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
+	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
 )
 
 // TypeCheck implements the Expr interface.
@@ -186,49 +189,49 @@ func (expr *CastExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	var returnDatum Datum
 	var validTypes []Datum
 	switch expr.Type.(type) {
-	case *BoolType:
-		returnDatum = DummyBool
+	case *BoolColType:
+		returnDatum = TypeBool
 		validTypes = boolCastTypes
 
-	case *IntType:
-		returnDatum = DummyInt
+	case *IntColType:
+		returnDatum = TypeInt
 		validTypes = intCastTypes
 
-	case *FloatType:
-		returnDatum = DummyFloat
+	case *FloatColType:
+		returnDatum = TypeFloat
 		validTypes = floatCastTypes
 
-	case *DecimalType:
-		returnDatum = DummyDecimal
+	case *DecimalColType:
+		returnDatum = TypeDecimal
 		validTypes = decimalCastTypes
 
-	case *StringType:
-		returnDatum = DummyString
+	case *StringColType:
+		returnDatum = TypeString
 		validTypes = stringCastTypes
 
-	case *BytesType:
-		returnDatum = DummyBytes
+	case *BytesColType:
+		returnDatum = TypeBytes
 		validTypes = bytesCastTypes
 
-	case *DateType:
-		returnDatum = DummyDate
+	case *DateColType:
+		returnDatum = TypeDate
 		validTypes = dateCastTypes
 
-	case *TimestampType:
-		returnDatum = DummyTimestamp
+	case *TimestampColType:
+		returnDatum = TypeTimestamp
 		validTypes = timestampCastTypes
 
-	case *TimestampTZType:
-		returnDatum = DummyTimestampTZ
+	case *TimestampTZColType:
+		returnDatum = TypeTimestampTZ
 		validTypes = timestampCastTypes
 
-	case *IntervalType:
-		returnDatum = DummyInterval
+	case *IntervalColType:
+		returnDatum = TypeInterval
 		validTypes = intervalCastTypes
 	}
 
 	if args.IsUnresolvedArgument(expr.Expr) {
-		desired = DummyString
+		desired = TypeString
 	} else if desired != nil && desired.TypeEqual(returnDatum) {
 		desired = nil
 	}
@@ -271,7 +274,7 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, e
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, err
 }
 
@@ -282,7 +285,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -359,7 +362,7 @@ func (expr *IsOfTypeExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, err
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -370,7 +373,7 @@ func (expr *NotExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -397,7 +400,7 @@ func (expr *OrExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -425,7 +428,7 @@ func (expr *RangeCond) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 	}
 
 	expr.Left, expr.From, expr.To = typedSubExprs[0], typedSubExprs[1], typedSubExprs[2]
-	expr.typ = DummyBool
+	expr.typ = TypeBool
 	return expr, nil
 }
 
@@ -577,7 +580,7 @@ func (d dNull) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { retur
 func (d *DValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 func typeCheckAndRequireBoolean(args MapArgs, expr Expr, op string) (TypedExpr, error) {
-	return typeCheckAndRequire(args, expr, DummyBool, op)
+	return typeCheckAndRequire(args, expr, TypeBool, op)
 }
 
 func typeCheckAndRequire(args MapArgs, expr Expr, required Datum, op string) (TypedExpr, error) {
@@ -617,7 +620,7 @@ func typeCheckComparisonOp(
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
 			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
-			// dummyLeft.TypeEquals(DummyBool). We currently can't distinguish NULL from
+			// TypeLeft.TypeEquals(TypeBool). We currently can't distinguish NULL from
 			// UNKNOWN. Is it important to do so?
 			return leftExpr, rightExpr, CmpOp{}, nil
 		default:
@@ -631,11 +634,11 @@ func typeCheckComparisonOp(
 	}
 
 	cmpOp := fn.(CmpOp)
-	if op == In && cmpOp.RightType.TypeEqual(dummyTuple) {
+	if op == In && cmpOp.RightType.TypeEqual(TypeTuple) {
 		if err := verifyTupleIN(args, leftReturn, rightReturn); err != nil {
 			return nil, nil, CmpOp{}, err
 		}
-	} else if cmpOp.LeftType.TypeEqual(dummyTuple) && cmpOp.RightType.TypeEqual(dummyTuple) {
+	} else if cmpOp.LeftType.TypeEqual(TypeTuple) && cmpOp.RightType.TypeEqual(TypeTuple) {
 		if err := verifyTupleCmp(args, leftReturn, rightReturn); err != nil {
 			return nil, nil, CmpOp{}, err
 		}

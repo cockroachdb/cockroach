@@ -6557,25 +6557,25 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2600
 		{
-			sqlVAL.union.val = bytesTypeBlob
+			sqlVAL.union.val = bytesColTypeBlob
 		}
 	case 411:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2604
 		{
-			sqlVAL.union.val = bytesTypeBytes
+			sqlVAL.union.val = bytesColTypeBytes
 		}
 	case 412:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2608
 		{
-			sqlVAL.union.val = bytesTypeBytea
+			sqlVAL.union.val = bytesColTypeBytea
 		}
 	case 413:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2612
 		{
-			sqlVAL.union.val = stringTypeText
+			sqlVAL.union.val = stringColTypeText
 		}
 	case 418:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -6586,7 +6586,7 @@ sqldefault:
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = &DecimalType{Prec: int(prec)}
+			sqlVAL.union.val = &DecimalColType{Prec: int(prec)}
 		}
 	case 419:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
@@ -6602,7 +6602,7 @@ sqldefault:
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = &DecimalType{Prec: int(prec), Scale: int(scale)}
+			sqlVAL.union.val = &DecimalColType{Prec: int(prec), Scale: int(scale)}
 		}
 	case 420:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
@@ -6614,37 +6614,37 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2663
 		{
-			sqlVAL.union.val = intTypeInt
+			sqlVAL.union.val = intColTypeInt
 		}
 	case 422:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2667
 		{
-			sqlVAL.union.val = intTypeInt64
+			sqlVAL.union.val = intColTypeInt64
 		}
 	case 423:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2671
 		{
-			sqlVAL.union.val = intTypeInteger
+			sqlVAL.union.val = intColTypeInteger
 		}
 	case 424:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2675
 		{
-			sqlVAL.union.val = intTypeSmallInt
+			sqlVAL.union.val = intColTypeSmallInt
 		}
 	case 425:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2679
 		{
-			sqlVAL.union.val = intTypeBigInt
+			sqlVAL.union.val = intColTypeBigInt
 		}
 	case 426:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2683
 		{
-			sqlVAL.union.val = floatTypeReal
+			sqlVAL.union.val = floatColTypeReal
 		}
 	case 427:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -6655,13 +6655,13 @@ sqldefault:
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = newFloatType(int(prec))
+			sqlVAL.union.val = newFloatColType(int(prec))
 		}
 	case 428:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2696
 		{
-			sqlVAL.union.val = floatTypeDouble
+			sqlVAL.union.val = floatColTypeDouble
 		}
 	case 429:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -6669,9 +6669,9 @@ sqldefault:
 		{
 			sqlVAL.union.val = sqlDollar[2].union.colType()
 			if sqlVAL.union.val == nil {
-				sqlVAL.union.val = decimalTypeDecimal
+				sqlVAL.union.val = decimalColTypeDecimal
 			} else {
-				sqlVAL.union.val.(*DecimalType).Name = "DECIMAL"
+				sqlVAL.union.val.(*DecimalColType).Name = "DECIMAL"
 			}
 		}
 	case 430:
@@ -6680,9 +6680,9 @@ sqldefault:
 		{
 			sqlVAL.union.val = sqlDollar[2].union.colType()
 			if sqlVAL.union.val == nil {
-				sqlVAL.union.val = decimalTypeDec
+				sqlVAL.union.val = decimalColTypeDec
 			} else {
-				sqlVAL.union.val.(*DecimalType).Name = "DEC"
+				sqlVAL.union.val.(*DecimalColType).Name = "DEC"
 			}
 		}
 	case 431:
@@ -6691,22 +6691,22 @@ sqldefault:
 		{
 			sqlVAL.union.val = sqlDollar[2].union.colType()
 			if sqlVAL.union.val == nil {
-				sqlVAL.union.val = decimalTypeNumeric
+				sqlVAL.union.val = decimalColTypeNumeric
 			} else {
-				sqlVAL.union.val.(*DecimalType).Name = "NUMERIC"
+				sqlVAL.union.val.(*DecimalColType).Name = "NUMERIC"
 			}
 		}
 	case 432:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2727
 		{
-			sqlVAL.union.val = boolTypeBoolean
+			sqlVAL.union.val = boolColTypeBoolean
 		}
 	case 433:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2731
 		{
-			sqlVAL.union.val = boolTypeBool
+			sqlVAL.union.val = boolColTypeBool
 		}
 	case 434:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -6735,7 +6735,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2770
 		{
-			sqlVAL.union.val = intTypeBit
+			sqlVAL.union.val = intColTypeBit
 		}
 	case 446:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -6748,8 +6748,8 @@ sqldefault:
 			}
 			sqlVAL.union.val = sqlDollar[1].union.colType()
 			if n != 0 {
-				strType := &StringType{N: int(n)}
-				strType.Name = sqlVAL.union.val.(*StringType).Name
+				strType := &StringColType{N: int(n)}
+				strType.Name = sqlVAL.union.val.(*StringColType).Name
 				sqlVAL.union.val = strType
 			}
 		}
@@ -6763,25 +6763,25 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2808
 		{
-			sqlVAL.union.val = stringTypeChar
+			sqlVAL.union.val = stringColTypeChar
 		}
 	case 449:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2812
 		{
-			sqlVAL.union.val = stringTypeChar
+			sqlVAL.union.val = stringColTypeChar
 		}
 	case 450:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2816
 		{
-			sqlVAL.union.val = stringTypeVarChar
+			sqlVAL.union.val = stringColTypeVarChar
 		}
 	case 451:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2820
 		{
-			sqlVAL.union.val = stringTypeString
+			sqlVAL.union.val = stringColTypeString
 		}
 	case 452:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -6797,31 +6797,31 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2831
 		{
-			sqlVAL.union.val = dateTypeDate
+			sqlVAL.union.val = dateColTypeDate
 		}
 	case 455:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2835
 		{
-			sqlVAL.union.val = timestampTypeTimestamp
+			sqlVAL.union.val = timestampColTypeTimestamp
 		}
 	case 456:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2839
 		{
-			sqlVAL.union.val = timestampTzTypeTimestampWithTZ
+			sqlVAL.union.val = timestampTzColTypeTimestampWithTZ
 		}
 	case 457:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2843
 		{
-			sqlVAL.union.val = timestampTzTypeTimestampWithTZ
+			sqlVAL.union.val = timestampTzColTypeTimestampWithTZ
 		}
 	case 458:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:2848
 		{
-			sqlVAL.union.val = intervalTypeInterval
+			sqlVAL.union.val = intervalColTypeInterval
 		}
 	case 459:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

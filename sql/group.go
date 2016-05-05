@@ -101,7 +101,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		}
 
 		typedHaving, err = parser.TypeCheckAndRequire(having, p.evalCtx.Args,
-			parser.DummyBool, "HAVING")
+			parser.TypeBool, "HAVING")
 		if err != nil {
 			return nil, err
 		}
@@ -951,9 +951,9 @@ func (a *sumAggregate) result() (parser.Datum, error) {
 		return parser.DNull, nil
 	}
 	switch {
-	case a.sumType.TypeEqual(parser.DummyFloat):
+	case a.sumType.TypeEqual(parser.TypeFloat):
 		return parser.NewDFloat(a.sumFloat), nil
-	case a.sumType.TypeEqual(parser.DummyInt), a.sumType.TypeEqual(parser.DummyDecimal):
+	case a.sumType.TypeEqual(parser.TypeInt), a.sumType.TypeEqual(parser.TypeDecimal):
 		dd := &parser.DDecimal{}
 		dd.Set(&a.sumDec)
 		return dd, nil

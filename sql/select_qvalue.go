@@ -288,10 +288,10 @@ func (s *starDatum) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser
 
 // Eval implements the TypedExpr interface.
 func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {
-	return parser.DummyInt.Eval(ctx)
+	return parser.TypeInt.Eval(ctx)
 }
 
 // ReturnType implements the TypedExpr interface.
 func (*starDatum) ReturnType() parser.Datum {
-	return parser.DummyInt.ReturnType()
+	return parser.TypeInt.ReturnType()
 }

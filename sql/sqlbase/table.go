@@ -121,7 +121,7 @@ func SanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
 	if err != nil {
 		return err
 	}
-	if defaultType := typedExpr.ReturnType(); colDatumType != defaultType {
+	if defaultType := typedExpr.ReturnType(); !colDatumType.TypeEqual(defaultType) {
 		return incompatibleColumnDefaultTypeError(colDatumType, defaultType)
 	}
 	if parser.ContainsVars(typedExpr) {
@@ -140,41 +140,41 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 
 	var colDatumType parser.Datum
 	switch t := d.Type.(type) {
-	case *parser.BoolType:
+	case *parser.BoolColType:
 		col.Type.Kind = ColumnType_BOOL
-		colDatumType = parser.DummyBool
-	case *parser.IntType:
+		colDatumType = parser.TypeBool
+	case *parser.IntColType:
 		col.Type.Kind = ColumnType_INT
 		col.Type.Width = int32(t.N)
-		colDatumType = parser.DummyInt
-	case *parser.FloatType:
+		colDatumType = parser.TypeInt
+	case *parser.FloatColType:
 		col.Type.Kind = ColumnType_FLOAT
 		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.DummyFloat
-	case *parser.DecimalType:
+		colDatumType = parser.TypeFloat
+	case *parser.DecimalColType:
 		col.Type.Kind = ColumnType_DECIMAL
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.DummyDecimal
-	case *parser.DateType:
+		colDatumType = parser.TypeDecimal
+	case *parser.DateColType:
 		col.Type.Kind = ColumnType_DATE
-		colDatumType = parser.DummyDate
-	case *parser.TimestampType:
+		colDatumType = parser.TypeDate
+	case *parser.TimestampColType:
 		col.Type.Kind = ColumnType_TIMESTAMP
-		colDatumType = parser.DummyTimestamp
-	case *parser.TimestampTZType:
+		colDatumType = parser.TypeTimestamp
+	case *parser.TimestampTZColType:
 		col.Type.Kind = ColumnType_TIMESTAMPTZ
-		colDatumType = parser.DummyTimestampTZ
-	case *parser.IntervalType:
+		colDatumType = parser.TypeTimestampTZ
+	case *parser.IntervalColType:
 		col.Type.Kind = ColumnType_INTERVAL
-		colDatumType = parser.DummyInterval
-	case *parser.StringType:
+		colDatumType = parser.TypeInterval
+	case *parser.StringColType:
 		col.Type.Kind = ColumnType_STRING
 		col.Type.Width = int32(t.N)
-		colDatumType = parser.DummyString
-	case *parser.BytesType:
+		colDatumType = parser.TypeString
+	case *parser.BytesColType:
 		col.Type.Kind = ColumnType_BYTES
-		colDatumType = parser.DummyBytes
+		colDatumType = parser.TypeBytes
 	default:
 		return nil, nil, util.Errorf("unexpected type %T", t)
 	}
@@ -231,9 +231,9 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		if err != nil {
 			return nil, nil, err
 		}
-		if typedExpr, err := expr.TypeCheck(nil, parser.DummyBool); err != nil {
+		if typedExpr, err := expr.TypeCheck(nil, parser.TypeBool); err != nil {
 			return nil, nil, err
-		} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.DummyBool) {
+		} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.TypeBool) {
 			return nil, nil, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
 		}
 	}
@@ -803,37 +803,37 @@ func CheckColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
 		_, ok = val.(*parser.DBool)
-		set, err = args.SetInferredType(val, parser.DummyBool)
+		set, err = args.SetInferredType(val, parser.TypeBool)
 	case ColumnType_INT:
 		_, ok = val.(*parser.DInt)
-		set, err = args.SetInferredType(val, parser.DummyInt)
+		set, err = args.SetInferredType(val, parser.TypeInt)
 	case ColumnType_FLOAT:
 		_, ok = val.(*parser.DFloat)
-		set, err = args.SetInferredType(val, parser.DummyFloat)
+		set, err = args.SetInferredType(val, parser.TypeFloat)
 	case ColumnType_DECIMAL:
 		_, ok = val.(*parser.DDecimal)
-		set, err = args.SetInferredType(val, parser.DummyDecimal)
+		set, err = args.SetInferredType(val, parser.TypeDecimal)
 	case ColumnType_STRING:
 		_, ok = val.(*parser.DString)
-		set, err = args.SetInferredType(val, parser.DummyString)
+		set, err = args.SetInferredType(val, parser.TypeString)
 	case ColumnType_BYTES:
 		_, ok = val.(*parser.DBytes)
 		if !ok {
 			_, ok = val.(*parser.DString)
 		}
-		set, err = args.SetInferredType(val, parser.DummyBytes)
+		set, err = args.SetInferredType(val, parser.TypeBytes)
 	case ColumnType_DATE:
 		_, ok = val.(*parser.DDate)
-		set, err = args.SetInferredType(val, parser.DummyDate)
+		set, err = args.SetInferredType(val, parser.TypeDate)
 	case ColumnType_TIMESTAMP:
 		_, ok = val.(*parser.DTimestamp)
-		set, err = args.SetInferredType(val, parser.DummyTimestamp)
+		set, err = args.SetInferredType(val, parser.TypeTimestamp)
 	case ColumnType_TIMESTAMPTZ:
 		_, ok = val.(*parser.DTimestampTZ)
-		set, err = args.SetInferredType(val, parser.DummyTimestampTZ)
+		set, err = args.SetInferredType(val, parser.TypeTimestampTZ)
 	case ColumnType_INTERVAL:
 		_, ok = val.(*parser.DInterval)
-		set, err = args.SetInferredType(val, parser.DummyInterval)
+		set, err = args.SetInferredType(val, parser.TypeInterval)
 	default:
 		return util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
