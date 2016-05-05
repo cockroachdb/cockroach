@@ -121,7 +121,7 @@ func SanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
 	if err != nil {
 		return err
 	}
-	if defaultType := typedExpr.ReturnType(); colDatumType != defaultType {
+	if defaultType := typedExpr.ReturnType(); !colDatumType.TypeEqual(defaultType) {
 		return incompatibleColumnDefaultTypeError(colDatumType, defaultType)
 	}
 	if parser.ContainsVars(typedExpr) {

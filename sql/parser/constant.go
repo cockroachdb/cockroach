@@ -182,17 +182,17 @@ func (expr *NumVal) AvailableTypes() []Datum {
 
 // ResolveAsType implements the Constant interface.
 func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
-	switch typ {
-	case DummyInt:
+	switch {
+	case typ.TypeEqual(DummyInt):
 		i, exact := constant.Int64Val(constant.ToInt(expr.Value))
 		if !exact {
 			return nil, fmt.Errorf("integer value out of range: %v", expr.Value)
 		}
 		return NewDInt(DInt(i)), nil
-	case DummyFloat:
+	case typ.TypeEqual(DummyFloat):
 		f, _ := constant.Float64Val(constant.ToFloat(expr.Value))
 		return NewDFloat(DFloat(f)), nil
-	case DummyDecimal:
+	case typ.TypeEqual(DummyDecimal):
 		dd := &DDecimal{}
 		s := expr.ExactString()
 		if idx := strings.IndexRune(s, '/'); idx != -1 {
