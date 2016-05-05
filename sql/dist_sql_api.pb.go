@@ -8,8 +8,6 @@
 	It is generated from these files:
 		cockroach/sql/dist_sql_api.proto
 		cockroach/sql/dist_sql_data.proto
-		cockroach/sql/privilege.proto
-		cockroach/sql/structured.proto
 
 	It has these top-level messages:
 		SetupFlowsRequest
@@ -18,15 +16,6 @@
 		TableReaderSpan
 		TableReaderSpec
 		FlowSpec
-		UserPrivileges
-		PrivilegeDescriptor
-		ColumnType
-		ColumnDescriptor
-		IndexDescriptor
-		DescriptorMutation
-		TableDescriptor
-		DatabaseDescriptor
-		Descriptor
 */
 package sql
 
