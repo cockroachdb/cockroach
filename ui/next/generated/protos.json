@@ -426,6 +426,232 @@
                     ]
                 }
             ]
+        },
+        {
+            "name": "ts",
+            "fields": [],
+            "options": {
+                "go_package": "ts"
+            },
+            "messages": [
+                {
+                    "name": "TimeSeriesDatapoint",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "timestamp_nanos",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "double",
+                            "name": "value",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "TimeSeriesData",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "name",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "source",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "TimeSeriesDatapoint",
+                            "name": "datapoints",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Query",
+                    "options": {
+                        "(gogoproto.goproto_getters)": true
+                    },
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "name",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "TimeSeriesQueryAggregator",
+                            "name": "downsampler",
+                            "id": 2,
+                            "options": {
+                                "default": "AVG"
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "TimeSeriesQueryAggregator",
+                            "name": "source_aggregator",
+                            "id": 3,
+                            "options": {
+                                "default": "SUM"
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "TimeSeriesQueryDerivative",
+                            "name": "derivative",
+                            "id": 4,
+                            "options": {
+                                "default": "NONE"
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "string",
+                            "name": "sources",
+                            "id": 5
+                        }
+                    ]
+                },
+                {
+                    "name": "TimeSeriesQueryRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "start_nanos",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "end_nanos",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "Query",
+                            "name": "queries",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "TimeSeriesQueryResponse",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "Result",
+                            "name": "results",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ],
+                    "messages": [
+                        {
+                            "name": "Result",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "Query",
+                                    "name": "query",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.embed)": true
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "TimeSeriesDatapoint",
+                                    "name": "datapoints",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "enums": [
+                {
+                    "name": "TimeSeriesQueryAggregator",
+                    "values": [
+                        {
+                            "name": "AVG",
+                            "id": 1
+                        },
+                        {
+                            "name": "SUM",
+                            "id": 2
+                        },
+                        {
+                            "name": "MAX",
+                            "id": 3
+                        },
+                        {
+                            "name": "MIN",
+                            "id": 4
+                        }
+                    ]
+                },
+                {
+                    "name": "TimeSeriesQueryDerivative",
+                    "values": [
+                        {
+                            "name": "NONE",
+                            "id": 0
+                        },
+                        {
+                            "name": "DERIVATIVE",
+                            "id": 1
+                        },
+                        {
+                            "name": "NON_NEGATIVE_DERIVATIVE",
+                            "id": 2
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

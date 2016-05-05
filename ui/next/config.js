@@ -58,7 +58,9 @@ System.config({
   map: {
     "d3": "npm:d3@3.5.16",
     "es6-promise": "npm:es6-promise@3.1.2",
+    "isomorphic-fetch": "npm:isomorphic-fetch@2.2.1",
     "lodash": "npm:lodash@4.11.2",
+    "long": "npm:long@3.1.0",
     "moment": "npm:moment@2.13.0",
     "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
@@ -265,7 +267,7 @@ System.config({
     },
     "npm:isomorphic-fetch@2.2.1": {
       "node-fetch": "npm:node-fetch@1.5.1",
-      "whatwg-fetch": "npm:whatwg-fetch@0.11.0"
+      "whatwg-fetch": "npm:whatwg-fetch@1.0.0"
     },
     "npm:lcid@1.0.0": {
       "invert-kv": "npm:invert-kv@1.0.0",
@@ -325,7 +327,7 @@ System.config({
     "npm:path-is-absolute@1.0.0": {
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
-    "npm:process-nextick-args@1.0.6": {
+    "npm:process-nextick-args@1.0.7": {
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:process@0.11.2": {
@@ -395,7 +397,7 @@ System.config({
       "inherits": "npm:inherits@2.0.1",
       "isarray": "npm:isarray@1.0.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "process-nextick-args": "npm:process-nextick-args@1.0.6",
+      "process-nextick-args": "npm:process-nextick-args@1.0.7",
       "string_decoder": "npm:string_decoder@0.10.31",
       "util-deprecate": "npm:util-deprecate@1.0.2"
     },
