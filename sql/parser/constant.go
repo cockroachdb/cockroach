@@ -209,24 +209,6 @@ func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 					"from string %q", expr, den)
 			}
 			dd.QuoRound(&dd.Dec, denDec, decimal.Precision, inf.RoundHalfUp)
-
-			// Get rid of trailing zeros. We probaby want to remove this
-			if s = dd.Dec.String(); strings.ContainsRune(s, '.') {
-				for {
-					switch s[len(s)-1] {
-					case '0':
-						s = s[:len(s)-1]
-						continue
-					case '.':
-						s = s[:len(s)-1]
-					}
-					break
-				}
-				if _, ok := dd.SetString(s); !ok {
-					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
-						"string %q", expr, s)
-				}
-			}
 		} else {
 			if _, ok := dd.SetString(s); !ok {
 				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
