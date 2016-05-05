@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sql_test
+package sqlbase
 
 import (
 	"encoding/json"

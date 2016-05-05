@@ -14,7 +14,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"fmt"

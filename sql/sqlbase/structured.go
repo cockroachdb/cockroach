@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"errors"

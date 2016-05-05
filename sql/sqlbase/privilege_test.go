@@ -14,7 +14,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sql_test
+package sqlbase
 
 import (
 	"testing"
