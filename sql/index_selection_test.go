@@ -57,20 +57,20 @@ func TestMergeAndSortSpans(t *testing.T) {
 		//  - we verify that after we unset all areas covered by the merged
 		//    spans, there are no bits that remain set.
 		bitmap := make([]bool, 100)
-		var s spans
+		var s sqlbase.Spans
 		for _, v := range tc {
 			start := v[0]
 			end := v[1]
 			for j := start; j < end; j++ {
 				bitmap[j] = true
 			}
-			s = append(s, span{start: []byte{byte(start)}, end: []byte{byte(end)}})
+			s = append(s, sqlbase.Span{Start: []byte{byte(start)}, End: []byte{byte(end)}})
 		}
 
-		printSpans := func(s spans, title string) {
+		printSpans := func(s sqlbase.Spans, title string) {
 			fmt.Printf("%s:", title)
 			for _, span := range s {
-				fmt.Printf(" %d-%d", span.start[0], span.end[0])
+				fmt.Printf(" %d-%d", span.Start[0], span.End[0])
 			}
 			fmt.Printf("\n")
 		}
@@ -87,8 +87,8 @@ func TestMergeAndSortSpans(t *testing.T) {
 
 		last := -1
 		for i := range s {
-			start := int(s[i].start[0])
-			end := int(s[i].end[0])
+			start := int(s[i].Start[0])
+			end := int(s[i].End[0])
 			if start >= end {
 				t.Fatalf("invalid span %d-%d", start, end)
 			}
@@ -495,7 +495,7 @@ func TestMakeSpans(t *testing.T) {
 			desc, index := makeTestIndex(t, columns, dirs)
 			constraints, _ := makeConstraints(t, d.expr, desc, index)
 			spans := makeSpans(constraints, desc.ID, index)
-			s := prettySpans(spans, 2)
+			s := sqlbase.PrettySpans(spans, 2)
 			var expected string
 			if dir == encoding.Ascending {
 				expected = d.expectedAsc
@@ -545,10 +545,11 @@ func TestMakeSpans(t *testing.T) {
 			d.expected = d.expected[4:]
 			// Trim the index prefix from the span.
 			prefix := string(sqlbase.MakeIndexKeyPrefix(desc.ID, index.ID))
-			got = strings.TrimPrefix(string(span.start), prefix) + "-" +
-				strings.TrimPrefix(string(span.end), prefix)
+			got = strings.TrimPrefix(string(span.Start), prefix) + "-" +
+				strings.TrimPrefix(string(span.End), prefix)
 		} else {
-			got = keys.MassagePrettyPrintedSpanForTest(prettySpans(spans, 2), indexToDirs(index))
+			got = keys.MassagePrettyPrintedSpanForTest(sqlbase.PrettySpans(spans, 2),
+				indexToDirs(index))
 		}
 		if d.expected != got {
 			if !raw {

@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -147,7 +147,7 @@ func TestScanBatches(t *testing.T) {
 	}
 
 	// The test will screw around with KVBatchSize; make sure to restore it at the end.
-	restore := csql.SetKVBatchSize(10)
+	restore := sqlbase.SetKVBatchSize(10)
 	defer restore()
 
 	numAs := 5
@@ -185,7 +185,7 @@ func TestScanBatches(t *testing.T) {
 	numSpanValues := []int{0, 1, 2, 3}
 
 	for _, batch := range batchSizes {
-		csql.SetKVBatchSize(int64(batch))
+		sqlbase.SetKVBatchSize(int64(batch))
 		for _, numSpans := range numSpanValues {
 			testScanBatchQuery(t, db, numSpans, numAs, numBs, false)
 			testScanBatchQuery(t, db, numSpans, numAs, numBs, true)
