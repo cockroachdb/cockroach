@@ -349,7 +349,7 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	if err := p.writeTableDesc(tableDesc); err != nil {
 		return err
 	}
-	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
 	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID ID) error {
 		desc, err := GetTableDesc(systemConfig, tableID)

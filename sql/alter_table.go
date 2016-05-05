@@ -217,7 +217,7 @@ func (n *alterTableNode) Start() error {
 		return nil
 	}
 
-	mutationID := invalidMutationID
+	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
 		mutationID, err = n.tableDesc.FinalizeMutation()
