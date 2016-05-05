@@ -609,7 +609,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						err := sc.exec(nil)
 						if err != nil {
 							if err == errExistingSchemaChangeLease {
-							} else if _, ok := err.(*roachpb.DescriptorNotFoundError); ok {
+							} else if err == errDescriptorNotFound {
 								// Someone deleted this table. Don't try to run the schema
 								// changer again. Note that there's no gossip update for the
 								// deletion which would remove this schemaChanger.

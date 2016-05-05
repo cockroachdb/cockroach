@@ -196,12 +196,6 @@ message ReplicaCorruptionError {
 message DescriptorDeletedError {
 }
 
-// A DescriptorNotFoundError indicates that a requested descriptor
-// doesn't exist (or no longer exists).
-message DescriptorNotFoundError {
-  optional uint32 descriptor_id = 1 [(gogoproto.nullable) = false];
-}
-
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -229,7 +223,6 @@ message ErrorDetail {
   optional RaftGroupDeletedError raft_group_deleted = 16;
   optional ReplicaCorruptionError replica_corruption = 17;
   optional DescriptorDeletedError descriptor_deleted = 23;
-  optional DescriptorNotFoundError descriptor_not_found = 24;
 }
 
 // TransactionRestart indicates how an error should be handled in a
