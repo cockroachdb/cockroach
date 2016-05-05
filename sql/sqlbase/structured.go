@@ -193,7 +193,7 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	return columnIDs, dirs
 }
 
-// SetID implements the descriptorProto interface.
+// SetID implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
 }
@@ -203,7 +203,7 @@ func (desc *TableDescriptor) TypeName() string {
 	return "table"
 }
 
-// SetName implements the descriptorProto interface.
+// SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
@@ -743,7 +743,7 @@ func (c *ColumnType) toDatumType() parser.Datum {
 	return nil
 }
 
-// SetID implements the descriptorProto interface.
+// SetID implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
 }
@@ -753,7 +753,7 @@ func (desc *DatabaseDescriptor) TypeName() string {
 	return "database"
 }
 
-// SetName implements the descriptorProto interface.
+// SetName implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetName(name string) {
 	desc.Name = name
 }

@@ -28,21 +28,21 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-var _ descriptorProto = &DatabaseDescriptor{}
-var _ descriptorProto = &TableDescriptor{}
+var _ DescriptorProto = &DatabaseDescriptor{}
+var _ DescriptorProto = &TableDescriptor{}
 
-// descriptorKey is the interface implemented by both
+// DescriptorKey is the interface implemented by both
 // databaseKey and tableKey. It is used to easily get the
 // descriptor key and plain name.
-type descriptorKey interface {
+type DescriptorKey interface {
 	Key() roachpb.Key
 	Name() string
 }
 
-// descriptorProto is the interface implemented by both DatabaseDescriptor
+// DescriptorProto is the interface implemented by both DatabaseDescriptor
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
-type descriptorProto interface {
+type DescriptorProto interface {
 	proto.Message
 	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
@@ -53,7 +53,7 @@ type descriptorProto interface {
 	Validate() error
 }
 
-func wrapDescriptor(descriptor descriptorProto) *Descriptor {
+func wrapDescriptor(descriptor DescriptorProto) *Descriptor {
 	desc := &Descriptor{}
 	switch t := descriptor.(type) {
 	case *TableDescriptor:
@@ -78,7 +78,7 @@ type MetadataSchema struct {
 
 type metadataDescriptor struct {
 	parentID ID
-	desc     descriptorProto
+	desc     DescriptorProto
 }
 
 type metadataTable struct {
@@ -97,7 +97,7 @@ func MakeMetadataSchema() MetadataSchema {
 
 // AddDescriptor adds a new descriptor to the system schema. Used only for
 // SystemConfig tables and databases. Prefer AddTable for most uses.
-func (ms *MetadataSchema) AddDescriptor(parentID ID, desc descriptorProto) {
+func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }
 
@@ -156,7 +156,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID ID, desc descriptorProto) {
+	addDescriptor := func(parentID ID, desc DescriptorProto) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
