@@ -91,10 +91,10 @@ SELECT
 ----
 true NULL false NULL
 
-statement error pq: unsupported comparison operator: <string> = <int>
+statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not the same type: expected 2 to be of type string, found type int
 SELECT (1, 2) > (1, 'hi')
 
-statement error pq: unequal number of entries in tuple expressions: 3, 2
+statement error pq: expected tuple \(1, 2, 3\) to have a length of 2
 SELECT (1, 2) > (1, 2, 3)
 
 statement ok

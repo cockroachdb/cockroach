@@ -589,17 +589,68 @@ func typeCheckAndRequire(args MapArgs, expr Expr, required Datum, op string) (Ty
 	return typedExpr, nil
 }
 
+const (
+	unsupportedCompErrFmtWithTypes = "unsupported comparison operator: <%s> %s <%s>"
+	unsupportedCompErrFmtWithExprs = "unsupported comparison operator: %s %s %s: %v"
+)
+
 func typeCheckComparisonOp(
 	args MapArgs, op ComparisonOperator, left, right Expr,
 ) (TypedExpr, TypedExpr, CmpOp, error) {
 	foldedOp, foldedLeft, foldedRight, switched, _ := foldComparisonExpr(op, left, right)
-
 	ops := CmpOps[foldedOp]
+
+	_, leftIsTuple := foldedLeft.(*Tuple)
+	rightTuple, rightIsTuple := foldedRight.(*Tuple)
+	switch {
+	case foldedOp == In && rightIsTuple:
+		sameTypeExprs := make([]Expr, 0, len(rightTuple.Exprs)+1)
+		sameTypeExprs = append(sameTypeExprs, foldedLeft)
+		sameTypeExprs = append(sameTypeExprs, rightTuple.Exprs...)
+
+		typedSubExprs, retType, err := typeCheckSameTypedExprs(args, nil, sameTypeExprs...)
+		if err != nil {
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprs,
+				left, op, right, err)
+		}
+
+		fn, ok := ops.lookupImpl(retType, dummyTuple)
+		if !ok {
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes,
+				retType.Type(), op, dummyTuple.Type())
+		}
+
+		typedLeft := typedSubExprs[0]
+		typedSubExprs = typedSubExprs[1:]
+
+		rightTuple.Exprs = rightTuple.Exprs[:0]
+		rightTuple.types = make(DTuple, 0, len(typedSubExprs))
+		for _, typedExpr := range typedSubExprs {
+			rightTuple.Exprs = append(rightTuple.Exprs, typedExpr)
+			rightTuple.types = append(rightTuple.types, retType)
+		}
+		if switched {
+			return rightTuple, typedLeft, fn, nil
+		}
+		return typedLeft, rightTuple, fn, nil
+	case leftIsTuple && rightIsTuple:
+		fn, ok := ops.lookupImpl(dummyTuple, dummyTuple)
+		if !ok {
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes,
+				dummyTuple.Type(), op, dummyTuple.Type())
+		}
+		// Using non-folded left and right to avoid having to swap later.
+		typedSubExprs, _, err := typeCheckSameTypedTupleExprs(args, nil, left, right)
+		if err != nil {
+			return nil, nil, CmpOp{}, err
+		}
+		return typedSubExprs[0], typedSubExprs[1], fn, nil
+	}
+
 	overloads := make([]overloadImpl, len(ops))
 	for i := range ops {
 		overloads[i] = ops[i]
 	}
-
 	typedSubExprs, fn, err := typeCheckOverloadedExprs(args, nil, overloads, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, CmpOp{}, err
@@ -624,53 +675,10 @@ func typeCheckComparisonOp(
 	}
 
 	if fn == nil {
-		return nil, nil, CmpOp{}, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-			leftReturn.Type(), op, rightReturn.Type())
+		return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, leftReturn.Type(),
+			op, rightReturn.Type())
 	}
-
-	cmpOp := fn.(CmpOp)
-	if op == In && cmpOp.RightType.TypeEqual(dummyTuple) {
-		if err := verifyTupleIN(args, leftReturn, rightReturn); err != nil {
-			return nil, nil, CmpOp{}, err
-		}
-	} else if cmpOp.LeftType.TypeEqual(dummyTuple) && cmpOp.RightType.TypeEqual(dummyTuple) {
-		if err := verifyTupleCmp(args, leftReturn, rightReturn); err != nil {
-			return nil, nil, CmpOp{}, err
-		}
-	}
-
-	return leftExpr, rightExpr, cmpOp, nil
-}
-
-func verifyTupleCmp(args MapArgs, leftTupleType, rightTupleType Datum) error {
-	lTuple := *leftTupleType.(*DTuple)
-	rTuple := *rightTupleType.(*DTuple)
-	if len(lTuple) != len(rTuple) {
-		return fmt.Errorf("unequal number of entries in tuple expressions: %d, %d", len(lTuple), len(rTuple))
-	}
-
-	for i := range lTuple {
-		if _, _, _, err := typeCheckComparisonOp(args, EQ, lTuple[i], rTuple[i]); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func verifyTupleIN(args MapArgs, arg, values Datum) error {
-	if arg == DNull {
-		return nil
-	}
-
-	vtuple := *values.(*DTuple)
-	for _, val := range vtuple {
-		if _, _, _, err := typeCheckComparisonOp(args, EQ, arg, val); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return leftExpr, rightExpr, fn.(CmpOp), nil
 }
 
 type indexedExpr struct {
@@ -895,7 +903,7 @@ func typeCheckSameTypedTupleExprs(args MapArgs, desired Datum, exprs ...Expr) ([
 		}
 		typedSubExprs, resType, err := typeCheckSameTypedExprs(args, desiredElem, sameTypeExprs...)
 		if err != nil {
-			return nil, nil, fmt.Errorf("tuples %s could not be coerced to the same types: %v", Exprs(exprs), err)
+			return nil, nil, fmt.Errorf("tuples %s are not the same type: %v", Exprs(exprs), err)
 		}
 		for j, typedExpr := range typedSubExprs {
 			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
@@ -926,7 +934,7 @@ func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 	for _, expr := range exprs {
 		t := expr.(*Tuple)
 		if len(t.Exprs) != expectedLen {
-			return fmt.Errorf("expected a tuple of length %d for tuple %v", expectedLen, t)
+			return fmt.Errorf("expected tuple %v to have a length of %d", t, expectedLen)
 		}
 	}
 	return nil

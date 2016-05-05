@@ -106,10 +106,10 @@ func TestTypeCheckError(t *testing.T) {
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
-		{`(1, 2, 3) = (1, 2)`, `unequal number of entries in tuple expressions`},
-		{`(1, 2) = (1, 'a')`, `unsupported comparison operator`},
-		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},
-		{`1 IN (1, 'a')`, `unsupported comparison operator`},
+		{`(1, 2, 3) = (1, 2)`, `expected tuple (1, 2) to have a length of 3`},
+		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not the same type: expected 2 to be of type string, found type int`},
+		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): expected 1 to be of type string, found type int`},
+		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): expected 1 to be of type string, found type int`},
 		{`1.0 BETWEEN 2 AND '5'`, `expected 1.0 to be of type string, found type float`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
 		{`IF(true, 2, '5')`, `incompatible IF expressions: expected 2 to be of type string, found type int`},
@@ -331,9 +331,9 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	floatIntMismatchErr := `expected .* to be of type (float|int), found type (float|int)`
-	tupleFloatIntMismatchErr := `tuples .* coerced to the same types: ` + floatIntMismatchErr
+	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + floatIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
-	tupleLenErr := `expected a tuple of length .*`
+	tupleLenErr := `expected tuple .* to have a length of .*`
 	paramErr := `could not determine data type of parameter .*`
 
 	testData := []struct {
