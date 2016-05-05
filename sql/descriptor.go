@@ -20,12 +20,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -36,31 +33,6 @@ var (
 	errNoDatabase        = errors.New("no database specified")
 	errNoTable           = errors.New("no table specified")
 )
-
-var _ descriptorProto = &DatabaseDescriptor{}
-var _ descriptorProto = &TableDescriptor{}
-
-// descriptorKey is the interface implemented by both
-// databaseKey and tableKey. It is used to easily get the
-// descriptor key and plain name.
-type descriptorKey interface {
-	Key() roachpb.Key
-	Name() string
-}
-
-// descriptorProto is the interface implemented by both DatabaseDescriptor
-// and TableDescriptor.
-// TODO(marc): this is getting rather large.
-type descriptorProto interface {
-	proto.Message
-	GetPrivileges() *PrivilegeDescriptor
-	GetID() ID
-	SetID(ID)
-	TypeName() string
-	GetName() string
-	SetName(string)
-	Validate() error
-}
 
 // checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
 func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
@@ -252,17 +224,4 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 	default:
 		return nil, fmt.Errorf("invalid table glob: %s", expr)
 	}
-}
-
-func wrapDescriptor(descriptor descriptorProto) *Descriptor {
-	desc := &Descriptor{}
-	switch t := descriptor.(type) {
-	case *TableDescriptor:
-		desc.Union = &Descriptor_Table{Table: t}
-	case *DatabaseDescriptor:
-		desc.Union = &Descriptor_Database{Database: t}
-	default:
-		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
-	}
-	return desc
 }

@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package sql
+package sqlbase
 
 import (
 	"testing"

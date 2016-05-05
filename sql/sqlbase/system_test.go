@@ -14,14 +14,13 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sql_test
+package sqlbase
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -33,9 +32,9 @@ func TestInitialKeys(t *testing.T) {
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
-	ms := sql.MakeMetadataSchema()
+	ms := MakeMetadataSchema()
 	kv := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+sql.NumSystemDescriptors)
+	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+NumSystemDescriptors)
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
