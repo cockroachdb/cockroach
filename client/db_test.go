@@ -331,7 +331,7 @@ func TestCommonMethods(t *testing.T) {
 		typ    reflect.Type
 		method string
 	}
-	blacklist := map[key]struct{}{
+	omittedChecks := map[key]struct{}{
 		// TODO(tschottdorf): removed GetProto from Batch, which necessitates
 		// these two exceptions. Batch.GetProto would require wrapping each
 		// request with the information that this particular Get must be
@@ -339,11 +339,13 @@ func TestCommonMethods(t *testing.T) {
 		// Batch.GetProto at the moment.
 		key{dbType, "GetProto"}:                   {},
 		key{txnType, "GetProto"}:                  {},
+		key{batchType, "ChangeFrozen"}:            {},
 		key{batchType, "CheckConsistency"}:        {},
 		key{batchType, "InternalAddRequest"}:      {},
 		key{batchType, "PutInline"}:               {},
 		key{dbType, "AdminMerge"}:                 {},
 		key{dbType, "AdminSplit"}:                 {},
+		key{dbType, "ChangeFrozen"}:               {},
 		key{dbType, "CheckConsistency"}:           {},
 		key{dbType, "NewBatch"}:                   {},
 		key{dbType, "Run"}:                        {},
@@ -375,7 +377,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "SystemConfigTrigger"}:       {},
 	}
 
-	for b := range blacklist {
+	for b := range omittedChecks {
 		if _, ok := b.typ.MethodByName(b.method); !ok {
 			t.Fatalf("blacklist method (%s).%s does not exist", b.typ, b.method)
 		}
@@ -387,7 +389,7 @@ func TestCommonMethods(t *testing.T) {
 			if len(m.PkgPath) > 0 {
 				continue
 			}
-			if _, ok := blacklist[key{typ, m.Name}]; ok {
+			if _, ok := omittedChecks[key{typ, m.Name}]; ok {
 				continue
 			}
 			for _, otherTyp := range types {

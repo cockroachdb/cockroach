@@ -171,6 +171,11 @@ func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRaftTruncatedStateSuffix, nil)
 }
 
+// RangeFrozenStatusKey returns a system-local key for the frozen status.
+func RangeFrozenStatusKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRangeFrozenStatusSuffix, nil)
+}
+
 // RangeLeaderLeaseKey returns a system-local key for a range leader lease.
 func RangeLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, localRangeLeaderLeaseSuffix, nil)

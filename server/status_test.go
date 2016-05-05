@@ -92,7 +92,7 @@ func TestStatusJson(t *testing.T) {
   },
   "buildInfo": {
     "go_version": "%s",
-    "tag": "",
+    "tag": "unknown",
     "time": "",
     "dependencies": "",
     "cgo_compiler": ".*",

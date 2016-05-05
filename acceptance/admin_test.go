@@ -76,7 +76,8 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 		},
 	}
 	var queryResponse ts.TimeSeriesQueryResponse
-	if err := postJSON(c.URL(0), "/ts/query", &queryRequest, &queryResponse); err != nil {
+	if err := postJSON(cluster.HTTPClient(), c.URL(0), "/ts/query",
+		&queryRequest, &queryResponse); err != nil {
 		t.Fatal(err)
 	}
 
