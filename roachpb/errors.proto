@@ -195,11 +195,6 @@ message ReplicaCorruptionError {
 message DidntUpdateDescriptorError {
 }
 
-// A DescriptorDeletedError indicates that an outstanding schema change is no
-// longer applicable because the descriptor in question has been dropped.
-message DescriptorDeletedError {
-}
-
 // A DescriptorNotFoundError indicates that a requested descriptor
 // doesn't exist (or no longer exists).
 message DescriptorNotFoundError {
@@ -233,7 +228,6 @@ message ErrorDetail {
   optional RaftGroupDeletedError raft_group_deleted = 16;
   optional ReplicaCorruptionError replica_corruption = 17;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
-  optional DescriptorDeletedError descriptor_deleted = 23;
   optional DescriptorNotFoundError descriptor_not_found = 24;
 }
 

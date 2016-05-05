@@ -594,16 +594,6 @@ func (*DidntUpdateDescriptorError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &DidntUpdateDescriptorError{}
 
-func (e *DescriptorDeletedError) Error() string {
-	return e.message(nil)
-}
-
-func (*DescriptorDeletedError) message(_ *Error) string {
-	return "descriptor deleted"
-}
-
-var _ ErrorDetailInterface = &DescriptorDeletedError{}
-
 func (e *DescriptorNotFoundError) Error() string {
 	return e.message(nil)
 }
