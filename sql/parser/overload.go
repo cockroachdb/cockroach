@@ -347,10 +347,6 @@ func typeCheckOverloadedExprs(
 
 	var bestConstType Datum
 	if len(constExprs) > 0 {
-		numVals := make([]*NumVal, len(constExprs))
-		for i, expr := range constExprs {
-			numVals[i] = expr.e.(*NumVal)
-		}
 		before := overloads
 
 		// The second heuristic is to prefer candidates where all numeric constants can become
@@ -358,8 +354,8 @@ func typeCheckOverloadedExprs(
 		// resolvable expressions were resolved homogeneously up to this point.
 		if homogeneousTyp != nil {
 			all := true
-			for _, constExpr := range numVals {
-				if !canConstantBecome(constExpr, homogeneousTyp) {
+			for _, expr := range constExprs {
+				if !canConstantBecome(expr.e.(*NumVal), homogeneousTyp) {
 					all = false
 					break
 				}
@@ -382,8 +378,8 @@ func typeCheckOverloadedExprs(
 
 		// The third heuristic is to prefer candidates where all numeric constants can become
 		// their "natural"" types.
-		for i, expr := range constExprs {
-			natural := naturalConstantType(numVals[i])
+		for _, expr := range constExprs {
+			natural := naturalConstantType(expr.e.(*NumVal))
 			if natural != nil {
 				filterOverloads(func(o overloadImpl) bool {
 					return o.params().getAt(expr.i).TypeEqual(natural)
@@ -400,7 +396,7 @@ func typeCheckOverloadedExprs(
 
 		// The fourth heuristic is to prefer candidates that accepts the "best" mutual
 		// type in the resolvable type set of all numeric constants.
-		bestConstType = commonNumericConstantType(numVals...)
+		bestConstType = commonNumericConstantType(constExprs)
 		for _, expr := range constExprs {
 			filterOverloads(func(o overloadImpl) bool {
 				return o.params().getAt(expr.i).TypeEqual(bestConstType)

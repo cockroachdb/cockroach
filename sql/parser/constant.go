@@ -226,13 +226,17 @@ var numValTypePriority = []Datum{DummyInt, DummyFloat, DummyDecimal}
 // commonNumericConstantType returns the best constant type which is shared
 // between a set of provided numeric constants. Here, "best" is defined as
 // the smallest numeric data type which will not lose information.
-func commonNumericConstantType(vals ...*NumVal) Datum {
+//
+// The function takes a slice of indexedExprs, but expects all indexedExprs
+// to wrap a *NumVal. The reason it does no take a slice of *NumVals instead
+// is to avoid forcing callers to allocate separate slices of *NumVals.
+func commonNumericConstantType(vals []indexedExpr) Datum {
 	bestType := 0
 	for _, c := range vals {
 		for {
 			// This will not work if the available types are not strictly
 			// supersets of their previous types in order of preference.
-			if shouldConstantBecome(c, numValTypePriority[bestType]) {
+			if shouldConstantBecome(c.e.(*NumVal), numValTypePriority[bestType]) {
 				break
 			}
 			bestType++
