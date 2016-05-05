@@ -23,26 +23,31 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// TODO(nvanbenschoten) These can be removed and DummyT can be replaced by TypeT.
 var (
-	// TypeBool returns a bool datum.
-	TypeBool = DummyBool
-	// TypeBytes returns a bytes datum.
-	TypeBytes = DummyBytes
-	// TypeDate returns a date datum.
-	TypeDate = DummyDate
-	// TypeFloat returns a float datum.
-	TypeFloat = DummyFloat
-	// TypeDecimal returns a decimal datum.
-	TypeDecimal = DummyDecimal
-	// TypeInt returns an int datum.
-	TypeInt = DummyInt
-	// TypeInterval returns an interval datum.
-	TypeInterval = DummyInterval
-	// TypeString returns a string datum.
-	TypeString = DummyString
-	// TypeTimestamp returns a timestamp datum.
-	TypeTimestamp = DummyTimestamp
+	// TypeBool is the type of a DBool.
+	TypeBool Datum = DBoolFalse
+	// TypeInt is the type of a DInt.
+	TypeInt Datum = NewDInt(0)
+	// TypeFloat is the type of a DFloat.
+	TypeFloat Datum = NewDFloat(0)
+	// TypeDecimal is the type of a DDecimal.
+	TypeDecimal Datum = &DDecimal{}
+	// TypeString is the type of a DString.
+	TypeString Datum = NewDString("")
+	// TypeBytes is the type of a DBytes.
+	TypeBytes Datum = NewDBytes("")
+	// TypeDate is the type of a DDate.
+	TypeDate Datum = NewDDate(0)
+	// TypeTimestamp is the type of a DTimestamp.
+	TypeTimestamp Datum = &DTimestamp{}
+	// TypeTimestampTZ is the type of a DTimestamp.
+	TypeTimestampTZ Datum = &DTimestampTZ{}
+	// TypeInterval is the type of a DInterval.
+	TypeInterval Datum = &DInterval{}
+	// TypeTuple is the type of a DTuple.
+	TypeTuple Datum = &DTuple{}
+	// DNull is the NULL type.
+	DNull Datum = dNull{}
 )
 
 type parameterTypeAmbiguityError struct {

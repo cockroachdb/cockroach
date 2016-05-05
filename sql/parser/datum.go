@@ -63,8 +63,6 @@ var (
 	DummyInterval Datum = &DInterval{}
 	// dummyTuple is a placeholder DTuple value.
 	dummyTuple Datum = &DTuple{}
-	// DNull is the NULL Datum.
-	DNull Datum = dNull{}
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
