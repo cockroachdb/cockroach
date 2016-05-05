@@ -112,7 +112,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlb
 	if values == nil {
 		return nil, &roachpb.DescriptorNotFoundError{DescriptorId: uint32(tableID)}
 	}
-	desc := &Descriptor{}
+	desc := &sqlbase.Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
 		return nil, err
 	}
@@ -193,8 +193,8 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Options) (
 	sqlbase.DescriptorVersion, error,
 ) {
-	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(tableID)
+	desc := &sqlbase.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	var tableDesc *sqlbase.TableDescriptor
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Get the current version of the table descriptor non-transactionally.
@@ -251,11 +251,11 @@ func (s LeaseStore) Publish(
 			return nil, err
 		}
 
-		desc := &Descriptor{}
+		desc := &sqlbase.Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		err = s.db.Txn(func(txn *client.Txn) error {
-			descKey := MakeDescMetadataKey(tableID)
+			descKey := sqlbase.MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
@@ -676,7 +676,7 @@ func NewLeaseManager(
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		tables:       make(map[ID]*tableState),
+		tables:       make(map[sqlbase.ID]*tableState),
 		testingKnobs: testingKnobs,
 	}
 }
@@ -739,13 +739,13 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						continue
 					}
 					// Attempt to unmarshal config into a table/database descriptor.
-					var descriptor Descriptor
+					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf("%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
-					case *Descriptor_Table:
+					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						if err := table.Validate(); err != nil {
 							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
@@ -763,7 +763,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 									table.ID, table.Name, err)
 							}
 						}
-					case *Descriptor_Database:
+					case *sqlbase.Descriptor_Database:
 						// Ignore.
 					}
 				}

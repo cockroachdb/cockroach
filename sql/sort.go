@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -74,9 +75,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := NormalizeName(string(qname.Base))
+				target := sqlbase.NormalizeName(string(qname.Base))
 				for j, col := range columns {
-					if NormalizeName(col.Name) == target {
+					if sqlbase.NormalizeName(col.Name) == target {
 						index = j
 						break
 					}
@@ -92,10 +93,10 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 					return nil, err
 				}
 				if qname.Table() == "" || equalName(s.table.alias, qname.Table()) {
-					qnameCol := NormalizeName(qname.Column())
+					qnameCol := sqlbase.NormalizeName(qname.Column())
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
-							if NormalizeName(qval.colRef.get().Name) == qnameCol {
+							if sqlbase.NormalizeName(qval.colRef.get().Name) == qnameCol {
 								index = j
 								break
 							}

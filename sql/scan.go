@@ -127,7 +127,7 @@ func (n *scanNode) initScan() (success bool) {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix. This isn't needed for the fetcher, but it is for
 		// other external users of n.spans.
-		start := roachpb.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
 		n.spans = append(n.spans, span{start: start, end: start.PrefixEnd()})
 	}
 
@@ -238,12 +238,12 @@ func (n *scanNode) initTable(
 	alias := n.desc.Name
 
 	if indexHints != nil && indexHints.Index != "" {
-		indexName := NormalizeName(string(indexHints.Index))
-		if indexName == NormalizeName(n.desc.PrimaryIndex.Name) {
+		indexName := sqlbase.NormalizeName(string(indexHints.Index))
+		if indexName == sqlbase.NormalizeName(n.desc.PrimaryIndex.Name) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if indexName == NormalizeName(n.desc.Indexes[i].Name) {
+				if indexName == sqlbase.NormalizeName(n.desc.Indexes[i].Name) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}

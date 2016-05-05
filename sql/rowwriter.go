@@ -46,7 +46,8 @@ func (rh *rowHelper) encodeIndexes(colIDtoRowIndex map[sqlbase.ColumnID]int, val
 	err error,
 ) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = MakeIndexKeyPrefix(rh.tableDesc.ID, rh.tableDesc.PrimaryIndex.ID)
+		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.tableDesc.ID,
+			rh.tableDesc.PrimaryIndex.ID)
 	}
 	primaryIndexKey, _, err = encodeIndexKey(
 		&rh.tableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
@@ -97,7 +98,7 @@ func makeRowInserter(
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
 	for _, m := range tableDesc.Mutations {
-		if m.State == DescriptorMutation_WRITE_ONLY {
+		if m.State == sqlbase.DescriptorMutation_WRITE_ONLY {
 			if index := m.GetIndex(); index != nil {
 				indexes = append(indexes, *index)
 			}
@@ -271,14 +272,14 @@ func makeRowUpdater(
 				indexes = append(indexes, *index)
 
 				switch m.State {
-				case DescriptorMutation_DELETE_ONLY:
+				case sqlbase.DescriptorMutation_DELETE_ONLY:
 					if deleteOnlyIndex == nil {
 						// Allocate at most once.
 						deleteOnlyIndex = make(map[int]struct{}, len(tableDesc.Mutations))
 					}
 					deleteOnlyIndex[len(indexes)-1] = struct{}{}
 
-				case DescriptorMutation_WRITE_ONLY:
+				case sqlbase.DescriptorMutation_WRITE_ONLY:
 				}
 			}
 		}

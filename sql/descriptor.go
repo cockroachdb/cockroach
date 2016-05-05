@@ -66,7 +66,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 
 	// Increment unique descriptor counter.
 	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
-		descriptor.SetID(ID(ir.ValueInt() - 1))
+		descriptor.SetID(sqlbase.ID(ir.ValueInt() - 1))
 	} else {
 		return false, err
 	}
@@ -80,7 +80,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 	// but not going through the normal INSERT logic and not performing a precise
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
-	descKey := MakeDescMetadataKey(descriptor.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 
 	b := client.Batch{}
 	descID := descriptor.GetID()
@@ -113,8 +113,8 @@ func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlba
 		return false, nil
 	}
 
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	desc := &Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
 	if err := p.txn.GetProto(descKey, desc); err != nil {
 		return false, err
 	}

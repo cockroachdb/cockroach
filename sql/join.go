@@ -98,7 +98,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 
 	indexScan.initOrdering(exactPrefix)
 
-	primaryKeyPrefix := roachpb.Key(MakeIndexKeyPrefix(table.desc.ID, table.index.ID))
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc.ID, table.index.ID))
 
 	return &indexJoinNode{
 		index:            indexScan,

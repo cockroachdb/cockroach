@@ -173,7 +173,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	//
 	//   SELECT id FROM system.namespace WHERE parentID = 0
 
-	prefix := MakeNameMetadataKey(keys.RootNamespaceID, "")
+	prefix := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -279,7 +279,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			parser.MakeDBool(parser.DBool(isStored)),
 		})
 	}
-	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
+	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		sequence := 1
 		for i, col := range index.ColumnNames {
 			appendRow(index, col, sequence, index.ColumnDirections[i].String(), false)

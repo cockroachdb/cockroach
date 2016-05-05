@@ -170,7 +170,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
 
 	tu.tableDesc = tu.ri.helper.tableDesc
-	tu.indexKeyPrefix = MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
 
 	tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
 	for i, updateCol := range tu.ru.updateCols {
