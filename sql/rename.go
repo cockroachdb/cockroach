@@ -270,7 +270,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
 }
 
@@ -373,6 +373,6 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
 }

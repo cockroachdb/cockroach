@@ -58,7 +58,7 @@ const (
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
-const invalidMutationID MutationID = 0
+const InvalidMutationID MutationID = 0
 
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
@@ -251,7 +251,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.Version == 0 {
 		desc.Version = 1
 	}
-	if desc.NextMutationID == invalidMutationID {
+	if desc.NextMutationID == InvalidMutationID {
 		desc.NextMutationID = 1
 	}
 
@@ -646,7 +646,7 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 // Future mutations will use a new ID.
 func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
 	if err := desc.SetUpVersion(); err != nil {
-		return invalidMutationID, err
+		return InvalidMutationID, err
 	}
 	mutationID := desc.NextMutationID
 	desc.NextMutationID++

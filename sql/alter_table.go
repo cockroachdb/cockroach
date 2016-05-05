@@ -216,7 +216,7 @@ func (n *alterTableNode) Start() *roachpb.Error {
 		return nil
 	}
 
-	mutationID := invalidMutationID
+	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
 		mutationID, err = n.tableDesc.FinalizeMutation()

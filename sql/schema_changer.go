@@ -218,7 +218,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) error {
 		}
 	}()
 
-	if sc.mutationID == invalidMutationID {
+	if sc.mutationID == sqlbase.InvalidMutationID {
 		// Nothing more to do.
 		return nil
 	}
@@ -415,7 +415,7 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		if err != nil {
 			return err
 		}
-		if sc.mutationID == invalidMutationID {
+		if sc.mutationID == sqlbase.InvalidMutationID {
 			if tableDesc.UpVersion {
 				done = false
 			}
@@ -572,7 +572,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// completed.
 							schemaChanger.tableID = table.ID
 							if len(table.Mutations) == 0 {
-								schemaChanger.mutationID = invalidMutationID
+								schemaChanger.mutationID = sqlbase.InvalidMutationID
 							} else {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
