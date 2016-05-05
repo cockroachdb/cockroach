@@ -386,22 +386,37 @@ func (*RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
 
-var _ ErrorDetailInterface = &RangeNotFoundError{}
+var _ ErrorDetailInterface = &RangeKeyMismatchError{}
+
+// NewRangeFrozenError initializes a new RangeFrozenError.
+func NewRangeFrozenError(desc RangeDescriptor) *RangeFrozenError {
+	return &RangeFrozenError{Desc: desc}
+}
+
+func (e *RangeFrozenError) Error() string {
+	return fmt.Sprintf("range is frozen: %s", e.Desc)
+}
+
+func (e *RangeFrozenError) message(_ *Error) string {
+	return e.Error()
+}
+
+var _ ErrorDetailInterface = &RangeFrozenError{}
 
 func (e *TransactionAbortedError) Error() string {
-	return fmt.Sprintf("txn aborted")
+	return "txn aborted"
 }
 
 func (e *TransactionAbortedError) message(pErr *Error) string {
 	return fmt.Sprintf("txn aborted %s", pErr.GetTxn())
 }
 
-var _ ErrorDetailInterface = &TransactionAbortedError{}
-var _ transactionRestartError = &TransactionAbortedError{}
-
 func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
 }
+
+var _ ErrorDetailInterface = &TransactionAbortedError{}
+var _ transactionRestartError = &TransactionAbortedError{}
 
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
 func NewTransactionAbortedError() *TransactionAbortedError {

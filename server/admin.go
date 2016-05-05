@@ -42,6 +42,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -791,6 +792,55 @@ func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainRespo
 		nowOnInts[i] = int32(nowOn[i])
 	}
 	return &DrainResponse{On: nowOnInts}, nil
+}
+
+func (s *adminServer) ClusterFreeze(
+	ctx context.Context, req *ClusterFreezeRequest,
+) (*ClusterFreezeResponse, error) {
+	var resp ClusterFreezeResponse
+
+	process := func(from, to roachpb.Key) (roachpb.Key, error) {
+		affected, minStart, err := s.server.db.ChangeFrozen(
+			from, to, build.GetInfo().Tag, req.Freeze)
+		resp.RangesAffected += affected
+		return minStart.AsRawKey(), err
+	}
+
+	if req.Freeze {
+		// When freezing, we save the meta2 and meta1 range for last to avoid
+		// interfering with command routing.
+		// Note that we freeze only Ranges whose StartKey is included. In
+		// particular, a Range which contains some meta keys will not be frozen
+		// by the request that begins at Meta2KeyMax. ChangeFreeze gives us the
+		// leftmost covered Range back, which we use for the next request to
+		// avoid split-related races.
+		freezeTo := roachpb.KeyMax // updated as we go along
+		freezeFroms := []roachpb.Key{
+			keys.Meta2KeyMax, // freeze userspace
+			keys.Meta1KeyMax, // freeze all meta2 ranges
+			keys.LocalMax,    // freeze first range (meta1)
+		}
+
+		for _, freezeFrom := range freezeFroms {
+			var err error
+			if freezeTo, err = process(freezeFrom, freezeTo); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		// When unfreezing, we walk in opposite order and try the first range
+		// first. We should be able to get there if the first range manages to
+		// gossip. From that, we can talk to the second level replicas, and
+		// then to everyone else. Because ChangeFrozen works in forward order,
+		// we can simply hit the whole keyspace at once.
+		// TODO(tschottdorf): make the first range replicas gossip their
+		// descriptor unconditionally or we won't always be able to unfreeze
+		// (except by restarting a node which holds the first range).
+		if _, err := process(keys.LocalMax, roachpb.KeyMax); err != nil {
+			return nil, err
+		}
+	}
+	return &resp, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
