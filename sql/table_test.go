@@ -110,9 +110,9 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, pErr := sqlbase.MakeTableDesc(create, 1)
-		if pErr != nil {
-			t.Fatalf("%d: %v", i, pErr)
+		schema, err := sqlbase.MakeTableDesc(create, 1)
+		if err != nil {
+			t.Fatalf("%d: %v", i, err)
 		}
 		if !reflect.DeepEqual(d.colType, schema.Columns[0].Type) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[0])
@@ -211,9 +211,9 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, pErr := sqlbase.MakeTableDesc(create, 1)
+		schema, err := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
-			t.Fatalf("%d: %v", i, pErr)
+			t.Fatalf("%d: %v", i, err)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
@@ -236,9 +236,9 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err := create.Table.NormalizeTableName(""); err != nil {
 		t.Fatal(err)
 	}
-	desc, pErr := sqlbase.MakeTableDesc(create, 1)
-	if pErr != nil {
-		t.Fatal(pErr)
+	desc, err := sqlbase.MakeTableDesc(create, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
 	err = desc.AllocateIDs()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {

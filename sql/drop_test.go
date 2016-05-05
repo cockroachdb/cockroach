@@ -46,31 +46,31 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
-	r, pErr := kvDB.Get(dbNameKey)
-	if pErr != nil {
-		t.Fatal(pErr)
+	r, err := kvDB.Get(dbNameKey)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
 	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
 	desc := &sqlbase.Descriptor{}
-	if pErr := kvDB.GetProto(dbDescKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(dbDescKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	dbDesc := desc.GetDatabase()
 
 	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv")
-	gr, pErr := kvDB.Get(tbNameKey)
-	if pErr != nil {
-		t.Fatal(pErr)
+	gr, err := kvDB.Get(tbNameKey)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
 	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	if pErr := kvDB.GetProto(tbDescKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(tbDescKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	tbDesc := desc.GetTable()
 
@@ -171,9 +171,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
-	gr, pErr := kvDB.Get(nameKey)
-	if pErr != nil {
-		t.Fatal(pErr)
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if !gr.Exists() {
@@ -182,8 +182,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
 	desc := &sqlbase.Descriptor{}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	tableDesc := desc.GetTable()
 
@@ -240,9 +240,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
-	gr, pErr := kvDB.Get(nameKey)
-	if pErr != nil {
-		t.Fatal(pErr)
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if !gr.Exists() {
@@ -251,8 +251,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
 	desc := &sqlbase.Descriptor{}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	tableDesc := desc.GetTable()
 

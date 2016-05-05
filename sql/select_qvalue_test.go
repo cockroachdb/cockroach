@@ -55,9 +55,9 @@ func TestRetryResolveQNames(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, pErr := s.resolveQNames(expr)
-		if pErr != nil {
-			t.Fatal(pErr)
+		_, err := s.resolveQNames(expr)
+		if err != nil {
+			t.Fatal(err)
 		}
 		if len(s.qvals) != 1 {
 			t.Fatalf("%d: expected 1 qvalue, but found %d", i, len(s.qvals))

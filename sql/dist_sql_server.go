@@ -68,9 +68,8 @@ func (ds *DistSQLServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequ
 		if err != nil {
 			return nil, err
 		}
-		pErr := reader.Run()
-		if pErr != nil {
-			fmt.Println(pErr)
+		if err := reader.Run(); err != nil {
+			fmt.Println(err)
 		}
 	}
 	return &SetupFlowsResponse{}, nil

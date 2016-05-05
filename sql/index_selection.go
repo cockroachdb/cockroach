@@ -850,9 +850,9 @@ func encodeStartConstraintAscending(spans []sqlbase.Span, c *parser.ComparisonEx
 		// is exclusive and the start key is inclusive, we're going to apply
 		// a .PrefixEnd(). Note that a ">" is usually transformed to a ">=".
 		datum := c.Right.(parser.Datum)
-		key, pErr := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
-		if pErr != nil {
-			panic(pErr)
+		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
+		if err != nil {
+			panic(err)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
@@ -880,9 +880,9 @@ func encodeStartConstraintDescending(
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	case parser.LE, parser.EQ:
 		datum := c.Right.(parser.Datum)
-		key, pErr := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
-		if pErr != nil {
-			panic(pErr)
+		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
+		if err != nil {
+			panic(err)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
@@ -893,9 +893,9 @@ func encodeStartConstraintDescending(
 		// is exclusive and the start key is inclusive, we're going to apply
 		// a .PrefixEnd(). Note that a "<" is usually transformed to a "<=".
 		datum := c.Right.(parser.Datum)
-		key, pErr := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
-		if pErr != nil {
-			panic(pErr)
+		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
+		if err != nil {
+			panic(err)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
@@ -1008,9 +1008,9 @@ func encodeInclusiveEndValue(
 			}
 		}
 	}
-	key, pErr := sqlbase.EncodeTableKey(key, datum, dir)
-	if pErr != nil {
-		panic(pErr)
+	key, err := sqlbase.EncodeTableKey(key, datum, dir)
+	if err != nil {
+		panic(err)
 	}
 	if needExclusiveKey {
 		key = key.PrefixEnd()

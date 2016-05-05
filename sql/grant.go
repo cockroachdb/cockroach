@@ -60,8 +60,8 @@ func (p *planner) changePrivileges(
 		descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 		b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
 	}
-	if pErr := p.txn.Run(b); pErr != nil {
-		return nil, pErr
+	if err := p.txn.Run(b); err != nil {
+		return nil, err
 	}
 	return &emptyNode{}, nil
 }
