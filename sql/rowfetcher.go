@@ -34,11 +34,11 @@ import (
 //   var rf rowFetcher
 //   err := rf.init(..)
 //   // Handle err
-//   pErr := rf.startScan(..)
-//   // Handle pErr
+//   err := rf.startScan(..)
+//   // Handle err
 //   for {
-//      row, pErr := rf.nextRow()
-//      // Handle pErr
+//      row, err := rf.nextRow()
+//      // Handle err
 //      if row == nil {
 //         // Done
 //         break
@@ -141,7 +141,7 @@ func (rf *rowFetcher) init(
 
 // startScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) *roachpb.Error {
+func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) error {
 	if len(spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
@@ -169,20 +169,18 @@ func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) *
 	rf.kvFetcher = makeKVFetcher(txn, spans, rf.reverse, firstBatchLimit)
 
 	// Retrieve the first key.
-	_, pErr := rf.nextKey()
-	return pErr
+	_, err := rf.nextKey()
+	return err
 }
 
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
 // TODO(andrei): change to return error
-func (rf *rowFetcher) nextKey() (rowDone bool, pErr *roachpb.Error) {
+func (rf *rowFetcher) nextKey() (rowDone bool, err error) {
 	var ok bool
-	var err error
 	ok, rf.kv, err = rf.kvFetcher.nextKV()
-	pErr = roachpb.NewError(err)
-	if pErr != nil {
-		return false, pErr
+	if err != nil {
+		return false, err
 	}
 	rf.kvEnd = !ok
 
@@ -336,7 +334,7 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 //
 // The DTuple should not be modified and is only valid until the next call. When
 // there are no more rows, the DTuple is nil.
-func (rf *rowFetcher) nextRow() (parser.DTuple, *roachpb.Error) {
+func (rf *rowFetcher) nextRow() (parser.DTuple, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -350,11 +348,11 @@ func (rf *rowFetcher) nextRow() (parser.DTuple, *roachpb.Error) {
 	for {
 		_, _, err := rf.processKV(rf.kv, false)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
-		rowDone, pErr := rf.nextKey()
-		if pErr != nil {
-			return nil, pErr
+		rowDone, err := rf.nextKey()
+		if err != nil {
+			return nil, err
 		}
 		if rowDone {
 			return rf.row, nil
@@ -366,18 +364,18 @@ func (rf *rowFetcher) nextRow() (parser.DTuple, *roachpb.Error) {
 // value. If we completed a row, the row is returned as well (see nextRow). If
 // there are no more keys, prettyKey is "".
 func (rf *rowFetcher) nextKeyDebug() (
-	prettyKey string, prettyValue string, row parser.DTuple, pErr *roachpb.Error,
+	prettyKey string, prettyValue string, row parser.DTuple, err error,
 ) {
 	if rf.kvEnd {
 		return "", "", nil, nil
 	}
-	prettyKey, prettyValue, err := rf.processKV(rf.kv, true)
+	prettyKey, prettyValue, err = rf.processKV(rf.kv, true)
 	if err != nil {
-		return "", "", nil, roachpb.NewError(err)
+		return "", "", nil, err
 	}
-	rowDone, pErr := rf.nextKey()
-	if pErr != nil {
-		return "", "", nil, pErr
+	rowDone, err := rf.nextKey()
+	if err != nil {
+		return "", "", nil, err
 	}
 	if rowDone {
 		row = rf.row

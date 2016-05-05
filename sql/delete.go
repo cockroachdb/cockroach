@@ -44,10 +44,10 @@ type deleteNode struct {
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
-func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.DELETE)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	// TODO(knz): Until we split the creation of the node from Start()
@@ -55,22 +55,22 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 	// this node's initSelect() method both does type checking and also
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
-	_, pErr := p.SelectClause(&parser.SelectClause{
+	_, err = p.SelectClause(&parser.SelectClause{
 		Exprs: en.tableDesc.allColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
 	}, nil)
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, err
 	}
 
-	if pErr := en.rh.TypeCheck(); pErr != nil {
-		return nil, pErr
+	if err := en.rh.TypeCheck(); err != nil {
+		return nil, err
 	}
 
 	rd, err := makeRowDeleter(en.tableDesc)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	// TODO(dan): Use rd.fetchCols to compute the fetch selectors.
 	tw := tableDeleter{rd: rd, autoCommit: autoCommit}
@@ -85,13 +85,13 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 
 func (d *deleteNode) Start() *roachpb.Error {
 	// TODO(knz): See the comment above in Delete().
-	rows, pErr := d.p.SelectClause(&parser.SelectClause{
+	rows, err := d.p.SelectClause(&parser.SelectClause{
 		Exprs: d.tableDesc.allColumnsSelector(),
 		From:  []parser.TableExpr{d.n.Table},
 		Where: d.n.Where,
 	}, nil)
-	if pErr != nil {
-		return pErr
+	if err != nil {
+		return roachpb.NewError(err)
 	}
 
 	if pErr := rows.Start(); pErr != nil {
@@ -182,7 +182,7 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bo
 func (d *deleteNode) fastDelete() error {
 	scan := d.run.rows.(*selectNode).table.node.(*scanNode)
 	if !scan.initScan() {
-		return scan.pErr.GoError()
+		return scan.err
 	}
 
 	if err := d.tw.init(d.p.txn); err != nil {

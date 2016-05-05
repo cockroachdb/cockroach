@@ -189,8 +189,8 @@ func (p *planner) Insert(
 		}
 	}
 
-	if pErr := en.rh.TypeCheck(); pErr != nil {
-		return nil, pErr
+	if err := en.rh.TypeCheck(); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	ri, err := makeRowInserter(en.tableDesc, cols)

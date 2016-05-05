@@ -55,8 +55,7 @@ type scanNode struct {
 	isSecondaryIndex bool
 	reverse          bool
 	ordering         orderingInfo
-	// TODO(andrei): change to error
-	pErr *roachpb.Error
+	err              error
 
 	explain   explainMode
 	rowIndex  int // the index of the current row
@@ -111,7 +110,7 @@ func (n *scanNode) Start() *roachpb.Error {
 	return nil
 }
 
-// initScan sets up the rowFetcher and starts a scan. On error, sets n.pErr and
+// initScan sets up the rowFetcher and starts a scan. On error, sets n.err and
 // returns false.
 func (n *scanNode) initScan() (success bool) {
 	// TODO(radu): we could call init() just once, after the index and
@@ -119,7 +118,7 @@ func (n *scanNode) initScan() (success bool) {
 	err := n.fetcher.init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex,
 		n.valNeededForCol)
 	if err != nil {
-		n.pErr = roachpb.NewError(err)
+		n.err = err
 		return false
 	}
 
@@ -131,8 +130,8 @@ func (n *scanNode) initScan() (success bool) {
 		n.spans = append(n.spans, span{start: start, end: start.PrefixEnd()})
 	}
 
-	n.pErr = n.fetcher.startScan(n.txn, n.spans, n.limitHint)
-	if n.pErr != nil {
+	n.err = n.fetcher.startScan(n.txn, n.spans, n.limitHint)
+	if n.err != nil {
 		return false
 	}
 	n.scanInitialized = true
@@ -143,15 +142,15 @@ func (n *scanNode) initScan() (success bool) {
 func (n *scanNode) debugNext() bool {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
-	n.debugVals.key, n.debugVals.value, n.row, n.pErr = n.fetcher.nextKeyDebug()
-	if n.pErr != nil || n.debugVals.key == "" {
+	n.debugVals.key, n.debugVals.value, n.row, n.err = n.fetcher.nextKeyDebug()
+	if n.err != nil || n.debugVals.key == "" {
 		return false
 	}
 
 	if n.row != nil {
 		passesFilter, err := runFilter(n.filter, n.planner.evalCtx)
 		if err != nil {
-			n.pErr = roachpb.NewError(err)
+			n.err = err
 			return false
 		}
 		if passesFilter {
@@ -169,7 +168,7 @@ func (n *scanNode) debugNext() bool {
 func (n *scanNode) Next() bool {
 	tracing.AnnotateTrace()
 
-	if n.pErr != nil {
+	if n.err != nil {
 		return false
 	}
 
@@ -184,13 +183,13 @@ func (n *scanNode) Next() bool {
 
 	// We fetch one row at a time until we find one that passes the filter.
 	for {
-		n.row, n.pErr = n.fetcher.nextRow()
-		if n.pErr != nil || n.row == nil {
+		n.row, n.err = n.fetcher.nextRow()
+		if n.err != nil || n.row == nil {
 			return false
 		}
 		passesFilter, err := runFilter(n.filter, n.planner.evalCtx)
 		if err != nil {
-			n.pErr = roachpb.NewError(err)
+			n.err = err
 			return false
 		}
 		if passesFilter {
@@ -200,7 +199,7 @@ func (n *scanNode) Next() bool {
 }
 
 func (n *scanNode) PErr() *roachpb.Error {
-	return n.pErr
+	return roachpb.NewError(n.err)
 }
 
 func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
@@ -223,16 +222,16 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 // fully-qualified columns if an alias is not specified.
 func (n *scanNode) initTable(
 	p *planner, tableName *parser.QualifiedName, indexHints *parser.IndexHints,
-) (string, *roachpb.Error) {
+) (string, error) {
 	var err error
 	n.desc, err = p.getTableLease(tableName)
 	if err != nil {
-		n.pErr = roachpb.NewError(err)
-		return "", n.pErr
+		n.err = err
+		return "", n.err
 	}
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
-		return "", roachpb.NewError(err)
+		return "", err
 	}
 
 	alias := n.desc.Name
@@ -249,8 +248,8 @@ func (n *scanNode) initTable(
 				}
 			}
 			if n.specifiedIndex == nil {
-				n.pErr = roachpb.NewUErrorf("index \"%s\" not found", indexName)
-				return "", n.pErr
+				n.err = fmt.Errorf("index \"%s\" not found", indexName)
+				return "", n.err
 			}
 		}
 	}

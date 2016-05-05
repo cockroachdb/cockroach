@@ -215,7 +215,8 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 		pNode, err := p.CreateTable(n)
 		return pNode, roachpb.NewError(err)
 	case *parser.Delete:
-		return p.Delete(n, desiredTypes, autoCommit)
+		pNode, err := p.Delete(n, desiredTypes, autoCommit)
+		return pNode, roachpb.NewError(err)
 	case *parser.DropDatabase:
 		pNode, err := p.DropDatabase(n)
 		return pNode, roachpb.NewError(err)
@@ -250,9 +251,11 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 		pNode, err := p.Revoke(n)
 		return pNode, roachpb.NewError(err)
 	case *parser.Select:
-		return p.Select(n, desiredTypes, autoCommit)
+		pNode, err := p.Select(n, desiredTypes, autoCommit)
+		return pNode, roachpb.NewError(err)
 	case *parser.SelectClause:
-		return p.SelectClause(n, desiredTypes)
+		pNode, err := p.SelectClause(n, desiredTypes)
+		return pNode, roachpb.NewError(err)
 	case *parser.Set:
 		pNode, err := p.Set(n)
 		return pNode, roachpb.NewError(err)
@@ -292,9 +295,11 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 	case *parser.UnionClause:
 		return p.UnionClause(n, desiredTypes, autoCommit)
 	case *parser.Update:
-		return p.Update(n, desiredTypes, autoCommit)
+		pNode, err := p.Update(n, desiredTypes, autoCommit)
+		return pNode, roachpb.NewError(err)
 	case *parser.ValuesClause:
-		return p.ValuesClause(n, desiredTypes)
+		pNode, err := p.ValuesClause(n, desiredTypes)
+		return pNode, roachpb.NewError(err)
 	default:
 		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
 	}
@@ -303,13 +308,16 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	switch n := stmt.(type) {
 	case *parser.Delete:
-		return p.Delete(n, nil, false)
+		pNode, err := p.Delete(n, nil, false)
+		return pNode, roachpb.NewError(err)
 	case *parser.Insert:
 		return p.Insert(n, nil, false)
 	case *parser.Select:
-		return p.Select(n, nil, false)
+		pNode, err := p.Select(n, nil, false)
+		return pNode, roachpb.NewError(err)
 	case *parser.SelectClause:
-		return p.SelectClause(n, nil)
+		pNode, err := p.SelectClause(n, nil)
+		return pNode, roachpb.NewError(err)
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)
@@ -332,7 +340,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 		pNode, err := p.ShowTables(n)
 		return pNode, roachpb.NewError(err)
 	case *parser.Update:
-		return p.Update(n, nil, false)
+		pNode, err := p.Update(n, nil, false)
+		return pNode, roachpb.NewError(err)
 	default:
 		// Other statement types do not support placeholders so there is no need
 		// for any special handling here.

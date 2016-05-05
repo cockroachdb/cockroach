@@ -213,17 +213,16 @@ func (tu *tableUpserter) flush() error {
 		pkSpans[i] = span{start: upsertRowPK, end: upsertRowPK.PrefixEnd()}
 	}
 
-	pErr := tu.fetcher.startScan(tu.txn, pkSpans, int64(len(pkSpans)))
-	if pErr != nil {
-		return pErr.GoError()
+	if err := tu.fetcher.startScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
+		return err
 	}
 
 	var upsertRowPKIdx int
 	existingRows := make([]parser.DTuple, len(tu.upsertRowPKs))
 	for {
-		row, pErr := tu.fetcher.nextRow()
-		if pErr != nil {
-			return pErr.GoError()
+		row, err := tu.fetcher.nextRow()
+		if err != nil {
+			return err
 		}
 		if row == nil {
 			break
@@ -233,7 +232,7 @@ func (tu *tableUpserter) flush() error {
 		// get back?
 		rowPK, _, err := encodeIndexKey(
 			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
-		if pErr != nil {
+		if err != nil {
 			return err
 		}
 
@@ -266,8 +265,7 @@ func (tu *tableUpserter) flush() error {
 	tu.upsertRows = nil
 	tu.upsertRowPKs = nil
 
-	err := tu.txn.Run(b)
-	if err != nil {
+	if err := tu.txn.Run(b); err != nil {
 		for _, r := range b.Results {
 			if r.PErr != nil {
 				return convertBatchError(tu.tableDesc, *b, r.PErr)
