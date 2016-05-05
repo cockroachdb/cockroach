@@ -32,7 +32,7 @@ import (
 // See docs/RFCS/distributed_sql.md
 type TableReader struct {
 	desc       sqlbase.TableDescriptor
-	spans      spans
+	spans      sqlbase.Spans
 	outputCols []int
 
 	filter parser.TypedExpr
@@ -42,7 +42,7 @@ type TableReader struct {
 
 	evalCtx parser.EvalContext
 	txn     *client.Txn
-	fetcher rowFetcher
+	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
 	row parser.DTuple
 }
@@ -118,15 +118,15 @@ func NewTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 	for i, c := range tr.desc.Columns {
 		colIdxMap[c.ID] = i
 	}
-	err = tr.fetcher.init(&tr.desc, colIdxMap, index, spec.Reverse, isSecondaryIndex,
+	err = tr.fetcher.Init(&tr.desc, colIdxMap, index, spec.Reverse, isSecondaryIndex,
 		valNeededForCol)
 	if err != nil {
 		return nil, err
 	}
 
-	tr.spans = make(spans, len(spec.Spans))
+	tr.spans = make(sqlbase.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
-		tr.spans[i] = span{start: s.Span.Key, end: s.Span.EndKey}
+		tr.spans[i] = sqlbase.Span{Start: s.Span.Key, End: s.Span.EndKey}
 	}
 
 	return tr, nil
@@ -137,12 +137,12 @@ func (tr *TableReader) Run() error {
 	if log.V(1) {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}
-	err := tr.fetcher.startScan(tr.txn, tr.spans, 0)
+	err := tr.fetcher.StartScan(tr.txn, tr.spans, 0)
 	if err != nil {
 		return err
 	}
 	for {
-		tr.row, err = tr.fetcher.nextRow()
+		tr.row, err = tr.fetcher.NextRow()
 		if err != nil {
 			return err
 		}

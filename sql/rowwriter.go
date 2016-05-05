@@ -40,21 +40,23 @@ type rowHelper struct {
 	primaryIndexCols      map[sqlbase.ColumnID]struct{}
 }
 
-func (rh *rowHelper) encodeIndexes(colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum) (
+func (rh *rowHelper) encodeIndexes(
+	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
+) (
 	primaryIndexKey []byte,
-	secondaryIndexEntries []indexEntry,
+	secondaryIndexEntries []sqlbase.IndexEntry,
 	err error,
 ) {
 	if rh.primaryIndexKeyPrefix == nil {
 		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.tableDesc.ID,
 			rh.tableDesc.PrimaryIndex.ID)
 	}
-	primaryIndexKey, _, err = encodeIndexKey(
+	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
 		&rh.tableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = encodeSecondaryIndexes(
+	secondaryIndexEntries, err = sqlbase.EncodeSecondaryIndexes(
 		rh.tableDesc.ID, rh.indexes, colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
@@ -134,7 +136,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 	for i, val := range values {
 		// Make sure the value can be written to the column before proceeding.
 		var err error
-		if ri.marshalled[i], err = marshalColumnValue(ri.insertCols[i], val); err != nil {
+		if ri.marshalled[i], err = sqlbase.MarshalColumnValue(ri.insertCols[i], val); err != nil {
 			return err
 		}
 	}
@@ -160,10 +162,10 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
 		if log.V(2) {
-			log.Infof("CPut %s -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
+			log.Infof("CPut %s -> %v", secondaryIndexEntry.Key, secondaryIndexEntry.Value)
 		}
-		ri.key = secondaryIndexEntry.key
-		b.CPut(&ri.key, secondaryIndexEntry.value, nil)
+		ri.key = secondaryIndexEntry.Key
+		b.CPut(&ri.key, secondaryIndexEntry.Value, nil)
 	}
 	ri.key = nil
 
@@ -343,7 +345,7 @@ func (ru *rowUpdater) updateRow(
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
 	for i, val := range updateValues {
-		if ru.marshalled[i], err = marshalColumnValue(ru.updateCols[i], val); err != nil {
+		if ru.marshalled[i], err = sqlbase.MarshalColumnValue(ru.updateCols[i], val); err != nil {
 			return nil, err
 		}
 	}
@@ -356,7 +358,7 @@ func (ru *rowUpdater) updateRow(
 
 	newPrimaryIndexKey := primaryIndexKey
 	rowPrimaryKeyChanged := false
-	var newSecondaryIndexEntries []indexEntry
+	var newSecondaryIndexEntries []sqlbase.IndexEntry
 	if ru.primaryKeyColChange {
 		newPrimaryIndexKey, newSecondaryIndexEntries, err = ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
@@ -364,7 +366,7 @@ func (ru *rowUpdater) updateRow(
 		}
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
 	} else {
-		newSecondaryIndexEntries, err = encodeSecondaryIndexes(
+		newSecondaryIndexEntries, err = sqlbase.EncodeSecondaryIndexes(
 			ru.helper.tableDesc.ID, ru.helper.indexes, ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
@@ -383,18 +385,18 @@ func (ru *rowUpdater) updateRow(
 	// Update secondary indexes.
 	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 		secondaryIndexEntry := secondaryIndexEntries[i]
-		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key)
+		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
 		if secondaryKeyChanged {
 			if log.V(2) {
-				log.Infof("Del %s", secondaryIndexEntry.key)
+				log.Infof("Del %s", secondaryIndexEntry.Key)
 			}
-			b.Del(secondaryIndexEntry.key)
+			b.Del(secondaryIndexEntry.Key)
 			// Do not update Indexes in the DELETE_ONLY state.
 			if _, ok := ru.deleteOnlyIndex[i]; !ok {
 				if log.V(2) {
-					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.key, newSecondaryIndexEntry.value)
+					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value)
 				}
-				b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
+				b.CPut(newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value, nil)
 			}
 		}
 	}
@@ -498,9 +500,9 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
 		if log.V(2) {
-			log.Infof("Del %s", secondaryIndexEntry.key)
+			log.Infof("Del %s", secondaryIndexEntry.Key)
 		}
-		b.Del(secondaryIndexEntry.key)
+		b.Del(secondaryIndexEntry.Key)
 	}
 
 	// Delete the row.

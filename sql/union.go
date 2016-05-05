@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -196,7 +197,7 @@ func (n *unionNode) readRight() bool {
 			return true
 		}
 		n.scratch = n.scratch[:0]
-		if n.scratch, n.err = encodeDTuple(n.scratch, n.right.Values()); n.err != nil {
+		if n.scratch, n.err = sqlbase.EncodeDTuple(n.scratch, n.right.Values()); n.err != nil {
 			return false
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
@@ -230,7 +231,7 @@ func (n *unionNode) readLeft() bool {
 			return true
 		}
 		n.scratch = n.scratch[:0]
-		if n.scratch, n.err = encodeDTuple(n.scratch, n.left.Values()); n.err != nil {
+		if n.scratch, n.err = sqlbase.EncodeDTuple(n.scratch, n.left.Values()); n.err != nil {
 			return false
 		}
 		if n.emit.emitLeft(n.scratch) {

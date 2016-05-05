@@ -226,7 +226,7 @@ func selectIndex(
 			// We only need to retrieve one key, but some spans might contain no
 			// keys so we need to keep all of them.
 			for i := range s.spans {
-				s.spans[i].count = 1
+				s.spans[i].Count = 1
 			}
 		}
 	}
@@ -234,7 +234,7 @@ func selectIndex(
 	if log.V(3) {
 		log.Infof("%s: filter=%v", c.index.Name, s.filter)
 		for i, span := range s.spans {
-			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 2))
+			log.Infof("%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
 		}
 	}
 
@@ -822,7 +822,7 @@ func (v indexInfoByCost) Sort() {
 	sort.Sort(v)
 }
 
-func encodeStartConstraintAscending(spans []span, c *parser.ComparisonExpr) {
+func encodeStartConstraintAscending(spans []sqlbase.Span, c *parser.ComparisonExpr) {
 	switch c.Operator {
 	case parser.IsNot:
 		// A IS NOT NULL expression allows us to constrain the start of
@@ -831,33 +831,33 @@ func encodeStartConstraintAscending(spans []span, c *parser.ComparisonExpr) {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
 		for i := range spans {
-			spans[i].start = encoding.EncodeNotNullAscending(spans[i].start)
+			spans[i].Start = encoding.EncodeNotNullAscending(spans[i].Start)
 		}
 	case parser.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	case parser.GE, parser.EQ:
 		datum := c.Right.(parser.Datum)
-		key, err := encodeTableKey(nil, datum, encoding.Ascending)
+		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
 		if err != nil {
 			panic(err)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].start = append(spans[i].start, key...)
+			spans[i].Start = append(spans[i].Start, key...)
 		}
 	case parser.GT:
 		// A ">" constraint is the last start constraint. Since the constraint
 		// is exclusive and the start key is inclusive, we're going to apply
 		// a .PrefixEnd(). Note that a ">" is usually transformed to a ">=".
 		datum := c.Right.(parser.Datum)
-		key, pErr := encodeTableKey(nil, datum, encoding.Ascending)
+		key, pErr := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
 		if pErr != nil {
 			panic(pErr)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].start = append(spans[i].start, key...)
-			spans[i].start = spans[i].start.PrefixEnd()
+			spans[i].Start = append(spans[i].Start, key...)
+			spans[i].Start = spans[i].Start.PrefixEnd()
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
@@ -865,7 +865,7 @@ func encodeStartConstraintAscending(spans []span, c *parser.ComparisonExpr) {
 }
 
 func encodeStartConstraintDescending(
-	spans []span, c *parser.ComparisonExpr) {
+	spans []sqlbase.Span, c *parser.ComparisonExpr) {
 	switch c.Operator {
 	case parser.Is:
 		// An IS NULL expressions allows us to constrain the start of the range
@@ -874,33 +874,33 @@ func encodeStartConstraintDescending(
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
 		for i := range spans {
-			spans[i].start = encoding.EncodeNullDescending(spans[i].start)
+			spans[i].Start = encoding.EncodeNullDescending(spans[i].Start)
 		}
 	case parser.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	case parser.LE, parser.EQ:
 		datum := c.Right.(parser.Datum)
-		key, pErr := encodeTableKey(nil, datum, encoding.Descending)
+		key, pErr := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
 		if pErr != nil {
 			panic(pErr)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].start = append(spans[i].start, key...)
+			spans[i].Start = append(spans[i].Start, key...)
 		}
 	case parser.LT:
 		// A "<" constraint is the last start constraint. Since the constraint
 		// is exclusive and the start key is inclusive, we're going to apply
 		// a .PrefixEnd(). Note that a "<" is usually transformed to a "<=".
 		datum := c.Right.(parser.Datum)
-		key, pErr := encodeTableKey(nil, datum, encoding.Descending)
+		key, pErr := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
 		if pErr != nil {
 			panic(pErr)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].start = append(spans[i].start, key...)
-			spans[i].start = spans[i].start.PrefixEnd()
+			spans[i].Start = append(spans[i].Start, key...)
+			spans[i].Start = spans[i].Start.PrefixEnd()
 		}
 
 	default:
@@ -908,8 +908,9 @@ func encodeStartConstraintDescending(
 	}
 }
 
-func encodeEndConstraintAscending(spans []span, c *parser.ComparisonExpr,
-	isLastEndConstraint bool) {
+func encodeEndConstraintAscending(
+	spans []sqlbase.Span, c *parser.ComparisonExpr, isLastEndConstraint bool,
+) {
 	switch c.Operator {
 	case parser.Is:
 		// An IS NULL expressions allows us to constrain the end of the range
@@ -918,33 +919,34 @@ func encodeEndConstraintAscending(spans []span, c *parser.ComparisonExpr,
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
 		for i := range spans {
-			spans[i].end = encoding.EncodeNotNullAscending(spans[i].end)
+			spans[i].End = encoding.EncodeNotNullAscending(spans[i].End)
 		}
 	default:
 		datum := c.Right.(parser.Datum)
 		if c.Operator != parser.LT {
 			for i := range spans {
-				spans[i].end = encodeInclusiveEndValue(
-					spans[i].end, datum, encoding.Ascending, isLastEndConstraint)
+				spans[i].End = encodeInclusiveEndValue(
+					spans[i].End, datum, encoding.Ascending, isLastEndConstraint)
 			}
 			break
 		}
 		if !isLastEndConstraint {
 			panic(fmt.Sprintf("can't have other end constraints after a '<' constraint, found %v", c.Operator))
 		}
-		key, err := encodeTableKey(nil, datum, encoding.Ascending)
+		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
 		if err != nil {
 			panic(err)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].end = append(spans[i].end, key...)
+			spans[i].End = append(spans[i].End, key...)
 		}
 	}
 }
 
-func encodeEndConstraintDescending(spans []span, c *parser.ComparisonExpr,
-	isLastEndConstraint bool) {
+func encodeEndConstraintDescending(
+	spans []sqlbase.Span, c *parser.ComparisonExpr, isLastEndConstraint bool,
+) {
 	switch c.Operator {
 	case parser.IsNot:
 		// An IS NOT NULL expressions allows us to constrain the end of the range
@@ -953,27 +955,27 @@ func encodeEndConstraintDescending(spans []span, c *parser.ComparisonExpr,
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
 		for i := range spans {
-			spans[i].end = encoding.EncodeNotNullDescending(spans[i].end)
+			spans[i].End = encoding.EncodeNotNullDescending(spans[i].End)
 		}
 	default:
 		datum := c.Right.(parser.Datum)
 		if c.Operator != parser.GT {
 			for i := range spans {
-				spans[i].end = encodeInclusiveEndValue(
-					spans[i].end, datum, encoding.Descending, isLastEndConstraint)
+				spans[i].End = encodeInclusiveEndValue(
+					spans[i].End, datum, encoding.Descending, isLastEndConstraint)
 			}
 			break
 		}
 		if !isLastEndConstraint {
 			panic(fmt.Sprintf("can't have other end constraints after a '>' constraint, found %v", c.Operator))
 		}
-		key, err := encodeTableKey(nil, datum, encoding.Descending)
+		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
 		if err != nil {
 			panic(err)
 		}
 		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].end = append(spans[i].end, key...)
+			spans[i].End = append(spans[i].End, key...)
 		}
 	}
 }
@@ -1006,7 +1008,7 @@ func encodeInclusiveEndValue(
 			}
 		}
 	}
-	key, pErr := encodeTableKey(key, datum, dir)
+	key, pErr := sqlbase.EncodeTableKey(key, datum, dir)
 	if pErr != nil {
 		panic(pErr)
 	}
@@ -1023,8 +1025,13 @@ func encodeInclusiveEndValue(
 // the start and/or end.
 //
 // Returns the exploded spans.
-func applyInConstraint(spans []span, c indexConstraint, firstCol int,
-	index *sqlbase.IndexDescriptor, isLastEndConstraint bool) []span {
+func applyInConstraint(
+	spans []sqlbase.Span,
+	c indexConstraint,
+	firstCol int,
+	index *sqlbase.IndexDescriptor,
+	isLastEndConstraint bool,
+) []sqlbase.Span {
 	var e *parser.ComparisonExpr
 	// It might be that the IN constraint is a start constraint, an
 	// end constraint, or both, depending on how whether we had
@@ -1036,7 +1043,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 	}
 	tuple := *e.Right.(*parser.DTuple)
 	existingSpans := spans
-	spans = make([]span, 0, len(existingSpans)*len(tuple))
+	spans = make([]sqlbase.Span, 0, len(existingSpans)*len(tuple))
 	for _, datum := range tuple {
 		// start and end will accumulate the end constraint for
 		// the current element of the tuple.
@@ -1053,7 +1060,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 					panic(err)
 				}
 
-				if start, err = encodeTableKey(start, (*t)[tupleIdx], colDir); err != nil {
+				if start, err = sqlbase.EncodeTableKey(start, (*t)[tupleIdx], colDir); err != nil {
 					panic(err)
 				}
 				end = encodeInclusiveEndValue(
@@ -1067,7 +1074,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			if colDir, err = index.ColumnDirections[firstCol].ToEncodingDirection(); err != nil {
 				panic(err)
 			}
-			if start, err = encodeTableKey(nil, datum, colDir); err != nil {
+			if start, err = sqlbase.EncodeTableKey(nil, datum, colDir); err != nil {
 				panic(err)
 			}
 
@@ -1079,10 +1086,10 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 		}
 		for _, s := range existingSpans {
 			if c.start != nil {
-				s.start = append(append(roachpb.Key(nil), s.start...), start...)
+				s.Start = append(append(roachpb.Key(nil), s.Start...), start...)
 			}
 			if c.end != nil {
-				s.end = append(append(roachpb.Key(nil), s.end...), end...)
+				s.End = append(append(roachpb.Key(nil), s.End...), end...)
 			}
 			spans = append(spans, s)
 		}
@@ -1116,11 +1123,11 @@ func (a spanEvents) Less(i, j int) bool {
 // spans are non-overlapping and ordered.
 func makeSpans(
 	constraints orIndexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
-) spans {
+) sqlbase.Spans {
 	if len(constraints) == 0 {
 		return makeSpansForIndexConstraints(nil, tableID, index)
 	}
-	var allSpans spans
+	var allSpans sqlbase.Spans
 	for _, c := range constraints {
 		s := makeSpansForIndexConstraints(c, tableID, index)
 		allSpans = append(allSpans, s...)
@@ -1130,17 +1137,17 @@ func makeSpans(
 
 // mergeAndSortSpans is used to merge a set of potentially overlapping spans
 // into a sorted set of non-overlapping spans.
-func mergeAndSortSpans(s spans) spans {
+func mergeAndSortSpans(s sqlbase.Spans) sqlbase.Spans {
 	// This is the classic 1D geometry problem of merging overlapping segments
 	// on the X axis. It can be solved using a scan algorithm: we go through all
 	// segment starting and ending points in X order (as "events") and keep
 	// track of how many open segments we have at each point.
 	events := make(spanEvents, 2*len(s))
 	for i := range s {
-		events[2*i] = spanEvent{start: true, key: s[i].start}
-		events[2*i+1] = spanEvent{start: false, key: s[i].end}
-		if s[i].start.Compare(s[i].end) >= 0 {
-			panic(fmt.Sprintf("invalid input span %s", prettySpan(s[i], 0)))
+		events[2*i] = spanEvent{start: true, key: s[i].Start}
+		events[2*i+1] = spanEvent{start: false, key: s[i].End}
+		if s[i].Start.Compare(s[i].End) >= 0 {
+			panic(fmt.Sprintf("invalid input span %s", sqlbase.PrettySpan(s[i], 0)))
 		}
 	}
 	sort.Sort(events)
@@ -1152,7 +1159,7 @@ func mergeAndSortSpans(s spans) spans {
 				// Start a new span. Because for equal keys the start events
 				// come first, there can't be end events for this key.
 				// The end of the span will be adjusted as we move forward.
-				s = append(s, span{start: e.key, end: e.key})
+				s = append(s, sqlbase.Span{Start: e.key, End: e.key})
 			}
 			openSpans++
 		} else {
@@ -1161,7 +1168,7 @@ func mergeAndSortSpans(s spans) spans {
 				panic("end span with no spans started")
 			} else if openSpans == 0 {
 				// Adjust the end of the last span.
-				s[len(s)-1].end = e.key
+				s[len(s)-1].End = e.key
 			}
 		}
 	}
@@ -1176,16 +1183,16 @@ func mergeAndSortSpans(s spans) spans {
 // virtue of the input constraints being disjunct).
 func makeSpansForIndexConstraints(
 	constraints indexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
-) spans {
+) sqlbase.Spans {
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableID, index.ID))
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.
 	// But we also have (...) IN <tuple> constraints that span multiple columns.
 	// These constraints split each span, and that's how we can end up with
 	// multiple spans.
-	resultSpans := spans{{
-		start: append(roachpb.Key(nil), prefix...),
-		end:   append(roachpb.Key(nil), prefix...),
+	resultSpans := sqlbase.Spans{{
+		Start: append(roachpb.Key(nil), prefix...),
+		End:   append(roachpb.Key(nil), prefix...),
 	}}
 
 	colIdx := 0
@@ -1225,7 +1232,7 @@ func makeSpansForIndexConstraints(
 	// If we had no end constraints, make it so that we scan the whole index.
 	if len(constraints) == 0 || constraints[0].end == nil {
 		for i := range resultSpans {
-			resultSpans[i].end = resultSpans[i].end.PrefixEnd()
+			resultSpans[i].End = resultSpans[i].End.PrefixEnd()
 		}
 	}
 
@@ -1234,7 +1241,7 @@ func makeSpansForIndexConstraints(
 	// as "a >= 2 AND a < 2" for span generation.
 	n := 0
 	for _, s := range resultSpans {
-		if bytes.Compare(s.start, s.end) < 0 {
+		if bytes.Compare(s.Start, s.End) < 0 {
 			resultSpans[n] = s
 			n++
 		}

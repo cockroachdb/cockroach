@@ -15,7 +15,7 @@
 // Author: Peter Mattis (peter@cockroachlabs.com)
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"bytes"
@@ -24,15 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// rowFetcher handles fetching kvs and forming table rows.
+// RowFetcher handles fetching kvs and forming table rows.
 // Usage:
-//   var rf rowFetcher
+//   var rf RowFetcher
 //   err := rf.init(..)
 //   // Handle err
 //   err := rf.startScan(..)
@@ -46,11 +45,11 @@ import (
 //      }
 //      // Process row
 //   }
-type rowFetcher struct {
+type RowFetcher struct {
 	// -- Fields initialized once --
 
-	desc             *sqlbase.TableDescriptor
-	index            *sqlbase.IndexDescriptor
+	desc             *TableDescriptor
+	index            *IndexDescriptor
 	reverse          bool
 	isSecondaryIndex bool
 	indexColumnDirs  []encoding.Direction
@@ -60,7 +59,7 @@ type rowFetcher struct {
 	valNeededForCol []bool
 
 	// Map used to get the index for columns in desc.Columns.
-	colIdxMap map[sqlbase.ColumnID]int
+	colIdxMap map[ColumnID]int
 
 	// One value per column that is part of the key; each value is a column
 	// index (into desc.Columns).
@@ -81,16 +80,16 @@ type rowFetcher struct {
 	kvEnd bool
 
 	// Buffered allocation of decoded datums.
-	alloc datumAlloc
+	alloc DatumAlloc
 }
 
-// init sets up a rowFetcher for a given table and index. If we are using a
+// Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, valNeededForCol can only be true for the columns in the
 // index.
-func (rf *rowFetcher) init(
-	desc *sqlbase.TableDescriptor,
-	colIdxMap map[sqlbase.ColumnID]int,
-	index *sqlbase.IndexDescriptor,
+func (rf *RowFetcher) Init(
+	desc *TableDescriptor,
+	colIdxMap map[ColumnID]int,
+	index *IndexDescriptor,
 	reverse, isSecondaryIndex bool,
 	valNeededForCol []bool,
 ) error {
@@ -102,7 +101,7 @@ func (rf *rowFetcher) init(
 	rf.valNeededForCol = valNeededForCol
 	rf.row = make([]parser.Datum, len(rf.desc.Columns))
 
-	var indexColumnIDs []sqlbase.ColumnID
+	var indexColumnIDs []ColumnID
 	indexColumnIDs, rf.indexColumnDirs = index.FullColumnIDs()
 
 	rf.indexColIdx = make([]int, len(indexColumnIDs))
@@ -120,7 +119,7 @@ func (rf *rowFetcher) init(
 
 	var err error
 	// Prepare our index key vals slice.
-	rf.keyValTypes, err = makeKeyVals(rf.desc, indexColumnIDs)
+	rf.keyValTypes, err = MakeKeyVals(rf.desc, indexColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -131,7 +130,7 @@ func (rf *rowFetcher) init(
 		// key. Prepare implicitVals for use in decoding this value.
 		// Primary indexes only contain ascendingly-encoded values. If this
 		// ever changes, we'll probably have to figure out the directions here too.
-		rf.implicitValTypes, err = makeKeyVals(desc, index.ImplicitColumnIDs)
+		rf.implicitValTypes, err = MakeKeyVals(desc, index.ImplicitColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -140,14 +139,14 @@ func (rf *rowFetcher) init(
 	return nil
 }
 
-// startScan initializes and starts the key-value scan. Can be used multiple
+// StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) error {
+func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) error {
 	if len(spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
-		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(rf.desc.ID, rf.index.ID))
-		spans = []span{{start: start, end: start.PrefixEnd()}}
+		start := roachpb.Key(MakeIndexKeyPrefix(rf.desc.ID, rf.index.ID))
+		spans = []Span{{Start: start, End: start.PrefixEnd()}}
 	}
 
 	rf.indexKey = nil
@@ -170,14 +169,14 @@ func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) e
 	rf.kvFetcher = makeKVFetcher(txn, spans, rf.reverse, firstBatchLimit)
 
 	// Retrieve the first key.
-	_, err := rf.nextKey()
+	_, err := rf.NextKey()
 	return err
 }
 
-// nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
+// NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
 // TODO(andrei): change to return error
-func (rf *rowFetcher) nextKey() (rowDone bool, err error) {
+func (rf *RowFetcher) NextKey() (rowDone bool, err error) {
 	var ok bool
 	ok, rf.kv, err = rf.kvFetcher.nextKV()
 	if err != nil {
@@ -227,18 +226,19 @@ func prettyDatums(vals []parser.Datum) string {
 	return buf.String()
 }
 
-func (rf *rowFetcher) readIndexKey(k roachpb.Key) (remaining []byte, err error) {
-	return decodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyValTypes, rf.keyVals,
+// ReadIndexKey decodes an index key for the fetcher's table.
+func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, err error) {
+	return DecodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyValTypes, rf.keyVals,
 		rf.indexColumnDirs, k)
 }
 
-// processKV processes the given key/value, setting values in the row
+// ProcessKV processes the given key/value, setting values in the row
 // accordingly. If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
-func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
+func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 	prettyKey string, prettyValue string, err error,
 ) {
-	remaining, err := rf.readIndexKey(kv.Key)
+	remaining, err := rf.ReadIndexKey(kv.Key)
 	if err != nil {
 		return "", "", err
 	}
@@ -269,13 +269,13 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 			return "", "", err
 		}
 
-		idx, ok := rf.colIdxMap[sqlbase.ColumnID(colID)]
+		idx, ok := rf.colIdxMap[ColumnID(colID)]
 		if ok && (debugStrings || rf.valNeededForCol[idx]) {
 			if debugStrings {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 			}
 			kind := rf.desc.Columns[idx].Type.Kind
-			value, err := unmarshalColumnValue(&rf.alloc, kind, kv.Value)
+			value, err := UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
@@ -298,7 +298,7 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 		if rf.implicitVals != nil {
 			// This is a unique index; decode the implicit column values from
 			// the value.
-			_, err := decodeKeyVals(&rf.alloc, rf.implicitValTypes, rf.implicitVals, nil,
+			_, err := DecodeKeyVals(&rf.alloc, rf.implicitValTypes, rf.implicitVals, nil,
 				kv.ValueBytes())
 			if err != nil {
 				return "", "", err
@@ -329,13 +329,13 @@ func (rf *rowFetcher) processKV(kv client.KeyValue, debugStrings bool) (
 	return prettyKey, prettyValue, nil
 }
 
-// nextRow processes keys until we complete one row, which is returned as a
+// NextRow processes keys until we complete one row, which is returned as a
 // DTuple. The row contains one value per table column, regardless of the index
 // used; values that are not needed (as per valNeededForCol) are nil.
 //
 // The DTuple should not be modified and is only valid until the next call. When
 // there are no more rows, the DTuple is nil.
-func (rf *rowFetcher) nextRow() (parser.DTuple, error) {
+func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -347,11 +347,11 @@ func (rf *rowFetcher) nextRow() (parser.DTuple, error) {
 	// column name. When the index key changes we output a row containing the
 	// current values.
 	for {
-		_, _, err := rf.processKV(rf.kv, false)
+		_, _, err := rf.ProcessKV(rf.kv, false)
 		if err != nil {
 			return nil, err
 		}
-		rowDone, err := rf.nextKey()
+		rowDone, err := rf.NextKey()
 		if err != nil {
 			return nil, err
 		}
@@ -361,20 +361,20 @@ func (rf *rowFetcher) nextRow() (parser.DTuple, error) {
 	}
 }
 
-// nextKeyDebug processes one key at a time and returns a pretty printed key and
+// NextKeyDebug processes one key at a time and returns a pretty printed key and
 // value. If we completed a row, the row is returned as well (see nextRow). If
 // there are no more keys, prettyKey is "".
-func (rf *rowFetcher) nextKeyDebug() (
+func (rf *RowFetcher) NextKeyDebug() (
 	prettyKey string, prettyValue string, row parser.DTuple, err error,
 ) {
 	if rf.kvEnd {
 		return "", "", nil, nil
 	}
-	prettyKey, prettyValue, err = rf.processKV(rf.kv, true)
+	prettyKey, prettyValue, err = rf.ProcessKV(rf.kv, true)
 	if err != nil {
 		return "", "", nil, err
 	}
-	rowDone, err := rf.nextKey()
+	rowDone, err := rf.NextKey()
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -382,4 +382,9 @@ func (rf *rowFetcher) nextKeyDebug() (
 		row = rf.row
 	}
 	return prettyKey, prettyValue, row, nil
+}
+
+// Key returns the next key (the key that follows the last returned row).
+func (rf *RowFetcher) Key() roachpb.Key {
+	return rf.kv.Key
 }

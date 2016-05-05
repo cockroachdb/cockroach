@@ -166,19 +166,19 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 }
 
 // getTableSpan returns a span containing the start and end key for a table.
-func (sc *SchemaChanger) getTableSpan() (span, error) {
+func (sc *SchemaChanger) getTableSpan() (sqlbase.Span, error) {
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = getTableDescFromID(txn, sc.tableID)
 		return err
 	}); err != nil {
-		return span{}, err
+		return sqlbase.Span{}, err
 	}
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
-	return span{
-		start: prefix,
-		end:   prefix.PrefixEnd(),
+	return sqlbase.Span{
+		Start: prefix,
+		End:   prefix.PrefixEnd(),
 	}, nil
 }
 
@@ -231,7 +231,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			*lease = l
 
 			// Add and delete columns for a chunk of the key space.
-			sp.start, done, err = sc.truncateAndBackfillColumnsChunk(
+			sp.Start, done, err = sc.truncateAndBackfillColumnsChunk(
 				added, dropped, nonNullableColumn, defaultExprs, evalCtx, sp,
 			)
 			if err != nil {
@@ -248,7 +248,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	nonNullableColumn string,
 	defaultExprs []parser.TypedExpr,
 	evalCtx parser.EvalContext,
-	sp span,
+	sp sqlbase.Span,
 ) (roachpb.Key, bool, error) {
 	var curSentinel roachpb.Key
 	done := false
@@ -269,7 +269,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		// handle intermediate OLTP commands which delete and add
 		// values during the scan.
 		b := &client.Batch{}
-		b.Scan(sp.start, sp.end, ColumnTruncateAndBackfillChunkSize)
+		b.Scan(sp.Start, sp.End, ColumnTruncateAndBackfillChunkSize)
 		if err := txn.Run(b); err != nil {
 			return err
 		}
@@ -321,7 +321,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 						if err != nil {
 							return err
 						}
-						marshalled[i], err = marshalColumnValue(col, d)
+						marshalled[i], err = sqlbase.MarshalColumnValue(col, d)
 						if err != nil {
 							return err
 						}
@@ -431,7 +431,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		}
 		*lease = l
 
-		sp.start, done, err = sc.backfillIndexesChunk(added, sp)
+		sp.Start, done, err = sc.backfillIndexesChunk(added, sp)
 		if err != nil {
 			return err
 		}
@@ -441,7 +441,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 func (sc *SchemaChanger) backfillIndexesChunk(
 	added []sqlbase.IndexDescriptor,
-	sp span,
+	sp sqlbase.Span,
 ) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
 	done := false
@@ -470,7 +470,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			planner: makePlanner(),
 			txn:     txn,
 			desc:    *tableDesc,
-			spans:   []span{sp},
+			spans:   []sqlbase.Span{sp},
 		}
 		scan.initDescDefaults()
 		rows, err := selectIndex(scan, nil, false)
@@ -489,17 +489,17 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			rowVals := rows.Values()
 
 			for _, desc := range added {
-				secondaryIndexEntries, err := encodeSecondaryIndexes(
+				secondaryIndexEntries, err := sqlbase.EncodeSecondaryIndexes(
 					tableDesc.ID, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
 				if err != nil {
 					return err
 				}
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
-						log.Infof("InitPut %s -> %v", secondaryIndexEntry.key,
-							secondaryIndexEntry.value)
+						log.Infof("InitPut %s -> %v", secondaryIndexEntry.Key,
+							secondaryIndexEntry.Value)
 					}
-					b.InitPut(secondaryIndexEntry.key, secondaryIndexEntry.value)
+					b.InitPut(secondaryIndexEntry.Key, secondaryIndexEntry.Value)
 				}
 			}
 		}
@@ -521,7 +521,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return nil
 		}
 		// Keep track of the next key.
-		nextKey = scan.fetcher.kv.Key
+		nextKey = scan.fetcher.Key()
 		return nil
 	})
 	return nextKey, done, err

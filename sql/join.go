@@ -187,16 +187,16 @@ func (n *indexJoinNode) Next() bool {
 			}
 
 			vals := n.index.Values()
-			primaryIndexKey, _, err := encodeIndexKey(
+			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
 			n.err = err
 			if n.err != nil {
 				return false
 			}
 			key := roachpb.Key(primaryIndexKey)
-			n.table.spans = append(n.table.spans, span{
-				start: key,
-				end:   key.PrefixEnd(),
+			n.table.spans = append(n.table.spans, sqlbase.Span{
+				Start: key,
+				End:   key.PrefixEnd(),
 			})
 
 			if n.explain == explainDebug {
@@ -207,7 +207,7 @@ func (n *indexJoinNode) Next() bool {
 		}
 
 		if log.V(3) {
-			log.Infof("table scan: %s", prettySpans(n.table.spans, 0))
+			log.Infof("table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
 		}
 	}
 	return false

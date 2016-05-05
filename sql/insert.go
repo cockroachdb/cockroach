@@ -182,7 +182,8 @@ func (p *planner) Insert(
 				if err != nil {
 					return nil, err
 				}
-				if err := checkColumnType(cols[eIdx], typedExpr.ReturnType(), p.evalCtx.Args); err != nil {
+				err = sqlbase.CheckColumnType(cols[eIdx], typedExpr.ReturnType(), p.evalCtx.Args)
+				if err != nil {
 					return nil, err
 				}
 			}
@@ -337,7 +338,7 @@ func (n *insertNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
-		if err := checkValueWidth(n.insertCols[i], rowVals[i]); err != nil {
+		if err := sqlbase.CheckValueWidth(n.insertCols[i], rowVals[i]); err != nil {
 			n.run.err = err
 			return false
 		}

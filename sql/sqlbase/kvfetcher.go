@@ -15,7 +15,7 @@
 // Author: Peter Mattis (peter@cockroachlabs.com)
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"bytes"
@@ -26,18 +26,20 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 )
 
-type span struct {
-	start roachpb.Key // inclusive key
-	end   roachpb.Key // exclusive key
-	count int64       // max # of keys for this span
+// Span represents a span that is part of a scan.
+type Span struct {
+	Start roachpb.Key // inclusive key
+	End   roachpb.Key // exclusive key
+	Count int64       // max # of keys for this span
 }
 
-type spans []span
+// Spans is a slice of spans.
+type Spans []Span
 
 // implement Sort.Interface
-func (a spans) Len() int           { return len(a) }
-func (a spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a spans) Less(i, j int) bool { return a[i].start.Compare(a[j].start) < 0 }
+func (a Spans) Len() int           { return len(a) }
+func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a Spans) Less(i, j int) bool { return a[i].Start.Compare(a[j].Start) < 0 }
 
 // prettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
@@ -60,22 +62,24 @@ func prettyKey(key roachpb.Key, skip int) string {
 	return p
 }
 
-func prettySpan(span span, skip int) string {
+// PrettySpan returns a human-readable representation of a span.
+func PrettySpan(span Span, skip int) string {
 	var buf bytes.Buffer
-	if span.count != 0 {
-		fmt.Fprintf(&buf, "%d:", span.count)
+	if span.Count != 0 {
+		fmt.Fprintf(&buf, "%d:", span.Count)
 	}
-	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.start, skip), prettyKey(span.end, skip))
+	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Start, skip), prettyKey(span.End, skip))
 	return buf.String()
 }
 
-func prettySpans(spans []span, skip int) string {
+// PrettySpans returns a human-readable description of the spans.
+func PrettySpans(spans []Span, skip int) string {
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
-		buf.WriteString(prettySpan(span, skip))
+		buf.WriteString(PrettySpan(span, skip))
 	}
 	return buf.String()
 }
@@ -97,7 +101,7 @@ func SetKVBatchSize(val int64) func() {
 type kvFetcher struct {
 	// "Constant" fields, provided by the caller.
 	txn             *client.Txn
-	spans           spans
+	spans           Spans
 	reverse         bool
 	firstBatchLimit int64
 
@@ -149,7 +153,7 @@ func (f *kvFetcher) getBatchSize() int64 {
 
 // makeKVFetcher initializes a kvFetcher for the given spans. If non-zero, firstBatchLimit limits
 // the size of the first batch (subsequent batches use the default size).
-func makeKVFetcher(txn *client.Txn, spans spans, reverse bool, firstBatchLimit int64) kvFetcher {
+func makeKVFetcher(txn *client.Txn, spans Spans, reverse bool, firstBatchLimit int64) kvFetcher {
 	if firstBatchLimit < 0 {
 		panic(fmt.Sprintf("invalid batch limit %d", firstBatchLimit))
 	}
@@ -176,9 +180,9 @@ func (f *kvFetcher) fetch() error {
 	atEnd := true
 	if !f.reverse {
 		for i := 0; i < len(f.spans); i++ {
-			start := f.spans[i].start
+			start := f.spans[i].Start
 			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].end) >= 0 {
+				if resumeKey.Compare(f.spans[i].End) >= 0 {
 					// We are resuming from a key after this span.
 					continue
 				}
@@ -191,13 +195,13 @@ func (f *kvFetcher) fetch() error {
 				}
 			}
 			atEnd = false
-			b.Scan(start, f.spans[i].end, f.spans[i].count)
+			b.Scan(start, f.spans[i].End, f.spans[i].Count)
 		}
 	} else {
 		for i := len(f.spans) - 1; i >= 0; i-- {
-			end := f.spans[i].end
+			end := f.spans[i].End
 			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].start) <= 0 {
+				if resumeKey.Compare(f.spans[i].Start) <= 0 {
 					// We are resuming from a key before this span.
 					continue
 				}
@@ -210,7 +214,7 @@ func (f *kvFetcher) fetch() error {
 				}
 			}
 			atEnd = false
-			b.ReverseScan(f.spans[i].start, end, f.spans[i].count)
+			b.ReverseScan(f.spans[i].Start, end, f.spans[i].Count)
 		}
 	}
 

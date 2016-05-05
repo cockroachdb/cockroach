@@ -155,7 +155,7 @@ type tableUpserter struct {
 	txn                   *client.Txn
 	tableDesc             *sqlbase.TableDescriptor
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
-	fetcher               rowFetcher
+	fetcher               sqlbase.RowFetcher
 
 	// Batched up in run/flush.
 	upsertRows   []parser.DTuple
@@ -182,7 +182,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	for i := range valNeededForCol {
 		valNeededForCol[i] = true
 	}
-	err := tu.fetcher.init(
+	err := tu.fetcher.Init(
 		tu.tableDesc, tu.ru.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
 		false, false, valNeededForCol)
 	if err != nil {
@@ -197,7 +197,7 @@ func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
 	// TODO(dan): The presence of OnConflict currently implies the short form
 	// (primary index and update the values being inserted). Implement the long
 	// form.
-	upsertRowPK, _, err := encodeIndexKey(
+	upsertRowPK, _, err := sqlbase.EncodeIndexKey(
 		&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 	if err != nil {
 		return nil, err
@@ -209,19 +209,19 @@ func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
 }
 
 func (tu *tableUpserter) flush() error {
-	pkSpans := make(spans, len(tu.upsertRowPKs))
+	pkSpans := make(sqlbase.Spans, len(tu.upsertRowPKs))
 	for i, upsertRowPK := range tu.upsertRowPKs {
-		pkSpans[i] = span{start: upsertRowPK, end: upsertRowPK.PrefixEnd()}
+		pkSpans[i] = sqlbase.Span{Start: upsertRowPK, End: upsertRowPK.PrefixEnd()}
 	}
 
-	if err := tu.fetcher.startScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
+	if err := tu.fetcher.StartScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
 		return err
 	}
 
 	var upsertRowPKIdx int
 	existingRows := make([]parser.DTuple, len(tu.upsertRowPKs))
 	for {
-		row, err := tu.fetcher.nextRow()
+		row, err := tu.fetcher.NextRow()
 		if err != nil {
 			return err
 		}
@@ -231,7 +231,7 @@ func (tu *tableUpserter) flush() error {
 
 		// TODO(dan): Can we do this without encoding an index key for every row we
 		// get back?
-		rowPK, _, err := encodeIndexKey(
+		rowPK, _, err := sqlbase.EncodeIndexKey(
 			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return err
@@ -330,9 +330,9 @@ func (td *tableDeleter) fastDelete(
 ) (rowCount int, err error) {
 	for _, span := range scan.spans {
 		if log.V(2) {
-			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
+			log.Infof("Skipping scan and just deleting %s - %s", span.Start, span.End)
 		}
-		td.b.DelRange(span.start, span.end, true)
+		td.b.DelRange(span.Start, span.End, true)
 	}
 
 	err = td.finalize()
@@ -348,7 +348,7 @@ func (td *tableDeleter) fastDelete(
 				continue
 			}
 
-			after, err := scan.fetcher.readIndexKey(i)
+			after, err := scan.fetcher.ReadIndexKey(i)
 			if err != nil {
 				return 0, err
 			}

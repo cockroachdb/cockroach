@@ -52,7 +52,7 @@ type scanNode struct {
 	// Map used to get the index for columns in desc.Columns.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	spans            []span
+	spans            []sqlbase.Span
 	isSecondaryIndex bool
 	reverse          bool
 	ordering         orderingInfo
@@ -68,7 +68,7 @@ type scanNode struct {
 	filterVars parser.IndexedVarHelper
 
 	scanInitialized bool
-	fetcher         rowFetcher
+	fetcher         sqlbase.RowFetcher
 
 	limitHint int64
 }
@@ -116,7 +116,7 @@ func (n *scanNode) Start() error {
 func (n *scanNode) initScan() (success bool) {
 	// TODO(radu): we could call init() just once, after the index and
 	// valNeededForCol are set.
-	err := n.fetcher.init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex,
+	err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex,
 		n.valNeededForCol)
 	if err != nil {
 		n.err = err
@@ -128,10 +128,10 @@ func (n *scanNode) initScan() (success bool) {
 		// index key prefix. This isn't needed for the fetcher, but it is for
 		// other external users of n.spans.
 		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
-		n.spans = append(n.spans, span{start: start, end: start.PrefixEnd()})
+		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 
-	n.err = n.fetcher.startScan(n.txn, n.spans, n.limitHint)
+	n.err = n.fetcher.StartScan(n.txn, n.spans, n.limitHint)
 	if n.err != nil {
 		return false
 	}
@@ -143,7 +143,7 @@ func (n *scanNode) initScan() (success bool) {
 func (n *scanNode) debugNext() bool {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
-	n.debugVals.key, n.debugVals.value, n.row, n.err = n.fetcher.nextKeyDebug()
+	n.debugVals.key, n.debugVals.value, n.row, n.err = n.fetcher.NextKeyDebug()
 	if n.err != nil || n.debugVals.key == "" {
 		return false
 	}
@@ -184,7 +184,7 @@ func (n *scanNode) Next() bool {
 
 	// We fetch one row at a time until we find one that passes the filter.
 	for {
-		n.row, n.err = n.fetcher.nextRow()
+		n.row, n.err = n.fetcher.NextRow()
 		if n.err != nil || n.row == nil {
 			return false
 		}
@@ -209,7 +209,7 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	} else {
 		name = "scan"
 	}
-	description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, prettySpans(n.spans, 2))
+	description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, sqlbase.PrettySpans(n.spans, 2))
 	return name, description, nil
 }
 
