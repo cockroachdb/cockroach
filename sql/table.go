@@ -248,7 +248,7 @@ func encodeIndexKey(index *sqlbase.IndexDescriptor, colMap map[sqlbase.ColumnID]
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 	for _, dir := range index.ColumnDirections {
-		convertedDir, err := dir.toEncodingDirection()
+		convertedDir, err := dir.ToEncodingDirection()
 		if err != nil {
 			return nil, false, err
 		}

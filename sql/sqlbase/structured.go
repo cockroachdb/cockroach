@@ -91,8 +91,8 @@ func validateName(name, typ string) error {
 	return nil
 }
 
-// toEncodingDirection converts a direction from the proto to an encoding.Direction.
-func (dir IndexDescriptor_Direction) toEncodingDirection() (encoding.Direction, error) {
+// ToEncodingDirection converts a direction from the proto to an encoding.Direction.
+func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, error) {
 	switch dir {
 	case IndexDescriptor_ASC:
 		return encoding.Ascending, nil
@@ -173,7 +173,7 @@ func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) {
 	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
 	for _, dir := range desc.ColumnDirections {
-		convertedDir, err := dir.toEncodingDirection()
+		convertedDir, err := dir.ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
