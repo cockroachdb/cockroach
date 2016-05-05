@@ -75,7 +75,7 @@ func (n *alterTableNode) Start() error {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
 			d := t.ColumnDef
-			col, idx, err := makeColumnDefDescs(d)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d)
 			if err != nil {
 				return err
 			}

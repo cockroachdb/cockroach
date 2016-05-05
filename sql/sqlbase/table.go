@@ -39,7 +39,7 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
-			col, idx, err := makeColumnDefDescs(d)
+			col, idx, err := MakeColumnDefDescs(d)
 			if err != nil {
 				return desc, err
 			}
@@ -118,7 +118,7 @@ func sanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
 	return nil
 }
 
-func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
+func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable != parser.NotNull && !d.PrimaryKey,
