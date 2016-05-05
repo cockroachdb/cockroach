@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql
+package distsql
 
 import (
 	"fmt"
@@ -25,30 +25,30 @@ import (
 	"golang.org/x/net/context"
 )
 
-// DistSQLServerContext encompasses the configuration required to create a
+// ServerContext encompasses the configuration required to create a
 // DistSQLServer.
-type DistSQLServerContext struct {
+type ServerContext struct {
 	DB *client.DB
 }
 
-// DistSQLServerImpl implements the server for the distributed SQL APIs.
-type DistSQLServerImpl struct {
-	ctx     DistSQLServerContext
+// ServerImpl implements the server for the distributed SQL APIs.
+type ServerImpl struct {
+	ctx     ServerContext
 	evalCtx parser.EvalContext
 }
 
-var _ DistSQLServer = &DistSQLServerImpl{}
+var _ DistSQLServer = &ServerImpl{}
 
-// NewDistSQLServer instantiates a DistSQLServer.
-func NewDistSQLServer(ctx DistSQLServerContext) *DistSQLServerImpl {
-	ds := &DistSQLServerImpl{
+// NewServer instantiates a DistSQLServer.
+func NewServer(ctx ServerContext) *ServerImpl {
+	ds := &ServerImpl{
 		ctx:     ctx,
 		evalCtx: parser.EvalContext{ReCache: parser.NewRegexpCache(512)},
 	}
 	return ds
 }
 
-func (ds *DistSQLServerImpl) setupTxn(
+func (ds *ServerImpl) setupTxn(
 	ctx context.Context,
 	txnProto *roachpb.Transaction,
 ) *client.Txn {
@@ -59,7 +59,7 @@ func (ds *DistSQLServerImpl) setupTxn(
 }
 
 // SetupFlows is part of the DistSQLServer interface.
-func (ds *DistSQLServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
+func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	*SetupFlowsResponse, error,
 ) {
 	txn := ds.setupTxn(ctx, &req.Txn)
