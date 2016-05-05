@@ -47,7 +47,7 @@ func (p *planner) changePrivileges(
 
 		tableDesc, updatingTable := descriptor.(*sqlbase.TableDescriptor)
 		if updatingTable {
-			if err := tableDesc.setUpVersion(); err != nil {
+			if err := tableDesc.SetUpVersion(); err != nil {
 				return nil, err
 			}
 			p.notifySchemaChange(tableDesc.ID, invalidMutationID)

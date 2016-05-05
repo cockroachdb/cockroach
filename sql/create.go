@@ -136,8 +136,8 @@ func (n *createIndexNode) Start() *roachpb.Error {
 		return roachpb.NewError(err)
 	}
 
-	n.tableDesc.addIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
-	mutationID, err := n.tableDesc.finalizeMutation()
+	n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
+	mutationID, err := n.tableDesc.FinalizeMutation()
 	if err != nil {
 		return roachpb.NewError(err)
 	}

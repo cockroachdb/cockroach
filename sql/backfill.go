@@ -89,7 +89,7 @@ func convertBackfillError(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		tableDesc.makeMutationComplete(mutation)
+		tableDesc.MakeMutationComplete(mutation)
 	}
 	return convertBatchError(tableDesc, *b, pErr)
 }

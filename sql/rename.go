@@ -260,7 +260,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		tableDesc.Mutations[i].GetIndex().Name = newIdxName
 	}
 
-	if err := tableDesc.setUpVersion(); err != nil {
+	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
@@ -362,7 +362,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		}
 	}
 	column.Name = newColName
-	if err := tableDesc.setUpVersion(); err != nil {
+	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
 

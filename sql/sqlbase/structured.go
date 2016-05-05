@@ -597,7 +597,7 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
-func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {
+func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		switch t := m.Descriptor_.(type) {
@@ -617,12 +617,14 @@ func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {
 	}
 }
 
-func (desc *TableDescriptor) addColumnMutation(c ColumnDescriptor, direction DescriptorMutation_Direction) {
+// AddColumnMutation adds a column mutation to desc.Mutations.
+func (desc *TableDescriptor) AddColumnMutation(c ColumnDescriptor, direction DescriptorMutation_Direction) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
 	desc.addMutation(m)
 }
 
-func (desc *TableDescriptor) addIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
+// AddColumnMutation adds an index mutation to desc.Mutations.
+func (desc *TableDescriptor) AddIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
 	desc.addMutation(m)
 }
@@ -639,11 +641,11 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
-// finalizeMutation returns the id that has been used by mutations appended
+// FinalizeMutation returns the id that has been used by mutations appended
 // with addMutation() since the last time this function was called.
 // Future mutations will use a new ID.
-func (desc *TableDescriptor) finalizeMutation() (MutationID, error) {
-	if err := desc.setUpVersion(); err != nil {
+func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
+	if err := desc.SetUpVersion(); err != nil {
 		return invalidMutationID, err
 	}
 	mutationID := desc.NextMutationID
@@ -651,9 +653,9 @@ func (desc *TableDescriptor) finalizeMutation() (MutationID, error) {
 	return mutationID, nil
 }
 
-// setUpVersion sets the up_version marker on the table descriptor (see the proto
+// SetUpVersion sets the up_version marker on the table descriptor (see the proto
 // for comments).
-func (desc *TableDescriptor) setUpVersion() error {
+func (desc *TableDescriptor) SetUpVersion() error {
 	if desc.Deleted {
 		// We don't allow the version to be incremented any more once a table
 		// has been deleted. This will block new mutations from being queued on the
@@ -686,7 +688,8 @@ func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
 	return exprs
 }
 
-func (desc *TableDescriptor) isEmpty() bool {
+// IsEmpty checks if the descriptor is uninitialized.
+func (desc *TableDescriptor) IsEmpty() bool {
 	// Valid tables cannot have an ID of 0.
 	return desc.ID == 0
 }
