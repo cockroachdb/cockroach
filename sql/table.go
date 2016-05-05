@@ -50,7 +50,7 @@ func tableDoesNotExistError(name string) error {
 	return fmt.Errorf("table %q does not exist", name)
 }
 
-// tableKey implements descriptorKey.
+// tableKey implements sqlbase.DescriptorKey.
 type tableKey struct {
 	parentID sqlbase.ID
 	name     string

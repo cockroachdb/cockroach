@@ -32,7 +32,7 @@ func databaseDoesNotExistError(name string) error {
 	return fmt.Errorf("database %q does not exist", name)
 }
 
-// databaseKey implements descriptorKey.
+// databaseKey implements sqlbase.DescriptorKey.
 type databaseKey struct {
 	name string
 }
