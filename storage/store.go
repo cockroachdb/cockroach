@@ -1818,7 +1818,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			err = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
 			// TODO(tschottdorf): converting this error (back) into a pErr is janky. See
 			// TODO in processWriteIntentError about returning a pErr.
-			pErr = roachpb.NewError(err)
+			if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
+				pErr = roachpb.RetryableTxnErrorToPErr(*retErr)
+			} else {
+				pErr = roachpb.NewError(err)
+			}
 			// Preserve the error index.
 			pErr.Index = index
 		}

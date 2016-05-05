@@ -95,31 +95,36 @@ func NewError(err error) *Error {
 	e := &Error{}
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
-	} else if retErr, ok := err.(*RetryableTxnError); ok {
-		// TODO(andrei): constructing an Error from a RetryableError is only needed
-		// in Store.Send(), which runs "internal batches" for pushing other
-		// transactions. It can get a RetryableError which it needs to marhall to
-		// the caller as a pErr. This needs to go away by moving away from using the
-		// external client interface for running these push batches.
-		// It's also needed while the transition from pErr to error is not complete,
-		// because there are some places where we go back and forth between the two
-		// types.
-		// TODO(andrei): at the very least move this to a separate function that's
-		// called only from Store.Send() after the sql layer is free of pErr.
-		e.Message = retErr.message
-		if retErr.Backoff {
-			e.TransactionRestart = TransactionRestart_BACKOFF
-		} else {
-			e.TransactionRestart = TransactionRestart_IMMEDIATE
-		}
-		e.SetTxn(retErr.Transaction)
-		if retErr.CauseProto == nil {
-			panic("RetryableTxnProto without a cause")
-		}
-		e.Detail = retErr.CauseProto
+	} else if _, ok := err.(*RetryableTxnError); ok {
+		// This shouldn't happen. The few unfortunate bastards that need to go from
+		// RetryableTxnError to pErr should do it explicitly through
+		// RetryableTxnErrorToPErr().
+		panic("RetryableTxnError being converted back to pErr.")
 	} else {
 		e.setGoError(err)
 	}
+	return e
+}
+
+// RetryableTxnErrorToPErr creates an Error from a retryable error.
+// TODO(tschottdorf): constructing an Error from a RetryableError is only needed in
+// Store.Send(), which runs "internal batches" for pushing other transactions.
+// It can get a RetryableError which it needs to marhall to the caller as a
+// pErr. This needs to go away by moving away from using the external client
+// interface for running these push batches.
+func RetryableTxnErrorToPErr(err RetryableTxnError) *Error {
+	e := &Error{}
+	e.Message = err.message
+	if err.Backoff {
+		e.TransactionRestart = TransactionRestart_BACKOFF
+	} else {
+		e.TransactionRestart = TransactionRestart_IMMEDIATE
+	}
+	e.SetTxn(err.Transaction)
+	if err.CauseProto == nil {
+		panic("RetryableTxnProto without a cause")
+	}
+	e.Detail = err.CauseProto
 	return e
 }
 
