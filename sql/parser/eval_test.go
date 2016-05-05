@@ -358,6 +358,8 @@ func TestEval(t *testing.T) {
 		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12 hours 2 minutes'::interval`, `2010-09-28 03:58:00.1+00:00`},
 		{`'2010-09-28 12:00:00.1-04:00'::timestamp - 'PT12H2M'::interval`, `2010-09-28 03:58:00.1+00:00`},
 		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamp`, `4h0m0s`},
+		// Need two interval ops to verify the return type matches the return struct type.
+		{`'2010-09-28 12:00:00.1-04:00'::timestamptz - '0s'::interval - '0s'::interval`, `2010-09-28 16:00:00.1+00:00`},
 		{`'12h2m1s23ms'::interval + '1h'::interval`, `13h2m1.023s`},
 		{`'12 hours 2 minutes 1 second'::interval + '1h'::interval`, `13h2m1s`},
 		{`'PT12H2M1S'::interval + '1h'::interval`, `13h2m1s`},

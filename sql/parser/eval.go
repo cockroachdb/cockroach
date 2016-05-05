@@ -394,7 +394,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		BinOp{
 			LeftType:   DummyTimestampTZ,
 			RightType:  DummyInterval,
-			ReturnType: DummyTimestamp,
+			ReturnType: DummyTimestampTZ,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
 				return &DTimestampTZ{t}, nil
