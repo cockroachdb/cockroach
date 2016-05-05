@@ -629,7 +629,22 @@ var Builtins = map[string][]Builtin{
 	"avg": {
 		Builtin{
 			Types:      ArgTypes{DummyInt},
+			ReturnType: TypeDecimal,
+		},
+		Builtin{
+			Types:      ArgTypes{DummyFloat},
 			ReturnType: TypeFloat,
+		},
+		Builtin{
+			Types:      ArgTypes{DummyDecimal},
+			ReturnType: TypeDecimal,
+		},
+	},
+
+	"sum": {
+		Builtin{
+			Types:      ArgTypes{DummyInt},
+			ReturnType: TypeDecimal,
 		},
 		Builtin{
 			Types:      ArgTypes{DummyFloat},
@@ -645,7 +660,6 @@ var Builtins = map[string][]Builtin{
 
 	"max": aggregateImpls(DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes, DummyDate, DummyTimestamp, DummyInterval),
 	"min": aggregateImpls(DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes, DummyDate, DummyTimestamp, DummyInterval),
-	"sum": aggregateImpls(DummyInt, DummyFloat, DummyDecimal),
 
 	"variance": {
 		Builtin{
