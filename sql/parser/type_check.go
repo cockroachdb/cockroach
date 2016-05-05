@@ -191,43 +191,43 @@ func (expr *CastExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	var returnDatum Datum
 	var validTypes []Datum
 	switch expr.Type.(type) {
-	case *BoolType:
+	case *BoolColType:
 		returnDatum = TypeBool
 		validTypes = boolCastTypes
 
-	case *IntType:
+	case *IntColType:
 		returnDatum = TypeInt
 		validTypes = intCastTypes
 
-	case *FloatType:
+	case *FloatColType:
 		returnDatum = TypeFloat
 		validTypes = floatCastTypes
 
-	case *DecimalType:
+	case *DecimalColType:
 		returnDatum = TypeDecimal
 		validTypes = decimalCastTypes
 
-	case *StringType:
+	case *StringColType:
 		returnDatum = TypeString
 		validTypes = stringCastTypes
 
-	case *BytesType:
+	case *BytesColType:
 		returnDatum = TypeBytes
 		validTypes = bytesCastTypes
 
-	case *DateType:
+	case *DateColType:
 		returnDatum = TypeDate
 		validTypes = dateCastTypes
 
-	case *TimestampType:
+	case *TimestampColType:
 		returnDatum = TypeTimestamp
 		validTypes = timestampCastTypes
 
-	case *TimestampTZType:
+	case *TimestampTZColType:
 		returnDatum = TypeTimestampTZ
 		validTypes = timestampCastTypes
 
-	case *IntervalType:
+	case *IntervalColType:
 		returnDatum = TypeInterval
 		validTypes = intervalCastTypes
 	}
