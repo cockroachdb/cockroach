@@ -24,7 +24,6 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
@@ -210,7 +209,7 @@ type groupNode struct {
 	currentBucket string
 
 	desiredOrdering columnOrdering
-	pErr            *roachpb.Error
+	err             error
 
 	explain explainMode
 }
@@ -249,21 +248,21 @@ func (n *groupNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *groupNode) Start() *roachpb.Error {
+func (n *groupNode) Start() error {
 	return n.plan.Start()
 }
 
 func (n *groupNode) Next() bool {
 	var scratch []byte
 
-	if n.pErr != nil {
+	if n.err != nil {
 		return false
 	}
 
 	for !n.populated {
 		if !n.plan.Next() {
-			n.pErr = n.plan.PErr()
-			if n.pErr != nil {
+			n.err = n.plan.Err()
+			if n.err != nil {
 				return false
 			}
 			n.computeAggregates()
@@ -284,7 +283,7 @@ func (n *groupNode) Next() bool {
 
 		encoded, err := encodeDTuple(scratch, groupedValues)
 		if err != nil {
-			n.pErr = roachpb.NewError(err)
+			n.err = err
 			return false
 		}
 
@@ -293,7 +292,7 @@ func (n *groupNode) Next() bool {
 		// Feed the aggregateFuncs for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
 			if err := n.funcs[i].add(encoded, value); err != nil {
-				n.pErr = roachpb.NewError(err)
+				n.err = err
 				return false
 			}
 		}
@@ -324,11 +323,11 @@ func (n *groupNode) computeAggregates() {
 		if n.having != nil {
 			res, err := n.having.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.pErr = roachpb.NewError(err)
+				n.err = err
 				return
 			}
 			if val, err := parser.GetBool(res); err != nil {
-				n.pErr = roachpb.NewError(err)
+				n.err = err
 				return
 			} else if !val {
 				continue
@@ -339,7 +338,7 @@ func (n *groupNode) computeAggregates() {
 		for _, r := range n.render {
 			res, err := r.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.pErr = roachpb.NewError(err)
+				n.err = err
 				return
 			}
 			row = append(row, res)
@@ -350,8 +349,8 @@ func (n *groupNode) computeAggregates() {
 
 }
 
-func (n *groupNode) PErr() *roachpb.Error {
-	return n.pErr
+func (n *groupNode) Err() error {
+	return n.err
 }
 
 func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []planNode) {

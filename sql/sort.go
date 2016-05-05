@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -172,7 +171,7 @@ type sortNode struct {
 	plan     planNode
 	columns  []ResultColumn
 	ordering columnOrdering
-	pErr     *roachpb.Error
+	err      error
 
 	needSort     bool
 	sortStrategy sortingStrategy
@@ -214,8 +213,8 @@ func (n *sortNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *sortNode) PErr() *roachpb.Error {
-	return n.pErr
+func (n *sortNode) Err() error {
+	return n.err
 }
 
 func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
@@ -292,12 +291,12 @@ func (n *sortNode) wrap(plan planNode) planNode {
 	return plan
 }
 
-func (n *sortNode) Start() *roachpb.Error {
+func (n *sortNode) Start() error {
 	return n.plan.Start()
 }
 
 func (n *sortNode) Next() bool {
-	if n.pErr != nil {
+	if n.err != nil {
 		return false
 	}
 
@@ -318,8 +317,8 @@ func (n *sortNode) Next() bool {
 		// ordering prefix, we should only accumulate values for equal fields
 		// in this prefix, then sort the accumulated chunk and output.
 		if !n.plan.Next() {
-			n.pErr = n.plan.PErr()
-			if n.pErr != nil {
+			n.err = n.plan.Err()
+			if n.err != nil {
 				return false
 			}
 
@@ -352,7 +351,7 @@ func (n *sortNode) Next() bool {
 	}
 	if !n.valueIter.Next() {
 		if n.valueIter == n.plan {
-			n.pErr = n.plan.PErr()
+			n.err = n.plan.Err()
 		}
 		return false
 	}

@@ -500,8 +500,8 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 				}
 			}
 		}
-		if rows.PErr() != nil {
-			return rows.PErr().GoError()
+		if rows.Err() != nil {
+			return rows.Err()
 		}
 		// Write the new index values.
 		if err := txn.Run(b); err != nil {

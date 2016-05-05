@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
@@ -50,10 +49,10 @@ var traceColumns = append([]ResultColumn{
 func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
 func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
 
-func (n *explainTraceNode) PErr() *roachpb.Error { return nil }
-func (n *explainTraceNode) Start() *roachpb.Error {
-	if pErr := n.plan.Start(); pErr != nil {
-		return pErr
+func (n *explainTraceNode) Err() error { return nil }
+func (n *explainTraceNode) Start() error {
+	if err := n.plan.Start(); err != nil {
+		return err
 	}
 	n.plan.MarkDebug(explainDebug)
 	return nil
@@ -68,8 +67,8 @@ func (n *explainTraceNode) Next() bool {
 		if !n.plan.Next() {
 			n.exhausted = true
 			sp := opentracing.SpanFromContext(n.txn.Context)
-			if pErr := n.PErr(); pErr != nil {
-				sp.LogEvent(pErr.String())
+			if err := n.Err(); err != nil {
+				sp.LogEvent(err.Error())
 			}
 			sp.LogEvent("tracing completed")
 			sp.Finish()

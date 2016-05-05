@@ -19,12 +19,12 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
 	switch n.Type {
@@ -47,7 +47,7 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 			emit = make(exceptNodeEmitDistinct)
 		}
 	default:
-		return nil, roachpb.NewErrorf("%v is not supported", n.Type)
+		return nil, util.Errorf("%v is not supported", n.Type)
 	}
 
 	left, err := p.makePlan(n.Left, desiredTypes, autoCommit)
@@ -62,7 +62,7 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 	leftColumns := left.Columns()
 	rightColumns := right.Columns()
 	if len(leftColumns) != len(rightColumns) {
-		return nil, roachpb.NewUErrorf("each %v query must have the same number of columns: %d vs %d", n.Type, len(left.Columns()), len(right.Columns()))
+		return nil, fmt.Errorf("each %v query must have the same number of columns: %d vs %d", n.Type, len(left.Columns()), len(right.Columns()))
 	}
 	for i := 0; i < len(leftColumns); i++ {
 		l := leftColumns[i]
@@ -71,10 +71,10 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
 		if !l.Typ.TypeEqual(r.Typ) {
-			return nil, roachpb.NewUErrorf("%v types %s and %s cannot be matched", n.Type, l.Typ.Type(), r.Typ.Type())
+			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ.Type(), r.Typ.Type())
 		}
 		if l.hidden != r.hidden {
-			return nil, roachpb.NewErrorf("%v types cannot be matched", n.Type)
+			return nil, fmt.Errorf("%v types cannot be matched", n.Type)
 		}
 	}
 
@@ -139,13 +139,13 @@ type unionNode struct {
 
 func (n *unionNode) Columns() []ResultColumn { return n.left.Columns() }
 func (n *unionNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (n *unionNode) PErr() *roachpb.Error {
+func (n *unionNode) Err() error {
 	if n.err != nil {
-		return roachpb.NewError(n.err)
-	} else if err := n.right.PErr(); err != nil {
+		return n.err
+	} else if err := n.right.Err(); err != nil {
 		return err
 	} else {
-		return n.left.PErr()
+		return n.left.Err()
 	}
 }
 func (n *unionNode) Values() parser.DTuple {
@@ -246,7 +246,7 @@ func (n *unionNode) readLeft() bool {
 	return false
 }
 
-func (n *unionNode) Start() *roachpb.Error {
+func (n *unionNode) Start() error {
 	if err := n.right.Start(); err != nil {
 		return err
 	}

@@ -106,7 +106,7 @@ func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
 	}
 }
 
-func (n *scanNode) Start() *roachpb.Error {
+func (n *scanNode) Start() error {
 	return nil
 }
 
@@ -198,8 +198,8 @@ func (n *scanNode) Next() bool {
 	}
 }
 
-func (n *scanNode) PErr() *roachpb.Error {
-	return roachpb.NewError(n.err)
+func (n *scanNode) Err() error {
+	return n.err
 }
 
 func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []planNode) {

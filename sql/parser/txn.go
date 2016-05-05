@@ -21,9 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
@@ -117,10 +114,9 @@ const RestartSavepointName string = "COCKROACH_RESTART"
 // value.
 // We accept everything with the desired prefix because at least the C++ libpqxx
 // appends sequence numbers to the savepoint name specified by the user.
-func ValidateRestartCheckpoint(savepoint string) *roachpb.Error {
+func ValidateRestartCheckpoint(savepoint string) error {
 	if !strings.HasPrefix(strings.ToUpper(savepoint), RestartSavepointName) {
-		return roachpb.NewError(util.Errorf(
-			"SAVEPOINT not supported except for %s", RestartSavepointName))
+		return fmt.Errorf("SAVEPOINT not supported except for %s", RestartSavepointName)
 	}
 	return nil
 }

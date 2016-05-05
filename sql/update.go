@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -65,9 +64,8 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desi
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows planNode
-	// TODO(andrei): change this to error
-	pErr      *roachpb.Error
+	rows      planNode
+	err       error
 	tw        tableWriter
 	resultRow parser.DTuple
 	done      bool
@@ -247,7 +245,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	return un, nil
 }
 
-func (u *updateNode) Start() *roachpb.Error {
+func (u *updateNode) Start() error {
 	exprs := make([]parser.UpdateExpr, len(u.n.Exprs))
 	for i, expr := range u.n.Exprs {
 		exprs[i] = *expr
@@ -257,7 +255,7 @@ func (u *updateNode) Start() *roachpb.Error {
 	for i, expr := range exprs {
 		newExpr, eErr := u.p.expandSubqueries(expr.Expr, len(expr.Names))
 		if eErr != nil {
-			return roachpb.NewError(eErr)
+			return eErr
 		}
 		exprs[i].Expr = newExpr
 	}
@@ -297,29 +295,29 @@ func (u *updateNode) Start() *roachpb.Error {
 		Where: u.n.Where,
 	}, u.desiredTypes)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
-	if pErr := rows.Start(); pErr != nil {
-		return pErr
+	if err := rows.Start(); err != nil {
+		return err
 	}
 
 	if err := u.run.startEditNode(&u.editNodeBase, rows, &u.tw); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	return nil
 }
 
 func (u *updateNode) Next() bool {
-	if u.run.done || u.run.pErr != nil {
+	if u.run.done || u.run.err != nil {
 		return false
 	}
 
 	if !u.run.rows.Next() {
 		// We're done. Finish the batch.
 		err := u.tw.finalize()
-		u.run.pErr = roachpb.NewError(err)
+		u.run.err = err
 		u.run.done = true
 		return false
 	}
@@ -336,7 +334,7 @@ func (u *updateNode) Next() bool {
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
 		if err := checkValueWidth(u.updateCols[i], updateValues[i]); err != nil {
-			u.run.pErr = roachpb.NewError(err)
+			u.run.err = err
 			return false
 		}
 	}
@@ -345,20 +343,20 @@ func (u *updateNode) Next() bool {
 	for i, col := range u.updateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
-			u.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
+			u.run.err = fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
 			return false
 		}
 	}
 
 	newValues, err := u.tw.row(append(oldValues, updateValues...))
 	if err != nil {
-		u.run.pErr = roachpb.NewError(err)
+		u.run.err = err
 		return false
 	}
 
 	resultRow, err := u.rh.cookResultRow(newValues)
 	if err != nil {
-		u.run.pErr = roachpb.NewError(err)
+		u.run.err = err
 		return false
 	}
 	u.run.resultRow = resultRow
@@ -396,8 +394,8 @@ func (u *updateNode) Ordering() orderingInfo {
 	return u.run.rows.Ordering()
 }
 
-func (u *updateNode) PErr() *roachpb.Error {
-	return u.run.pErr
+func (u *updateNode) Err() error {
+	return u.run.err
 }
 
 func (u *updateNode) ExplainPlan(v bool) (name, description string, children []planNode) {

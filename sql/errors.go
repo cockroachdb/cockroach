@@ -177,29 +177,29 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 	return origPErr.GoError()
 }
 
-// convertToErrWithPGCode recognizes pErrs that should have SQL error codes to be
-// reported to the client and converts pErr to them. If this doesn't apply, pErr
+// convertToErrWithPGCode recognizes errs that should have SQL error codes to be
+// reported to the client and converts err to them. If this doesn't apply, err
 // is returned.
 // Note that this returns a new proto, and no fields from the original one are
 // copied. So only use it in contexts where the only thing that matters in the
 // response is the error detail.
 // TODO(andrei): convertBatchError() above seems to serve similar purposes, but
 // it's called from more specialized contexts. Consider unifying the two.
-func convertToErrWithPGCode(pErr *roachpb.Error) *roachpb.Error {
-	if pErr == nil {
+func convertToErrWithPGCode(err error) error {
+	if err == nil {
 		return nil
 	}
-	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-		return sqlErrToPErr(&errRetry{msg: txnRetryMsgPrefix + " " + pErr.Message})
+	if _, ok := err.(*roachpb.RetryableTxnError); ok {
+		return sqlErrToPErr(&errRetry{msg: txnRetryMsgPrefix + " " + err.Error()})
 	}
-	return pErr
+	return err
 }
 
-// sqlErrToPErr takes a sqlError and produces a pErr with a suitable detail.
+// sqlErrToPErr takes a sqlError and produces a err with a suitable detail.
 // TODO(andrei): get rid of this function when sql stops using pErr.
-func sqlErrToPErr(e errorWithPGCode) *roachpb.Error {
+func sqlErrToPErr(e errorWithPGCode) error {
 	var detail roachpb.ErrorWithPGCode
 	detail.ErrorCode = e.Code()
 	detail.Message = e.Error()
-	return roachpb.NewError(&detail)
+	return &detail
 }

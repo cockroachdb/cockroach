@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -68,7 +67,7 @@ type distinctNode struct {
 	// encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
 	suffixSeen map[string]struct{}
-	pErr       *roachpb.Error
+	err        error
 	explain    explainMode
 	debugVals  debugValues
 }
@@ -89,7 +88,7 @@ func (n *distinctNode) DebugValues() debugValues {
 }
 
 func (n *distinctNode) Next() bool {
-	if n.pErr != nil {
+	if n.err != nil {
 		return false
 	}
 	for n.planNode.Next() {
@@ -102,7 +101,7 @@ func (n *distinctNode) Next() bool {
 		}
 		// Detect duplicates
 		prefix, suffix := n.encodeValues(n.Values())
-		if n.pErr != nil {
+		if n.err != nil {
 			return false
 		}
 
@@ -136,12 +135,12 @@ func (n *distinctNode) Next() bool {
 			return true
 		}
 	}
-	n.pErr = n.planNode.PErr()
+	n.err = n.planNode.Err()
 	return false
 }
 
-func (n *distinctNode) PErr() *roachpb.Error {
-	return n.pErr
+func (n *distinctNode) Err() error {
+	return n.err
 }
 
 func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
@@ -151,18 +150,14 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)
 			}
-			var err error
-			prefix, err = encodeDatum(prefix, val)
-			n.pErr = roachpb.NewError(err)
+			prefix, n.err = encodeDatum(prefix, val)
 		} else {
 			if suffix == nil {
 				suffix = make([]byte, 0, 100)
 			}
-			var err error
-			suffix, err = encodeDatum(suffix, val)
-			n.pErr = roachpb.NewError(err)
+			suffix, n.err = encodeDatum(suffix, val)
 		}
-		if n.pErr != nil {
+		if n.err != nil {
 			break
 		}
 	}

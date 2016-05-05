@@ -276,7 +276,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				// statements in the current batch; we can't modify the results of older
 				// statements.
 				if scEntry.epoch == scc.curGroupNum {
-					results[scEntry.idx] = Result{PErr: roachpb.NewError(err)}
+					results[scEntry.idx] = Result{Err: err}
 				}
 				log.Warningf("Error executing schema change: %s", err)
 			}

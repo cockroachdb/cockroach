@@ -17,7 +17,8 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -45,12 +46,12 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	return &createDatabaseNode{p: p, n: n}, nil
 }
 
-func (n *createDatabaseNode) Start() *roachpb.Error {
+func (n *createDatabaseNode) Start() error {
 	desc := makeDatabaseDesc(n.n)
 
 	created, err := n.p.createDescriptor(databaseKey{string(n.n.Name)}, &desc, n.n.IfNotExists)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	if created {
 		// Log Create Database event.
@@ -64,7 +65,7 @@ func (n *createDatabaseNode) Start() *roachpb.Error {
 				User         string
 			}{n.n.Name.String(), n.n.String(), n.p.session.User},
 		); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 	}
 	return nil
@@ -76,7 +77,7 @@ func (n *createDatabaseNode) Ordering() orderingInfo              { return order
 func (n *createDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createDatabaseNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createDatabaseNode) ExplainTypes(_ func(string, string)) {}
-func (n *createDatabaseNode) PErr() *roachpb.Error                { return nil }
+func (n *createDatabaseNode) Err() error                          { return nil }
 func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createDatabaseNode) MarkDebug(mode explainMode)          {}
 func (n *createDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -109,13 +110,13 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	return &createIndexNode{p: p, tableDesc: tableDesc, n: n}, nil
 }
 
-func (n *createIndexNode) Start() *roachpb.Error {
+func (n *createIndexNode) Start() error {
 	status, i, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if status == DescriptorIncomplete {
 			switch n.tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_DROP:
-				return roachpb.NewErrorf("index %q being dropped, try again later", string(n.n.Name))
+				return fmt.Errorf("index %q being dropped, try again later", string(n.n.Name))
 
 			case DescriptorMutation_ADD:
 				// Noop, will fail in AllocateIDs below.
@@ -132,20 +133,20 @@ func (n *createIndexNode) Start() *roachpb.Error {
 		StoreColumnNames: n.n.Storing,
 	}
 	if err := indexDesc.fillColumns(n.n.Columns); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	n.tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
 	mutationID, err := n.tableDesc.finalizeMutation()
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	if err := n.p.txn.Put(MakeDescMetadataKey(n.tableDesc.GetID()), wrapDescriptor(n.tableDesc)); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
 
@@ -158,7 +159,7 @@ func (n *createIndexNode) Ordering() orderingInfo              { return ordering
 func (n *createIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createIndexNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createIndexNode) ExplainTypes(_ func(string, string)) {}
-func (n *createIndexNode) PErr() *roachpb.Error                { return nil }
+func (n *createIndexNode) Err() error                          { return nil }
 func (n *createIndexNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createIndexNode) MarkDebug(mode explainMode)          {}
 func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -194,10 +195,10 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	return &createTableNode{p: p, n: n, dbDesc: dbDesc}, nil
 }
 
-func (n *createTableNode) Start() *roachpb.Error {
+func (n *createTableNode) Start() error {
 	desc, err := makeTableDesc(n.n, n.dbDesc.ID)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	// Inherit permissions from the database descriptor.
 	desc.Privileges = n.dbDesc.GetPrivileges()
@@ -221,17 +222,17 @@ func (n *createTableNode) Start() *roachpb.Error {
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		}
 		if err := desc.AddIndex(idx, true); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 	}
 
 	if err := desc.AllocateIDs(); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	created, err := n.p.createDescriptor(tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	if created {
@@ -246,7 +247,7 @@ func (n *createTableNode) Start() *roachpb.Error {
 				User      string
 			}{n.n.Table.String(), n.n.String(), n.p.session.User},
 		); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 	}
 
@@ -258,7 +259,7 @@ func (n *createTableNode) Columns() []ResultColumn             { return make([]R
 func (n *createTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createTableNode) DebugValues() debugValues            { return debugValues{} }
-func (n *createTableNode) PErr() *roachpb.Error                { return nil }
+func (n *createTableNode) Err() error                          { return nil }
 func (n *createTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *createTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createTableNode) MarkDebug(mode explainMode)          {}

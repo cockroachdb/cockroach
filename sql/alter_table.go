@@ -17,7 +17,8 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -62,7 +63,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	return &alterTableNode{n: n, p: p, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) Start() *roachpb.Error {
+func (n *alterTableNode) Start() error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -75,12 +76,12 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			d := t.ColumnDef
 			col, idx, err := makeColumnDefDescs(d)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			status, i, err := n.tableDesc.FindColumnByName(col.Name)
 			if err == nil {
 				if status == DescriptorIncomplete && n.tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
-					return roachpb.NewUErrorf("column %q being dropped, try again later", col.Name)
+					return fmt.Errorf("column %q being dropped, try again later", col.Name)
 				}
 			}
 			n.tableDesc.addColumnMutation(*col, DescriptorMutation_ADD)
@@ -92,7 +93,7 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
 				if d.PrimaryKey {
-					return roachpb.NewUErrorf("multiple primary keys for table %q are not allowed", n.tableDesc.Name)
+					return fmt.Errorf("multiple primary keys for table %q are not allowed", n.tableDesc.Name)
 				}
 				name := string(d.Name)
 				idx := IndexDescriptor{
@@ -101,18 +102,18 @@ func (n *alterTableNode) Start() *roachpb.Error {
 					StoreColumnNames: d.Storing,
 				}
 				if err := idx.fillColumns(d.Columns); err != nil {
-					return roachpb.NewError(err)
+					return err
 				}
 				status, i, err := n.tableDesc.FindIndexByName(name)
 				if err == nil {
 					if status == DescriptorIncomplete && n.tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
-						return roachpb.NewUErrorf("index %q being dropped, try again later", name)
+						return fmt.Errorf("index %q being dropped, try again later", name)
 					}
 				}
 				n.tableDesc.addIndexMutation(idx, DescriptorMutation_ADD)
 
 			default:
-				return roachpb.NewUErrorf("unsupported constraint: %T", t.ConstraintDef)
+				return fmt.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
 
 		case *parser.AlterTableDropColumn:
@@ -122,17 +123,17 @@ func (n *alterTableNode) Start() *roachpb.Error {
 					// Noop.
 					continue
 				}
-				return roachpb.NewError(err)
+				return err
 			}
 			switch status {
 			case DescriptorActive:
 				col := n.tableDesc.Columns[i]
 				if n.tableDesc.PrimaryIndex.containsColumnID(col.ID) {
-					return roachpb.NewUErrorf("column %q is referenced by the primary key", col.Name)
+					return fmt.Errorf("column %q is referenced by the primary key", col.Name)
 				}
 				for _, idx := range n.tableDesc.allNonDropIndexes() {
 					if idx.containsColumnID(col.ID) {
-						return roachpb.NewUErrorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+						return fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
 					}
 				}
 				n.tableDesc.addColumnMutation(col, DescriptorMutation_DROP)
@@ -141,7 +142,7 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			case DescriptorIncomplete:
 				switch n.tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.Column)
+					return fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
 
 				case DescriptorMutation_DROP:
 					// Noop.
@@ -155,7 +156,7 @@ func (n *alterTableNode) Start() *roachpb.Error {
 					// Noop.
 					continue
 				}
-				return roachpb.NewError(err)
+				return err
 			}
 			switch status {
 			case DescriptorActive:
@@ -165,7 +166,7 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			case DescriptorIncomplete:
 				switch n.tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return roachpb.NewUErrorf("constraint %q in the middle of being added, try again later", t.Constraint)
+					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 
 				case DescriptorMutation_DROP:
 					// Noop.
@@ -176,27 +177,27 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			// Column mutations
 			status, i, err := n.tableDesc.FindColumnByName(t.GetColumn())
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
 			switch status {
 			case DescriptorActive:
 				if err := applyColumnMutation(&n.tableDesc.Columns[i], t); err != nil {
-					return roachpb.NewError(err)
+					return err
 				}
 				descriptorChanged = true
 
 			case DescriptorIncomplete:
 				switch n.tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.GetColumn())
+					return fmt.Errorf("column %q in the middle of being added, try again later", t.GetColumn())
 				case DescriptorMutation_DROP:
-					return roachpb.NewUErrorf("column %q in the middle of being dropped", t.GetColumn())
+					return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 				}
 			}
 
 		default:
-			return roachpb.NewUErrorf("unsupported alter cmd: %T", cmd)
+			return fmt.Errorf("unsupported alter cmd: %T", cmd)
 		}
 	}
 	// Were some changes made?
@@ -219,15 +220,15 @@ func (n *alterTableNode) Start() *roachpb.Error {
 		err = n.tableDesc.setUpVersion()
 	}
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	if err := n.tableDesc.AllocateIDs(); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	if err := n.p.writeTableDesc(n.tableDesc); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
 
@@ -240,7 +241,7 @@ func (n *alterTableNode) Ordering() orderingInfo              { return orderingI
 func (n *alterTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *alterTableNode) DebugValues() debugValues            { return debugValues{} }
 func (n *alterTableNode) ExplainTypes(_ func(string, string)) {}
-func (n *alterTableNode) PErr() *roachpb.Error                { return nil }
+func (n *alterTableNode) Err() error                          { return nil }
 func (n *alterTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *alterTableNode) MarkDebug(mode explainMode)          {}
 func (n *alterTableNode) ExplainPlan(v bool) (string, string, []planNode) {

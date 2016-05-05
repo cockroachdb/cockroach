@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -56,18 +55,18 @@ type insertNode struct {
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
 	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
-) (planNode, *roachpb.Error) {
+) (planNode, error) {
 	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.INSERT)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	if n.OnConflict != nil {
 		if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		// TODO(dan): Support RETURNING in UPSERTs.
 		if n.Returning != nil {
-			return nil, roachpb.NewErrorf("RETURNING is not supported with UPSERT")
+			return nil, fmt.Errorf("RETURNING is not supported with UPSERT")
 		}
 	}
 
@@ -78,7 +77,7 @@ func (p *planner) Insert(
 	} else {
 		var err error
 		if cols, err = p.processColumns(en.tableDesc, n.Columns); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 	}
 	// Number of columns expecting an input. This doesn't include the
@@ -117,20 +116,20 @@ func (p *planner) Insert(
 
 	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
 	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	// Construct the check expressions. The returned slice will be nil if no
 	// column in the table has a check expression.
 	checkExprs, err := p.makeCheckExprs(cols)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	// Prepare the check expressions.
@@ -144,14 +143,14 @@ func (p *planner) Insert(
 		for i := range checkExprs {
 			expr, err := resolveQNames(checkExprs[i], &table, qvals, &p.qnameVisitor)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			typedExpr, err := parser.TypeCheck(expr, nil, parser.DummyBool)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			if typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr); err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			typedCheckExprs = append(typedCheckExprs, typedExpr)
 		}
@@ -162,13 +161,13 @@ func (p *planner) Insert(
 	for i, col := range cols {
 		desiredTypesFromSelect[i] = col.Type.toDatumType()
 	}
-	rows, pErr := p.makePlan(insertRows, desiredTypesFromSelect, false)
-	if pErr != nil {
-		return nil, pErr
+	rows, err := p.makePlan(insertRows, desiredTypesFromSelect, false)
+	if err != nil {
+		return nil, err
 	}
 
 	if expressions := len(rows.Columns()); expressions > numInputColumns {
-		return nil, roachpb.NewUErrorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
+		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
 	}
 
 	// Type check the tuples, if any, to collect placeholder types.
@@ -180,22 +179,22 @@ func (p *planner) Insert(
 				}
 				typedExpr, err := parser.TypeCheck(val, p.evalCtx.Args, desiredTypesFromSelect[eIdx])
 				if err != nil {
-					return nil, roachpb.NewError(err)
+					return nil, err
 				}
 				if err := checkColumnType(cols[eIdx], typedExpr.ReturnType(), p.evalCtx.Args); err != nil {
-					return nil, roachpb.NewError(err)
+					return nil, err
 				}
 			}
 		}
 	}
 
 	if err := en.rh.TypeCheck(); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	ri, err := makeRowInserter(en.tableDesc, cols)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	var tw tableWriter
@@ -226,7 +225,7 @@ func (p *planner) Insert(
 		}
 		ru, err := makeRowUpdater(en.tableDesc, updateCols)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 
@@ -248,7 +247,7 @@ func (p *planner) Insert(
 	return in, nil
 }
 
-func (n *insertNode) Start() *roachpb.Error {
+func (n *insertNode) Start() error {
 	// TODO(knz): We need to re-run makePlan here again
 	// because that's when we can expand sub-queries.
 	// This goes away when sub-query expansion is moved
@@ -256,17 +255,17 @@ func (n *insertNode) Start() *roachpb.Error {
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	rows, pErr := n.p.makePlan(n.insertRows, n.desiredTypes, false)
-	if pErr != nil {
-		return pErr
+	rows, err := n.p.makePlan(n.insertRows, n.desiredTypes, false)
+	if err != nil {
+		return err
 	}
 
-	if pErr := rows.Start(); pErr != nil {
-		return pErr
+	if err := rows.Start(); err != nil {
+		return err
 	}
 
 	if err := n.run.startEditNode(&n.editNodeBase, rows, n.tw); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Prepare structures for building values to pass to rh.
@@ -296,13 +295,13 @@ func (n *insertNode) Start() *roachpb.Error {
 }
 
 func (n *insertNode) Next() bool {
-	if n.run.done || n.run.pErr != nil {
+	if n.run.done || n.run.err != nil {
 		return false
 	}
 
 	if !n.run.rows.Next() {
 		// We're done. Finish the batch.
-		n.run.pErr = roachpb.NewError(n.tw.finalize())
+		n.run.err = n.tw.finalize()
 		n.run.done = true
 		return false
 	}
@@ -319,7 +318,7 @@ func (n *insertNode) Next() bool {
 		}
 		d, err := n.defaultExprs[i].Eval(n.p.evalCtx)
 		if err != nil {
-			n.run.pErr = roachpb.NewError(err)
+			n.run.err = err
 			return false
 		}
 		rowVals = append(rowVals, d)
@@ -329,7 +328,7 @@ func (n *insertNode) Next() bool {
 	for _, col := range n.tableDesc.Columns {
 		if !col.Nullable {
 			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-				n.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
+				n.run.err = fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
 				return false
 			}
 		}
@@ -338,7 +337,7 @@ func (n *insertNode) Next() bool {
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
 		if err := checkValueWidth(n.insertCols[i], rowVals[i]); err != nil {
-			n.run.pErr = roachpb.NewError(err)
+			n.run.err = err
 			return false
 		}
 	}
@@ -349,29 +348,29 @@ func (n *insertNode) Next() bool {
 			// The colIdx is 0-based, we need to change it to 1-based.
 			ri, has := n.insertColIDtoRowIndex[ColumnID(ref.colIdx+1)]
 			if !has {
-				n.run.pErr = roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
+				n.run.err = fmt.Errorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
 				return false
 			}
 			qval.datum = rowVals[ri]
 		}
 		for _, expr := range n.checkExprs {
 			if d, err := expr.Eval(n.p.evalCtx); err != nil {
-				n.run.pErr = roachpb.NewError(err)
+				n.run.err = err
 				return false
 			} else if res, err := parser.GetBool(d); err != nil {
-				n.run.pErr = roachpb.NewError(err)
+				n.run.err = err
 				return false
 			} else if !res {
 				// Failed to satisfy CHECK constraint.
-				n.run.pErr = roachpb.NewUErrorf("failed to satisfy CHECK constraint (%s)", expr.String())
+				n.run.err = fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr.String())
 				return false
 			}
 		}
 	}
 
 	_, err := n.tw.row(rowVals)
-	n.run.pErr = roachpb.NewError(err)
-	if n.run.pErr != nil {
+	if err != nil {
+		n.run.err = err
 		return false
 	}
 
@@ -383,7 +382,7 @@ func (n *insertNode) Next() bool {
 
 	resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
 	if err != nil {
-		n.run.pErr = roachpb.NewError(err)
+		n.run.err = err
 		return false
 	}
 	n.run.resultRow = resultRow
@@ -558,8 +557,8 @@ func (n *insertNode) Ordering() orderingInfo {
 	return n.run.rows.Ordering()
 }
 
-func (n *insertNode) PErr() *roachpb.Error {
-	return n.run.pErr
+func (n *insertNode) Err() error {
+	return n.run.err
 }
 
 func (n *insertNode) ExplainPlan(v bool) (name, description string, children []planNode) {

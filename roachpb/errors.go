@@ -130,12 +130,6 @@ func NewErrorWithTxn(err error, txn *Transaction) *Error {
 	return e
 }
 
-// NewUErrorf creates an Error from the given error message. Used
-// for user-facing errors.
-func NewUErrorf(format string, a ...interface{}) *Error {
-	return NewError(fmt.Errorf(format, a...))
-}
-
 // NewErrorf creates an Error from the given error message. It is a
 // passthrough to fmt.Errorf, with an additional prefix containing the
 // filename and line number.

@@ -186,7 +186,7 @@ func (p *planner) resetTxn() {
 //
 // Note: The autoCommit parameter enables operations to enable the 1PC
 // optimization. This is a bit hackish/preliminary at present.
-func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing
@@ -200,148 +200,106 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 
 	switch n := stmt.(type) {
 	case *parser.AlterTable:
-		pNode, err := p.AlterTable(n)
-		return pNode, roachpb.NewError(err)
+		return p.AlterTable(n)
 	case *parser.BeginTransaction:
-		pNode, err := p.BeginTransaction(n)
-		return pNode, roachpb.NewError(err)
+		return p.BeginTransaction(n)
 	case *parser.CreateDatabase:
-		pNode, err := p.CreateDatabase(n)
-		return pNode, roachpb.NewError(err)
+		return p.CreateDatabase(n)
 	case *parser.CreateIndex:
-		pNode, err := p.CreateIndex(n)
-		return pNode, roachpb.NewError(err)
+		return p.CreateIndex(n)
 	case *parser.CreateTable:
-		pNode, err := p.CreateTable(n)
-		return pNode, roachpb.NewError(err)
+		return p.CreateTable(n)
 	case *parser.Delete:
-		pNode, err := p.Delete(n, desiredTypes, autoCommit)
-		return pNode, roachpb.NewError(err)
+		return p.Delete(n, desiredTypes, autoCommit)
 	case *parser.DropDatabase:
-		pNode, err := p.DropDatabase(n)
-		return pNode, roachpb.NewError(err)
+		return p.DropDatabase(n)
 	case *parser.DropIndex:
-		pNode, err := p.DropIndex(n)
-		return pNode, roachpb.NewError(err)
+		return p.DropIndex(n)
 	case *parser.DropTable:
-		pNode, err := p.DropTable(n)
-		return pNode, roachpb.NewError(err)
+		return p.DropTable(n)
 	case *parser.Explain:
 		return p.Explain(n, autoCommit)
 	case *parser.Grant:
-		pNode, err := p.Grant(n)
-		return pNode, roachpb.NewError(err)
+		return p.Grant(n)
 	case *parser.Insert:
 		return p.Insert(n, desiredTypes, autoCommit)
 	case *parser.ParenSelect:
 		return p.makePlan(n.Select, desiredTypes, autoCommit)
 	case *parser.RenameColumn:
-		pNode, err := p.RenameColumn(n)
-		return pNode, roachpb.NewError(err)
+		return p.RenameColumn(n)
 	case *parser.RenameDatabase:
-		pNode, err := p.RenameDatabase(n)
-		return pNode, roachpb.NewError(err)
+		return p.RenameDatabase(n)
 	case *parser.RenameIndex:
-		pNode, err := p.RenameIndex(n)
-		return pNode, roachpb.NewError(err)
+		return p.RenameIndex(n)
 	case *parser.RenameTable:
-		pNode, err := p.RenameTable(n)
-		return pNode, roachpb.NewError(err)
+		return p.RenameTable(n)
 	case *parser.Revoke:
-		pNode, err := p.Revoke(n)
-		return pNode, roachpb.NewError(err)
+		return p.Revoke(n)
 	case *parser.Select:
-		pNode, err := p.Select(n, desiredTypes, autoCommit)
-		return pNode, roachpb.NewError(err)
+		return p.Select(n, desiredTypes, autoCommit)
 	case *parser.SelectClause:
-		pNode, err := p.SelectClause(n, desiredTypes)
-		return pNode, roachpb.NewError(err)
+		return p.SelectClause(n, desiredTypes)
 	case *parser.Set:
-		pNode, err := p.Set(n)
-		return pNode, roachpb.NewError(err)
+		return p.Set(n)
 	case *parser.SetTimeZone:
-		pNode, err := p.SetTimeZone(n)
-		return pNode, roachpb.NewError(err)
+		return p.SetTimeZone(n)
 	case *parser.SetTransaction:
-		pNode, err := p.SetTransaction(n)
-		return pNode, roachpb.NewError(err)
+		return p.SetTransaction(n)
 	case *parser.SetDefaultIsolation:
-		pNode, err := p.SetDefaultIsolation(n)
-		return pNode, roachpb.NewError(err)
+		return p.SetDefaultIsolation(n)
 	case *parser.Show:
-		pNode, err := p.Show(n)
-		return pNode, roachpb.NewError(err)
+		return p.Show(n)
 	case *parser.ShowCreateTable:
-		pNode, err := p.ShowCreateTable(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowCreateTable(n)
 	case *parser.ShowColumns:
-		pNode, err := p.ShowColumns(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
-		pNode, err := p.ShowDatabases(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowDatabases(n)
 	case *parser.ShowGrants:
-		pNode, err := p.ShowGrants(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowGrants(n)
 	case *parser.ShowIndex:
-		pNode, err := p.ShowIndex(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowIndex(n)
 	case *parser.ShowTables:
-		pNode, err := p.ShowTables(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowTables(n)
 	case *parser.Truncate:
-		pNode, err := p.Truncate(n)
-		return pNode, roachpb.NewError(err)
+		return p.Truncate(n)
 	case *parser.UnionClause:
 		return p.UnionClause(n, desiredTypes, autoCommit)
 	case *parser.Update:
-		pNode, err := p.Update(n, desiredTypes, autoCommit)
-		return pNode, roachpb.NewError(err)
+		return p.Update(n, desiredTypes, autoCommit)
 	case *parser.ValuesClause:
-		pNode, err := p.ValuesClause(n, desiredTypes)
-		return pNode, roachpb.NewError(err)
+		return p.ValuesClause(n, desiredTypes)
 	default:
-		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
+		return nil, util.Errorf("unknown statement type: %T", stmt)
 	}
 }
 
-func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
+func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 	switch n := stmt.(type) {
 	case *parser.Delete:
-		pNode, err := p.Delete(n, nil, false)
-		return pNode, roachpb.NewError(err)
+		return p.Delete(n, nil, false)
 	case *parser.Insert:
 		return p.Insert(n, nil, false)
 	case *parser.Select:
-		pNode, err := p.Select(n, nil, false)
-		return pNode, roachpb.NewError(err)
+		return p.Select(n, nil, false)
 	case *parser.SelectClause:
-		pNode, err := p.SelectClause(n, nil)
-		return pNode, roachpb.NewError(err)
+		return p.SelectClause(n, nil)
 	case *parser.Show:
-		pNode, err := p.Show(n)
-		return pNode, roachpb.NewError(err)
+		return p.Show(n)
 	case *parser.ShowCreateTable:
-		pNode, err := p.ShowCreateTable(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowCreateTable(n)
 	case *parser.ShowColumns:
-		pNode, err := p.ShowColumns(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
-		pNode, err := p.ShowDatabases(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowDatabases(n)
 	case *parser.ShowGrants:
-		pNode, err := p.ShowGrants(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowGrants(n)
 	case *parser.ShowIndex:
-		pNode, err := p.ShowIndex(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowIndex(n)
 	case *parser.ShowTables:
-		pNode, err := p.ShowTables(n)
-		return pNode, roachpb.NewError(err)
+		return p.ShowTables(n)
 	case *parser.Update:
-		pNode, err := p.Update(n, nil, false)
-		return pNode, roachpb.NewError(err)
+		return p.Update(n, nil, false)
 	default:
 		// Other statement types do not support placeholders so there is no need
 		// for any special handling here.
@@ -349,20 +307,19 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	}
 }
 
-func (p *planner) query(sql string, args ...interface{}) (planNode, *roachpb.Error) {
+func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	stmt, err := parser.ParseOneTraditional(sql)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	stmt, err = parser.FillArgs(stmt, golangParameters(args))
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	return p.makePlan(stmt, nil, false)
 }
 
-// TODO(andrei): change to return error.
-func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roachpb.Error) {
+func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -371,31 +328,30 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 		return nil, err
 	}
 	if !plan.Next() {
-		if pErr := plan.PErr(); pErr != nil {
-			return nil, pErr
+		if err := plan.Err(); err != nil {
+			return nil, err
 		}
 		return nil, nil
 	}
 	values := plan.Values()
 	if plan.Next() {
-		return nil, roachpb.NewErrorf("%s: unexpected multiple results", sql)
+		return nil, util.Errorf("%s: unexpected multiple results", sql)
 	}
-	if pErr := plan.PErr(); pErr != nil {
-		return nil, pErr
+	if err := plan.Err(); err != nil {
+		return nil, err
 	}
 	return values, nil
 }
 
-// TODO(andrei): change to return error.
-func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
-	plan, pErr := p.query(sql, args...)
-	if pErr != nil {
-		return 0, pErr
+func (p *planner) exec(sql string, args ...interface{}) (int, error) {
+	plan, err := p.query(sql, args...)
+	if err != nil {
+		return 0, err
 	}
-	if pErr := plan.Start(); pErr != nil {
-		return 0, pErr
+	if err := plan.Start(); err != nil {
+		return 0, err
 	}
-	return countRowsAffected(plan), plan.PErr()
+	return countRowsAffected(plan), plan.Err()
 }
 
 // getAliasedTableLease looks up the table descriptor for an alias table
@@ -469,7 +425,7 @@ type planNode interface {
 	// plan). Returns an error if initialization fails.
 	// The SQL "prepare" phase should merely build the plan node(s),
 	// and Start/Next should be only called during "execute".
-	Start() *roachpb.Error
+	Start() error
 
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
@@ -478,9 +434,8 @@ type planNode interface {
 	// See executor.go: countRowsAffected() and execStmt() for an example.
 	Next() bool
 
-	// PErr returns the error, if any, encountered during iteration.
-	// TODO(andrei): change to return error
-	PErr() *roachpb.Error
+	// Err returns the error, if any, encountered during iteration.
+	Err() error
 
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan(verbose bool) (name, description string, children []planNode)
@@ -547,7 +502,7 @@ type emptyNode struct {
 func (*emptyNode) Columns() []ResultColumn { return nil }
 func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*emptyNode) Values() parser.DTuple   { return nil }
-func (*emptyNode) PErr() *roachpb.Error    { return nil }
+func (*emptyNode) Err() error              { return nil }
 
 func (*emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "empty", "-", nil
@@ -566,7 +521,7 @@ func (*emptyNode) DebugValues() debugValues {
 	}
 }
 
-func (e *emptyNode) Start() *roachpb.Error {
+func (e *emptyNode) Start() error {
 	return nil
 }
 
