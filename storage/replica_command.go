@@ -211,9 +211,12 @@ func (r *Replica) ConditionalPut(
 	ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ConditionalPutRequest,
 ) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
-	if args.Blind {
-		return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
-	}
+
+	// TODO: This optimization is incorrect if the same key is CPut twice in the
+	// same batch. Check for that case and re-enable.
+	// if args.Blind {
+	// 	return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+	// }
 	return reply, engine.MVCCConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 }
 

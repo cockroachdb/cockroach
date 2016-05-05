@@ -421,3 +421,23 @@ CREATE TABLE decimal (
 
 statement ok
 INSERT INTO decimal VALUES (4)
+
+# Verify that the "blind" ConditionalPut optimization correctly handles a batch
+# with two CPuts of the same key.
+statement ok
+CREATE TABLE accounts (
+  pk1 INT,
+  pk2 INT,
+  random_id INT,
+  PRIMARY KEY (pk1, pk2),
+  UNIQUE (pk1, random_id)
+);
+
+statement ok
+CREATE INDEX ON accounts(random_id);
+
+statement ok
+CREATE INDEX ON accounts (pk2);
+
+statement error duplicate key value \(pk1,pk2\)=\(123,2\) violates unique constraint "primary"
+INSERT INTO accounts (pk1, pk2, random_id) values(123, 2, 2), (123, 2, 3);
