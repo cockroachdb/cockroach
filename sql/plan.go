@@ -441,7 +441,8 @@ func (p *planner) releaseLeases() {
 }
 
 func (p *planner) writeTableDesc(tableDesc *sqlbase.TableDescriptor) error {
-	return p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+	return p.txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
+		sqlbase.WrapDescriptor(tableDesc))
 }
 
 // planNode defines the interface for executing a query or portion of a query.

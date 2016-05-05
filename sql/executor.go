@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -269,7 +270,7 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
 	e.databaseCache = &databaseCache{
-		databases: map[string]ID{},
+		databases: map[string]sqlbase.ID{},
 	}
 	e.systemConfigCond.Broadcast()
 }

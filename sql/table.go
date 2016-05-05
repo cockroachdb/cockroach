@@ -57,7 +57,7 @@ type tableKey struct {
 }
 
 func (tk tableKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(tk.parentID, tk.name)
+	return sqlbase.MakeNameMetadataKey(tk.parentID, tk.name)
 }
 
 func (tk tableKey) Name() string {
@@ -80,7 +80,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 		return nil, databaseDoesNotExistError(qname.Database())
 	}
 
-	desc := TableDescriptor{}
+	desc := sqlbase.TableDescriptor{}
 	found, err := p.getDescriptor(tableKey{parentID: dbDesc.ID, name: qname.Table()}, &desc)
 	if err != nil {
 		return nil, err
@@ -95,8 +95,8 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 // returns an error if the descriptor doesn't exist or if it exists and is not
 // a table.
 func getTableDescFromID(txn *client.Txn, id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
-	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(id)
+	desc := &sqlbase.Descriptor{}
+	descKey := sqlbase.MakeDescMetadataKey(id)
 
 	if err := txn.GetProto(descKey, desc); err != nil {
 		return nil, err
@@ -168,9 +168,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			if _, ok := err.(*roachpb.DescriptorNotFoundError); ok {
 				// Transform the descriptor error into an error that references the
 				// table's name.
-				return TableDescriptor{}, tableDoesNotExistError(qname.String())
+				return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
 			}
-			return TableDescriptor{}, err
+			return sqlbase.TableDescriptor{}, err
 		}
 		p.leases = append(p.leases, lease)
 		commitBy = updateCommitBy(commitBy, lease)
@@ -217,7 +217,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 }
 
 func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.QualifiedNames, error) {
-	prefix := MakeNameMetadataKey(dbDesc.ID, "")
+	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -419,10 +419,11 @@ func decodeIndexKeyPrefix(desc *sqlbase.TableDescriptor, key []byte) (
 	}
 
 	if sqlbase.ID(tableID) != desc.ID {
-		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+		return sqlbase.IndexID(indexID), nil,
+			util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
-	return IndexID(indexID), key, nil
+	return sqlbase.IndexID(indexID), key, nil
 }
 
 // decodeIndexKey decodes the values that are a part of the specified index
@@ -708,7 +709,7 @@ func encodeSecondaryIndexes(
 ) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
-		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
+		secondaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, containsNull, err := encodeIndexKey(
 			&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
@@ -765,37 +766,37 @@ func checkColumnType(col sqlbase.ColumnDescriptor, val parser.Datum, args parser
 	var err error
 	var set parser.Datum
 	switch col.Type.Kind {
-	case ColumnType_BOOL:
+	case sqlbase.ColumnType_BOOL:
 		_, ok = val.(*parser.DBool)
 		set, err = args.SetInferredType(val, parser.DummyBool)
-	case ColumnType_INT:
+	case sqlbase.ColumnType_INT:
 		_, ok = val.(*parser.DInt)
 		set, err = args.SetInferredType(val, parser.DummyInt)
-	case ColumnType_FLOAT:
+	case sqlbase.ColumnType_FLOAT:
 		_, ok = val.(*parser.DFloat)
 		set, err = args.SetInferredType(val, parser.DummyFloat)
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		_, ok = val.(*parser.DDecimal)
 		set, err = args.SetInferredType(val, parser.DummyDecimal)
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		_, ok = val.(*parser.DString)
 		set, err = args.SetInferredType(val, parser.DummyString)
-	case ColumnType_BYTES:
+	case sqlbase.ColumnType_BYTES:
 		_, ok = val.(*parser.DBytes)
 		if !ok {
 			_, ok = val.(*parser.DString)
 		}
 		set, err = args.SetInferredType(val, parser.DummyBytes)
-	case ColumnType_DATE:
+	case sqlbase.ColumnType_DATE:
 		_, ok = val.(*parser.DDate)
 		set, err = args.SetInferredType(val, parser.DummyDate)
-	case ColumnType_TIMESTAMP:
+	case sqlbase.ColumnType_TIMESTAMP:
 		_, ok = val.(*parser.DTimestamp)
 		set, err = args.SetInferredType(val, parser.DummyTimestamp)
-	case ColumnType_TIMESTAMPTZ:
+	case sqlbase.ColumnType_TIMESTAMPTZ:
 		_, ok = val.(*parser.DTimestampTZ)
 		set, err = args.SetInferredType(val, parser.DummyTimestampTZ)
-	case ColumnType_INTERVAL:
+	case sqlbase.ColumnType_INTERVAL:
 		_, ok = val.(*parser.DInterval)
 		set, err = args.SetInferredType(val, parser.DummyInterval)
 	default:
@@ -822,7 +823,7 @@ func marshalColumnValue(col sqlbase.ColumnDescriptor, val parser.Datum) (roachpb
 	}
 
 	switch col.Type.Kind {
-	case ColumnType_BOOL:
+	case sqlbase.ColumnType_BOOL:
 		if v, ok := val.(*parser.DBool); ok {
 			if *v {
 				r.SetInt(1)
@@ -831,27 +832,27 @@ func marshalColumnValue(col sqlbase.ColumnDescriptor, val parser.Datum) (roachpb
 			}
 			return r, nil
 		}
-	case ColumnType_INT:
+	case sqlbase.ColumnType_INT:
 		if v, ok := val.(*parser.DInt); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case ColumnType_FLOAT:
+	case sqlbase.ColumnType_FLOAT:
 		if v, ok := val.(*parser.DFloat); ok {
 			r.SetFloat(float64(*v))
 			return r, nil
 		}
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
 			err := r.SetDecimal(&v.Dec)
 			return r, err
 		}
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {
 			r.SetString(string(*v))
 			return r, nil
 		}
-	case ColumnType_BYTES:
+	case sqlbase.ColumnType_BYTES:
 		if v, ok := val.(*parser.DBytes); ok {
 			r.SetString(string(*v))
 			return r, nil
@@ -860,22 +861,22 @@ func marshalColumnValue(col sqlbase.ColumnDescriptor, val parser.Datum) (roachpb
 			r.SetString(string(*v))
 			return r, nil
 		}
-	case ColumnType_DATE:
+	case sqlbase.ColumnType_DATE:
 		if v, ok := val.(*parser.DDate); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case ColumnType_TIMESTAMP:
+	case sqlbase.ColumnType_TIMESTAMP:
 		if v, ok := val.(*parser.DTimestamp); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case ColumnType_TIMESTAMPTZ:
+	case sqlbase.ColumnType_TIMESTAMPTZ:
 		if v, ok := val.(*parser.DTimestampTZ); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case ColumnType_INTERVAL:
+	case sqlbase.ColumnType_INTERVAL:
 		if v, ok := val.(*parser.DInterval); ok {
 			err := r.SetDuration(v.Duration)
 			return r, err
@@ -898,25 +899,25 @@ func unmarshalColumnValue(
 	}
 
 	switch kind {
-	case ColumnType_BOOL:
+	case sqlbase.ColumnType_BOOL:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return parser.MakeDBool(parser.DBool(v != 0)), nil
-	case ColumnType_INT:
+	case sqlbase.ColumnType_INT:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDInt(parser.DInt(v)), nil
-	case ColumnType_FLOAT:
+	case sqlbase.ColumnType_FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDFloat(parser.DFloat(v)), nil
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
 			return nil, err
@@ -924,37 +925,37 @@ func unmarshalColumnValue(
 		dd := a.newDDecimal(parser.DDecimal{})
 		dd.Set(v)
 		return dd, nil
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDString(parser.DString(v)), nil
-	case ColumnType_BYTES:
+	case sqlbase.ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDBytes(parser.DBytes(v)), nil
-	case ColumnType_DATE:
+	case sqlbase.ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDDate(parser.DDate(v)), nil
-	case ColumnType_TIMESTAMP:
+	case sqlbase.ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDTimestamp(parser.DTimestamp{Time: v}), nil
-	case ColumnType_TIMESTAMPTZ:
+	case sqlbase.ColumnType_TIMESTAMPTZ:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.newDTimestampTZ(parser.DTimestampTZ{Time: v}), nil
-	case ColumnType_INTERVAL:
+	case sqlbase.ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
@@ -970,13 +971,13 @@ func unmarshalColumnValue(
 // Used by INSERT and UPDATE.
 func checkValueWidth(col sqlbase.ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
-	case ColumnType_STRING:
+	case sqlbase.ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {
 			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)", col.Type.SQLString(), col.Name)
 			}
 		}
-	case ColumnType_DECIMAL:
+	case sqlbase.ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
 			if col.Type.Precision > 0 {
 				// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html

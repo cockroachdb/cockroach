@@ -161,10 +161,8 @@ func (n *alterTableNode) Start() *roachpb.Error {
 				return roachpb.NewError(err)
 			}
 			switch status {
-			case DescriptorActive:
-				n.tableDesc.AddIndexMutation(n.tableDesc.Indexes[i], DescriptorMutation_DROP)
 			case sqlbase.DescriptorActive:
-				n.tableDesc.addIndexMutation(n.tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
+				n.tableDesc.AddIndexMutation(n.tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
 				n.tableDesc.Indexes = append(n.tableDesc.Indexes[:i], n.tableDesc.Indexes[i+1:]...)
 
 			case sqlbase.DescriptorIncomplete:

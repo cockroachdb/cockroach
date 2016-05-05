@@ -202,16 +202,16 @@ func (n *dropIndexNode) Start() *roachpb.Error {
 		}
 		// Queue the mutation.
 		switch status {
-		case DescriptorActive:
-			tableDesc.AddIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
+		case sqlbase.DescriptorActive:
+			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 
-		case DescriptorIncomplete:
+		case sqlbase.DescriptorIncomplete:
 			switch tableDesc.Mutations[i].Direction {
-			case DescriptorMutation_ADD:
+			case sqlbase.DescriptorMutation_ADD:
 				return roachpb.NewUErrorf("index %q in the middle of being added, try again later", idxName)
 
-			case DescriptorMutation_DROP:
+			case sqlbase.DescriptorMutation_DROP:
 				continue
 			}
 		}
@@ -351,7 +351,7 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID ID) error {
+	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID sqlbase.ID) error {
 		desc, err := GetTableDesc(systemConfig, tableID)
 		if err != nil {
 			return err

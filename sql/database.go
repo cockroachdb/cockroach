@@ -38,7 +38,7 @@ type databaseKey struct {
 }
 
 func (dk databaseKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
+	return sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
 }
 
 func (dk databaseKey) Name() string {
@@ -76,7 +76,7 @@ func (s *databaseCache) setID(name string, id sqlbase.ID) {
 func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
 	return sqlbase.DatabaseDescriptor{
 		Name:       p.Name.String(),
-		Privileges: NewDefaultPrivilegeDescriptor(),
+		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
 	}
 }
 
@@ -110,13 +110,13 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 		return nil, err
 	}
 
-	descKey := MakeDescMetadataKey(sqlbase.ID(id))
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
 	descVal := p.systemConfig.GetValue(descKey)
 	if descVal == nil {
 		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
 	}
 
-	desc := &Descriptor{}
+	desc := &sqlbase.Descriptor{}
 	if err := descVal.GetProto(desc); err != nil {
 		return nil, err
 	}

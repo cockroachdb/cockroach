@@ -108,7 +108,7 @@ func (p *planner) Insert(
 	// Also add any column in a mutation that is WRITE_ONLY and has
 	// a DEFAULT expression.
 	for _, m := range en.tableDesc.Mutations {
-		if m.State != DescriptorMutation_WRITE_ONLY {
+		if m.State != sqlbase.DescriptorMutation_WRITE_ONLY {
 			continue
 		}
 		if col := m.GetColumn(); col != nil {

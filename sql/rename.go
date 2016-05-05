@@ -62,7 +62,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	}
 
 	// Now update the nameMetadataKey and the descriptor.
-	descKey := MakeDescMetadataKey(dbDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(dbDesc.GetID())
 	dbDesc.SetName(string(n.NewName))
 
 	if err := dbDesc.Validate(); err != nil {
@@ -173,7 +173,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	tableDesc.SetName(n.NewName.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 
 	if err := tableDesc.Validate(); err != nil {
@@ -254,7 +254,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
-	if status == DescriptorActive {
+	if status == sqlbase.DescriptorActive {
 		tableDesc.Indexes[i].Name = newIdxName
 	} else {
 		tableDesc.Mutations[i].GetIndex().Name = newIdxName
@@ -263,7 +263,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
-	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
@@ -325,8 +325,8 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	var column *ColumnDescriptor
-	if status == DescriptorActive {
+	var column *sqlbase.ColumnDescriptor
+	if status == sqlbase.DescriptorActive {
 		column = &tableDesc.Columns[i]
 	} else {
 		column = tableDesc.Mutations[i].GetColumn()
@@ -366,7 +366,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 
-	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}

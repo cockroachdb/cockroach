@@ -146,7 +146,7 @@ func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) e
 	if len(spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
-		start := roachpb.Key(MakeIndexKeyPrefix(rf.desc.ID, rf.index.ID))
+		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(rf.desc.ID, rf.index.ID))
 		spans = []span{{start: start, end: start.PrefixEnd()}}
 	}
 

@@ -544,8 +544,9 @@ func TestMakeSpans(t *testing.T) {
 			span := spans[0]
 			d.expected = d.expected[4:]
 			// Trim the index prefix from the span.
-			got = strings.TrimPrefix(string(span.start), string(MakeIndexKeyPrefix(desc.ID, index.ID))) +
-				"-" + strings.TrimPrefix(string(span.end), string(MakeIndexKeyPrefix(desc.ID, index.ID)))
+			prefix := string(sqlbase.MakeIndexKeyPrefix(desc.ID, index.ID))
+			got = strings.TrimPrefix(string(span.start), prefix) + "-" +
+				strings.TrimPrefix(string(span.end), prefix)
 		} else {
 			got = keys.MassagePrettyPrintedSpanForTest(prettySpans(spans, 2), indexToDirs(index))
 		}

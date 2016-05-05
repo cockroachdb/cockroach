@@ -107,7 +107,7 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
-		return txn.Put(MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 	return lease, roachpb.NewError(err)
 }
@@ -138,7 +138,7 @@ func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChange
 		}
 		tableDesc.Lease = nil
 		txn.SetSystemConfigTrigger()
-		return txn.Put(MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 	return err
 }
@@ -156,7 +156,7 @@ func (sc *SchemaChanger) ExtendLease(
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
 		txn.SetSystemConfigTrigger()
-		return txn.Put(MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 	return lease, err
 }
@@ -279,29 +279,29 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 				break
 			}
 			switch mutation.Direction {
-			case DescriptorMutation_ADD:
+			case sqlbase.DescriptorMutation_ADD:
 				switch mutation.State {
-				case DescriptorMutation_DELETE_ONLY:
+				case sqlbase.DescriptorMutation_DELETE_ONLY:
 					// TODO(vivek): while moving up the state is appropriate,
 					// it will be better to run the backfill of a unique index
 					// twice: once in the DELETE_ONLY state to confirm that
 					// the index can indeed be created, and subsequently in the
 					// WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
-					desc.Mutations[i].State = DescriptorMutation_WRITE_ONLY
+					desc.Mutations[i].State = sqlbase.DescriptorMutation_WRITE_ONLY
 					modified = true
 
-				case DescriptorMutation_WRITE_ONLY:
+				case sqlbase.DescriptorMutation_WRITE_ONLY:
 					// The state change has already moved forward.
 				}
 
-			case DescriptorMutation_DROP:
+			case sqlbase.DescriptorMutation_DROP:
 				switch mutation.State {
-				case DescriptorMutation_DELETE_ONLY:
+				case sqlbase.DescriptorMutation_DELETE_ONLY:
 					// The state change has already moved forward.
 
-				case DescriptorMutation_WRITE_ONLY:
-					desc.Mutations[i].State = DescriptorMutation_DELETE_ONLY
+				case sqlbase.DescriptorMutation_WRITE_ONLY:
+					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
 					modified = true
 				}
 			}
@@ -373,11 +373,11 @@ func (sc *SchemaChanger) purgeMutations(lease *sqlbase.TableDescriptor_SchemaCha
 			}
 			log.Warningf("Purging schema change mutation: %v", desc.Mutations[i])
 			switch mutation.Direction {
-			case DescriptorMutation_ADD:
-				desc.Mutations[i].Direction = DescriptorMutation_DROP
+			case sqlbase.DescriptorMutation_ADD:
+				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_DROP
 
-			case DescriptorMutation_DROP:
-				desc.Mutations[i].Direction = DescriptorMutation_ADD
+			case sqlbase.DescriptorMutation_DROP:
+				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
 			}
 		}
 		// Publish() will increment the version.
@@ -453,7 +453,7 @@ func NewSchemaChangeManager(
 		db:             db,
 		gossip:         gossip,
 		leaseMgr:       leaseMgr,
-		schemaChangers: make(map[ID]SchemaChanger),
+		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
 	}
 }
 
@@ -531,7 +531,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					leaseMgr: s.leaseMgr,
 				}
 				// Keep track of existing schema changers.
-				oldSchemaChangers := make(map[ID]struct{}, len(s.schemaChangers))
+				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))
 				for k := range s.schemaChangers {
 					oldSchemaChangers[k] = struct{}{}
 				}
@@ -542,13 +542,13 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						continue
 					}
 					// Attempt to unmarshal config into a table/database descriptor.
-					var descriptor Descriptor
+					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf("%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
-					case *Descriptor_Table:
+					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						if err := table.Validate(); err != nil {
 							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
@@ -590,7 +590,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							s.schemaChangers[table.ID] = schemaChanger
 						}
 
-					case *Descriptor_Database:
+					case *sqlbase.Descriptor_Database:
 						// Ignore.
 					}
 				}

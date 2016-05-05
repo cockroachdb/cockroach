@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -38,12 +39,12 @@ var configDescKey = sql.MakeDescMetadataKey(keys.MaxReservedDescID)
 // just-written descriptor is found.
 func forceNewConfig(t *testing.T, s *testServer) config.SystemConfig {
 	configID++
-	configDesc := &sql.Descriptor{
-		Union: &sql.Descriptor_Database{
-			Database: &sql.DatabaseDescriptor{
+	configDesc := &sqlbase.Descriptor{
+		Union: &sqlbase.Descriptor_Database{
+			Database: &sqlbase.DatabaseDescriptor{
 				Name:       "sentinel",
 				ID:         configID,
-				Privileges: &sql.PrivilegeDescriptor{},
+				Privileges: &sqlbase.PrivilegeDescriptor{},
 			},
 		},
 	}

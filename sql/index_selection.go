@@ -1177,7 +1177,7 @@ func mergeAndSortSpans(s spans) spans {
 func makeSpansForIndexConstraints(
 	constraints indexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
 ) spans {
-	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
+	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableID, index.ID))
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.
 	// But we also have (...) IN <tuple> constraints that span multiple columns.
