@@ -105,6 +105,8 @@ func incompatibleColumnDefaultTypeError(colDatumType parser.Datum, defaultType p
 		colDatumType.Type(), defaultType.Type())
 }
 
+// SanitizeDefaultExpr verifies a default expression is valid and has the
+// correct type.
 func SanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
 	typedExpr, err := parser.TypeCheck(expr, nil, colDatumType)
 	if err != nil {
@@ -119,6 +121,8 @@ func SanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
 	return nil
 }
 
+// MakeColumnDefDescs creates the column descriptor for a column, as well as the
+// index descriptor if the column is a primary key or unique.
 func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),

@@ -58,6 +58,7 @@ const (
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
+// InvalidMutationID is the uninitialised mutation id.
 const InvalidMutationID MutationID = 0
 
 const (
@@ -80,7 +81,10 @@ const (
 	DescriptorActive
 )
 
+// ErrMissingColumns indicates a table with no columns.
 var ErrMissingColumns = errors.New("table must contain at least 1 column")
+
+// ErrMissingPrimaryKey indicates a table with no primary key.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
 func validateName(name, typ string) error {
@@ -597,6 +601,7 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
+// MakeMutationComplete updates the descriptor upon completion of a mutation.
 func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
@@ -623,7 +628,7 @@ func (desc *TableDescriptor) AddColumnMutation(c ColumnDescriptor, direction Des
 	desc.addMutation(m)
 }
 
-// AddColumnMutation adds an index mutation to desc.Mutations.
+// AddIndexMutation adds an index mutation to desc.Mutations.
 func (desc *TableDescriptor) AddIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
 	desc.addMutation(m)
@@ -720,8 +725,8 @@ func (c *ColumnType) SQLString() string {
 	return c.Kind.String()
 }
 
-// toDatum converts the ColumnType to a dummy Datum of the correct type, or nil
-// if there is no correspondence.
+// ToDatumType converts the ColumnType to a dummy Datum of the correct type, or
+// nil if there is no correspondence.
 func (c *ColumnType) ToDatumType() parser.Datum {
 	switch c.Kind {
 	case ColumnType_BOOL:
