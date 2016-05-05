@@ -685,6 +685,12 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
+			"UPDATE d.t SET i = $1 WHERE (i, s) = ($2, $3)",
+			[]preparedExecTest{
+				base.Params(8, 4, "4").RowsAffected(1),
+			},
+		},
+		{
 			"DELETE FROM d.t WHERE s = $1 and i = $2 and d = 2 + $3",
 			[]preparedExecTest{
 				base.Params(1, 2, 3).RowsAffected(0),
