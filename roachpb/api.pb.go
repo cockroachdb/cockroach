@@ -109,7 +109,6 @@
 		SendError
 		RaftGroupDeletedError
 		ReplicaCorruptionError
-		DescriptorDeletedError
 		ErrorDetail
 		ErrPosition
 		Error

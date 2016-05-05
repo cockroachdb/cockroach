@@ -191,11 +191,6 @@ message ReplicaCorruptionError {
   optional bool processed = 2 [(gogoproto.nullable) = false];;
 }
 
-// A DescriptorDeletedError indicates that an outstanding schema change is no
-// longer applicable because the descriptor in question has been dropped.
-message DescriptorDeletedError {
-}
-
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -222,7 +217,6 @@ message ErrorDetail {
   // converting Go errors from/to proto Errors. Revisit this design.
   optional RaftGroupDeletedError raft_group_deleted = 16;
   optional ReplicaCorruptionError replica_corruption = 17;
-  optional DescriptorDeletedError descriptor_deleted = 23;
 }
 
 // TransactionRestart indicates how an error should be handled in a
