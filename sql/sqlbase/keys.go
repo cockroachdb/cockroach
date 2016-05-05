@@ -116,7 +116,7 @@ func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
 	return key
 }
 
-func stripColumnIDLength(key roachpb.Key) roachpb.Key {
+func StripColumnIDLength(key roachpb.Key) roachpb.Key {
 	if n := len(key); n > 0 {
 		return key[:n-1]
 	}

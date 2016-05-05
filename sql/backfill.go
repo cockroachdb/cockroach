@@ -291,7 +291,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 					// Sentinel keys have a 0 suffix indicating 0 bytes of
 					// column ID. Strip off that suffix to determine the
 					// prefix shared with the other keys for the row.
-					sentinelKey = stripColumnIDLength(kv.Key)
+					sentinelKey = sqlbase.StripColumnIDLength(kv.Key)
 					// Store away key for the next table row as the point from
 					// which to start from.
 					curSentinel = sentinelKey
