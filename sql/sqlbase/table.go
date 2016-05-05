@@ -133,39 +133,39 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	switch t := d.Type.(type) {
 	case *parser.BoolType:
 		col.Type.Kind = ColumnType_BOOL
-		colDatumType = parser.DummyBool
+		colDatumType = parser.TypeBool
 	case *parser.IntType:
 		col.Type.Kind = ColumnType_INT
 		col.Type.Width = int32(t.N)
-		colDatumType = parser.DummyInt
+		colDatumType = parser.TypeInt
 	case *parser.FloatType:
 		col.Type.Kind = ColumnType_FLOAT
 		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.DummyFloat
+		colDatumType = parser.TypeFloat
 	case *parser.DecimalType:
 		col.Type.Kind = ColumnType_DECIMAL
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.DummyDecimal
+		colDatumType = parser.TypeDecimal
 	case *parser.DateType:
 		col.Type.Kind = ColumnType_DATE
-		colDatumType = parser.DummyDate
+		colDatumType = parser.TypeDate
 	case *parser.TimestampType:
 		col.Type.Kind = ColumnType_TIMESTAMP
-		colDatumType = parser.DummyTimestamp
+		colDatumType = parser.TypeTimestamp
 	case *parser.TimestampTZType:
 		col.Type.Kind = ColumnType_TIMESTAMPTZ
-		colDatumType = parser.DummyTimestampTZ
+		colDatumType = parser.TypeTimestampTZ
 	case *parser.IntervalType:
 		col.Type.Kind = ColumnType_INTERVAL
-		colDatumType = parser.DummyInterval
+		colDatumType = parser.TypeInterval
 	case *parser.StringType:
 		col.Type.Kind = ColumnType_STRING
 		col.Type.Width = int32(t.N)
-		colDatumType = parser.DummyString
+		colDatumType = parser.TypeString
 	case *parser.BytesType:
 		col.Type.Kind = ColumnType_BYTES
-		colDatumType = parser.DummyBytes
+		colDatumType = parser.TypeBytes
 	default:
 		return nil, nil, util.Errorf("unexpected type %T", t)
 	}
@@ -222,9 +222,9 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		if err != nil {
 			return nil, nil, err
 		}
-		if typedExpr, err := expr.TypeCheck(nil, parser.DummyBool); err != nil {
+		if typedExpr, err := expr.TypeCheck(nil, parser.TypeBool); err != nil {
 			return nil, nil, err
-		} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.DummyBool) {
+		} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.TypeBool) {
 			return nil, nil, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
 		}
 	}

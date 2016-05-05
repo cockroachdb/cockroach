@@ -94,10 +94,10 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			plan: plan,
 			results: &valuesNode{
 				columns: []ResultColumn{
-					{Name: "Level", Typ: parser.DummyInt},
-					{Name: "Type", Typ: parser.DummyString},
-					{Name: "Element", Typ: parser.DummyString},
-					{Name: "Description", Typ: parser.DummyString},
+					{Name: "Level", Typ: parser.TypeInt},
+					{Name: "Type", Typ: parser.TypeString},
+					{Name: "Element", Typ: parser.TypeString},
+					{Name: "Description", Typ: parser.TypeString},
 				},
 			},
 		}
@@ -109,9 +109,9 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			plan:    plan,
 			results: &valuesNode{
 				columns: []ResultColumn{
-					{Name: "Level", Typ: parser.DummyInt},
-					{Name: "Type", Typ: parser.DummyString},
-					{Name: "Description", Typ: parser.DummyString},
+					{Name: "Level", Typ: parser.TypeInt},
+					{Name: "Type", Typ: parser.TypeString},
+					{Name: "Description", Typ: parser.TypeString},
 				},
 			},
 		}
@@ -315,10 +315,10 @@ type explainDebugNode struct {
 
 // Columns for explainDebug mode.
 var debugColumns = []ResultColumn{
-	{Name: "RowIdx", Typ: parser.DummyInt},
-	{Name: "Key", Typ: parser.DummyString},
-	{Name: "Value", Typ: parser.DummyString},
-	{Name: "Disposition", Typ: parser.DummyString},
+	{Name: "RowIdx", Typ: parser.TypeInt},
+	{Name: "Key", Typ: parser.TypeString},
+	{Name: "Value", Typ: parser.TypeString},
+	{Name: "Disposition", Typ: parser.TypeString},
 }
 
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }

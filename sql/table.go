@@ -768,37 +768,37 @@ func checkColumnType(col sqlbase.ColumnDescriptor, val parser.Datum, args parser
 	switch col.Type.Kind {
 	case sqlbase.ColumnType_BOOL:
 		_, ok = val.(*parser.DBool)
-		set, err = args.SetInferredType(val, parser.DummyBool)
+		set, err = args.SetInferredType(val, parser.TypeBool)
 	case sqlbase.ColumnType_INT:
 		_, ok = val.(*parser.DInt)
-		set, err = args.SetInferredType(val, parser.DummyInt)
+		set, err = args.SetInferredType(val, parser.TypeInt)
 	case sqlbase.ColumnType_FLOAT:
 		_, ok = val.(*parser.DFloat)
-		set, err = args.SetInferredType(val, parser.DummyFloat)
+		set, err = args.SetInferredType(val, parser.TypeFloat)
 	case sqlbase.ColumnType_DECIMAL:
 		_, ok = val.(*parser.DDecimal)
-		set, err = args.SetInferredType(val, parser.DummyDecimal)
+		set, err = args.SetInferredType(val, parser.TypeDecimal)
 	case sqlbase.ColumnType_STRING:
 		_, ok = val.(*parser.DString)
-		set, err = args.SetInferredType(val, parser.DummyString)
+		set, err = args.SetInferredType(val, parser.TypeString)
 	case sqlbase.ColumnType_BYTES:
 		_, ok = val.(*parser.DBytes)
 		if !ok {
 			_, ok = val.(*parser.DString)
 		}
-		set, err = args.SetInferredType(val, parser.DummyBytes)
+		set, err = args.SetInferredType(val, parser.TypeBytes)
 	case sqlbase.ColumnType_DATE:
 		_, ok = val.(*parser.DDate)
-		set, err = args.SetInferredType(val, parser.DummyDate)
+		set, err = args.SetInferredType(val, parser.TypeDate)
 	case sqlbase.ColumnType_TIMESTAMP:
 		_, ok = val.(*parser.DTimestamp)
-		set, err = args.SetInferredType(val, parser.DummyTimestamp)
+		set, err = args.SetInferredType(val, parser.TypeTimestamp)
 	case sqlbase.ColumnType_TIMESTAMPTZ:
 		_, ok = val.(*parser.DTimestampTZ)
-		set, err = args.SetInferredType(val, parser.DummyTimestampTZ)
+		set, err = args.SetInferredType(val, parser.TypeTimestampTZ)
 	case sqlbase.ColumnType_INTERVAL:
 		_, ok = val.(*parser.DInterval)
-		set, err = args.SetInferredType(val, parser.DummyInterval)
+		set, err = args.SetInferredType(val, parser.TypeInterval)
 	default:
 		return util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}

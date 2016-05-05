@@ -40,29 +40,6 @@ var (
 	// DBoolFalse is a pointer to the DBool(false) value and can be used in
 	// comparisons against Datum types.
 	DBoolFalse = &constDBoolFalse
-
-	// DummyBool is a placeholder DBool value.
-	DummyBool Datum = DBoolFalse
-	// DummyInt is a placeholder DInt value.
-	DummyInt Datum = NewDInt(0)
-	// DummyFloat is a placeholder DFloat value.
-	DummyFloat Datum = NewDFloat(0)
-	// DummyDecimal is a placeholder DDecimal value.
-	DummyDecimal Datum = &DDecimal{}
-	// DummyString is a placeholder DString value.
-	DummyString Datum = NewDString("")
-	// DummyBytes is a placeholder DBytes value.
-	DummyBytes Datum = NewDBytes("")
-	// DummyDate is a placeholder DDate value.
-	DummyDate Datum = NewDDate(0)
-	// DummyTimestamp is a placeholder DTimestamp value.
-	DummyTimestamp Datum = &DTimestamp{}
-	// DummyTimestampTZ is a placeholder DTimestamp value rendered in session offset.
-	DummyTimestampTZ Datum = &DTimestampTZ{}
-	// DummyInterval is a placeholder DInterval value.
-	DummyInterval Datum = &DInterval{}
-	// dummyTuple is a placeholder DTuple value.
-	dummyTuple Datum = &DTuple{}
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
@@ -128,7 +105,7 @@ func GetBool(d Datum) (DBool, error) {
 
 // ReturnType implements the TypedExpr interface.
 func (*DBool) ReturnType() Datum {
-	return DummyBool
+	return TypeBool
 }
 
 // Type implements the Datum interface.
@@ -206,7 +183,7 @@ func NewDInt(d DInt) *DInt {
 
 // ReturnType implements the TypedExpr interface.
 func (*DInt) ReturnType() Datum {
-	return DummyInt
+	return TypeInt
 }
 
 // Type implements the Datum interface.
@@ -289,7 +266,7 @@ func NewDFloat(d DFloat) *DFloat {
 
 // ReturnType implements the TypedExpr interface.
 func (*DFloat) ReturnType() Datum {
-	return DummyFloat
+	return TypeFloat
 }
 
 // Type implements the Datum interface.
@@ -376,7 +353,7 @@ type DDecimal struct {
 
 // ReturnType implements the TypedExpr interface.
 func (d *DDecimal) ReturnType() Datum {
-	return DummyDecimal
+	return TypeDecimal
 }
 
 // Type implements the Datum interface.
@@ -454,7 +431,7 @@ func NewDString(d string) *DString {
 
 // ReturnType implements the TypedExpr interface.
 func (*DString) ReturnType() Datum {
-	return DummyString
+	return TypeString
 }
 
 // Type implements the Datum interface.
@@ -534,7 +511,7 @@ func NewDBytes(d DBytes) *DBytes {
 
 // ReturnType implements the TypedExpr interface.
 func (d *DBytes) ReturnType() Datum {
-	return DummyBytes
+	return TypeBytes
 }
 
 // Type implements the Datum interface.
@@ -614,7 +591,7 @@ func NewDDate(d DDate) *DDate {
 
 // ReturnType implements the TypedExpr interface.
 func (*DDate) ReturnType() Datum {
-	return DummyDate
+	return TypeDate
 }
 
 // Type implements the Datum interface.
@@ -689,7 +666,7 @@ type DTimestamp struct {
 
 // ReturnType implements the TypedExpr interface.
 func (*DTimestamp) ReturnType() Datum {
-	return DummyTimestamp
+	return TypeTimestamp
 }
 
 // Type implements the Datum interface.
@@ -766,7 +743,7 @@ type DTimestampTZ struct {
 
 // ReturnType implements the TypedExpr interface.
 func (*DTimestampTZ) ReturnType() Datum {
-	return DummyTimestampTZ
+	return TypeTimestampTZ
 }
 
 // Type implements the Datum interface.
@@ -843,7 +820,7 @@ type DInterval struct {
 
 // ReturnType implements the TypedExpr interface.
 func (d *DInterval) ReturnType() Datum {
-	return DummyInterval
+	return TypeInterval
 }
 
 // Type implements the Datum interface.

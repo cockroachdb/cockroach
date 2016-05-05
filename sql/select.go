@@ -482,7 +482,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	}
 
 	s.filter, s.err = parser.TypeCheckAndRequire(untypedFilter, s.planner.evalCtx.Args,
-		parser.DummyBool, "WHERE")
+		parser.TypeBool, "WHERE")
 	if s.err != nil {
 		return s.err
 	}
