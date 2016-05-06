@@ -91,12 +91,7 @@ func (ti *tableInserter) finalize() error {
 	}
 
 	if err != nil {
-		for _, r := range ti.b.Results {
-			if r.PErr != nil {
-				return convertBatchError(ti.ri.helper.tableDesc, *ti.b, r.PErr)
-			}
-		}
-		return err
+		return convertBatchError(ti.ri.helper.tableDesc, ti.b)
 	}
 	return nil
 }
@@ -135,12 +130,7 @@ func (tu *tableUpdater) finalize() error {
 	}
 
 	if err != nil {
-		for _, r := range tu.b.Results {
-			if r.PErr != nil {
-				return convertBatchError(tu.ru.helper.tableDesc, *tu.b, r.PErr)
-			}
-		}
-		return err
+		return convertBatchError(tu.ru.helper.tableDesc, tu.b)
 	}
 	return nil
 }
@@ -267,12 +257,7 @@ func (tu *tableUpserter) flush() error {
 	tu.upsertRowPKs = nil
 
 	if err := tu.txn.Run(b); err != nil {
-		for _, r := range b.Results {
-			if r.PErr != nil {
-				return convertBatchError(tu.tableDesc, *b, r.PErr)
-			}
-		}
-		return err
+		return convertBatchError(tu.tableDesc, b)
 	}
 	return nil
 }
