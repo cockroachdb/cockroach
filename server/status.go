@@ -526,12 +526,16 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	rows, err := s.db.ScanInconsistent(startKey, endKey, 0)
+	var b client.Batch
+	b.Header.ReadConsistency = roachpb.INCONSISTENT
+	b.Scan(startKey, endKey, 0)
+	err := s.db.Run(&b)
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rows := b.Results[0].Rows
 
 	nodeStatuses := []status.NodeStatus{}
 	for _, row := range rows {
@@ -555,14 +559,23 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	}
 
 	key := keys.NodeStatusKey(int32(nodeID))
-	nodeStatus := &status.NodeStatus{}
-	if err := s.db.GetProtoInconsistent(key, nodeStatus); err != nil {
+	var b client.Batch
+	b.Header.ReadConsistency = roachpb.INCONSISTENT
+	b.Get(key)
+	if err := s.db.Run(&b); err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	respondAsJSON(w, r, nodeStatus)
+	var nodeStatus status.NodeStatus
+	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
+		err = util.Errorf("value returned from %s is not a NodeStatus: %s", key, err)
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respondAsJSON(w, r, &nodeStatus)
 }
 
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
