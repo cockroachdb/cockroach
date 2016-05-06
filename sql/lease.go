@@ -111,7 +111,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlb
 		return nil, err
 	}
 	if values == nil {
-		return nil, &roachpb.DescriptorNotFoundError{DescriptorId: uint32(tableID)}
+		return nil, errDescriptorNotFound
 	}
 	desc := &sqlbase.Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {

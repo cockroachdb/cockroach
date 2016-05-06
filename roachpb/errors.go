@@ -598,13 +598,3 @@ func (*DescriptorDeletedError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &DescriptorDeletedError{}
-
-func (e *DescriptorNotFoundError) Error() string {
-	return e.message(nil)
-}
-
-func (e *DescriptorNotFoundError) message(_ *Error) string {
-	return fmt.Sprintf("descriptor ID %d not found", e.DescriptorId)
-}
-
-var _ ErrorDetailInterface = &DescriptorNotFoundError{}

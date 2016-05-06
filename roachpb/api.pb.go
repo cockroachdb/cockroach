@@ -110,7 +110,6 @@
 		RaftGroupDeletedError
 		ReplicaCorruptionError
 		DescriptorDeletedError
-		DescriptorNotFoundError
 		ErrorDetail
 		ErrPosition
 		Error

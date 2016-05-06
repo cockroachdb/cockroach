@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"time"
 
@@ -84,6 +85,8 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 	return &desc, nil
 }
 
+var errDescriptorNotFound = errors.New("descriptor not found")
+
 // get the table descriptor for the ID passed in using an existing txn.
 // returns an error if the descriptor doesn't exist or if it exists and is not
 // a table.
@@ -96,7 +99,7 @@ func getTableDescFromID(txn *client.Txn, id sqlbase.ID) (*sqlbase.TableDescripto
 	}
 	table := desc.GetTable()
 	if table == nil {
-		return nil, &roachpb.DescriptorNotFoundError{DescriptorId: uint32(id)}
+		return nil, errDescriptorNotFound
 	}
 	return table, nil
 }
@@ -158,7 +161,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		var err error
 		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if err != nil {
-			if _, ok := err.(*roachpb.DescriptorNotFoundError); ok {
+			if err == errDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
 				// table's name.
 				return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
