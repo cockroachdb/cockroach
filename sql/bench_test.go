@@ -375,6 +375,89 @@ func BenchmarkUpdate1000_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkUpdate1000)
 }
 
+// runBenchmarkUpsert benchmarks upserting count rows in a table.
+func runBenchmarkUpsert(b *testing.B, db *gosql.DB, count int) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.upsert`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE bench.upsert (k INT PRIMARY KEY, v INT)`); err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE bench.upsert`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	s := rand.New(rand.NewSource(5432))
+
+	b.ResetTimer()
+	// Upsert in Cockroach doesn't let you conflict the same row twice in one
+	// statement (fwiw, neither does Postgres), so build one statement that
+	// inserts half the values requested by `count` followed by a statement that
+	// updates each of the values just inserted. This also weighs the benchmark
+	// 50/50 for inserts vs updates.
+	var insertBuf bytes.Buffer
+	var updateBuf bytes.Buffer
+	key := 0
+	for i := 0; i < b.N; i++ {
+		// TODO(dan): Once the long form is implemented, use it here so we can have
+		// Postgres benchmarks.
+		insertBuf.Reset()
+		insertBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
+		updateBuf.Reset()
+		updateBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
+		j := 0
+		for ; j < count; j += 2 {
+			if j > 0 {
+				insertBuf.WriteString(`, `)
+				updateBuf.WriteString(`, `)
+			}
+			fmt.Fprintf(&insertBuf, "(%d, %d)", key, s.Int())
+			fmt.Fprintf(&updateBuf, "(%d, %d)", key, s.Int())
+			key++
+		}
+		insertBuf.WriteString(`; `)
+		updateBuf.WriteTo(&insertBuf)
+		if _, err := db.Exec(insertBuf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
+
+func runBenchmarkUpsert1(b *testing.B, db *gosql.DB) {
+	runBenchmarkUpsert(b, db, 1)
+}
+
+func runBenchmarkUpsert10(b *testing.B, db *gosql.DB) {
+	runBenchmarkUpsert(b, db, 10)
+}
+
+func runBenchmarkUpsert100(b *testing.B, db *gosql.DB) {
+	runBenchmarkUpsert(b, db, 100)
+}
+
+func runBenchmarkUpsert1000(b *testing.B, db *gosql.DB) {
+	runBenchmarkUpsert(b, db, 1000)
+}
+
+func BenchmarkUpsert1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpsert1)
+}
+
+func BenchmarkUpsert10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpsert10)
+}
+
+func BenchmarkUpsert100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpsert100)
+}
+
+func BenchmarkUpsert1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpsert1000)
+}
+
 // runBenchmarkDelete benchmarks deleting count rows from a table.
 func runBenchmarkDelete(b *testing.B, db *gosql.DB, rows int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.delete`); err != nil {
