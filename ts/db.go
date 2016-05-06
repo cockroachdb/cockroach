@@ -127,7 +127,7 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 	// Send the individual internal merge requests.
 	b := client.Batch{}
 	for _, kv := range kvs {
-		b.InternalAddRequest(&roachpb.MergeRequest{
+		b.AddRawRequest(&roachpb.MergeRequest{
 			Span: roachpb.Span{
 				Key: kv.Key,
 			},

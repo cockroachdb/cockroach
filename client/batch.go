@@ -21,6 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+const (
+	raw    = true
+	notRaw = false
+)
+
 // Batch provides for the parallel execution of a number of database
 // operations. Operations are added to the Batch and then the Batch is executed
 // via either DB.Run, Txn.Run or Txn.Commit.
@@ -49,6 +54,9 @@ type Batch struct {
 	// To be modified directly.
 	Header roachpb.Header
 	reqs   []roachpb.RequestUnion
+	// Set when AddRawRequest is used, in which case using the "other"
+	// operations renders the batch unusable.
+	raw bool
 	// Once received, the response from the sent batch.
 	response *roachpb.BatchResponse
 	pErr     *roachpb.Error
@@ -84,7 +92,10 @@ func (b *Batch) prepare() error {
 	return nil
 }
 
-func (b *Batch) initResult(calls, numRows int, err error) {
+func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
+	if err == nil && b.raw && !raw {
+		err = util.Errorf("must not use non-raw operations on a raw batch")
+	}
 	// TODO(tschottdorf): assert that calls is 0 or 1?
 	r := Result{calls: calls, Err: err}
 	if numRows > 0 {
@@ -271,9 +282,11 @@ func (b *Batch) appendReqs(args ...roachpb.Request) {
 	b.reqs = append(b.reqs, rus...)
 }
 
-// InternalAddRequest adds the specified requests to the batch. It is intended
-// for internal use only.
-func (b *Batch) InternalAddRequest(reqs ...roachpb.Request) {
+// AddRawRequest adds the specified requests to the batch. No responses will
+// be allocated for them, and using any of the non-raw operations will result
+// in an error when running the batch.
+func (b *Batch) AddRawRequest(reqs ...roachpb.Request) {
+	b.raw = true
 	for _, args := range reqs {
 		numRows := 0
 		switch args.(type) {
@@ -285,7 +298,7 @@ func (b *Batch) InternalAddRequest(reqs ...roachpb.Request) {
 			numRows = 1
 		}
 		b.appendReqs(args)
-		b.initResult(1 /* calls */, numRows, nil)
+		b.initResult(1 /* calls */, numRows, raw, nil)
 	}
 }
 
@@ -299,22 +312,22 @@ func (b *Batch) InternalAddRequest(reqs ...roachpb.Request) {
 func (b *Batch) Get(key interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewGet(k))
-	b.initResult(1, 1, nil)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 func (b *Batch) put(key, value interface{}, inline bool) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	v, err := marshalValue(value)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	if inline {
@@ -322,7 +335,7 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 	} else {
 		b.appendReqs(roachpb.NewPut(k, v))
 	}
-	b.initResult(1, 1, nil)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 // Put sets the value for a key.
@@ -363,21 +376,21 @@ func (b *Batch) PutInline(key, value interface{}) {
 func (b *Batch) CPut(key, value, expValue interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	v, err := marshalValue(value)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	ev, err := marshalValue(expValue)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewConditionalPut(k, v, ev))
-	b.initResult(1, 1, nil)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -389,16 +402,16 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 func (b *Batch) InitPut(key, value interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	v, err := marshalValue(value)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewInitPut(k, v))
-	b.initResult(1, 1, nil)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -412,22 +425,22 @@ func (b *Batch) InitPut(key, value interface{}) {
 func (b *Batch) Inc(key interface{}, value int64) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 1, err)
+		b.initResult(0, 1, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewIncrement(k, value))
-	b.initResult(1, 1, nil)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	end, err := marshalKey(e)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	if !isReverse {
@@ -435,7 +448,7 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 	} else {
 		b.appendReqs(roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
 	}
-	b.initResult(1, 0, nil)
+	b.initResult(1, 0, notRaw, nil)
 }
 
 // Scan retrieves the key/values between begin (inclusive) and end (exclusive) in
@@ -468,16 +481,16 @@ func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	end, err := marshalKey(e)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
-	b.initResult(1, 0, nil)
+	b.initResult(1, 0, notRaw, nil)
 }
 
 // ChangeFrozen attempts to freeze or unfreeze all Ranges with StartKey
@@ -485,17 +498,17 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 func (b *Batch) ChangeFrozen(s, e interface{}, mustVersion string, frozen bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	end, err := marshalKey(e)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewChangeFrozen(
 		roachpb.Key(begin), roachpb.Key(end), frozen, mustVersion))
-	b.initResult(1, 1, nil)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 // Del deletes one or more keys.
@@ -509,13 +522,13 @@ func (b *Batch) Del(keys ...interface{}) {
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
-			b.initResult(0, len(keys), err)
+			b.initResult(0, len(keys), notRaw, err)
 			return
 		}
 		reqs = append(reqs, roachpb.NewDelete(k))
 	}
 	b.appendReqs(reqs...)
-	b.initResult(len(reqs), len(reqs), nil)
+	b.initResult(len(reqs), len(reqs), notRaw, nil)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -527,24 +540,26 @@ func (b *Batch) Del(keys ...interface{}) {
 func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	end, err := marshalKey(e)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
-	b.initResult(1, 0, nil)
+	b.initResult(1, 0, notRaw, nil)
 }
+
+// TODO(tschottdorf): kill the below
 
 // adminMerge is only exported on DB. It is here for symmetry with the
 // other operations.
 func (b *Batch) adminMerge(key interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	req := &roachpb.AdminMergeRequest{
@@ -553,7 +568,7 @@ func (b *Batch) adminMerge(key interface{}) {
 		},
 	}
 	b.appendReqs(req)
-	b.initResult(1, 0, nil)
+	b.initResult(1, 0, notRaw, nil)
 }
 
 // adminSplit is only exported on DB. It is here for symmetry with the
@@ -561,7 +576,7 @@ func (b *Batch) adminMerge(key interface{}) {
 func (b *Batch) adminSplit(splitKey interface{}) {
 	k, err := marshalKey(splitKey)
 	if err != nil {
-		b.initResult(0, 0, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	req := &roachpb.AdminSplitRequest{
@@ -571,5 +586,5 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 	}
 	req.SplitKey = k
 	b.appendReqs(req)
-	b.initResult(1, 0, nil)
+	b.initResult(1, 0, notRaw, nil)
 }

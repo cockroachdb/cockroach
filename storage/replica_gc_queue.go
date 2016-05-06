@@ -100,7 +100,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ config.S
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
 	b := &client.Batch{}
-	b.InternalAddRequest(&roachpb.RangeLookupRequest{
+	b.AddRawRequest(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(desc.StartKey),
 		},
