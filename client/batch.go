@@ -42,7 +42,7 @@ type Batch struct {
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
 	Results []Result
-	reqs    []roachpb.Request
+	reqs    []roachpb.RequestUnion
 	// If nonzero, limits the total amount of key/values returned by all Scan/ReverseScan operations
 	// in the batch. This can only be used if all requests are of the same type, and that type is
 	// Scan or ReverseScan.
@@ -112,7 +112,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 		result := &b.Results[i]
 
 		for k := 0; k < result.calls; k++ {
-			args := b.reqs[offset+k]
+			args := b.reqs[offset+k].GetInner()
 
 			var reply roachpb.Response
 			if result.PErr == nil {
@@ -207,7 +207,8 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 
 			default:
 				if result.PErr == nil {
-					result.PErr = roachpb.NewErrorf("unsupported reply: %T", reply)
+					result.PErr = roachpb.NewErrorf("unsupported reply: %T for %T",
+						reply, args)
 				}
 
 				// Nothing to do for all methods below as they do not generate
@@ -240,6 +241,16 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 	return nil
 }
 
+func (b *Batch) appendReqs(args ...roachpb.Request) {
+	rus := make([]roachpb.RequestUnion, 0, len(args))
+	for _, arg := range args {
+		var ru roachpb.RequestUnion
+		ru.MustSetInner(arg)
+		rus = append(rus, ru)
+	}
+	b.reqs = append(b.reqs, rus...)
+}
+
 // InternalAddRequest adds the specified requests to the batch. It is intended
 // for internal use only.
 func (b *Batch) InternalAddRequest(reqs ...roachpb.Request) {
@@ -253,7 +264,7 @@ func (b *Batch) InternalAddRequest(reqs ...roachpb.Request) {
 			*roachpb.DeleteRequest:
 			numRows = 1
 		}
-		b.reqs = append(b.reqs, args)
+		b.appendReqs(args)
 		b.initResult(1 /* calls */, numRows, nil)
 	}
 }
@@ -271,7 +282,7 @@ func (b *Batch) Get(key interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewGet(k))
+	b.appendReqs(roachpb.NewGet(k))
 	b.initResult(1, 1, nil)
 }
 
@@ -287,9 +298,9 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 		return
 	}
 	if inline {
-		b.reqs = append(b.reqs, roachpb.NewPutInline(k, v))
+		b.appendReqs(roachpb.NewPutInline(k, v))
 	} else {
-		b.reqs = append(b.reqs, roachpb.NewPut(k, v))
+		b.appendReqs(roachpb.NewPut(k, v))
 	}
 	b.initResult(1, 1, nil)
 }
@@ -345,7 +356,7 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewConditionalPut(k, v, ev))
+	b.appendReqs(roachpb.NewConditionalPut(k, v, ev))
 	b.initResult(1, 1, nil)
 }
 
@@ -366,7 +377,7 @@ func (b *Batch) InitPut(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewInitPut(k, v))
+	b.appendReqs(roachpb.NewInitPut(k, v))
 	b.initResult(1, 1, nil)
 }
 
@@ -384,7 +395,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewIncrement(k, value))
+	b.appendReqs(roachpb.NewIncrement(k, value))
 	b.initResult(1, 1, nil)
 }
 
@@ -400,9 +411,9 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.reqs = append(b.reqs, roachpb.NewScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
+		b.appendReqs(roachpb.NewScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
 	} else {
-		b.reqs = append(b.reqs, roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
+		b.appendReqs(roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
 	}
 	b.initResult(1, 0, nil)
 }
@@ -445,7 +456,7 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
+	b.appendReqs(roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
 	b.initResult(1, 0, nil)
 }
 
@@ -462,8 +473,8 @@ func (b *Batch) ChangeFrozen(s, e interface{}, mustVersion string, frozen bool) 
 		b.initResult(0, 0, err)
 		return
 	}
-	b.reqs = append(b.reqs,
-		roachpb.NewChangeFrozen(roachpb.Key(begin), roachpb.Key(end), frozen, mustVersion))
+	b.appendReqs(roachpb.NewChangeFrozen(
+		roachpb.Key(begin), roachpb.Key(end), frozen, mustVersion))
 	b.initResult(1, 1, nil)
 }
 
@@ -474,7 +485,7 @@ func (b *Batch) ChangeFrozen(s, e interface{}, mustVersion string, frozen bool) 
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
-	var reqs []roachpb.Request
+	reqs := make([]roachpb.Request, 0, len(keys))
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
@@ -483,7 +494,7 @@ func (b *Batch) Del(keys ...interface{}) {
 		}
 		reqs = append(reqs, roachpb.NewDelete(k))
 	}
-	b.reqs = append(b.reqs, reqs...)
+	b.appendReqs(reqs...)
 	b.initResult(len(reqs), len(reqs), nil)
 }
 
@@ -504,7 +515,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
+	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
 	b.initResult(1, 0, nil)
 }
 
@@ -521,7 +532,7 @@ func (b *Batch) adminMerge(key interface{}) {
 			Key: k,
 		},
 	}
-	b.reqs = append(b.reqs, req)
+	b.appendReqs(req)
 	b.initResult(1, 0, nil)
 }
 
@@ -539,6 +550,6 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 		},
 	}
 	req.SplitKey = k
-	b.reqs = append(b.reqs, req)
+	b.appendReqs(req)
 	b.initResult(1, 0, nil)
 }

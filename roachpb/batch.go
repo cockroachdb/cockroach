@@ -150,7 +150,8 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 	return nil
 }
 
-// Add adds a request to the batch request.
+// Add adds a request to the batch request. It's a convenience method;
+// requests may also be added directly into the slice.
 func (ba *BatchRequest) Add(requests ...Request) {
 	for _, args := range requests {
 		ba.Requests = append(ba.Requests, RequestUnion{})
@@ -158,7 +159,8 @@ func (ba *BatchRequest) Add(requests ...Request) {
 	}
 }
 
-// Add adds a response to the batch response.
+// Add adds a response to the batch response. It's a convenience method;
+// responses may also be added directly.
 func (br *BatchResponse) Add(reply Response) {
 	br.Responses = append(br.Responses, ResponseUnion{})
 	br.Responses[len(br.Responses)-1].MustSetInner(reply)
