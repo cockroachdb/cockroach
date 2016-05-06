@@ -573,7 +573,7 @@ func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roa
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
 	b := &client.Batch{}
-	b.InternalAddRequest(&roachpb.RangeLookupRequest{
+	b.AddRawRequest(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(key),
 		},

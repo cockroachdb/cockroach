@@ -192,7 +192,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 			args.SetHeader(header)
 		}
 		b := &client.Batch{}
-		b.InternalAddRequest(args)
+		b.AddRawRequest(args)
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())

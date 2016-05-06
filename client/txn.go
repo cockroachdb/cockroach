@@ -400,8 +400,7 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 	if txn != b.txn {
 		return util.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.appendReqs(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
-	b.initResult(1, 0, nil)
+	b.AddRawRequest(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
 	err := txn.Run(b)
 	if err == nil {
 		txn.finalized = true
