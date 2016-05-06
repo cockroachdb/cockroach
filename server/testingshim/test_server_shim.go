@@ -30,9 +30,9 @@ type TestServerInterface interface {
 	// ServingAddr returns the server's address.
 	ServingAddr() string
 
-	// ClientDB() returns a *client.DB instance for talking to this server, as
-	// an interface{}.
-	ClientDB() interface{}
+	// KVClient() returns a *client.DB instance for talking to this KV server,
+	// as an interface{}.
+	KVClient() interface{}
 
 	// KVDB() returns the *kv.DB instance as an interface{}.
 	KVDB() interface{}
@@ -64,12 +64,7 @@ func InitTestServerFactory(impl TestServerFactory) {
 	serviceImpl = impl
 }
 
-// NewTestServerWithParams creates a new test server with the given parameters.
-func NewTestServerWithParams(params TestServerParams) TestServerInterface {
+// NewTestServer creates a new test server with the given parameters.
+func NewTestServer(params TestServerParams) TestServerInterface {
 	return serviceImpl.New(params)
-}
-
-// NewTestServer creates a new test server with default parameters.
-func NewTestServer() TestServerInterface {
-	return NewTestServerWithParams(TestServerParams{})
 }

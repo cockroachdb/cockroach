@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql_test
+package sql
 
 import (
 	"testing"
@@ -23,9 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -33,9 +33,8 @@ import (
 func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, _ := createTestServerContext()
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
-	defer cleanup(server, sqlDB)
+	_, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
+	defer cleanup()
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE test;
@@ -46,20 +45,20 @@ func TestTableReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	td := getTableDescriptor(kvDB, "test", "t")
+	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	ts := sql.TableReaderSpec{
+	ts := TableReaderSpec{
 		Table:         *td,
 		IndexIdx:      0,
 		Reverse:       false,
 		Spans:         nil,
-		Filter:        sql.Expression{Expr: "$2 != 21"}, // c != 21
-		OutputColumns: []uint32{0, 3},                   // a, d
+		Filter:        Expression{Expr: "$2 != 21"}, // c != 21
+		OutputColumns: []uint32{0, 3},               // a, d
 	}
 
 	txn := client.NewTxn(context.Background(), *kvDB)
 
-	tr, err := sql.NewTableReader(&ts, txn, parser.EvalContext{})
+	tr, err := NewTableReader(&ts, txn, parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,15 +80,15 @@ func TestTableReader(t *testing.T) {
 	span.Key = roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.ID, td.Indexes[0].ID))
 	span.EndKey = append(span.Key, encoding.EncodeVarintAscending(nil, 50)...)
 
-	ts = sql.TableReaderSpec{
+	ts = TableReaderSpec{
 		Table:         *td,
 		IndexIdx:      1,
 		Reverse:       true,
-		Spans:         []sql.TableReaderSpan{{Span: span}},
-		Filter:        sql.Expression{Expr: "$1 != 30"}, // b != 30
-		OutputColumns: []uint32{0, 1},                   // a, c
+		Spans:         []TableReaderSpan{{Span: span}},
+		Filter:        Expression{Expr: "$1 != 30"}, // b != 30
+		OutputColumns: []uint32{0, 1},               // a, c
 	}
-	tr, err = sql.NewTableReader(&ts, txn, parser.EvalContext{})
+	tr, err = NewTableReader(&ts, txn, parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
