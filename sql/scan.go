@@ -149,7 +149,7 @@ func (n *scanNode) debugNext() bool {
 	}
 
 	if n.row != nil {
-		passesFilter, err := runFilter(n.filter, n.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, n.planner.evalCtx)
 		if err != nil {
 			n.err = err
 			return false
@@ -188,7 +188,7 @@ func (n *scanNode) Next() bool {
 		if n.err != nil || n.row == nil {
 			return false
 		}
-		passesFilter, err := runFilter(n.filter, n.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, n.planner.evalCtx)
 		if err != nil {
 			n.err = err
 			return false
