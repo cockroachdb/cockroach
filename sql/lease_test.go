@@ -349,34 +349,6 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
-func getTableDescriptor(db *client.DB, database string, table string) *sqlbase.TableDescriptor {
-	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, database)
-	gr, err := db.Get(dbNameKey)
-	if err != nil {
-		panic(err)
-	}
-	if !gr.Exists() {
-		panic("database missing")
-	}
-	dbDescID := sqlbase.ID(gr.ValueInt())
-
-	tableNameKey := sqlbase.MakeNameMetadataKey(dbDescID, table)
-	gr, err = db.Get(tableNameKey)
-	if err != nil {
-		panic(err)
-	}
-	if !gr.Exists() {
-		panic("table missing")
-	}
-
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := db.GetProto(descKey, desc); err != nil {
-		panic("proto missing")
-	}
-	return desc.GetTable()
-}
-
 // Test that we fail to lease a table that was marked for deletion.
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
@@ -420,7 +392,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Make sure we can't get a lease on the descriptor.
-	tableDesc := getTableDescriptor(t.kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "test", "t")
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
@@ -500,7 +472,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := getTableDescriptor(kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	lease1, err := acquire(s.TestServer, tableDesc.ID, 0)
 	if err != nil {
