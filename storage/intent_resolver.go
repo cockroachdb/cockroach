@@ -218,7 +218,8 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	// pErr in the caller. Stop using the external RunWithResponse() interface for
 	// running this internal batch. Instead use the TxnCoordSender directly, and make
 	// this function return pErr.
-	br, err := ir.store.db.RunWithResponse(b)
+	err := ir.store.db.Run(b)
+	br := b.RawResponse()
 	ir.mu.Lock()
 	for _, intent := range pushIntents {
 		ir.mu.inFlight[*intent.Txn.ID]--

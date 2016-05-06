@@ -354,17 +354,11 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 
 // Run implements Runner.Run(). See comments there.
 func (txn *Txn) Run(b *Batch) error {
-	_, err := txn.RunWithResponse(b)
-	return err
-}
-
-// RunWithResponse is a version of Run that returns the BatchResponse.
-func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
 	if err := b.prepare(); err != nil {
-		return nil, err
+		return err
 	}
 	return sendAndFill(txn.send, b)
 }
@@ -403,23 +397,16 @@ func (txn *Txn) Commit() error {
 // error, no attempt is made to clean up the (possibly still pending)
 // transaction.
 func (txn *Txn) CommitInBatch(b *Batch) error {
-	_, err := txn.CommitInBatchWithResponse(b)
-	return err
-}
-
-// CommitInBatchWithResponse is a version of CommitInBatch that returns the
-// BatchResponse.
-func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	if txn != b.txn {
-		return nil, util.Errorf("a batch b can only be committed by b.txn")
+		return util.Errorf("a batch b can only be committed by b.txn")
 	}
 	b.appendReqs(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
 	b.initResult(1, 0, nil)
-	resp, err := txn.RunWithResponse(b)
+	err := txn.Run(b)
 	if err == nil {
 		txn.finalized = true
 	}
-	return resp, err
+	return err
 }
 
 // CommitOrCleanup sends an EndTransactionRequest with Commit=true.
