@@ -1946,6 +1946,11 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // existing values during the MVCC write.
 func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 	var iter engine.Iterator
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+	}()
 
 	processPuts := func(startIdx, count int, minKey, maxKey roachpb.Key) {
 		if count < optimizePutThreshold { // don't bother if below this threshold
@@ -1980,7 +1985,14 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 
 	var putCount int
 	var minKey, maxKey roachpb.Key
-	addPut := func(key roachpb.Key) {
+	var duplicate bool
+	unique := make(map[string]struct{}, len(reqs))
+	maybeAddPut := func(key roachpb.Key) {
+		if _, ok := unique[string(key)]; ok {
+			duplicate = true
+			return
+		}
+		unique[string(key)] = struct{}{}
 		putCount++
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
@@ -1989,23 +2001,25 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 			maxKey = key
 		}
 	}
+
 	for i, r := range reqs {
 		switch t := r.GetInner().(type) {
 		case *roachpb.PutRequest:
-			addPut(t.Key)
+			maybeAddPut(t.Key)
 		case *roachpb.ConditionalPutRequest:
-			addPut(t.Key)
+			maybeAddPut(t.Key)
 		default:
 			processPuts(i-putCount, putCount, minKey, maxKey)
 			putCount = 0
 			minKey = nil
 			maxKey = nil
 		}
+		if duplicate {
+			processPuts(i-putCount, putCount, minKey, maxKey)
+			return
+		}
 	}
 	processPuts(len(reqs)-putCount, putCount, minKey, maxKey)
-	if iter != nil {
-		iter.Close()
-	}
 }
 
 func (r *Replica) executeBatch(
@@ -2023,9 +2037,7 @@ func (r *Replica) executeBatch(
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
-	if len(ba.Requests) >= optimizePutThreshold {
-		optimizePuts(batch, ba.Requests)
-	}
+	optimizePuts(batch, ba.Requests)
 
 	for index, union := range ba.Requests {
 		// Execute the command.
