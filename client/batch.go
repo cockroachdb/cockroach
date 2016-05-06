@@ -49,12 +49,20 @@ type Batch struct {
 	// To be modified directly.
 	Header roachpb.Header
 	reqs   []roachpb.RequestUnion
+	// Once received, the response from the sent batch.
+	response *roachpb.BatchResponse
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
 	rowsBuf       []KeyValue
 	rowsStaticBuf [8]KeyValue
 	rowsStaticIdx int
+}
+
+// RawResponse returns the BatchResponse which was the result of a successful
+// execution of the batch, and nil otherwise.
+func (b *Batch) RawResponse() *roachpb.BatchResponse {
+	return b.response
 }
 
 func (b *Batch) prepare() error {
@@ -105,7 +113,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 }
 
 // Returns the first error.
-func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) error {
+func (b *Batch) fillResults(pErr *roachpb.Error) error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -117,8 +125,8 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 			if result.PErr == nil {
 				result.PErr = pErr
 				if result.PErr == nil {
-					if br != nil && offset+k < len(br.Responses) {
-						reply = br.Responses[offset+k].GetInner()
+					if b.response != nil && offset+k < len(b.response.Responses) {
+						reply = b.response.Responses[offset+k].GetInner()
 					} else if args.Method() != roachpb.EndTransaction {
 						// TODO(tschottdorf): EndTransaction is special-cased
 						// here because it may be elided (r/o txns). Might
@@ -127,7 +135,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 						// TODO(tschottdorf): returning an error here seems
 						// to get swallowed.
 						panic(util.Errorf("not enough responses for calls: %+v, %+v",
-							b.reqs, br))
+							b.reqs, b.response))
 					}
 				}
 			}

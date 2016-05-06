@@ -396,7 +396,7 @@ func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 func sendAndFill(
 	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 	b *Batch,
-) (*roachpb.BatchResponse, error) {
+) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
@@ -408,28 +408,23 @@ func sendAndFill(
 	// original data (as can readily be seen by a whole bunch of test failures.
 	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
 	ba.Header = b.Header
-	br, pErr := send(ba)
+	var pErr *roachpb.Error
+	b.response, pErr = send(ba)
 	if pErr != nil {
 		// Discard errors from fillResults.
-		_ = b.fillResults(nil, pErr)
-		return nil, pErr.GoError()
+		_ = b.fillResults(pErr)
+		return pErr.GoError()
 	}
-	if err := b.fillResults(br, nil); err != nil {
-		return nil, err
+	if err := b.fillResults(nil); err != nil {
+		return err
 	}
-	return br, nil
+	return nil
 }
 
 // Run implements Runner.Run(). See comments there.
 func (db *DB) Run(b *Batch) error {
-	_, err := db.RunWithResponse(b)
-	return err
-}
-
-// RunWithResponse is a version of Run that returns the BatchResponse.
-func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	if err := b.prepare(); err != nil {
-		return nil, err
+		return err
 	}
 	return sendAndFill(db.send, b)
 }

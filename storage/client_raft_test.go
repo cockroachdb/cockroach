@@ -580,10 +580,10 @@ func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roa
 		MaxRanges: 1,
 	})
 	var reply *roachpb.RangeLookupResponse
-	if br, err := mtc.dbs[0].RunWithResponse(b); err != nil {
+	if err := mtc.dbs[0].Run(b); err != nil {
 		t.Fatalf("error getting range metadata: %s", err)
 	} else {
-		reply = br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
+		reply = b.RawResponse().Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 	}
 	if a, e := len(reply.Ranges), 1; a != e {
 		t.Fatalf("expected %d range descriptor, got %d", e, a)
