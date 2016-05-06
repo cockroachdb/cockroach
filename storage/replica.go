@@ -1951,6 +1951,11 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // existing values during the MVCC write.
 func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 	var iter engine.Iterator
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+	}()
 
 	processPuts := func(startIdx, count int, minKey, maxKey roachpb.Key) {
 		if count < optimizePutThreshold { // don't bother if below this threshold
@@ -1985,7 +1990,14 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 
 	var putCount int
 	var minKey, maxKey roachpb.Key
-	addPut := func(key roachpb.Key) {
+	unique := make(map[string]struct{}, len(reqs))
+	// Returns false on occurrence of a duplicate key.
+	maybeAddPut := func(key roachpb.Key) bool {
+		// Note that casting the byte slice key to a string does not allocate.
+		if _, ok := unique[string(key)]; ok {
+			return false
+		}
+		unique[string(key)] = struct{}{}
 		putCount++
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
@@ -1993,24 +2005,26 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 		if maxKey == nil || bytes.Compare(key, maxKey) > 0 {
 			maxKey = key
 		}
+		return true
 	}
+
 	for i, r := range reqs {
 		switch t := r.GetInner().(type) {
 		case *roachpb.PutRequest:
-			addPut(t.Key)
+			if maybeAddPut(t.Key) {
+				continue
+			}
 		case *roachpb.ConditionalPutRequest:
-			addPut(t.Key)
-		default:
-			processPuts(i-putCount, putCount, minKey, maxKey)
-			putCount = 0
-			minKey = nil
-			maxKey = nil
+			if maybeAddPut(t.Key) {
+				continue
+			}
 		}
+		processPuts(i-putCount, putCount, minKey, maxKey)
+		putCount = 0
+		minKey = nil
+		maxKey = nil
 	}
 	processPuts(len(reqs)-putCount, putCount, minKey, maxKey)
-	if iter != nil {
-		iter.Close()
-	}
 }
 
 func (r *Replica) executeBatch(
@@ -2028,9 +2042,7 @@ func (r *Replica) executeBatch(
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
-	if len(ba.Requests) >= optimizePutThreshold {
-		optimizePuts(batch, ba.Requests)
-	}
+	optimizePuts(batch, ba.Requests)
 
 	for index, union := range ba.Requests {
 		// Execute the command.
