@@ -741,6 +741,29 @@ func TestRSpanContains(t *testing.T) {
 	}
 }
 
+// TestRSpanContainsEndKey verifies  methods to check whether a key
+// or key range is contained within the span.
+func TestRSpanContainsEndKey(t *testing.T) {
+	rs := RSpan{Key: []byte("b"), EndKey: []byte("c")}
+
+	testData := []struct {
+		key      RKey
+		contains bool
+	}{
+		// Single keys.
+		{RKey("a"), false},
+		{RKey("b"), false},
+		{RKey("bb"), true},
+		{RKey("c"), true},
+		{RKey("c").Next(), false},
+	}
+	for i, test := range testData {
+		if rs.ContainsEndKey(test.key) != test.contains {
+			t.Errorf("%d: expected key %q within range", i, test.key)
+		}
+	}
+}
+
 // TestRSpanIntersect verifies rSpan.intersect.
 func TestRSpanIntersect(t *testing.T) {
 	rs := RSpan{Key: RKey("b"), EndKey: RKey("e")}
