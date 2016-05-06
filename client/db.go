@@ -416,8 +416,7 @@ func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(int64, roachpb.ReadConsistencyType, ...roachpb.Request,
-	) (*roachpb.BatchResponse, *roachpb.Error),
+	send func(roachpb.Header, ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error),
 	b *Batch,
 ) (*roachpb.BatchResponse, error) {
 	// Errors here will be attached to the results, so we will get them from
@@ -425,7 +424,10 @@ func sendAndFill(
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	br, pErr := send(b.MaxScanResults, b.ReadConsistency, b.reqs...)
+	var ba roachpb.BatchRequest // TODO
+	ba.MaxScanResults = b.MaxScanResults
+	ba.ReadConsistency = b.ReadConsistency
+	br, pErr := send(ba.Header, b.reqs...)
 	if pErr != nil {
 		// Discard errors from fillResults.
 		_ = b.fillResults(nil, pErr)
@@ -481,13 +483,13 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns a nil response for empty input (no requests).
-func (db *DB) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType,
+func (db *DB) send(h roachpb.Header,
 	reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(reqs) == 0 {
 		return nil, nil
 	}
 
-	if readConsistency == roachpb.INCONSISTENT {
+	if h.ReadConsistency == roachpb.INCONSISTENT {
 		for _, req := range reqs {
 			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
 				req.Method() != roachpb.ReverseScan {
@@ -496,14 +498,14 @@ func (db *DB) send(maxScanResults int64, readConsistency roachpb.ReadConsistency
 		}
 	}
 
-	ba := roachpb.BatchRequest{}
+	ba := roachpb.BatchRequest{
+		Header: h,
+	}
 	ba.Add(reqs...)
 
-	ba.MaxScanResults = maxScanResults
 	if db.userPriority != 1 {
 		ba.UserPriority = db.userPriority
 	}
-	ba.ReadConsistency = readConsistency
 
 	tracing.AnnotateTrace()
 
