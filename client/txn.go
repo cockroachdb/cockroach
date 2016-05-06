@@ -451,9 +451,9 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
-	var ru roachpb.RequestUnion
-	ru.MustSetInner(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
-	_, err := txn.send(roachpb.Header{}, []roachpb.RequestUnion{ru})
+	var ba roachpb.BatchRequest
+	ba.Add(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	_, err := txn.send(ba)
 	return err.GoError()
 }
 
@@ -596,7 +596,7 @@ RetryLoop:
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(h roachpb.Header, reqs []roachpb.RequestUnion) (
+func (txn *Txn) send(ba roachpb.BatchRequest) (
 	*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
@@ -606,12 +606,12 @@ func (txn *Txn) send(h roachpb.Header, reqs []roachpb.RequestUnion) (
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
-	if h.ReadConsistency != roachpb.CONSISTENT {
+	if ba.ReadConsistency != roachpb.CONSISTENT {
 		return nil, roachpb.NewErrorf("cannot use %d ReadConsistency in txn",
-			h.ReadConsistency)
+			ba.ReadConsistency)
 	}
 
-	lastIndex := len(reqs) - 1
+	lastIndex := len(ba.Requests) - 1
 	if lastIndex < 0 {
 		return &roachpb.BatchResponse{}, nil
 	}
@@ -624,7 +624,7 @@ func (txn *Txn) send(h roachpb.Header, reqs []roachpb.RequestUnion) (
 	firstWriteIndex := -1
 	var firstWriteKey roachpb.Key
 
-	for i, ru := range reqs {
+	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < lastIndex {
 			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
@@ -638,7 +638,7 @@ func (txn *Txn) send(h roachpb.Header, reqs []roachpb.RequestUnion) (
 	}
 
 	haveTxnWrite := firstWriteIndex != -1
-	endTxnRequest, haveEndTxn := reqs[lastIndex].GetInner().(*roachpb.EndTransactionRequest)
+	endTxnRequest, haveEndTxn := ba.Requests[lastIndex].GetInner().(*roachpb.EndTransactionRequest)
 	needBeginTxn := !txn.Proto.Writing && haveTxnWrite
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
 	elideEndTxn := haveEndTxn && !needEndTxn
@@ -659,14 +659,16 @@ func (txn *Txn) send(h roachpb.Header, reqs []roachpb.RequestUnion) (
 
 		var bt roachpb.RequestUnion
 		bt.MustSetInner(req)
-		reqs = append(append(append([]roachpb.RequestUnion(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
+		ba.Requests = append(append(
+			append([]roachpb.RequestUnion(nil), ba.Requests[:firstWriteIndex]...), bt),
+			ba.Requests[firstWriteIndex:]...)
 	}
 
 	if elideEndTxn {
-		reqs = reqs[:lastIndex]
+		ba.Requests = ba.Requests[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(h, reqs)
+	br, pErr := txn.db.send(ba)
 	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline.
 		if endTxnRequest.Deadline != nil {

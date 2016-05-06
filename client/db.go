@@ -416,7 +416,7 @@ func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(roachpb.Header, []roachpb.RequestUnion) (*roachpb.BatchResponse, *roachpb.Error),
+	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 	b *Batch,
 ) (*roachpb.BatchResponse, error) {
 	// Errors here will be attached to the results, so we will get them from
@@ -430,8 +430,8 @@ func sendAndFill(
 	// TODO(tschottdorf): this nonsensical copy is required since at the time
 	// of writing, the chunking and masking code in DistSender operates on the
 	// original data (as can readily be seen by a whole bunch of test failures.
-	reqs := append([]roachpb.RequestUnion(nil), b.reqs...) // HACK
-	br, pErr := send(ba.Header, reqs)
+	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
+	br, pErr := send(ba)
 	if pErr != nil {
 		// Discard errors from fillResults.
 		_ = b.fillResults(nil, pErr)
@@ -487,14 +487,15 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns a nil response for empty input (no requests).
-func (db *DB) send(h roachpb.Header,
-	reqs []roachpb.RequestUnion) (*roachpb.BatchResponse, *roachpb.Error) {
-	if len(reqs) == 0 {
+func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	if len(ba.Requests) == 0 {
+		// TODO (tschottdorf): Should probably still return a BatchResponse in
+		// this case.
 		return nil, nil
 	}
 
-	if h.ReadConsistency == roachpb.INCONSISTENT {
-		for _, ru := range reqs {
+	if ba.ReadConsistency == roachpb.INCONSISTENT {
+		for _, ru := range ba.Requests {
 			req := ru.GetInner()
 			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
 				req.Method() != roachpb.ReverseScan {
@@ -502,11 +503,6 @@ func (db *DB) send(h roachpb.Header,
 			}
 		}
 	}
-
-	ba := roachpb.BatchRequest{
-		Header: h,
-	}
-	ba.Requests = reqs
 
 	if db.userPriority != 1 {
 		ba.UserPriority = db.userPriority
