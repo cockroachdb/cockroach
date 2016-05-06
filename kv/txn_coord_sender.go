@@ -959,8 +959,8 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 			req := arg.GetInner()
 			b.InternalAddRequest(req)
 		}
-		var err error
-		br, err = txn.CommitInBatchWithResponse(b)
+		err := txn.CommitInBatch(b)
+		br = b.RawResponse()
 		return err
 	})
 	if err != nil {
