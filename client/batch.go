@@ -51,6 +51,7 @@ type Batch struct {
 	reqs   []roachpb.RequestUnion
 	// Once received, the response from the sent batch.
 	response *roachpb.BatchResponse
+	pErr     *roachpb.Error
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
@@ -65,10 +66,19 @@ func (b *Batch) RawResponse() *roachpb.BatchResponse {
 	return b.response
 }
 
+// MustPErr returns the structured error resulting from a failed execution of
+// the batch, asserting that that error is non-nil.
+func (b *Batch) MustPErr() *roachpb.Error {
+	if b.pErr == nil {
+		panic(util.Errorf("expected non-nil pErr"))
+	}
+	return b.pErr
+}
+
 func (b *Batch) prepare() error {
 	for _, r := range b.Results {
-		if r.Err() != nil {
-			return r.Err()
+		if r.Err != nil {
+			return r.Err
 		}
 	}
 	return nil
@@ -76,7 +86,7 @@ func (b *Batch) prepare() error {
 
 func (b *Batch) initResult(calls, numRows int, err error) {
 	// TODO(tschottdorf): assert that calls is 0 or 1?
-	r := Result{calls: calls, PErr: roachpb.NewError(err)}
+	r := Result{calls: calls, Err: err}
 	if numRows > 0 {
 		if b.rowsStaticIdx+numRows <= len(b.rowsStaticBuf) {
 			r.Rows = b.rowsStaticBuf[b.rowsStaticIdx : b.rowsStaticIdx+numRows]
@@ -113,7 +123,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 }
 
 // Returns the first error.
-func (b *Batch) fillResults(pErr *roachpb.Error) error {
+func (b *Batch) fillResults() error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -122,9 +132,9 @@ func (b *Batch) fillResults(pErr *roachpb.Error) error {
 			args := b.reqs[offset+k].GetInner()
 
 			var reply roachpb.Response
-			if result.PErr == nil {
-				result.PErr = pErr
-				if result.PErr == nil {
+			if result.Err == nil {
+				result.Err = b.pErr.GoError()
+				if result.Err == nil {
 					if b.response != nil && offset+k < len(b.response.Responses) {
 						reply = b.response.Responses[offset+k].GetInner()
 					} else if args.Method() != roachpb.EndTransaction {
@@ -144,37 +154,37 @@ func (b *Batch) fillResults(pErr *roachpb.Error) error {
 			case *roachpb.GetRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.Err() == nil {
+				if result.Err == nil {
 					row.Value = reply.(*roachpb.GetResponse).Value
 				}
 			case *roachpb.PutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.Err() == nil {
+				if result.Err == nil {
 					row.Value = &req.Value
 				}
 			case *roachpb.ConditionalPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.Err() == nil {
+				if result.Err == nil {
 					row.Value = &req.Value
 				}
 			case *roachpb.InitPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.Err() == nil {
+				if result.Err == nil {
 					row.Value = &req.Value
 				}
 			case *roachpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.Err() == nil {
+				if result.Err == nil {
 					t := reply.(*roachpb.IncrementResponse)
 					row.Value = &roachpb.Value{}
 					row.Value.SetInt(t.NewValue)
 				}
 			case *roachpb.ScanRequest:
-				if result.Err() == nil {
+				if result.Err == nil {
 					t := reply.(*roachpb.ScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
@@ -185,7 +195,7 @@ func (b *Batch) fillResults(pErr *roachpb.Error) error {
 					}
 				}
 			case *roachpb.ReverseScanRequest:
-				if result.Err() == nil {
+				if result.Err == nil {
 					t := reply.(*roachpb.ReverseScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
@@ -200,14 +210,14 @@ func (b *Batch) fillResults(pErr *roachpb.Error) error {
 				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
 
 			case *roachpb.DeleteRangeRequest:
-				if result.Err() == nil {
+				if result.Err == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
 			case *roachpb.ChangeFrozenRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.PErr == nil {
+				if result.Err == nil {
 					t := reply.(*roachpb.ChangeFrozenResponse)
 					row.Value = &roachpb.Value{}
 					if err := row.Value.SetProto(t); err != nil {
@@ -216,8 +226,8 @@ func (b *Batch) fillResults(pErr *roachpb.Error) error {
 				}
 
 			default:
-				if result.PErr == nil {
-					result.PErr = roachpb.NewErrorf("unsupported reply: %T for %T",
+				if result.Err == nil {
+					result.Err = util.Errorf("unsupported reply: %T for %T",
 						reply, args)
 				}
 
@@ -244,8 +254,8 @@ func (b *Batch) fillResults(pErr *roachpb.Error) error {
 
 	for i := range b.Results {
 		result := &b.Results[i]
-		if result.PErr != nil {
-			return result.Err()
+		if result.Err != nil {
+			return result.Err
 		}
 	}
 	return nil

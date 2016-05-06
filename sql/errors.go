@@ -133,7 +133,8 @@ func (e *errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origPErr *roachpb.Error) error {
+func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
+	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
 	}

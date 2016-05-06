@@ -73,9 +73,7 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func convertBackfillError(
-	tableDesc *sqlbase.TableDescriptor, b *client.Batch, pErr *roachpb.Error,
-) error {
+func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// convertBatchError() will only work correctly if the schema elements are
@@ -91,7 +89,7 @@ func convertBackfillError(
 		}
 		tableDesc.MakeMutationComplete(mutation)
 	}
-	return convertBatchError(tableDesc, *b, pErr)
+	return convertBatchError(tableDesc, b)
 }
 
 // runBackfill runs the backfill for the schema changer.
@@ -345,12 +343,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			}
 		}
 		if err := txn.Run(writeBatch); err != nil {
-			for _, r := range writeBatch.Results {
-				if r.PErr != nil {
-					return convertBackfillError(tableDesc, writeBatch, r.PErr)
-				}
-			}
-			return err
+			return convertBackfillError(tableDesc, writeBatch)
 		}
 		return nil
 	})
@@ -508,12 +501,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		}
 		// Write the new index values.
 		if err := txn.Run(b); err != nil {
-			for _, r := range b.Results {
-				if r.PErr != nil {
-					return convertBackfillError(tableDesc, b, r.PErr)
-				}
-			}
-			return err
+			return convertBackfillError(tableDesc, b)
 		}
 		// Have we processed all the table rows?
 		if numRows < IndexBackfillChunkSize {
