@@ -45,14 +45,10 @@ type Batch struct {
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
 	Results []Result
-	reqs    []roachpb.RequestUnion
-	// If nonzero, limits the total amount of key/values returned by all Scan/ReverseScan operations
-	// in the batch. This can only be used if all requests are of the same type, and that type is
-	// Scan or ReverseScan.
-	MaxScanResults int64
-	// ReadConsistency specifies the consistency for read operations. The default
-	// is CONSISTENT. This value is ignored for write operations.
-	ReadConsistency roachpb.ReadConsistencyType
+	// The Header which will be used to send the resulting BatchRequest.
+	// To be modified directly.
+	Header roachpb.Header
+	reqs   []roachpb.RequestUnion
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
