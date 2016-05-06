@@ -451,7 +451,7 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
-	_, err := txn.send(0, roachpb.CONSISTENT, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	_, err := txn.send(roachpb.Header{}, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
 	return err.GoError()
 }
 
@@ -594,7 +594,7 @@ RetryLoop:
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType, reqs ...roachpb.Request) (
+func (txn *Txn) send(h roachpb.Header, reqs ...roachpb.Request) (
 	*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
@@ -604,8 +604,9 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
-	if readConsistency != roachpb.CONSISTENT {
-		return nil, roachpb.NewErrorf("attempting to use %d readConsistency in a txn", readConsistency)
+	if h.ReadConsistency != roachpb.CONSISTENT {
+		return nil, roachpb.NewErrorf("cannot use %d ReadConsistency in txn",
+			h.ReadConsistency)
 	}
 
 	lastIndex := len(reqs) - 1
@@ -659,7 +660,7 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 		reqs = reqs[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)
+	br, pErr := txn.db.send(h, reqs...)
 	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline.
 		if endTxnRequest.Deadline != nil {
