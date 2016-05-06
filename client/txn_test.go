@@ -345,7 +345,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 		b := txn.NewBatch()
 		b.Put("a", "b")
 		_, err := runOneResult(txn, b)
-		pErr := b.Results[0].PErr
+		pErr := b.MustPErr()
 		// Verify that the original error type is preserved, but the error index is unset.
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 			t.Fatalf("unexpected error %s", pErr)

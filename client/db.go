@@ -120,9 +120,8 @@ func (kv *KeyValue) ValueProto(msg proto.Message) error {
 // etc).
 type Result struct {
 	calls int
-	// PErr contains any error encountered when performing the operation.
-	// Code that doesn't need a pErr (so, most code) should use Err() instead.
-	PErr *roachpb.Error
+	// Err contains any error encountered when performing the operation.
+	Err error
 	// Rows contains the key/value pairs for the operation. The number of rows
 	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
 	// of rows returned is the number of keys operated on. For Scan the number of
@@ -134,14 +133,9 @@ type Result struct {
 	Keys []roachpb.Key
 }
 
-// Err returns the error that encountered when performing the operation, if any.
-func (r Result) Err() error {
-	return r.PErr.GoError()
-}
-
 func (r Result) String() string {
-	if r.Err() != nil {
-		return r.Err().Error()
+	if r.Err != nil {
+		return r.Err.Error()
 	}
 	var buf bytes.Buffer
 	for i, row := range r.Rows {
@@ -408,14 +402,14 @@ func sendAndFill(
 	// original data (as can readily be seen by a whole bunch of test failures.
 	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
 	ba.Header = b.Header
-	var pErr *roachpb.Error
-	b.response, pErr = send(ba)
-	if pErr != nil {
+	b.response, b.pErr = send(ba)
+	if b.pErr != nil {
 		// Discard errors from fillResults.
-		_ = b.fillResults(pErr)
-		return pErr.GoError()
+		_ = b.fillResults()
+		return b.pErr.GoError()
 	}
-	if err := b.fillResults(nil); err != nil {
+	if err := b.fillResults(); err != nil {
+		b.pErr = roachpb.NewError(err)
 		return err
 	}
 	return nil
@@ -511,12 +505,12 @@ type Runner interface {
 func runOneResult(r Runner, b *Batch) (Result, error) {
 	if err := r.Run(b); err != nil {
 		if len(b.Results) > 0 {
-			return b.Results[0], b.Results[0].Err()
+			return b.Results[0], b.Results[0].Err
 		}
-		return Result{PErr: roachpb.NewError(err)}, err
+		return Result{Err: err}, err
 	}
 	res := b.Results[0]
-	if res.Err() != nil {
+	if res.Err != nil {
 		panic("r.Run() succeeded even through the result has an error")
 	}
 	return res, nil
