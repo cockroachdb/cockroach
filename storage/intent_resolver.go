@@ -74,8 +74,12 @@ func newIntentResolver(store *Store) *intentResolver {
 // set to tell the client to retry immediately; otherwise it is false
 // to cause the client to back off).
 func (ir *intentResolver) processWriteIntentError(ctx context.Context,
-	wiErr roachpb.WriteIntentError, r *Replica, args roachpb.Request, h roachpb.Header,
-	pushType roachpb.PushTxnType) error {
+	wiPErr *roachpb.Error, r *Replica, args roachpb.Request, h roachpb.Header,
+	pushType roachpb.PushTxnType) *roachpb.Error {
+	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
+	if !ok {
+		return roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
+	}
 
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
@@ -112,13 +116,13 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 		// conflicts, return the write intent error which engages
 		// backoff/retry (with !Resolved). We don't need to restart the
 		// txn, only resend the read with a backoff.
-		return &wiErr
+		return wiPErr
 	}
 
 	// We pushed all transactions, so tell the client everything's
 	// resolved and it can retry immediately.
 	wiErr.Resolved = true
-	return &wiErr
+	return wiPErr // references wiErr
 }
 
 // maybePushTransactions tries to push the conflicting transaction(s)
@@ -147,7 +151,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 //    in non-pending state and doesn't require a push.
 func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []roachpb.Intent,
 	h roachpb.Header, pushType roachpb.PushTxnType, skipIfInFlight bool) (
-	[]roachpb.Intent, error) {
+	[]roachpb.Intent, *roachpb.Error) {
 
 	now := ir.store.Clock().Now()
 
@@ -190,7 +194,8 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	}
 	ir.mu.Unlock()
 	if len(nonPendingIntents) > 0 {
-		return nil, util.Errorf("unexpected aborted/resolved intents: %+v", nonPendingIntents)
+		return nil, roachpb.NewError(util.Errorf("unexpected aborted/resolved intents: %+v",
+			nonPendingIntents))
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
@@ -214,12 +219,10 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushReqs...)
-	// TODO(tschottdorf): We're getting an err here that will be turned (back) into a
-	// pErr in the caller. Stop using the external RunWithResponse() interface for
-	// running this internal batch. Instead use the TxnCoordSender directly, and make
-	// this function return pErr.
-	err := ir.store.db.Run(b)
-	br := b.RawResponse()
+	var pErr *roachpb.Error
+	if err := ir.store.db.Run(b); err != nil {
+		pErr = b.MustPErr()
+	}
 	ir.mu.Lock()
 	for _, intent := range pushIntents {
 		ir.mu.inFlight[*intent.Txn.ID]--
@@ -228,9 +231,10 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		}
 	}
 	ir.mu.Unlock()
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
+	br := b.RawResponse()
 
 	var resolveIntents []roachpb.Intent
 	for i, intent := range pushIntents {
