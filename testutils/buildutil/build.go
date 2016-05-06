@@ -64,6 +64,11 @@ func VerifyNoImports(
 	cgo bool,
 	forbiddenPkgs, forbiddenPrefixes []string,
 ) {
+	// Skip test if source is not available.
+	if build.Default.GOPATH == "" {
+		t.Skip("GOPATH isn't set")
+	}
+
 	imports, err := TransitiveImports(pkgPath, true)
 	if err != nil {
 		t.Fatal(err)
