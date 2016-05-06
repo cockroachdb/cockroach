@@ -125,7 +125,7 @@ func (s *selectNode) Next() bool {
 		}
 		row := s.table.node.Values()
 		s.qvals.populateQVals(row)
-		passesFilter, err := runFilter(s.filter, s.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(s.filter, s.planner.evalCtx)
 		if err != nil {
 			s.err = err
 			return false

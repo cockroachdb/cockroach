@@ -19,8 +19,7 @@ package sql
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -29,13 +28,9 @@ import (
 func TestPOC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := testingshim.NewTestServer()
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer s.Stop()
+	_, _, kvClient, cleanup := sqlutils.SetupServer(t)
+	defer cleanup()
 
-	kvClient := s.ClientDB().(*client.DB)
 	err := kvClient.Put("testkey", "testval")
 	if err != nil {
 		t.Fatal(err)
