@@ -103,49 +103,52 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
     "protobuf.FileOptions\030\262\354\003 \001(\010:8\n\020gogoprot"
     "o_import\022\034.google.protobuf.FileOptions\030\263"
     "\354\003 \001(\010:6\n\016protosizer_all\022\034.google.protob"
-    "uf.FileOptions\030\264\354\003 \001(\010::\n\017goproto_getter"
-    "s\022\037.google.protobuf.MessageOptions\030\201\364\003 \001"
-    "(\010:;\n\020goproto_stringer\022\037.google.protobuf"
-    ".MessageOptions\030\203\364\003 \001(\010:8\n\rverbose_equal"
-    "\022\037.google.protobuf.MessageOptions\030\204\364\003 \001("
-    "\010:/\n\004face\022\037.google.protobuf.MessageOptio"
-    "ns\030\205\364\003 \001(\010:3\n\010gostring\022\037.google.protobuf"
-    ".MessageOptions\030\206\364\003 \001(\010:3\n\010populate\022\037.go"
-    "ogle.protobuf.MessageOptions\030\207\364\003 \001(\010:3\n\010"
-    "stringer\022\037.google.protobuf.MessageOption"
-    "s\030\300\213\004 \001(\010:2\n\007onlyone\022\037.google.protobuf.M"
-    "essageOptions\030\211\364\003 \001(\010:0\n\005equal\022\037.google."
-    "protobuf.MessageOptions\030\215\364\003 \001(\010:6\n\013descr"
-    "iption\022\037.google.protobuf.MessageOptions\030"
-    "\216\364\003 \001(\010:2\n\007testgen\022\037.google.protobuf.Mes"
-    "sageOptions\030\217\364\003 \001(\010:3\n\010benchgen\022\037.google"
-    ".protobuf.MessageOptions\030\220\364\003 \001(\010:4\n\tmars"
-    "haler\022\037.google.protobuf.MessageOptions\030\221"
-    "\364\003 \001(\010:6\n\013unmarshaler\022\037.google.protobuf."
-    "MessageOptions\030\222\364\003 \001(\010:;\n\020stable_marshal"
-    "er\022\037.google.protobuf.MessageOptions\030\223\364\003 "
-    "\001(\010:0\n\005sizer\022\037.google.protobuf.MessageOp"
-    "tions\030\224\364\003 \001(\010:;\n\020unsafe_marshaler\022\037.goog"
-    "le.protobuf.MessageOptions\030\227\364\003 \001(\010:=\n\022un"
-    "safe_unmarshaler\022\037.google.protobuf.Messa"
-    "geOptions\030\230\364\003 \001(\010:A\n\026goproto_extensions_"
-    "map\022\037.google.protobuf.MessageOptions\030\231\364\003"
-    " \001(\010:\?\n\024goproto_unrecognized\022\037.google.pr"
-    "otobuf.MessageOptions\030\232\364\003 \001(\010:5\n\nprotosi"
-    "zer\022\037.google.protobuf.MessageOptions\030\234\364\003"
-    " \001(\010:1\n\010nullable\022\035.google.protobuf.Field"
-    "Options\030\351\373\003 \001(\010:.\n\005embed\022\035.google.protob"
-    "uf.FieldOptions\030\352\373\003 \001(\010:3\n\ncustomtype\022\035."
-    "google.protobuf.FieldOptions\030\353\373\003 \001(\t:3\n\n"
-    "customname\022\035.google.protobuf.FieldOption"
-    "s\030\354\373\003 \001(\t:0\n\007jsontag\022\035.google.protobuf.F"
-    "ieldOptions\030\355\373\003 \001(\t:1\n\010moretags\022\035.google"
-    ".protobuf.FieldOptions\030\356\373\003 \001(\t:1\n\010castty"
-    "pe\022\035.google.protobuf.FieldOptions\030\357\373\003 \001("
-    "\t:0\n\007castkey\022\035.google.protobuf.FieldOpti"
-    "ons\030\360\373\003 \001(\t:2\n\tcastvalue\022\035.google.protob"
-    "uf.FieldOptions\030\361\373\003 \001(\tB!\n\023com.google.pr"
-    "otobufB\nGoGoProtos", 3498);
+    "uf.FileOptions\030\264\354\003 \001(\010:3\n\013compare_all\022\034."
+    "google.protobuf.FileOptions\030\265\354\003 \001(\010::\n\017g"
+    "oproto_getters\022\037.google.protobuf.Message"
+    "Options\030\201\364\003 \001(\010:;\n\020goproto_stringer\022\037.go"
+    "ogle.protobuf.MessageOptions\030\203\364\003 \001(\010:8\n\r"
+    "verbose_equal\022\037.google.protobuf.MessageO"
+    "ptions\030\204\364\003 \001(\010:/\n\004face\022\037.google.protobuf"
+    ".MessageOptions\030\205\364\003 \001(\010:3\n\010gostring\022\037.go"
+    "ogle.protobuf.MessageOptions\030\206\364\003 \001(\010:3\n\010"
+    "populate\022\037.google.protobuf.MessageOption"
+    "s\030\207\364\003 \001(\010:3\n\010stringer\022\037.google.protobuf."
+    "MessageOptions\030\300\213\004 \001(\010:2\n\007onlyone\022\037.goog"
+    "le.protobuf.MessageOptions\030\211\364\003 \001(\010:0\n\005eq"
+    "ual\022\037.google.protobuf.MessageOptions\030\215\364\003"
+    " \001(\010:6\n\013description\022\037.google.protobuf.Me"
+    "ssageOptions\030\216\364\003 \001(\010:2\n\007testgen\022\037.google"
+    ".protobuf.MessageOptions\030\217\364\003 \001(\010:3\n\010benc"
+    "hgen\022\037.google.protobuf.MessageOptions\030\220\364"
+    "\003 \001(\010:4\n\tmarshaler\022\037.google.protobuf.Mes"
+    "sageOptions\030\221\364\003 \001(\010:6\n\013unmarshaler\022\037.goo"
+    "gle.protobuf.MessageOptions\030\222\364\003 \001(\010:;\n\020s"
+    "table_marshaler\022\037.google.protobuf.Messag"
+    "eOptions\030\223\364\003 \001(\010:0\n\005sizer\022\037.google.proto"
+    "buf.MessageOptions\030\224\364\003 \001(\010:;\n\020unsafe_mar"
+    "shaler\022\037.google.protobuf.MessageOptions\030"
+    "\227\364\003 \001(\010:=\n\022unsafe_unmarshaler\022\037.google.p"
+    "rotobuf.MessageOptions\030\230\364\003 \001(\010:A\n\026goprot"
+    "o_extensions_map\022\037.google.protobuf.Messa"
+    "geOptions\030\231\364\003 \001(\010:\?\n\024goproto_unrecognize"
+    "d\022\037.google.protobuf.MessageOptions\030\232\364\003 \001"
+    "(\010:5\n\nprotosizer\022\037.google.protobuf.Messa"
+    "geOptions\030\234\364\003 \001(\010:2\n\007compare\022\037.google.pr"
+    "otobuf.MessageOptions\030\235\364\003 \001(\010:1\n\010nullabl"
+    "e\022\035.google.protobuf.FieldOptions\030\351\373\003 \001(\010"
+    ":.\n\005embed\022\035.google.protobuf.FieldOptions"
+    "\030\352\373\003 \001(\010:3\n\ncustomtype\022\035.google.protobuf"
+    ".FieldOptions\030\353\373\003 \001(\t:3\n\ncustomname\022\035.go"
+    "ogle.protobuf.FieldOptions\030\354\373\003 \001(\t:0\n\007js"
+    "ontag\022\035.google.protobuf.FieldOptions\030\355\373\003"
+    " \001(\t:1\n\010moretags\022\035.google.protobuf.Field"
+    "Options\030\356\373\003 \001(\t:1\n\010casttype\022\035.google.pro"
+    "tobuf.FieldOptions\030\357\373\003 \001(\t:0\n\007castkey\022\035."
+    "google.protobuf.FieldOptions\030\360\373\003 \001(\t:2\n\t"
+    "castvalue\022\035.google.protobuf.FieldOptions"
+    "\030\361\373\003 \001(\tB!\n\023com.google.protobufB\nGoGoPro"
+    "tos", 3603);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "gogoproto/gogo.proto", &protobuf_RegisterTypes);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
@@ -239,6 +242,9 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
     &::google::protobuf::FileOptions::default_instance(),
     63028, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
+    &::google::protobuf::FileOptions::default_instance(),
+    63029, 8, false, false);
+  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::MessageOptions::default_instance(),
     64001, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
@@ -301,6 +307,9 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::MessageOptions::default_instance(),
     64028, 8, false, false);
+  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
+    &::google::protobuf::MessageOptions::default_instance(),
+    64029, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::FieldOptions::default_instance(),
     65001, 8, false, false);
@@ -429,6 +438,9 @@ const ::std::string enumvalue_customname_default("");
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   protosizer_all(kProtosizerAllFieldNumber, false);
+::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  compare_all(kCompareAllFieldNumber, false);
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   goproto_getters(kGoprotoGettersFieldNumber, false);
@@ -492,6 +504,9 @@ const ::std::string enumvalue_customname_default("");
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   protosizer(kProtosizerFieldNumber, false);
+::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  compare(kCompareFieldNumber, false);
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   nullable(kNullableFieldNumber, false);
