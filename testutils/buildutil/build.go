@@ -58,12 +58,19 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 // VerifyNoImports verifies that a package doesn't depend (directly or
 // indirectly) on forbidden packages. The forbidden packages are specified as
 // either exact matches or prefix matches.
+// If GOPATH isn't set, it is an indication that the source is not available and
+// the test is skipped.
 func VerifyNoImports(
 	t testing.TB,
 	pkgPath string,
 	cgo bool,
 	forbiddenPkgs, forbiddenPrefixes []string,
 ) {
+	// Skip test if source is not available.
+	if build.Default.GOPATH == "" {
+		t.Skip("GOPATH isn't set")
+	}
+
 	imports, err := TransitiveImports(pkgPath, true)
 	if err != nil {
 		t.Fatal(err)
