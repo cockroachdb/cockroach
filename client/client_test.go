@@ -742,27 +742,29 @@ func TestInconsistentReads(t *testing.T) {
 	}
 	db := client.NewDB(senderFn)
 
+	prepInconsistent := func() *client.Batch {
+		var b client.Batch
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
+		return &b
+	}
+
 	// Perform inconsistent reads through the mocked sender function.
 	{
 		key := roachpb.Key([]byte("key"))
-		if _, err := db.GetInconsistent(key); err != nil {
+		b := prepInconsistent()
+		b.Get(key)
+		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	{
-		key := roachpb.Key([]byte("key"))
-		var p roachpb.BatchRequest
-		if err := db.GetProtoInconsistent(key, &p); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	{
+		b := prepInconsistent()
 		key1 := roachpb.Key([]byte("key1"))
 		key2 := roachpb.Key([]byte("key2"))
 		const dontCareMaxRows = 1000
-		if _, err := db.ScanInconsistent(key1, key2, dontCareMaxRows); err != nil {
+		b.Scan(key1, key2, dontCareMaxRows)
+		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}
 	}

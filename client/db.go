@@ -205,32 +205,12 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 	return runOneRow(db, b)
 }
 
-// GetInconsistent is Get with an inconsistent read.
-// TODO(tschottdorf): Mixing this and other inconsistent ops has weird semantics.
-// We should specify that a batch is inconsistent when it is created.
-// Comment applies to other methods here as well.
-func (db *DB) GetInconsistent(key interface{}) (KeyValue, error) {
-	b := db.NewBatch()
-	b.Header.ReadConsistency = roachpb.INCONSISTENT
-	b.Get(key)
-	return runOneRow(db, b)
-}
-
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 	r, err := db.Get(key)
-	if err != nil {
-		return err
-	}
-	return r.ValueProto(msg)
-}
-
-// GetProtoInconsistent is GetProto with an inconsistent read.
-func (db *DB) GetProtoInconsistent(key interface{}, msg proto.Message) error {
-	r, err := db.GetInconsistent(key)
 	if err != nil {
 		return err
 	}
@@ -325,11 +305,6 @@ func (db *DB) scan(
 // key can be either a byte slice or a string.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return db.scan(begin, end, maxRows, false, roachpb.CONSISTENT)
-}
-
-// ScanInconsistent is Scan with an inconsistent read.
-func (db *DB) ScanInconsistent(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(begin, end, maxRows, false, roachpb.INCONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)

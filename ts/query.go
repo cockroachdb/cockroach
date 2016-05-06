@@ -431,11 +431,13 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 		// query.
 		startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
 		endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-		var err error
-		rows, err = db.db.ScanInconsistent(startKey, endKey, 0)
-		if err != nil {
+		var b client.Batch
+		b.Scan(startKey, endKey, 0)
+
+		if err := db.db.Run(&b); err != nil {
 			return nil, nil, err
 		}
+		rows = b.Results[0].Rows
 	} else {
 		b := db.db.NewBatch()
 		b.Header.ReadConsistency = roachpb.INCONSISTENT
