@@ -344,6 +344,7 @@ func TestCommonMethods(t *testing.T) {
 		key{batchType, "InternalAddRequest"}:   {},
 		key{batchType, "PutInline"}:            {},
 		key{batchType, "RawResponse"}:          {},
+		key{batchType, "MustPErr"}:             {},
 		key{dbType, "AdminMerge"}:              {},
 		key{dbType, "AdminSplit"}:              {},
 		key{dbType, "ChangeFrozen"}:            {},
