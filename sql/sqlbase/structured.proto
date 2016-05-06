@@ -254,12 +254,23 @@ message TableDescriptor {
   optional uint32 format_version = 17 [(gogoproto.nullable) = false,
       (gogoproto.casttype) = "FormatVersion"];
 
-  // deleted is set if this TableDescriptor is in the process of being deleted.
-  // A deleted descriptor cannot be leased.
-  // A schema changer observing this set will truncate the table and delete the
+  // replaced by State.
+  optional bool OBSOLETE_Deleted = 18 [(gogoproto.nullable) = false];
+
+  // State is set if this TableDescriptor is in the process of being added or deleted.
+  // A non-public table descriptor cannot be leased.
+  // A schema changer observing DROP set will truncate the table and delete the
   // descriptor.
-  // It is illegal to transition deleted = true to deleted = false.
-  optional bool deleted = 18 [(gogoproto.nullable) = false];
+  // It is illegal to transition DROP to any other state.
+  enum State {
+    // Not used.
+    PUBLIC = 0;
+    // Descriptor is being added.
+    // ADD = 1;
+    // Descriptor is being dropped.
+    DROP = 2;
+  }
+  optional State state = 19 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

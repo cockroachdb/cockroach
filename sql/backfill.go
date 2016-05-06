@@ -258,7 +258,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
-		if tableDesc.Deleted {
+		if tableDesc.Deleted() {
 			done = true
 			return nil
 		}
@@ -374,7 +374,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				return err
 			}
 			// Short circuit the truncation if the table has been deleted.
-			if tableDesc.Deleted {
+			if tableDesc.Deleted() {
 				return nil
 			}
 
@@ -451,7 +451,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
-		if tableDesc.Deleted {
+		if tableDesc.Deleted() {
 			done = true
 			return nil
 		}
