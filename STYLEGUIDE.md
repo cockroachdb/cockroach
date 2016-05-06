@@ -1,14 +1,19 @@
 # CockroachDB Style guide
 
+## Go Code
 We're following the
 [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments)
 fairly closely. In particular, you want to watch out for proper
 punctuation and capitalization in comments. We use two-space indents
 in non-Go code (in Go, we follow `gofmt` which indents with
-tabs). Format your code assuming it will be read in a window 100
-columns wide. Wrap code at 100 characters and comments at 80 unless doing so
-makes the code less legible.
+tabs).
 
+### Line Length
+Format your code assuming it will be read in a window 100 columns wide.
+Wrap code at 100 characters and comments at 80 unless doing so makes the
+code less legible.
+
+### Wrapping Function Signatures
 When wrapping function signatures that do not fit on one line,
 put the name, arguments, and return types on separate lines, with the closing `)`
 at the same indentation as `func` (this helps visually separate the indented
