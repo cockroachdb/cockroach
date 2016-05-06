@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -90,9 +89,11 @@ func jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
+var errTableDeleted = errors.New("table is being deleted")
+
 // Acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
-// being deleted, the error detail will be DescriptorDeletedError.
+// being deleted, the error will be errTableDeleted.
 func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlbase.DescriptorVersion) (*LeaseState, error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
@@ -123,7 +124,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlb
 		return nil, util.Errorf("ID %d is not a table", tableID)
 	}
 	if tableDesc.Deleted {
-		return nil, &roachpb.DescriptorDeletedError{}
+		return nil, errTableDeleted
 	}
 	lease.TableDescriptor = *tableDesc
 
@@ -534,7 +535,7 @@ func (t *tableState) acquireWait() {
 }
 
 // If the lease cannot be obtained because the descriptor is in the process of
-// being deleted, the error detail will be DescriptorDeletedError.
+// being deleted, the error will be errDescriptorDeleted.
 func (t *tableState) acquireNodeLease(
 	txn *client.Txn, minVersion sqlbase.DescriptorVersion, store LeaseStore,
 ) (*LeaseState, error) {
@@ -611,7 +612,9 @@ func (t *tableState) purgeOldLeases(
 		var err error
 		if !deleted {
 			lease, err = t.acquire(txn, minVersion, store)
-			_, deleted = err.(*roachpb.DescriptorDeletedError)
+			if err == errTableDeleted {
+				deleted = true
+			}
 		}
 		if err == nil || deleted {
 			t.mu.Lock()

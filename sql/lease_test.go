@@ -424,7 +424,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
-	if !testutils.IsError(err, "descriptor deleted") {
+	if !testutils.IsError(err, "table is being deleted") {
 		t.Fatalf("got a different error than expected: %s", err)
 	}
 }
@@ -546,7 +546,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 	// Now we shouldn't be able to acquire any more.
 	_, err = acquire(s.TestServer, tableDesc.ID, 0)
-	if !testutils.IsError(err, "descriptor deleted") {
+	if !testutils.IsError(err, "table is being deleted") {
 		t.Fatalf("got a different error than expected: %s", err)
 	}
 }

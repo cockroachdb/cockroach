@@ -588,13 +588,3 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
-
-func (e *DescriptorDeletedError) Error() string {
-	return e.message(nil)
-}
-
-func (*DescriptorDeletedError) message(_ *Error) string {
-	return "descriptor deleted"
-}
-
-var _ ErrorDetailInterface = &DescriptorDeletedError{}
