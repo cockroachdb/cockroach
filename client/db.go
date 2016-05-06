@@ -206,9 +206,12 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 }
 
 // GetInconsistent is Get with an inconsistent read.
+// TODO(tschottdorf): Mixing this and other inconsistent ops has weird semantics.
+// We should specify that a batch is inconsistent when it is created.
+// Comment applies to other methods here as well.
 func (db *DB) GetInconsistent(key interface{}) (KeyValue, error) {
 	b := db.NewBatch()
-	b.ReadConsistency = roachpb.INCONSISTENT
+	b.Header.ReadConsistency = roachpb.INCONSISTENT
 	b.Get(key)
 	return runOneRow(db, b)
 }
@@ -304,7 +307,7 @@ func (db *DB) scan(
 	readConsistency roachpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
 	b := db.NewBatch()
-	b.ReadConsistency = readConsistency
+	b.Header.ReadConsistency = readConsistency
 	if !isReverse {
 		b.Scan(begin, end, maxRows)
 	} else {
@@ -424,13 +427,12 @@ func sendAndFill(
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	var ba roachpb.BatchRequest // TODO
-	ba.MaxScanResults = b.MaxScanResults
-	ba.ReadConsistency = b.ReadConsistency
+	var ba roachpb.BatchRequest
 	// TODO(tschottdorf): this nonsensical copy is required since at the time
 	// of writing, the chunking and masking code in DistSender operates on the
 	// original data (as can readily be seen by a whole bunch of test failures.
 	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
+	ba.Header = b.Header
 	br, pErr := send(ba)
 	if pErr != nil {
 		// Discard errors from fillResults.
