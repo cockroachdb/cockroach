@@ -341,7 +341,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "GetProto"}:               {},
 		key{batchType, "ChangeFrozen"}:         {},
 		key{batchType, "CheckConsistency"}:     {},
-		key{batchType, "InternalAddRequest"}:   {},
+		key{batchType, "AddRawRequest"}:        {},
 		key{batchType, "PutInline"}:            {},
 		key{batchType, "RawResponse"}:          {},
 		key{batchType, "MustPErr"}:             {},

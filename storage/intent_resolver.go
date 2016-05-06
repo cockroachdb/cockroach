@@ -213,7 +213,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		})
 	}
 	b := &client.Batch{}
-	b.InternalAddRequest(pushReqs...)
+	b.AddRawRequest(pushReqs...)
 	// TODO(tschottdorf): We're getting an err here that will be turned (back) into a
 	// pErr in the caller. Stop using the external RunWithResponse() interface for
 	// running this internal batch. Instead use the TxnCoordSender directly, and make
@@ -424,7 +424,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	// Resolve all of the intents which aren't local to the Range.
 	if len(reqsRemote) > 0 {
 		b := &client.Batch{}
-		b.InternalAddRequest(reqsRemote...)
+		b.AddRawRequest(reqsRemote...)
 		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
 			return r.store.DB().Run(b)
