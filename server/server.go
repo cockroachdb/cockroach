@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
@@ -76,7 +77,7 @@ type Server struct {
 	db                  *client.DB
 	kvDB                *kv.DBServer
 	pgServer            *pgwire.Server
-	distSQLServer       *sql.DistSQLServerImpl
+	distSQLServer       *distsql.ServerImpl
 	node                *Node
 	recorder            *status.MetricsRecorder
 	runtime             status.RuntimeStatSampler
@@ -189,11 +190,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor, sqlRegistry)
 
-	distSQLCtx := sql.DistSQLServerContext{
+	distSQLCtx := distsql.ServerContext{
 		DB: s.db,
 	}
-	s.distSQLServer = sql.NewDistSQLServer(distSQLCtx)
-	sql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
+	s.distSQLServer = distsql.NewServer(distSQLCtx)
+	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
