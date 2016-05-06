@@ -1033,14 +1033,14 @@ func TestParsePrecedence(t *testing.T) {
 
 func BenchmarkParse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		st, pErr := parse(`
+		st, err := parse(`
 			BEGIN;
 			UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
 			SELECT abalance FROM pgbench_accounts WHERE aid = 5;
 			INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (1, 2, 5, 77, CURRENT_TIMESTAMP);
 			END`, Traditional)
-		if pErr != nil {
-			b.Fatal(pErr)
+		if err != nil {
+			b.Fatal(err)
 		}
 		if len(st) != 5 {
 			b.Fatal("parsed wrong number of statements: ", len(st))

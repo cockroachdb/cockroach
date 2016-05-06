@@ -63,9 +63,8 @@ func TestTableReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pErr := tr.Run()
-	if pErr != nil {
-		t.Fatal(pErr)
+	if err := tr.Run(); err != nil {
+		t.Fatal(err)
 	}
 	// TODO(radu): currently the table reader just prints out stuff; when it
 	// will output results we will be able to verify them.
@@ -93,9 +92,9 @@ func TestTableReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pErr = tr.Run()
-	if pErr != nil {
-		t.Fatal(pErr)
+	err = tr.Run()
+	if err != nil {
+		t.Fatal(err)
 	}
 	// Expected output:
 	// RESULT: 6 40 41 <skipped>

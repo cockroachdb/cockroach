@@ -29,15 +29,15 @@ import (
 // tableWriter handles writing kvs and forming table rows.
 //
 // Usage:
-//   pErr := tw.init(txn)
-//   // Handle pErr.
+//   err := tw.init(txn)
+//   // Handle err.
 //   for {
 //      values := ...
-//      row, pErr := tw.row(values)
-//      // Handle pErr.
+//      row, err := tw.row(values)
+//      // Handle err.
 //   }
-//   pErr := tw.finalize()
-//   // Handle pErr.
+//   err := tw.finalize()
+//   // Handle err.
 type tableWriter interface {
 
 	// init provides the tableWriter with a Txn to write to and returns an error
