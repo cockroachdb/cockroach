@@ -1875,7 +1875,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
 	// Attempt to push the transaction which created the intent.
 	b := client.Batch{}
-	b.InternalAddRequest(&roachpb.PushTxnRequest{
+	b.AddRawRequest(&roachpb.PushTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
 		},

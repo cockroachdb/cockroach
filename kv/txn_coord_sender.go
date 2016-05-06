@@ -957,7 +957,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 		b.Header = ba.Header
 		for _, arg := range ba.Requests {
 			req := arg.GetInner()
-			b.InternalAddRequest(req)
+			b.AddRawRequest(req)
 		}
 		err := txn.CommitInBatch(b)
 		br = b.RawResponse()
