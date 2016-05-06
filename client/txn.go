@@ -413,7 +413,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, err
 	if txn != b.txn {
 		return nil, util.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
+	b.appendReqs(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
 	b.initResult(1, 0, nil)
 	resp, err := txn.RunWithResponse(b)
 	if err == nil {
@@ -451,7 +451,9 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
-	_, err := txn.send(roachpb.Header{}, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	var ru roachpb.RequestUnion
+	ru.MustSetInner(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	_, err := txn.send(roachpb.Header{}, []roachpb.RequestUnion{ru})
 	return err.GoError()
 }
 
@@ -594,7 +596,7 @@ RetryLoop:
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(h roachpb.Header, reqs ...roachpb.Request) (
+func (txn *Txn) send(h roachpb.Header, reqs []roachpb.RequestUnion) (
 	*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
@@ -622,7 +624,8 @@ func (txn *Txn) send(h roachpb.Header, reqs ...roachpb.Request) (
 	firstWriteIndex := -1
 	var firstWriteKey roachpb.Key
 
-	for i, args := range reqs {
+	for i, ru := range reqs {
+		args := ru.GetInner()
 		if i < lastIndex {
 			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
 				return nil, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
@@ -635,7 +638,7 @@ func (txn *Txn) send(h roachpb.Header, reqs ...roachpb.Request) (
 	}
 
 	haveTxnWrite := firstWriteIndex != -1
-	endTxnRequest, haveEndTxn := reqs[lastIndex].(*roachpb.EndTransactionRequest)
+	endTxnRequest, haveEndTxn := reqs[lastIndex].GetInner().(*roachpb.EndTransactionRequest)
 	needBeginTxn := !txn.Proto.Writing && haveTxnWrite
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
 	elideEndTxn := haveEndTxn && !needEndTxn
@@ -643,24 +646,27 @@ func (txn *Txn) send(h roachpb.Header, reqs ...roachpb.Request) (
 	// If we're not yet writing in this txn, but intend to, insert a
 	// begin transaction request before the first write command.
 	if needBeginTxn {
-		bt := &roachpb.BeginTransactionRequest{
+		// If the transaction already has a key (we're in a restart), make
+		// sure we set the key in the begin transaction request to the original.
+		req := &roachpb.BeginTransactionRequest{
 			Span: roachpb.Span{
 				Key: firstWriteKey,
 			},
 		}
-		// If the transaction already has a key (we're in a restart), make
-		// sure we set the key in the begin transaction request to the original.
 		if txn.Proto.Key != nil {
-			bt.Key = txn.Proto.Key
+			req.Key = txn.Proto.Key
 		}
-		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
+
+		var bt roachpb.RequestUnion
+		bt.MustSetInner(req)
+		reqs = append(append(append([]roachpb.RequestUnion(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
 	}
 
 	if elideEndTxn {
 		reqs = reqs[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(h, reqs...)
+	br, pErr := txn.db.send(h, reqs)
 	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline.
 		if endTxnRequest.Deadline != nil {

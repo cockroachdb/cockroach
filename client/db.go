@@ -416,7 +416,7 @@ func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(roachpb.Header, ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error),
+	send func(roachpb.Header, []roachpb.RequestUnion) (*roachpb.BatchResponse, *roachpb.Error),
 	b *Batch,
 ) (*roachpb.BatchResponse, error) {
 	// Errors here will be attached to the results, so we will get them from
@@ -427,7 +427,11 @@ func sendAndFill(
 	var ba roachpb.BatchRequest // TODO
 	ba.MaxScanResults = b.MaxScanResults
 	ba.ReadConsistency = b.ReadConsistency
-	br, pErr := send(ba.Header, b.reqs...)
+	// TODO(tschottdorf): this nonsensical copy is required since at the time
+	// of writing, the chunking and masking code in DistSender operates on the
+	// original data (as can readily be seen by a whole bunch of test failures.
+	reqs := append([]roachpb.RequestUnion(nil), b.reqs...) // HACK
+	br, pErr := send(ba.Header, reqs)
 	if pErr != nil {
 		// Discard errors from fillResults.
 		_ = b.fillResults(nil, pErr)
@@ -484,13 +488,14 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns a nil response for empty input (no requests).
 func (db *DB) send(h roachpb.Header,
-	reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
+	reqs []roachpb.RequestUnion) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(reqs) == 0 {
 		return nil, nil
 	}
 
 	if h.ReadConsistency == roachpb.INCONSISTENT {
-		for _, req := range reqs {
+		for _, ru := range reqs {
+			req := ru.GetInner()
 			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
 				req.Method() != roachpb.ReverseScan {
 				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
@@ -501,7 +506,7 @@ func (db *DB) send(h roachpb.Header,
 	ba := roachpb.BatchRequest{
 		Header: h,
 	}
-	ba.Add(reqs...)
+	ba.Requests = reqs
 
 	if db.userPriority != 1 {
 		ba.UserPriority = db.userPriority
