@@ -106,28 +106,6 @@ func NewError(err error) *Error {
 	return e
 }
 
-// RetryableTxnErrorToPErr creates an Error from a retryable error.
-// TODO(tschottdorf): constructing an Error from a RetryableError is only needed in
-// Store.Send(), which runs "internal batches" for pushing other transactions.
-// It can get a RetryableError which it needs to marshall to the caller as a
-// pErr. This needs to go away by moving away from using the external client
-// interface for running these push batches.
-func RetryableTxnErrorToPErr(err RetryableTxnError) *Error {
-	e := &Error{}
-	e.Message = err.message
-	if err.Backoff {
-		e.TransactionRestart = TransactionRestart_BACKOFF
-	} else {
-		e.TransactionRestart = TransactionRestart_IMMEDIATE
-	}
-	e.SetTxn(err.Transaction)
-	if err.CauseProto == nil {
-		panic("RetryableTxnProto without a cause")
-	}
-	e.Detail = err.CauseProto
-	return e
-}
-
 // NewErrorWithTxn creates an Error from the given error and a transaction.
 func NewErrorWithTxn(err error, txn *Transaction) *Error {
 	e := NewError(err)

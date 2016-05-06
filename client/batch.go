@@ -552,8 +552,6 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-// TODO(tschottdorf): kill the below
-
 // adminMerge is only exported on DB. It is here for symmetry with the
 // other operations.
 func (b *Batch) adminMerge(key interface{}) {
