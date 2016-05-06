@@ -1797,7 +1797,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it there.
-		if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok && pErr.Index != nil {
+		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok && pErr.Index != nil {
 			var pushType roachpb.PushTxnType
 			if ba.IsWrite() {
 				pushType = roachpb.PUSH_ABORT
@@ -1815,14 +1815,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			err = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
-			// TODO(tschottdorf): converting this error (back) into a pErr is janky. See
-			// TODO in processWriteIntentError about returning a pErr.
-			if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
-				pErr = roachpb.RetryableTxnErrorToPErr(*retErr)
-			} else {
-				pErr = roachpb.NewError(err)
-			}
+			pErr = s.intentResolver.processWriteIntentError(ctx, pErr, rng, args, h, pushType)
 			// Preserve the error index.
 			pErr.Index = index
 		}
