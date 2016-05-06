@@ -1980,7 +1980,13 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 
 	var putCount int
 	var minKey, maxKey roachpb.Key
-	addPut := func(key roachpb.Key) {
+	unique := make(map[string]struct{}, len(reqs))
+	addPut := func(key roachpb.Key) bool {
+		strKey := string(key)
+		if _, ok := unique[strKey]; ok {
+			return false
+		}
+		unique[strKey] = struct{}{}
 		putCount++
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
@@ -1988,13 +1994,19 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 		if maxKey == nil || bytes.Compare(key, maxKey) > 0 {
 			maxKey = key
 		}
+		return true
 	}
+
 	for i, r := range reqs {
 		switch t := r.GetInner().(type) {
 		case *roachpb.PutRequest:
-			addPut(t.Key)
+			if !addPut(t.Key) {
+				break
+			}
 		case *roachpb.ConditionalPutRequest:
-			addPut(t.Key)
+			if !addPut(t.Key) {
+				break
+			}
 		default:
 			processPuts(i-putCount, putCount, minKey, maxKey)
 			putCount = 0

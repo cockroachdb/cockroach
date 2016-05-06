@@ -1456,6 +1456,36 @@ func TestOptimizePuts(t *testing.T) {
 				false, true, true, true, true, true, true, true, true, true, true,
 			},
 		},
+		// Duplicate put at 6th key; should see 5 puts blind.
+		{
+			nil,
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8],
+			},
+			[]bool{
+				true, true, true, true, true, false, false, false, false, false,
+			},
+		},
+		// Duplicate cput at 6th key; should see 5 blind.
+		{
+			nil,
+			[]roachpb.Request{
+				&cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8],
+			},
+			[]bool{
+				true, true, true, true, true, false, false, false, false, false,
+			},
+		},
+		// Duplicate put & cput at 6th key; should see 5 blind.
+		{
+			nil,
+			[]roachpb.Request{
+				&cpArgs[0], &pArgs[1], &cpArgs[2], &pArgs[3], &cpArgs[4], &pArgs[5], &cpArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8],
+			},
+			[]bool{
+				true, true, true, true, true, false, false, false, false, false,
+			},
+		},
 	}
 
 	for i, c := range testCases {
