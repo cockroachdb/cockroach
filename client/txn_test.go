@@ -642,13 +642,19 @@ func TestTransactionStatus(t *testing.T) {
 	}
 }
 
-func TestCommitInBatchWithResponse(t *testing.T) {
+func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 	txn := NewTxn(context.Background(), *db)
-	b := &Batch{}
-	if _, pErr := txn.CommitInBatchWithResponse(b); pErr == nil {
-		t.Error("this batch should not be committed")
+
+	b1 := &Batch{}
+	txn2 := NewTxn(context.Background(), *db)
+	b2 := txn2.NewBatch()
+
+	for _, b := range []*Batch{b1, b2} {
+		if err := txn.CommitInBatch(b); !testutils.IsError(err, "can only be committed by") {
+			t.Error(err)
+		}
 	}
 }
 

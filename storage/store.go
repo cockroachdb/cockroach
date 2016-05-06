@@ -1887,7 +1887,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	br, err := s.db.RunWithResponse(&b)
+	err := s.db.Run(&b)
 	if err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
@@ -1912,6 +1912,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		// don't use s.db for these internal requests any more.
 		return nil, roachpb.NewError(err)
 	}
+	br := b.RawResponse()
 	// ID can be nil if no BeginTransaction has been sent yet.
 	if updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn; updatedTxn.ID != nil {
 		switch updatedTxn.Status {
