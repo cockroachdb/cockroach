@@ -941,6 +941,12 @@ func (rs RSpan) ContainsKey(key RKey) bool {
 	return bytes.Compare(key, rs.Key) >= 0 && bytes.Compare(key, rs.EndKey) < 0
 }
 
+// ContainsExclusiveEndKey returns whether this span contains the specified (exclusive) end key
+// (e.g., span ["a", b") contains "b" as exclusive end key).
+func (rs RSpan) ContainsExclusiveEndKey(key RKey) bool {
+	return bytes.Compare(key, rs.Key) > 0 && bytes.Compare(key, rs.EndKey) <= 0
+}
+
 // ContainsKeyRange returns whether this span contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
