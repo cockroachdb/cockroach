@@ -55,3 +55,21 @@ Exception when omitting repeated types for consecutive arguments:
 short and related arguments (e.g. `start, end int64`) should either go on the same line
 or the type should be repeated on each line -- no argument should appear by itself
 on a line with no type (confusing and brittle when edited).
+
+## Protobuf IDLs
+In order to ensure on-the-wire and on-disk compatibility, and avoid confusing,
+unexpected serialization errors (or worse, correctness errors):
+
+*Never remove (or comment out) a field from a proto or change its type in place.*
+
+Instead, prefix unused fields with `OBSOLETE_`.
+
+Removing or commenting out a field could allow the field ID to be accidentally reused --
+leaving it lets the generator ensure that field IDs remain unique.
+
+NB: In theory, a proto that is never written to the network or disk can ignore this rule.
+In practice, following it anyway is probably safer and any exceptions should be met with
+strict scrutiny in code review.
+
+When deprecating a message field, it is safe to also change the type to `bytes`
+so that the message definition can be deleted.
