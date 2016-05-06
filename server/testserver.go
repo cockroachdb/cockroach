@@ -384,8 +384,8 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 
 var _ testingshim.TestServerInterface = &TestServer{}
 
-// ClientDB is part of TestServerInterface.
-func (ts *TestServer) ClientDB() interface{} { return ts.db }
+// KVClient is part of TestServerInterface.
+func (ts *TestServer) KVClient() interface{} { return ts.db }
 
 // KVDB is part of TestServerInterface.
 func (ts *TestServer) KVDB() interface{} { return ts.kvDB }
