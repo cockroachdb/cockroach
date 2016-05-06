@@ -1444,16 +1444,36 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, false, false, false, false, false,
 			},
 		},
-		// No existing key, inc + ten puts + inc + ten cputs.
+		// No existing key, ten puts + inc + ten cputs.
 		{
 			nil,
 			[]roachpb.Request{
-				&incArgs, &pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
 				&incArgs, &cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
 			},
 			[]bool{
-				false, true, true, true, true, true, true, true, true, true, true,
-				false, true, true, true, true, true, true, true, true, true, true,
+				true, true, true, true, true, true, true, true, true, true,
+				false, false, false, false, false, false, false, false, false, false, false,
+			},
+		},
+		// Duplicate put at 11th key; should see ten puts.
+		{
+			nil,
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &pArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true, false,
+			},
+		},
+		// Duplicate cput at 6th key; should see ten cputs.
+		{
+			nil,
+			[]roachpb.Request{
+				&cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9], &cpArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true, false,
 			},
 		},
 	}
