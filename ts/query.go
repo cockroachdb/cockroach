@@ -438,7 +438,7 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 		}
 	} else {
 		b := db.db.NewBatch()
-		b.ReadConsistency = roachpb.INCONSISTENT
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
 		kd := r.KeyDuration()
