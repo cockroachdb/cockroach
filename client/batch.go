@@ -16,7 +16,10 @@
 
 package client
 
-import "github.com/cockroachdb/cockroach/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
+)
 
 // Batch provides for the parallel execution of a number of database
 // operations. Operations are added to the Batch and then the Batch is executed
@@ -125,7 +128,10 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 						// here because it may be elided (r/o txns). Might
 						// prefer to simulate an EndTransaction response
 						// instead; this effectively just leaks here.
-						panic("not enough responses for calls")
+						// TODO(tschottdorf): returning an error here seems
+						// to get swallowed.
+						panic(util.Errorf("not enough responses for calls: %+v, %+v",
+							b.reqs, br))
 					}
 				}
 			}
