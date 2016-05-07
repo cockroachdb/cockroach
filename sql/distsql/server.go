@@ -64,11 +64,11 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 ) {
 	txn := ds.setupTxn(ctx, &req.Txn)
 	for _, f := range req.Flows {
-		reader, err := NewTableReader(f.Reader, txn, ds.evalCtx)
+		reader, err := newTableReader(f.Reader, txn, ds.evalCtx)
 		if err != nil {
 			return nil, err
 		}
-		if err := reader.Run(); err != nil {
+		if err := reader.run(); err != nil {
 			fmt.Println(err)
 		}
 	}
