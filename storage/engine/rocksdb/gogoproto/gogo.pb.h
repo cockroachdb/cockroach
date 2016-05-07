@@ -161,6 +161,10 @@ static const int kProtosizerAllFieldNumber = 63028;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   protosizer_all;
+static const int kCompareAllFieldNumber = 63029;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  compare_all;
 static const int kGoprotoGettersFieldNumber = 64001;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
@@ -245,6 +249,10 @@ static const int kProtosizerFieldNumber = 64028;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   protosizer;
+static const int kCompareFieldNumber = 64029;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  compare;
 static const int kNullableFieldNumber = 65001;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
