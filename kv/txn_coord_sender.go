@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/interval"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -61,7 +60,7 @@ type txnMetadata struct {
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
-	keys interval.RangeGroup
+	keys []roachpb.Span
 
 	// lastUpdateNanos is the latest wall time in nanos the client sent
 	// transaction operations to this coordinator. Accessed and updated
@@ -82,26 +81,6 @@ type txnMetadata struct {
 	txnEnd chan struct{}
 }
 
-// addKeyRange adds the specified key range to the range group,
-// taking care not to add this range if existing entries already
-// completely cover the range.
-func addKeyRange(keys interval.RangeGroup, start, end roachpb.Key) {
-	// This gives us a memory-efficient end key if end is empty.
-	// The most common case for keys in the intents interval map
-	// is for single keys. However, the range group requires
-	// a non-empty interval, so we create two key slices which
-	// share the same underlying byte array.
-	if len(end) == 0 {
-		end = start.Next()
-		start = end[:len(start)]
-	}
-	keyR := interval.Range{
-		Start: interval.Comparable(start),
-		End:   interval.Comparable(end),
-	}
-	keys.Add(keyR)
-}
-
 // setLastUpdate updates the wall time (in nanoseconds) since the most
 // recent client operation for this transaction through the coordinator.
 func (tm *txnMetadata) setLastUpdate(nowNanos int64) {
@@ -120,26 +99,6 @@ func (tm *txnMetadata) getLastUpdate() int64 {
 func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 	timeout := nowNanos - tm.timeoutDuration.Nanoseconds()
 	return tm.getLastUpdate() < timeout
-}
-
-// collectIntentSpans collects the spans of the intents to be resolved for the
-// transaction. It does not create copies, so the caller must not alter the
-// returned data. Usually called with txnMeta.keys.
-func collectIntentSpans(keys interval.RangeGroup) []roachpb.Span {
-	intents := make([]roachpb.Span, 0, keys.Len())
-	if err := keys.ForEach(func(r interval.Range) error {
-		sp := roachpb.Span{
-			Key: roachpb.Key(r.Start),
-		}
-		if endKey := roachpb.Key(r.End); !sp.Key.IsPrev(endKey) {
-			sp.EndKey = endKey
-		}
-		intents = append(intents, sp)
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-	return intents
 }
 
 // TxnMetrics holds all metrics relating to KV transactions.
@@ -366,16 +325,17 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 			// Populate et.IntentSpans, taking into account both any existing
 			// and new writes, and taking care to perform proper deduplication.
-			var keys interval.RangeGroup
-			if txnMeta, metaOK := tc.txns[*ba.Txn.ID]; metaOK {
-				keys = txnMeta.keys
-			} else {
-				keys = interval.NewRangeTree()
+			txnMeta := tc.txns[*ba.Txn.ID]
+			if txnMeta != nil {
+				et.IntentSpans = txnMeta.keys
 			}
 			ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
-				addKeyRange(keys, key, endKey)
+				et.IntentSpans = append(et.IntentSpans, roachpb.Span{
+					Key:    key,
+					EndKey: endKey,
+				})
 			})
-			et.IntentSpans = collectIntentSpans(keys)
+			et.IntentSpans = roachpb.MergeSpans(et.IntentSpans)
 			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state
@@ -576,7 +536,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (
 	restarts = int64(txnMeta.txn.Epoch)
 	status = txnMeta.txn.Status
 
-	txnMeta.keys.Clear()
+	txnMeta.keys = nil
 
 	delete(tc.txns, txnID)
 
@@ -656,8 +616,8 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	// Grab the intents and clone the txn to avoid data races.
-	intentSpans := collectIntentSpans(txnMeta.keys)
-	txnMeta.keys.Clear()
+	intentSpans := roachpb.MergeSpans(txnMeta.keys)
+	txnMeta.keys = nil
 	txn := txnMeta.txn.Clone()
 	tc.Unlock()
 
@@ -854,21 +814,24 @@ func (tc *TxnCoordSender) updateState(
 	// unless it is tracking it (on top of it making sense to track it;
 	// after all, it **has** laid down intents and only the coordinator
 	// can augment a potential EndTransaction call). See #3303.
-	var intentGroup interval.RangeGroup
-	if txnMeta != nil {
-		intentGroup = txnMeta.keys
-	} else if pErr == nil || newTxn.Writing {
-		intentGroup = interval.NewRangeTree()
-	}
-	if intentGroup != nil {
+	if txnMeta != nil || pErr == nil || newTxn.Writing {
 		// Adding the intents even on error reduces the likelihood of dangling
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
+		var keys []roachpb.Span
+		if txnMeta != nil {
+			keys = txnMeta.keys
+		}
 		ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
-			addKeyRange(intentGroup, key, endKey)
+			keys = append(keys, roachpb.Span{
+				Key:    key,
+				EndKey: endKey,
+			})
 		})
 
-		if txnMeta == nil && intentGroup.Len() > 0 {
+		if txnMeta != nil {
+			txnMeta.keys = keys
+		} else if len(keys) > 0 {
 			if !newTxn.Writing {
 				panic("txn with intents marked as non-writing")
 			}
@@ -882,7 +845,7 @@ func (tc *TxnCoordSender) updateState(
 				log.Trace(ctx, "coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              newTxn,
-					keys:             intentGroup,
+					keys:             keys,
 					firstUpdateNanos: startNS,
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,
