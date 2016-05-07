@@ -766,11 +766,7 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		}
 
 		// If all consts could not become typ, use their best shared type.
-		numValExprs := make([]*NumVal, len(constExprs))
-		for i, numVal := range constExprs {
-			numValExprs[i] = numVal.e.(*NumVal)
-		}
-		bestType := commonNumericConstantType(numValExprs...)
+		bestType := commonNumericConstantType(constExprs)
 		setTypeForConsts(bestType)
 		return bestType, nil
 	}
