@@ -943,7 +943,7 @@ func (rs RSpan) ContainsKey(key RKey) bool {
 
 // ContainsKeyRange returns whether this span contains the specified
 // key range from start (inclusive) to end (exclusive).
-// If end is empty, returns ContainsKey(start).
+// If end is empty or start is equal to end, returns ContainsKey(start).
 func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 	if len(end) == 0 {
 		return rs.ContainsKey(start)
