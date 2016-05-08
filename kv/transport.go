@@ -18,9 +18,18 @@
 package kv
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/cockroachdb/cockroach/util/log"
+	"google.golang.org/grpc"
 )
+
+// Allow local calls to be dispatched directly to the local server without
+// sending an RPC.
+var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
 
 // TransportFactory encapsulates all interaction with the RPC
 // subsystem, allowing it to be mocked out for testing. The factory
@@ -109,7 +118,44 @@ func (gt *grpcTransport) IsExhausted() bool {
 	return len(gt.orderedClients) == 0
 }
 
+// SendNext invokes the specified RPC on the supplied client when the
+// client is ready. On success, the reply is sent on the channel;
+// otherwise an error is sent.
 func (gt *grpcTransport) SendNext(done chan batchCall) {
-	sendOneFn(gt.opts, gt.rpcContext, gt.orderedClients[0], done)
+	client := gt.orderedClients[0]
 	gt.orderedClients = gt.orderedClients[1:]
+
+	addr := client.remoteAddr
+	if log.V(2) {
+		log.Infof("sending request to %s: %+v", addr, client.args)
+	}
+
+	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
+		ctx, cancel := gt.opts.contextWithTimeout()
+		defer cancel()
+
+		reply, err := localServer.Batch(ctx, &client.args)
+		done <- batchCall{reply: reply, err: err}
+		return
+	}
+
+	go func() {
+		ctx, cancel := gt.opts.contextWithTimeout()
+		defer cancel()
+
+		c := client.conn
+		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
+			if err != nil {
+				done <- batchCall{err: err}
+				return
+			}
+			if state == grpc.Shutdown {
+				done <- batchCall{err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
+				return
+			}
+		}
+
+		reply, err := client.client.Batch(ctx, &client.args)
+		done <- batchCall{reply: reply, err: err}
+	}()
 }

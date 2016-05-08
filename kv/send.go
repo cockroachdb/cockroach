@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -191,55 +190,6 @@ func splitHealthy(clients []batchClient) (int, error) {
 		}
 	}
 	return nHealthy, nil
-}
-
-// Allow local calls to be dispatched directly to the local server without
-// sending an RPC.
-var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
-
-// sendOneFn is overwritten in tests to mock sendOne.
-var sendOneFn = sendOne
-
-// sendOne invokes the specified RPC on the supplied client when the
-// client is ready. On success, the reply is sent on the channel;
-// otherwise an error is sent.
-//
-// Do not call directly, but instead use sendOneFn. Tests mock out this method
-// via sendOneFn in order to test various error cases.
-func sendOne(opts SendOptions, rpcContext *rpc.Context, client batchClient, done chan batchCall) {
-	addr := client.remoteAddr
-	if log.V(2) {
-		log.Infof("sending request to %s: %+v", addr, client.args)
-	}
-
-	if localServer := rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
-		ctx, cancel := opts.contextWithTimeout()
-		defer cancel()
-
-		reply, err := localServer.Batch(ctx, &client.args)
-		done <- batchCall{reply: reply, err: err}
-		return
-	}
-
-	go func() {
-		ctx, cancel := opts.contextWithTimeout()
-		defer cancel()
-
-		c := client.conn
-		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
-			if err != nil {
-				done <- batchCall{err: err}
-				return
-			}
-			if state == grpc.Shutdown {
-				done <- batchCall{err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
-				return
-			}
-		}
-
-		reply, err := client.client.Batch(ctx, &client.args)
-		done <- batchCall{reply: reply, err: err}
-	}()
 }
 
 // isPerReplicaError returns true if the given error is likely to be
