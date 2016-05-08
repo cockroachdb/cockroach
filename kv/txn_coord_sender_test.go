@@ -299,9 +299,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS roachpb.Timestamp
 	for i := 0; i < 3; i++ {
 		util.SucceedsSoon(t, func() error {
-			ok, txn, pErr := getTxn(sender, &initialTxn.Proto)
-			if !ok || pErr != nil {
-				t.Fatalf("got txn: %t: %s", ok, pErr)
+			txn, pErr := getTxn(sender, &initialTxn.Proto)
+			if pErr != nil {
+				t.Fatal(pErr)
 			}
 			// Advance clock by 1ns.
 			// Locking the TxnCoordSender to prevent a data race.
@@ -346,7 +346,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, *roachpb.Error) {
+func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (*roachpb.Transaction, *roachpb.Error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
@@ -356,9 +356,9 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Tra
 		Txn: txn,
 	}, hb)
 	if pErr != nil {
-		return false, nil, pErr
+		return nil, pErr
 	}
-	return true, reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
+	return reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
 }
 
 func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
@@ -401,13 +401,20 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		if pErr := txn.Put(key, []byte("value")); pErr != nil {
 			t.Fatal(pErr)
 		}
-		// Conflicting transaction that psuhes the above transaction.
+		// Conflicting transaction that pushes the above transaction.
 		conflictTxn := client.NewTxn(context.Background(), *s.DB)
 		if _, pErr := conflictTxn.Get(key); pErr != nil {
 			t.Fatal(pErr)
 		}
-		// The transaction was pushed to this new timestamp.
-		pushedTimestamp := conflictTxn.Proto.Timestamp.Next().Next()
+
+		// The transaction was pushed at least to this timestamp (but it could
+		// have been pushed more - the push takes a timestamp off the HLC).
+		pushedTimestamp := conflictTxn.Proto.Timestamp
+		if txn, pErr := getTxn(sender, &txn.Proto); pErr != nil {
+			t.Fatal(pErr)
+		} else {
+			pushedTimestamp.Forward(txn.Timestamp)
+		}
 
 		{
 			var err error
@@ -433,7 +440,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			case 0:
 				// No deadline.
 				if err != nil {
-					t.Error(err)
+					t.Fatal(err)
 				}
 			case 1:
 				// Past deadline.
@@ -441,12 +448,12 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			case 2:
 				// Equal deadline.
 				if err != nil {
-					t.Error(err)
+					t.Fatal(err)
 				}
 			case 3:
 				// Future deadline.
 				if err != nil {
-					t.Error(err)
+					t.Fatal(err)
 				}
 			}
 		}
