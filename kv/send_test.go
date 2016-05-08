@@ -19,6 +19,7 @@ package kv
 import (
 	"errors"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -162,33 +163,60 @@ func TestRetryableError(t *testing.T) {
 	}
 }
 
+// channelSaveTransport captures the 'done' channels of every RPC it
+// "sends".
+type channelSaveTransport struct {
+	ch        chan chan batchCall
+	remaining int
+}
+
+func (c *channelSaveTransport) IsExhausted() bool {
+	return c.remaining <= 0
+}
+
+func (c *channelSaveTransport) SendNext(done chan batchCall) {
+	c.remaining--
+	c.ch <- done
+}
+
 // setupSendNextTest sets up a situation in which SendNextTimeout has
 // caused RPCs to be sent to all three replicas simultaneously. The
 // caller may then cause those RPCs to finish by writing to one of the
 // 'done' channels in the first return value; the second returned
 // channel will contain the final result of the send() call.
+//
+// TODO(bdarnell): all the 'done' channels are currently the same.
+// Either give each call its own channel, return a list of (replica
+// descriptor, channel) pair, or decide we don't care about
+// distinguishing them and just send a single channel.
 func setupSendNextTest(t *testing.T) ([]chan batchCall, chan batchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nodeContext := newNodeTestContext(nil, stopper)
 
-	// Using a real listener here speeds up the tests, compared to using
-	// a fake non-resolving address.
-	_, ln := newTestServer(t, nodeContext)
-	addrs := []net.Addr{ln.Addr(), ln.Addr(), ln.Addr()}
+	addrs := []net.Addr{
+		util.NewUnresolvedAddr("dummy", "1"),
+		util.NewUnresolvedAddr("dummy", "2"),
+		util.NewUnresolvedAddr("dummy", "3"),
+	}
+
+	doneChanChan := make(chan chan batchCall, len(addrs))
 
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Millisecond,
 		Timeout:         10 * time.Second,
 		Context:         context.Background(),
+		transportFactory: func(_ SendOptions,
+			_ *rpc.Context,
+			replicas ReplicaSlice,
+			_ roachpb.BatchRequest,
+		) (Transport, error) {
+			return &channelSaveTransport{
+				ch:        doneChanChan,
+				remaining: len(replicas),
+			}, nil
+		},
 	}
-
-	doneChanChan := make(chan chan batchCall, len(addrs))
-	sendOneFn = func(_ SendOptions, _ *rpc.Context,
-		_ batchClient, done chan batchCall) {
-		doneChanChan <- done
-	}
-	stopper.AddCloser(stop.CloserFn(func() { sendOneFn = sendOne }))
 
 	sendChan := make(chan batchCall, 1)
 	go func() {
@@ -467,6 +495,31 @@ func TestClientNotReady(t *testing.T) {
 	}
 }
 
+// firstNErrorTransport is a mock transport that sends an error on
+// requests to the first N addresses, then succeeds.
+type firstNErrorTransport struct {
+	replicas           ReplicaSlice
+	args               roachpb.BatchRequest
+	numErrors          int
+	numRetryableErrors int
+	numSent            int
+}
+
+func (f *firstNErrorTransport) IsExhausted() bool {
+	return f.numSent >= len(f.replicas)
+}
+
+func (f *firstNErrorTransport) SendNext(done chan batchCall) {
+	call := batchCall{
+		reply: &roachpb.BatchResponse{},
+	}
+	if f.numSent < f.numErrors {
+		call.err = roachpb.NewSendError("test", f.numSent < f.numRetryableErrors)
+	}
+	f.numSent++
+	done <- call
+}
+
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
@@ -505,15 +558,10 @@ func TestComplexScenarios(t *testing.T) {
 		{5, 5, 2, false, true},
 	}
 	for i, test := range testCases {
-		// Copy the values to avoid data race. sendOneFn might
-		// be called after this test case finishes.
-		numErrors := test.numErrors
-		numRetryableErrors := test.numRetryableErrors
-
 		var serverAddrs []net.Addr
 		for j := 0; j < test.numServers; j++ {
-			_, ln := newTestServer(t, nodeContext)
-			serverAddrs = append(serverAddrs, ln.Addr())
+			serverAddrs = append(serverAddrs, util.NewUnresolvedAddr("dummy",
+				strconv.Itoa(j)))
 		}
 
 		opts := SendOptions{
@@ -521,30 +569,19 @@ func TestComplexScenarios(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
 			Context:         context.Background(),
+			transportFactory: func(_ SendOptions,
+				_ *rpc.Context,
+				replicas ReplicaSlice,
+				args roachpb.BatchRequest,
+			) (Transport, error) {
+				return &firstNErrorTransport{
+					replicas:           replicas,
+					args:               args,
+					numErrors:          test.numErrors,
+					numRetryableErrors: test.numRetryableErrors,
+				}, nil
+			},
 		}
-
-		// Mock sendOne.
-		sendOneFn = func(_ SendOptions, _ *rpc.Context,
-			client batchClient, done chan batchCall) {
-			addrID := -1
-			for serverAddrID, serverAddr := range serverAddrs {
-				if serverAddr.String() == client.remoteAddr {
-					addrID = serverAddrID
-					break
-				}
-			}
-			if addrID == -1 {
-				t.Fatalf("%d: %s is not found in serverAddrs: %v", i, client.remoteAddr, serverAddrs)
-			}
-			call := batchCall{
-				reply: &roachpb.BatchResponse{},
-			}
-			if addrID < numErrors {
-				call.err = roachpb.NewSendError("test", addrID < numRetryableErrors)
-			}
-			done <- call
-		}
-		defer func() { sendOneFn = sendOne }()
 
 		reply, err := sendBatch(opts, serverAddrs, nodeContext)
 		if test.success {
