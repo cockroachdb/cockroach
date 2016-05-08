@@ -106,8 +106,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ config.S
 		},
 		MaxRanges: 1,
 	})
-	err := q.db.Run(b)
-	if err != nil {
+	if err := q.db.Run(b); err != nil {
 		return err
 	}
 	br := b.RawResponse()
