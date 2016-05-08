@@ -56,6 +56,8 @@ type SendOptions struct {
 	// Timeout is the maximum duration of an RPC before failure.
 	// 0 for no timeout.
 	Timeout time.Duration
+
+	transportFactory TransportFactory
 }
 
 func (so SendOptions) contextWithTimeout() (context.Context, func()) {
@@ -99,49 +101,18 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 	done := make(chan batchCall, len(replicas))
 
-	clients := make([]batchClient, 0, len(replicas))
-	for _, replica := range replicas {
-		conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
-		if err != nil {
-			return nil, err
-		}
-		argsCopy := args
-		argsCopy.Replica = replica.ReplicaDescriptor
-		clients = append(clients, batchClient{
-			remoteAddr: replica.NodeDesc.Address.String(),
-			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
-			args:       argsCopy,
-		})
+	transportFactory := opts.transportFactory
+	if transportFactory == nil {
+		transportFactory = grpcTransportFactory
 	}
-
-	// Put known-unhealthy clients last.
-	nHealthy, err := splitHealthy(clients)
+	transport, err := transportFactory(opts, rpcContext, replicas, args)
 	if err != nil {
 		return nil, err
 	}
 
-	var orderedClients []batchClient
-	switch opts.Ordering {
-	case orderStable:
-		orderedClients = clients
-	case orderRandom:
-		// Randomly permute order, but keep known-unhealthy clients last.
-		shuffleClients(clients[:nHealthy])
-		shuffleClients(clients[nHealthy:])
-
-		orderedClients = clients
-	}
-	// TODO(spencer): going to need to also sort by affinity; closest
-	// ping time should win. Makes sense to have the rpc client/server
-	// heartbeat measure ping times. With a bit of seasoning, each
-	// node will be able to order the healthy replicas based on latency.
-
 	// Send the first request.
-	sendOneFn(opts, rpcContext, orderedClients[0], done)
-	orderedClients = orderedClients[1:]
-
-	var errors int
+	pending := 1
+	transport.SendNext(done)
 
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
@@ -154,13 +125,14 @@ func send(opts SendOptions, replicas ReplicaSlice,
 		case <-sendNextTimer.C:
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
-			if len(orderedClients) > 0 {
+			if !transport.IsExhausted() {
 				log.Trace(opts.Context, "timeout, trying next peer")
-				sendOneFn(opts, rpcContext, orderedClients[0], done)
-				orderedClients = orderedClients[1:]
+				pending++
+				transport.SendNext(done)
 			}
 
 		case call := <-done:
+			pending--
 			err := call.err
 			if err == nil {
 				if log.V(2) {
@@ -185,18 +157,16 @@ func send(opts SendOptions, replicas ReplicaSlice,
 				log.Warningf("RPC error: %s", err)
 			}
 
-			errors++
-
-			if remainingNonErrorRPCs := len(replicas) - errors; remainingNonErrorRPCs < 1 {
+			// Send to additional replicas if available.
+			if !transport.IsExhausted() {
+				log.Trace(opts.Context, "error, trying next peer")
+				pending++
+				transport.SendNext(done)
+			}
+			if pending == 0 {
 				return nil, roachpb.NewSendError(
 					fmt.Sprintf("failed to send to any of %d replicas failed: %v",
-						len(clients), err), true)
-			}
-			// Send to additional replicas if available.
-			if len(orderedClients) > 0 {
-				log.Trace(opts.Context, "error, trying next peer")
-				sendOneFn(opts, rpcContext, orderedClients[0], done)
-				orderedClients = orderedClients[1:]
+						len(replicas), err), true)
 			}
 		}
 	}

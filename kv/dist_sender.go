@@ -121,9 +121,10 @@ type DistSender struct {
 	leaderCache *leaderCache
 	// RPCSend is used to send RPC calls and defaults to send
 	// outside of tests.
-	rpcSend         rpcSendFn
-	rpcContext      *rpc.Context
-	rpcRetryOptions retry.Options
+	rpcSend          rpcSendFn
+	transportFactory TransportFactory
+	rpcContext       *rpc.Context
+	rpcRetryOptions  retry.Options
 }
 
 var _ client.Sender = &DistSender{}
@@ -149,6 +150,7 @@ type DistSenderContext struct {
 	// The RPC dispatcher. Defaults to send but can be changed here for testing
 	// purposes.
 	RPCSend           rpcSendFn
+	TransportFactory  TransportFactory
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	Tracer            opentracing.Tracer
@@ -193,6 +195,9 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	ds.rpcSend = send
 	if ctx.RPCSend != nil {
 		ds.rpcSend = ctx.RPCSend
+	}
+	if ctx.TransportFactory != nil {
+		ds.transportFactory = ctx.TransportFactory
 	}
 	ds.rpcRetryOptions = defaultRPCRetryOptions
 	if ctx.RPCRetryOptions != nil {
@@ -337,10 +342,11 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
-		Ordering:        order,
-		SendNextTimeout: defaultSendNextTimeout,
-		Timeout:         base.NetworkTimeout,
-		Context:         ctx,
+		Ordering:         order,
+		SendNextTimeout:  defaultSendNextTimeout,
+		Timeout:          base.NetworkTimeout,
+		Context:          ctx,
+		transportFactory: ds.transportFactory,
 	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
