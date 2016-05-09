@@ -95,7 +95,11 @@ func TestLeaseSet(t *testing.T) {
 			set.remove(s)
 		case newest:
 			n := set.findNewest(op.version)
-			if s := fmt.Sprint(n); d.expected != s {
+			s := "<nil>"
+			if n != nil {
+				s = fmt.Sprintf("%d:%d", n.Version, n.Expiration().UnixNano())
+			}
+			if d.expected != s {
 				t.Fatalf("%d: expected %s, but found %s", i, d.expected, s)
 			}
 			continue

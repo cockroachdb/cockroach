@@ -412,9 +412,14 @@ func (txn *Txn) CommitOrCleanup() error {
 	return err
 }
 
-// SetDeadline sets the transactions deadline.
-func (txn *Txn) SetDeadline(deadline roachpb.Timestamp) {
-	txn.deadline = &deadline
+// UpdateDeadlineMaybe sets the transactions deadline to the lower of the
+// current one (if any) and the passed value.
+func (txn *Txn) UpdateDeadlineMaybe(deadline roachpb.Timestamp) bool {
+	if txn.deadline == nil || txn.deadline.Less(deadline) {
+		txn.deadline = &deadline
+		return true
+	}
+	return false
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.

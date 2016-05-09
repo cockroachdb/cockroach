@@ -796,7 +796,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 
 	if err := db.Txn(func(txn *client.Txn) error {
 		// Set deadline to sometime in the past.
-		txn.SetDeadline(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
+		txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
 		_, err := txn.Get("k")
 		return err
 	}); !testutils.IsError(err, "read-only txn timestamp violates deadline") {
