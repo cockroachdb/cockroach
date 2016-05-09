@@ -387,7 +387,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 		switch expr := ate.Expr.(type) {
 		case *parser.QualifiedName:
 			// Usual case: a table.
-			scan := &scanNode{planner: p, txn: p.txn}
+			scan := p.Scan()
 			s.table.alias, s.err = scan.initTable(p, expr, ate.Hints)
 			if s.err != nil {
 				return s.err
