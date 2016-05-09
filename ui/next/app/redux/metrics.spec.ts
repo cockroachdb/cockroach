@@ -159,9 +159,9 @@ describe("metrics reducer", function() {
       fetchMock.mock("/ts/query", "post", (url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1 or 2.
           assert.isAtLeast(mockMetricsState.inFlight, 1);
-          assert.isAtMost(mockMetricsState.inFlight, 1);
+          assert.isAtMost(mockMetricsState.inFlight, 2);
 
-          let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
+          let request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(requestObj.body as ArrayBuffer);
 
           return {
             sendAsJson: false,
@@ -172,7 +172,7 @@ describe("metrics reducer", function() {
                   datapoints: [],
                 };
               }),
-            }).encodeJSON(),
+            }).toArrayBuffer(),
           };
       });
 
@@ -232,7 +232,7 @@ describe("metrics reducer", function() {
           }
           successSent = true;
 
-          let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
+          let request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(requestObj.body as ArrayBuffer);
 
           return {
             sendAsJson: false,
@@ -243,7 +243,7 @@ describe("metrics reducer", function() {
                   datapoints: [],
                 };
               }),
-            }).encodeJSON(),
+            }).toArrayBuffer(),
           };
       });
 

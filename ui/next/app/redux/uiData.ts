@@ -72,7 +72,7 @@ export default function(state = new UIDataSet(), action: Action): UIDataSet {
 /**
  * setUIDataKey sets the value of the given UIData key.
  */
-export function setUIDataKey(key: string, value: any): PayloadAction<KeyValue> {
+export function setUIDataKey(key: string, value: Object): PayloadAction<KeyValue> {
   return {
     type: SET,
     payload: { key, value },
@@ -113,7 +113,7 @@ export function fetchCompleteUIData(): Action {
  */
 export interface KeyValue {
   key: string;
-  value: any;
+  value: Object;
 }
 
 /**
@@ -156,9 +156,9 @@ export function loadUIData(...keys: string[]) {
       response.getKeyValues().forEach((val, key) => {
         // Responses from the server return values as ByteBuffer objects, which
         // represent stringified JSON objects.
-        let decoded: any = null;
+        let decoded: Object;
         let bb = val.getValue();
-        let str = bb.readString(bb.limit);
+        let str = bb.readString(bb.limit - bb.offset);
         if (str) {
           decoded = JSON.parse(str);
         }

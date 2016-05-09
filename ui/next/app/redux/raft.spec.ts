@@ -96,7 +96,7 @@ describe("raft reducer", function() {
           successSent = true;
           return {
             sendAsJson: false,
-            body: new protos.cockroach.server.serverpb.RaftDebugResponse().encodeJSON(),
+            body: new protos.cockroach.server.serverpb.RaftDebugResponse().toArrayBuffer(),
           };
       });
 

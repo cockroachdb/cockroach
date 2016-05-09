@@ -84,12 +84,18 @@ function Fetch<TRequestMessage extends {
   return timeout(fetch(url, {
     method: req ? "POST" : "GET",
     headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
+      "Accept": "application/x-protobuf",
+      "Content-Type": "application/x-protobuf",
     },
-    body: req ? req.encodeJSON() : undefined,
-  })).then((res) => res.json<TResponse>()).then((json) => new builder(json));
+    body: req ? req.toArrayBuffer() : undefined,
+  })).then((res) => {
+    if (!res.ok) {
+      throw Error(res.statusText);
+    }
+    return res.arrayBuffer().then((buffer) => builder.decode(buffer));
+  });
 }
+
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
 // - keys with null or undefined values will be skipped
