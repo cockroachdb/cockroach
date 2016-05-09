@@ -72,7 +72,7 @@ func (p *planner) makeReturningHelper(
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		expr, err := resolveQNames(target.Expr, &table, rh.qvals, &p.qnameVisitor)
+		expr, err := resolveQNames(target.Expr, []*tableInfo{&table}, rh.qvals, &p.qnameVisitor)
 		if err != nil {
 			return returningHelper{}, err
 		}

@@ -25,6 +25,7 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -501,6 +502,81 @@ func DecodeKeyVals(a *DatumAlloc, valTypes, vals []parser.Datum,
 	return key, nil
 }
 
+// ExtractIndexKey constructs the index (primary) key for a row from any index
+// key/value entry, including secondary indexes.
+func ExtractIndexKey(
+	a *DatumAlloc,
+	tableDesc *TableDescriptor,
+	entry client.KeyValue,
+) (roachpb.Key, error) {
+	indexID, key, err := DecodeIndexKeyPrefix(tableDesc, entry.Key)
+	if err != nil {
+		return nil, err
+	}
+	if indexID == tableDesc.PrimaryIndex.ID {
+		return entry.Key, nil
+	}
+
+	index, err := tableDesc.FindIndexByID(indexID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract the values for index.ColumnIDs.
+	valueTypes, err := MakeKeyVals(tableDesc, index.ColumnIDs)
+	if err != nil {
+		return nil, err
+	}
+	dirs := make([]encoding.Direction, len(index.ColumnIDs))
+	for i, dir := range index.ColumnDirections {
+		dirs[i], err = dir.ToEncodingDirection()
+		if err != nil {
+			return nil, err
+		}
+	}
+	extractedValues := make([]parser.Datum, len(valueTypes))
+	key, err = DecodeKeyVals(a, valueTypes, extractedValues, dirs, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract the values for index.ImplicitColumnIDs
+	valueTypes, err = MakeKeyVals(tableDesc, index.ImplicitColumnIDs)
+	if err != nil {
+		return nil, err
+	}
+	dirs = make([]encoding.Direction, len(index.ImplicitColumnIDs))
+	for i := range index.ImplicitColumnIDs {
+		// Implicit columns are always encoded Ascending.
+		dirs[i] = encoding.Ascending
+	}
+	extractedImplicitValues := make([]parser.Datum, len(valueTypes))
+	implicitKey := key
+	if index.Unique {
+		implicitKey, err = entry.Value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, err = DecodeKeyVals(a, valueTypes, extractedImplicitValues, dirs, implicitKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encode the index key from its components.
+	extractedValues = append(extractedValues, extractedImplicitValues...)
+	colMap := make(map[ColumnID]int)
+	for i, columnID := range index.ColumnIDs {
+		colMap[columnID] = i
+	}
+	for i, columnID := range index.ImplicitColumnIDs {
+		colMap[columnID] = i + len(index.ColumnIDs)
+	}
+	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID)
+	indexKey, _, err := EncodeIndexKey(&tableDesc.PrimaryIndex, colMap, extractedValues, indexKeyPrefix)
+	return indexKey, err
+}
+
 const datumAllocSize = 16 // Arbitrary, could be tuned.
 
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
@@ -734,6 +810,57 @@ type IndexEntry struct {
 	Value []byte
 }
 
+// EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
+// ColumnIDs to indices in `values`.
+func EncodeSecondaryIndex(
+	tableID ID,
+	secondaryIndex IndexDescriptor,
+	colMap map[ColumnID]int,
+	values []parser.Datum,
+) (IndexEntry, error) {
+	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
+	secondaryIndexKey, containsNull, err := EncodeIndexKey(
+		&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+	if err != nil {
+		return IndexEntry{}, err
+	}
+
+	// Add the implicit columns - they are encoded ascendingly.
+	implicitDirs := make([]encoding.Direction, 0, len(secondaryIndex.ImplicitColumnIDs))
+	for range secondaryIndex.ImplicitColumnIDs {
+		implicitDirs = append(implicitDirs, encoding.Ascending)
+	}
+	extraKey, _, err := EncodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
+		colMap, values, nil)
+	if err != nil {
+		return IndexEntry{}, err
+	}
+
+	entry := IndexEntry{Key: secondaryIndexKey}
+
+	if !secondaryIndex.Unique || containsNull {
+		// If the index is not unique or it contains a NULL value, append
+		// extraKey to the key in order to make it unique.
+		entry.Key = append(entry.Key, extraKey...)
+	}
+
+	// Index keys are considered "sentinel" keys in that they do not have a
+	// column ID suffix.
+	entry.Key = keys.MakeNonColumnKey(entry.Key)
+
+	if secondaryIndex.Unique {
+		// Note that a unique secondary index that contains a NULL column value
+		// will have extraKey appended to the key and stored in the value. We
+		// require extraKey to be appended to the key in order to make the key
+		// unique. We could potentially get rid of the duplication here but at
+		// the expense of complicating scanNode when dealing with unique
+		// secondary indexes.
+		entry.Value = extraKey
+	}
+
+	return entry, nil
+}
+
 // EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
 // maps ColumnIDs to indices in `values`.
 func EncodeSecondaryIndexes(
@@ -744,46 +871,10 @@ func EncodeSecondaryIndexes(
 ) ([]IndexEntry, error) {
 	var secondaryIndexEntries []IndexEntry
 	for _, secondaryIndex := range indexes {
-		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
-		secondaryIndexKey, containsNull, err := EncodeIndexKey(
-			&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		entry, err := EncodeSecondaryIndex(tableID, secondaryIndex, colMap, values)
 		if err != nil {
 			return nil, err
 		}
-
-		// Add the implicit columns - they are encoded ascendingly.
-		implicitDirs := make([]encoding.Direction, 0, len(secondaryIndex.ImplicitColumnIDs))
-		for range secondaryIndex.ImplicitColumnIDs {
-			implicitDirs = append(implicitDirs, encoding.Ascending)
-		}
-		extraKey, _, err := EncodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
-			colMap, values, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		entry := IndexEntry{Key: secondaryIndexKey}
-
-		if !secondaryIndex.Unique || containsNull {
-			// If the index is not unique or it contains a NULL value, append
-			// extraKey to the key in order to make it unique.
-			entry.Key = append(entry.Key, extraKey...)
-		}
-
-		// Index keys are considered "sentinel" keys in that they do not have a
-		// column ID suffix.
-		entry.Key = keys.MakeNonColumnKey(entry.Key)
-
-		if secondaryIndex.Unique {
-			// Note that a unique secondary index that contains a NULL column value
-			// will have extraKey appended to the key and stored in the value. We
-			// require extraKey to be appended to the key in order to make the key
-			// unique. We could potentially get rid of the duplication here but at
-			// the expense of complicating scanNode when dealing with unique
-			// secondary indexes.
-			entry.Value = extraKey
-		}
-
 		secondaryIndexEntries = append(secondaryIndexEntries, entry)
 	}
 	return secondaryIndexEntries, nil

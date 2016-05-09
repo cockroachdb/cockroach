@@ -29,13 +29,13 @@ type Insert struct {
 	Table      TableExpr
 	Columns    QualifiedNames
 	Rows       *Select
-	Returning  ReturningExprs
 	OnConflict *OnConflict
+	Returning  ReturningExprs
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
-	if node.OnConflict != nil {
+	if node.OnConflict.IsUpsertAlias() {
 		buf.WriteString("UPSERT")
 	} else {
 		buf.WriteString("INSERT")
@@ -53,6 +53,15 @@ func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteByte(' ')
 		FormatNode(buf, f, node.Rows)
 	}
+	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
+		buf.WriteString(" ON CONFLICT (")
+		FormatNode(buf, f, node.OnConflict.Columns)
+		buf.WriteString(") DO UPDATE SET ")
+		FormatNode(buf, f, node.OnConflict.Exprs)
+		if node.OnConflict.Where != nil {
+			FormatNode(buf, f, node.OnConflict.Where)
+		}
+	}
 	FormatNode(buf, f, node.Returning)
 }
 
@@ -61,11 +70,19 @@ func (node *Insert) DefaultValues() bool {
 	return node.Rows.Select == nil
 }
 
-// OnConflict represents an `ON CONFLICT index DO UPDATE SET` clause.
+// OnConflict represents an `ON CONFLICT (columns) DO UPDATE SET exprs WHERE
+// where` clause.
 //
 // The zero value for OnConflict is used to signal the UPSERT short form, which
-// uses the primary key for Index and the values being inserted for Exprs.
+// uses the primary key for as the conflict index and the values being inserted
+// for Exprs.
 type OnConflict struct {
-	Index Name
-	Exprs UpdateExprs
+	Columns NameList
+	Exprs   UpdateExprs
+	Where   *Where
+}
+
+// IsUpsertAlias returns true if the UPSERT syntactic sugar was used.
+func (oc *OnConflict) IsUpsertAlias() bool {
+	return oc != nil && oc.Columns == nil && oc.Exprs == nil && oc.Where == nil
 }

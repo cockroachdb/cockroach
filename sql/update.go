@@ -118,32 +118,9 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	}
 
 	// Determine which columns we're inserting into.
-	var names parser.QualifiedNames
-	for _, expr := range n.Exprs {
-		// TODO(knz): We need to (attempt to) expand subqueries here already
-		// so that it retrieves the column names. But then we need to do
-		// it again when the placeholder values are known below.
-		newExpr, eErr := p.expandSubqueries(expr.Expr, len(expr.Names))
-		if eErr != nil {
-			return nil, eErr
-		}
-
-		if expr.Tuple {
-			n := 0
-			switch t := newExpr.(type) {
-			case *parser.Tuple:
-				n = len(t.Exprs)
-			case *parser.DTuple:
-				n = len(*t)
-			default:
-				return nil, util.Errorf("unsupported tuple assignment: %T", newExpr)
-			}
-			if len(expr.Names) != n {
-				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
-					len(expr.Names), n)
-			}
-		}
-		names = append(names, expr.Names...)
+	names, err := p.namesForExprs(n.Exprs)
+	if err != nil {
+		return nil, err
 	}
 
 	updateCols, err := p.processColumns(en.tableDesc, names)
@@ -364,6 +341,38 @@ func (u *updateNode) Next() bool {
 	u.run.resultRow = resultRow
 
 	return true
+}
+
+// namesForExprs expands names in the tuples and subqueries in exprs.
+func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.QualifiedNames, error) {
+	var names parser.QualifiedNames
+	for _, expr := range exprs {
+		// TODO(knz): We need to (attempt to) expand subqueries here already
+		// so that it retrieves the column names. But then we need to do
+		// it again when the placeholder values are known below.
+		newExpr, eErr := p.expandSubqueries(expr.Expr, len(expr.Names))
+		if eErr != nil {
+			return nil, eErr
+		}
+
+		if expr.Tuple {
+			n := 0
+			switch t := newExpr.(type) {
+			case *parser.Tuple:
+				n = len(t.Exprs)
+			case *parser.DTuple:
+				n = len(*t)
+			default:
+				return nil, util.Errorf("unsupported tuple assignment: %T", newExpr)
+			}
+			if len(expr.Names) != n {
+				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
+					len(expr.Names), n)
+			}
+		}
+		names = append(names, expr.Names...)
+	}
+	return names, nil
 }
 
 func fillDefault(
