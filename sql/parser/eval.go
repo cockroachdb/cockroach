@@ -59,10 +59,6 @@ func (op UnaryOp) params() typeList {
 	return op.types
 }
 
-func (op UnaryOp) matchParams(t Datum) bool {
-	return op.params().matchAt(t, 0)
-}
-
 func (op UnaryOp) returnType() Datum {
 	return op.ReturnType
 }
@@ -78,15 +74,6 @@ func init() {
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
 type unaryOpOverload []UnaryOp
-
-func (o unaryOpOverload) lookupImpl(typ Datum) (UnaryOp, bool) {
-	for _, fn := range o {
-		if fn.matchParams(typ) {
-			return fn, true
-		}
-	}
-	return UnaryOp{}, false
-}
 
 // UnaryOps contains the unary operations indexed by operation type.
 var UnaryOps = map[UnaryOperator]unaryOpOverload{
@@ -1291,12 +1278,6 @@ func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
 	if right == DNull {
 		return DNull, nil
 	}
-	if expr.fn.fn == nil {
-		var ok bool
-		if expr.fn, ok = BinOps[expr.Operator].lookupImpl(left, right); !ok {
-			panic(fmt.Sprintf("lookup for TypedBinaryExpr %v's BinOp failed", expr))
-		}
-	}
 	return expr.fn.fn(ctx, left, right)
 }
 
@@ -1584,16 +1565,6 @@ func (expr *CoalesceExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
-	// Make sure the expression's cmpOp function is memoized and that
-	// type checking has taken place.
-	if expr.fn.fn == nil {
-		op, leftExpr, rightExpr, _, _ := foldComparisonExpr(expr.Operator, expr.Left, expr.Right)
-		expr.fn, _ = CmpOps[op].lookupImpl(
-			leftExpr.(TypedExpr).ReturnType(),
-			rightExpr.(TypedExpr).ReturnType(),
-		)
-	}
-
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1617,12 +1588,6 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 		default:
 			return DNull, nil
 		}
-	}
-
-	// If cmpOp's function is still nil, return unsupported op error.
-	if expr.fn.fn == nil {
-		return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-			left.Type(), expr.Operator, right.Type())
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(expr.Operator, left, right)
@@ -1651,25 +1616,6 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 			return nil, err
 		}
 		args = append(args, arg)
-	}
-
-	if expr.fn.fn == nil {
-		name := string(expr.Name.Base)
-		candidates, _ := Builtins[strings.ToLower(name)]
-		for _, fn := range candidates {
-			if fn.Types.match(ArgTypes(args)) {
-				expr.fn = fn
-				break
-			}
-		}
-		if expr.fn.fn == nil {
-			// The argument types no longer match the memoized function. This happens
-			// when a non-NULL argument becomes NULL and the function does not support
-			// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
-			// nullable. The SELECT does not error, but returns a NULL value for that
-			// select expression.
-			return DNull, nil
-		}
 	}
 
 	if !expr.fn.Types.match(ArgTypes(args)) {
@@ -1881,13 +1827,10 @@ func (expr *Subquery) Eval(_ EvalContext) (Datum, error) {
 func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
-	if expr.fn.fn == nil {
-		var ok bool
-		if expr.fn, ok = UnaryOps[expr.Operator].lookupImpl(expr.Expr.(TypedExpr).ReturnType()); !ok {
-			panic(fmt.Sprintf("lookup for TypedUnaryExpr %v's UnaryOp failed", expr))
-		}
+	if d == DNull {
+		return DNull, nil
 	}
 	return expr.fn.fn(ctx, d)
 }

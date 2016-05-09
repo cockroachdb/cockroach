@@ -145,19 +145,31 @@ func TestNormalizeColumnName(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
+	defer mockQualifiedNameTypes(map[string]Datum{
+		"a": TypeBool,
+		"b": TypeBool,
+		"c": TypeBool,
+		"d": TypeBool,
+		"e": TypeBool,
+		"f": TypeInt,
+		"g": TypeInt,
+		"h": TypeInt,
+		"i": TypeInt,
+		"j": TypeInt,
+		"k": TypeInt,
+	})()
 	testExprs := []string{
 		`a AND b`,
 		`a AND b OR c`,
 		`(a AND b) OR c`,
 		`a AND (b OR c)`,
 		`a AND NOT ((b OR c) AND (d AND e))`,
-		`~-a`,
-		`~-a`,
-		`-2*(a+3)*b-2/c`,
-		`a&b<<(b+c)&d AND (b&d)+c>>(d&a)`,
-		`a&(b<<b+c)&d AND b&(d+c>>d)&a`,
-		`a = b|c`,
-		`a != b|c`,
+		`~-f`,
+		`-2*(f+3)*g`,
+		`f&g<<(g+h)&i > 0 AND (g&i)+h>>(i&f) > 0`,
+		`f&(g<<g+h)&i > 0 AND g&(i+h>>i)&f > 0`,
+		`f = g|h`,
+		`f != g|h`,
 		`NOT a AND b`,
 		`NOT (a AND b)`,
 		`(NOT a) AND b`,
@@ -167,7 +179,7 @@ func TestExprString(t *testing.T) {
 		`NOT (NOT a) < b`,
 		`NOT (NOT a = b)`,
 		`(NOT NOT a) >= b`,
-		`(a OR (b BETWEEN (c+d) AND (e+f))) AND b`,
+		`(a OR (g BETWEEN (h+i) AND (j+k))) AND b`,
 		`(1 >= 2) IS OF (BOOL)`,
 		`(1 >= 2) = (2 IS OF (BOOL))`,
 	}
@@ -176,7 +188,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := TypeConstants(expr)
+		typedExpr, err := TypeCheck(expr, nil, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -186,7 +198,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := TypeConstants(expr2)
+		typedExpr2, err := TypeCheck(expr2, nil, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}
@@ -205,7 +217,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		if !reflect.DeepEqual(normalized, normalized2) {
+		if !reflect.DeepEqual(stripMemoizedFuncs(normalized), stripMemoizedFuncs(normalized2)) {
 			t.Errorf("normalized expressions differ\n"+
 				"original:     %s\n"+
 				"intermediate: %s\n"+
@@ -213,4 +225,29 @@ func TestExprString(t *testing.T) {
 				"after:  %#v", exprStr, str, normalized, normalized2)
 		}
 	}
+}
+
+type stripFuncsVisitor struct{}
+
+func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	case *UnaryExpr:
+		t.fn = UnaryOp{}
+	case *BinaryExpr:
+		t.fn = BinOp{}
+	case *ComparisonExpr:
+		t.fn = CmpOp{}
+	case *FuncExpr:
+		t.fn = Builtin{}
+	}
+	return true, expr
+}
+
+func (stripFuncsVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// stripMemoizedFuncs strips memoized function references from expression trees.
+// This is necessary to permit equality checks using reflect.DeepEqual.
+func stripMemoizedFuncs(expr Expr) Expr {
+	expr, _ = WalkExpr(stripFuncsVisitor{}, expr)
+	return expr
 }
