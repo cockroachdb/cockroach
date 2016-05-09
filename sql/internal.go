@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/sql/sqlutil"
 )
 
@@ -58,7 +59,7 @@ func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, ta
 	if err := qname.NormalizeTableName(dbName); err != nil {
 		return roachpb.Span{}, err
 	}
-	tableID, err := p.getTableID(qname)
+	tableID, err := getTableID(p, qname)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -68,4 +69,27 @@ func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, ta
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}, nil
+}
+
+// getTableID retrieves the table ID for the specified table.
+func getTableID(p *planner, qname *parser.QualifiedName) (sqlbase.ID, error) {
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+		return 0, err
+	}
+
+	dbID, err := p.getDatabaseID(qname.Database())
+	if err != nil {
+		return 0, err
+	}
+
+	nameKey := tableKey{dbID, qname.Table()}
+	key := nameKey.Key()
+	gr, err := p.txn.Get(key)
+	if err != nil {
+		return 0, err
+	}
+	if !gr.Exists() {
+		return 0, tableDoesNotExistError(qname.String())
+	}
+	return sqlbase.ID(gr.ValueInt()), nil
 }

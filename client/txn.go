@@ -422,6 +422,11 @@ func (txn *Txn) CommitOrCleanup() error {
 	return err
 }
 
+// GetDeadline sets the transactions deadline.
+func (txn *Txn) GetDeadline() *roachpb.Timestamp {
+	return txn.deadline
+}
+
 // SetDeadline sets the transactions deadline.
 func (txn *Txn) SetDeadline(deadline roachpb.Timestamp) {
 	txn.deadline = &deadline

@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -41,7 +40,6 @@ type SchemaChanger struct {
 	mutationID sqlbase.MutationID
 	nodeID     roachpb.NodeID
 	db         client.DB
-	cfg        config.SystemConfig
 	leaseMgr   *LeaseManager
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
@@ -579,7 +577,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							} else {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
-							schemaChanger.cfg = cfg
 							schemaChanger.execAfter = execAfter
 							// Keep track of this schema change.
 							// Remove from oldSchemaChangers map.
