@@ -207,7 +207,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		Exprs: targets,
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	}, desiredTypesFromSelect)
+	}, nil, nil, desiredTypesFromSelect)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,7 @@ func (u *updateNode) Start() error {
 		Exprs: targets,
 		From:  []parser.TableExpr{u.n.Table},
 		Where: u.n.Where,
-	}, u.desiredTypes)
+	}, nil, nil, u.desiredTypes)
 	if err != nil {
 		return err
 	}

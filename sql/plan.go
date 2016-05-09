@@ -239,7 +239,7 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 	case *parser.Select:
 		return p.Select(n, desiredTypes, autoCommit)
 	case *parser.SelectClause:
-		return p.SelectClause(n, desiredTypes)
+		return p.SelectClause(n, nil, nil, desiredTypes)
 	case *parser.Set:
 		return p.Set(n)
 	case *parser.SetTimeZone:
@@ -284,7 +284,7 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 	case *parser.Select:
 		return p.Select(n, nil, false)
 	case *parser.SelectClause:
-		return p.SelectClause(n, nil)
+		return p.SelectClause(n, nil, nil, nil)
 	case *parser.Show:
 		return p.Show(n)
 	case *parser.ShowCreateTable:

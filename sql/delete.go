@@ -58,7 +58,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		Exprs: en.tableDesc.AllColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	}, nil)
+	}, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (d *deleteNode) Start() error {
 		Exprs: d.tableDesc.AllColumnsSelector(),
 		From:  []parser.TableExpr{d.n.Table},
 		Where: d.n.Where,
-	}, nil)
+	}, nil, nil, nil)
 	if err != nil {
 		return err
 	}
