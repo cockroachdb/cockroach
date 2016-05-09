@@ -19,6 +19,13 @@ package parser
 import "testing"
 
 func TestNormalizeExpr(t *testing.T) {
+	defer mockQualifiedNameTypes(map[string]Datum{
+		"a": TypeInt,
+		"b": TypeInt,
+		"c": TypeInt,
+		"d": TypeBool,
+		"s": TypeString,
+	})()
 	testData := []struct {
 		expr     string
 		expected string
@@ -33,18 +40,18 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1+1+a`, `2 + a`},
 		{`a=1+1`, `a = 2`},
 		{`a=1+(2*3)-4`, `a = 3`},
-		{`true OR a`, `true`},
-		{`false OR a`, `a`},
-		{`NULL OR a`, `NULL OR a`},
-		{`a OR true`, `true`},
-		{`a OR false`, `a`},
-		{`a OR NULL`, `a OR NULL`},
-		{`true AND a`, `a`},
-		{`false AND a`, `false`},
-		{`NULL AND a`, `NULL AND a`},
-		{`a AND true`, `a`},
-		{`a AND false`, `false`},
-		{`a AND NULL`, `a AND NULL`},
+		{`true OR d`, `true`},
+		{`false OR d`, `d`},
+		{`NULL OR d`, `NULL OR d`},
+		{`d OR true`, `true`},
+		{`d OR false`, `d`},
+		{`d OR NULL`, `d OR NULL`},
+		{`true AND d`, `d`},
+		{`false AND d`, `false`},
+		{`NULL AND d`, `NULL AND d`},
+		{`d AND true`, `d`},
+		{`d AND false`, `false`},
+		{`d AND NULL`, `d AND NULL`},
 		{`1 IN (1, 2, 3)`, `true`},
 		{`1 IN (3, 2, 1)`, `true`},
 		{`a IN (3, 2, 1)`, `a IN (1, 2, 3)`},
@@ -64,15 +71,13 @@ func TestNormalizeExpr(t *testing.T) {
 		{`a+1+1=2`, `a = 0`},
 		{`1+1>=(b+c)`, `(b + c) <= 2`},
 		{`b+c<=1+1`, `(b + c) <= 2`},
-		{`a/2=1`, `a = 2`},
-		{`1=a/2`, `a = 2`},
-		{`a=lower('FOO')`, `a = 'foo'`},
-		{`lower(a)='foo'`, `lower(a) = 'foo'`},
+		{`a/2=1`, `a = 2.0`},
+		{`1=a/2`, `a = 2.0`},
+		{`s=lower('FOO')`, `s = 'foo'`},
+		{`lower(s)='foo'`, `lower(s) = 'foo'`},
 		{`random()`, `random()`},
-		{`version(a)`, `version(a)`},
-		{`notARealMethod()`, `notARealMethod()`},
 		{`9223372036854775808`, `9.223372036854776e+18`},
-		{`-9223372036854775808`, `-9223372036854775808`},
+		{`-9223372036854775808`, `-9.223372036854776e+18`},
 		{`(SELECT 1)`, `(SELECT 1)`},
 		{`(1, 2, 3) = (SELECT 1, 2, 3)`, `(1, 2, 3) = (SELECT 1, 2, 3)`},
 		{`(1, 2, 3) IN (SELECT 1, 2, 3)`, `(1, 2, 3) IN (SELECT 1, 2, 3)`},
@@ -83,7 +88,7 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeConstants(expr)
+		typedExpr, err := expr.TypeCheck(nil, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

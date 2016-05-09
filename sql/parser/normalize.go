@@ -16,10 +16,7 @@
 
 package parser
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 type normalizableExpr interface {
 	Expr
@@ -115,14 +112,11 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					expr = &exprCopy
 					exprCopied = true
 				}
-				*expr = ComparisonExpr{
-					Operator: invertComparisonOp(expr.Operator),
-					Left:     expr.Right,
-					Right:    expr.Left,
-					typeAnnotation: typeAnnotation{
-						typ: TypeBool,
-					},
-				}
+				expr = NewTypedComparisonExpr(
+					invertComparisonOp(expr.Operator),
+					expr.TypedRight(),
+					expr.TypedLeft(),
+				)
 			} else if !v.isConst(expr.Right) {
 				return expr
 			}
@@ -163,16 +157,15 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					left.Operator = Mult
 				}
 
-				// Clear the function caches since we're rotating.
-				left.fn.fn = nil
-				expr.fn.fn = nil
-
 				expr.Left = left.Left
 				left.Left = expr.Right
+
+				left.memoizeFn()
 				expr.Right, v.err = left.Eval(v.ctx)
 				if v.err != nil {
 					return nil
 				}
+				expr.memoizeFn()
 				if !isVar(expr.Left) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
@@ -196,8 +189,6 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				left = &leftCopy
 
 				// Clear the function caches; we're about to change stuff.
-				expr.fn.fn = nil
-				left.fn.fn = nil
 				left.Right, expr.Right = expr.Right, left.Right
 				if left.Operator == Plus {
 					left.Operator = Minus
@@ -205,11 +196,14 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				} else {
 					expr.Operator = invertComparisonOp(expr.Operator)
 				}
+
+				left.memoizeFn()
 				expr.Left, v.err = left.Eval(v.ctx)
 				if v.err != nil {
 					return nil
 				}
 				expr.Left, expr.Right = expr.Right, expr.Left
+				expr.memoizeFn()
 				if !isVar(expr.Left) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
@@ -440,22 +434,7 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			v.isConst = false
 			return false, expr
 		case *FuncExpr:
-			// TODO(nvanbenschoten) This could be cleaned up a bit.
-			if t.fn.fn == nil {
-				name := string(t.Name.Base)
-				candidates, _ := Builtins[strings.ToLower(name)]
-				args := make(DTuple, 0, len(t.Exprs))
-				for _, e := range t.Exprs {
-					args = append(args, e.(TypedExpr).ReturnType())
-				}
-				for _, fn := range candidates {
-					if fn.Types.match(ArgTypes(args)) {
-						t.fn = fn
-						break
-					}
-				}
-			}
-			if t.fn.fn == nil || t.fn.impure {
+			if t.fn.impure {
 				v.isConst = false
 				return false, expr
 			}

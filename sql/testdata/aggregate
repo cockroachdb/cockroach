@@ -610,7 +610,7 @@ EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 query RRR
 SELECT AVG(1::int), AVG(2::float), AVG(3::decimal)
 ----
-1.0000000000000000 2 3.0000000000000000
+1 2 3
 
 query III
 SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
