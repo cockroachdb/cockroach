@@ -623,21 +623,35 @@ var Builtins = map[string][]Builtin{
 	},
 
 	// Aggregate functions.
-	// These functions are handled in sql/group.go and are not evaluated normally,
-	// so they do not need to define an fn function.
+	// These functions are handled in sql/group.go and are not evaluated normally.
+	//
+	// The functions are split into two groups when it comes to handling constant
+	// literal arguments. If the result of the aggregate function with constant
+	// arguments is dependent on the number of rows it is run across (eg. SUM(1)),
+	// it should be marked as impure. If the results of the aggregate function with
+	// constant arguments is independent on the number of rows it is run across
+	// (eg. BOOL_AND(true)), it should provide an fn implementation that handles this
+	// constant argument case.
 
 	"avg": {
 		Builtin{
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeDecimal,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(*args[0].(*DInt)))
+				return dd, nil
+			},
 		},
 		Builtin{
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeFloat,
+			fn:         identityFn,
 		},
 		Builtin{
 			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeDecimal,
+			fn:         identityFn,
 		},
 	},
 
@@ -645,6 +659,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeBool,
+			fn:         identityFn,
 		},
 	},
 
@@ -652,6 +667,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeBool,
+			fn:         identityFn,
 		},
 	},
 
@@ -662,14 +678,17 @@ var Builtins = map[string][]Builtin{
 
 	"sum": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeDecimal,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeFloat,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeDecimal,
 		},
@@ -677,14 +696,17 @@ var Builtins = map[string][]Builtin{
 
 	"variance": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeDecimal,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeDecimal,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeFloat,
 		},
@@ -692,14 +714,17 @@ var Builtins = map[string][]Builtin{
 
 	"stddev": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeDecimal,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeDecimal,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeFloat,
 		},
@@ -990,8 +1015,13 @@ var Builtins = map[string][]Builtin{
 	},
 }
 
-// The aggregate functions all just return their first argument. We don't
-// perform any type checking here either. The bulk of the aggregate function
+// identityFn returns the first argument provided.
+var identityFn = func(_ EvalContext, args DTuple) (Datum, error) {
+	return args[0], nil
+}
+
+// The aggregate functions all just return their first argument if given a
+// constant argument. The bulk of the aggregate function
 // implementation is performed at a higher level in sql.groupNode.
 func aggregateImpls(types ...Datum) []Builtin {
 	var r []Builtin
@@ -999,6 +1029,7 @@ func aggregateImpls(types ...Datum) []Builtin {
 		r = append(r, Builtin{
 			Types:      ArgTypes{t},
 			ReturnType: t,
+			fn:         identityFn,
 		})
 	}
 	return r
