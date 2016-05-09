@@ -772,6 +772,7 @@ func (t *Transaction) Restart(userPriority UserPriority, upgradePriority int32, 
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
+	t.RetryOnPush = false
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
@@ -813,12 +814,13 @@ func (t *Transaction) Update(o *Transaction) {
 	// that we update from a transaction which isn't Writing.
 	t.Writing = t.Writing || o.Writing
 	// This isn't or'd (similar to Writing) because we want WriteTooOld
-	// to be set each time according to "o". This allows a persisted
-	// txn to have its WriteTooOld flag reset on update.
+	// and RetryOnPush to be set each time according to "o". This allows
+	// a persisted txn to have its WriteTooOld flag reset on update.
 	// TODO(tschottdorf): reset in a central location when it's certifiably
 	//   a new request. Update is called in many situations and shouldn't
 	//   reset anything.
 	t.WriteTooOld = o.WriteTooOld
+	t.RetryOnPush = o.RetryOnPush
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}
@@ -843,9 +845,9 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t",
+	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t rop=%t",
 		t.ID.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld)
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush)
 	return buf.String()
 }
 

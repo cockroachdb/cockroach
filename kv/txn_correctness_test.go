@@ -280,6 +280,9 @@ func historyString(cmds []*cmd) string {
 func parseHistory(txnIdx int, history string, t *testing.T) []*cmd {
 	// Parse commands.
 	var cmds []*cmd
+	if len(history) == 0 {
+		return cmds
+	}
 	elems := strings.Split(history, " ")
 	for _, elem := range elems {
 		var c *cmd
@@ -468,15 +471,14 @@ func TestEnumerateHistories(t *testing.T) {
 	}
 }
 
-// verifier executes the history and then invokes checkFn to verify
-// the environment (map from key to value) left from executing the
-// history.
+// verifier first executes the pre-history, which sets existing values
+// as necessary, then executes the history and then invokes checkFn to
+// verify the environment (map from key to value) left from executing
+// the history.
 type verifier struct {
-	history string
-	checkFn func(env map[string]int64) error
-	// limit execution (and checks) to orderings of history whose string
-	// representation matches.
-	pruneTo *regexp.Regexp
+	preHistory string
+	history    string
+	checkFn    func(env map[string]int64) error
 }
 
 // historyVerifier parses a planned transaction execution history into
@@ -486,12 +488,13 @@ type verifier struct {
 // actual commands slice. When all txns have completed the actual history
 // is compared to the expected history.
 type historyVerifier struct {
-	name       string
-	txns       [][]*cmd
-	verify     *verifier
-	verifyCmds []*cmd
-	expSuccess bool
-	symmetric  bool
+	name           string
+	txns           [][]*cmd
+	verify         *verifier
+	preHistoryCmds []*cmd
+	verifyCmds     []*cmd
+	expSuccess     bool
+	symmetric      bool
 
 	sync.Mutex // protects actual slice of command outcomes.
 	actual     []string
@@ -500,12 +503,13 @@ type historyVerifier struct {
 
 func newHistoryVerifier(name string, txns []string, verify *verifier, expSuccess bool, t *testing.T) *historyVerifier {
 	return &historyVerifier{
-		name:       name,
-		txns:       parseHistories(txns, t),
-		verify:     verify,
-		verifyCmds: parseHistory(0, verify.history, t),
-		expSuccess: expSuccess,
-		symmetric:  areHistoriesSymmetric(txns),
+		name:           name,
+		txns:           parseHistories(txns, t),
+		verify:         verify,
+		preHistoryCmds: parseHistory(0, verify.preHistory, t),
+		verifyCmds:     parseHistory(0, verify.history, t),
+		expSuccess:     expSuccess,
+		symmetric:      areHistoriesSymmetric(txns),
 	}
 }
 
@@ -551,13 +555,14 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
-	plannedStr := historyString(cmds)
-	if p := hv.verify.pruneTo; p != nil && !p.MatchString(plannedStr) {
-		if log.V(2) {
-			log.Infof("skipping iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+	// Execute pre-history if applicable.
+	if hv.preHistoryCmds != nil {
+		if str, _, err := hv.runCmds(hv.preHistoryCmds, historyIdx, db, t); err != nil {
+			t.Errorf("failed on execution of pre history %s: %s", str, err)
+			return err
 		}
-		return nil
 	}
+	plannedStr := historyString(cmds)
 	if log.V(1) {
 		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
 	}
@@ -585,39 +590,41 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	actualStr := strings.Join(hv.actual, " ")
 
 	// Verify history.
-	var verifyStrs []string
-	verifyEnv := map[string]int64{}
-	for _, c := range hv.verifyCmds {
-		c.historyIdx = historyIdx
-		c.env = verifyEnv
-		c.init(nil)
-		err := db.Txn(func(txn *client.Txn) error {
-			fmtStr, err := c.execute(txn, t)
-			if err != nil {
-				return err
-			}
-			cmdStr := fmt.Sprintf(fmtStr, 0, 0)
-			verifyStrs = append(verifyStrs, cmdStr)
-			return nil
-		})
-		if err != nil {
-			t.Errorf("failed on execution of verification cmd %s: %s", c, err)
-			return err
-		}
+	verifyStr, verifyEnv, err := hv.runCmds(hv.verifyCmds, historyIdx, db, t)
+	if err != nil {
+		t.Errorf("failed on execution of verification history %s: %s", verifyStr, err)
+		return err
 	}
-
-	err := hv.verify.checkFn(verifyEnv)
+	err = hv.verify.checkFn(verifyEnv)
 	if err == nil {
 		if log.V(1) {
 			log.Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
 		}
 	}
 	if hv.expSuccess && err != nil {
-		verifyStr := strings.Join(verifyStrs, " ")
 		t.Errorf("%d: iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s",
 			historyIdx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
 	}
 	return err
+}
+
+func (hv *historyVerifier) runCmds(cmds []*cmd, historyIdx int, db *client.DB, t *testing.T) (string, map[string]int64, error) {
+	var strs []string
+	env := map[string]int64{}
+	err := db.Txn(func(txn *client.Txn) error {
+		for _, c := range cmds {
+			c.historyIdx = historyIdx
+			c.env = env
+			c.init(nil)
+			fmtStr, err := c.execute(txn, t)
+			if err != nil {
+				return err
+			}
+			strs = append(strs, fmt.Sprintf(fmtStr, 0, 0))
+		}
+		return nil
+	})
+	return strings.Join(strs, " "), env, err
 }
 
 func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
@@ -765,60 +772,71 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	checkConcurrency("lost update", bothIsolations, []string{txn, txn}, verify, true, t)
 }
 
-func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
+// TestTxnDBLostDeleteAnomaly verifies that neither SI nor SSI
+// isolation are subject to the lost delete anomaly. See #6240.
+//
+// With lost delete, the two deletions from txn2 are interleaved
+// with a read and write from txn1, allowing txn1 to read a pre-
+// existing value for A and then write to B, rewriting history
+// underneath txn2's deletion of B.
+//
+// This anomaly is prevented by the use of deletion tombstones,
+// even on keys which have no values written.
+//
+// Lost delete would typically fail with a history such as:
+//   D2(A) R1(A) D2(B) C2 W1(B,A) C1
+func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Currently fails with (variants of the histories)
-	// I1(A) C1 D3(A) R2(A) D3(B) C3 W2(B-A) C2
-	// I1(A) C1 R2(A) D3(A) D3(B) C3 W2(B-A) C2
-	// I1(A) C1 R2(A) D3(A) D3(B) W2(B-A) C3 C2
 
-	// When serializable, B can't exceed A.
-	txn1 := "R(A) I(A) C"
-	txn2 := "R(A) W(B,A) C"
-	txn3 := "D(A) D(B) C"
+	// B must not exceed A.
+	txn1 := "R(A) W(B,A) C"
+	txn2 := "D(A) D(B) C"
 	verify := &verifier{
-		history: "R(A) R(B)",
+		preHistory: "W(A,1)",
+		history:    "R(A) R(B)",
 		checkFn: func(env map[string]int64) error {
 			if env["B"] != 0 && env["A"] == 0 {
 				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
 			}
 			return nil
 		},
-		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
 	}
-	checkConcurrency("lost update (delete)", onlySerializable,
-		[]string{txn1, txn2, txn3}, verify, true, t)
-	// TODO(vivek): Enable this once these tests can run faster.
-	//checkConcurrency("lost update (delete)", onlySnapshot,
-	//	[]string{txn1, txn2, txn3}, verify, true, t)
+	checkConcurrency("lost update (delete)", onlySnapshot, []string{txn1, txn2}, verify, true, t)
 }
 
-func TestTxnDBLostUpdateAnomaly_DeleteRange(t *testing.T) {
+// TestTxnDBLostDeleteRangeAnomaly verifies that neither SI nor SSI
+// isolation are subject to the lost delete range anomaly. See #6240.
+//
+// With lost delete range, the delete range for keys B-C leave no
+// deletion tombstones (as there are an infinite number of keys in the
+// range [B,C)). Without deletion tombstones, the anomaly manifests in
+// snapshot mode when txn1 pushes txn2 to commit at a higher timestamp
+// and then txn1 writes B and commits an an earlier timestamp. The
+// delete range request therefore committed but failed to delete the
+// value written to key B.
+//
+// This anomaly is prevented by making snapshot transactions which
+// involve a range deletion restart when they are pushed.
+//
+// Lost delete range would typically fail with a history such as:
+//   D2(A) DR2(B-C) R1(A) C2 W1(B,A) C1
+func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Currently fails with variations of
-	//   iso=[SNAPSHOT SNAPSHOT SNAPSHOT], pri=[3 2 1]
-	//   I1.1(A)[1] C1.1 DR3.1(A-C) R2.1(A)[1] C3.1 W2.1(B-A)[1] C2.1
-	// and
-	//   iso=[SNAPSHOT SNAPSHOT SNAPSHOT], pri=[2 3 1]
-	//   I1.1(A)[1] C1.1 R2.1(A)[1] DR3.1(A-C) W2.1(B-A)[1] C3.1 C2.1
-	t.Skip("TODO(tschottdorf): see #6240")
 
-	// When serializable, B can't exceed A.
-	txn1 := "R(A) I(A) C"
-	txn2 := "R(A) W(B,A) C"
-	txn3 := "DR(A-C) C"
+	// B must not exceed A.
+	txn1 := "R(A) W(B,A) C"
+	txn2 := "D(A) DR(B-C) C"
 	verify := &verifier{
-		history: "R(A) R(B)",
+		preHistory: "W(A,1)",
+		history:    "R(A) R(B)",
 		checkFn: func(env map[string]int64) error {
 			if env["B"] != 0 && env["A"] == 0 {
 				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
 			}
 			return nil
 		},
-		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
 	}
-	checkConcurrency("lost update (range delete)", onlySnapshot,
-		[]string{txn1, txn2, txn3}, verify, true, t)
+	checkConcurrency("lost update (range delete)", onlySnapshot, []string{txn1, txn2}, verify, true, t)
 }
 
 // TestTxnDBPhantomReadAnomaly verifies that neither SI nor SSI isolation

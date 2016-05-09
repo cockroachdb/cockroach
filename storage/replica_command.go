@@ -524,10 +524,22 @@ func isEndTransactionTriggeringRetryError(headerTxn, currentTxn *roachpb.Transac
 	if headerTxn.WriteTooOld {
 		return true
 	}
+
+	isTxnPushed := !currentTxn.Timestamp.Equal(headerTxn.OrigTimestamp)
+
+	// If pushing requires a retry and the transaction was pushed, retry.
+	if headerTxn.RetryOnPush && isTxnPushed {
+		return true
+	}
+
 	// If the isolation level is SERIALIZABLE, return a transaction
 	// retry error if the commit timestamp isn't equal to the txn
 	// timestamp.
-	return headerTxn.Isolation == roachpb.SERIALIZABLE && !currentTxn.Timestamp.Equal(headerTxn.OrigTimestamp)
+	if headerTxn.Isolation == roachpb.SERIALIZABLE && isTxnPushed {
+		return true
+	}
+
+	return false
 }
 
 // resolveLocalIntents synchronously resolves any intents that are
