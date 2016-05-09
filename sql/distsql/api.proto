@@ -28,7 +28,7 @@ import weak "gogoproto/gogo.proto";
 message SetupFlowsRequest {
   // TODO(radu): would TxnMeta suffice?
   optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
-  repeated FlowSpec flows = 2;
+  repeated FlowSpec flows = 2 [(gogoproto.nullable) = false];
 }
 
 message SetupFlowsResponse {

@@ -13,6 +13,9 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+//
+// Data structures for distributed SQL APIs. See docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
 
 syntax = "proto2";
 package cockroach.distsql;
@@ -57,12 +60,66 @@ message TableReaderSpec {
 
   // The table reader will only produce values for these columns, referenced by
   // their indices in table.columns.
-  repeated uint32 output_columns = 6;
+  repeated uint32 output_columns = 6 [packed = true];
+}
+
+
+// StreamEndSpec describes one of the endpoints (input or output) of a physical
+// stream.
+message StreamEndSpec {
+    enum Type {
+        // The ending is part of the same flow.
+        LOCAL = 0;
+        // The stream crosses flows; the ending is a mailbox.
+        REMOTE = 1;
+        // This is a special mode used for simple flows with few expected
+        // results. In this "sync RPC" mode, we accumulate results and return
+        // them as part of the RPC call that set up the flow. This saves
+        // overhead (extra RPCs) compared to the normal "async" mode where the
+        // RPC just sets up the flow. There can be at most one such endpoint in
+        // one flow, and such a flow cannot have any REMOTE endpoints.
+        RPC_SYNC_RESP = 2;
+    }
+    optional Type type = 1 [(gogoproto.nullable) = false];
+
+    // For the LOCAL type, this is the ID of the corresponding endpoint within
+    // the same flow. For the REMOTE type, this is the ID of a mailbox.
+    optional int32 id = 2 [(gogoproto.nullable) = false,
+                           (gogoproto.customname) = "ID"];
+}
+
+// OutputRouterSpec is the specification for the output router of a processor;
+// it decides how to send results to multiple output streams.
+message OutputRouterSpec {
+    enum Type {
+        // There is only one output stream.
+        SINGLE_OUTPUT = 0;
+        // Each row is sent to all output streams.
+        MIRROR = 1;
+        // Each row is sent to one stream, chosen by hashing certain columns of
+        // the row. TODO(radu): an extra optional structure below for the hashing
+        // details.
+        BY_HASH = 2;
+        // Each row is sent to one stream, chosen according to preset boundaries
+        // for the values of certain columns of the row. TODO(radu)
+        BY_RANGE = 3;
+    }
+    optional Type type = 1 [(gogoproto.nullable) = false];
+    repeated StreamEndSpec streams = 2 [(gogoproto.nullable) = false];
+}
+
+message ProcessorSpec {
+    // One of the following will be filled in.
+    optional TableReaderSpec tableReader = 1;
+    // TODO(radu): other "processor core" types will go here.
+
+    // In most cases, there is one output.
+    repeated OutputRouterSpec output = 100 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
 // computation consisting of processors and streams.
 message FlowSpec {
-  // TODO(radu): for now a flow is just a table reader.
-  optional TableReaderSpec reader = 2;
+  repeated ProcessorSpec processors = 1 [(gogoproto.nullable) = false];
+  // TODO(radu): mailbox specs will go here.
 }
