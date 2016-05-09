@@ -419,6 +419,10 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	}
 }
 
+// getQValColIdx detects whether an expression is a straightforward
+// reference to a column or index variable. In this case it returns
+// the index of that column's in the descriptor's Column[] array.
+// Used by indexInfo.makeIndexConstraints().
 func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 	switch q := expr.(type) {
 	case *qvalue:
