@@ -39,10 +39,13 @@ type planner struct {
 	// As the planner executes statements, it may change the current user session.
 	// TODO(andrei): see if the circular dependency between planner and Session
 	// can be broken if we move the User and Database here from the Session.
-	session       *Session
-	evalCtx       parser.EvalContext
-	leases        []*LeaseState
-	leaseMgr      *LeaseManager
+	session  *Session
+	evalCtx  parser.EvalContext
+	leases   []*LeaseState
+	leaseMgr *LeaseManager
+	// This is used as a cache for database names.
+	// TODO(andrei): get rid of it and replace it with a leasing system for
+	// database descriptors.
 	systemConfig  config.SystemConfig
 	databaseCache *databaseCache
 
@@ -379,7 +382,6 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 		tableID:    id,
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
-		cfg:        p.systemConfig,
 		leaseMgr:   p.leaseMgr,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)

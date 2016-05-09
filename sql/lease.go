@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
@@ -435,8 +436,14 @@ func (l *leaseSet) findNewest(version sqlbase.DescriptorVersion) *LeaseState {
 
 type tableState struct {
 	id sqlbase.ID
+	// The cache is updated every time we get a lease with a changed name.
+	tableNameCache *tableNameCache
 	// Protects both active and acquiring.
 	mu sync.Mutex
+	// The name of the table, as of the most recent lease.
+	// This name should be normalized using sqlbase.NormalizeName() before
+	// comparing it.
+	tableName string
 	// The active leases for the table: sorted by their version and expiration
 	// time. There may be more than one active lease when the system is
 	// transitioning from one version of the descriptor to another or when the
@@ -453,7 +460,9 @@ type tableState struct {
 	deleted bool
 }
 
-func (t *tableState) acquire(txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquire(
+	txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore,
+) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -501,6 +510,13 @@ func (t *tableState) acquire(txn *client.Txn, version sqlbase.DescriptorVersion,
 			t.acquiring = nil
 			if err != nil {
 				return nil, err
+			}
+			// If we'll be returning a lease with a new name for the table (or if this is
+			// the first time we get a lease on a table with this name), update the name
+			// cache.
+			if sqlbase.NormalizeName(t.tableName) != sqlbase.NormalizeName(s.Name) {
+				t.tableNameCache.upsert(s.ParentID, t.tableName, s.Name, t.id)
+				t.tableName = s.Name
 			}
 			t.active.insert(s)
 		}
@@ -656,12 +672,64 @@ var _ base.ModuleTestingKnobs = &LeaseManagerTestingKnobs{}
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*LeaseManagerTestingKnobs) ModuleTestingKnobs() {}
 
-// LeaseManager manages acquiring and releasing per-table leases. Exported only
-// for testing.
+type tableNameCacheKey struct {
+	dbID                sqlbase.ID
+	normalizeTabledName string
+}
+
+type tableNameCache struct {
+	mu     sync.Mutex
+	tables map[tableNameCacheKey]sqlbase.ID
+}
+
+// Resolves a (database ID, table name) to the table descriptor's ID. Returns
+// false as the first component if the name is not part of the cache.
+// This method handles normalizing the table name.
+func (t *tableNameCache) get(dbID sqlbase.ID, tableName string) (sqlbase.ID, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	id, ok := t.tables[t.makeCacheKey(dbID, tableName)]
+	return id, ok
+}
+
+// upsert inserts or updates a name -> id mapping in the cache. If oldName is
+// "", then the entry is inserted. Otherwise, it's replaced.
+// The replacing is best-effort (tables being renamed from one database to
+// another are not handled), so stale entries have to be detected outside of the
+// cache.
+func (t *tableNameCache) upsert(
+	dbID sqlbase.ID, oldName string, newName string, tableID sqlbase.ID,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if oldName != "" {
+		// We remove the old name from the cache unless its been claimed by some
+		// other id since the table that's now being updated owned the name.
+		key := t.makeCacheKey(dbID, oldName)
+		if t.tables[key] == tableID {
+			delete(t.tables, key)
+		}
+	}
+	t.tables[t.makeCacheKey(dbID, newName)] = tableID
+}
+
+func (t *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
+	return tableNameCacheKey{dbID, sqlbase.NormalizeName(tableName)}
+}
+
+// LeaseManager manages acquiring and releasing per-table leases. It also
+// handles resolving table names to descriptor IDs.
+// Exported only for testing.
 type LeaseManager struct {
 	LeaseStore
-	mu           sync.Mutex
-	tables       map[sqlbase.ID]*tableState
+	mu     sync.Mutex
+	tables map[sqlbase.ID]*tableState
+
+	// tableNames is a cache for name -> id mappings. A mapping for the cache
+	// should only be used if we currently have an active lease on the respective
+	// id; otherwise, the mapping may well be stale.
+	// Not protected by mu.
+	tableNames   tableNameCache
 	testingKnobs LeaseManagerTestingKnobs
 }
 
@@ -681,25 +749,80 @@ func NewLeaseManager(
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		tables:       make(map[sqlbase.ID]*tableState),
+		tables: make(map[sqlbase.ID]*tableState),
+		tableNames: tableNameCache{
+			tables: make(map[tableNameCacheKey]sqlbase.ID),
+		},
 		testingKnobs: testingKnobs,
 	}
+}
+
+// AcquireByName acquires a read lease for the specified table.
+// The lease is grabbed for the most recent version of the descriptor that the
+// lease manager knows about.
+func (m *LeaseManager) AcquireByName(
+	txn *client.Txn, dbID sqlbase.ID, tableName string,
+) (*LeaseState, error) {
+	tableID, ok := m.tableNames.get(dbID, tableName)
+	hadLease := ok && m.haveUsableLease(m.LeaseStore, tableID)
+	if !hadLease {
+		// We failed to find something in the cache, or what we found is not
+		// guaranteed to be valid by the time we use it because we don't have a
+		// lease with at least a bit of lifetime left in it.
+		var err error
+		tableID, err = m.resolveName(txn, dbID, tableName)
+		if err != nil {
+			return nil, err
+		}
+	}
+	lease, err := m.Acquire(txn, tableID, 0)
+	if err != nil {
+		return nil, err
+	}
+	if sqlbase.NormalizeName(lease.Name) != sqlbase.NormalizeName(tableName) {
+		// The table name has changed from under us. This means that we raced with a
+		// rename, and we lost. So, declare that the table doesn't exist any more.
+		if hadLease {
+			return nil, util.Errorf("inconsistent name found in cache for table for "+
+				"which we had a lease, but that can't be... Cached name: %q, "+
+				"descriptor name: %q, lease: %+v", tableName, lease.Name, lease)
+		}
+		return nil, errDescriptorNotFound
+	}
+	return lease, nil
+}
+
+func (m *LeaseManager) resolveName(
+	txn *client.Txn, dbID sqlbase.ID, tableName string,
+) (sqlbase.ID, error) {
+	nameKey := tableKey{dbID, tableName}
+	key := nameKey.Key()
+	gr, err := txn.Get(key)
+	if err != nil {
+		return 0, err
+	}
+	if !gr.Exists() {
+		return 0, errDescriptorNotFound
+	}
+	return sqlbase.ID(gr.ValueInt()), nil
 }
 
 // Acquire acquires a read lease for the specified table ID. If version is
 // non-zero the lease is grabbed for the specified version. Otherwise it is
 // grabbed for the most recent version of the descriptor that the lease manager
 // knows about.
+// TODO(andrei): move the tests that use this to the sql package and un-export
+// it.
 func (m *LeaseManager) Acquire(
 	txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*LeaseState, error) {
-	t := m.findTableState(tableID, true)
+	t := m.findTableState(tableID, true, &m.tableNames)
 	return t.acquire(txn, version, m.LeaseStore)
 }
 
 // Release releases a previously acquired read lease.
 func (m *LeaseManager) Release(lease *LeaseState) error {
-	t := m.findTableState(lease.ID, false)
+	t := m.findTableState(lease.ID, false, nil)
 	if t == nil {
 		return util.Errorf("table %d not found", lease.ID)
 	}
@@ -712,15 +835,28 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	return t.release(lease, m.LeaseStore)
 }
 
-func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableState {
+// If create is set, cache needs to be set as well.
+func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool, cache *tableNameCache) *tableState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.tables[tableID]
 	if t == nil && create {
-		t = &tableState{id: tableID}
+		t = &tableState{id: tableID, tableNameCache: cache}
 		m.tables[tableID] = t
 	}
 	return t
+}
+
+// haveUsableLease returns true if we have a lease on the specified descriptor
+// and the lease has at least some amount on life left in it.
+func (m *LeaseManager) haveUsableLease(store LeaseStore, tableID sqlbase.ID) bool {
+	ts := m.findTableState(tableID, false, nil)
+	lease := ts.active.findNewest(0)
+	if lease == nil {
+		return false
+	}
+	minDesiredExpiration := store.clock.Now().GoTime().Add(MinLeaseDuration)
+	return lease.expiration.After(minDesiredExpiration)
 }
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
@@ -761,7 +897,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 								kv.Key, table.ID, table.Name, table.Version)
 						}
 						// Try to refresh the table lease to one >= this version.
-						if t := m.findTableState(table.ID, false /* create */); t != nil {
+						if t := m.findTableState(table.ID, false /* create */, nil); t != nil {
 							if err := t.purgeOldLeases(
 								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
 								log.Warningf("error purging leases for table %d(%s): %s",

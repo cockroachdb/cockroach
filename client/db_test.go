@@ -356,6 +356,7 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "PutInline"}:               {},
 		key{txnType, "Commit"}:                 {},
 		key{txnType, "CommitInBatch"}:          {},
+		key{txnType, "GetDeadline"}:            {},
 		key{txnType, "CommitOrCleanup"}:        {},
 		key{txnType, "Rollback"}:               {},
 		key{txnType, "CleanupOnError"}:         {},
