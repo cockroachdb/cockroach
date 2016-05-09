@@ -375,7 +375,7 @@ describe("databases reducers", function () {
 
           return {
             sendAsJson: false,
-            body: response.encodeJSON(),
+            body: response.toArrayBuffer(),
           };
         });
 
@@ -446,7 +446,7 @@ describe("databases reducers", function () {
 
             return {
               sendAsJson: false,
-              body: response.encodeJSON(),
+              body: response.toArrayBuffer(),
             };
           });
 
@@ -552,7 +552,7 @@ describe("databases reducers", function () {
 
             return {
               sendAsJson: false,
-              body: response.encodeJSON(),
+              body: response.toArrayBuffer(),
             };
           });
 
