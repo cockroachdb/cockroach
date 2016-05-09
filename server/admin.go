@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -197,8 +196,13 @@ func newAdminServer(s *Server) *adminServer {
 	server.ServeMux.HandleFunc(healthPath, server.handleHealth)
 
 	// Initialize grpc-gateway mux and context.
-	jsonpb := new(protoutil.JSONPb)
-	server.gwMux = gwruntime.NewServeMux(gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb))
+	jsonpb := new(util.JSONPb)
+	protopb := new(util.ProtoPb)
+	server.gwMux = gwruntime.NewServeMux(
+		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
+	)
 	server.gwCtx, server.gwCancel = context.WithCancel(context.Background())
 
 	return server

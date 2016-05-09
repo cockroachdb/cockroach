@@ -135,6 +135,7 @@ export function refreshNodes() {
     dispatch(requestNodes());
 
     // Fetch node status from the servers and convert it to JSON.
+    // TODO(tamird): protofy (after tristan)
     fetch("/_status/nodes/").then((response) => {
       return response.json();
     }).then((json: any) => {
