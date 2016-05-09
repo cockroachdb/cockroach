@@ -11,7 +11,7 @@ export interface EventRowProps {
 }
 
 export function getEventInfo(e: Event) {
-  let info: any = JSON.parse(e.info) || {};
+  let info: Object = JSON.parse(e.info) || {};
   let targetId: number = e.target_id.toNumber();
   let content: React.ReactNode;
 

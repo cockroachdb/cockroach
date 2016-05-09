@@ -111,7 +111,7 @@ describe("rest api", function() {
           sendAsJson: false,
           body: new protos.cockroach.server.serverpb.DatabasesResponse({
             databases: ["system", "test"],
-          }).encodeJSON(),
+          }).toArrayBuffer(),
         };
       });
 
@@ -175,7 +175,7 @@ describe("rest api", function() {
               { user: "root", privileges: ["ALL"] },
               { user: "other", privileges: [] },
             ],
-          }).encodeJSON(),
+          }).toArrayBuffer(),
         };
       });
 
@@ -235,7 +235,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.serverpb.TableDetailsResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.TableDetailsResponse().toArrayBuffer(),
         };
       });
 
@@ -298,7 +298,7 @@ describe("rest api", function() {
             events: [
               { event_type: "test" },
             ],
-          }).encodeJSON(),
+          }).toArrayBuffer(),
         };
       });
 
@@ -331,7 +331,7 @@ describe("rest api", function() {
             events: [
               { event_type: "test" },
             ],
-          }).encodeJSON(),
+          }).toArrayBuffer(),
         };
       });
 
@@ -359,7 +359,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.serverpb.EventsResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.EventsResponse().toArrayBuffer(),
         };
       });
 
@@ -416,7 +416,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.serverpb.HealthResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.HealthResponse().encode(),
         };
       });
 

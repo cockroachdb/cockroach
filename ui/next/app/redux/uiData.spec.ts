@@ -124,12 +124,12 @@ describe("UIData reducer", function() {
       fetchMock.mock("/_admin/v1/uidata", "post", (url: string, requestObj: RequestInit) => {
         assert.equal(state.inFlight, 1);
 
-        let kvs = new protos.cockroach.server.serverpb.SetUIDataRequest(JSON.parse(requestObj.body as string)).getKeyValues();
+        let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(requestObj.body as ArrayBuffer).getKeyValues();
 
         assert.equal(kvs.size, 2);
 
-        let deserialize = function(buff: ByteBuffer): any {
-          return JSON.parse(buff.readString(buff.limit));
+        let deserialize = function(buff: ByteBuffer): Object {
+          return JSON.parse(buff.readString(buff.limit - buff.offset));
         };
 
         assert.deepEqual(deserialize(kvs.get(uiKey1)), uiObj1);
@@ -137,7 +137,7 @@ describe("UIData reducer", function() {
 
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.serverpb.SetUIDataResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.SetUIDataResponse().toArrayBuffer(),
         };
       });
 
@@ -183,7 +183,7 @@ describe("UIData reducer", function() {
         assert.equal(state.inFlight, 1);
 
         let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
-        let setValue = function(key: string, obj: any) {
+        let setValue = function(key: string, obj: Object) {
           let value = new protos.cockroach.server.serverpb.GetUIDataResponse.Value();
           value.setValue(ByteBuffer.fromUTF8(JSON.stringify(obj)));
           response.key_values.set(key, value);
@@ -193,7 +193,7 @@ describe("UIData reducer", function() {
 
         return {
           sendAsJson: false,
-          body: response.encodeJSON(),
+          body: response.toArrayBuffer(),
         };
       });
 

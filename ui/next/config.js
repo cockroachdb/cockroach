@@ -89,7 +89,7 @@ System.config({
     "ts": "github:frankwallis/plugin-typescript@4.0.16",
     "ts-runtime": "npm:babel-runtime@6.9.2",
     "typescript": "npm:typescript@1.8.10",
-    "whatwg-fetch": "npm:whatwg-fetch@1.0.0",
+    "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.1.0"
     },
