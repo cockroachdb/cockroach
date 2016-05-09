@@ -215,6 +215,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
+		RaftTickInterval: ctx.RaftTickInterval,
 	}
 	if ctx.TestingKnobs.Store != nil {
 		nCtx.TestingKnobs = *ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs)

@@ -54,7 +54,6 @@ import (
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount               = 10
-	defaultRaftTickInterval         = 100 * time.Millisecond
 	defaultHeartbeatIntervalTicks   = 3
 	defaultRaftElectionTimeoutTicks = 15
 	defaultAsyncSnapshotMaxAge      = time.Minute
@@ -622,7 +621,7 @@ func (sc *StoreContext) setDefaults() {
 	sc.RangeRetryOptions = defaultRangeRetryOptions
 
 	if sc.RaftTickInterval == 0 {
-		sc.RaftTickInterval = defaultRaftTickInterval
+		sc.RaftTickInterval = base.DefaultRaftTickInterval
 	}
 	if sc.RaftHeartbeatIntervalTicks == 0 {
 		sc.RaftHeartbeatIntervalTicks = defaultHeartbeatIntervalTicks
