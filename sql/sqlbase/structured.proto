@@ -280,6 +280,20 @@ message TableDescriptor {
 
   repeated CheckConstraint checks = 20;
 
+  message RenameInfo{
+    // The database that the table belonged to before the rename (tables can be
+    // renamed from one db to another).
+    optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false, 
+      (gogoproto.customname) = "OldParentID"];
+    optional string old_name = 2 [(gogoproto.nullable) = false];
+  }
+
+  // This array is populated if the descriptor was renamed. If the descriptor is
+  // renamed multiple times before the schema chage is processed, there will be
+  // one element for each rename.
+  // When this is detected in a schema change, the records for the old names are
+  // deleted and this field is cleared.
+  repeated RenameInfo renames = 21 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

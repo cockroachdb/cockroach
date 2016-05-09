@@ -354,7 +354,6 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip(`TODO(andrei, dt): Fails with 'table "foo" does not exist'`)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(),
@@ -376,7 +375,6 @@ func TestDropAndCreateTable(t *testing.T) {
 		if _, err := db.Exec(`DROP TABLE IF EXISTS foo`); err != nil {
 			t.Fatal(err)
 		}
-		//NB: a `time.Sleep(time.Second)` here makes this pass.
 		if _, err := db.Exec(`CREATE TABLE foo (k INT PRIMARY KEY)`); err != nil {
 			t.Fatal(err)
 		}
