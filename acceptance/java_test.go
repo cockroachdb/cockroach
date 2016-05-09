@@ -80,7 +80,7 @@ public class main {
 		    throw new Exception("unexpected: DROP TABLE reports " + res + " rows changed, expecting 0");
 		}
 
-		stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::boolean, ?::int, ?::float, ?::float, ?::int");
+		stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::string, ?::string, ?::string, ?::string, ?::string");
 		stmt.setInt(1, 3);
 		stmt.set%v;
 
