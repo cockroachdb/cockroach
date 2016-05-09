@@ -349,7 +349,7 @@ func (p *planner) SelectClause(parsed *parser.SelectClause, orderBy parser.Order
 			preferOrderMatchingIndex = true
 		}
 
-		plan, err := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
+		plan, err := scan.selectIndex(analyzeOrdering, preferOrderMatchingIndex)
 		if err != nil {
 			return nil, err
 		}

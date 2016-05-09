@@ -82,9 +82,7 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func selectIndex(
-	s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
-) (planNode, error) {
+func (s *scanNode) selectIndex(analyzeOrdering analyzeOrderingFn, preferOrderMatching bool) (planNode, error) {
 	if s.desc.IsEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
 		// No table or no where-clause, no ordering, and no specified index.
 		s.initOrdering(0)

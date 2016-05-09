@@ -466,7 +466,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			spans:   []sqlbase.Span{sp},
 		}
 		scan.initDescDefaults()
-		rows, err := selectIndex(scan, nil, false)
+		rows, err := scan.selectIndex(nil, false)
 		if err != nil {
 			return err
 		}
