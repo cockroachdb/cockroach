@@ -66,13 +66,6 @@ const (
 	AllocatorRemoveDead
 )
 
-func pluralize(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
 // allocatorError indicates a retryable error condition which sends replicas
 // being processed through the replicate_queue into purgatory so that they
 // can be retried quickly as soon as new stores come online, or additional
@@ -95,7 +88,8 @@ func (ae *allocatorError) Error() string {
 		auxInfo = "; likely not enough nodes in cluster"
 	}
 	return fmt.Sprintf("0 of %d store%s with %s matching [%s]%s",
-		ae.aliveStoreCount, pluralize(ae.aliveStoreCount), anyAll, ae.required, auxInfo)
+		ae.aliveStoreCount, util.Pluralize(int64(ae.aliveStoreCount)),
+		anyAll, ae.required, auxInfo)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}
