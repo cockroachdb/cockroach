@@ -415,9 +415,24 @@ func (expr *ParenExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 	return expr, nil
 }
 
+// qualifiedNameTypes is a mapping of QualifiedNames to types that can be mocked out
+// for tests to allow the qualified names to be type checked without throwing an error.
+var qualifiedNameTypes map[string]Datum
+
+func mockQualifiedNameTypes(types map[string]Datum) func() {
+	qualifiedNameTypes = types
+	return func() {
+		qualifiedNameTypes = nil
+	}
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *QualifiedName) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	return nil, fmt.Errorf("qualified name \"%s\" not found", expr)
+	name := expr.String()
+	if _, ok := qualifiedNameTypes[name]; ok {
+		return expr, nil
+	}
+	return nil, fmt.Errorf("qualified name \"%s\" not found", name)
 }
 
 // TypeCheck implements the Expr interface.

@@ -299,7 +299,23 @@ func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
 	node.typ = TypeBool
+	node.memoizeFn()
 	return node
+}
+
+func (node *ComparisonExpr) memoizeFn() {
+	switch node.Operator {
+	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+		return
+	}
+	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
+	leftRet, rightRet := fLeft.(TypedExpr).ReturnType(), fRight.(TypedExpr).ReturnType()
+	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
+	if !ok {
+		panic(fmt.Sprintf("lookup for ComparisonExpr %s's CmpOp failed",
+			AsStringWithFlags(node, FmtShowTypes)))
+	}
+	node.fn = fn
 }
 
 // TypedLeft returns the ComparisonExpr's left expression as a TypedExpr.
@@ -491,7 +507,12 @@ type QualifiedName struct {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*QualifiedName) ReturnType() Datum { return nil }
+func (node *QualifiedName) ReturnType() Datum {
+	if qualifiedNameTypes == nil {
+		return nil
+	}
+	return qualifiedNameTypes[node.String()]
+}
 
 // Variable implements the VariableExpr interface.
 func (*QualifiedName) Variable() {}
@@ -879,6 +900,16 @@ type BinaryExpr struct {
 }
 
 func (*BinaryExpr) operatorExpr() {}
+
+func (node *BinaryExpr) memoizeFn() {
+	leftRet, rightRet := node.Left.(TypedExpr).ReturnType(), node.Right.(TypedExpr).ReturnType()
+	fn, ok := BinOps[node.Operator].lookupImpl(leftRet, rightRet)
+	if !ok {
+		panic(fmt.Sprintf("lookup for BinaryExpr %s's BinOp failed",
+			AsStringWithFlags(node, FmtShowTypes)))
+	}
+	node.fn = fn
+}
 
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
