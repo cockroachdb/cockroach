@@ -19,7 +19,6 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -30,10 +29,9 @@ import (
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	planner *planner
-	txn     *client.Txn
-	desc    sqlbase.TableDescriptor
-	index   *sqlbase.IndexDescriptor
+	p     *planner
+	desc  sqlbase.TableDescriptor
+	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
 	specifiedIndex *sqlbase.IndexDescriptor
@@ -71,6 +69,10 @@ type scanNode struct {
 	fetcher         sqlbase.RowFetcher
 
 	limitHint int64
+}
+
+func (p *planner) Scan() *scanNode {
+	return &scanNode{p: p}
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -131,7 +133,7 @@ func (n *scanNode) initScan() (success bool) {
 		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 
-	n.err = n.fetcher.StartScan(n.txn, n.spans, n.limitHint)
+	n.err = n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint)
 	if n.err != nil {
 		return false
 	}
@@ -149,7 +151,7 @@ func (n *scanNode) debugNext() bool {
 	}
 
 	if n.row != nil {
-		passesFilter, err := sqlbase.RunFilter(n.filter, n.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
 			n.err = err
 			return false
@@ -188,7 +190,7 @@ func (n *scanNode) Next() bool {
 		if n.err != nil || n.row == nil {
 			return false
 		}
-		passesFilter, err := sqlbase.RunFilter(n.filter, n.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
 			n.err = err
 			return false
