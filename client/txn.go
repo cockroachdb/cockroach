@@ -581,9 +581,8 @@ RetryLoop:
 // been successfully committed or aborted, a potential trailing
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
-// required (or even erroneous).
-func (txn *Txn) send(ba roachpb.BatchRequest) (
-	*roachpb.BatchResponse, *roachpb.Error) {
+// required (or even erroneous). Returns (nil, nil) for an empty batch.
+func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
 		return nil, roachpb.NewErrorf(
@@ -593,13 +592,13 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
 	if ba.ReadConsistency != roachpb.CONSISTENT {
-		return nil, roachpb.NewErrorf("cannot use %d ReadConsistency in txn",
+		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
 			ba.ReadConsistency)
 	}
 
 	lastIndex := len(ba.Requests) - 1
 	if lastIndex < 0 {
-		return &roachpb.BatchResponse{}, nil
+		return nil, nil
 	}
 
 	// firstWriteIndex is set to the index of the first command which is
@@ -634,20 +633,21 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (
 	if needBeginTxn {
 		// If the transaction already has a key (we're in a restart), make
 		// sure we set the key in the begin transaction request to the original.
-		req := &roachpb.BeginTransactionRequest{
+		bt := &roachpb.BeginTransactionRequest{
 			Span: roachpb.Span{
 				Key: firstWriteKey,
 			},
 		}
 		if txn.Proto.Key != nil {
-			req.Key = txn.Proto.Key
+			bt.Key = txn.Proto.Key
 		}
-
-		var bt roachpb.RequestUnion
-		bt.MustSetInner(req)
-		ba.Requests = append(append(
-			append([]roachpb.RequestUnion(nil), ba.Requests[:firstWriteIndex]...), bt),
-			ba.Requests[firstWriteIndex:]...)
+		// Inject the new request before position firstWriteIndex, taking
+		// care to avoid unnecessary allocations.
+		oldRequests := ba.Requests
+		ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests)+1)
+		copy(ba.Requests, oldRequests[:firstWriteIndex])
+		ba.Requests[firstWriteIndex].MustSetInner(bt)
+		copy(ba.Requests[firstWriteIndex+1:], oldRequests[firstWriteIndex:])
 	}
 
 	if elideEndTxn {

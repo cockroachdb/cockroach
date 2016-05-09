@@ -397,9 +397,9 @@ func sendAndFill(
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
 	var ba roachpb.BatchRequest
-	// TODO(tschottdorf): this nonsensical copy is required since at the time
-	// of writing, the chunking and masking code in DistSender operates on the
-	// original data (as can readily be seen by a whole bunch of test failures.
+	// TODO(tschottdorf): this nonsensical copy is required since (at least at
+	// the time of writing, the chunking and masking in DistSender operates on
+	// the original data (as attested to by a whole bunch of test failures).
 	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
 	ba.Header = b.Header
 	b.response, b.pErr = send(ba)
@@ -452,14 +452,11 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 }
 
 // send runs the specified calls synchronously in a single batch and returns
-// any errors. Returns a nil response for empty input (no requests).
+// any errors. Returns (nil, nil) for an empty batch.
 func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) == 0 {
-		// TODO (tschottdorf): Should probably still return a BatchResponse in
-		// this case.
 		return nil, nil
 	}
-
 	if ba.ReadConsistency == roachpb.INCONSISTENT {
 		for _, ru := range ba.Requests {
 			req := ru.GetInner()

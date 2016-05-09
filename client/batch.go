@@ -57,9 +57,10 @@ type Batch struct {
 	// Set when AddRawRequest is used, in which case using the "other"
 	// operations renders the batch unusable.
 	raw bool
-	// Once received, the response from the sent batch.
+	// Once received, the response from a successful batch.
 	response *roachpb.BatchResponse
-	pErr     *roachpb.Error
+	// Once received, any error encountered sending the batch.
+	pErr *roachpb.Error
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
@@ -78,7 +79,7 @@ func (b *Batch) RawResponse() *roachpb.BatchResponse {
 // the batch, asserting that that error is non-nil.
 func (b *Batch) MustPErr() *roachpb.Error {
 	if b.pErr == nil {
-		panic(util.Errorf("expected non-nil pErr"))
+		panic(util.Errorf("expected non-nil pErr for batch %+v", b))
 	}
 	return b.pErr
 }
@@ -133,7 +134,8 @@ func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
 	b.Results = append(b.Results, r)
 }
 
-// Returns the first error.
+// fillResults walks through the results and updates them either with the
+// data or error which was the result of running the batch previously.
 func (b *Batch) fillResults() error {
 	offset := 0
 	for i := range b.Results {
@@ -143,9 +145,16 @@ func (b *Batch) fillResults() error {
 			args := b.reqs[offset+k].GetInner()
 
 			var reply roachpb.Response
+			// It's possible that result.Err was populated early, for example
+			// when PutProto is called and the proto marshaling errored out.
+			// In that case, we don't want to mutate this result's error
+			// further.
 			if result.Err == nil {
+				// The outcome of each result is that of the batch as a whole.
 				result.Err = b.pErr.GoError()
 				if result.Err == nil {
+					// For a successful request, load the reply to populate in
+					// this pass.
 					if b.response != nil && offset+k < len(b.response.Responses) {
 						reply = b.response.Responses[offset+k].GetInner()
 					} else if args.Method() != roachpb.EndTransaction {
@@ -273,11 +282,9 @@ func (b *Batch) fillResults() error {
 }
 
 func (b *Batch) appendReqs(args ...roachpb.Request) {
-	rus := make([]roachpb.RequestUnion, 0, len(args))
-	for _, arg := range args {
-		var ru roachpb.RequestUnion
-		ru.MustSetInner(arg)
-		rus = append(rus, ru)
+	rus := make([]roachpb.RequestUnion, len(args))
+	for i := range args {
+		rus[i].MustSetInner(args[i])
 	}
 	b.reqs = append(b.reqs, rus...)
 }
