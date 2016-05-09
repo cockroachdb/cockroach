@@ -33,6 +33,7 @@ type returningHelper struct {
 	qvals        qvalMap
 	rowCount     int
 	desiredTypes []parser.Datum
+	alias        string
 }
 
 func (p *planner) makeReturningHelper(
@@ -44,6 +45,7 @@ func (p *planner) makeReturningHelper(
 	rh := returningHelper{
 		p:            p,
 		desiredTypes: desiredTypes,
+		alias:        alias,
 	}
 	if len(r) == 0 {
 		return rh, nil
@@ -72,7 +74,7 @@ func (p *planner) makeReturningHelper(
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		expr, err := resolveQNames(target.Expr, &table, rh.qvals, &p.qnameVisitor)
+		expr, err := resolveQNames(target.Expr, []*tableInfo{&table}, rh.qvals, &p.qnameVisitor)
 		if err != nil {
 			return returningHelper{}, err
 		}
@@ -90,7 +92,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 		rh.rowCount++
 		return rowVals, nil
 	}
-	rh.qvals.populateQVals(rowVals)
+	rh.qvals.populateQVals(rh.alias, rowVals)
 	resRow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(rh.p.evalCtx)
