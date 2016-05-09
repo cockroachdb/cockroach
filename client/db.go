@@ -120,9 +120,8 @@ func (kv *KeyValue) ValueProto(msg proto.Message) error {
 // etc).
 type Result struct {
 	calls int
-	// PErr contains any error encountered when performing the operation.
-	// Code that doesn't need a pErr (so, most code) should use Err() instead.
-	PErr *roachpb.Error
+	// Err contains any error encountered when performing the operation.
+	Err error
 	// Rows contains the key/value pairs for the operation. The number of rows
 	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
 	// of rows returned is the number of keys operated on. For Scan the number of
@@ -134,14 +133,9 @@ type Result struct {
 	Keys []roachpb.Key
 }
 
-// Err returns the error that encountered when performing the operation, if any.
-func (r Result) Err() error {
-	return r.PErr.GoError()
-}
-
 func (r Result) String() string {
-	if r.Err() != nil {
-		return r.Err().Error()
+	if r.Err != nil {
+		return r.Err.Error()
 	}
 	var buf bytes.Buffer
 	for i, row := range r.Rows {
@@ -205,29 +199,12 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 	return runOneRow(db, b)
 }
 
-// GetInconsistent is Get with an inconsistent read.
-func (db *DB) GetInconsistent(key interface{}) (KeyValue, error) {
-	b := db.NewBatch()
-	b.ReadConsistency = roachpb.INCONSISTENT
-	b.Get(key)
-	return runOneRow(db, b)
-}
-
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 	r, err := db.Get(key)
-	if err != nil {
-		return err
-	}
-	return r.ValueProto(msg)
-}
-
-// GetProtoInconsistent is GetProto with an inconsistent read.
-func (db *DB) GetProtoInconsistent(key interface{}, msg proto.Message) error {
-	r, err := db.GetInconsistent(key)
 	if err != nil {
 		return err
 	}
@@ -304,7 +281,7 @@ func (db *DB) scan(
 	readConsistency roachpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
 	b := db.NewBatch()
-	b.ReadConsistency = readConsistency
+	b.Header.ReadConsistency = readConsistency
 	if !isReverse {
 		b.Scan(begin, end, maxRows)
 	} else {
@@ -322,11 +299,6 @@ func (db *DB) scan(
 // key can be either a byte slice or a string.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 	return db.scan(begin, end, maxRows, false, roachpb.CONSISTENT)
-}
-
-// ScanInconsistent is Scan with an inconsistent read.
-func (db *DB) ScanInconsistent(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(begin, end, maxRows, false, roachpb.INCONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -416,37 +388,37 @@ func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(int64, roachpb.ReadConsistencyType, ...roachpb.Request,
-	) (*roachpb.BatchResponse, *roachpb.Error),
+	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 	b *Batch,
-) (*roachpb.BatchResponse, error) {
+) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	br, pErr := send(b.MaxScanResults, b.ReadConsistency, b.reqs...)
-	if pErr != nil {
+	var ba roachpb.BatchRequest
+	// TODO(tschottdorf): this nonsensical copy is required since (at least at
+	// the time of writing, the chunking and masking in DistSender operates on
+	// the original data (as attested to by a whole bunch of test failures).
+	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
+	ba.Header = b.Header
+	b.response, b.pErr = send(ba)
+	if b.pErr != nil {
 		// Discard errors from fillResults.
-		_ = b.fillResults(nil, pErr)
-		return nil, pErr.GoError()
+		_ = b.fillResults()
+		return b.pErr.GoError()
 	}
-	if err := b.fillResults(br, nil); err != nil {
-		return nil, err
+	if err := b.fillResults(); err != nil {
+		b.pErr = roachpb.NewError(err)
+		return err
 	}
-	return br, nil
+	return nil
 }
 
 // Run implements Runner.Run(). See comments there.
 func (db *DB) Run(b *Batch) error {
-	_, err := db.RunWithResponse(b)
-	return err
-}
-
-// RunWithResponse is a version of Run that returns the BatchResponse.
-func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	if err := b.prepare(); err != nil {
-		return nil, err
+		return err
 	}
 	return sendAndFill(db.send, b)
 }
@@ -480,15 +452,14 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 }
 
 // send runs the specified calls synchronously in a single batch and returns
-// any errors. Returns a nil response for empty input (no requests).
-func (db *DB) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType,
-	reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
-	if len(reqs) == 0 {
+// any errors. Returns (nil, nil) for an empty batch.
+func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
-
-	if readConsistency == roachpb.INCONSISTENT {
-		for _, req := range reqs {
+	if ba.ReadConsistency == roachpb.INCONSISTENT {
+		for _, ru := range ba.Requests {
+			req := ru.GetInner()
 			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
 				req.Method() != roachpb.ReverseScan {
 				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
@@ -496,14 +467,9 @@ func (db *DB) send(maxScanResults int64, readConsistency roachpb.ReadConsistency
 		}
 	}
 
-	ba := roachpb.BatchRequest{}
-	ba.Add(reqs...)
-
-	ba.MaxScanResults = maxScanResults
 	if db.userPriority != 1 {
 		ba.UserPriority = db.userPriority
 	}
-	ba.ReadConsistency = readConsistency
 
 	tracing.AnnotateTrace()
 
@@ -536,12 +502,12 @@ type Runner interface {
 func runOneResult(r Runner, b *Batch) (Result, error) {
 	if err := r.Run(b); err != nil {
 		if len(b.Results) > 0 {
-			return b.Results[0], b.Results[0].Err()
+			return b.Results[0], b.Results[0].Err
 		}
-		return Result{PErr: roachpb.NewError(err)}, err
+		return Result{Err: err}, err
 	}
 	res := b.Results[0]
-	if res.Err() != nil {
+	if res.Err != nil {
 		panic("r.Run() succeeded even through the result has an error")
 	}
 	return res, nil

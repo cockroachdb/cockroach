@@ -354,17 +354,11 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 
 // Run implements Runner.Run(). See comments there.
 func (txn *Txn) Run(b *Batch) error {
-	_, err := txn.RunWithResponse(b)
-	return err
-}
-
-// RunWithResponse is a version of Run that returns the BatchResponse.
-func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
 	if err := b.prepare(); err != nil {
-		return nil, err
+		return err
 	}
 	return sendAndFill(txn.send, b)
 }
@@ -403,23 +397,15 @@ func (txn *Txn) Commit() error {
 // error, no attempt is made to clean up the (possibly still pending)
 // transaction.
 func (txn *Txn) CommitInBatch(b *Batch) error {
-	_, err := txn.CommitInBatchWithResponse(b)
-	return err
-}
-
-// CommitInBatchWithResponse is a version of CommitInBatch that returns the
-// BatchResponse.
-func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	if txn != b.txn {
-		return nil, util.Errorf("a batch b can only be committed by b.txn")
+		return util.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
-	b.initResult(1, 0, nil)
-	resp, err := txn.RunWithResponse(b)
+	b.AddRawRequest(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
+	err := txn.Run(b)
 	if err == nil {
 		txn.finalized = true
 	}
-	return resp, err
+	return err
 }
 
 // CommitOrCleanup sends an EndTransactionRequest with Commit=true.
@@ -451,7 +437,9 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
-	_, err := txn.send(0, roachpb.CONSISTENT, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	var ba roachpb.BatchRequest
+	ba.Add(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	_, err := txn.send(ba)
 	return err.GoError()
 }
 
@@ -593,9 +581,8 @@ RetryLoop:
 // been successfully committed or aborted, a potential trailing
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
-// required (or even erroneous).
-func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType, reqs ...roachpb.Request) (
-	*roachpb.BatchResponse, *roachpb.Error) {
+// required (or even erroneous). Returns (nil, nil) for an empty batch.
+func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
 		return nil, roachpb.NewErrorf(
@@ -604,13 +591,14 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
-	if readConsistency != roachpb.CONSISTENT {
-		return nil, roachpb.NewErrorf("attempting to use %d readConsistency in a txn", readConsistency)
+	if ba.ReadConsistency != roachpb.CONSISTENT {
+		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
+			ba.ReadConsistency)
 	}
 
-	lastIndex := len(reqs) - 1
+	lastIndex := len(ba.Requests) - 1
 	if lastIndex < 0 {
-		return &roachpb.BatchResponse{}, nil
+		return nil, nil
 	}
 
 	// firstWriteIndex is set to the index of the first command which is
@@ -621,7 +609,8 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 	firstWriteIndex := -1
 	var firstWriteKey roachpb.Key
 
-	for i, args := range reqs {
+	for i, ru := range ba.Requests {
+		args := ru.GetInner()
 		if i < lastIndex {
 			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
 				return nil, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
@@ -634,7 +623,7 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 	}
 
 	haveTxnWrite := firstWriteIndex != -1
-	endTxnRequest, haveEndTxn := reqs[lastIndex].(*roachpb.EndTransactionRequest)
+	endTxnRequest, haveEndTxn := ba.Requests[lastIndex].GetInner().(*roachpb.EndTransactionRequest)
 	needBeginTxn := !txn.Proto.Writing && haveTxnWrite
 	needEndTxn := txn.Proto.Writing || haveTxnWrite
 	elideEndTxn := haveEndTxn && !needEndTxn
@@ -642,24 +631,30 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 	// If we're not yet writing in this txn, but intend to, insert a
 	// begin transaction request before the first write command.
 	if needBeginTxn {
+		// If the transaction already has a key (we're in a restart), make
+		// sure we set the key in the begin transaction request to the original.
 		bt := &roachpb.BeginTransactionRequest{
 			Span: roachpb.Span{
 				Key: firstWriteKey,
 			},
 		}
-		// If the transaction already has a key (we're in a restart), make
-		// sure we set the key in the begin transaction request to the original.
 		if txn.Proto.Key != nil {
 			bt.Key = txn.Proto.Key
 		}
-		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
+		// Inject the new request before position firstWriteIndex, taking
+		// care to avoid unnecessary allocations.
+		oldRequests := ba.Requests
+		ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests)+1)
+		copy(ba.Requests, oldRequests[:firstWriteIndex])
+		ba.Requests[firstWriteIndex].MustSetInner(bt)
+		copy(ba.Requests[firstWriteIndex+1:], oldRequests[firstWriteIndex:])
 	}
 
 	if elideEndTxn {
-		reqs = reqs[:lastIndex]
+		ba.Requests = ba.Requests[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)
+	br, pErr := txn.db.send(ba)
 	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline.
 		if endTxnRequest.Deadline != nil {

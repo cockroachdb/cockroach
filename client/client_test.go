@@ -448,7 +448,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 scans.
 	{
-		b := &client.Batch{MaxScanResults: 7}
+		b := &client.Batch{}
+		b.Header.MaxScanResults = 7
 		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
 		if err := db.Run(b); err != nil {
@@ -460,7 +461,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 scans.
 	{
-		b := &client.Batch{MaxScanResults: 7}
+		b := &client.Batch{}
+		b.Header.MaxScanResults = 7
 		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
 		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
 		if err := db.Run(b); err != nil {
@@ -472,7 +474,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 scans.
 	{
-		b := &client.Batch{MaxScanResults: 3}
+		b := &client.Batch{}
+		b.Header.MaxScanResults = 3
 		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
 		if err := db.Run(b); err != nil {
@@ -496,7 +499,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 reverse scans.
 	{
-		b := &client.Batch{MaxScanResults: 7}
+		b := &client.Batch{}
+		b.Header.MaxScanResults = 7
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
 		if err := db.Run(b); err != nil {
@@ -508,7 +512,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 reverse scans.
 	{
-		b := &client.Batch{MaxScanResults: 7}
+		b := &client.Batch{}
+		b.Header.MaxScanResults = 7
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
 		if err := db.Run(b); err != nil {
@@ -520,7 +525,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 reverse scans.
 	{
-		b := &client.Batch{MaxScanResults: 3}
+		b := &client.Batch{}
+		b.Header.MaxScanResults = 3
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
 		if err := db.Run(b); err != nil {
@@ -544,7 +550,7 @@ func TestClientBatch(t *testing.T) {
 		} else {
 			var foundError bool
 			for _, result := range b.Results {
-				if result.Err() != nil {
+				if result.Err != nil {
 					foundError = true
 					break
 				}
@@ -571,7 +577,7 @@ func TestClientBatch(t *testing.T) {
 		} else {
 			var foundError bool
 			for _, result := range b.Results {
-				if result.Err() != nil {
+				if result.Err != nil {
 					foundError = true
 					break
 				}
@@ -736,37 +742,39 @@ func TestInconsistentReads(t *testing.T) {
 	}
 	db := client.NewDB(senderFn)
 
+	prepInconsistent := func() *client.Batch {
+		var b client.Batch
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
+		return &b
+	}
+
 	// Perform inconsistent reads through the mocked sender function.
 	{
 		key := roachpb.Key([]byte("key"))
-		if _, err := db.GetInconsistent(key); err != nil {
+		b := prepInconsistent()
+		b.Get(key)
+		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	{
-		key := roachpb.Key([]byte("key"))
-		var p roachpb.BatchRequest
-		if err := db.GetProtoInconsistent(key, &p); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	{
+		b := prepInconsistent()
 		key1 := roachpb.Key([]byte("key1"))
 		key2 := roachpb.Key([]byte("key2"))
 		const dontCareMaxRows = 1000
-		if _, err := db.ScanInconsistent(key1, key2, dontCareMaxRows); err != nil {
+		b.Scan(key1, key2, dontCareMaxRows)
+		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	{
 		key := roachpb.Key([]byte("key"))
-		ba := db.NewBatch()
-		ba.ReadConsistency = roachpb.INCONSISTENT
-		ba.Get(key)
-		if err := db.Run(ba); err != nil {
+		b := db.NewBatch()
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
+		b.Get(key)
+		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}
 	}

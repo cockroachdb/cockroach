@@ -581,12 +581,12 @@ func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
 		PushType:  typ,
 	}
 	b := &client.Batch{}
-	b.InternalAddRequest(pushArgs)
-	br, err := repl.store.DB().RunWithResponse(b)
-	if err != nil {
+	b.AddRawRequest(pushArgs)
+	if err := repl.store.DB().Run(b); err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
 		return
 	}
+	br := b.RawResponse()
 	// Update the supplied txn on successful push.
 	*txn = br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 }

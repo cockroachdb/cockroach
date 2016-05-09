@@ -2019,7 +2019,7 @@ func (r *Replica) AdminSplit(
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		b.InternalAddRequest(&roachpb.EndTransactionRequest{
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
@@ -2278,7 +2278,7 @@ func (r *Replica) AdminMerge(
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		b.InternalAddRequest(&roachpb.EndTransactionRequest{
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
@@ -2483,7 +2483,7 @@ func (r *Replica) ChangeReplicas(
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
 		b = &client.Batch{}
-		b.InternalAddRequest(&roachpb.EndTransactionRequest{
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{

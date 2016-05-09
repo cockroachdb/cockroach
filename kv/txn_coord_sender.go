@@ -954,13 +954,13 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
-		b.MaxScanResults = ba.MaxScanResults
+		b.Header = ba.Header
 		for _, arg := range ba.Requests {
 			req := arg.GetInner()
-			b.InternalAddRequest(req)
+			b.AddRawRequest(req)
 		}
-		var err error
-		br, err = txn.CommitInBatchWithResponse(b)
+		err := txn.CommitInBatch(b)
+		br = b.RawResponse()
 		return err
 	})
 	if err != nil {

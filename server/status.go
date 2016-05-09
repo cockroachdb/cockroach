@@ -105,6 +105,12 @@ const (
 // Pattern for local used when determining the node ID.
 var localRE = regexp.MustCompile(`(?i)local`)
 
+func inconsistentBatch() *client.Batch {
+	b := &client.Batch{}
+	b.Header.ReadConsistency = roachpb.INCONSISTENT
+	return b
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	db           *client.DB
@@ -526,12 +532,15 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	rows, err := s.db.ScanInconsistent(startKey, endKey, 0)
+	b := inconsistentBatch()
+	b.Scan(startKey, endKey, 0)
+	err := s.db.Run(b)
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rows := b.Results[0].Rows
 
 	nodeStatuses := []status.NodeStatus{}
 	for _, row := range rows {
@@ -555,14 +564,22 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	}
 
 	key := keys.NodeStatusKey(int32(nodeID))
-	nodeStatus := &status.NodeStatus{}
-	if err := s.db.GetProtoInconsistent(key, nodeStatus); err != nil {
+	b := inconsistentBatch()
+	b.Get(key)
+	if err := s.db.Run(b); err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	respondAsJSON(w, r, nodeStatus)
+	var nodeStatus status.NodeStatus
+	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
+		err = util.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respondAsJSON(w, r, &nodeStatus)
 }
 
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

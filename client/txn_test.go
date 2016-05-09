@@ -345,7 +345,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 		b := txn.NewBatch()
 		b.Put("a", "b")
 		_, err := runOneResult(txn, b)
-		pErr := b.Results[0].PErr
+		pErr := b.MustPErr()
 		// Verify that the original error type is preserved, but the error index is unset.
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 			t.Fatalf("unexpected error %s", pErr)
@@ -642,13 +642,19 @@ func TestTransactionStatus(t *testing.T) {
 	}
 }
 
-func TestCommitInBatchWithResponse(t *testing.T) {
+func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 	txn := NewTxn(context.Background(), *db)
-	b := &Batch{}
-	if _, pErr := txn.CommitInBatchWithResponse(b); pErr == nil {
-		t.Error("this batch should not be committed")
+
+	b1 := &Batch{}
+	txn2 := NewTxn(context.Background(), *db)
+	b2 := txn2.NewBatch()
+
+	for _, b := range []*Batch{b1, b2} {
+		if err := txn.CommitInBatch(b); !testutils.IsError(err, "can only be committed by") {
+			t.Error(err)
+		}
 	}
 }
 
@@ -752,5 +758,17 @@ func TestWrongTxnRetry(t *testing.T) {
 	}
 	if retries != 1 {
 		t.Fatalf("unexpected retries: %d", retries)
+	}
+}
+
+func TestBatchMixRawRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := NewDB(newTestSender(nil, nil))
+
+	b := db.NewBatch()
+	b.AddRawRequest(&roachpb.EndTransactionRequest{})
+	b.Put("x", "y")
+	if err := db.Run(b); !testutils.IsError(err, "non-raw operations") {
+		t.Fatal(err)
 	}
 }
