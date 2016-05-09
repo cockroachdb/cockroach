@@ -364,11 +364,11 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "Exec"}:                   {},
 		key{txnType, "Run"}:                    {},
 		key{txnType, "SetDebugName"}:           {},
-		key{txnType, "SetDeadline"}:            {},
 		key{txnType, "SetIsolation"}:           {},
 		key{txnType, "SetUserPriority"}:        {},
 		key{txnType, "SetSystemConfigTrigger"}: {},
 		key{txnType, "SystemConfigTrigger"}:    {},
+		key{txnType, "UpdateDeadlineMaybe"}:    {},
 	}
 
 	for b := range omittedChecks {

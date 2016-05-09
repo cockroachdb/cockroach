@@ -434,15 +434,22 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				txn.SetDeadline(pushedTimestamp.Prev())
+				if !txn.UpdateDeadlineMaybe(pushedTimestamp.Prev()) {
+					t.Fatalf("did not update deadline")
+				}
 
 			case 2:
 				// Equal deadline.
-				txn.SetDeadline(pushedTimestamp)
+				if !txn.UpdateDeadlineMaybe(pushedTimestamp) {
+					t.Fatalf("did not update deadline")
+				}
 
 			case 3:
 				// Future deadline.
-				txn.SetDeadline(pushedTimestamp.Next())
+
+				if !txn.UpdateDeadlineMaybe(pushedTimestamp.Next()) {
+					t.Fatalf("did not update deadline")
+				}
 			}
 			err = txn.CommitOrCleanup()
 
