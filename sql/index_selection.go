@@ -216,7 +216,7 @@ func selectIndex(
 		plan = s
 	} else {
 		// Note: makeIndexJoin can modify s.filter.
-		plan = makeIndexJoin(s, c.exactPrefix)
+		plan = s.p.makeIndexJoin(s, c.exactPrefix)
 	}
 
 	// If we have no filter, we can request a single key in some cases.
