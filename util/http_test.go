@@ -18,8 +18,10 @@ package util_test
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -113,6 +115,14 @@ func TestGetContentType(t *testing.T) {
 	}
 }
 
+type readCloser struct {
+	io.Reader
+}
+
+func (*readCloser) Close() error {
+	return nil
+}
+
 func TestUnmarshalRequest(t *testing.T) {
 	testCases := []struct {
 		cType    string
@@ -135,9 +145,10 @@ func TestUnmarshalRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		req.Body = &readCloser{bytes.NewReader(test.body)}
 		req.Header.Add(util.ContentTypeHeader, test.cType)
 		config := &config.ZoneConfig{}
-		err = util.UnmarshalRequest(req, test.body, config, util.AllEncodings)
+		err = util.UnmarshalRequest(req, config, util.AllEncodings)
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: unexpected success", i)
@@ -235,10 +246,10 @@ func TestProtoEncodingError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Body = &readCloser{strings.NewReader("foo")}
 	req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
-	reqBody := []byte("foo")
 	var value string
-	err = util.UnmarshalRequest(req, reqBody, value, []util.EncodingType{util.ProtoEncoding})
+	err = util.UnmarshalRequest(req, value, []util.EncodingType{util.ProtoEncoding})
 	if err == nil {
 		t.Errorf("unexpected success")
 	}

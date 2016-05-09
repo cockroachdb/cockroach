@@ -1036,8 +1036,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "timestamp_nanos",
                             "id": 1,
                             "options": {
-                                "(gogoproto.nullable)": false,
-                                "(gogoproto.jsontag)": "timestamp_nanos,string"
+                                "(gogoproto.nullable)": false
                             }
                         },
                         {
@@ -1142,8 +1141,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "start_nanos",
                             "id": 1,
                             "options": {
-                                "(gogoproto.nullable)": false,
-                                "(gogoproto.jsontag)": "start_nanos,string"
+                                "(gogoproto.nullable)": false
                             }
                         },
                         {
@@ -1152,8 +1150,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "end_nanos",
                             "id": 2,
                             "options": {
-                                "(gogoproto.nullable)": false,
-                                "(gogoproto.jsontag)": "end_nanos,string"
+                                "(gogoproto.nullable)": false
                             }
                         },
                         {
