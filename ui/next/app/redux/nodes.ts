@@ -4,14 +4,13 @@
  * '/_status/nodes' endpoint.
  */
 
+import "isomorphic-fetch";
+import * as protos from  "../js/protos";
 import _ = require("lodash");
-import { Dispatch } from "redux";
 import assign = require("object-assign");
 import { Action, PayloadAction } from "../interfaces/action";
+import { Dispatch } from "redux";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
-import "isomorphic-fetch";
-
-import * as protos from "../js/protos";
 
 const REQUEST = "cockroachui/nodes/REQUEST";
 const RECEIVE = "cockroachui/nodes/RECEIVE";
@@ -123,7 +122,7 @@ const statusValidDurationMS = 10 * 1000;
  */
 export function refreshNodes() {
   return (dispatch: Dispatch, getState: () => any): void => {
-    let { nodes }: {nodes: NodeStatusState} = getState();
+    let { nodes }: { nodes: NodeStatusState } = getState();
 
     // If there is a query in flight, or if the most recent results are still
     // valid, do nothing.
@@ -135,20 +134,20 @@ export function refreshNodes() {
     dispatch(requestNodes());
 
     // Fetch node status from the servers and convert it to JSON.
-    fetch("/_status/nodes").then((response) => {
-      return response.json() as cockroach.server.NodesResponse;
-    }).then((json) => {
-      // Extract the result, an array of NodeStatus objects.
-      let { nodes: jsonResult } = json;
+    fetch("/_status/nodes", {
+      headers: {
+        "Accept": "application/x-protobuf",
+      },
+    }).then((response) => response.arrayBuffer() ).then((ab) => {
+      let response = protos.cockroach.server.NodesResponse.decode(ab);
+
       // Roll up store status metrics, additively, on each node status.
-      let result = _.map(jsonResult, (nsObj) => {
-        let ns = new protos.cockroach.server.status.NodeStatus(nsObj);
-        RollupStoreMetrics(ns);
-        return ns;
+      _.each(response.nodes, (nodeStatus) => {
+        RollupStoreMetrics(nodeStatus);
       });
 
       // Dispatch the processed results to the store.
-      dispatch(receiveNodes(result));
+      dispatch(receiveNodes(response.nodes));
 
       // Set a timeout which will later invalidate the results.
       setTimeout(() => dispatch(invalidateNodes()), statusValidDurationMS);

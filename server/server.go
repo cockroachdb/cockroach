@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -425,8 +424,14 @@ func (s *Server) Start() error {
 	})
 
 	// Initialize grpc-gateway mux and context.
-	jsonpb := new(protoutil.JSONPb)
-	gwMux := gwruntime.NewServeMux(gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb))
+	// Initialize grpc-gateway mux and context.
+	jsonpb := new(util.JSONPb)
+	protopb := new(util.ProtoPb)
+	gwMux := gwruntime.NewServeMux(
+		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
+	)
 	gwCtx, gwCancel := context.WithCancel(context.Background())
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 

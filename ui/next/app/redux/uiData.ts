@@ -1,9 +1,9 @@
-import _ = require("lodash");
 import "isomorphic-fetch";
 import * as protos from  "../js/protos";
-import { Dispatch } from "redux";
-import { Action, PayloadAction } from "../interfaces/action";
+import _ = require("lodash");
 import ByteBuffer = require("bytebuffer");
+import { Action, PayloadAction } from "../interfaces/action";
+import { Dispatch } from "redux";
 
 export const SET = "cockroachui/uidata/SET_OPTIN";
 export const ERROR = "cockroachui/uidata/ERROR";
@@ -117,16 +117,15 @@ export function saveUIData(...values: KeyValue[]) {
     return fetch("/_admin/v1/uidata", {
       method: "POST",
       headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
+        "Accept": "application/x-protobuf",
+        "Content-Type": "application/x-protobuf",
       },
-      body: request.encodeJSON(),
-    }).then((response) => {
-      if (!response.ok) {
-        throw new Error(response.statusText);
-      }
-    }).then(() => {
-      // SetUIDataResponse is empty. A positive return indicates success.
+      body: request.toArrayBuffer(),
+    }).then((response) => response.arrayBuffer()).then((ab) => {
+      // `SetUIDataResponse` is an empty message. A positive return indicates
+      // success. This `decode` call is present only as documentation.
+      protos.cockroach.server.SetUIDataResponse.decode(ab);
+
       _.each(values, (kv) => dispatch(setUIData(kv.key, kv.value)));
     }).catch((error) => {
       dispatch(errorUIData(error));
@@ -147,21 +146,18 @@ export function loadUIData(...keys: string[]) {
     // GetUIData is requested with query string.
     let queryStr = _.map(keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
 
-    return fetch("/_admin/v1/uidata?" + queryStr)
-    .then((response) => {
-      return response.json() as Promise<cockroach.server.GetUIDataResponse>;
-    }).then((json) => {
-      let response = new protos.cockroach.server.GetUIDataResponse(json);
+    return fetch("/_admin/v1/uidata?" + queryStr, {
+      headers: {
+        "Accept": "application/x-protobuf",
+      },
+    }).then(fetch.Response.arrayBuffer).then(ab => {
+      let response = protos.cockroach.server.GetUIDataResponse.decode(ab);
       response.getKeyValues().forEach((val, key) => {
         // Responses from the server return values as ByteBuffer objects, which
         // represent stringified JSON objects.
-        let decoded: any = null;
         let bb = val.getValue();
-        let str = bb.readString(bb.limit);
-        if (str) {
-          decoded = JSON.parse(str);
-        }
-        dispatch(setUIData(key, decoded));
+        let str = bb.readUTF8String(bb.limit);
+        dispatch(setUIData(key, str ? JSON.parse(str) : null));
       });
     }).catch((error) => {
       dispatch(errorUIData(error));
