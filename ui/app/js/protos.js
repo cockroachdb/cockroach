@@ -1406,7 +1406,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "ttl_seconds",
                             "id": 1,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.customname)": "TTLSeconds"
                             }
                         }
@@ -1431,7 +1430,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "range_min_bytes",
                             "id": 2,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.moretags)": "yaml:\\\"range_min_bytes\\\""
                             }
                         },
@@ -1441,7 +1439,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "range_max_bytes",
                             "id": 3,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.moretags)": "yaml:\\\"range_max_bytes\\\""
                             }
                         },
@@ -2667,55 +2664,37 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "rule": "optional",
                             "type": "string",
                             "name": "go_version",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 1
                         },
                         {
                             "rule": "optional",
                             "type": "string",
                             "name": "tag",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 2
                         },
                         {
                             "rule": "optional",
                             "type": "string",
                             "name": "time",
-                            "id": 3,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 3
                         },
                         {
                             "rule": "optional",
                             "type": "string",
                             "name": "dependencies",
-                            "id": 4,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 4
                         },
                         {
                             "rule": "optional",
                             "type": "string",
                             "name": "cgo_compiler",
-                            "id": 5,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 5
                         },
                         {
                             "rule": "optional",
                             "type": "string",
                             "name": "platform",
-                            "id": 6,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 6
                         }
                     ]
                 }
