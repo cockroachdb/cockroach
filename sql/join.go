@@ -151,7 +151,14 @@ func (n *indexJoinNode) Next() bool {
 	// table. This outer loop is necessary because a batch of rows from the index
 	// might all be filtered when the resulting rows are read from the table.
 	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
-		// First, try to pull a row from the table.
+		// First, (re)start the table scan if necessary.
+		if !n.table.scanInitialized {
+			if n.err = n.table.Start(); n.err != nil {
+				return false
+			}
+		}
+
+		// Try to pull a row from the table.
 		if tableLookup && n.table.Next() {
 			if n.explain == explainDebug {
 				n.debugVals = n.table.DebugValues()
