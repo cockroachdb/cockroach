@@ -64,7 +64,8 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 ) {
 	txn := ds.setupTxn(ctx, &req.Txn)
 	for _, f := range req.Flows {
-		reader, err := NewTableReader(f.Reader, txn, ds.evalCtx)
+		// TODO(radu): for now we expect exactly one processor (a table reader)
+		reader, err := NewTableReader(f.Processors[0].Core.TableReader, txn, ds.evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -74,3 +75,11 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	}
 	return &SetupFlowsResponse{}, nil
 }
+
+// TODO(radu): prevent varcheck from complaining about (yet) unused constants
+var _ = StreamEndpointSpec_LOCAL
+var _ = StreamEndpointSpec_REMOTE
+var _ = StreamEndpointSpec_RPC_SYNC_RESP
+var _ = OutputRouterSpec_MIRROR
+var _ = OutputRouterSpec_BY_HASH
+var _ = OutputRouterSpec_BY_RANGE
