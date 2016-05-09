@@ -1028,11 +1028,6 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 					// DeleteRange adds to the write timestamp cache to prevent
 					// subsequent writes from rewriting history.
 					readTSCache = false
-					// DeleteRange requires that we retry on push to avoid the
-					// lost delete range anomaly.
-					if br.Txn != nil {
-						br.Txn.RetryOnPush = true
-					}
 				case *roachpb.EndTransactionRequest:
 					// EndTransaction adds to the write timestamp cache to ensure
 					// replays create a transaction record with WriteTooOld set.
