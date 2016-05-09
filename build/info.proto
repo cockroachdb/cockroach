@@ -14,7 +14,7 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.build;
 option go_package = "build";
 
@@ -22,10 +22,10 @@ import weak "gogoproto/gogo.proto";
 
 // Info describes build information for this CockroachDB binary.
 message Info {
-  optional string go_version = 1 [(gogoproto.nullable) = false];
-  optional string tag = 2 [(gogoproto.nullable) = false];
-  optional string time = 3 [(gogoproto.nullable) = false];
-  optional string dependencies = 4 [(gogoproto.nullable) = false];
-  optional string cgo_compiler = 5 [(gogoproto.nullable) = false];
-  optional string platform = 6 [(gogoproto.nullable) = false];
+  string go_version = 1;
+  string tag = 2;
+  string time = 3;
+  string dependencies = 4;
+  string cgo_compiler = 5;
+  string platform = 6;
 }
