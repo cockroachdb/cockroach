@@ -704,11 +704,11 @@ func TestClusterFreeze(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var resp map[string]int
+		var resp ClusterFreezeResponse
 		if err := apiPost(s, "cluster/freeze", string(reqBodyBytes), &resp); err != nil {
 			t.Fatal(err)
 		}
-		if aff := resp["ranges_affected"]; aff == 0 {
+		if aff := resp.RangesAffected; aff == 0 {
 			t.Fatalf("expected affected ranges: %+v", resp)
 		}
 
@@ -716,5 +716,4 @@ func TestClusterFreeze(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
 }
