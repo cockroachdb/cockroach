@@ -704,12 +704,12 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 				// we can not include it in the index constraints because the index
 				// encoding would be incorrect. See #4313.
 				if preStart != *startExpr {
-					if isMixedTypeComparison(*startExpr) {
+					if (*startExpr).IsMixedTypeComparison() {
 						*startExpr = nil
 					}
 				}
 				if preEnd != *endExpr {
-					if isMixedTypeComparison(*endExpr) {
+					if (*endExpr).IsMixedTypeComparison() {
 						*endExpr = nil
 					}
 				}
@@ -775,33 +775,6 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 		}
 	}
 	return true
-}
-
-func isMixedTypeComparison(c *parser.ComparisonExpr) bool {
-	switch c.Operator {
-	case parser.In, parser.NotIn:
-		tuple := *c.Right.(*parser.DTuple)
-		for _, expr := range tuple {
-			if !sameTypeExprs(c.TypedLeft(), expr.(parser.TypedExpr)) {
-				return true
-			}
-		}
-		return false
-	default:
-		return !sameTypeExprs(c.TypedLeft(), c.TypedRight())
-	}
-}
-
-func sameTypeExprs(left, right parser.TypedExpr) bool {
-	leftType := left.ReturnType()
-	if leftType == parser.DNull {
-		return true
-	}
-	rightType := right.ReturnType()
-	if rightType == parser.DNull {
-		return true
-	}
-	return leftType.TypeEqual(rightType)
 }
 
 type indexInfoByCost []*indexInfo
