@@ -264,7 +264,15 @@ func (r *Replica) DeleteRange(
 ) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
 	deleted, err := engine.MVCCDeleteRange(ctx, batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn, args.ReturnKeys)
-	reply.Keys = deleted
+	if err == nil {
+		reply.Keys = deleted
+		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
+		if h.Txn != nil {
+			clonedTxn := h.Txn.Clone()
+			clonedTxn.RetryOnPush = true
+			reply.Txn = &clonedTxn
+		}
+	}
 	return reply, err
 }
 
