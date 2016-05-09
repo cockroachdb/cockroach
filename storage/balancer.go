@@ -59,7 +59,7 @@ func (rcb rangeCountBalancer) selectGood(
 
 func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	var worst *roachpb.StoreDescriptor
-	for _, candidate := range sl.stores {
+	for _, candidate := range sl.Stores {
 		if worst == nil {
 			worst = candidate
 			continue
@@ -125,8 +125,8 @@ func selectRandom(
 	// Randomly permute available stores matching the required attributes.
 	randGen.Lock()
 	defer randGen.Unlock()
-	for _, idx := range randGen.Perm(len(sl.stores)) {
-		desc := sl.stores[idx]
+	for _, idx := range randGen.Perm(len(sl.Stores)) {
+		desc := sl.Stores[idx]
 		// Skip if store is in excluded set.
 		if _, ok := excluded[desc.Node.NodeID]; ok {
 			continue
@@ -138,7 +138,7 @@ func selectRandom(
 		}
 
 		// Add this store; exit loop if we've satisfied count.
-		descs = append(descs, sl.stores[idx])
+		descs = append(descs, sl.Stores[idx])
 		if len(descs) >= count {
 			break
 		}
