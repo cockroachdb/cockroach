@@ -434,7 +434,7 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			v.isConst = false
 			return false, expr
 		case *FuncExpr:
-			if t.fn.fn == nil || t.fn.impure {
+			if t.fn.impure {
 				v.isConst = false
 				return false, expr
 			}
