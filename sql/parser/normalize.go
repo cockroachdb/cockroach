@@ -16,10 +16,7 @@
 
 package parser
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 type normalizableExpr interface {
 	Expr
@@ -440,21 +437,6 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			v.isConst = false
 			return false, expr
 		case *FuncExpr:
-			// TODO(nvanbenschoten) This could be cleaned up a bit.
-			if t.fn.fn == nil {
-				name := string(t.Name.Base)
-				candidates, _ := Builtins[strings.ToLower(name)]
-				args := make(DTuple, 0, len(t.Exprs))
-				for _, e := range t.Exprs {
-					args = append(args, e.(TypedExpr).ReturnType())
-				}
-				for _, fn := range candidates {
-					if fn.Types.match(ArgTypes(args)) {
-						t.fn = fn
-						break
-					}
-				}
-			}
 			if t.fn.fn == nil || t.fn.impure {
 				v.isConst = false
 				return false, expr
