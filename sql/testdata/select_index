@@ -286,12 +286,15 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
 query ITT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-0 scan t@bc -
+0 scan t@bc /5/1-/5/2
+
+query error tuples \(b, c\), \(5.1, 1\) are not the same type: expected 5.1 to be of type int, found type float
+EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-0 scan t@b_desc -
+0 scan t@b_desc /-6-/-5 /-2-/-1
 
 statement ok
 CREATE TABLE abcd (

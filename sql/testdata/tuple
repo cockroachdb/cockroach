@@ -91,10 +91,10 @@ SELECT
 ----
 true NULL false NULL
 
-statement error pq: unsupported comparison operator: <string> = <int>
+statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not the same type: expected 2 to be of type string, found type int
 SELECT (1, 2) > (1, 'hi')
 
-statement error pq: unequal number of entries in tuple expressions: 3, 2
+statement error pq: expected tuple \(1, 2, 3\) to have a length of 2
 SELECT (1, 2) > (1, 2, 3)
 
 statement ok
@@ -115,3 +115,21 @@ SELECT * FROM t WHERE (a, b, c) > (1, 2, 3) ORDER BY a, b, c
 ----
 2 3 1
 3 1 2
+
+query BB
+SELECT ((1, 2), 'equal') = ((1, 2.0), 'equal'), ((1, 2), 'equal') = ((1, 2.0), 'not equal')
+----
+true false
+
+query B
+SELECT ((1, 2), 'equal') = ((1, 2.1), 'equal')
+----
+false
+
+query B
+SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100)), 'ab')
+----
+true
+
+query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not the same type: tuples \(1, 2\), \(1, 'huh'\) are not the same type: expected 2 to be of type string, found type int
+SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal')
