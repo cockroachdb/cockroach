@@ -17,6 +17,7 @@
 		IndexDescriptor
 		DescriptorMutation
 		TableDescriptor
+		TableRenameDetails
 		DatabaseDescriptor
 		Descriptor
 */
