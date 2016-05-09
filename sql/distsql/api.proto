@@ -17,7 +17,7 @@
 // APIs for distributed SQL; see docs/RFCS/distributed_sql.md
 
 syntax = "proto2";
-package cockroach.distsql;
+package cockroach.sql.distsql;
 option go_package = "distsql";
 
 import "cockroach/roachpb/data.proto";

@@ -15,7 +15,7 @@
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.distsql;
+package cockroach.sql.distsql;
 option go_package = "distsql";
 
 import "cockroach/roachpb/data.proto";

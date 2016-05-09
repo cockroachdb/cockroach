@@ -16,7 +16,7 @@
 
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
-package cockroach.sqlbase;
+package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
 import "cockroach/roachpb/data.proto";
