@@ -1461,7 +1461,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
 					return true, expr
 				}
-				diff := diffSorted(*datum.(*parser.DTuple), *cdatum.(*parser.DTuple))
+				diff := datum.(*parser.DTuple).SortedDifference(cdatum.(*parser.DTuple))
 				if len(*diff) == 0 {
 					return false, parser.DBoolTrue
 				}
@@ -1498,21 +1498,4 @@ func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	}
 
 	return expr
-}
-
-func diffSorted(a, b parser.DTuple) *parser.DTuple {
-	var r parser.DTuple
-	for len(a) > 0 && len(b) > 0 {
-		switch a[0].Compare(b[0]) {
-		case -1:
-			r = append(r, a[0])
-			a = a[1:]
-		case 0:
-			a = a[1:]
-			b = b[1:]
-		case 1:
-			b = b[1:]
-		}
-	}
-	return &r
 }
