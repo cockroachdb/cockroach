@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
@@ -20,7 +21,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -84,13 +84,6 @@ func getKeysForTableDescriptor(
 	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
 	descKey = sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	return
-}
-
-func updateCommitBy(commitBy time.Time, lease *LeaseState) time.Time {
-	if commitBy.IsZero() || commitBy.After(lease.Expiration()) {
-		return lease.Expiration()
-	}
-	return commitBy
 }
 
 // SchemaAccessor provides helper methods for using the SQL schema.
@@ -172,6 +165,9 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 
 // getTableLease implements the SchemaAccessor interface.
 func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error) {
+	if log.V(2) {
+		log.Infof("planner acquiring lease on table %q", qname)
+	}
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
@@ -191,22 +187,35 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		return *desc, nil
 	}
 
-	tableID, err := p.getTableID(qname)
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
+
+	dbID, err := p.getDatabaseID(qname.Database())
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
 
+	// First, look to see if we already have a lease for this table.
+	// This ensures that, once a SQL transaction resolved name N to id X, it will
+	// continue to use N to refer to X even if N is renamed during the
+	// transaction.
 	var lease *LeaseState
-	var commitBy time.Time
 	for _, l := range p.leases {
-		commitBy = updateCommitBy(commitBy, l)
-		if l.TableDescriptor.ID == tableID {
+		if sqlbase.NormalizeName(l.Name) == sqlbase.NormalizeName(qname.Table()) &&
+			l.ParentID == dbID {
 			lease = l
+			if log.V(2) {
+				log.Infof("found lease in planner cache for table %q", qname)
+			}
+			break
 		}
 	}
+
+	// If we didn't find a lease, acquire one.
 	if lease == nil {
 		var err error
-		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
 		if err != nil {
 			if err == errDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -216,13 +225,14 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			return sqlbase.TableDescriptor{}, err
 		}
 		p.leases = append(p.leases, lease)
-		commitBy = updateCommitBy(commitBy, lease)
+		// If the lease we just acquired expires before the txn's deadline, reduce
+		// the deadline.
+		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
-	p.txn.SetDeadline(roachpb.Timestamp{WallTime: commitBy.UnixNano()})
 	return lease.TableDescriptor, nil
 }
 
-// getTableID implements the SchemaAccessor interface.
+// getTableID retrieves the table ID for the specified table.
 func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return 0, err
@@ -233,20 +243,8 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 		return 0, err
 	}
 
-	// Lookup the ID of the table in the cache. The use of the cache might cause
-	// the usage of a recently renamed table, but that's a race that could occur
-	// anyways.
-	// TODO(andrei): remove the used of p.systemConfig as a cache for table names,
-	// replace it with using the leases for resolving names, and do away with any
-	// races due to renames. We'll probably have to rewrite renames to perform
-	// an async schema change.
 	nameKey := tableKey{dbID, qname.Table()}
 	key := nameKey.Key()
-	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
-		id, err := nameVal.GetInt()
-		return sqlbase.ID(id), err
-	}
-
 	gr, err := p.txn.Get(key)
 	if err != nil {
 		return 0, err
@@ -307,7 +305,6 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 		tableID:    id,
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
-		cfg:        p.systemConfig,
 		leaseMgr:   p.leaseMgr,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
