@@ -38,9 +38,9 @@ github.com/docker/go-units 5d2041e26a699eaca682e2ea41c8f891e1060444
 github.com/dustin/go-humanize 8929fe90cee4b2cb9deb468b51fb34eba64d1bf0
 github.com/elastic/gosigar e9bc408cebda400d161a8b852b38405fadce7502
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
-github.com/gengo/grpc-gateway 98578bc58fc0cbdfd90557390120dec5c1bd8486
+github.com/gengo/grpc-gateway 03f88dc8d1e1f11f278d52e466360961c39f1ff4
 github.com/go-sql-driver/mysql 7ebe0a500653eeb1859664bed5e48dec1e164e73
-github.com/gogo/protobuf 43a2e0b1c32252bfbbdf81f7faa7a88fb3fa4028
+github.com/gogo/protobuf c18eea6ad611eecf94a9ba38471f59706199409e
 github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 github.com/golang/lint c7bacac2b21ca01afa1dee0acf64df3ce047c28f
 github.com/golang/protobuf 7cc19b78d562895b13596ddce7aafb59dd789318
@@ -72,10 +72,10 @@ github.com/spf13/pflag cb88ea77998c3f024757528e3305022ab50b43be
 github.com/tebeka/go2xunit 22b8a642949a778695f67a22d39d4f4401740a08
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 47ff8dfbc528fea3003fc0ce2d88ffbbfbc46a43
-golang.org/x/net 2a35e686583654a1b89ca79c4ac78cb3d6529ca3
+golang.org/x/net ef00b378c73f107bf44d5c9b69875255ce89b79a
 golang.org/x/text bd1c9905f55d983c0cd0b15cf0c3e2fe860c8902
 golang.org/x/tools 2c200eec40d70d74e01852aad22cf6637e8f8f3d
-google.golang.org/grpc 04f4ff6a1c69dbfa0eb68d502d80ba4cc1fe82db
+google.golang.org/grpc 4c4ed377c72e199edd16a87011f13a56fd519119
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
 honnef.co/go/unused 9057d575b3bb51f1e1251088a8b8196f4226f936
