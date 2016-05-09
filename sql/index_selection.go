@@ -206,7 +206,7 @@ func selectIndex(
 		// There are no spans to scan.
 		return &emptyNode{}, nil
 	}
-	s.filter = applyConstraints(s.filter, c.constraints)
+	s.filter = applyIndexConstraints(s.filter, c.constraints)
 	noFilter := (s.filter == nil)
 	s.reverse = c.reverse
 
@@ -1353,7 +1353,7 @@ func (oic orIndexConstraints) exactPrefix() int {
 // constraint is "a = 1", the expression is simplified to "b > 2".
 //
 // Note that applyConstraints currently only handles simple cases.
-func applyConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
+func applyIndexConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).
