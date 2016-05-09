@@ -198,7 +198,12 @@ func newAdminServer(s *Server) *adminServer {
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := new(protoutil.JSONPb)
-	server.gwMux = gwruntime.NewServeMux(gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb))
+	protopb := new(util.ProtoMarshaler)
+	server.gwMux = gwruntime.NewServeMux(
+		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
+	)
 	server.gwCtx, server.gwCancel = context.WithCancel(context.Background())
 
 	return server
