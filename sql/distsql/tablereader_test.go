@@ -58,11 +58,11 @@ func TestTableReader(t *testing.T) {
 
 	txn := client.NewTxn(context.Background(), *kvDB)
 
-	tr, err := NewTableReader(&ts, txn, parser.EvalContext{})
+	tr, err := newTableReader(&ts, txn, parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tr.Run(); err != nil {
+	if err := tr.run(); err != nil {
 		t.Fatal(err)
 	}
 	// TODO(radu): currently the table reader just prints out stuff; when it
@@ -87,11 +87,11 @@ func TestTableReader(t *testing.T) {
 		Filter:        Expression{Expr: "$1 != 30"}, // b != 30
 		OutputColumns: []uint32{0, 1},               // a, c
 	}
-	tr, err = NewTableReader(&ts, txn, parser.EvalContext{})
+	tr, err = newTableReader(&ts, txn, parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = tr.Run()
+	err = tr.run()
 	if err != nil {
 		t.Fatal(err)
 	}

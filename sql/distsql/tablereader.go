@@ -26,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// TableReader is the start of a computation flow; it performs KV operations to
+// tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table and outputs the desired columns of the rows that
 // pass a filter expression.
 // See docs/RFCS/distributed_sql.md
-type TableReader struct {
+type tableReader struct {
 	desc       sqlbase.TableDescriptor
 	spans      sqlbase.Spans
 	outputCols []int
@@ -47,29 +47,29 @@ type TableReader struct {
 	row parser.DTuple
 }
 
-// TableReader implements parser.IndexedVarContainer.
-var _ parser.IndexedVarContainer = &TableReader{}
+// tableReader implements parser.IndexedVarContainer.
+var _ parser.IndexedVarContainer = &tableReader{}
 
 // IndexedVarReturnType is part of the parser.IndexedVarContaine interface.
-func (tr *TableReader) IndexedVarReturnType(idx int) parser.Datum {
+func (tr *tableReader) IndexedVarReturnType(idx int) parser.Datum {
 	return tr.desc.Columns[idx].Type.ToDatumType()
 }
 
 // IndexedVarEval is part of the parser.IndexedVarContaine interface.
-func (tr *TableReader) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
+func (tr *tableReader) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
 	return tr.row[idx].Eval(ctx)
 }
 
 // IndexedVarString is part of the parser.IndexedVarContaine interface.
-func (tr *TableReader) IndexedVarString(idx int) string {
+func (tr *tableReader) IndexedVarString(idx int) string {
 	return string(tr.desc.Columns[idx].Name)
 }
 
-// NewTableReader creates a TableReader. Exported for testing purposes.
-func NewTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalContext) (
-	*TableReader, error,
+// newTableReader creates a tableReader. Exported for testing purposes.
+func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalContext) (
+	*tableReader, error,
 ) {
-	tr := &TableReader{
+	tr := &tableReader{
 		desc:    spec.Table,
 		txn:     txn,
 		evalCtx: evalCtx,
@@ -132,8 +132,8 @@ func NewTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 	return tr, nil
 }
 
-// Run is the "main loop".
-func (tr *TableReader) Run() error {
+// run is the "main loop".
+func (tr *tableReader) run() error {
 	if log.V(1) {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}
