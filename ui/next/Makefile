@@ -48,9 +48,14 @@ typings.installed: typings.json npm.installed
 jspm.installed: npm.installed
 	rm -rf $(JSPM_PACKAGES)/
 	jspm install
+	# jspm touches package.json, so we need to bump npm.installed's timestamp
+	# here to prevent endless pointless rebuilds. This `touch` will still result
+	# in a spurious `typings install`, but that's extremely fast compared to `npm
+	# install`.
+	touch npm.installed
 	touch $@
 
-UI_PROTOS = ../../server/status.proto ../../server/status/status.proto ../../ts/timeseries.proto ../../server/admin.proto
+UI_PROTOS = ../../server/admin.proto ../../server/status.proto ../../server/status/status.proto ../../ts/timeseries.proto
 
 PBJS_ARGS = --path ../../../ $(UI_PROTOS)
 
