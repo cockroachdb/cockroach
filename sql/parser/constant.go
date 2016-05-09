@@ -37,7 +37,8 @@ type Constant interface {
 	AvailableTypes() []Datum
 	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
 	// error if the Constant could not be resolved as that type. The method should only
-	// be passed a type returned from AvailableTypes.
+	// be passed a type returned from AvailableTypes and should never be called more than
+	// once for a given Constant.
 	ResolveAsType(Datum) (Datum, error)
 }
 
@@ -101,6 +102,11 @@ type NumVal struct {
 
 	// We preserve the "original" string representation (before folding).
 	OrigString string
+
+	// The following fields are used to avoid allocating Datums on type resolution.
+	resInt     DInt
+	resFloat   DFloat
+	resDecimal DDecimal
 }
 
 // Format implements the NodeFormatter interface.
@@ -188,12 +194,14 @@ func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 		if !exact {
 			return nil, fmt.Errorf("integer value out of range: %v", expr.Value)
 		}
-		return NewDInt(DInt(i)), nil
+		expr.resInt = DInt(i)
+		return &expr.resInt, nil
 	case typ.TypeEqual(TypeFloat):
 		f, _ := constant.Float64Val(constant.ToFloat(expr.Value))
-		return NewDFloat(DFloat(f)), nil
+		expr.resFloat = DFloat(f)
+		return &expr.resFloat, nil
 	case typ.TypeEqual(TypeDecimal):
-		dd := &DDecimal{}
+		dd := &expr.resDecimal
 		s := expr.ExactString()
 		if idx := strings.IndexRune(s, '/'); idx != -1 {
 			// Handle constant.ratVal, which will return a rational string
@@ -203,6 +211,7 @@ func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 				return nil, fmt.Errorf("could not evaluate numerator of %v as Datum type DDecimal "+
 					"from string %q", expr, num)
 			}
+			// TODO(nvanbenschoten) Should we try to avoid this allocation?
 			denDec := new(inf.Dec)
 			if _, ok := denDec.SetString(den); !ok {
 				return nil, fmt.Errorf("could not evaluate denominator %v as Datum type DDecimal "+
@@ -252,6 +261,10 @@ func commonNumericConstantType(vals []indexedExpr) Datum {
 type StrVal struct {
 	s        string
 	bytesEsc bool
+
+	// The following fields are used to avoid allocating Datums on type resolution.
+	resString DString
+	resBytes  DBytes
 }
 
 // Format implements the NodeFormatter interface.
@@ -282,9 +295,11 @@ func (expr *StrVal) AvailableTypes() []Datum {
 func (expr *StrVal) ResolveAsType(typ Datum) (Datum, error) {
 	switch typ {
 	case TypeString:
-		return NewDString(expr.s), nil
+		expr.resString = DString(expr.s)
+		return &expr.resString, nil
 	case TypeBytes:
-		return NewDBytes(DBytes(expr.s)), nil
+		expr.resBytes = DBytes(expr.s)
+		return &expr.resBytes, nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
