@@ -259,22 +259,6 @@ func (n *scanNode) initTable(
 	return alias, nil
 }
 
-// makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
-	cols := make([]ResultColumn, 0, len(colDescs))
-	for _, colDesc := range colDescs {
-		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
-		typ := colDesc.Type.ToDatumType()
-		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
-		}
-
-		hidden := colDesc.Hidden
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
-	}
-	return cols
-}
-
 // setNeededColumns sets the flags indicating which columns are needed by the upper layer.
 func (n *scanNode) setNeededColumns(needed []bool) {
 	if len(needed) != len(n.valNeededForCol) {
