@@ -142,7 +142,7 @@ func (p *planner) Insert(
 			columns: makeResultColumns(en.tableDesc.Columns),
 		}
 		for i := range checkExprs {
-			expr, err := resolveQNames(checkExprs[i], &table, qvals, &p.qnameVisitor)
+			expr, err := resolveQNames(checkExprs[i], &table, nil, qvals, &p.qnameVisitor)
 			if err != nil {
 				return nil, err
 			}
@@ -203,35 +203,26 @@ func (p *planner) Insert(
 	if n.OnConflict == nil {
 		tw = &tableInserter{ri: ri, autoCommit: autoCommit}
 	} else {
-		// TODO(dan): These are both implied by the short form of UPSERT. When the
-		// INSERT INTO ON CONFLICT form is implemented, get these values from
-		// n.OnConfict.
-		upsertConflictIndex := en.tableDesc.PrimaryIndex
-		insertCols := ri.insertCols
-
-		indexColSet := make(map[sqlbase.ColumnID]struct{}, len(upsertConflictIndex.ColumnIDs))
-		for _, colID := range upsertConflictIndex.ColumnIDs {
-			indexColSet[colID] = struct{}{}
-		}
-
-		// updateCols contains the columns that will be updated when a conflict is
-		// found. For the UPSERT short form, it is the set of columns in insertCols
-		// minus any columns in the conflict index. Example:
-		// `UPSERT INTO abc VALUES (1, 2, 3)` is syntactic sugar for
-		// `INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT a DO UPDATE SET b = 2, c = 3`.
-		updateCols := make([]sqlbase.ColumnDescriptor, 0, len(insertCols))
-		for _, c := range insertCols {
-			if _, ok := indexColSet[c.ID]; !ok {
-				updateCols = append(updateCols, c)
-			}
-		}
-		ru, err := makeRowUpdater(en.tableDesc, updateCols)
+		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.insertCols)
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 
-		tw = &tableUpserter{ri: ri, ru: ru, autoCommit: autoCommit}
+		names, err := p.namesForExprs(updateExprs)
+		if err != nil {
+			return nil, err
+		}
+		updateCols, err := p.processColumns(en.tableDesc, names)
+		if err != nil {
+			return nil, err
+		}
+
+		helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateExprs, conflictIndex)
+		if err != nil {
+			return nil, err
+		}
+
+		tw = &tableUpserter{ri: ri, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
 	}
 
 	in := &insertNode{

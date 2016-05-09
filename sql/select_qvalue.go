@@ -44,8 +44,9 @@ func (cr columnRef) get() ResultColumn {
 }
 
 type qvalResolver struct {
-	table *tableInfo
-	qvals qvalMap
+	table         *tableInfo
+	aliasedTables []*tableInfo
+	qvals         qvalMap
 }
 
 // findColumn looks up the column described by a QualifiedName. The qname will be normalized.
@@ -63,9 +64,6 @@ func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error
 		return ref, err
 	}
 
-	// TODO(radu): when we support multiple FROMs, we will find the node with the correct alias; if
-	// no alias is given, we will search for the column in all FROMs and make sure there is only
-	// one.  For now we just check that the name matches (if given).
 	if qname.Base == "" || sqlbase.EqualName(qt.table.alias, string(qname.Base)) {
 		colName := sqlbase.NormalizeName(qname.Column())
 		for idx, col := range qt.table.columns {
@@ -73,6 +71,19 @@ func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error
 				ref.table = qt.table
 				ref.colIdx = idx
 				return ref, nil
+			}
+		}
+	} else {
+		for _, table := range qt.aliasedTables {
+			if sqlbase.EqualName(table.alias, string(qname.Base)) {
+				colName := sqlbase.NormalizeName(qname.Column())
+				for idx, col := range table.columns {
+					if sqlbase.NormalizeName(col.Name) == colName {
+						ref.table = table
+						ref.colIdx = idx
+						return ref, nil
+					}
+				}
 			}
 		}
 	}
@@ -224,13 +235,15 @@ func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
 	if s.planner != nil {
 		v = &s.planner.qnameVisitor
 	}
-	return resolveQNames(expr, &s.table, s.qvals, v)
+	return resolveQNames(expr, &s.table, nil, s.qvals, v)
 }
 
 // resolveQNames walks the provided expression and resolves all qualified
 // names using the tableInfo and qvalMap. The function takes an optional
 // qnameVisitor to provide the caller the option of avoiding an allocation.
-func resolveQNames(expr parser.Expr, table *tableInfo, qvals qvalMap, v *qnameVisitor) (parser.Expr, error) {
+func resolveQNames(
+	expr parser.Expr, table *tableInfo, aliasedTables []*tableInfo, qvals qvalMap, v *qnameVisitor,
+) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
@@ -239,8 +252,9 @@ func resolveQNames(expr parser.Expr, table *tableInfo, qvals qvalMap, v *qnameVi
 	}
 	*v = qnameVisitor{
 		qt: qvalResolver{
-			table: table,
-			qvals: qvals,
+			table:         table,
+			aliasedTables: aliasedTables,
+			qvals:         qvals,
 		},
 	}
 	expr, _ = parser.WalkExpr(v, expr)
@@ -250,7 +264,7 @@ func resolveQNames(expr parser.Expr, table *tableInfo, qvals qvalMap, v *qnameVi
 // Populates the datum fields in the qval map given a row of values.
 func (q qvalMap) populateQVals(row parser.DTuple) {
 	for ref, qval := range q {
-		qval.datum = row[ref.colIdx]
+		qval.datum = row[ref.colIdx+ref.table.columnOffset]
 		if qval.datum == nil {
 			panic(fmt.Sprintf("Unpopulated value for column %d", ref.colIdx))
 		}

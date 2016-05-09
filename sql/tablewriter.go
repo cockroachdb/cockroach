@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -135,25 +136,32 @@ func (tu *tableUpdater) finalize() error {
 	return nil
 }
 
+type tableUpsertEvaler interface {
+	// eval returns the values for the update case of an upsert, given the row
+	// that would have been inserted and the existing (conflicting) values.
+	eval(insertRow parser.DTuple, existingRow parser.DTuple) (parser.DTuple, error)
+}
+
 // tableUpserter handles writing kvs and forming table rows for upserts.
 type tableUpserter struct {
-	ri         rowInserter
-	ru         rowUpdater
-	autoCommit bool
+	ri            rowInserter
+	updateCols    []sqlbase.ColumnDescriptor
+	conflictIndex sqlbase.IndexDescriptor
+	evaler        tableUpsertEvaler
 
 	// Set by init.
 	txn                   *client.Txn
 	tableDesc             *sqlbase.TableDescriptor
+	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
+	a                     sqlbase.DatumAlloc
 	fetcher               sqlbase.RowFetcher
 
 	// Batched up in run/flush.
-	upsertRows   []parser.DTuple
-	upsertRowPKs []roachpb.Key
+	insertRows []parser.DTuple
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
-	updateRow      parser.DTuple
 }
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
@@ -162,104 +170,192 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.tableDesc = tu.ri.helper.tableDesc
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
 
+	var err error
+	tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols)
+	if err != nil {
+		return err
+	}
+	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
+
 	tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
 	for i, updateCol := range tu.ru.updateCols {
 		tu.updateColIDtoRowIndex[updateCol.ID] = i
 	}
-	tu.updateRow = make(parser.DTuple, len(tu.updateColIDtoRowIndex))
 
 	valNeededForCol := make([]bool, len(tu.ru.fetchCols))
 	for i := range valNeededForCol {
+		// TODO(dan): We only need the primary key columns, the update columns, and
+		// anything referenced by an UpdateExpr.
 		valNeededForCol[i] = true
 	}
-	err := tu.fetcher.Init(
-		tu.tableDesc, tu.ru.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
-		false, false, valNeededForCol)
+	err = tu.fetcher.Init(
+		tu.tableDesc, tu.ru.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
+		valNeededForCol)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
-	tu.upsertRows = append(tu.upsertRows, row)
+	// TODO(dan): If a table has one index and every column is being upserted,
+	// then it can be done entirely with Puts. This would greatly help the
+	// key/value table case.
 
-	// TODO(dan): The presence of OnConflict currently implies the short form
-	// (primary index and update the values being inserted). Implement the long
-	// form.
-	upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-		&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
-	if err != nil {
-		return nil, err
-	}
-	tu.upsertRowPKs = append(tu.upsertRowPKs, upsertRowPK)
+	tu.insertRows = append(tu.insertRows, row)
 
-	// TODO(dan): If len(tu.upsertRows) > some threshold, call flush().
+	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
 	return nil, nil
 }
 
+// flush commits to tu.txn any rows batched up in tu.insertRows.
 func (tu *tableUpserter) flush() error {
-	pkSpans := make(sqlbase.Spans, len(tu.upsertRowPKs))
-	for i, upsertRowPK := range tu.upsertRowPKs {
-		pkSpans[i] = sqlbase.Span{Start: upsertRowPK, End: upsertRowPK.PrefixEnd()}
-	}
+	defer func() {
+		tu.insertRows = nil
+	}()
 
-	if err := tu.fetcher.StartScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
+	existingRows, err := tu.fetchExisting()
+	if err != nil {
 		return err
 	}
 
-	var upsertRowPKIdx int
-	existingRows := make([]parser.DTuple, len(tu.upsertRowPKs))
-	for {
-		row, err := tu.fetcher.NextRow()
-		if err != nil {
-			return err
-		}
-		if row == nil {
-			break
-		}
-
-		// TODO(dan): Can we do this without encoding an index key for every row we
-		// get back?
-		rowPK, _, err := sqlbase.EncodeIndexKey(
-			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
-		if err != nil {
-			return err
-		}
-
-		for ; upsertRowPKIdx < len(tu.upsertRowPKs); upsertRowPKIdx++ {
-			if bytes.Equal(tu.upsertRowPKs[upsertRowPKIdx], rowPK) {
-				existingRows[upsertRowPKIdx] = row
-				break
-			}
-		}
-	}
-
 	b := tu.txn.NewBatch()
-	for i, upsertRow := range tu.upsertRows {
+	for i, insertRow := range tu.insertRows {
 		existingRow := existingRows[i]
+
 		if existingRow == nil {
-			err := tu.ri.insertRow(b, upsertRow)
+			err := tu.ri.insertRow(b, insertRow)
 			if err != nil {
 				return err
 			}
 		} else {
-			for uCol, uIdx := range tu.updateColIDtoRowIndex {
-				tu.updateRow[uIdx] = upsertRow[tu.ri.insertColIDtoRowIndex[uCol]]
+			existingValues := existingRow[:len(tu.ru.fetchCols)]
+			updateValues, err := tu.evaler.eval(insertRow, existingValues)
+			if err != nil {
+				return err
 			}
-			_, err := tu.ru.updateRow(b, existingRow, tu.updateRow)
+			_, err = tu.ru.updateRow(b, existingValues, updateValues)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	tu.upsertRows = nil
-	tu.upsertRowPKs = nil
 
 	if err := tu.txn.Run(b); err != nil {
 		return convertBatchError(tu.tableDesc, b)
 	}
 	return nil
+}
+
+// upsertRowPKs returns the primary keys of any rows with potential upsert
+// conflicts.
+//
+// If the conflict index is the primary index, we can compute them directly.
+// In this case, the slice will be filled, but not all rows will have
+// conflicts.
+//
+// Otherwise, compute the keys for the conflict index and look them up. The
+// primary keys can be constructed from the entries that come back. In this
+// case, some spots in the slice will be nil (indicating no conflict) and the
+// others will be conflicting rows.
+func (tu *tableUpserter) upsertRowPKs() ([]roachpb.Key, error) {
+	upsertRowPKs := make([]roachpb.Key, len(tu.insertRows))
+
+	if tu.conflictIndex.ID == tu.tableDesc.PrimaryIndex.ID {
+		for i, insertRow := range tu.insertRows {
+			upsertRowPK, _, err := sqlbase.EncodeIndexKey(
+				&tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
+			if err != nil {
+				return nil, err
+			}
+			upsertRowPKs[i] = upsertRowPK
+		}
+	} else {
+		b := tu.txn.NewBatch()
+		for _, insertRow := range tu.insertRows {
+			entry, err := sqlbase.EncodeSecondaryIndex(
+				tu.tableDesc.ID, tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow)
+			if err != nil {
+				return nil, err
+			}
+			if log.V(2) {
+				log.Infof("Get %s\n", entry.Key)
+			}
+			b.Get(entry.Key)
+		}
+
+		if err := tu.txn.Run(b); err != nil {
+			return nil, err
+		}
+		for i, result := range b.Results {
+			if len(result.Rows) == 0 {
+				// No conflict for this row, so leave upsertRowPKs[i] as nil.
+			} else if len(result.Rows) == 1 {
+				if result.Rows[0].Value == nil {
+					upsertRowPKs[i] = nil
+				} else {
+					upsertRowPK, err := sqlbase.ExtractIndexKey(&tu.a, tu.tableDesc, result.Rows[0])
+					if err != nil {
+						return nil, err
+					}
+					upsertRowPKs[i] = upsertRowPK
+				}
+			}
+		}
+	}
+
+	return upsertRowPKs, nil
+}
+
+// fetchExisting returns any existing rows in the table that conflict with the
+// ones in tu.insertRows. The returned slice is the same length as tu.insertRows
+// and a nil entry indicates no conflict.
+func (tu *tableUpserter) fetchExisting() ([]parser.DTuple, error) {
+	primaryKeys, err := tu.upsertRowPKs()
+	if err != nil {
+		return nil, err
+	}
+
+	pkSpans := make(sqlbase.Spans, 0, len(primaryKeys))
+	rowIdxForPrimaryKey := make(map[string]int, len(primaryKeys))
+	for i, primaryKey := range primaryKeys {
+		if primaryKey != nil {
+			pkSpans = append(pkSpans, sqlbase.Span{Start: primaryKey, End: primaryKey.PrefixEnd()})
+			if _, ok := rowIdxForPrimaryKey[string(primaryKey)]; ok {
+				return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
+			}
+			rowIdxForPrimaryKey[string(primaryKey)] = i
+		}
+	}
+	if len(pkSpans) == 0 {
+		// Every key was empty, so there's nothing to fetch.
+		return make([]parser.DTuple, len(primaryKeys)), nil
+	}
+
+	if err := tu.fetcher.StartScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
+		return nil, err
+	}
+
+	rows := make([]parser.DTuple, len(primaryKeys))
+	for {
+		row, err := tu.fetcher.NextRow()
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			break // Done
+		}
+
+		rowPrimaryKey, _, err := sqlbase.EncodeIndexKey(
+			&tu.tableDesc.PrimaryIndex, tu.ru.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
+		if err != nil {
+			return nil, err
+		}
+
+		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = row
+	}
+	return rows, nil
 }
 
 func (tu *tableUpserter) finalize() error {

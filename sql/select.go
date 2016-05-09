@@ -38,6 +38,10 @@ type tableInfo struct {
 	// resultColumns which match the node.Columns() 1-to-1. However the column names might be
 	// different if the statement renames them using AS.
 	columns []ResultColumn
+
+	// TODO(dan): Reviewers, is this a reasonable way to handle the interaction
+	// between columns here and qvalmap in the presence of multiple tables?
+	columnOffset int
 }
 
 // selectNode encapsulates the core logic of a select statement: retrieving filtered results from
