@@ -652,7 +652,7 @@ func TestApplyConstraints(t *testing.T) {
 	for _, d := range testData {
 		desc, index := makeTestIndexFromStr(t, d.columns)
 		constraints, expr := makeConstraints(t, d.expr, desc, index)
-		expr2 := applyConstraints(expr, constraints)
+		expr2 := applyIndexConstraints(expr, constraints)
 		if s := fmt.Sprint(expr2); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
