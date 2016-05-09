@@ -201,12 +201,12 @@ func TestStorePoolDies(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int, expectedAliveStoreCount int) error {
 	var actual []int
-	sl, aliveStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
+	sl, aliveStoreCount := sp.GetStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return fmt.Errorf("expected AliveStoreCount %d does not match actual %d", expectedAliveStoreCount,
 			aliveStoreCount)
 	}
-	for _, store := range sl.stores {
+	for _, store := range sl.Stores {
 		actual = append(actual, int(store.StoreID))
 	}
 	sort.Ints(expected)
@@ -227,8 +227,8 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
-		t.Errorf("expected no stores, instead %+v", sl.stores)
+	if sl, _ := sp.GetStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.Stores) != 0 {
+		t.Errorf("expected no stores, instead %+v", sl.Stores)
 	}
 
 	matchingStore := roachpb.StoreDescriptor{
@@ -396,7 +396,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
-	if sl, c := sp.getStoreList(roachpb.Attributes{}, true); len(sl.stores) > 0 || c != 0 {
+	if sl, c := sp.GetStoreList(roachpb.Attributes{}, true); len(sl.Stores) > 0 || c != 0 {
 		t.Errorf("expected 0 live stores; got list %v and total count %d", sl, c)
 	}
 }

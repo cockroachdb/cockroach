@@ -305,7 +305,7 @@ func (s *stat) stddev() float64 {
 // StoreList holds a list of store descriptors and associated count and used
 // stats for those stores.
 type StoreList struct {
-	stores      []*roachpb.StoreDescriptor
+	Stores      []*roachpb.StoreDescriptor
 	count, used stat
 
 	// candidateCount tracks range count stats for stores that are eligible to
@@ -317,7 +317,7 @@ type StoreList struct {
 // add includes the store descriptor to the list of stores and updates
 // maintained statistics.
 func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
-	sl.stores = append(sl.stores, s)
+	sl.Stores = append(sl.Stores, s)
 	sl.count.update(float64(s.Capacity.RangeCount))
 	sl.used.update(s.Capacity.FractionUsed())
 	if s.Capacity.FractionUsed() <= maxFractionUsedThreshold {
@@ -331,7 +331,7 @@ func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int) {
+func (sp *StorePool) GetStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
