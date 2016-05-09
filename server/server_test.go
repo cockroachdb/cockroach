@@ -20,15 +20,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/gogo/protobuf/jsonpb"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -69,13 +69,9 @@ func TestHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("could not read response body: %s", err)
-	}
-	expected := "{}"
-	if !strings.Contains(string(b), expected) {
-		t.Errorf("expected body to contain %q, got %q", expected, string(b))
+	var data HealthResponse
+	if err := jsonpb.Unmarshal(resp.Body, &data); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -104,12 +100,9 @@ func TestPlainHTTPServer(t *testing.T) {
 		t.Fatalf("error requesting health at %s: %s", httpURL, err)
 	} else {
 		defer resp.Body.Close()
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("could not read response body: %s", err)
-		}
-		if expected := "{}"; !strings.Contains(string(b), expected) {
-			t.Errorf("expected body to contain %q, got %q", expected, string(b))
+		var data HealthResponse
+		if err := jsonpb.Unmarshal(resp.Body, &data); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -211,13 +204,9 @@ func TestAcceptEncoding(t *testing.T) {
 			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
 		}
 		r := d.newReader(resp.Body)
-		b, err := ioutil.ReadAll(r)
-		if err != nil {
-			t.Fatalf("could not read '%s' response body: %s", d.acceptEncoding, err)
-		}
-		expected := "{}"
-		if !strings.Contains(string(b), expected) {
-			t.Errorf("expected body to contain %q, got %q", expected, b)
+		var data HealthResponse
+		if err := jsonpb.Unmarshal(r, &data); err != nil {
+			t.Error(err)
 		}
 	}
 }

@@ -26,21 +26,23 @@ JSPM_PACKAGES := jspm_packages
 TYPINGS       := typings
 TS_ROOT       := app
 
-REMOTE_DEPS   := npm.installed jspm.installed typings.installed
-
 .PHONY: all
-all: lint $(REMOTE_DEPS) app/js/protos.js generated/protos.d.ts
+all: app/js/protos.js lint test
 
 .PHONY: lint
-lint: npm.installed typings.installed
+lint: $(GENERATED) npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
+
+.PHONY: test
+test: app/js/protos.js npm.installed typings.installed
+	mocha $(TS_ROOT)/'**/*.spec.ts*' --require ts-node/register
 
 npm.installed: package.json npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
 	npm install --no-progress
 	touch $@
 
-typings.installed: typings.json npm.installed
+typings.installed: generated/protos.d.ts typings.json npm.installed
 	typings install
 	typings prune
 	touch $@
@@ -48,21 +50,26 @@ typings.installed: typings.json npm.installed
 jspm.installed: npm.installed
 	rm -rf $(JSPM_PACKAGES)/
 	jspm install
+	# jspm touches package.json, so we need to bump npm.installed's timestamp
+	# here to prevent endless pointless rebuilds. This `touch` will still result
+	# in a spurious `typings install`, but that's extremely fast compared to `npm
+	# install`.
+	touch npm.installed
 	touch $@
 
-UI_PROTOS = ../../server/status.proto ../../server/status/status.proto ../../ts/timeseries.proto ../../server/admin.proto
+UI_PROTOS = ../../server/admin.proto ../../server/status.proto ../../server/status/status.proto ../../ts/timeseries.proto
 
 PBJS_ARGS = --path ../../../ $(UI_PROTOS)
 
 app/js/protos.js: npm.installed $(UI_PROTOS)
-	pbjs -t commonjs $(PBJS_ARGS) > $@
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	pbjs -t commonjs $(PBJS_ARGS) >> $@
 
 generated/protos.json: npm.installed $(UI_PROTOS)
 	pbjs $(PBJS_ARGS) > $@
 
 generated/protos.d.ts: generated/protos.json
-	proto2ts --file generated/protos.json > $@
-
-.PHONY: test
-test: npm.installed typings.installed
-	mocha $(TS_ROOT)/'**/*.spec.ts*' --require ts-node/register
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	proto2ts --file generated/protos.json >> $@
