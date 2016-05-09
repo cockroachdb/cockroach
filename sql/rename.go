@@ -183,10 +183,22 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	descID := tableDesc.GetID()
 	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
+	if err := tableDesc.SetUpVersion(); err != nil {
+		return nil, err
+	}
+	tableDesc.State = sqlbase.TableDescriptor_RENAME
+	tableDesc.OldName = n.Name.Table()
+	tableDesc.OldParentId = uint32(dbDesc.ID)
+	if err := p.writeTableDesc(tableDesc); err != nil {
+		return nil, err
+	}
+
+	// We update the descriptor to the new name, but also leave the mapping of the
+	// old name to the id, so that the name is not reused until the schema changer
+	// has made sure it's not in use any more.
 	b := client.Batch{}
 	b.Put(descKey, descDesc)
 	b.CPut(newTbKey, descID, nil)
-	b.Del(tbKey)
 
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
@@ -194,6 +206,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		}
 		return nil, err
 	}
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
 	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
@@ -202,7 +215,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
 			return err
 		}
-		return expectDeleted(systemConfig, tbKey)
+		return nil
 	})
 
 	return &emptyNode{}, nil

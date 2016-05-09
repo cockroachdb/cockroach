@@ -262,6 +262,8 @@ message TableDescriptor {
   // A schema changer observing DROP set will truncate the table and delete the
   // descriptor.
   // It is illegal to transition DROP to any other state.
+  // When adding states, consider adding them to TableDescriptor.Visible() in
+  // structured.go.
   enum State {
     // Not used.
     PUBLIC = 0;
@@ -269,8 +271,15 @@ message TableDescriptor {
     // ADD = 1;
     // Descriptor is being dropped.
     DROP = 2;
+    // Descriptor was renamed. When this state is detected in a schema change,
+    // the record for the old name needs to be deleted.
+    RENAME = 3;
   }
   optional State state = 19 [(gogoproto.nullable) = false];
+  // If state == RENAME, these old_* fields are set with the state of the
+  // descriptor before the rename.
+  optional uint32 old_parent_id = 20 [(gogoproto.nullable) = false];
+  optional string old_name = 21 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

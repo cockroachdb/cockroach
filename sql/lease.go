@@ -124,7 +124,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlb
 	if tableDesc != nil && tableDesc.Deleted() {
 		return nil, errTableDeleted
 	}
-	if tableDesc == nil || tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+	if tableDesc == nil || !tableDesc.Visible() {
 		return nil, util.Errorf("ID %d is not a table", tableID)
 	}
 

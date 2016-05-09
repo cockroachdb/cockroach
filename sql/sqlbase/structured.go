@@ -663,6 +663,16 @@ func (desc *TableDescriptor) Deleted() bool {
 	return desc.State == TableDescriptor_DROP
 }
 
+// Renamed returns true if the table is being renamed.
+func (desc *TableDescriptor) Renamed() bool {
+	return desc.State == TableDescriptor_RENAME
+}
+
+// Visible returns true if the table is accessible to the general public.
+func (desc *TableDescriptor) Visible() bool {
+	return desc.State == TableDescriptor_PUBLIC || desc.State == TableDescriptor_RENAME
+}
+
 // SetUpVersion sets the up_version marker on the table descriptor (see the proto
 func (desc *TableDescriptor) SetUpVersion() error {
 	if desc.Deleted() {
