@@ -44,7 +44,7 @@ type indexJoinNode struct {
 
 func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	// Create a new table scan node with the primary index.
-	table := &scanNode{planner: indexScan.planner, txn: indexScan.txn}
+	table := indexScan.p.Scan()
 	table.desc = indexScan.desc
 	table.initDescDefaults()
 	table.initOrdering(0)
