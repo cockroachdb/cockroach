@@ -222,6 +222,9 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
 }
+func (u *sqlSymUnion) onConflict() *OnConflict {
+    return u.val.(*OnConflict)
+}
 func (u *sqlSymUnion) orderBy() OrderBy {
     return u.val.(OrderBy)
 }
@@ -388,8 +391,8 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 // %type <empty> first_or_next
 
 %type <Statement>  insert_rest
-%type <empty> opt_conf_expr
-%type <empty> opt_on_conflict
+%type <[]string> opt_conf_expr
+%type <*OnConflict> opt_on_conflict
 
 %type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
 
@@ -1836,14 +1839,15 @@ insert_stmt:
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
+    $$.val.(*Insert).OnConflict = $6.onConflict()
     $$.val.(*Insert).Returning = $7.retExprs()
   }
-| opt_with_clause UPSERT INTO insert_target insert_rest opt_on_conflict returning_clause
+| opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
-    $$.val.(*Insert).Returning = $7.retExprs()
     $$.val.(*Insert).OnConflict = &OnConflict{}
+    $$.val.(*Insert).Returning = $6.retExprs()
   }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -1874,17 +1878,28 @@ insert_rest:
     $$.val = &Insert{Rows: &Select{}}
   }
 
-// TODO(andrei): If this is ever supported, `opt_conf_expr` needs to use something different
-// than `index_params`.
 opt_on_conflict:
-  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause { unimplemented() }
+  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause
+  {
+    $$.val = &OnConflict{Columns: NameList($3.strs()), Exprs: $7.updateExprs(), Where: newWhere(astWhere, $8.expr())}
+  }
 | ON CONFLICT opt_conf_expr DO NOTHING { unimplemented() }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = (*OnConflict)(nil)
+  }
 
 opt_conf_expr:
-  '(' index_params ')' where_clause { unimplemented() }
+  '(' name_list ')' where_clause
+  {
+    // TODO(dan): Support the where_clause.
+    $$.val = $2.strs()
+  }
 | ON CONSTRAINT name { unimplemented() }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
 
 returning_clause:
   RETURNING target_list
