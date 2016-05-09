@@ -42,9 +42,9 @@ type indexJoinNode struct {
 	debugVals        debugValues
 }
 
-func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
+func (p *planner) makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	// Create a new table scan node with the primary index.
-	table := indexScan.p.Scan()
+	table := p.Scan()
 	table.desc = indexScan.desc
 	table.initDescDefaults()
 	table.initOrdering(0)
