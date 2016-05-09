@@ -15,7 +15,7 @@
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.sqlbase;
+package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
 import weak "gogoproto/gogo.proto";
