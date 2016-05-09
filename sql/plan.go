@@ -49,6 +49,10 @@ type planMaker interface {
 	// must start by calling Start() first and then iterating using
 	// Next() and Values() in order to retrieve matching
 	// rows.
+	// The desiredTypes argument should be passed as empty for a
+	// top-level statement. During the makePlan recursion it is used to
+	// pass the types desired by expressions or statements at some level
+	// to the type checking of sub-nodes.
 	// If autoCommit is true, the plan is allowed (but not required) to
 	// commit the transaction along with other KV operations.
 	// Note: The autoCommit parameter enables operations to enable the
@@ -165,6 +169,9 @@ type planNode interface {
 	Err() error
 }
 
+// planNodeFastPath is implemented by nodes that can perform all their
+// work during Start(), even possibly work that affect multiple
+// rows. For example, DELETE can do this.
 type planNodeFastPath interface {
 	// FastPathResults returns the affected row count and true if the
 	// node has no result set and has already executed when Start() completes.

@@ -185,9 +185,6 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bo
 // that it is safe to do so.
 func (d *deleteNode) fastDelete() error {
 	scan := d.run.rows.(*selectNode).table.node.(*scanNode)
-	if !scan.initScan() {
-		return scan.err
-	}
 
 	if err := d.tw.init(d.p.txn); err != nil {
 		return err

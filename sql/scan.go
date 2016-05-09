@@ -114,19 +114,17 @@ func (n *scanNode) expandPlan() error {
 }
 
 func (n *scanNode) Start() error {
-	return nil
-}
+	if n.scanInitialized {
+		// FIXME: remove this before final PR.
+		panic("scanNode already initialized")
+	}
 
-// initScan sets up the rowFetcher and starts a scan. On error, sets n.err and
-// returns false.
-func (n *scanNode) initScan() (success bool) {
 	// TODO(radu): we could call init() just once, after the index and
 	// valNeededForCol are set.
 	err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex,
 		n.valNeededForCol)
 	if err != nil {
-		n.err = err
-		return false
+		return err
 	}
 
 	if len(n.spans) == 0 {
@@ -137,12 +135,12 @@ func (n *scanNode) initScan() (success bool) {
 		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 
-	n.err = n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint)
-	if n.err != nil {
-		return false
+	if err := n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint); err != nil {
+		return err
 	}
+
 	n.scanInitialized = true
-	return true
+	return nil
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
@@ -175,12 +173,12 @@ func (n *scanNode) debugNext() bool {
 func (n *scanNode) Next() bool {
 	tracing.AnnotateTrace()
 
-	if n.err != nil {
-		return false
+	if !n.scanInitialized {
+		// FIXME: remove this before final PR.
+		panic("scanNode was not initialized")
 	}
 
-	if !n.scanInitialized && !n.initScan() {
-		// Hit error during initScan
+	if n.err != nil {
 		return false
 	}
 

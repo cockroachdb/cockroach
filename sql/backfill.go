@@ -473,6 +473,11 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		if err != nil {
 			return err
 		}
+
+		if err := rows.Start(); err != nil {
+			return err
+		}
+
 		b := &client.Batch{}
 		numRows := 0
 		for ; numRows < IndexBackfillChunkSize && rows.Next(); numRows++ {
