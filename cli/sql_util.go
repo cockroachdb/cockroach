@@ -252,13 +252,6 @@ func sqlRowsToStrings(rows *sqlRows) ([]string, [][]string, string, error) {
 	return cols, allRows, tag, nil
 }
 
-func pluralize(n int64) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
 // printQueryOutput takes a list of column names and a list of row contents
 // writes a pretty table to 'w', or "OK" if empty.
 func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string) {
