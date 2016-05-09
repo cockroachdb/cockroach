@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/mattn/go-isatty"
@@ -330,7 +331,8 @@ func runStatements(conn *sqlConn, stmts []string) error {
 				fmt.Fprintln(os.Stdout, tag)
 			} else {
 				// Some results selected, inform the user about how much data to expect.
-				fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows), pluralize(int64(len(allRows))))
+				fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows),
+					util.Pluralize(int64(len(allRows))))
 
 				// Then print the results themselves.
 				fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))

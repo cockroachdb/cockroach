@@ -23,6 +23,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -270,14 +271,8 @@ func (n *valuesNode) InitMinHeap() {
 
 func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	name = "values"
-	pluralize := func(n int) string {
-		if n == 1 {
-			return ""
-		}
-		return "s"
-	}
 	description = fmt.Sprintf("%d column%s",
-		len(n.columns), pluralize(len(n.columns)))
+		len(n.columns), util.Pluralize(int64(len(n.columns))))
 	return name, description, nil
 }
 
