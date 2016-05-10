@@ -690,3 +690,31 @@ func TestCluster(t *testing.T) {
 		return nil
 	})
 }
+
+func TestClusterFreeze(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	for _, freeze := range []bool{true, false} {
+		reqBodyBytes, err := json.Marshal(map[string]bool{
+			"freeze": freeze,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var resp map[string]int
+		if err := apiPost(s, "cluster/freeze", string(reqBodyBytes), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if aff := resp["ranges_affected"]; aff == 0 {
+			t.Fatal("expected affected ranges: %+v", resp)
+		}
+
+		if err := apiPost(s, "cluster/freeze", string(reqBodyBytes), &resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+}

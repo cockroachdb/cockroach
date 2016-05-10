@@ -1874,6 +1874,9 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if pFrozen != b {
 			t.Fatal(util.ErrorfSkipFrames(1, "expected status %t, got %t", b, pFrozen))
 		}
+		if pFrozen != store.IsFrozen() {
+			t.Fatal(util.ErrorfSkipFrames(1, "expected store to be frozen: %t", pFrozen))
+		}
 	}
 
 	fReqVersMismatch := roachpb.NewChangeFrozen(keys.LocalMax, keys.LocalMax.Next(),
