@@ -133,7 +133,7 @@ func (s *selectNode) Next() bool {
 
 		if passesFilter {
 			s.renderRow()
-			return true
+			return s.err == nil
 		} else if s.explain == explainDebug {
 			// Mark the row as filtered out.
 			s.debugVals.output = debugValueFiltered
