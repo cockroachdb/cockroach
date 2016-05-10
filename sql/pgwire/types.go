@@ -207,8 +207,8 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
 	}
 }
 
-const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
-const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999999"
+const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999"
+const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 
 // formatTs formats t into a format cockroachdb/pq understands.
 // Mostly cribbed from github.com/cockroachdb/pq.
