@@ -84,11 +84,13 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 
 	// Attempt to freeze should get stuck (since it does not get confirmation
 	// of the last node receiving the freeze command).
+	// Note that this is the freeze trigger stalling on the Replica, not the
+	// Store-polling mechanism.
 	if reply, err := postFreeze(c, true); !testutils.IsError(err, "timed out waiting for Range|Timeout exceeded while") {
 		t.Fatalf("expected timeout, got %v: %v", err, reply)
 	}
 
-	// Shut down the remaining nodes and restart then.
+	// Shut down the remaining nodes and restart them.
 	for i := 0; i < num-1; i++ {
 		if err := c.Kill(i); err != nil {
 			t.Fatal(err)
