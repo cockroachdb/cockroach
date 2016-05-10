@@ -19,7 +19,13 @@ system
 test
 
 statement ok
-CREATE DATABASE b
+CREATE DATABASE b ENCODING='UTF8'
+
+statement error 'NOPE' is not a supported encoding
+CREATE DATABASE c ENCODING='NOPE'
+
+statement error 'NOPE' is not a supported encoding
+CREATE DATABASE IF NOT EXISTS c ENCODING='NOPE'
 
 statement ok
 CREATE DATABASE c

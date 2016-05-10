@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -38,6 +39,20 @@ type createDatabaseNode struct {
 func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
+	}
+
+	if n.Encoding != nil {
+		encoding, err := n.Encoding.ResolveAsType(parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+		encodingStr := string(*encoding.(*parser.DString))
+		// We only support UTF8 (and aliases for UTF8).
+		if !(strings.EqualFold(encodingStr, "UTF8") ||
+			strings.EqualFold(encodingStr, "UTF-8") ||
+			strings.EqualFold(encodingStr, "UNICODE")) {
+			return nil, fmt.Errorf("%s is not a supported encoding", encoding)
+		}
 	}
 
 	if p.session.User != security.RootUser {
