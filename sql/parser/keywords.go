@@ -71,6 +71,7 @@ var keywords = map[string]int{
 	"DOUBLE":            DOUBLE,
 	"DROP":              DROP,
 	"ELSE":              ELSE,
+	"ENCODING":          ENCODING,
 	"END":               END,
 	"EXCEPT":            EXCEPT,
 	"EXISTS":            EXISTS,

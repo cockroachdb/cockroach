@@ -69,6 +69,12 @@ type sqlSymUnion struct {
 func (u *sqlSymUnion) numVal() *NumVal {
     return u.val.(*NumVal)
 }
+func (u *sqlSymUnion) strVal() *StrVal {
+    if strVal, ok := u.val.(*StrVal); ok {
+        return strVal
+    }
+    return nil
+}
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
 }
@@ -310,6 +316,8 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %type <DropBehavior> opt_drop_behavior
 
+%type <*StrVal> opt_encoding_clause
+
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
 
@@ -514,7 +522,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   DEFERRABLE DELETE DESC
 %token <str>   DISTINCT DO DOUBLE DROP
 
-%token <str>   ELSE END ESCAPE EXCEPT
+%token <str>   ELSE ENCODING END ESCAPE EXCEPT
 %token <str>   EXISTS EXPLAIN EXTRACT
 
 %token <str>   FALSE FETCH FILTER FIRST FLOAT FOLLOWING FOR
@@ -1808,14 +1816,21 @@ transaction_iso_level:
   }
 
 create_database_stmt:
-  CREATE DATABASE name
+  CREATE DATABASE name opt_encoding_clause
   {
-    $$.val = &CreateDatabase{Name: Name($3)}
+    $$.val = &CreateDatabase{Name: Name($3), Encoding: $4.strVal()}
   }
-| CREATE DATABASE IF NOT EXISTS name
+| CREATE DATABASE IF NOT EXISTS name opt_encoding_clause
   {
-    $$.val = &CreateDatabase{IfNotExists: true, Name: Name($6)}
+    $$.val = &CreateDatabase{IfNotExists: true, Name: Name($6), Encoding: $7.strVal()}
   }
+
+opt_encoding_clause:
+  ENCODING '=' SCONST
+  {
+    $$.val = &StrVal{s: $3}
+  }
+| /* EMPTY */ {}
 
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict returning_clause
@@ -4099,6 +4114,7 @@ unreserved_keyword:
 | DELETE
 | DOUBLE
 | DROP
+| ENCODING
 | EXPLAIN
 | FILTER
 | FIRST

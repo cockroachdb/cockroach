@@ -31,6 +31,7 @@ import (
 type CreateDatabase struct {
 	IfNotExists bool
 	Name        Name
+	Encoding    *StrVal
 }
 
 // Format implements the NodeFormatter interface.
@@ -40,6 +41,10 @@ func (node *CreateDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, node.Name)
+	if node.Encoding != nil {
+		buf.WriteString(" ENCODING=")
+		node.Encoding.Format(buf, f)
+	}
 }
 
 // IndexElem represents a column with a direction in a CREATE INDEX statement.

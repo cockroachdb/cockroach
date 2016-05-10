@@ -40,6 +40,17 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
+	if n.Encoding != nil {
+		encoding, err := n.Encoding.ResolveAsType(parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+		// We only support UTF8.
+		if *encoding.(*parser.DString) != "UTF8" {
+			return nil, fmt.Errorf("%s is not a supported encoding", encoding)
+		}
+	}
+
 	if p.session.User != security.RootUser {
 		return nil, util.Errorf("only %s is allowed to create databases", security.RootUser)
 	}
