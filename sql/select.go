@@ -105,6 +105,12 @@ func (s *selectNode) DebugValues() debugValues {
 	return s.debugVals
 }
 
+func (s *selectNode) BuildPlan() error {
+	// TODO(knz) Some code from the constructor in Select() and initSelect() really
+	// belongs here.
+	return s.table.node.BuildPlan()
+}
+
 func (s *selectNode) Start() error {
 	return s.table.node.Start()
 }

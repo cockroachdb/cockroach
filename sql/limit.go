@@ -91,11 +91,11 @@ func (p *planner) limit(count, offset int64, plan planNode) planNode {
 		plan.SetLimitHint(offset+count, false /* hard */)
 	}
 
-	return &limitNode{planNode: plan, count: count, offset: offset}
+	return &limitNode{plan: plan, count: count, offset: offset}
 }
 
 type limitNode struct {
-	planNode
+	plan      planNode
 	count     int64
 	offset    int64
 	rowIndex  int64
@@ -103,12 +103,20 @@ type limitNode struct {
 	debugVals debugValues
 }
 
+func (n *limitNode) ExplainTypes(f func(string, string)) { n.plan.ExplainTypes(f) }
+func (n *limitNode) BuildPlan() error                    { return n.plan.BuildPlan() }
+func (n *limitNode) Err() error                          { return n.plan.Err() }
+func (n *limitNode) Start() error                        { return n.plan.Start() }
+func (n *limitNode) Columns() []ResultColumn             { return n.plan.Columns() }
+func (n *limitNode) Values() parser.DTuple               { return n.plan.Values() }
+func (n *limitNode) Ordering() orderingInfo              { return n.plan.Ordering() }
+
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
 		panic(fmt.Sprintf("unknown debug mode %d", mode))
 	}
 	n.explain = mode
-	n.planNode.MarkDebug(mode)
+	n.plan.MarkDebug(mode)
 }
 
 func (n *limitNode) DebugValues() debugValues {
@@ -126,12 +134,12 @@ func (n *limitNode) Next() bool {
 	}
 
 	for {
-		if !n.planNode.Next() {
+		if !n.plan.Next() {
 			return false
 		}
 
 		if n.explain == explainDebug {
-			n.debugVals = n.planNode.DebugValues()
+			n.debugVals = n.plan.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Let the non-row debug values pass through.
 				return true
@@ -161,7 +169,7 @@ func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {
 		count = strconv.FormatInt(n.count, 10)
 	}
 
-	return "limit", fmt.Sprintf("count: %s, offset: %d", count, n.offset), []planNode{n.planNode}
+	return "limit", fmt.Sprintf("count: %s, offset: %d", count, n.offset), []planNode{n.plan}
 }
 
 func (*limitNode) SetLimitHint(_ int64, _ bool) {}

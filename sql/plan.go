@@ -325,6 +325,9 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	if err != nil {
 		return nil, err
 	}
+	if err := plan.BuildPlan(); err != nil {
+		return nil, err
+	}
 	if err := plan.Start(); err != nil {
 		return nil, err
 	}
@@ -347,6 +350,9 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
+		return 0, err
+	}
+	if err := plan.BuildPlan(); err != nil {
 		return 0, err
 	}
 	if err := plan.Start(); err != nil {
@@ -422,11 +428,15 @@ type planNode interface {
 	// Values().
 	DebugValues() debugValues
 
-	// Start begins the query/statement and initializes what needs to be
-	// initialized (e.g. final type checking of placeholders, first query
-	// plan). Returns an error if initialization fails.
-	// The SQL "prepare" phase should merely build the plan node(s),
-	// and Start/Next should be only called during "execute".
+	// BuildPlan() finalizes type checking of placeholders and builds
+	// the query plan. Returns an error if the initialization fails.
+	// The SQL "prepare" phase, as well as the EXPLAIN statement, should
+	// merely build the plan node(s) and call BuildPlan().
+	BuildPlan() error
+
+	// Start begins the processing of the query/statement and starts
+	// performing side effects for data-modifying statements. Returns an
+	// error if initial processing fails.
 	Start() error
 
 	// Next performs one unit of work, returning false if an error is
@@ -501,20 +511,21 @@ type emptyNode struct {
 	results bool
 }
 
-func (*emptyNode) Columns() []ResultColumn { return nil }
-func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*emptyNode) Values() parser.DTuple   { return nil }
-func (*emptyNode) Err() error              { return nil }
+func (*emptyNode) Columns() []ResultColumn             { return nil }
+func (*emptyNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (*emptyNode) Values() parser.DTuple               { return nil }
+func (*emptyNode) Err() error                          { return nil }
+func (*emptyNode) ExplainTypes(_ func(string, string)) {}
+func (*emptyNode) BuildPlan() error                    { return nil }
+func (*emptyNode) Start() error                        { return nil }
+func (*emptyNode) SetLimitHint(_ int64, _ bool)        {}
+func (*emptyNode) MarkDebug(_ explainMode)             {}
 
 func (*emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "empty", "-", nil
 }
 
-func (e *emptyNode) ExplainTypes(_ func(string, string)) {}
-
-func (*emptyNode) MarkDebug(_ explainMode) {}
-
-func (*emptyNode) DebugValues() debugValues {
+func (e *emptyNode) DebugValues() debugValues {
 	return debugValues{
 		rowIdx: 0,
 		key:    "",
@@ -523,14 +534,8 @@ func (*emptyNode) DebugValues() debugValues {
 	}
 }
 
-func (e *emptyNode) Start() error {
-	return nil
-}
-
 func (e *emptyNode) Next() bool {
 	r := e.results
 	e.results = false
 	return r
 }
-
-func (*emptyNode) SetLimitHint(_ int64, _ bool) {}

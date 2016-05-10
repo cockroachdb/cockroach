@@ -919,6 +919,9 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 
+	if err := plan.BuildPlan(); err != nil {
+		return result, err
+	}
 	if err := plan.Start(); err != nil {
 		return result, err
 	}
