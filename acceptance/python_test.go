@@ -28,10 +28,13 @@ func TestDockerPython(t *testing.T) {
 
 const python = `
 import psycopg2
-import os
 conn = psycopg2.connect('')
 cur = conn.cursor()
 cur.execute("SELECT 1, 2+%v")
 v = cur.fetchall()
 assert v == [(1, 5)]
+# verify we can parse a timestamp
+cur = conn.cursor()
+cur.execute("SELECT now()")
+v = cur.fetchall()
 `
