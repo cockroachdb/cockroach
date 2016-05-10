@@ -48,13 +48,20 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 	return bytes.Compare(aKey, bKey)
 }
 
-func (db *testDescriptorDB) getDescriptors(key roachpb.RKey, considerIntents bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (db *testDescriptorDB) getDescriptors(key roachpb.RKey, considerIntents bool, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	rs := make([]roachpb.RangeDescriptor, 0, 1)
 	preRs := make([]roachpb.RangeDescriptor, 0, 2)
 	for i := 0; i < 3; i++ {
+		var endKey roachpb.RKey
+		if useReverseScan {
+			endKey = key
+		} else {
+			endKey = key.Next()
+		}
+
 		v := db.data.Ceil(testDescriptorNode{
 			&roachpb.RangeDescriptor{
-				EndKey: key.Next(),
+				EndKey: endKey,
 			},
 		})
 		if v == nil {
@@ -77,7 +84,12 @@ func (db *testDescriptorDB) getDescriptors(key roachpb.RKey, considerIntents boo
 		if desc.EndKey.Equal(roachpb.RKeyMax) {
 			break
 		}
-		key = desc.EndKey
+
+		if useReverseScan {
+			key = desc.StartKey
+		} else {
+			key = desc.EndKey
+		}
 	}
 	return rs, preRs, nil
 }
@@ -86,10 +98,10 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, nil
 }
 
-func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	<-db.pauseChan
 	db.lookupCount++
-	return db.getDescriptors(stripMeta(key), considerIntents)
+	return db.getDescriptors(stripMeta(key), considerIntents, useReverseScan)
 }
 
 func stripMeta(key roachpb.RKey) roachpb.RKey {
@@ -194,6 +206,45 @@ func doLookupWithToken(t *testing.T, rc *rangeDescriptorCache, key string, evict
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 	return r, returnToken
+}
+
+// TestDescriptorDBGetDescriptors verifies that getDescriptors returns correct descriptors.
+func TestDescriptorDBGetDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := initTestDescriptorDB(t)
+
+	key := roachpb.RKey("k")
+	expectedRspansMap := map[bool][]roachpb.RSpan{
+		true: {
+			roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")},
+			roachpb.RSpan{Key: roachpb.RKey("i"), EndKey: roachpb.RKey("j")},
+			roachpb.RSpan{Key: roachpb.RKey("h"), EndKey: roachpb.RKey("i")},
+		},
+		false: {
+			roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")},
+			roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")},
+			roachpb.RSpan{Key: roachpb.RKey("m"), EndKey: roachpb.RKey("n")},
+		},
+	}
+
+	for i, useReverseScan := range []bool{true, false} {
+		descs, preDescs, pErr := db.getDescriptors(key, false, useReverseScan)
+		if pErr != nil {
+			t.Error(pErr)
+		}
+
+		if len(descs) != 1 {
+			t.Errorf("unexpected size of descs: %s", descs)
+		}
+		if len(preDescs) != 2 {
+			t.Errorf("unexpected size of preDescs: %s", preDescs)
+		}
+		rSpans := []roachpb.RSpan{descs[0].RSpan(), preDescs[0].RSpan(), preDescs[1].RSpan()}
+		expectedRspans := expectedRspansMap[useReverseScan]
+		if !reflect.DeepEqual(rSpans, expectedRspans) {
+			t.Errorf("%d: unexpected descriptor range: %s", i, rSpans)
+		}
+	}
 }
 
 func TestRangeCacheAssumptions(t *testing.T) {
@@ -335,7 +386,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	// such that a RangeKeyMismatchError is returned.
 	_, evictToken := doLookup(t, db.cache, "az")
 	// mismatchErrRange mocks out a RangeKeyMismatchError.Range response.
-	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false)
+	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false, false)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -373,7 +424,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	// such that a RangeKeyMismatchError is returned.
 	_, evictToken := doLookup(t, db.cache, "az")
 	// mismatchErrRange mocks out a RangeKeyMismatchError.Range response.
-	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false)
+	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false, false)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
