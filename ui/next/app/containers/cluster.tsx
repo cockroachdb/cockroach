@@ -1,4 +1,8 @@
+/// <reference path="../../typings/main.d.ts" />
 import * as React from "react";
+
+import { MetricsDataProvider } from "../containers/metricsDataProvider";
+import { TextGraph, Axis, Selector } from "../components/graphs";
 
 /**
  * ClusterTitle renders the main content of the cluster page.
@@ -6,7 +10,14 @@ import * as React from "react";
 export class ClusterMain extends React.Component<{}, {}> {
   render() {
     return <div className="section">
-      <h1>Cluster Page</h1>
+      <MetricsDataProvider id="graphone">
+        <TextGraph>
+          <Axis>
+            <Selector name="cr.node.sql.conns" title="SqlConnections" />
+            <Selector name="cr.node.sql.inserts" />
+          </Axis>
+        </TextGraph>
+      </MetricsDataProvider>
     </div>;
   }
 }
