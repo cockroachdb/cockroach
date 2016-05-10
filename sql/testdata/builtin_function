@@ -112,6 +112,18 @@ SELECT SUBSTR('RoacH', -2, 4)
 ----
 R
 
+# See #6601
+query error invalid utf8: .*
+select b'\x61\xa1'::string;
+
+query error invalid utf8: .*
+explain(debug) select b'\x61\xa1'::string where false;
+
+query T
+select b'\x61\x62'::string;
+----
+ab
+
 query T
 SELECT SUBSTR('12345', 2, 77)
 ----

@@ -132,8 +132,8 @@ func (s *selectNode) Next() bool {
 		}
 
 		if passesFilter {
-			s.renderRow()
-			return true
+			s.err = s.renderRow()
+			return s.err == nil
 		} else if s.explain == explainDebug {
 			// Mark the row as filtered out.
 			s.debugVals.output = debugValueFiltered
@@ -612,19 +612,19 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 }
 
 // renderRow renders the row by evaluating the render expressions. Assumes the qvals have been
-// populated with the current row. May set n.err if an error occurs during expression evaluation.
-func (s *selectNode) renderRow() {
+// populated with the current row.
+func (s *selectNode) renderRow() error {
 	if s.row == nil {
 		s.row = make([]parser.Datum, len(s.render))
 	}
 	for i, e := range s.render {
 		var err error
 		s.row[i], err = e.Eval(s.planner.evalCtx)
-		s.err = err
 		if s.err != nil {
-			return
+			return err
 		}
 	}
+	return nil
 }
 
 // Searches for a render target that matches the given column reference.
