@@ -339,7 +339,6 @@ func TestCommonMethods(t *testing.T) {
 		// Batch.GetProto at the moment.
 		key{dbType, "GetProto"}:                {},
 		key{txnType, "GetProto"}:               {},
-		key{batchType, "ChangeFrozen"}:         {},
 		key{batchType, "CheckConsistency"}:     {},
 		key{batchType, "AddRawRequest"}:        {},
 		key{batchType, "PutInline"}:            {},
@@ -347,7 +346,6 @@ func TestCommonMethods(t *testing.T) {
 		key{batchType, "MustPErr"}:             {},
 		key{dbType, "AdminMerge"}:              {},
 		key{dbType, "AdminSplit"}:              {},
-		key{dbType, "ChangeFrozen"}:            {},
 		key{dbType, "CheckConsistency"}:        {},
 		key{dbType, "NewBatch"}:                {},
 		key{dbType, "Run"}:                     {},
