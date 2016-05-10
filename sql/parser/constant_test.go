@@ -139,9 +139,9 @@ func TestStringConstantAvailableTypes(t *testing.T) {
 		c     *StrVal
 		avail []Datum
 	}{
-		{&StrVal{"abc 世界", false}, wantStringButCanBeBytes},
-		{&StrVal{"abc 世界", true}, wantBytesButCanBeString},
-		{&StrVal{string([]byte{0xff, 0xfe, 0xfd}), true}, wantBytes},
+		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeBytes},
+		{&StrVal{s: "abc 世界", bytesEsc: true}, wantBytesButCanBeString},
+		{&StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true}, wantBytes},
 	}
 
 	for i, test := range testCases {
