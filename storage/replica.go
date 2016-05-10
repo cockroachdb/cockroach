@@ -1945,66 +1945,66 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // set to put "blindly", meaning no iterator need be used to read
 // existing values during the MVCC write.
 func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
-	var iter engine.Iterator
-
-	processPuts := func(startIdx, count int, minKey, maxKey roachpb.Key) {
-		if count < optimizePutThreshold { // don't bother if below this threshold
-			return
-		}
-		if iter == nil {
-			iter = batch.NewIterator(false /* total order iterator */)
-		}
-
-		// If there are enough puts in the run to justify calling seek,
-		// we can determine whether any part of the range being written
-		// is "virgin" and set the puts to write blindly.
-		// Find the first non-empty key in the run.
-		iter.Seek(engine.MakeMVCCMetadataKey(minKey))
-		var iterKey roachpb.Key
-		if iter.Valid() && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
-			iterKey = iter.Key().Key
-		}
-		// Set the prefix of the run which is being written to virgin
-		// keyspace to "blindly" put values.
-		for _, r := range reqs[startIdx : startIdx+count] {
-			if iterKey == nil || bytes.Compare(iterKey, r.GetInner().Header().Key) > 0 {
-				switch t := r.GetInner().(type) {
-				case *roachpb.PutRequest:
-					t.Blind = true
-				case *roachpb.ConditionalPutRequest:
-					t.Blind = true
-				}
-			}
-		}
-	}
-
-	var putCount int
 	var minKey, maxKey roachpb.Key
-	addPut := func(key roachpb.Key) {
-		putCount++
+	unique := make(map[string]struct{}, len(reqs))
+	// Returns false on occurrence of a duplicate key.
+	maybeAddPut := func(key roachpb.Key) bool {
+		// Note that casting the byte slice key to a string does not allocate.
+		if _, ok := unique[string(key)]; ok {
+			return false
+		}
+		unique[string(key)] = struct{}{}
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
 		}
 		if maxKey == nil || bytes.Compare(key, maxKey) > 0 {
 			maxKey = key
 		}
+		return true
 	}
-	for i, r := range reqs {
+
+	for _, r := range reqs {
 		switch t := r.GetInner().(type) {
 		case *roachpb.PutRequest:
-			addPut(t.Key)
+			if maybeAddPut(t.Key) {
+				continue
+			}
 		case *roachpb.ConditionalPutRequest:
-			addPut(t.Key)
-		default:
-			processPuts(i-putCount, putCount, minKey, maxKey)
-			putCount = 0
-			minKey = nil
-			maxKey = nil
+			if maybeAddPut(t.Key) {
+				continue
+			}
 		}
+		break
 	}
-	processPuts(len(reqs)-putCount, putCount, minKey, maxKey)
-	if iter != nil {
-		iter.Close()
+
+	if len(unique) < optimizePutThreshold { // don't bother if below this threshold
+		return
+	}
+	iter := batch.NewIterator(false /* total order iterator */)
+	defer iter.Close()
+
+	// If there are enough puts in the run to justify calling seek,
+	// we can determine whether any part of the range being written
+	// is "virgin" and set the puts to write blindly.
+	// Find the first non-empty key in the run.
+	iter.Seek(engine.MakeMVCCMetadataKey(minKey))
+	var iterKey roachpb.Key
+	if iter.Valid() && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
+		iterKey = iter.Key().Key
+	}
+	// Set the prefix of the run which is being written to virgin
+	// keyspace to "blindly" put values.
+	for _, r := range reqs[:len(unique)] {
+		if iterKey == nil || bytes.Compare(iterKey, r.GetInner().Header().Key) > 0 {
+			switch t := r.GetInner().(type) {
+			case *roachpb.PutRequest:
+				t.Blind = true
+			case *roachpb.ConditionalPutRequest:
+				t.Blind = true
+			default:
+				panic(fmt.Sprintf("unexpected non-put request: %s", t))
+			}
+		}
 	}
 }
 
