@@ -872,7 +872,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return true
 			}
 			wg.Add(1)
-			if !s.stopper.RunLimitedAsyncTask(sem, func() {
+			if !s.stopper.RunLimitedAsyncTask(sem, stop.Blocking, func() {
 				defer wg.Done()
 				desc := r.Desc()
 				var ba roachpb.BatchRequest
