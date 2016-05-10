@@ -25,7 +25,7 @@ import weak "gogoproto/gogo.proto";
 message TimeSeriesDatapoint {
   // The timestamp when this datapoint is located, expressed in nanoseconds
   // since the unix epoch.
-  optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
+  optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = 'timestamp_nanos,string'];
   // A floating point representation of the value of this datapoint.
   optional double value = 2 [(gogoproto.nullable) = false];
 }
@@ -101,10 +101,10 @@ message Query {
 message TimeSeriesQueryRequest {
   // A timestamp in nanoseconds which defines the early bound of the time span
   // for this query.
-  optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
+  optional int64 start_nanos = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag)="start_nanos,string"];
   // A timestamp in nanoseconds which defines the late bound of the time span
   // for this query. Must be greater than start_nanos.
-  optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
+  optional int64 end_nanos = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag)="end_nanos,string"];
 
   // A set of Queries for this request. A request must have at least one
   // Query.
