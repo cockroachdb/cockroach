@@ -945,8 +945,14 @@ func (e *Executor) execStmt(
 		chunkSize := 4          // Arbitrary as well.
 
 		for plan.Next() {
+			if plan.Err() != nil {
+				return result, plan.Err()
+			}
 			// The plan.Values DTuple needs to be copied on each iteration.
 			values := plan.Values()
+			if plan.Err() != nil {
+				return result, plan.Err()
+			}
 
 			n := len(values)
 			if len(valuesAlloc) < n {
