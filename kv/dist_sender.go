@@ -690,8 +690,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// We evict and retry in such a case.
 			includesFrontOfCurSpan := func(rd *roachpb.RangeDescriptor) bool {
 				if isReverse {
-					// This approach is needed because rs.EndKey is exclusive.
-					return desc.ContainsKeyRange(desc.StartKey, rs.EndKey)
+					return desc.ContainsExclusiveEndKey(rs.EndKey)
 				}
 				return desc.ContainsKey(rs.Key)
 			}

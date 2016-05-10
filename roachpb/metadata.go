@@ -107,6 +107,11 @@ func (r RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
 }
 
+// ContainsExclusiveEndKey returns whether this RangeDescriptor contains the specified end key.
+func (r RangeDescriptor) ContainsExclusiveEndKey(key RKey) bool {
+	return r.RSpan().ContainsExclusiveEndKey(key)
+}
+
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
