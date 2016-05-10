@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/biogo/store/llrb"
@@ -186,15 +187,16 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 }
 
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, *evictionToken) {
-	return doLookupWithToken(t, rc, key, nil, false)
+	return doLookupWithToken(t, rc, key, nil, false, nil)
 }
 
 func doLookupConsideringIntents(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, *evictionToken) {
-	return doLookupWithToken(t, rc, key, nil, true)
+	return doLookupWithToken(t, rc, key, nil, true, nil)
 }
 
-func doLookupWithToken(t *testing.T, rc *rangeDescriptorCache, key string, evictToken *evictionToken, considerIntents bool) (*roachpb.RangeDescriptor, *evictionToken) {
-	r, returnToken, pErr := rc.LookupRangeDescriptor(roachpb.RKey(key), evictToken, considerIntents, false /* useReverseScan */)
+func doLookupWithToken(t *testing.T, rc *rangeDescriptorCache, key string, evictToken *evictionToken, considerIntents bool, wg *sync.WaitGroup,
+) (*roachpb.RangeDescriptor, *evictionToken) {
+	r, returnToken, pErr := rc.lookupRangeDescriptorInternal(roachpb.RKey(key), evictToken, considerIntents, false /* useReverseScan */, wg)
 	if pErr != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
 	}
@@ -331,15 +333,17 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 	db := initTestDescriptorDB(t)
 
 	pauseLookupResumeAndAssert := func(key string, expected int) {
-		var wg sync.WaitGroup
+		var wg, waitJoin sync.WaitGroup
 		db.pauseRangeLookups()
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
+			waitJoin.Add(1)
 			go func() {
-				doLookup(t, db.cache, key)
+				doLookupWithToken(t, db.cache, key, nil, false, &waitJoin)
 				wg.Done()
 			}()
 		}
+		waitJoin.Wait()
 		db.resumeRangeLookups()
 		wg.Wait()
 		db.assertLookupCount(t, expected, key)
@@ -360,16 +364,18 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	db := initTestDescriptorDB(t)
 
 	pauseLookupResumeAndAssert := func(key string, expected int, evictToken *evictionToken) {
-		var wg sync.WaitGroup
+		var wg, waitJoin sync.WaitGroup
 		db.pauseRangeLookups()
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
+			waitJoin.Add(1)
 			go func(id int) {
 				// Each request goes to a different key.
-				doLookupWithToken(t, db.cache, fmt.Sprintf("%s%d", key, id), evictToken, false)
+				doLookupWithToken(t, db.cache, fmt.Sprintf("%s%d", key, id), evictToken, false, &waitJoin)
 				wg.Done()
 			}(i)
 		}
+		waitJoin.Wait()
 		db.resumeRangeLookups()
 		wg.Wait()
 		db.assertLookupCount(t, expected, key)
@@ -443,17 +449,22 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	// - "an" and "ao" will get the right range back
 	// - "at" and "az" will make a second lookup
 	//   + will lookup the ["at"-"b") desc
-	var wg sync.WaitGroup
+	var wg, waitJoin sync.WaitGroup
 	db.pauseRangeLookups()
+	numRetries := int64(0)
 	for _, k := range []string{"aa", "an", "ao", "at", "az"} {
 		wg.Add(1)
+		waitJoin.Add(1)
 		go func(key string) {
 			reqEvictToken := evictToken
+			waitJoinCopied := &waitJoin
 			for {
 				// Each request goes to a different key.
 				var pErr *roachpb.Error
-				if _, reqEvictToken, pErr = db.cache.LookupRangeDescriptor(roachpb.RKey(key), reqEvictToken, false /* considerIntents */, false /* useReverseScan */); pErr != nil {
+				if _, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(roachpb.RKey(key), reqEvictToken, false /* considerIntents */, false /* useReverseScan */, waitJoinCopied); pErr != nil {
 					if pErr.CanRetry() {
+						waitJoinCopied = nil
+						atomic.AddInt64(&numRetries, 1)
 						continue
 					}
 					panic(fmt.Sprintf("Unexpected error from LookupRangeDescriptor: %s", pErr))
@@ -463,9 +474,15 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 			wg.Done()
 		}(k)
 	}
+	// Wait until all lookup requests hit the cache or join into a coalesced request.
+	waitJoin.Wait()
 	db.resumeRangeLookups()
+
 	wg.Wait()
 	db.assertLookupCount(t, 3, "an and az")
+	if numRetries == 0 {
+		t.Error("expected retry on desc lookup")
+	}
 
 	// All three descriptors are now correctly cached.
 	doLookup(t, db.cache, "aa")
