@@ -25,6 +25,22 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
+// distinctNode de-duplicates row returned by a wrapped planNode.
+type distinctNode struct {
+	plan planNode
+	// All the columns that are part of the Sort. Set to nil if no-sort, or
+	// sort used an expression that was not part of the requested column set.
+	columnsInOrder []bool
+	// encoding of the columnsInOrder columns for the previous row.
+	prefixSeen []byte
+	// encoding of the non-columnInOrder columns for rows sharing the same
+	// prefixSeen value.
+	suffixSeen map[string]struct{}
+	err        error
+	explain    explainMode
+	debugVals  debugValues
+}
+
 // distinct constructs a distinctNode.
 func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
 	if !n.Distinct {
@@ -58,21 +74,7 @@ func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
 	return d
 }
 
-type distinctNode struct {
-	plan planNode
-	// All the columns that are part of the Sort. Set to nil if no-sort, or
-	// sort used an expression that was not part of the requested column set.
-	columnsInOrder []bool
-	// encoding of the columnsInOrder columns for the previous row.
-	prefixSeen []byte
-	// encoding of the non-columnInOrder columns for rows sharing the same
-	// prefixSeen value.
-	suffixSeen map[string]struct{}
-	err        error
-	explain    explainMode
-	debugVals  debugValues
-}
-
+func (n *distinctNode) BuildPlan() error        { return n.plan.BuildPlan() }
 func (n *distinctNode) Start() error            { return n.plan.Start() }
 func (n *distinctNode) Columns() []ResultColumn { return n.plan.Columns() }
 func (n *distinctNode) Values() parser.DTuple   { return n.plan.Values() }

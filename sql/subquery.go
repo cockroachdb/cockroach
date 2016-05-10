@@ -74,6 +74,10 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		return false, expr
 	}
 
+	// TODO(knz) This is really not the right place to do this.
+	if v.err = plan.BuildPlan(); v.err != nil {
+		return false, expr
+	}
 	if v.err = plan.Start(); v.err != nil {
 		return false, expr
 	}

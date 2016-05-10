@@ -50,13 +50,15 @@ func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
 func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
 
 func (n *explainTraceNode) Err() error { return nil }
-func (n *explainTraceNode) Start() error {
-	if err := n.plan.Start(); err != nil {
+func (n *explainTraceNode) BuildPlan() error {
+	if err := n.plan.BuildPlan(); err != nil {
 		return err
 	}
 	n.plan.MarkDebug(explainDebug)
 	return nil
 }
+func (n *explainTraceNode) Start() error { return n.plan.Start() }
+
 func (n *explainTraceNode) Next() bool {
 	first := n.rows == nil
 	if first {
