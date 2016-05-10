@@ -1443,7 +1443,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	case *StringColType:
 		var s DString
 		switch t := d.(type) {
-		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
+		case *DBool, *DInt, *DFloat, *DDecimal, *DTimestamp, *DTimestampTZ, dNull:
 			s = DString(d.String())
 		case *DString:
 			s = *t
@@ -1487,7 +1487,6 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return &DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation())}, nil
-
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:

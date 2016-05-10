@@ -778,6 +778,16 @@ foobarbaz
 query error regexp_replace: invalid regexp flag: 'z'
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 
+query T
+SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
+----
+2016-02-10 19:46:33.306157519+00:00
+
+query T
+SELECT (timestamptz '2016-02-10 19:46:33.306157519')::string
+----
+2016-02-10 19:46:33.306157519+00:00
+
 query I
 SELECT extract(milliseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
