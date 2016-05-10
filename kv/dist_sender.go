@@ -732,10 +732,14 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
 
-			// Error handling below.
-			// If retryable, allow retry. For range not found or range
-			// key mismatch errors, we don't backoff on the retry,
-			// but reset the backoff loop so we can retry immediately.
+			// Error handling: If the error indicates that our range
+			// descriptor is out of date, evict it from the cache and try
+			// again. Errors that apply only to a single replica were
+			// handled in send().
+			//
+			// TODO(bdarnell): Don't retry endlessly. If we fail twice in a
+			// row and the range descriptor hasn't changed, return the error
+			// to our caller.
 			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.SendError:
 				// We've tried all the replicas without success. Either
