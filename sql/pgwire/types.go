@@ -430,7 +430,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, util.Errorf("could not parse string %q as timestamp", b)
 			}
 			d = &parser.DTimestamp{Time: ts}
-		case formatBinary:
+		default:
 			return d, util.Errorf("unsupported timestamp format code: %d", code)
 		}
 	case oid.T_date:
@@ -442,7 +442,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
-		case formatBinary:
+		default:
 			return d, util.Errorf("unsupported date format code: %d", code)
 		}
 	default:
