@@ -353,13 +353,6 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, err
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
-		case formatBinary:
-			var f float32
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
-			if err != nil {
-				return d, err
-			}
-			d = parser.NewDFloat(parser.DFloat(f))
 		default:
 			return d, fmt.Errorf("unsupported float4 format code: %d", code)
 		}
@@ -367,13 +360,6 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		switch code {
 		case formatText:
 			f, err := strconv.ParseFloat(string(b), 64)
-			if err != nil {
-				return d, err
-			}
-			d = parser.NewDFloat(parser.DFloat(f))
-		case formatBinary:
-			var f float64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
 			if err != nil {
 				return d, err
 			}
