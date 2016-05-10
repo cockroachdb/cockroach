@@ -41,19 +41,19 @@ $bin sql -e "CREATE DATABASE old"
 $bin sql -d old -e "CREATE TABLE testing (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
 $bin sql -d old -e "INSERT INTO testing values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
 $bin sql -d old -e "INSERT INTO testing values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
-$bin sql -d old -e "SELECT * FROM testing" > old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > old.everything
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach
 $bin start --background
 echo "Read data written by reference version using new binary"
-$bin sql -d old -e "SELECT * FROM testing" > new.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 
 echo "Add a row with the new binary and render the updated data before shutting down."
 $bin sql -d old -e "INSERT INTO testing values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
-$bin sql -d old -e "SELECT * FROM testing" > new.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > new.everything
 $bin quit
 # Let it close its listening sockets.
 sleep 1
@@ -62,7 +62,7 @@ echo "Read the modified data using the reference binary again."
 bin=/reference-version/cockroach
 $bin start &
 sleep 1
-$bin sql -d old -e "SELECT * FROM testing" > old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 $bin quit && wait
