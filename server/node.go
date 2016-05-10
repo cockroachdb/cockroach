@@ -712,10 +712,29 @@ func (n *Node) recordJoinEvent() {
 }
 
 // Batch implements the roachpb.KVServer interface.
-func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-	// TODO(marc): this code is duplicated in kv/db.go, which should be fixed.
-	// Also, grpc's authentication model (which gives credential access in the
-	// request handler) doesn't really fit with the current design of the
+func (n *Node) Batch(
+	ctx context.Context, args *roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, err error) {
+	// TODO(marc,bdarnell): this code is duplicated in server/node.go,
+	// which should be fixed.
+	defer func() {
+		// We always return errors via BatchResponse.Error so structure is
+		// preserved; plain errors are presumed to be from the RPC
+		// framework and not from cockroach.
+		if err != nil {
+			if br == nil {
+				br = &roachpb.BatchResponse{}
+			}
+			if br.Error != nil {
+				panic(fmt.Sprintf(
+					"attempting to return both a plain error (%s) and roachpb.Error (%s)", err, br.Error))
+			}
+			br.Error = roachpb.NewError(err)
+			err = nil
+		}
+	}()
+	// TODO(marc): grpc's authentication model (which gives credential access in
+	// the request handler) doesn't really fit with the current design of the
 	// security package (which assumes that TLS state is only given at connection
 	// time) - that should be fixed.
 	if peer, ok := peer.FromContext(ctx); ok {
@@ -730,7 +749,6 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		}
 	}
 
-	var br *roachpb.BatchResponse
 	opName := "node " + strconv.Itoa(int(n.Descriptor.NodeID)) // could save allocs here
 
 	fail := func(err error) {

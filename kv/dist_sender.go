@@ -732,36 +732,26 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
 
-			// Error handling below.
-			// If retryable, allow retry. For range not found or range
-			// key mismatch errors, we don't backoff on the retry,
-			// but reset the backoff loop so we can retry immediately.
+			// Error handling: If the error indicates that our range
+			// descriptor is out of date, evict it from the cache and try
+			// again. Errors that apply only to a single replica were
+			// handled in send().
+			//
+			// TODO(bdarnell): Don't retry endlessly. If we fail twice in a
+			// row and the range descriptor hasn't changed, return the error
+			// to our caller.
 			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.SendError:
-				// For an RPC error to occur, we must've been unable to contact
-				// any replicas. In this case, likely all nodes are down (or
-				// not getting back to us within a reasonable amount of time).
-				// We may simply not be trying to talk to the up-to-date
-				// replicas, so clearing the descriptor here should be a good
-				// idea.
+				// We've tried all the replicas without success. Either
+				// they're all down, or we're using an out-of-date range
+				// descriptor. Invalidate the cache and try again with the new
+				// metadata.
 				if err := evictToken.Evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				if tErr.CanRetry() {
 					continue
 				}
-			case *roachpb.RangeNotFoundError:
-				// Range descriptor might be out of date - evict it. This is
-				// likely the result of a rebalance.
-				if err := evictToken.Evict(); err != nil {
-					return nil, roachpb.NewError(err), false
-				}
-				// On addressing errors, don't backoff; retry immediately.
-				r.Reset()
-				if log.V(1) {
-					log.Warning(tErr)
-				}
-				continue
 			case *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it. This is
 				// likely the result of a range split. If we have new range

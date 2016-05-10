@@ -162,43 +162,223 @@ func TestRetryableError(t *testing.T) {
 	}
 }
 
-// TestUnretryableError verifies that Send returns an unretryable
-// error when it hits a critical error.
-func TestUnretryableError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
+// setupSendNextTest sets up a situation in which SendNextTimeout has
+// caused RPCs to be sent to all three replicas simultaneously. The
+// caller may then cause those RPCs to finish by writing to one of the
+// 'done' channels in the first return value; the second returned
+// channel will contain the final result of the send() call.
+func setupSendNextTest(t *testing.T) ([]chan batchCall, chan batchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
 	nodeContext := newNodeTestContext(nil, stopper)
+
+	// Using a real listener here speeds up the tests, compared to using
+	// a fake non-resolving address.
 	_, ln := newTestServer(t, nodeContext)
+	addrs := []net.Addr{ln.Addr(), ln.Addr(), ln.Addr()}
 
 	opts := SendOptions{
 		Ordering:        orderStable,
-		SendNextTimeout: 1 * time.Second,
+		SendNextTimeout: 1 * time.Millisecond,
 		Timeout:         10 * time.Second,
 		Context:         context.Background(),
 	}
 
+	doneChanChan := make(chan chan batchCall, len(addrs))
 	sendOneFn = func(_ SendOptions, _ *rpc.Context,
 		_ batchClient, done chan batchCall) {
-		done <- batchCall{
-			reply: &roachpb.BatchResponse{},
-			err:   errors.New("unretryable"),
+		doneChanChan <- done
+	}
+	stopper.AddCloser(stop.CloserFn(func() { sendOneFn = sendOne }))
+
+	sendChan := make(chan batchCall, 1)
+	go func() {
+		// Send the batch. This will block until we signal one of the done
+		// channels.
+		br, err := sendBatch(opts, addrs, nodeContext)
+		sendChan <- batchCall{br, err}
+	}()
+
+	doneChans := make([]chan batchCall, len(addrs))
+	for i := range doneChans {
+		// Note that this blocks until the replica has been contacted.
+		doneChans[i] = <-doneChanChan
+	}
+	return doneChans, sendChan, stopper
+}
+
+// Test the behavior of SendNextTimeout when all servers are slow to
+// respond (but successful).
+func TestSendNext_AllSlow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	doneChans, sendChan, stopper := setupSendNextTest(t)
+	defer stopper.Stop()
+
+	// Now that all replicas have been contacted, let one finish.
+	doneChans[1] <- batchCall{
+		reply: &roachpb.BatchResponse{
+			BatchResponse_Header: roachpb.BatchResponse_Header{
+				Now: roachpb.Timestamp{Logical: 42},
+			},
+		},
+		err: nil,
+	}
+
+	// The RPC now completes successfully.
+	bc := <-sendChan
+	if bc.err != nil {
+		t.Fatal(bc.err)
+	}
+	// Make sure the response we sent in is the one we get back.
+	if bc.reply.Now.Logical != 42 {
+		t.Errorf("got unexpected response: %s", bc.reply)
+	}
+}
+
+// Test the behavior of SendNextTimeout when some servers return
+// RPC errors but one succeeds.
+func TestSendNext_RPCErrorThenSuccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	doneChans, sendChan, stopper := setupSendNextTest(t)
+	defer stopper.Stop()
+
+	// Now that all replicas have been contacted, let two finish with
+	// retryable errors.
+	for i := 1; i <= 2; i++ {
+		doneChans[i] <- batchCall{
+			reply: nil,
+			err:   roachpb.NewSendError("boom", true),
 		}
 	}
-	defer func() { sendOneFn = sendOne }()
 
-	_, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext)
-	if err == nil {
-		t.Fatalf("Unexpected success")
+	// The client is still waiting for the third slow RPC to complete.
+	select {
+	case bc := <-sendChan:
+		t.Fatalf("got unexpected response %v", bc)
+	default:
 	}
-	retryErr, ok := err.(retry.Retryable)
-	if !ok {
-		t.Fatalf("Unexpected error type: %v", err)
+
+	// Now let the final server complete the RPC successfully.
+	doneChans[0] <- batchCall{
+		reply: &roachpb.BatchResponse{},
+		err:   nil,
 	}
-	if retryErr.CanRetry() {
-		t.Errorf("Unexpected retryable error: %v", retryErr)
+
+	// The client side now completes successfully.
+	bc := <-sendChan
+	if bc.err != nil {
+		t.Fatal(bc.err)
+	}
+}
+
+// Test the behavior of SendNextTimeout when all servers return
+// RPC errors (this is effectively the same whether
+// SendNextTimeout is used or not).
+func TestSendNext_AllRPCErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	doneChans, sendChan, stopper := setupSendNextTest(t)
+	defer stopper.Stop()
+
+	// All replicas finish with RPC errors.
+	for i := 0; i <= 2; i++ {
+		doneChans[i] <- batchCall{
+			reply: nil,
+			err:   errors.New("boom"),
+		}
+	}
+
+	// The client side completes with a retryable send error.
+	bc := <-sendChan
+	if sErr, ok := bc.err.(*roachpb.SendError); !ok {
+		t.Errorf("did not get expected SendError; got %T instead", bc.err)
+	} else if !sErr.CanRetry() {
+		t.Errorf("expected a retryable error but got %s", sErr)
+	}
+}
+
+func TestSendNext_RetryableApplicationErrorThenSuccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	doneChans, sendChan, stopper := setupSendNextTest(t)
+	defer stopper.Stop()
+
+	// One replica finishes with a retryable error.
+	doneChans[1] <- batchCall{
+		reply: &roachpb.BatchResponse{
+			BatchResponse_Header: roachpb.BatchResponse_Header{
+				Error: roachpb.NewError(roachpb.NewRangeNotFoundError(1)),
+			},
+		},
+	}
+
+	// A second replica finishes successfully.
+	doneChans[2] <- batchCall{
+		reply: &roachpb.BatchResponse{},
+	}
+
+	// The client send finishes with the second response.
+	bc := <-sendChan
+	if bc.err != nil {
+		t.Fatalf("unexpected RPC error: %s", bc.err)
+	}
+	if bc.reply.Error != nil {
+		t.Errorf("expected successful reply, got %s", bc.reply.Error)
+	}
+}
+
+func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	doneChans, sendChan, stopper := setupSendNextTest(t)
+	defer stopper.Stop()
+
+	// All replicas finish with a retryable error.
+	for _, ch := range doneChans {
+		ch <- batchCall{
+			reply: &roachpb.BatchResponse{
+				BatchResponse_Header: roachpb.BatchResponse_Header{
+					Error: roachpb.NewError(roachpb.NewRangeNotFoundError(1)),
+				},
+			},
+		}
+	}
+
+	// The client send finishes with one of the errors, wrapped in a SendError.
+	bc := <-sendChan
+	if bc.err == nil {
+		t.Fatalf("expected SendError, got err=nil and reply=%s", bc.reply)
+	} else if _, ok := bc.err.(*roachpb.SendError); !ok {
+		t.Fatalf("expected SendError, got err=%s", bc.err)
+	} else if exp := "range 1 was not found"; !testutils.IsError(bc.err, exp) {
+		t.Errorf("expected SendError to contain %q, but got %s", exp, bc.err)
+	}
+}
+
+func TestSendNext_NonRetryableApplicationError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	doneChans, sendChan, stopper := setupSendNextTest(t)
+	defer stopper.Stop()
+
+	// One replica finishes with a non-retryable error.
+	doneChans[1] <- batchCall{
+		reply: &roachpb.BatchResponse{
+			BatchResponse_Header: roachpb.BatchResponse_Header{
+				Error: roachpb.NewError(roachpb.NewTransactionReplayError()),
+			},
+		},
+	}
+
+	// The client completes with that error, without waiting for the
+	// others to finish.
+	bc := <-sendChan
+	if bc.err != nil {
+		t.Fatalf("expected error in payload, not rpc error %s", bc.err)
+	}
+	if _, ok := bc.reply.Error.GetDetail().(*roachpb.TransactionReplayError); !ok {
+		t.Errorf("expected TransactionReplayError, got %v", bc.reply.Error)
 	}
 }
 
@@ -297,6 +477,9 @@ func TestComplexScenarios(t *testing.T) {
 
 	nodeContext := newNodeTestContext(nil, stopper)
 
+	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
+	// Rework this test to incorporate application-level errors carried in
+	// the BatchResponse.
 	testCases := []struct {
 		numServers               int
 		numErrors                int
@@ -314,7 +497,7 @@ func TestComplexScenarios(t *testing.T) {
 
 		// --- Failure scenarios ---
 		// All RPCs fail.
-		{5, 5, 0, false, false},
+		{5, 5, 0, false, true},
 		// All RPCs fail, but some of the errors are retryable.
 		{5, 5, 1, false, true},
 		{5, 5, 3, false, true},
