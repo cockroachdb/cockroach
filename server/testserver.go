@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/testingshim"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -193,11 +192,6 @@ func (ts *TestServer) DB() *client.DB {
 		return ts.db
 	}
 	return nil
-}
-
-// LeaseManager exposes the LeaseManager used by the TestServer.
-func (ts *TestServer) LeaseManager() *sql.LeaseManager {
-	return ts.leaseMgr
 }
 
 // Start starts the TestServer by bootstrapping an in-memory store
@@ -389,6 +383,11 @@ func (ts *TestServer) KVClient() interface{} { return ts.db }
 
 // KVDB is part of TestServerInterface.
 func (ts *TestServer) KVDB() interface{} { return ts.kvDB }
+
+// LeaseManager is part of TestServerInterface.
+func (ts *TestServer) LeaseManager() interface{} {
+	return ts.leaseMgr
+}
 
 type testServerFactoryImpl struct{}
 

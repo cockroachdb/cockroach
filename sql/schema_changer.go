@@ -173,7 +173,10 @@ func isSchemaChangeRetryError(err error) bool {
 
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
-func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
+func (sc SchemaChanger) exec(
+	startBackfillNotification func() error,
+	oldNameNotInUseNotification func(),
+) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -230,6 +233,9 @@ func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
 			return err
 		}
 
+		if oldNameNotInUseNotification != nil {
+			oldNameNotInUseNotification()
+		}
 		// Free up the old name(s).
 		err := sc.db.Txn(func(txn *client.Txn) error {
 			b := client.Batch{}
@@ -385,7 +391,13 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
+	if log.V(2) {
+		log.Infof("waiting for a single version of table %d...", sc.tableID)
+	}
 	_, err := sc.leaseMgr.waitForOneVersion(sc.tableID, retryOpts)
+	if log.V(2) {
+		log.Infof("waiting for a single version of table %d... done", sc.tableID)
+	}
 	return err
 }
 
@@ -661,7 +673,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						err := sc.exec(nil)
+						err := sc.exec(nil, nil)
 						if err != nil {
 							if err == errExistingSchemaChangeLease {
 							} else if err == errDescriptorNotFound {
