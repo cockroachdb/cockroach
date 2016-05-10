@@ -179,6 +179,9 @@ func (c *channelSaveTransport) SendNext(done chan BatchCall) {
 	c.ch <- done
 }
 
+func (*channelSaveTransport) Close() {
+}
+
 // setupSendNextTest sets up a situation in which SendNextTimeout has
 // caused RPCs to be sent to all three replicas simultaneously. The
 // caller may then cause those RPCs to finish by writing to one of the
@@ -518,6 +521,9 @@ func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
 	}
 	f.numSent++
 	done <- call
+}
+
+func (*firstNErrorTransport) Close() {
 }
 
 // TestComplexScenarios verifies various complex success/failure scenarios by

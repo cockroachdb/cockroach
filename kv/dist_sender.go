@@ -118,10 +118,7 @@ type DistSender struct {
 	rangeLookupMaxRanges int32
 	// leaderCache caches the last known leader replica for range
 	// consensus groups.
-	leaderCache *leaderCache
-	// RPCSend is used to send RPC calls and defaults to send
-	// outside of tests.
-	rpcSend          rpcSendFn
+	leaderCache      *leaderCache
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
@@ -147,9 +144,8 @@ type DistSenderContext struct {
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
 	nodeDescriptor *roachpb.NodeDescriptor
-	// The RPC dispatcher. Defaults to send but can be changed here for testing
+	// The RPC dispatcher. Defaults to grpc but can be changed here for testing
 	// purposes.
-	RPCSend           rpcSendFn
 	TransportFactory  TransportFactory
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
@@ -191,10 +187,6 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	ds.leaderCache = newLeaderCache(int(lcSize))
 	if ctx.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
-	}
-	ds.rpcSend = send
-	if ctx.RPCSend != nil {
-		ds.rpcSend = ctx.RPCSend
 	}
 	if ctx.TransportFactory != nil {
 		ds.transportFactory = ctx.TransportFactory
@@ -351,7 +343,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := ds.rpcSend(rpcOpts, replicas, ba, ds.rpcContext)
+	reply, err := send(rpcOpts, replicas, ba, ds.rpcContext)
 	if err != nil {
 		return nil, err
 	}

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -64,6 +65,46 @@ var testRangeDescriptor = roachpb.RangeDescriptor{
 }
 
 var testAddress = util.NewUnresolvedAddr("tcp", "node1")
+
+// adaptLegacyTransport converts the RPCSend functions used in these
+// tests to the newer transport interface.
+//
+// TODO(bdarnell): phase out this interface.
+func adaptLegacyTransport(f rpcSendFn) TransportFactory {
+	return func(opts SendOptions,
+		rpcContext *rpc.Context,
+		replicas ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (Transport, error) {
+		return &legacyTransportAdapter{f, opts, rpcContext, replicas, args, false}, nil
+	}
+}
+
+type legacyTransportAdapter struct {
+	f          rpcSendFn
+	opts       SendOptions
+	rpcContext *rpc.Context
+	replicas   ReplicaSlice
+	args       roachpb.BatchRequest
+
+	called bool
+}
+
+func (l *legacyTransportAdapter) IsExhausted() bool {
+	return l.called
+}
+
+func (l *legacyTransportAdapter) SendNext(done chan BatchCall) {
+	l.called = true
+	br, err := l.f(l.opts, l.replicas, l.args, l.rpcContext)
+	done <- BatchCall{
+		Reply: br,
+		Err:   err,
+	}
+}
+
+func (*legacyTransportAdapter) Close() {
+}
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1)
@@ -285,7 +326,7 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 		RangeDescriptorDB: MockRangeDescriptorDB(func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			return []roachpb.RangeDescriptor{descriptor}, nil, nil
 		}),
@@ -406,7 +447,7 @@ func TestOwnNodeCertain(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
 	expTS := roachpb.ZeroTimestamp.Add(1, 2)
@@ -443,7 +484,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
 
@@ -493,7 +534,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
 	ds := NewDistSender(ctx, g)
@@ -531,7 +572,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			// Return next error and truncate the prefix of the errors array.
 			var pErr *roachpb.Error
@@ -565,11 +606,11 @@ func TestEvictCacheOnError(t *testing.T) {
 	// if rpcError is true, the first attempt gets an RPC error, otherwise
 	// the RPC call succeeds but there is an error in the RequestHeader.
 	// Currently leader and cached range descriptor are treated equally.
+	// TODO(bdarnell): refactor to cover different types of retryable errors.
 	testCases := []struct{ rpcError, retryable, shouldClearLeader, shouldClearReplica bool }{
 		{false, false, false, false}, // non-retryable replica error
 		{false, true, false, false},  // retryable replica error
-		{true, false, true, true},    // RPC error aka all nodes dead
-		{true, true, false, false},   // retryable RPC error
+		{true, true, false, false},   // RPC error aka all nodes dead
 	}
 
 	const errString = "boom"
@@ -604,7 +645,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 
 		ctx := &DistSenderContext{
-			RPCSend:           testFn,
+			TransportFactory:  adaptLegacyTransport(testFn),
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		}
 		ds := NewDistSender(ctx, g)
@@ -686,7 +727,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
@@ -741,11 +782,13 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		// When the Scan first turns up, provide the correct descriptor as a
 		// suggestion for future range descriptor lookups.
 		if ba.RangeID == badRangeDescriptor.RangeID {
-			return nil, &roachpb.RangeKeyMismatchError{
+			var br roachpb.BatchResponse
+			br.Error = roachpb.NewError(&roachpb.RangeKeyMismatchError{
 				RequestStartKey: rs.Key.AsRawKey(),
 				RequestEndKey:   rs.EndKey.AsRawKey(),
 				SuggestedRange:  &goodRangeDescriptor,
-			}
+			})
+			return &br, nil
 		} else if ba.RangeID != goodRangeDescriptor.RangeID {
 			t.Fatalf("unexpected RangeID %d provided in request %v", ba.RangeID, ba)
 		}
@@ -753,7 +796,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
@@ -838,7 +881,7 @@ func TestSendRPCRetry(t *testing.T) {
 		return batchReply, nil
 	}
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
@@ -941,7 +984,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		return batchReply, nil
 	}
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
@@ -982,7 +1025,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend: testFn,
+		TransportFactory: adaptLegacyTransport(testFn),
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if len(key) > 0 && !useReverseScan {
 				t.Fatalf("expected UseReverseScan to be set")
@@ -1018,8 +1061,8 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Prepare the test function
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	doCheck := func(testFn rpcSendFn, fakeTime roachpb.Timestamp) {
-		ds.rpcSend = testFn
+	doCheck := func(sender client.Sender, fakeTime roachpb.Timestamp) {
+		ds.transportFactory = SenderTransportFactory(tracing.NewTracer(), sender)
 		_, err := client.SendWrapped(ds, nil, put)
 		if err != nil && err != expectedErr {
 			t.Fatal(err)
@@ -1032,23 +1075,22 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Test timestamp propagation on valid BatchResults.
 	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0)
-	replyNormal := func(_ SendOptions, _ ReplicaSlice,
-		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rb := args.CreateReply()
-		rb.Now = fakeTime
-		return rb, nil
-	}
+	replyNormal := client.SenderFunc(
+		func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			rb := args.CreateReply()
+			rb.Now = fakeTime
+			return rb, nil
+		})
 	doCheck(replyNormal, fakeTime)
 
 	// Test timestamp propagation on errors.
 	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0)
-	replyError := func(_ SendOptions, _ ReplicaSlice,
-		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rb := args.CreateReply()
-		rb.Error = expectedErr
-		rb.Error.Now = fakeTime
-		return rb, nil
-	}
+	replyError := client.SenderFunc(
+		func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			pErr := expectedErr
+			pErr.Now = fakeTime
+			return nil, pErr
+		})
 	doCheck(replyError, fakeTime)
 }
 
@@ -1134,7 +1176,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           sendStub,
+		TransportFactory:  adaptLegacyTransport(sendStub),
 		RangeDescriptorDB: descDB,
 	}
 	ds := NewDistSender(ctx, g)
@@ -1259,7 +1301,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           sendStub,
+		TransportFactory:  adaptLegacyTransport(sendStub),
 		RangeDescriptorDB: descDB,
 	}
 	ds := NewDistSender(ctx, g)
@@ -1315,7 +1357,7 @@ func TestSequenceUpdate(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
 	ds := NewDistSender(ctx, g)
@@ -1426,7 +1468,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: descDB,
 	}
 	ds := NewDistSender(ctx, g)
@@ -1539,7 +1581,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		}
 
 		ctx := &DistSenderContext{
-			RPCSend:           testFn,
+			TransportFactory:  adaptLegacyTransport(testFn),
 			RangeDescriptorDB: descDB,
 		}
 		ds := NewDistSender(ctx, g)
@@ -1612,7 +1654,7 @@ func TestCountRanges(t *testing.T) {
 		return ba.CreateReply(), nil
 	}
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: descDB,
 	}
 	ds := NewDistSender(ctx, g)

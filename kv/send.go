@@ -111,6 +111,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	if err != nil {
 		return nil, err
 	}
+	defer transport.Close()
 
 	// Send the first request.
 	pending := 1

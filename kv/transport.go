@@ -20,10 +20,14 @@ package kv
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -54,6 +58,10 @@ type Transport interface {
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted.
 	SendNext(chan BatchCall)
+
+	// Close is called when the transport is no longer needed. It may
+	// cancel any pending RPCs without writing any response to the channel.
+	Close()
 }
 
 // grpcTransportFactory is the default TransportFactory, using GRPC.
@@ -158,4 +166,55 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		reply, err := client.client.Batch(ctx, &client.args)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
+}
+
+func (*grpcTransport) Close() {
+	// TODO(bdarnell): Save the cancel functions of all pending RPCs and
+	// call them here. (it's fine to ignore them for now since they'll
+	// time out anyway)
+}
+
+// SenderTransportFactory wraps a client.Sender for use as a KV
+// Transport. This is useful for tests that want to use DistSender
+// without a full RPC stack.
+func SenderTransportFactory(tracer opentracing.Tracer, sender client.Sender) TransportFactory {
+	return func(
+		_ SendOptions, _ *rpc.Context, _ ReplicaSlice, args roachpb.BatchRequest,
+	) (Transport, error) {
+		return &senderTransport{tracer, sender, args, false}, nil
+	}
+}
+
+type senderTransport struct {
+	tracer opentracing.Tracer
+	sender client.Sender
+	args   roachpb.BatchRequest
+
+	called bool
+}
+
+func (s *senderTransport) IsExhausted() bool {
+	return s.called
+}
+
+func (s *senderTransport) SendNext(done chan BatchCall) {
+	sp := s.tracer.StartSpan("node")
+	defer sp.Finish()
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	log.Trace(ctx, s.args.String())
+	br, pErr := s.sender.Send(ctx, s.args)
+	if br == nil {
+		br = &roachpb.BatchResponse{}
+	}
+	if br.Error != nil {
+		panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
+	}
+	br.Error = pErr
+	if pErr != nil {
+		log.Trace(ctx, "error: "+pErr.String())
+	}
+	done <- BatchCall{Reply: br}
+}
+
+func (s *senderTransport) Close() {
 }
