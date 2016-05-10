@@ -22,7 +22,7 @@ _obj
 _test
 certs
 
-Architecture specific extensions/prefixes
+# Architecture specific extensions/prefixes
 *.cgo1.go
 *.cgo2.c
 _cgo_defun.c
@@ -41,3 +41,6 @@ _testmain.go
 *.swp
 
 .bootstrap
+
+# Editor Specific Folders
+.vscode
