@@ -190,29 +190,6 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 	return lease.TableDescriptor, nil
 }
 
-// getTableID retrieves the table ID for the specified table.
-func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
-	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return 0, err
-	}
-
-	dbID, err := p.getDatabaseID(qname.Database())
-	if err != nil {
-		return 0, err
-	}
-
-	nameKey := tableKey{dbID, qname.Table()}
-	key := nameKey.Key()
-	gr, err := p.txn.Get(key)
-	if err != nil {
-		return 0, err
-	}
-	if !gr.Exists() {
-		return 0, tableDoesNotExistError(qname.String())
-	}
-	return sqlbase.ID(gr.ValueInt()), nil
-}
-
 func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.QualifiedNames, error) {
 	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
