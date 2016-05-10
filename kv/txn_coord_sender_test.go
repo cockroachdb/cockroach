@@ -251,8 +251,10 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
-	if txnMeta.keys.Len() != 2 {
-		t.Errorf("expected 2 entries in keys range group; got %v", txnMeta.keys)
+	roachpb.MergeSpans(&txnMeta.keys)
+	keys := txnMeta.keys
+	if len(keys) != 2 {
+		t.Errorf("expected 2 entries in keys range group; got %v", keys)
 	}
 }
 
@@ -481,7 +483,8 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	}
 	sender.Lock()
 	txnID := *txn.Proto.ID
-	intentSpans := collectIntentSpans(sender.txns[txnID].keys)
+	roachpb.MergeSpans(&sender.txns[txnID].keys)
+	intentSpans := sender.txns[txnID].keys
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	sender.Unlock()
