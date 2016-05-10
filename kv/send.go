@@ -143,7 +143,9 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 	var errors int
 
-	// Wait for completions.
+	// Wait for completions. This loop will retry operations that fail
+	// with errors that reflect per-replica state and may succeed on
+	// other replicas.
 	var sendNextTimer util.Timer
 	defer sendNextTimer.Stop()
 	for {
@@ -163,7 +165,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			if err == nil {
 				if log.V(2) {
 					log.Infof("RPC reply: %+v", call.reply)
-				} else if call.reply.Error != nil && log.V(1) {
+				} else if log.V(1) && call.reply.Error != nil {
 					log.Infof("application error: %s", call.reply.Error)
 				}
 
@@ -178,7 +180,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 				// one to return; we may want to remember the "best" error
 				// we've seen (for example, a NotLeaderError conveys more
 				// information than a RangeNotFound).
-				err = call.reply.Error.GetDetail()
+				err = call.reply.Error.GoError()
 			} else if log.V(1) {
 				log.Warningf("RPC error: %s", err)
 			}

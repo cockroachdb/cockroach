@@ -198,9 +198,10 @@ func setupSendNextTest(t *testing.T) ([]chan batchCall, chan batchCall, *stop.St
 		sendChan <- batchCall{br, err}
 	}()
 
-	var doneChans []chan batchCall
-	for i := 0; i < len(addrs); i++ {
-		doneChans = append(doneChans, <-doneChanChan)
+	doneChans := make([]chan batchCall, len(addrs))
+	for i := range doneChans {
+		// Note that this blocks until the replica has been contacted.
+		doneChans[i] = <-doneChanChan
 	}
 	return doneChans, sendChan, stopper
 }
@@ -293,7 +294,7 @@ func TestSendNext_AllRPCErrors(t *testing.T) {
 	if sErr, ok := bc.err.(*roachpb.SendError); !ok {
 		t.Errorf("did not get expected SendError; got %T instead", bc.err)
 	} else if !sErr.CanRetry() {
-		t.Errorf("expected a retryable error")
+		t.Errorf("expected a retryable error but got %s", sErr)
 	}
 }
 
@@ -350,8 +351,8 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 		t.Fatalf("expected SendError, got err=nil and reply=%s", bc.reply)
 	} else if _, ok := bc.err.(*roachpb.SendError); !ok {
 		t.Fatalf("expected SendError, got err=%s", bc.err)
-	} else if !testutils.IsError(bc.err, "range 1 was not found") {
-		t.Errorf("expected SendError to contain 'range 1 was not found', but got %s", bc.err)
+	} else if exp := "range 1 was not found"; !testutils.IsError(bc.err, exp) {
+		t.Errorf("expected SendError to contain %q, but got %s", exp, bc.err)
 	}
 }
 
