@@ -277,6 +277,10 @@ export function queryMetrics(id: string, query: TSRequestMessage) {
 
           return fetch("/ts/query", {
             method: "POST",
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json",
+            },
             body: unifiedRequest.encodeJSON(),
           }).then((response) => {
             return response.json() as TSResponse;

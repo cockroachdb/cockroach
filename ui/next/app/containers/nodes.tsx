@@ -1,3 +1,4 @@
+/// <reference path="../../typings/main.d.ts" />
 import * as React from "react";
 import _ = require("lodash");
 import { Link } from "react-router";

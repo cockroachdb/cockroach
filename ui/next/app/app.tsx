@@ -10,6 +10,7 @@ import thunk from "redux-thunk";
 
 import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
+import metricsReducer from "./redux/metrics";
 
 import Layout from "./containers/layout";
 import { ClusterMain, ClusterTitle } from "./containers/cluster";
@@ -27,6 +28,7 @@ const store = createStore(
     routing: routerReducer,
     nodes: nodesReducer,
     ui: uiReducer,
+    metrics: metricsReducer,
   }),
   compose(
     applyMiddleware(thunk),

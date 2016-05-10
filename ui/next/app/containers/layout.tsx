@@ -1,3 +1,4 @@
+/// <reference path="../../typings/main.d.ts" />
 import * as React from "react";
 import SideBar from "../components/layoutSidebar";
 import Header from "../components/layoutHeader";
