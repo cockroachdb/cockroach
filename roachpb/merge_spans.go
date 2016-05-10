@@ -39,17 +39,16 @@ func (s sortedSpans) Len() int {
 	return len(s)
 }
 
-// MergeSpans sorts the incoming spans and merges overlapping spans. Note that
-// MergeSpans may mutate both the supplied slice and the spans it contains.
-func MergeSpans(spans []Span) []Span {
-	if len(spans) == 0 {
-		return spans
+// MergeSpans sorts the incoming spans and merges overlapping spans.
+func MergeSpans(spans *[]Span) {
+	if len(*spans) == 0 {
+		return
 	}
 
-	sort.Sort(sortedSpans(spans))
+	sort.Sort(sortedSpans(*spans))
 
-	r := spans[:1]
-	for _, cur := range spans[1:] {
+	r := (*spans)[:1]
+	for _, cur := range (*spans)[1:] {
 		prev := &r[len(r)-1]
 		if cur.EndKey == nil && prev.EndKey == nil {
 			if cur.Key.Compare(prev.Key) != 0 {
@@ -88,5 +87,5 @@ func MergeSpans(spans []Span) []Span {
 		}
 		r = append(r, cur)
 	}
-	return r
+	*spans = r
 }

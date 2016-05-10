@@ -60,7 +60,8 @@ func TestMergeSpans(t *testing.T) {
 		{"a-c,b-c", "a-c"},
 	}
 	for i, c := range testCases {
-		spans := MergeSpans(makeSpans(c.spans))
+		spans := makeSpans(c.spans)
+		MergeSpans(&spans)
 		expected := makeSpans(c.expected)
 		if !reflect.DeepEqual(expected, spans) {
 			t.Fatalf("%d: expected\n%s\n, but found:\n%s", i, expected, spans)

@@ -335,7 +335,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 					EndKey: endKey,
 				})
 			})
-			et.IntentSpans = roachpb.MergeSpans(et.IntentSpans)
+			roachpb.MergeSpans(&et.IntentSpans)
 			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state
@@ -619,7 +619,8 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	// Grab the intents and clone the txn to avoid data races.
-	intentSpans := roachpb.MergeSpans(txnMeta.keys)
+	roachpb.MergeSpans(&txnMeta.keys)
+	intentSpans := txnMeta.keys
 	txnMeta.keys = nil
 	txn := txnMeta.txn.Clone()
 	tc.Unlock()
