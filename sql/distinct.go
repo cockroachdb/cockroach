@@ -31,7 +31,7 @@ func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
 		return p
 	}
 	d := &distinctNode{
-		planNode:   p,
+		plan:       p,
 		suffixSeen: make(map[string]struct{}),
 	}
 	ordering := p.Ordering()
@@ -59,7 +59,7 @@ func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
 }
 
 type distinctNode struct {
-	planNode
+	plan planNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
@@ -73,12 +73,17 @@ type distinctNode struct {
 	debugVals  debugValues
 }
 
+func (n *distinctNode) Start() error            { return n.plan.Start() }
+func (n *distinctNode) Columns() []ResultColumn { return n.plan.Columns() }
+func (n *distinctNode) Values() parser.DTuple   { return n.plan.Values() }
+func (n *distinctNode) Ordering() orderingInfo  { return n.plan.Ordering() }
+
 func (n *distinctNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
 		panic(fmt.Sprintf("unknown debug mode %d", mode))
 	}
 	n.explain = mode
-	n.planNode.MarkDebug(mode)
+	n.plan.MarkDebug(mode)
 }
 
 func (n *distinctNode) DebugValues() debugValues {
@@ -92,9 +97,9 @@ func (n *distinctNode) Next() bool {
 	if n.err != nil {
 		return false
 	}
-	for n.planNode.Next() {
+	for n.plan.Next() {
 		if n.explain == explainDebug {
-			n.debugVals = n.planNode.DebugValues()
+			n.debugVals = n.plan.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Let the non-row debug values pass through.
 				return true
@@ -136,7 +141,7 @@ func (n *distinctNode) Next() bool {
 			return true
 		}
 	}
-	n.err = n.planNode.Err()
+	n.err = n.plan.Err()
 	return false
 }
 
@@ -177,12 +182,12 @@ func (n *distinctNode) ExplainPlan(_ bool) (string, string, []planNode) {
 		}
 		description = strings.Join(strs, ",")
 	}
-	return "distinct", description, []planNode{n.planNode}
+	return "distinct", description, []planNode{n.plan}
 }
 
 func (n *distinctNode) ExplainTypes(_ func(string, string)) {}
 
 func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 	// Any limit becomes a "soft" limit underneath.
-	n.planNode.SetLimitHint(numRows, true)
+	n.plan.SetLimitHint(numRows, true)
 }
