@@ -117,7 +117,7 @@ TestGolint() {
 
 TestVarcheck() {
   ! varcheck -e "$PKG" | \
-    grep -vE '(_string.go|sql/parser/(yacctab|sql\.y))'
+    grep -vE '(_string.go|sql/parser/(yacctab|sql\.y)|\.pb\.go)'
 }
 
 TestGofmtSimplify() {

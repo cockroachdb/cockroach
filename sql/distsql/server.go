@@ -75,11 +75,3 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	}
 	return &SetupFlowsResponse{}, nil
 }
-
-// TODO(radu): prevent varcheck from complaining about (yet) unused constants
-var _ = StreamEndpointSpec_LOCAL
-var _ = StreamEndpointSpec_REMOTE
-var _ = StreamEndpointSpec_RPC_SYNC_RESP
-var _ = OutputRouterSpec_MIRROR
-var _ = OutputRouterSpec_BY_HASH
-var _ = OutputRouterSpec_BY_RANGE
