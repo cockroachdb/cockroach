@@ -711,7 +711,7 @@ func (n *Node) recordJoinEvent() {
 	})
 }
 
-// Batch implements the roachpb.KVServer interface.
+// Batch implements the roachpb.InternalServer interface.
 func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	// TODO(marc): this code is duplicated in kv/db.go, which should be fixed.
 	// Also, grpc's authentication model (which gives credential access in the
@@ -783,4 +783,34 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		return nil, util.Errorf("node %d stopped", n.Descriptor.NodeID)
 	}
 	return br, nil
+}
+
+func (n *Node) execStoreCommand(
+	h roachpb.StoreRequestHeader, f func(*storage.Store) error,
+) error {
+	if h.NodeID != n.Descriptor.NodeID {
+		return util.Errorf("request for NodeID %d cannot be served by NodeID %d",
+			h.NodeID, n.Descriptor.NodeID)
+	}
+	store, err := n.stores.GetStore(h.StoreID)
+	if err != nil {
+		return err
+	}
+	return f(store)
+}
+
+// PollFrozen implements the roachpb.InternalServer interface.
+func (n *Node) PollFrozen(
+	ctx context.Context, args *roachpb.PollFrozenRequest,
+) (*roachpb.PollFrozenResponse, error) {
+	resp := &roachpb.PollFrozenResponse{Frozen: true}
+	err := n.execStoreCommand(args.StoreRequestHeader,
+		func(s *storage.Store) error {
+			resp.Frozen = s.IsFrozen()
+			return nil
+		})
+	if err != nil {
+		resp = nil
+	}
+	return resp, err
 }

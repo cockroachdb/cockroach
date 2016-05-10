@@ -63,6 +63,9 @@ func (n Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.B
 	}
 	return &roachpb.BatchResponse{}, nil
 }
+func (n Node) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
+	panic("unimplemented")
+}
 
 func TestInvalidAddrLength(t *testing.T) {
 	defer leaktest.AfterTest(t)()
