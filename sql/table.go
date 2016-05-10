@@ -106,11 +106,6 @@ type SchemaAccessor interface {
 	// into an error, use newUndefinedTableError().
 	getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
-	// getTableID retrieves the table ID for the specified table. It uses the
-	// descriptor cache to perform lookups, falling back to the KV store when
-	// necessary.
-	getTableID(qname *parser.QualifiedName) (sqlbase.ID, error)
-
 	// NB: one can use getTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
 	// in the transaction already.
@@ -230,29 +225,6 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
 	return lease.TableDescriptor, nil
-}
-
-// getTableID retrieves the table ID for the specified table.
-func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
-	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return 0, err
-	}
-
-	dbID, err := p.getDatabaseID(qname.Database())
-	if err != nil {
-		return 0, err
-	}
-
-	nameKey := tableKey{dbID, qname.Table()}
-	key := nameKey.Key()
-	gr, err := p.txn.Get(key)
-	if err != nil {
-		return 0, err
-	}
-	if !gr.Exists() {
-		return 0, newUndefinedTableError(qname.String())
-	}
-	return sqlbase.ID(gr.ValueInt()), nil
 }
 
 // getTableNames implements the SchemaAccessor interface.
