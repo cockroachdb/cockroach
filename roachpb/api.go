@@ -230,6 +230,12 @@ func (af *ChangeFrozenResponse) combine(c combinable) error {
 		if otherAF.MinStartKey.Less(af.MinStartKey) {
 			af.MinStartKey = otherAF.MinStartKey
 		}
+		for storeID, nodeID := range otherAF.Stores {
+			if af.Stores == nil {
+				af.Stores = make(map[StoreID]NodeID, len(otherAF.Stores))
+			}
+			af.Stores[storeID] = nodeID
+		}
 	}
 	return nil
 }

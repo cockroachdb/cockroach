@@ -240,6 +240,11 @@ message ChangeFrozenResponse {
   // during execution (regardless of whether the command had any effect on that
   // specific Range).
   optional bytes min_start_key = 3 [(gogoproto.casttype) = "RKey"];
+  // The StoreIDs to which this request applies (i.e. all StoreIDs which had
+  // a Replica on which the command should execute, even when already
+  // frozen).
+  map<int32, int32> stores = 4 [(gogoproto.nullable) = false,
+      (gogoproto.castkey) = "StoreID", (gogoproto.castvalue) = "NodeID" ];
 }
 
 
@@ -787,13 +792,34 @@ message RaftCommand {
   optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
 }
 
-// The two services below are identical, except that some internal Request
-// types are not permitted in batches processed by External.Batch. This
+// StoreRequestHeader locates a Store on a Node.
+message StoreRequestHeader {
+  optional int32 node_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  optional int32 store_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+}
+
+// A PollFrozenRequest asks the addressed Store whether all of its Replicas are
+// frozen.
+message PollFrozenRequest {
+  optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A PollFrozenResponse is the response returned from a PollFrozenRequest. If
+// all of the Store's replicas are frozen, the contained boolean will be set.
+message PollFrozenResponse {
+  optional bool frozen = 1 [(gogoproto.nullable) = false];
+}
+
+// The two Batch services below are identical, except that some internal
+// Request types are not permitted in batches processed by External.Batch. This
 // distinction exists e.g. to prevent command-line tools from accessing
 // internal-only RPC methods.
 
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
+  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
 }
 
 service External {
