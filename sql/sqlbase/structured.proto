@@ -254,8 +254,7 @@ message TableDescriptor {
   optional uint32 format_version = 17 [(gogoproto.nullable) = false,
       (gogoproto.casttype) = "FormatVersion"];
 
-  // replaced by State.
-  optional bool OBSOLETE_Deleted = 18 [(gogoproto.nullable) = false];
+  reserved 18; // Removed field "bool deleted", replaced by "state".
 
   // State is set if this TableDescriptor is in the process of being added or deleted.
   // A non-public table descriptor cannot be leased.
