@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -352,21 +353,26 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 // Test that we fail to lease a table that was marked for deletion.
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	defer csql.TestDisableAsyncSchemaChangeExec()()
 
-	var execKnobs csql.ExecutorTestingKnobs
 	var mu sync.Mutex
 	clearSchemaChangers := false
-	execKnobs.SyncSchemaChangersFilter =
-		func(tscc csql.TestingSchemaChangerCollection) {
-			mu.Lock()
-			defer mu.Unlock()
-			if clearSchemaChangers {
-				tscc.ClearSchemaChangers()
-			}
-		}
+
 	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &execKnobs
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				mu.Lock()
+				defer mu.Unlock()
+				if clearSchemaChangers {
+					tscc.ClearSchemaChangers()
+				}
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+		},
+	}
+
 	t := newLeaseTest(testingT, ctx)
 	defer t.cleanup()
 
@@ -430,36 +436,40 @@ func acquire(s server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorV
 // when it expires.
 func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer csql.TestDisableAsyncSchemaChangeExec()()
 
-	var execKnobs csql.ExecutorTestingKnobs
-	var lmKnobs csql.LeaseManagerTestingKnobs
 	var mu sync.Mutex
 	clearSchemaChangers := false
-	execKnobs.SyncSchemaChangersFilter =
-		func(tscc csql.TestingSchemaChangerCollection) {
-			mu.Lock()
-			defer mu.Unlock()
-			if clearSchemaChangers {
-				tscc.ClearSchemaChangers()
-			}
-		}
+
 	var waitTableID sqlbase.ID
 	deleted := make(chan bool)
-	lmKnobs.TestingLeasesRefreshedEvent =
-		func(cfg config.SystemConfig) {
-			mu.Lock()
-			defer mu.Unlock()
-			if waitTableID != 0 {
-				if isDeleted(waitTableID, cfg) {
-					close(deleted)
-					waitTableID = 0
-				}
-			}
-		}
+
 	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &execKnobs
-	ctx.TestingKnobs.SQLLeaseManager = &lmKnobs
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				mu.Lock()
+				defer mu.Unlock()
+				if clearSchemaChangers {
+					tscc.ClearSchemaChangers()
+				}
+			},
+		},
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			TestingLeasesRefreshedEvent: func(cfg config.SystemConfig) {
+				mu.Lock()
+				defer mu.Unlock()
+				if waitTableID != 0 {
+					if isDeleted(waitTableID, cfg) {
+						close(deleted)
+						waitTableID = 0
+					}
+				}
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+		},
+	}
 	s, db, kvDB := setupWithContext(t, ctx)
 	defer cleanup(s, db)
 
