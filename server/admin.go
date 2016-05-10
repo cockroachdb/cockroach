@@ -20,10 +20,13 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -51,6 +54,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -794,16 +799,151 @@ func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainRespo
 	return &DrainResponse{On: nowOnInts}, nil
 }
 
+// waitForStoreFrozen polls the given stores until they all report having no
+// unfrozen Replicas (or an error or timeout occurs). The map will be mutated.
+func (s *adminServer) waitForStoreFrozen(
+	required map[roachpb.StoreID]struct{},
+) error {
+	mu := struct {
+		sync.Mutex
+		oks map[roachpb.StoreID]bool
+	}{
+		oks: make(map[roachpb.StoreID]bool),
+	}
+
+	opts := retry.Options{
+		Closer:         s.server.stopper.ShouldDrain(),
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     20,
+	}
+	sem := make(chan struct{}, 256)
+	errChan := make(chan error, 1)
+	sendErr := func(err error) {
+		select {
+		case errChan <- err:
+		default:
+		}
+	}
+	storeList, _ := s.server.storePool.GetStoreList(roachpb.Attributes{}, false)
+	numWaiting := math.MaxInt64 // wait until this drops to zero
+	var err error
+	for r := retry.Start(opts); r.Next(); {
+		mu.Lock()
+		for _, storeDesc := range storeList.Stores {
+			storeID, nodeID := storeDesc.StoreID, storeDesc.Node.NodeID
+			if _, ok := required[storeID]; !ok {
+				// We don't care about this Store. It may have launched so
+				// recently that it doesn't hold any data.
+				continue
+			}
+			addr := storeDesc.Node.Address.String()
+			if _, inflightOrSucceeded := mu.oks[storeID]; inflightOrSucceeded {
+				continue
+			}
+			mu.oks[storeID] = false // mark as inflight
+			action := func() (err error) {
+				var resp *roachpb.PollFrozenResponse
+				defer func() {
+					if err != nil {
+						return
+					}
+					mu.Lock()
+					if resp.Frozen {
+						// If the Store is frozen, mark it as such. This means
+						// we won't try it again.
+						mu.oks[storeID] = resp.Frozen
+					} else {
+						// When not frozen, forget that we tried the Store so
+						// that the retry loop picks it up again.
+						delete(mu.oks, storeID)
+					}
+					mu.Unlock()
+				}()
+				conn, err := s.server.rpcContext.GRPCDial(addr)
+				if err != nil {
+					return err
+				}
+				client := roachpb.NewInternalClient(conn)
+				resp, err = client.PollFrozen(context.Background(),
+					&roachpb.PollFrozenRequest{
+						StoreRequestHeader: roachpb.StoreRequestHeader{
+							NodeID:  nodeID,
+							StoreID: storeID,
+						},
+					})
+				return err
+			}
+			// Run a limited, non-blocking task. That means the task simply
+			// won't run if the semaphore is full (or the node is draining).
+			// Both are handled by the surrounding retry loop.
+			if !s.server.stopper.RunLimitedAsyncTask(sem, stop.NonBlocking, func() {
+				if err := action(); err != nil {
+					sendErr(err)
+				}
+			}) {
+				// We're throttled.
+				break
+			}
+		}
+
+		numWaiting = 0
+		for storeID, ok := range mu.oks {
+			if ok {
+				// Store has reported that it is frozen.
+				delete(required, storeID)
+				continue
+			}
+			numWaiting++
+		}
+		mu.Unlock()
+
+		select {
+		case err = <-errChan:
+		default:
+		}
+
+		// Keep going unless there's been an error or everyone's frozen.
+		if err != nil || numWaiting == 0 {
+			break
+		}
+	}
+	if err != nil {
+		return err
+	}
+	select {
+	case <-s.server.stopper.ShouldDrain():
+		err = errors.New("node is shutting down")
+	default:
+		if numWaiting > 0 {
+			err = fmt.Errorf("timed out waiting for %d store%s to report freeze",
+				numWaiting, util.Pluralize(int64(numWaiting)))
+		} else if remReq := len(required); remReq > 0 {
+			err = fmt.Errorf("unable to reach %d stores", remReq)
+		}
+	}
+	return err
+}
+
 func (s *adminServer) ClusterFreeze(
 	ctx context.Context, req *ClusterFreezeRequest,
 ) (*ClusterFreezeResponse, error) {
 	var resp ClusterFreezeResponse
-
+	touchedStores := make(map[roachpb.StoreID]struct{})
 	process := func(from, to roachpb.Key) (roachpb.Key, error) {
-		affected, minStart, err := s.server.db.ChangeFrozen(
-			from, to, build.GetInfo().Tag, req.Freeze)
-		resp.RangesAffected += affected
-		return minStart.AsRawKey(), err
+		b := &client.Batch{}
+		fa := roachpb.NewChangeFrozen(from, to, req.Freeze, build.GetInfo().Tag)
+		b.AddRawRequest(fa)
+		if err := s.server.db.Run(b); err != nil {
+			return nil, err
+		}
+		fr := b.RawResponse().Responses[0].GetInner().(*roachpb.ChangeFrozenResponse)
+		resp.RangesAffected += fr.RangesAffected
+		for _, storeID := range fr.Stores {
+			touchedStores[storeID] = struct{}{}
+		}
+		return fr.MinStartKey.AsRawKey(), nil
 	}
 
 	if req.Freeze {
@@ -840,7 +980,11 @@ func (s *adminServer) ClusterFreeze(
 			return nil, err
 		}
 	}
-	return &resp, nil
+	var err error
+	if req.Freeze {
+		err = s.waitForStoreFrozen(touchedStores)
+	}
+	return &resp, err
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses

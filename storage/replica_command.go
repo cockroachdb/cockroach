@@ -1831,6 +1831,13 @@ func (r *Replica) ChangeFrozen(
 		resp.RangesAffected++
 	}
 
+	// Note down the Stores on which this request ran, even if the Range was
+	// not affected.
+	resp.Stores = make([]roachpb.StoreID, len(desc.Replicas))
+	for i := range desc.Replicas {
+		resp.Stores[i] = desc.Replicas[i].StoreID
+	}
+
 	if resp.RangesAffected == 0 {
 		return resp, nil
 	}

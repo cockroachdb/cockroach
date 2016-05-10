@@ -87,12 +87,27 @@ func TestCombinable(t *testing.T) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
 	}
 
-	cf1 := &ChangeFrozenResponse{RangesAffected: 3, MinStartKey: RKey("x")}
-	cf2 := &ChangeFrozenResponse{RangesAffected: 1, MinStartKey: RKey("b")}
-	wantedCF := &ChangeFrozenResponse{RangesAffected: 4, MinStartKey: RKey("b")}
+	cf1 := &ChangeFrozenResponse{RangesAffected: 3, MinStartKey: RKey("x"),
+		Stores: []StoreID{1, 2, 4},
+	}
+	cf2 := &ChangeFrozenResponse{RangesAffected: 1, MinStartKey: RKey("b"),
+		Stores: []StoreID{3},
+	}
+	cf3 := &ChangeFrozenResponse{RangesAffected: 0, MinStartKey: RKey("b"),
+		Stores: []StoreID{8, 1, 3, 3},
+	}
+
+	wantedCF := &ChangeFrozenResponse{
+		RangesAffected: 4, MinStartKey: RKey("b"),
+		Stores: []StoreID{1, 2, 3, 4, 8},
+	}
 	if err := cf1.combine(cf2); err != nil {
 		t.Fatal(err)
 	}
+	if err := cf1.combine(cf3); err != nil {
+		t.Fatal(err)
+	}
+
 	if !reflect.DeepEqual(cf1, wantedCF) {
 		t.Errorf("wanted %v, got %v", wantedCF, cf1)
 	}

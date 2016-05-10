@@ -18,6 +18,7 @@ package roachpb
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -229,6 +230,19 @@ func (af *ChangeFrozenResponse) combine(c combinable) error {
 		af.RangesAffected += otherAF.RangesAffected
 		if otherAF.MinStartKey.Less(af.MinStartKey) {
 			af.MinStartKey = otherAF.MinStartKey
+		}
+		sort.Sort(StoreIDSlice(af.Stores))
+		// Not a very elegant way of merging the two slices, but it'll do.
+		for _, storeID := range otherAF.Stores {
+			pos := sort.Search(len(af.Stores), func(i int) bool {
+				return af.Stores[i] >= storeID
+			})
+			// Insert storeID at position 'pos' (which could be len(af.Stores)).
+			if pos == len(af.Stores) || af.Stores[pos] != storeID {
+				af.Stores = append(af.Stores, StoreID(0))
+				copy(af.Stores[pos+1:], af.Stores[pos:])
+				af.Stores[pos] = storeID
+			}
 		}
 	}
 	return nil
