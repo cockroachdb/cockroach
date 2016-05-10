@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/opentracing/opentracing-go"
@@ -263,7 +264,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 	for _, item := range intents {
 		if item.args.Method() != roachpb.EndTransaction {
-			stopper.RunLimitedAsyncTask(ir.sem, func() {
+			stopper.RunLimitedAsyncTask(ir.sem, stop.Blocking, func() {
 				// Everything here is best effort; give up rather than waiting
 				// too long (helps avoid deadlocks during test shutdown,
 				// although this is imperfect due to the use of an
@@ -298,7 +299,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				}
 			})
 		} else { // EndTransaction
-			stopper.RunLimitedAsyncTask(ir.sem, func() {
+			stopper.RunLimitedAsyncTask(ir.sem, stop.Blocking, func() {
 				ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 				defer cancel()
 
@@ -410,7 +411,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 			return pErr.GoError()
 		}
 		wg.Add(1)
-		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
+		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, stop.Blocking, func() {
 			if err := action(); err != nil {
 				log.Warningf("unable to resolve local intents; %s", err)
 			}
@@ -433,7 +434,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 			// TODO(tschottdorf): no tracing here yet.
 			return r.store.DB().Run(b)
 		}
-		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
+		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, stop.Blocking, func() {
 			if err := action(); err != nil {
 				log.Warningf("unable to resolve external intents: %s", err)
 			}

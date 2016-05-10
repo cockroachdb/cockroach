@@ -183,13 +183,25 @@ func (s *Stopper) RunAsyncTask(f func()) bool {
 	return true
 }
 
+const (
+	// Blocking is a constant which makes calls to RunLimitedAsyncTask more
+	// legible.
+	Blocking = true
+	// NonBlocking is !Blocking.
+	NonBlocking = false
+)
+
 // RunLimitedAsyncTask runs function f in a goroutine, using the given
 // channel as a semaphore to limit the number of tasks that are run
-// concurrently to the channel's capacity. Blocks until the semaphore
-// is available in order to push back on callers that may be trying to
-// create many tasks. Returns false if the Stopper is draining and the
-// function is not executed.
-func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) bool {
+// concurrently to the channel's capacity. If blocking is true, blocks until
+// the semaphore is available in order to push back on callers that may be
+// trying to create many tasks. When blocking is false and the semaphore is
+// not available, returns false immediately and does not run f.
+// In either case, returns false if the Stopper is draining and the function is
+// not executed.
+func (s *Stopper) RunLimitedAsyncTask(
+	sem chan struct{}, blocking bool, f func(),
+) bool {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 
@@ -199,6 +211,10 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) bool {
 	case <-s.ShouldDrain():
 		return false
 	default:
+		if !blocking {
+			log.Printf("stopper refusing task from %s:%d due to semaphore", file, line)
+			return false
+		}
 		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {

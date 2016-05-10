@@ -381,6 +381,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	defer s.Stop()
 
 	const maxConcurrency = 5
+	const attemptConcurrency = 3 * maxConcurrency
 	const duration = 10 * time.Millisecond
 	sem := make(chan struct{}, maxConcurrency)
 	var mu sync.Mutex
@@ -402,11 +403,20 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 		wg.Done()
 	}
 
-	for i := 0; i < maxConcurrency*3; i++ {
-		wg.Add(1)
-		s.RunLimitedAsyncTask(sem, f)
+	var notRunCount int
+	for _, blockMode := range []bool{stop.Blocking, stop.NonBlocking} {
+		for i := 0; i < attemptConcurrency; i++ {
+			wg.Add(1)
+			if !s.RunLimitedAsyncTask(sem, blockMode, f) {
+				notRunCount++
+				wg.Done()
+			}
+		}
+		wg.Wait()
 	}
-	wg.Wait()
+	if notRunCount > (attemptConcurrency - maxConcurrency) {
+		t.Fatalf("expected at most %d refused tasks, got %d", maxConcurrency, notRunCount)
+	}
 	if concurrency != 0 {
 		t.Fatalf("expected 0 concurrency at end of test but got %d", concurrency)
 	}
