@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -39,6 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
+
+// schemaChangeManagerDisabled can be used to disable asynchronous processing
+// of schema changes.
+func schemaChangeManagerDisabled() error {
+	return errors.New("async schema changes are disabled")
+}
 
 func TestSchemaChangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -125,8 +132,11 @@ func TestSchemaChangeProcess(t *testing.T) {
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	defer csql.TestDisableAsyncSchemaChangeExec()()
-	server, sqlDB, kvDB := setup(t)
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
@@ -297,11 +307,15 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
-	defer csql.TestSpeedupAsyncSchemaChanges()()
 	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &csql.ExecutorTestingKnobs{
-		SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
-			tscc.ClearSchemaChangers()
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
 
@@ -536,16 +550,20 @@ func TestRaceWithBackfill(t *testing.T) {
 
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
-	defer csql.TestDisableAsyncSchemaChangeExec()()
 	var backfillNotification chan bool
 	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &csql.ExecutorTestingKnobs{
-		SchemaChangersStartBackfillNotification: func() error {
-			if backfillNotification != nil {
-				// Close channel to notify that the backfill has started.
-				close(backfillNotification)
-			}
-			return nil
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SchemaChangersStartBackfillNotification: func() error {
+				if backfillNotification != nil {
+					// Close channel to notify that the backfill has started.
+					close(backfillNotification)
+				}
+				return nil
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
 	server, sqlDB, kvDB := setupWithContext(t, ctx)
@@ -719,19 +737,24 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // Test schema changes are retried and complete properly
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Disable asynchronous schema change execution to allow synchronous path
-	// to run schema changes.
-	defer csql.TestDisableAsyncSchemaChangeExec()()
+
 	attempts := 0
 	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &csql.ExecutorTestingKnobs{
-		SchemaChangersStartBackfillNotification: func() error {
-			attempts++
-			// Return a deadline exceeded error once.
-			if attempts == 1 {
-				return errors.New("context deadline exceeded")
-			}
-			return nil
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SchemaChangersStartBackfillNotification: func() error {
+				attempts++
+				// Return a deadline exceeded error once.
+				if attempts == 1 {
+					return errors.New("context deadline exceeded")
+				}
+				return nil
+			},
+		},
+		// Disable asynchronous schema change execution to allow synchronous
+		// path to run schema changes.
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
 	server, sqlDB, _ := setupWithContext(t, ctx)
@@ -792,30 +815,34 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Speed up evaluation of async schema changes so that it processes a
-	// purged schema change quickly.
-	defer csql.TestSpeedupAsyncSchemaChanges()()
 
 	// Disable the async schema changer.
 	var enableAsyncSchemaChanges uint32
 
 	attempts := 0
 	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &csql.ExecutorTestingKnobs{
-		SchemaChangersStartBackfillNotification: func() error {
-			attempts++
-			// Return a deadline exceeded error during the second attempt
-			// which attempts to clean up the schema change.
-			if attempts == 2 {
-				return errors.New("context deadline exceeded")
-			}
-			return nil
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SchemaChangersStartBackfillNotification: func() error {
+				attempts++
+				// Return a deadline exceeded error during the second attempt
+				// which attempts to clean up the schema change.
+				if attempts == 2 {
+					return errors.New("context deadline exceeded")
+				}
+				return nil
+			},
 		},
-		AsyncSchemaChangerExecNotification: func() error {
-			if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
-				return errors.New("async schema changes are disabled")
-			}
-			return nil
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			// Speed up evaluation of async schema changes so that it
+			// processes a purged schema change quickly.
+			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
 	server, sqlDB, kvDB := setupWithContext(t, ctx)

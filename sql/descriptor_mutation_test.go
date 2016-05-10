@@ -187,8 +187,11 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	defer csql.TestDisableAsyncSchemaChangeExec()()
-	server, sqlDB, kvDB := setup(t)
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -375,8 +378,11 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// The descriptor changes made must have an immediate effect.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	defer csql.TestDisableAsyncSchemaChangeExec()()
-	server, sqlDB, kvDB := setup(t)
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -506,8 +512,11 @@ func TestCommandsWithPendingMutations(t *testing.T) {
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	defer csql.TestDisableAsyncSchemaChangeExec()()
-	server, sqlDB, kvDB := setup(t)
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
