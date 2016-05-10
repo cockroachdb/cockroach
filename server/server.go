@@ -202,6 +202,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		DB:                             s.db,
 		Gossip:                         s.gossip,
 		Transport:                      s.raftTransport,
+		RaftTickInterval:               s.ctx.RaftTickInterval,
 		ScanInterval:                   s.ctx.ScanInterval,
 		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,

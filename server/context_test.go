@@ -137,6 +137,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctxExpected.MetricsSampleInterval = time.Hour + time.Minute*10
+	if err := os.Setenv("COCKROACH_RAFT_TICK_INTERVAL", "200ms"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.RaftTickInterval = 200 * time.Millisecond
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
@@ -180,6 +184,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_RAFT_TICK_INTERVAL", "abcd"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {

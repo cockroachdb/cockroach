@@ -44,6 +44,9 @@ const (
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
+
+	// DefaultRaftTickInterval is the default resolution of the Raft timer.
+	DefaultRaftTickInterval = 100 * time.Millisecond
 )
 
 type lazyTLSConfig struct {
@@ -68,6 +71,9 @@ type Context struct {
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
 	User string
+
+	// RaftTickInterval is the resolution of the Raft timer.
+	RaftTickInterval time.Duration
 
 	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
 	clientTLSConfig lazyTLSConfig

@@ -235,6 +235,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
 	ctx.ConsistencyCheckInterval = defaultConsistencyCheckInterval
+	ctx.RaftTickInterval = base.DefaultRaftTickInterval
 	ctx.MetricsSampleInterval = defaultMetricsSampleInterval
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})
@@ -313,6 +314,7 @@ func (ctx *Context) readEnvironmentVariables() {
 	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("consistency_check_panic_on_failure", ctx.ConsistencyCheckPanicOnFailure)
 	ctx.MaxOffset = envutil.EnvOrDefaultDuration("max_offset", ctx.MaxOffset)
 	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("metrics_sample_interval", ctx.MetricsSampleInterval)
+	ctx.RaftTickInterval = envutil.EnvOrDefaultDuration("raft_tick_interval", ctx.RaftTickInterval)
 	ctx.ScanInterval = envutil.EnvOrDefaultDuration("scan_interval", ctx.ScanInterval)
 	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("scan_max_idle_time", ctx.ScanMaxIdleTime)
 	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("time_until_store_dead", ctx.TimeUntilStoreDead)
