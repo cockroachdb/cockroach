@@ -70,10 +70,7 @@ func (u *sqlSymUnion) numVal() *NumVal {
     return u.val.(*NumVal)
 }
 func (u *sqlSymUnion) strVal() *StrVal {
-    if strVal, ok := u.val.(*StrVal); ok {
-        return strVal
-    }
-    return nil
+    return u.val.(*StrVal)
 }
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
