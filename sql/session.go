@@ -262,6 +262,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			}
 			if err := sc.exec(
 				e.ctx.TestingKnobs.SchemaChangersStartBackfillNotification,
+				e.ctx.TestingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification,
 			); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again

@@ -19,7 +19,10 @@
 
 package testingshim
 
-import "github.com/cockroachdb/cockroach/base"
+import (
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util/hlc"
+)
 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
@@ -36,6 +39,12 @@ type TestServerInterface interface {
 
 	// KVDB() returns the *kv.DB instance as an interface{}.
 	KVDB() interface{}
+
+	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
+	LeaseManager() interface{}
+
+	// Clock returns the clock used by the TestServer.
+	Clock() *hlc.Clock
 }
 
 // TestServerParams contains the parameters we can set when creating a test
