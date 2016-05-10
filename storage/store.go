@@ -1394,6 +1394,11 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	}
 
 	s.metrics.replicaCount.Inc(1)
+
+	// After splitting a range, always have the store gossip its store
+	// descriptor to keep the cluster as up to date as possible.
+	go s.GossipStore()
+
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
@@ -1431,6 +1436,10 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 	if err := subsumingRng.setDesc(&copy); err != nil {
 		return err
 	}
+
+	// After merging a range, always have the store gossip its store
+	// descriptor to keep the cluster as up to date as possible.
+	go s.GossipStore()
 
 	return nil
 }
@@ -1491,6 +1500,11 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
+
+	// After removing a replica, always have the store gossip its store
+	// descriptor to keep the cluster as up to date as possible.
+	go s.GossipStore()
+
 	return s.removeReplicaImpl(rep, origDesc, destroy)
 }
 
