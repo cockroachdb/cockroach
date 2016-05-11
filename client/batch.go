@@ -234,17 +234,6 @@ func (b *Batch) fillResults() error {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
-			case *roachpb.ChangeFrozenRequest:
-				row := &result.Rows[k]
-				row.Key = []byte(req.Key)
-				if result.Err == nil {
-					t := reply.(*roachpb.ChangeFrozenResponse)
-					row.Value = &roachpb.Value{}
-					if err := row.Value.SetProto(t); err != nil {
-						panic(err)
-					}
-				}
-
 			default:
 				if result.Err == nil {
 					result.Err = util.Errorf("unsupported reply: %T for %T",
@@ -267,6 +256,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.LeaderLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
+			case *roachpb.ChangeFrozenRequest:
 			}
 		}
 		offset += result.calls
@@ -498,24 +488,6 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 	}
 	b.appendReqs(roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
 	b.initResult(1, 0, notRaw, nil)
-}
-
-// ChangeFrozen attempts to freeze or unfreeze all Ranges with StartKey
-// covered by the given key range.
-func (b *Batch) ChangeFrozen(s, e interface{}, mustVersion string, frozen bool) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	b.appendReqs(roachpb.NewChangeFrozen(
-		roachpb.Key(begin), roachpb.Key(end), frozen, mustVersion))
-	b.initResult(1, 1, notRaw, nil)
 }
 
 // Del deletes one or more keys.
