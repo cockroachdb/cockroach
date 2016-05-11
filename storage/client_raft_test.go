@@ -976,7 +976,8 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
-		expected        []raft.StateType
+		expected []raft.StateType
+		// only one of these may be true
 		remove, replace bool
 	}{
 		{ // Replica removed
@@ -1014,14 +1015,13 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
 				t.Fatal(err)
 			}
-		}
-		if td.replace {
+		} else if td.replace {
 			// Simulate replacement by changing replica ID.
 			desc := replica2.GetReplica()
 			desc.ReplicaID += 1234
 		}
 
-		states := make(map[raft.StateType]bool)
+		states := make(map[raft.StateType]struct{})
 		ticker := time.NewTicker(1 * time.Millisecond)
 		timer := time.NewTimer(100 * time.Millisecond)
 	L:
@@ -1029,7 +1029,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			select {
 			case <-ticker.C:
 				state := replica2.RaftStatus().RaftState
-				states[state] = true
+				states[state] = struct{}{}
 			case <-timer.C:
 				ticker.Stop()
 				break L
@@ -1037,7 +1037,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 		}
 
 		for _, state := range td.expected {
-			if !states[state] {
+			if _, ok := states[state]; !ok {
 				t.Errorf("%d. replica state was never expected %d", i, state)
 			}
 			delete(states, state)
