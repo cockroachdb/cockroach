@@ -220,6 +220,14 @@ func (r *RocksDB) Merge(key MVCCKey, value []byte) error {
 	return dbMerge(r.rdb, key, value)
 }
 
+// ApplyBatchRepr atomically applies a set of batched updates. Created by calling
+// Repr() on a batch. Using this method is equivalent to calling Commit() on a
+// batch, but can also be used when the representation has been extracted and
+// passed to a remote node.
+func (r *RocksDB) ApplyBatchRepr(repr []byte) error {
+	return dbApplyBatchRepr(r.rdb, repr)
+}
+
 // Get returns the value for the given key.
 func (r *RocksDB) Get(key MVCCKey) ([]byte, error) {
 	return dbGet(r.rdb, key)
@@ -355,6 +363,11 @@ func (r *RocksDB) Commit() error {
 	return nil
 }
 
+// Repr is not implemented for RocksDB engine.
+func (r *RocksDB) Repr() []byte {
+	panic("only implemented for rocksDBBatch")
+}
+
 // Defer is not implemented for RocksDB engine.
 func (r *RocksDB) Defer(func()) {
 	panic("only implemented for rocksDBBatch")
@@ -442,6 +455,11 @@ func (r *rocksDBSnapshot) Merge(key MVCCKey, value []byte) error {
 	return util.Errorf("cannot Merge to a snapshot")
 }
 
+// ApplyBatchRepr is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) ApplyBatchRepr(repr []byte) error {
+	return util.Errorf("cannot ApplyBatchRepr to a snapshot")
+}
+
 // Capacity returns capacity details for the engine's available storage.
 func (r *rocksDBSnapshot) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
@@ -477,6 +495,11 @@ func (r *rocksDBSnapshot) NewBatch() Engine {
 // Commit is illegal for snapshot and returns an error.
 func (r *rocksDBSnapshot) Commit() error {
 	return util.Errorf("cannot Commit to a snapshot")
+}
+
+// Repr is not implemented for rocksDBSnapshot.
+func (r *rocksDBSnapshot) Repr() []byte {
+	panic("only implemented for rocksDBBatch")
 }
 
 // Defer is not implemented for rocksDBSnapshot.
@@ -530,6 +553,11 @@ func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
 	return dbMerge(r.batch, key, value)
 }
 
+// ApplyBatchRepr is illegal for a batch and returns an error.
+func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
+	return util.Errorf("cannot ApplyBatchRepr to a batch")
+}
+
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 	return dbGet(r.batch, key)
 }
@@ -575,7 +603,7 @@ func (r *rocksDBBatch) Commit() error {
 	if r.batch == nil {
 		panic("this batch was already committed")
 	}
-	if err := statusToError(C.DBWriteBatch(r.batch)); err != nil {
+	if err := statusToError(C.DBCommitBatch(r.batch)); err != nil {
 		return err
 	}
 	C.DBClose(r.batch)
@@ -588,6 +616,10 @@ func (r *rocksDBBatch) Commit() error {
 	r.defers = nil
 
 	return nil
+}
+
+func (r *rocksDBBatch) Repr() []byte {
+	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }
 
 func (r *rocksDBBatch) Defer(fn func()) {
@@ -900,6 +932,10 @@ func dbMerge(rdb *C.DBEngine, key MVCCKey, value []byte) error {
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
 	return statusToError(C.DBMerge(rdb, goToCKey(key), goToCSlice(value)))
+}
+
+func dbApplyBatchRepr(rdb *C.DBEngine, repr []byte) error {
+	return statusToError(C.DBApplyBatchRepr(rdb, goToCSlice(repr)))
 }
 
 // dbGet returns the value for the given key.
