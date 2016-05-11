@@ -8,7 +8,9 @@ import Long = require("long");
 
 import * as protos from  "../js/protos";
 import { queryMetrics, MetricsQuery } from "../redux/metrics";
-import { SelectorProps, Selector, MetricsDataComponentProps } from "../components/graphs";
+import { MetricProps, Metric, MetricsDataComponentProps } from "../components/graphs";
+import { findChildrenOfType } from "../util/find";
+import { MilliToNano } from "../util/convert";
 
 type TSQueryMessage = cockroach.ts.QueryMessage;
 type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
@@ -60,9 +62,17 @@ const enum TimeSeriesQueryDerivative {
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
- * structure based on a SelectorProps object.
+ * structure based on a MetricProps object.
  */
-function queryFromProps(props: SelectorProps): TSQueryMessage {
+function queryFromProps(props: MetricProps): TSQueryMessage {
+    // Compute derivative function.
+    let derivative: TimeSeriesQueryDerivative = TimeSeriesQueryDerivative.NONE;
+    if (props.rate) {
+      derivative = TimeSeriesQueryDerivative.DERIVATIVE;
+    } else if (props.nonNegativeRate) {
+      derivative = TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE;
+    }
+
     return new protos.cockroach.ts.Query({
       name: props.name,
       sources: props.sources || undefined,
@@ -76,7 +86,7 @@ function queryFromProps(props: SelectorProps): TSQueryMessage {
        */
       downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.TimeSeriesQueryAggregator,
       source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.TimeSeriesQueryAggregator,
-      derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.TimeSeriesQueryDerivative,
+      derivative: derivative as number as cockroach.ts.TimeSeriesQueryDerivative,
     });
 }
 
@@ -130,20 +140,8 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
   private queriesSelector = createSelector(
     (props: {children?: any}) => props.children,
     (children) => {
-      // Perform a simple DFS to find all children which are Selector objects.
-      let selectors: React.ReactElement<SelectorProps>[] = [];
-      let remainingChildren = React.Children.toArray(children);
-      while (remainingChildren.length > 0) {
-        let child = remainingChildren.shift() as React.ReactElement<any>;
-        if (child.type === Selector) {
-          selectors.push(child);
-        }
-        let { props } = child;
-        if (props.children) {
-          remainingChildren = remainingChildren.concat(React.Children.toArray(props.children));
-        }
-      }
-
+      // Perform a simple DFS to find all children which are Metric objects.
+      let selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(children, Metric);
       // Construct a query for each found selector child.
       return _(selectors).map((s) => queryFromProps(s.props)).value();
     });
@@ -186,7 +184,9 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
 
 // TODO: constTimeSpan is currently used in lieu of a globally managed timespan,
 // and should be removed in a subsequent PR.
-const constTimeSpan = [Long.fromNumber(0), Long.fromNumber(200)];
+let end = new Date();
+let start = new Date(end.getTime() - 10 * 60 * 1000);
+let constTimeSpan = [Long.fromNumber(MilliToNano(start.getTime())), Long.fromNumber(MilliToNano(end.getTime()))];
 
 // Connect the MetricsDataProvider class to redux state.
 let metricsDataProviderConnected = connect(

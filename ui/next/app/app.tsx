@@ -1,5 +1,50 @@
 /// <reference path="../typings/main.d.ts" />
 
+/**
+ * UI/NEXT TODO LIST
+ *
+ * ! = Potentially difficult to implement
+ *
+ * - Visualization Components
+ *    - Graphs
+ *      - Greyed-out display on error
+ *      - Display Tooltips
+ *      - Stacked Line Graph
+ *    - Tooltip component
+ *    - Visualization Wrapper
+ *    - "Big number" visualization
+ *    ! Events table
+ *    ! Global Timespan Selector
+ *      - UI Component
+ *      - Reducer for current global timespan
+ *    - Horizontal navigation bar
+ *    - Cluster health indicator
+ * ! Notification Banners
+ *    - Help Us
+ *    - Cluster Unreachable
+ *    - Cockroach out of date
+ * - Cluster Page
+ *    - Finish converting all existing graphs onto Cluster page
+ *    - "Big Number" Visualizations
+ *    - Events page
+ * - Nodes Page
+ *    - Graphs tab, without all graphs from existing page
+ * - Node Page
+ *    - Overview page with table
+ *    - Graphs page
+ *    ! Logs Page
+ * ! Databases Page
+ *    - Database table
+ *    - Tables drilldown
+ *    - Table drilldown
+ * ! HelpUs Page
+ *    - Forms
+ *    - Reducer
+ * ! HelpUs Modal
+ * ! Persistent Settings Reducer
+ * 
+ */
+
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { createStore, combineReducers, applyMiddleware, compose } from "redux";
