@@ -97,43 +97,39 @@ func typeForDatum(d parser.Datum) pgType {
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) error {
+func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) {
 	if log.V(2) {
 		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
 		b.putInt32(-1)
-		return nil
+		return
 	}
 	switch v := d.(type) {
 	case *parser.DBool:
 		b.putInt32(1)
 		if *v {
-			return b.WriteByte('t')
+			b.writeByte('t')
+		} else {
+			b.writeByte('f')
 		}
-		return b.WriteByte('f')
 
 	case *parser.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		// TODO(tamird): @petermattis sez this allocates. Investigate.
 		s := strconv.AppendInt(b.putbuf[4:4], int64(*v), 10)
 		b.putInt32(int32(len(s)))
-		_, err := b.Write(s)
-		return err
+		b.write(s)
 
 	case *parser.DFloat:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'f', -1, 64)
 		b.putInt32(int32(len(s)))
-		_, err := b.Write(s)
-		return err
+		b.write(s)
 
 	case *parser.DDecimal:
-		vs := v.Dec.String()
-		b.putInt32(int32(len(vs)))
-		_, err := b.WriteString(vs)
-		return err
+		b.writeLengthPrefixedString(v.Dec.String())
 
 	case *parser.DBytes:
 		// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
@@ -144,66 +140,55 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		hex.Encode(result[2:], []byte(*v))
 
 		b.putInt32(int32(len(result)))
-		_, err := b.Write(result)
-		return err
+		b.write(result)
 
 	case *parser.DString:
-		b.putInt32(int32(len(*v)))
-		_, err := b.WriteString(string(*v))
-		return err
+		b.writeLengthPrefixedString(string(*v))
 
 	case *parser.DDate:
 		t := time.Unix(int64(*v)*secondsInDay, 0)
 		s := formatTs(t, nil)
 		b.putInt32(int32(len(s)))
-		_, err := b.Write(s)
-		return err
+		b.write(s)
 
 	case *parser.DTimestamp:
 		s := formatTs(v.Time, nil)
 		b.putInt32(int32(len(s)))
-		_, err := b.Write(s)
-		return err
+		b.write(s)
 
 	case *parser.DTimestampTZ:
 		s := formatTs(v.Time, sessionLoc)
 		b.putInt32(int32(len(s)))
-		_, err := b.Write(s)
-		return err
+		b.write(s)
 
 	case *parser.DInterval:
-		s := v.String()
-		b.putInt32(int32(len(s)))
-		_, err := b.WriteString(s)
-		return err
+		b.writeLengthPrefixedString(v.String())
 
 	default:
-		return util.Errorf("unsupported type %T", d)
+		b.setError(util.Errorf("unsupported type %T", d))
 	}
 }
 
-func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
+func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 	if log.V(2) {
 		log.Infof("pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
 		b.putInt32(-1)
-		return nil
+		return
 	}
 	switch v := d.(type) {
 	case *parser.DInt:
 		b.putInt32(8)
 		b.putInt64(int64(*v))
-		return nil
 
 	case *parser.DBytes:
 		b.putInt32(int32(len(*v)))
-		_, err := b.Write([]byte(*v))
-		return err
+		b.write([]byte(*v))
 
 	default:
-		return util.Errorf("unsupported type %T", d)
+		b.setError(util.Errorf("unsupported type %T", d))
 	}
 }
 
