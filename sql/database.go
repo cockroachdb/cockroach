@@ -80,9 +80,37 @@ func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
 	}
 }
 
-// getDatabaseDesc looks up the database descriptor given its name.
-// Returns nil if the descriptor is not found. If you want to turn the "not
-// found" condition into an error, use databaseDoesNotExistError().
+// getKeysForDatabaseDescriptor retrieves the KV keys corresponding to
+// the zone, name and descriptor of a database.
+func getKeysForDatabaseDescriptor(
+	dbDesc *sqlbase.DatabaseDescriptor,
+) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
+	zoneKey = sqlbase.MakeZoneKey(dbDesc.ID)
+	nameKey = sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
+	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
+	return
+}
+
+// DatabaseAccessor provides helper methods for using SQL database descriptors.
+type DatabaseAccessor interface {
+	// getDatabaseDesc looks up the database descriptor given its name.
+	// Returns nil if the descriptor is not found. If you want to turn the "not
+	// found" condition into an error, use databaseDoesNotExistError().
+	getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
+
+	// getCachedDatabaseDesc looks up the database descriptor from
+	// the descriptor cache, given its name.
+	getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
+
+	// getDatabaseID returns the ID of a database given its name.  It
+	// uses the descriptor cache if possible, otherwise falls back to KV
+	// operations.
+	getDatabaseID(name string) (sqlbase.ID, error)
+}
+
+var _ DatabaseAccessor = &planner{}
+
+// getDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	desc := &sqlbase.DatabaseDescriptor{}
 	found, err := p.getDescriptor(databaseKey{name}, desc)
@@ -92,8 +120,7 @@ func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, err
 	return desc, err
 }
 
-// getCachedDatabaseDesc looks up the database descriptor given its name in the
-// descriptor cache.
+// getCachedDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	if name == sqlbase.SystemDB.Name {
 		return &sqlbase.SystemDB, nil
@@ -129,15 +156,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	return database, database.Validate()
 }
 
-func getKeysForDatabaseDescriptor(
-	dbDesc *sqlbase.DatabaseDescriptor,
-) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = sqlbase.MakeZoneKey(dbDesc.ID)
-	nameKey = sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
-	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
-	return
-}
-
+// getDatabaseID implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 	if id := p.databaseCache.getID(name); id != 0 {
 		return id, nil
