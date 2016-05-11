@@ -5527,3 +5527,50 @@ func TestSyncSnapshot(t *testing.T) {
 		t.Fatal("snapshot is empty")
 	}
 }
+
+// TestReplicaIDChangePending verifies that on a replica ID change, pending
+// commands are re-proposed on the new raft group.
+func TestReplicaIDChangePending(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	rng := tc.rng
+
+	// Add a command to the pending list
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{
+			Key: roachpb.Key("a"),
+		},
+	})
+	p, err := rng.proposeRaftCommand(context.Background(), ba)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set the raft command handler so we can tell if the command has been
+	// re-proposed.
+	commandProposed := false
+	rng.mu.Lock()
+	rng.mu.proposeRaftCommandFn = func(p2 *pendingCmd) error {
+		commandProposed = true
+		if p != p2 {
+			t.Fatalf("unknown pending command proposed: %v", p2)
+		}
+		return nil
+	}
+	rng.mu.Unlock()
+
+	// Set the ReplicaID on the description and replica.
+	rng.GetReplica().ReplicaID = 2
+	if err := rng.setReplicaID(2); err != nil {
+		t.Fatal(err)
+	}
+
+	if !commandProposed {
+		t.Fatal("command was not re-proposed")
+	}
+}
