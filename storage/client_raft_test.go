@@ -970,6 +970,63 @@ func TestReplicateAfterSplit(t *testing.T) {
 	})
 }
 
+// TestReplicaRemovalCampaign verifies that a new replica after a split can be
+// transferred away/replaced without campaigning the old one.
+func TestReplicaRemovalCampaign(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		advance bool
+		remove  bool
+	}{
+		{ // Replica removed
+			advance: false,
+			remove:  true,
+		},
+		{ // Default behavior
+			advance: true,
+		},
+	}
+
+	rangeID := roachpb.RangeID(1)
+	splitKey := roachpb.Key("m")
+	key2 := roachpb.Key("z")
+
+	for i, td := range testData {
+		func() {
+			mtc := startMultiTestContext(t, 2)
+			defer mtc.Stop()
+
+			// Replicate range to enable raft campaigning.
+			mtc.replicateRange(rangeID, 1)
+			store0 := mtc.stores[0]
+
+			// Make the split
+			splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+			if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
+			if td.remove {
+				// Simulate second replica being transferred by removing it.
+				if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			originalTerm := replica2.RaftStatus().Term
+			time.Sleep(100 * time.Millisecond)
+			term := replica2.RaftStatus().Term
+			if td.advance && term <= originalTerm {
+				t.Errorf("%d. raft term should have advanced", i)
+			} else if !td.advance && term > originalTerm {
+				t.Errorf("%d. raft term should not have advanced", i)
+			}
+		}()
+	}
+}
+
 // TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
 // transactions are performed on the range descriptor.
 func TestRangeDescriptorSnapshotRace(t *testing.T) {
