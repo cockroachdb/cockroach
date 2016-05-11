@@ -224,7 +224,7 @@ Interpret keys as raw bytes.`),
 Print values along with their associated key.`),
 
 	cliflags.RaftTickIntervalName: wrapText(`
-RaftTickInterval is the resolution of the Raft timer; other raft timeouts are
+The resolution of the Raft timer; other raft timeouts are
 defined in terms of multiples of this value.`),
 }
 
