@@ -1883,7 +1883,10 @@ opt_on_conflict:
   {
     $$.val = &OnConflict{Columns: NameList($3.strs()), Exprs: $7.updateExprs(), Where: newWhere(astWhere, $8.expr())}
   }
-| ON CONFLICT opt_conf_expr DO NOTHING { unimplemented() }
+| ON CONFLICT opt_conf_expr DO NOTHING
+  {
+    $$.val = &OnConflict{Columns: NameList($3.strs()), DoNothing: true}
+  }
 | /* EMPTY */
   {
     $$.val = (*OnConflict)(nil)
