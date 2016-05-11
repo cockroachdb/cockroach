@@ -52,7 +52,9 @@ struct DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value) = 0;
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
   virtual DBStatus Delete(DBKey key) = 0;
-  virtual DBStatus WriteBatch() = 0;
+  virtual DBStatus CommitBatch() = 0;
+  virtual DBStatus WriteBatch(DBSlice repr) = 0;
+  virtual DBSlice BatchRepr() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(bool prefix) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
@@ -87,7 +89,9 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
-  virtual DBStatus WriteBatch();
+  virtual DBStatus CommitBatch();
+  virtual DBStatus WriteBatch(DBSlice repr);
+  virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
   virtual DBStatus GetStats(DBStatsResult* stats);
@@ -105,7 +109,9 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
-  virtual DBStatus WriteBatch();
+  virtual DBStatus CommitBatch();
+  virtual DBStatus WriteBatch(DBSlice repr);
+  virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
   virtual DBStatus GetStats(DBStatsResult* stats);
@@ -127,7 +133,9 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
-  virtual DBStatus WriteBatch();
+  virtual DBStatus CommitBatch();
+  virtual DBStatus WriteBatch(DBSlice repr);
+  virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
   virtual DBStatus GetStats(DBStatsResult* stats);
@@ -1451,11 +1459,11 @@ DBStatus DBDelete(DBEngine *db, DBKey key) {
   return db->Delete(key);
 }
 
-DBStatus DBImpl::WriteBatch() {
+DBStatus DBImpl::CommitBatch() {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBBatch::WriteBatch() {
+DBStatus DBBatch::CommitBatch() {
   if (updates == 0) {
     return kSuccess;
   }
@@ -1463,12 +1471,46 @@ DBStatus DBBatch::WriteBatch() {
   return ToDBStatus(rep->Write(options, batch.GetWriteBatch()));
 }
 
-DBStatus DBSnapshot::WriteBatch() {
+DBStatus DBSnapshot::CommitBatch() {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBWriteBatch(DBEngine* db) {
-  return db->WriteBatch();
+DBStatus DBCommitBatch(DBEngine* db) {
+  return db->CommitBatch();
+}
+
+DBStatus DBImpl::WriteBatch(DBSlice repr) {
+  rocksdb::WriteBatch batch(ToString(repr));
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->Write(options, &batch));
+}
+
+DBStatus DBBatch::WriteBatch(DBSlice repr) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBSnapshot::WriteBatch(DBSlice repr) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteBatch(DBEngine* db, DBSlice repr) {
+  return db->WriteBatch(repr);
+}
+
+DBSlice DBImpl::BatchRepr() {
+  return ToDBSlice("unsupported");
+}
+
+DBSlice DBBatch::BatchRepr() {
+  return ToDBSlice(batch.GetWriteBatch()->Data());
+}
+
+DBSlice DBSnapshot::BatchRepr() {
+  return ToDBSlice("unsupported");
+}
+
+DBSlice DBBatchRepr(DBEngine *db) {
+  return db->BatchRepr();
 }
 
 DBEngine* DBNewSnapshot(DBEngine* db)  {

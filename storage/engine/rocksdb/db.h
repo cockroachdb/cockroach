@@ -102,14 +102,23 @@ DBStatus DBDelete(DBEngine* db, DBKey key);
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically. It is only valid to call this function on an
 // engine created by DBNewBatch.
-DBStatus DBWriteBatch(DBEngine* db);
+DBStatus DBCommitBatch(DBEngine* db);
+
+// WriteBatch writes a batch of mutations encoded using that batch
+// representation returned by DBBatchRepr().
+DBStatus DBWriteBatch(DBEngine* db, DBSlice repr);
+
+// Returns the internal batch representation. The returned value is
+// only valid until the next call to a method using the DBEngine and
+// should thus be copied immediately.
+DBSlice DBBatchRepr(DBEngine *db);
 
 // Creates a new snapshot of the database for use in DBGet() and
 // DBNewIter(). It is the caller's responsibility to call DBClose().
 DBEngine* DBNewSnapshot(DBEngine* db);
 
 // Creates a new batch for performing a series of operations
-// atomically. Use DBWriteBatch() on the returned engine to apply the
+// atomically. Use DBCommitBatch() on the returned engine to apply the
 // batch to the database. It is the caller's responsibility to call
 // DBClose().
 DBEngine* DBNewBatch(DBEngine *db);

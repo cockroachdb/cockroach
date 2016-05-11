@@ -18,6 +18,7 @@ package engine
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"testing"
@@ -45,10 +46,7 @@ func mvccKey(k interface{}) MVCCKey {
 	}
 }
 
-// TestBatchBasics verifies that all commands work in a batch, aren't
-// visible until commit, and then are all visible after commit.
-func TestBatchBasics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func testBatchBasics(t *testing.T, commit func(e, b Engine) error) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
@@ -103,7 +101,7 @@ func TestBatchBasics(t *testing.T) {
 	}
 
 	// Commit batch and verify direct engine scan yields correct values.
-	if err := b.Commit(); err != nil {
+	if err := commit(e, b); err != nil {
 		t.Fatal(err)
 	}
 	kvs, err = Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
@@ -113,6 +111,117 @@ func TestBatchBasics(t *testing.T) {
 	if !reflect.DeepEqual(expValues, kvs) {
 		t.Errorf("%v != %v", kvs, expValues)
 	}
+}
+
+// TestBatchBasics verifies that all commands work in a batch, aren't
+// visible until commit, and then are all visible after commit.
+func TestBatchBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBatchBasics(t, func(e, b Engine) error {
+		return b.Commit()
+	})
+}
+
+func TestBatchRepr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBatchBasics(t, func(e, b Engine) error {
+		repr := b.Repr()
+
+		// Simple sanity checks about the format of the batch representation. This
+		// is inefficient decoding code. Do not move outside of test code.
+		buf := bytes.NewReader(repr)
+		var seq uint64
+		var count uint32
+		if err := binary.Read(buf, binary.LittleEndian, &seq); err != nil {
+			t.Fatal(err)
+		}
+		if seq != 0 {
+			// The sequence number is set when the batch is written.
+			t.Fatalf("bad sequence: expected 0, but found %d", seq)
+		}
+		if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
+			t.Fatal(err)
+		}
+		if expected := uint32(3); expected != count {
+			t.Fatalf("bad count: expected %d, but found %d", expected, count)
+		}
+
+		const (
+			// These constants come from rocksdb/db/dbformat.h.
+			TypeDeletion = 0x0
+			TypeValue    = 0x1
+			TypeMerge    = 0x2
+			// TypeLogData                    = 0x3
+			// TypeColumnFamilyDeletion       = 0x4
+			// TypeColumnFamilyValue          = 0x5
+			// TypeColumnFamilyMerge          = 0x6
+			// TypeSingleDeletion             = 0x7
+			// TypeColumnFamilySingleDeletion = 0x8
+		)
+
+		varstring := func(buf *bytes.Reader) (string, error) {
+			n, err := binary.ReadUvarint(buf)
+			if err != nil {
+				return "", err
+			}
+			s := make([]byte, n)
+			c, err := buf.Read(s)
+			if err != nil {
+				return "", err
+			}
+			if c != int(n) {
+				return "", fmt.Errorf("expected %d, but found %d", n, c)
+			}
+			return string(s), nil
+		}
+
+		var ops []string
+		for i := uint32(0); i < count; i++ {
+			typ, err := buf.ReadByte()
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch typ {
+			case TypeDeletion:
+				k, err := varstring(buf)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ops = append(ops, fmt.Sprintf("delete(%s)", k))
+			case TypeValue:
+				k, err := varstring(buf)
+				if err != nil {
+					t.Fatal(err)
+				}
+				v, err := varstring(buf)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ops = append(ops, fmt.Sprintf("put(%s,%s)", k, v))
+			case TypeMerge:
+				k, err := varstring(buf)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// The merge value is a protobuf and not easily displayable.
+				if _, err = varstring(buf); err != nil {
+					t.Fatal(err)
+				}
+				ops = append(ops, fmt.Sprintf("merge(%s)", k))
+			default:
+				t.Fatalf("%d: unexpected type %d", i, typ)
+			}
+		}
+
+		// The keys in the batch have the internal MVCC encoding applied which for
+		// this test implies an appended 0 byte.
+		expOps := []string{"put(a\x00,value)", "delete(b\x00)", "merge(c\x00)"}
+		if !reflect.DeepEqual(expOps, ops) {
+			t.Fatalf("expected %v, but found %v", expOps, ops)
+		}
+
+		return e.WriteBatch(repr)
+	})
 }
 
 func TestBatchGet(t *testing.T) {
