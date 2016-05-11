@@ -415,6 +415,15 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 // double split.
 func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testRangeCacheHandleDoubleSplit(t, false)
+}
+
+func TestRangeCacheHandleDoubleSplitUseReverse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRangeCacheHandleDoubleSplit(t, true)
+}
+
+func testRangeCacheHandleDoubleSplit(t *testing.T, useReverseScan bool) {
 	db := initTestDescriptorDB(t)
 	db.disablePrefetch = true
 
@@ -442,6 +451,17 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	}
 
 	// Requests to all parts of the split are sent:
+
+	// [reverse case]
+	// - "aa" and "an" will hit the cache
+	// - all others will join a coalesced request to "az"
+	//   + will lookup the meta2 desc
+	//   + will lookup the ["at"-"b") desc
+	// - "az" will get the right range back
+	// - "at" will make a second lookup
+	//   + will lookup the ["an"-"at") desc
+	//
+	// [non-reverse case]
 	// - "aa" will hit the cache
 	// - all others will join a coalesced request to "an"
 	//   + will lookup the meta2 desc
@@ -455,13 +475,14 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	for _, k := range []string{"aa", "an", "ao", "at", "az"} {
 		wg.Add(1)
 		waitJoin.Add(1)
-		go func(key string) {
+		go func(key roachpb.RKey) {
 			reqEvictToken := evictToken
 			waitJoinCopied := &waitJoin
+			var desc *roachpb.RangeDescriptor
 			for {
 				// Each request goes to a different key.
 				var pErr *roachpb.Error
-				if _, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(roachpb.RKey(key), reqEvictToken, false /* considerIntents */, false /* useReverseScan */, waitJoinCopied); pErr != nil {
+				if desc, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(key, reqEvictToken, false /* considerIntents */, useReverseScan, waitJoinCopied); pErr != nil {
 					if pErr.CanRetry() {
 						waitJoinCopied = nil
 						atomic.AddInt64(&numRetries, 1)
@@ -471,8 +492,18 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 				}
 				break
 			}
+			if useReverseScan {
+				if !desc.ContainsExclusiveEndKey(key) {
+					t.Errorf("desc %s does not contain exclusive end key %s", desc, key)
+				}
+			} else {
+				if !desc.ContainsKey(key) {
+					t.Errorf("desc %s does not contain key %s", desc, key)
+				}
+			}
+
 			wg.Done()
-		}(k)
+		}(roachpb.RKey(k))
 	}
 	// Wait until all lookup requests hit the cache or join into a coalesced request.
 	waitJoin.Wait()
