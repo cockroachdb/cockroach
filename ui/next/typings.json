@@ -23,6 +23,7 @@
     "fetch-mock": "registry:npm/fetch-mock#4.1.1+20160310030142",
     "lodash": "registry:npm/lodash#4.0.0+20160416211519",
     "moment": "registry:npm/moment#2.10.5+20160211003958",
+    "nvd3": "registry:npm/nvd3#1.8.3+20160501004949",
     "reselect": "github:reactjs/reselect/src/reselect.d.ts#v2.5.1",
     "sinon": "registry:npm/sinon#1.16.0+20160309002336"
   }
