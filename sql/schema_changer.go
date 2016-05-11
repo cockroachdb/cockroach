@@ -460,6 +460,21 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 	return done, err
 }
 
+// SchemaChangeManagerTestingKnobs for the SchemaChangeManager.
+type SchemaChangeManagerTestingKnobs struct {
+	// AsyncSchemaChangersExecNotification is a function called before running
+	// a schema change asynchronously. Returning an error will prevent the
+	// asynchronous execution path from running.
+	AsyncSchemaChangerExecNotification func() error
+
+	// AsyncSchemaChangerExecQuickly executes queued schema changes as soon as
+	// possible.
+	AsyncSchemaChangerExecQuickly bool
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*SchemaChangeManagerTestingKnobs) ModuleTestingKnobs() {}
+
 // SchemaChangeManager processes pending schema changes seen in gossip
 // updates. Most schema changes are executed synchronously by the node
 // that created the schema change. If the node dies while
@@ -469,14 +484,14 @@ type SchemaChangeManager struct {
 	db           client.DB
 	gossip       *gossip.Gossip
 	leaseMgr     *LeaseManager
-	testingKnobs *ExecutorTestingKnobs
+	testingKnobs *SchemaChangeManagerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
-	testingKnobs *ExecutorTestingKnobs,
+	testingKnobs *SchemaChangeManagerTestingKnobs,
 	db client.DB,
 	gossip *gossip.Gossip,
 	leaseMgr *LeaseManager,
@@ -487,41 +502,6 @@ func NewSchemaChangeManager(
 		leaseMgr:       leaseMgr,
 		testingKnobs:   testingKnobs,
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
-	}
-}
-
-var (
-	// disableAsyncSchemaChangeExec can be turned on in tests to disable the
-	// async processing of schema changes when explicit processing through
-	// the synchronous path is desired.
-	disableAsyncSchemaChangeExec = false
-	// How often does the SchemaChangeManager attempt to execute
-	// pending schema changes.
-	asyncSchemaChangeExecInterval = 60 * time.Second
-	// How old must the schema change be before the SchemaChangeManager
-	// attempts to execute it.
-	asyncSchemaChangeExecDelay = 360 * time.Second
-)
-
-// TestSpeedupAsyncSchemaChanges can be used in tests to manipulate the async
-// executor timing and make it run quickly and often.  Returns a cleanup
-// function restoring original values.
-func TestSpeedupAsyncSchemaChanges() func() {
-	origInterval, origDelay := asyncSchemaChangeExecInterval, asyncSchemaChangeExecDelay
-	asyncSchemaChangeExecDelay = 20 * time.Millisecond
-	asyncSchemaChangeExecInterval = 20 * time.Millisecond
-	return func() {
-		asyncSchemaChangeExecDelay = origDelay
-		asyncSchemaChangeExecInterval = origInterval
-	}
-}
-
-// TestDisableAsyncSchemaChangeExec is used in tests to disable the
-// asynchronous execution of schema changes.
-func TestDisableAsyncSchemaChangeExec() func() {
-	disableAsyncSchemaChangeExec = true
-	return func() {
-		disableAsyncSchemaChangeExec = false
 	}
 }
 
@@ -546,13 +526,14 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 // Start starts a goroutine that runs outstanding schema changes
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
-	if disableAsyncSchemaChangeExec {
-		return
-	}
 	stopper.RunWorker(func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
+		delay := 360 * time.Second
+		if s.testingKnobs.AsyncSchemaChangerExecQuickly {
+			delay = 20 * time.Millisecond
+		}
 		for {
 			select {
 			case <-gossipUpdateC:
@@ -571,7 +552,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for k := range s.schemaChangers {
 					oldSchemaChangers[k] = struct{}{}
 				}
-				execAfter := timeutil.Now().Add(asyncSchemaChangeExecDelay)
+				execAfter := timeutil.Now().Add(delay)
 				// Loop through the configuration to find all the tables.
 				for _, kv := range cfg.Values {
 					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
@@ -662,7 +643,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						}
 						// Advance the execAfter time so that this schema
 						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(asyncSchemaChangeExecDelay)
+						sc.execAfter = timeutil.Now().Add(delay)
 					}
 					// Only attempt to run one schema changer.
 					break

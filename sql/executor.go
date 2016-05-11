@@ -216,11 +216,6 @@ type ExecutorTestingKnobs struct {
 	// backfill for a schema change operation. It returns error to stop the
 	// backfill and return an error to the caller of the SchemaChanger.exec().
 	SchemaChangersStartBackfillNotification func() error
-
-	// AsyncSchemaChangersExecNotification is a function called before running
-	// a schema change asynchronously. Returning an error will prevent the
-	// asynchronous execution path from running.
-	AsyncSchemaChangerExecNotification func() error
 }
 
 // NewExecutor creates an Executor and registers a callback on the
