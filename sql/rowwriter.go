@@ -125,9 +125,26 @@ func makeRowInserter(
 
 // insertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
-func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
+func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreConflicts bool) error {
 	if len(values) != len(ri.insertCols) {
 		return util.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
+	}
+
+	// putFn `CPut`s a key and value if conflicts should be respected, and `Put`s
+	// them otherwise. logValue is used to pretty print the value.
+	putFn := func(key *roachpb.Key, value interface{}, logValue interface{}) {
+		if log.V(2) {
+			log.InfofDepth(1, "CPut %s -> %v", *key, logValue)
+		}
+		b.CPut(key, value, nil)
+	}
+	if ignoreConflicts {
+		putFn = func(key *roachpb.Key, value interface{}, logValue interface{}) {
+			if log.V(2) {
+				log.InfofDepth(1, "Put %s -> %v", *key, logValue)
+			}
+			b.Put(key, value)
+		}
 	}
 
 	// Encode the values to the expected column type. This needs to
@@ -151,21 +168,15 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 	// secondary indexes first, we may get an error that looks like a
 	// uniqueness violation on a non-unique index.
 	ri.key = keys.MakeNonColumnKey(primaryIndexKey)
-	if log.V(2) {
-		log.Infof("CPut %s -> NULL", ri.key)
-	}
 	// Each sentinel value needs a distinct RawBytes field as the computed
 	// checksum includes the key the value is associated with.
 	ri.sentinelValue.SetBytes([]byte{})
-	b.CPut(&ri.key, &ri.sentinelValue, nil)
+	putFn(&ri.key, &ri.sentinelValue, "NULL")
 	ri.key = nil
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		if log.V(2) {
-			log.Infof("CPut %s -> %v", secondaryIndexEntry.Key, secondaryIndexEntry.Value)
-		}
 		ri.key = secondaryIndexEntry.Key
-		b.CPut(&ri.key, secondaryIndexEntry.Value, nil)
+		putFn(&ri.key, secondaryIndexEntry.Value, secondaryIndexEntry.Value)
 	}
 	ri.key = nil
 
@@ -186,11 +197,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 			// the row exists.
 
 			ri.key = keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
-			if log.V(2) {
-				log.Infof("CPut %s -> %v", ri.key, val)
-			}
-
-			b.CPut(&ri.key, &ri.marshalled[i], nil)
+			putFn(&ri.key, &ri.marshalled[i], val)
 			ri.key = nil
 		}
 	}
@@ -400,7 +407,7 @@ func (ru *rowUpdater) updateRow(
 		if err != nil {
 			return nil, err
 		}
-		err = ru.ri.insertRow(b, ru.newValues)
+		err = ru.ri.insertRow(b, ru.newValues, false)
 		return ru.newValues, err
 	}
 
