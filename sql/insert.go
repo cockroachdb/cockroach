@@ -217,7 +217,7 @@ func (p *planner) Insert(
 			return nil, err
 		}
 
-		helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateExprs, conflictIndex)
+		helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
 		if err != nil {
 			return nil, err
 		}

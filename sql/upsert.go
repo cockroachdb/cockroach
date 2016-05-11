@@ -42,9 +42,35 @@ var _ tableUpsertEvaler = (*upsertHelper)(nil)
 func (p *planner) makeUpsertHelper(
 	tableDesc *sqlbase.TableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
+	updateCols []sqlbase.ColumnDescriptor,
 	updateExprs parser.UpdateExprs,
 	upsertConflictIndex *sqlbase.IndexDescriptor,
 ) (*upsertHelper, error) {
+	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, p.evalCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	untupledExprs := make(parser.Exprs, 0, len(updateExprs))
+	i := 0
+	for _, updateExpr := range updateExprs {
+		if updateExpr.Tuple {
+			if t, ok := updateExpr.Expr.(*parser.Tuple); ok {
+				for _, e := range t.Exprs {
+					typ := updateCols[i].Type.ToDatumType()
+					e := fillDefault(e, typ, i, defaultExprs)
+					untupledExprs = append(untupledExprs, e)
+					i++
+				}
+			}
+		} else {
+			typ := updateCols[i].Type.ToDatumType()
+			e := fillDefault(updateExpr.Expr, typ, i, defaultExprs)
+			untupledExprs = append(untupledExprs, e)
+			i++
+		}
+	}
+
 	table := &tableInfo{alias: tableDesc.Name, columns: makeResultColumns(tableDesc.Columns)}
 	excludedAliasTable := &tableInfo{
 		alias:   upsertExcludedTable,
@@ -54,8 +80,8 @@ func (p *planner) makeUpsertHelper(
 
 	var normExprs []parser.TypedExpr
 	qvals := make(qvalMap)
-	for _, updateExpr := range updateExprs {
-		expandedExpr, err := p.expandSubqueries(updateExpr.Expr, len(updateExpr.Names))
+	for _, expr := range untupledExprs {
+		expandedExpr, err := p.expandSubqueries(expr, 1)
 		if err != nil {
 			return nil, err
 		}

@@ -39,6 +39,9 @@ UPSERT INTO kv VALUES (10, 10), (10, 11)
 statement error RETURNING is not supported with UPSERT
 UPSERT INTO kv VALUES (10, 10) RETURNING *
 
+statement ok
+INSERT INTO kv VALUES (9, 9) ON CONFLICT (k) DO UPDATE SET (k, v) = (excluded.k + 2, excluded.v + 3)
+
 query II
 SELECT * FROM kv ORDER BY (k, v)
 ----
@@ -48,7 +51,7 @@ SELECT * FROM kv ORDER BY (k, v)
 4 24
 6 6
 7 7
-9 9
+11 12
 
 
 statement ok
@@ -95,6 +98,17 @@ SELECT * FROM abc ORDER BY (a, b, c)
 ----
 1 2 7
 7 8 6
+
+statement ok
+DELETE FROM abc where a = 1
+
+statement ok
+INSERT INTO abc VALUES (7, 8, 9) ON CONFLICT (a, b) DO UPDATE SET c = DEFAULT
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+7 8 7
 
 
 statement ok
