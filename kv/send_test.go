@@ -166,7 +166,7 @@ func TestRetryableError(t *testing.T) {
 // channelSaveTransport captures the 'done' channels of every RPC it
 // "sends".
 type channelSaveTransport struct {
-	ch        chan chan batchCall
+	ch        chan chan BatchCall
 	remaining int
 }
 
@@ -174,7 +174,7 @@ func (c *channelSaveTransport) IsExhausted() bool {
 	return c.remaining <= 0
 }
 
-func (c *channelSaveTransport) SendNext(done chan batchCall) {
+func (c *channelSaveTransport) SendNext(done chan BatchCall) {
 	c.remaining--
 	c.ch <- done
 }
@@ -189,7 +189,7 @@ func (c *channelSaveTransport) SendNext(done chan batchCall) {
 // Either give each call its own channel, return a list of (replica
 // descriptor, channel) pair, or decide we don't care about
 // distinguishing them and just send a single channel.
-func setupSendNextTest(t *testing.T) ([]chan batchCall, chan batchCall, *stop.Stopper) {
+func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nodeContext := newNodeTestContext(nil, stopper)
 
@@ -199,7 +199,7 @@ func setupSendNextTest(t *testing.T) ([]chan batchCall, chan batchCall, *stop.St
 		util.NewUnresolvedAddr("dummy", "3"),
 	}
 
-	doneChanChan := make(chan chan batchCall, len(addrs))
+	doneChanChan := make(chan chan BatchCall, len(addrs))
 
 	opts := SendOptions{
 		Ordering:        orderStable,
@@ -218,15 +218,15 @@ func setupSendNextTest(t *testing.T) ([]chan batchCall, chan batchCall, *stop.St
 		},
 	}
 
-	sendChan := make(chan batchCall, 1)
+	sendChan := make(chan BatchCall, 1)
 	go func() {
 		// Send the batch. This will block until we signal one of the done
 		// channels.
 		br, err := sendBatch(opts, addrs, nodeContext)
-		sendChan <- batchCall{br, err}
+		sendChan <- BatchCall{br, err}
 	}()
 
-	doneChans := make([]chan batchCall, len(addrs))
+	doneChans := make([]chan BatchCall, len(addrs))
 	for i := range doneChans {
 		// Note that this blocks until the replica has been contacted.
 		doneChans[i] = <-doneChanChan
@@ -243,23 +243,23 @@ func TestSendNext_AllSlow(t *testing.T) {
 	defer stopper.Stop()
 
 	// Now that all replicas have been contacted, let one finish.
-	doneChans[1] <- batchCall{
-		reply: &roachpb.BatchResponse{
+	doneChans[1] <- BatchCall{
+		Reply: &roachpb.BatchResponse{
 			BatchResponse_Header: roachpb.BatchResponse_Header{
 				Now: roachpb.Timestamp{Logical: 42},
 			},
 		},
-		err: nil,
+		Err: nil,
 	}
 
 	// The RPC now completes successfully.
 	bc := <-sendChan
-	if bc.err != nil {
-		t.Fatal(bc.err)
+	if bc.Err != nil {
+		t.Fatal(bc.Err)
 	}
 	// Make sure the response we sent in is the one we get back.
-	if bc.reply.Now.Logical != 42 {
-		t.Errorf("got unexpected response: %s", bc.reply)
+	if bc.Reply.Now.Logical != 42 {
+		t.Errorf("got unexpected response: %s", bc.Reply)
 	}
 }
 
@@ -274,9 +274,9 @@ func TestSendNext_RPCErrorThenSuccess(t *testing.T) {
 	// Now that all replicas have been contacted, let two finish with
 	// retryable errors.
 	for i := 1; i <= 2; i++ {
-		doneChans[i] <- batchCall{
-			reply: nil,
-			err:   roachpb.NewSendError("boom", true),
+		doneChans[i] <- BatchCall{
+			Reply: nil,
+			Err:   roachpb.NewSendError("boom", true),
 		}
 	}
 
@@ -288,15 +288,15 @@ func TestSendNext_RPCErrorThenSuccess(t *testing.T) {
 	}
 
 	// Now let the final server complete the RPC successfully.
-	doneChans[0] <- batchCall{
-		reply: &roachpb.BatchResponse{},
-		err:   nil,
+	doneChans[0] <- BatchCall{
+		Reply: &roachpb.BatchResponse{},
+		Err:   nil,
 	}
 
 	// The client side now completes successfully.
 	bc := <-sendChan
-	if bc.err != nil {
-		t.Fatal(bc.err)
+	if bc.Err != nil {
+		t.Fatal(bc.Err)
 	}
 }
 
@@ -311,16 +311,16 @@ func TestSendNext_AllRPCErrors(t *testing.T) {
 
 	// All replicas finish with RPC errors.
 	for i := 0; i <= 2; i++ {
-		doneChans[i] <- batchCall{
-			reply: nil,
-			err:   errors.New("boom"),
+		doneChans[i] <- BatchCall{
+			Reply: nil,
+			Err:   errors.New("boom"),
 		}
 	}
 
 	// The client side completes with a retryable send error.
 	bc := <-sendChan
-	if sErr, ok := bc.err.(*roachpb.SendError); !ok {
-		t.Errorf("did not get expected SendError; got %T instead", bc.err)
+	if sErr, ok := bc.Err.(*roachpb.SendError); !ok {
+		t.Errorf("did not get expected SendError; got %T instead", bc.Err)
 	} else if !sErr.CanRetry() {
 		t.Errorf("expected a retryable error but got %s", sErr)
 	}
@@ -333,8 +333,8 @@ func TestSendNext_RetryableApplicationErrorThenSuccess(t *testing.T) {
 	defer stopper.Stop()
 
 	// One replica finishes with a retryable error.
-	doneChans[1] <- batchCall{
-		reply: &roachpb.BatchResponse{
+	doneChans[1] <- BatchCall{
+		Reply: &roachpb.BatchResponse{
 			BatchResponse_Header: roachpb.BatchResponse_Header{
 				Error: roachpb.NewError(roachpb.NewRangeNotFoundError(1)),
 			},
@@ -342,17 +342,17 @@ func TestSendNext_RetryableApplicationErrorThenSuccess(t *testing.T) {
 	}
 
 	// A second replica finishes successfully.
-	doneChans[2] <- batchCall{
-		reply: &roachpb.BatchResponse{},
+	doneChans[2] <- BatchCall{
+		Reply: &roachpb.BatchResponse{},
 	}
 
 	// The client send finishes with the second response.
 	bc := <-sendChan
-	if bc.err != nil {
-		t.Fatalf("unexpected RPC error: %s", bc.err)
+	if bc.Err != nil {
+		t.Fatalf("unexpected RPC error: %s", bc.Err)
 	}
-	if bc.reply.Error != nil {
-		t.Errorf("expected successful reply, got %s", bc.reply.Error)
+	if bc.Reply.Error != nil {
+		t.Errorf("expected successful reply, got %s", bc.Reply.Error)
 	}
 }
 
@@ -364,8 +364,8 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 
 	// All replicas finish with a retryable error.
 	for _, ch := range doneChans {
-		ch <- batchCall{
-			reply: &roachpb.BatchResponse{
+		ch <- BatchCall{
+			Reply: &roachpb.BatchResponse{
 				BatchResponse_Header: roachpb.BatchResponse_Header{
 					Error: roachpb.NewError(roachpb.NewRangeNotFoundError(1)),
 				},
@@ -375,12 +375,12 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 
 	// The client send finishes with one of the errors, wrapped in a SendError.
 	bc := <-sendChan
-	if bc.err == nil {
-		t.Fatalf("expected SendError, got err=nil and reply=%s", bc.reply)
-	} else if _, ok := bc.err.(*roachpb.SendError); !ok {
-		t.Fatalf("expected SendError, got err=%s", bc.err)
-	} else if exp := "range 1 was not found"; !testutils.IsError(bc.err, exp) {
-		t.Errorf("expected SendError to contain %q, but got %s", exp, bc.err)
+	if bc.Err == nil {
+		t.Fatalf("expected SendError, got err=nil and reply=%s", bc.Reply)
+	} else if _, ok := bc.Err.(*roachpb.SendError); !ok {
+		t.Fatalf("expected SendError, got err=%s", bc.Err)
+	} else if exp := "range 1 was not found"; !testutils.IsError(bc.Err, exp) {
+		t.Errorf("expected SendError to contain %q, but got %s", exp, bc.Err)
 	}
 }
 
@@ -391,8 +391,8 @@ func TestSendNext_NonRetryableApplicationError(t *testing.T) {
 	defer stopper.Stop()
 
 	// One replica finishes with a non-retryable error.
-	doneChans[1] <- batchCall{
-		reply: &roachpb.BatchResponse{
+	doneChans[1] <- BatchCall{
+		Reply: &roachpb.BatchResponse{
 			BatchResponse_Header: roachpb.BatchResponse_Header{
 				Error: roachpb.NewError(roachpb.NewTransactionReplayError()),
 			},
@@ -402,11 +402,11 @@ func TestSendNext_NonRetryableApplicationError(t *testing.T) {
 	// The client completes with that error, without waiting for the
 	// others to finish.
 	bc := <-sendChan
-	if bc.err != nil {
-		t.Fatalf("expected error in payload, not rpc error %s", bc.err)
+	if bc.Err != nil {
+		t.Fatalf("expected error in payload, not rpc error %s", bc.Err)
 	}
-	if _, ok := bc.reply.Error.GetDetail().(*roachpb.TransactionReplayError); !ok {
-		t.Errorf("expected TransactionReplayError, got %v", bc.reply.Error)
+	if _, ok := bc.Reply.Error.GetDetail().(*roachpb.TransactionReplayError); !ok {
+		t.Errorf("expected TransactionReplayError, got %v", bc.Reply.Error)
 	}
 }
 
@@ -509,12 +509,12 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
-func (f *firstNErrorTransport) SendNext(done chan batchCall) {
-	call := batchCall{
-		reply: &roachpb.BatchResponse{},
+func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
+	call := BatchCall{
+		Reply: &roachpb.BatchResponse{},
 	}
 	if f.numSent < f.numErrors {
-		call.err = roachpb.NewSendError("test", f.numSent < f.numRetryableErrors)
+		call.Err = roachpb.NewSendError("test", f.numSent < f.numRetryableErrors)
 	}
 	f.numSent++
 	done <- call
