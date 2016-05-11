@@ -386,7 +386,12 @@ module Models {
       selectors: Utils.ChainProperty<Select.Selector[], Query> = Utils.ChainProp(this, []);
 
       private static dispatch_query(q: Proto.QueryRequestSet): promise<QueryResultSet> {
-          return Utils.Http.Post("/ts/query", q)
+          // HACK: Convert end_nanos numbers to strings.
+          let anyq: any = q;
+          anyq.end_nanos = q.end_nanos.toString();
+          anyq.start_nanos = q.start_nanos.toString();
+
+          return Utils.Http.Post("/ts/query", anyq)
               .then((d: Proto.Results) => {
                   // Populate missing collection fields with empty arrays.
                   if (!d.results) {
@@ -427,6 +432,7 @@ module Models {
         requestSet.forEach((qr: Proto.QueryRequest) => {
           req.queries.push(qr);
         });
+
         return Query.dispatch_query(req);
       };
     }
