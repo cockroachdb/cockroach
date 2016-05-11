@@ -70,10 +70,7 @@ func (u *sqlSymUnion) numVal() *NumVal {
     return u.val.(*NumVal)
 }
 func (u *sqlSymUnion) strVal() *StrVal {
-    if strVal, ok := u.val.(*StrVal); ok {
-        return strVal
-    }
-    return nil
+    return u.val.(*StrVal)
 }
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
@@ -1830,7 +1827,9 @@ opt_encoding_clause:
   {
     $$.val = &StrVal{s: $3}
   }
-| /* EMPTY */ {}
+| /* EMPTY */ {
+    $$.val = (*StrVal)(nil)
+  }
 
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict returning_clause
