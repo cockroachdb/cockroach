@@ -39,6 +39,9 @@ UPSERT INTO kv VALUES (10, 10), (10, 11)
 statement error RETURNING is not supported with UPSERT
 UPSERT INTO kv VALUES (10, 10) RETURNING *
 
+statement ok
+INSERT INTO kv VALUES (11, 11), (9, 11) ON CONFLICT (k) DO NOTHING
+
 query II
 SELECT * FROM kv ORDER BY (k, v)
 ----
@@ -49,6 +52,7 @@ SELECT * FROM kv ORDER BY (k, v)
 6 6
 7 7
 9 9
+11 11
 
 
 statement ok

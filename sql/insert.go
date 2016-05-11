@@ -208,21 +208,28 @@ func (p *planner) Insert(
 			return nil, err
 		}
 
-		names, err := p.namesForExprs(updateExprs)
-		if err != nil {
-			return nil, err
-		}
-		updateCols, err := p.processColumns(en.tableDesc, names)
-		if err != nil {
-			return nil, err
-		}
+		if n.OnConflict.DoNothing {
+			// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
+			// conflict index, which means do nothing on any conflict. Support this if
+			// someone needs it.
+			tw = &tableUpserter{ri: ri, conflictIndex: *conflictIndex}
+		} else {
+			names, err := p.namesForExprs(updateExprs)
+			if err != nil {
+				return nil, err
+			}
+			updateCols, err := p.processColumns(en.tableDesc, names)
+			if err != nil {
+				return nil, err
+			}
 
-		helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateExprs, conflictIndex)
-		if err != nil {
-			return nil, err
-		}
+			helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateExprs, conflictIndex)
+			if err != nil {
+				return nil, err
+			}
 
-		tw = &tableUpserter{ri: ri, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
+			tw = &tableUpserter{ri: ri, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
+		}
 	}
 
 	in := &insertNode{

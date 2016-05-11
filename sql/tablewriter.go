@@ -145,9 +145,11 @@ type tableUpsertEvaler interface {
 // tableUpserter handles writing kvs and forming table rows for upserts.
 type tableUpserter struct {
 	ri            rowInserter
-	updateCols    []sqlbase.ColumnDescriptor
 	conflictIndex sqlbase.IndexDescriptor
-	evaler        tableUpsertEvaler
+
+	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
+	updateCols []sqlbase.ColumnDescriptor
+	evaler     tableUpsertEvaler
 
 	// Set by init.
 	txn                   *client.Txn
@@ -155,6 +157,7 @@ type tableUpserter struct {
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
+	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	fetcher               sqlbase.RowFetcher
 
 	// Batched up in run/flush.
@@ -171,25 +174,33 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
 
 	var err error
-	tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols)
-	if err != nil {
-		return err
-	}
-	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
+	var fetchCols []sqlbase.ColumnDescriptor
+	if tu.updateCols == nil {
+		fetchCols = tu.tableDesc.Columns
+		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(tu.tableDesc.Columns)
+	} else {
+		tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols)
+		if err != nil {
+			return err
+		}
+		fetchCols = tu.ru.fetchCols
+		tu.fetchColIDtoRowIndex = tu.ru.fetchColIDtoRowIndex
+		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 
-	tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
-	for i, updateCol := range tu.ru.updateCols {
-		tu.updateColIDtoRowIndex[updateCol.ID] = i
+		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
+		for i, updateCol := range tu.ru.updateCols {
+			tu.updateColIDtoRowIndex[updateCol.ID] = i
+		}
 	}
 
-	valNeededForCol := make([]bool, len(tu.ru.fetchCols))
+	valNeededForCol := make([]bool, len(fetchCols))
 	for i := range valNeededForCol {
 		// TODO(dan): We only need the primary key columns, the update columns, and
 		// anything referenced by an UpdateExpr.
 		valNeededForCol[i] = true
 	}
 	err = tu.fetcher.Init(
-		tu.tableDesc, tu.ru.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
+		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
 		valNeededForCol)
 	if err != nil {
 		return err
@@ -230,14 +241,17 @@ func (tu *tableUpserter) flush() error {
 				return err
 			}
 		} else {
-			existingValues := existingRow[:len(tu.ru.fetchCols)]
-			updateValues, err := tu.evaler.eval(insertRow, existingValues)
-			if err != nil {
-				return err
-			}
-			_, err = tu.ru.updateRow(b, existingValues, updateValues)
-			if err != nil {
-				return err
+			// If tu.updateCols == nil, then we're in the DO NOTHING case.
+			if tu.updateCols != nil {
+				existingValues := existingRow[:len(tu.ru.fetchCols)]
+				updateValues, err := tu.evaler.eval(insertRow, existingValues)
+				if err != nil {
+					return err
+				}
+				_, err = tu.ru.updateRow(b, existingValues, updateValues)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -350,7 +364,7 @@ func (tu *tableUpserter) fetchExisting() ([]parser.DTuple, error) {
 		}
 
 		rowPrimaryKey, _, err := sqlbase.EncodeIndexKey(
-			&tu.tableDesc.PrimaryIndex, tu.ru.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
+			&tu.tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
