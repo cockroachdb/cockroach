@@ -356,8 +356,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	} else if r.mu.replicaID > replicaID {
 		return util.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
 	} else if r.mu.replicaID != 0 {
-		// TODO(bdarnell): clean up previous raftGroup (cancel pending commands,
-		// update peers)
+		// TODO(bdarnell): clean up previous raftGroup (update peers)
 	}
 
 	raftCfg := &raft.Config{
@@ -376,6 +375,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if err != nil {
 		return err
 	}
+	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
 	r.mu.raftGroup = raftGroup
 
@@ -395,8 +395,15 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
-	if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].StoreID == r.store.StoreID() {
+	if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].ReplicaID == replicaID {
 		if err := raftGroup.Campaign(); err != nil {
+			return err
+		}
+	}
+
+	if previousReplicaID != 0 {
+		// propose pending commands under new replicaID
+		if err := r.reproposePendingCmdsLocked(); err != nil {
 			return err
 		}
 	}
