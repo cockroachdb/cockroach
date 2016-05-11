@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -1022,7 +1023,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 		}
 
 		states := make(map[raft.StateType]bool)
-		for ti := time.Now(); time.Now().Sub(ti) < 100*time.Millisecond; {
+		for ti := timeutil.Now(); timeutil.Since(ti) < 100*time.Millisecond; {
 			time.Sleep(1 * time.Millisecond)
 			state := replica2.RaftStatus().RaftState
 			states[state] = true
