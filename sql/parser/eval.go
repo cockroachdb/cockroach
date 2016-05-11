@@ -511,6 +511,21 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
+	IntDiv: {
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeInt,
+			ReturnType: TypeInt,
+			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+				rInt := *right.(*DInt)
+				if rInt == 0 {
+					return nil, errDivByZero
+				}
+				return NewDInt(*left.(*DInt) / rInt), nil
+			},
+		},
+	},
+
 	Mod: {
 		BinOp{
 			LeftType:   TypeInt,

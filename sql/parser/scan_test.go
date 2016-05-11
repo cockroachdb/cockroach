@@ -58,6 +58,7 @@ func TestScanner(t *testing.T) {
 		{`-`, []int{'-'}},
 		{`*`, []int{'*'}},
 		{`/`, []int{'/'}},
+		{`//`, []int{INTDIV}},
 		{`%`, []int{'%'}},
 		{`^`, []int{'^'}},
 		{`$`, []int{'$'}},

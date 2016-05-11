@@ -38,6 +38,8 @@ func TestEval(t *testing.T) {
 		{`1 + 1`, `2`},
 		{`1 - 2`, `-1`},
 		{`3 * 4`, `12`},
+		{`9 // 2`, `4`},
+		{`-5 // 3`, `-1`},
 		{`3.1 % 2.0`, `1.1`},
 		{`5 % 3`, `2`},
 		{`1 + NULL`, `NULL`},
@@ -411,7 +413,8 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
+		// expr.TypeCheck to avoid constant folding.
+		typedExpr, err := expr.TypeCheck(nil, NoTypePreference)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -435,6 +438,7 @@ func TestEvalError(t *testing.T) {
 	}{
 		{`1 % 0`, `zero modulus`},
 		{`1 / 0`, `division by zero`},
+		{`1 // 0`, `division by zero`},
 		{`'2010-09-28 12:00:00.1'::date`,
 			`could not parse '2010-09-28 12:00:00.1' in any supported date format`},
 		{`'2010-09-28 12:00.1 MST'::timestamp`,

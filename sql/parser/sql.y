@@ -534,7 +534,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %token <str>   IF IFNULL IN
 %token <str>   INDEX INDEXES INITIALLY
-%token <str>   INNER INSERT INT INT64 INTEGER
+%token <str>   INNER INSERT INT INT64 INTEGER INTDIV
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
 %token <str>   JOIN
@@ -637,7 +637,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %left      '&'
 %left      LSHIFT RSHIFT
 %left      '+' '-'
-%left      '*' '/' '%'
+%left      '*' '/' INTDIV '%'
 // Unary Operators
 %left      AT                // sets precedence for AT TIME ZONE
 %left      COLLATE
@@ -2963,6 +2963,10 @@ a_expr:
   {
     $$.val = &BinaryExpr{Operator: Div, Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr INTDIV a_expr
+  {
+    $$.val = &BinaryExpr{Operator: IntDiv, Left: $1.expr(), Right: $3.expr()}
+  }
 | a_expr '%' a_expr
   {
     $$.val = &BinaryExpr{Operator: Mod, Left: $1.expr(), Right: $3.expr()}
@@ -3168,6 +3172,10 @@ b_expr:
 | b_expr '/' b_expr
   {
     $$.val = &BinaryExpr{Operator: Div, Left: $1.expr(), Right: $3.expr()}
+  }
+| b_expr INTDIV b_expr
+  {
+    $$.val = &BinaryExpr{Operator: IntDiv, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '%' b_expr
   {

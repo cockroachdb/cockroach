@@ -325,6 +325,15 @@ func (s *scanner) scan(lval *sqlSymType) {
 		}
 		return
 
+	case '/':
+		switch s.peek() {
+		case '/': // //
+			s.pos++
+			lval.id = INTDIV
+			return
+		}
+		return
+
 	default:
 		if isDigit(ch) {
 			s.scanNumber(lval, ch)

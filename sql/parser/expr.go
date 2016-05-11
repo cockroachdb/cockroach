@@ -863,6 +863,7 @@ const (
 	Minus
 	Mult
 	Div
+	IntDiv
 	Mod
 	Concat
 	LShift
@@ -877,6 +878,7 @@ var binaryOpName = [...]string{
 	Minus:  "-",
 	Mult:   "*",
 	Div:    "/",
+	IntDiv: "//",
 	Mod:    "%",
 	Concat: "||",
 	LShift: "<<",
