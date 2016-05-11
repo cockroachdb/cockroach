@@ -82,7 +82,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 	return dn, nil
 }
 
-func (d *deleteNode) Start() error {
+func (d *deleteNode) FinalizePlan() error {
 	// TODO(knz): See the comment above in Delete().
 	rows, err := d.p.SelectClause(&parser.SelectClause{
 		Exprs: d.tableDesc.AllColumnsSelector(),
@@ -93,11 +93,16 @@ func (d *deleteNode) Start() error {
 		return err
 	}
 
-	if err := rows.Start(); err != nil {
+	if err := rows.FinalizePlan(); err != nil {
 		return err
 	}
 
-	if err := d.run.startEditNode(&d.editNodeBase, rows, &d.tw); err != nil {
+	d.run.buildEditNodePlan(&d.editNodeBase, rows, &d.tw)
+	return nil
+}
+
+func (d *deleteNode) Start() error {
+	if err := d.run.rows.Start(); err != nil {
 		return err
 	}
 
@@ -105,7 +110,7 @@ func (d *deleteNode) Start() error {
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	// TODO(dt): We could probably be smarter when presented with an index-join,
 	// but this goes away anyway once we push-down more of SQL.
-	sel := rows.(*selectNode)
+	sel := d.run.rows.(*selectNode)
 	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 		d.run.fastPath = true
 		d.run.err = d.fastDelete()
@@ -113,7 +118,7 @@ func (d *deleteNode) Start() error {
 		return d.run.err
 	}
 
-	return nil
+	return d.run.tw.init(d.p.txn)
 }
 
 func (d *deleteNode) FastPathResults() (int, bool) {
