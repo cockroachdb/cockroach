@@ -892,7 +892,7 @@ func TestParsePanic(t *testing.T) {
 func TestParsePrecedence(t *testing.T) {
 	// Precedence levels (highest first):
 	//   0: - ~
-	//   1: * / %
+	//   1: * / // %
 	//   2: + -
 	//   3: << >>
 	//   4: &
@@ -934,24 +934,32 @@ func TestParsePrecedence(t *testing.T) {
 		{`~-1`, unary(UnaryComplement, unary(UnaryMinus, one))},
 		{`-~1`, unary(UnaryMinus, unary(UnaryComplement, one))},
 
-		// Mul, div, mod combined with higher precedence.
+		// Mul, div, floordiv, mod combined with higher precedence.
 		{`-1*2`, binary(Mult, unary(UnaryMinus, one), two)},
 		{`1*-2`, binary(Mult, one, unary(UnaryMinus, two))},
 		{`-1/2`, binary(Div, unary(UnaryMinus, one), two)},
 		{`1/-2`, binary(Div, one, unary(UnaryMinus, two))},
+		{`-1//2`, binary(FloorDiv, unary(UnaryMinus, one), two)},
+		{`1//-2`, binary(FloorDiv, one, unary(UnaryMinus, two))},
 		{`-1%2`, binary(Mod, unary(UnaryMinus, one), two)},
 		{`1%-2`, binary(Mod, one, unary(UnaryMinus, two))},
 
-		// Mul, div, mod combined with self (left associative).
+		// Mul, div, floordiv, mod combined with self (left associative).
 		{`1*2*3`, binary(Mult, binary(Mult, one, two), three)},
 		{`1*2/3`, binary(Div, binary(Mult, one, two), three)},
 		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
+		{`1*2//3`, binary(FloorDiv, binary(Mult, one, two), three)},
+		{`1//2*3`, binary(Mult, binary(FloorDiv, one, two), three)},
 		{`1*2%3`, binary(Mod, binary(Mult, one, two), three)},
 		{`1%2*3`, binary(Mult, binary(Mod, one, two), three)},
 		{`1/2/3`, binary(Div, binary(Div, one, two), three)},
-		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
+		{`1/2//3`, binary(FloorDiv, binary(Div, one, two), three)},
+		{`1//2/3`, binary(Div, binary(FloorDiv, one, two), three)},
 		{`1/2%3`, binary(Mod, binary(Div, one, two), three)},
 		{`1%2/3`, binary(Div, binary(Mod, one, two), three)},
+		{`1//2//3`, binary(FloorDiv, binary(FloorDiv, one, two), three)},
+		{`1//2%3`, binary(Mod, binary(FloorDiv, one, two), three)},
+		{`1%2//3`, binary(FloorDiv, binary(Mod, one, two), three)},
 		{`1%2%3`, binary(Mod, binary(Mod, one, two), three)},
 
 		// Binary plus and minus combined with higher precedence.

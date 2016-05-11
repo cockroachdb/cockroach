@@ -526,6 +526,46 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
+	FloorDiv: {
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeInt,
+			ReturnType: TypeInt,
+			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+				rInt := *right.(*DInt)
+				if rInt == 0 {
+					return nil, errDivByZero
+				}
+				return NewDInt(*left.(*DInt) / rInt), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeFloat,
+			RightType:  TypeFloat,
+			ReturnType: TypeFloat,
+			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+				l := float64(*left.(*DFloat))
+				r := float64(*right.(*DFloat))
+				return NewDFloat(DFloat(math.Trunc(l / r))), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+				l := left.(*DDecimal).Dec
+				r := right.(*DDecimal).Dec
+				if r.Sign() == 0 {
+					return nil, errZeroModulus
+				}
+				dd := &DDecimal{}
+				dd.QuoRound(&l, &r, 0, inf.RoundDown)
+				return dd, nil
+			},
+		},
+	},
+
 	Mod: {
 		BinOp{
 			LeftType:   TypeInt,

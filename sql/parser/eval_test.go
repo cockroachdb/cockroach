@@ -38,24 +38,31 @@ func TestEval(t *testing.T) {
 		{`1 + 1`, `2`},
 		{`1 - 2`, `-1`},
 		{`3 * 4`, `12`},
+		{`9 // 2`, `4`},
+		{`-5 // 3`, `-1`},
+		{`4.5 // 2`, `2`},
+		{`-4.5 // 1.2`, `-3`},
 		{`3.1 % 2.0`, `1.1`},
 		{`5 % 3`, `2`},
 		{`1 + NULL`, `NULL`},
+		// TODO(nvanbenschoten) These should all be changed to test float, now that decimal
+		// is the default non-int numeric type.
 		{`1.1::decimal + 2.4::decimal`, `3.5`},
 		{`1.1::decimal - 2.4::decimal`, `-1.3`},
 		{`1.1::decimal * 2.4::decimal`, `2.64`},
 		{`1.1::decimal % 2.4::decimal`, `1.1`},
+		{`-4.5::float // 1.2::float`, `-3.0`},
 		// Division is always done on floats or decimals.
 		{`4 / 5`, `0.8000000000000000`},
 		{`1.1::decimal / 2.2::decimal`, `0.5000000000000000`},
 		// Only floats support infinity.
 		{`1.0::float / 0.0`, `+Inf`},
-		{`-1.0 * (1.0::float / 0.0)`, `-Inf`},
+		{`-1.0::float * (1.0::float / 0.0)`, `-Inf`},
 		// Grouping
 		{`1 + 2 + (3 * 4)`, `15`},
 		// Unary operators.
 		{`-3`, `-3`},
-		{`-4.1`, `-4.1000000000000000`},
+		{`-4.1`, `-4.1`},
 		{`-6.1::float`, `-6.1`},
 		// Ones complement operates on signed integers.
 		{`~0`, `-1`},
@@ -415,7 +422,8 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
+		// expr.TypeCheck to avoid constant folding.
+		typedExpr, err := expr.TypeCheck(nil, NoTypePreference)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -439,6 +447,7 @@ func TestEvalError(t *testing.T) {
 	}{
 		{`1 % 0`, `zero modulus`},
 		{`1 / 0`, `division by zero`},
+		{`1 // 0`, `division by zero`},
 		{`'2010-09-28 12:00:00.1'::date`,
 			`could not parse '2010-09-28 12:00:00.1' in any supported date format`},
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
