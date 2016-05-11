@@ -970,6 +970,75 @@ func TestReplicateAfterSplit(t *testing.T) {
 	})
 }
 
+// TestReplicaRemovalCampaign verifies that a new replica after a split can be
+// transfered away without campaigning it.
+func TestReplicaRemovalCampaign(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		expected        raft.StateType
+		remove, replace bool
+	}{
+		// Replicate removed
+		{
+			expected: raft.StateLeader,
+			remove:   true,
+		},
+		// Range replaced by different replicate
+		{
+			expected: raft.StateLeader,
+			replace:  true,
+		},
+		// Nothing
+		{
+			expected: raft.StateCandidate,
+		},
+	}
+
+	rangeID := roachpb.RangeID(1)
+	splitKey := roachpb.Key("m")
+	key1 := roachpb.Key("a")
+	key2 := roachpb.Key("z")
+
+	for i, td := range testData {
+		mtc := startMultiTestContext(t, 2)
+
+		// Replicated the range.
+		mtc.replicateRange(rangeID, 1)
+
+		store0 := mtc.stores[0]
+		// Make the split
+		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+		if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
+			t.Fatal(err)
+		}
+		replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
+
+		if td.remove || td.replace {
+			// Simulate second replica being transferred by removing it.
+			if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if td.replace {
+			replica3, err := storage.NewReplica(replica2.Desc(), store0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store0.AddReplicaTest(replica3)
+		}
+
+		time.Sleep(100 * time.Millisecond)
+
+		replica1 := store0.LookupReplica(roachpb.RKey(key1), nil)
+		state := replica1.RaftStatus().RaftState
+		if state != td.expected {
+			t.Errorf("%d. replica state = %d; not %d", i, state, td.expected)
+		}
+		mtc.Stop()
+	}
+}
+
 // TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
 // transactions are performed on the range descriptor.
 func TestRangeDescriptorSnapshotRace(t *testing.T) {

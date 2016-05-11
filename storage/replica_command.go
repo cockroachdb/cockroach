@@ -2194,7 +2194,21 @@ func (r *Replica) splitTrigger(
 			// flaky without a bit of a delay.
 			r.store.stopper.RunAsyncTask(func() {
 				time.Sleep(10 * time.Millisecond)
-				// TODO(bdarnell): make sure newRng hasn't been removed
+				// Make sure that newRng hasn't been removed.
+				replica, err := r.store.GetReplica(newRng.RangeID)
+				foundReplica := false
+				if err == nil {
+					for _, rep := range split.NewDesc.Replicas {
+						if rep.ReplicaID == replica.mu.replicaID {
+							foundReplica = true
+							break
+						}
+					}
+				}
+				if err != nil || !foundReplica {
+					log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
+					return
+				}
 				newRng.mu.Lock()
 				_ = newRng.mu.raftGroup.Campaign()
 				newRng.mu.Unlock()
