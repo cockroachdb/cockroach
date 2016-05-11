@@ -247,6 +247,13 @@ func (n *unionNode) readLeft() bool {
 	return false
 }
 
+func (n *unionNode) FinalizePlan() error {
+	if err := n.right.FinalizePlan(); err != nil {
+		return err
+	}
+	return n.left.FinalizePlan()
+}
+
 func (n *unionNode) Start() error {
 	if err := n.right.Start(); err != nil {
 		return err

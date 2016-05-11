@@ -107,6 +107,10 @@ func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
 	}
 }
 
+func (n *scanNode) FinalizePlan() error {
+	return nil
+}
+
 func (n *scanNode) Start() error {
 	return nil
 }

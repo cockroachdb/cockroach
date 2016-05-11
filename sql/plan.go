@@ -22,18 +22,52 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
+type PlanMaker interface {
+	// makePlan starts preparing the query plan for a single SQL
+	// statement.
+	// It performs as many early checks as possible on the structure of
+	// the SQL statement, including verifying permissions and type checking.
+	// The returned plan object is not yet ready to execute. It must
+	// first be finalized using its FinalizePlan() method. Then execution
+	// must start by calling Start() first and then iterating using
+	// Next() and Values() in order to retrieve matching
+	// rows.
+	// If autoCommit is true, the plan is allowed (but not required) to
+	// commit the transaction along with other KV operations.
+	// Note: The autoCommit parameter enables operations to enable the
+	// 1PC optimization. This is a bit hackish/preliminary at present.
+	makePlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error)
+
+	// prepare does the same checks as makePlan but skips building some
+	// data structures necessary for execution, based on the assumption
+	// that the plan will never be run. A planNode built with prepare()
+	// will do just enough work to check the structural validity of the
+	// SQL statement and determine types for placeholders. However it is
+	// not appropriate to call BuildPlan(), Next() or Values() on a plan
+	// object created with prepare().
+	prepare(stmt parser.Statement) (planNode, error)
+}
+
+var _ PlanMaker = &planner{}
+
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
 	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
+	//
+	// Available after makePlan(). (FIXME: also prepare()? )
 	Columns() []ResultColumn
 
 	// The indexes of the columns the output is ordered by.
+	//
+	// Available after makePlan(). (FIXME: also prepare()? )
 	Ordering() orderingInfo
 
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
+	//
+	// Available after Next().
 	Values() parser.DTuple
 
 	// DebugValues returns a set of debug values, valid until the next call to
@@ -41,11 +75,26 @@ type planNode interface {
 	// "explainDebug" mode (using MarkDebug). When the output field in the
 	// result is debugValueRow, a set of values is also available through
 	// Values().
+	//
+	// Available after Next() and MarkDebug(explainDebug), see
+	// explain.go.
 	DebugValues() debugValues
+
+	// FinalizePlan finalizes type checking of placeholders and expands
+	// the query plan to its final form, including index selection and
+	// expansion of sub-queries. Returns an error if the initialization
+	// fails.  The SQL "prepare" phase, as well as the EXPLAIN
+	// statement, should merely build the plan node(s) and call
+	// FinalizePlan().
+	//
+	// Available after makePlan().
+	FinalizePlan() error
 
 	// Start begins the processing of the query/statement and starts
 	// performing side effects for data-modifying statements. Returns an
 	// error if initial processing fails.
+	//
+	// Available after FinalizePlan().
 	Start() error
 
 	// Next performs one unit of work, returning false if an error is
@@ -53,16 +102,24 @@ type planNode interface {
 	// that return a result set, the Value() method will return one row
 	// of results each time that Next() returns true.
 	// See executor.go: countRowsAffected() and execStmt() for an example.
+	//
+	// Available after FinalizePlan().
 	Next() bool
 
 	// Err returns the error, if any, encountered during iteration.
+	//
+	// Available after Next().
 	Err() error
 
 	// ExplainPlan returns a name and description and a list of child nodes.
+	//
+	// Available after FinalizePlan().
 	ExplainPlan(verbose bool) (name, description string, children []planNode)
 
 	// ExplainTypes reports the data types involved in the node, excluding
 	// the result column types.
+	//
+	// Available after makePlan()
 	ExplainTypes(explainFn func(elem string, desc string))
 
 	// SetLimitHint tells this node to optimize things under the assumption that
@@ -73,12 +130,17 @@ type planNode interface {
 	//
 	// If soft is false, this is a "hard" limit and is a promise that Next will
 	// never be called more than numRows times.
+	//
+	// Available during/after makePlan().
+	// TODO(knz) This should only be used during FinalizePlan().
 	SetLimitHint(numRows int64, soft bool)
 
 	// MarkDebug puts the node in a special debugging mode, which allows
 	// DebugValues to be used. This should be called after Start() and
 	// before the first call to Next() since it may need to recurse into
 	// sub-nodes created by Start().
+	//
+	// Available after FinalizePlan().
 	MarkDebug(mode explainMode)
 }
 
@@ -111,14 +173,7 @@ var _ planNode = &dropTableNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &alterTableNode{}
 
-// makePlan creates the query plan for a single SQL statement. The returned
-// plan needs to be iterated over using planNode.Next() and planNode.Values()
-// in order to retrieve matching rows. If autoCommit is true, the plan is
-// allowed (but not required) to commit the transaction along with other KV
-// operations.
-//
-// Note: The autoCommit parameter enables operations to enable the 1PC
-// optimization. This is a bit hackish/preliminary at present.
+// makePlan implements the PlanMaker interface.
 func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 

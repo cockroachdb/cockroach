@@ -137,6 +137,14 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
+func (n *indexJoinNode) FinalizePlan() error {
+	// TODO(knz): Some code from makeIndexJoin() above really belongs here.
+	if err := n.table.FinalizePlan(); err != nil {
+		return err
+	}
+	return n.index.FinalizePlan()
+}
+
 func (n *indexJoinNode) Start() error {
 	if err := n.table.Start(); err != nil {
 		return err
