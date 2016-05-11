@@ -971,49 +971,44 @@ func TestReplicateAfterSplit(t *testing.T) {
 }
 
 // TestReplicaRemovalCampaign verifies that a new replica after a split can be
-// transfered away without campaigning it.
+// transferred away/replaced without campaigning the old one.
 func TestReplicaRemovalCampaign(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
-		expected        raft.StateType
+		expected        []raft.StateType
 		remove, replace bool
 	}{
-		// Replicate removed
-		{
-			expected: raft.StateLeader,
+		{ // Replica removed
+			expected: []raft.StateType{raft.StateFollower},
 			remove:   true,
 		},
-		// Range replaced by different replicate
-		{
-			expected: raft.StateLeader,
+		{ // Replica replaced by different replica
+			expected: []raft.StateType{raft.StateFollower},
 			replace:  true,
 		},
-		// Nothing
-		{
-			expected: raft.StateCandidate,
+		{ // Default behavior
+			expected: []raft.StateType{raft.StateFollower, raft.StateCandidate, raft.StateLeader},
 		},
 	}
 
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
-	key1 := roachpb.Key("a")
 	key2 := roachpb.Key("z")
 
 	for i, td := range testData {
 		mtc := startMultiTestContext(t, 2)
-
-		// Replicated the range.
+		// Replicate range to enable raft campaigning.
 		mtc.replicateRange(rangeID, 1)
-
 		store0 := mtc.stores[0]
+
 		// Make the split
 		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 		if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 			t.Fatal(err)
 		}
-		replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
 
+		replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
 		if td.remove || td.replace {
 			// Simulate second replica being transferred by removing it.
 			if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
@@ -1021,19 +1016,24 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			}
 		}
 		if td.replace {
-			replica3, err := storage.NewReplica(replica2.Desc(), store0, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			store0.AddReplicaTest(replica3)
+			// Simulate replacement by changing replica ID.
+			desc := replica2.GetReplica()
+			desc.ReplicaID += 1234
 		}
 
-		time.Sleep(100 * time.Millisecond)
-
-		replica1 := store0.LookupReplica(roachpb.RKey(key1), nil)
-		state := replica1.RaftStatus().RaftState
-		if state != td.expected {
-			t.Errorf("%d. replica state = %d; not %d", i, state, td.expected)
+		states := make(map[raft.StateType]bool)
+		for ti := time.Now(); time.Now().Sub(ti) < 100*time.Millisecond; {
+			state := replica2.RaftStatus().RaftState
+			states[state] = true
+		}
+		for _, state := range td.expected {
+			if !states[state] {
+				t.Errorf("%d. replica state was never expected %d", i, state)
+			}
+			delete(states, state)
+		}
+		for state := range states {
+			t.Errorf("%d. unexpected replica state %d", i, state)
 		}
 		mtc.Stop()
 	}
