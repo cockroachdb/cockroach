@@ -301,7 +301,8 @@ func (e *Executor) Prepare(ctx context.Context, query string, session *Session, 
 	session.planner.evalCtx.Args = args
 	session.planner.evalCtx.PrepareOnly = true
 
-	// TODO(andrei): does the prepare phase really need a Txn?
+	// Prepare needs a transaction because it needs to retrieve db/table
+	// descriptors for type checking.
 	txn := client.NewTxn(ctx, *e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
@@ -918,7 +919,7 @@ func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner, autoCommit bool,
 ) (Result, error) {
 	var result Result
-	plan, err := planMaker.makePlan(stmt, nil, autoCommit)
+	plan, err := planMaker.makePlan(stmt, autoCommit)
 	if err != nil {
 		return result, err
 	}

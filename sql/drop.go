@@ -185,8 +185,8 @@ func (n *dropIndexNode) Start() error {
 		// drop need to be visible to the second drop.
 		tableDesc, err := n.p.getTableDesc(index.Table)
 		if err != nil || tableDesc == nil {
-			// makePlan() and Start() ultimately run within the same
-			// transaction. If we got a descriptor during makePlan(), we
+			// newPlan() and Start() ultimately run within the same
+			// transaction. If we got a descriptor during newPlan(), we
 			// must have it here too.
 			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.Table))
 		}
