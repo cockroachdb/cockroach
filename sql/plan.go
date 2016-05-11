@@ -22,47 +22,40 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
+type planMaker interface {
+	// makePlan starts preparing the query plan for a single SQL
+	// statement.
+	// It performs as many early checks as possible on the structure of
+	// the SQL statement, including verifying permissions and type checking.
+	// The returned plan object is not yet ready to execute. It must
+	// first be finalized using its expandPlan() method. Then execution
+	// must start by calling Start() first and then iterating using
+	// Next() and Values() in order to retrieve matching
+	// rows.
+	// If autoCommit is true, the plan is allowed (but not required) to
+	// commit the transaction along with other KV operations.
+	// Note: The autoCommit parameter enables operations to enable the
+	// 1PC optimization. This is a bit hackish/preliminary at present.
+	makePlan(stmt parser.Statement, autoCommit bool) (planNode, error)
+
+	// prepare does the same checks as makePlan but skips building some
+	// data structures necessary for execution, based on the assumption
+	// that the plan will never be run. A planNode built with prepare()
+	// will do just enough work to check the structural validity of the
+	// SQL statement and determine types for placeholders. However it is
+	// not appropriate to call BuildPlan(), Next() or Values() on a plan
+	// object created with prepare().
+	prepare(stmt parser.Statement) (planNode, error)
+}
+
+var _ planMaker = &planner{}
+
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
-	// Columns returns the column names and types. The length of the
-	// returned slice is guaranteed to be equal to the length of the
-	// tuple returned by Values().
-	Columns() []ResultColumn
-
-	// The indexes of the columns the output is ordered by.
-	Ordering() orderingInfo
-
-	// Values returns the values at the current row. The result is only valid
-	// until the next call to Next().
-	Values() parser.DTuple
-
-	// DebugValues returns a set of debug values, valid until the next call to
-	// Next(). This is only available for nodes that have been put in a special
-	// "explainDebug" mode (using MarkDebug). When the output field in the
-	// result is debugValueRow, a set of values is also available through
-	// Values().
-	DebugValues() debugValues
-
-	// Start begins the processing of the query/statement and starts
-	// performing side effects for data-modifying statements. Returns an
-	// error if initial processing fails.
-	Start() error
-
-	// Next performs one unit of work, returning false if an error is
-	// encountered or if there is no more work to do. For statements
-	// that return a result set, the Value() method will return one row
-	// of results each time that Next() returns true.
-	// See executor.go: countRowsAffected() and execStmt() for an example.
-	Next() bool
-
-	// Err returns the error, if any, encountered during iteration.
-	Err() error
-
-	// ExplainPlan returns a name and description and a list of child nodes.
-	ExplainPlan(verbose bool) (name, description string, children []planNode)
-
 	// ExplainTypes reports the data types involved in the node, excluding
 	// the result column types.
+	//
+	// Available after newPlan().
 	ExplainTypes(explainFn func(elem string, desc string))
 
 	// SetLimitHint tells this node to optimize things under the assumption that
@@ -73,13 +66,86 @@ type planNode interface {
 	//
 	// If soft is false, this is a "hard" limit and is a promise that Next will
 	// never be called more than numRows times.
+	//
+	// Available during/after newPlan().
+	// TODO(knz) This should only be used during expandPlan().
 	SetLimitHint(numRows int64, soft bool)
+
+	// expandPlan finalizes type checking of placeholders and expands
+	// the query plan to its final form, including index selection and
+	// expansion of sub-queries. Returns an error if the initialization
+	// fails.  The SQL "prepare" phase, as well as the EXPLAIN
+	// statement, should merely build the plan node(s) and call
+	// expandPlan(). This is called automatically by makePlan().
+	//
+	// Available after newPlan().
+	expandPlan() error
+
+	// ExplainPlan returns a name and description and a list of child nodes.
+	//
+	// Available after expandPlan() (or makePlan).
+	ExplainPlan(verbose bool) (name, description string, children []planNode)
+
+	// Columns returns the column names and types. The length of the
+	// returned slice is guaranteed to be equal to the length of the
+	// tuple returned by Values().
+	//
+	// Stable after expandPlan() (or makePlan).
+	// Available after newPlan(), but may change on intermediate plan
+	// nodes during expandPlan() due to index selection.
+	Columns() []ResultColumn
+
+	// The indexes of the columns the output is ordered by.
+	//
+	// Stable after expandPlan() (or makePlan).
+	// Available after newPlan(), but may change on intermediate plan
+	// nodes during expandPlan() due to index selection.
+	Ordering() orderingInfo
 
 	// MarkDebug puts the node in a special debugging mode, which allows
 	// DebugValues to be used. This should be called after Start() and
 	// before the first call to Next() since it may need to recurse into
 	// sub-nodes created by Start().
+	//
+	// Available after expandPlan().
 	MarkDebug(mode explainMode)
+
+	// Start begins the processing of the query/statement and starts
+	// performing side effects for data-modifying statements. Returns an
+	// error if initial processing fails.
+	//
+	// Available after expandPlan() (or makePlan).
+	Start() error
+
+	// Next performs one unit of work, returning false if an error is
+	// encountered or if there is no more work to do. For statements
+	// that return a result set, the Value() method will return one row
+	// of results each time that Next() returns true.
+	// See executor.go: countRowsAffected() and execStmt() for an example.
+	//
+	// Available after Start().
+	Next() bool
+
+	// Values returns the values at the current row. The result is only valid
+	// until the next call to Next().
+	//
+	// Available after Next().
+	Values() parser.DTuple
+
+	// DebugValues returns a set of debug values, valid until the next call to
+	// Next(). This is only available for nodes that have been put in a special
+	// "explainDebug" mode (using MarkDebug). When the output field in the
+	// result is debugValueRow, a set of values is also available through
+	// Values().
+	//
+	// Available after Next() and MarkDebug(explainDebug), see
+	// explain.go.
+	DebugValues() debugValues
+
+	// Err returns the error, if any, encountered during iteration.
+	//
+	// Available after Next().
+	Err() error
 }
 
 type planNodeFastPath interface {
@@ -111,20 +177,15 @@ var _ planNode = &dropTableNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &alterTableNode{}
 
-// makePlan creates the query plan for a single SQL statement. The returned
-// plan needs to be iterated over using planNode.Next() and planNode.Values()
-// in order to retrieve matching rows. If autoCommit is true, the plan is
-// allowed (but not required) to commit the transaction along with other KV
-// operations.
-//
-// Note: The autoCommit parameter enables operations to enable the 1PC
-// optimization. This is a bit hackish/preliminary at present.
+// makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
 	plan, err := p.newPlan(stmt, nil, autoCommit)
 	if err != nil {
 		return nil, err
 	}
-	// If any work needs to be done to finalize the plan, do it here.
+	if err := plan.expandPlan(); err != nil {
+		return nil, err
+	}
 	return plan, nil
 }
 
