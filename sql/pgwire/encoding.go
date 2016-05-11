@@ -177,6 +177,10 @@ func (b *writeBuffer) putInt64(v int64) {
 	b.Write(b.putbuf[:8])
 }
 
+func (b *writeBuffer) putErrFieldMsg(field serverErrFieldType) error {
+	return b.WriteByte(byte(field))
+}
+
 func (b *writeBuffer) initMsg(typ serverMessageType) {
 	b.Reset()
 	b.putbuf[0] = byte(typ)

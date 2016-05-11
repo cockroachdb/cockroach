@@ -66,6 +66,16 @@ const (
 	serverMsgNoData               serverMessageType = 'n'
 )
 
+//go:generate stringer -type=serverErrFieldType
+type serverErrFieldType byte
+
+// http://www.postgresql.org/docs/current/static/protocol-error-fields.html
+const (
+	serverErrFieldSeverity   serverErrFieldType = 'S'
+	serverErrFieldSQLState   serverErrFieldType = 'C'
+	serverErrFieldMsgPrimary serverErrFieldType = 'M'
+)
+
 //go:generate stringer -type=prepareType
 type prepareType byte
 
@@ -674,19 +684,19 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errToSend string) error {
 	}
 
 	c.writeBuf.initMsg(serverMsgErrorResponse)
-	if err := c.writeBuf.WriteByte('S'); err != nil {
+	if err := c.writeBuf.putErrFieldMsg(serverErrFieldSeverity); err != nil {
 		return err
 	}
 	if err := c.writeBuf.writeString("ERROR"); err != nil {
 		return err
 	}
-	if err := c.writeBuf.WriteByte('C'); err != nil {
+	if err := c.writeBuf.putErrFieldMsg(serverErrFieldSQLState); err != nil {
 		return err
 	}
 	if err := c.writeBuf.writeString(errCode); err != nil {
 		return err
 	}
-	if err := c.writeBuf.WriteByte('M'); err != nil {
+	if err := c.writeBuf.putErrFieldMsg(serverErrFieldMsgPrimary); err != nil {
 		return err
 	}
 	if err := c.writeBuf.writeString(errToSend); err != nil {
