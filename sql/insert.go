@@ -240,7 +240,7 @@ func (p *planner) Insert(
 	return in, nil
 }
 
-func (n *insertNode) Start() error {
+func (n *insertNode) expandPlan() error {
 	// TODO(knz): We need to re-run makePlan here again
 	// because that's when we can expand sub-queries.
 	// This goes away when sub-query expansion is moved
@@ -253,11 +253,7 @@ func (n *insertNode) Start() error {
 		return err
 	}
 
-	if err := rows.Start(); err != nil {
-		return err
-	}
-
-	if err := n.run.startEditNode(&n.editNodeBase, rows, n.tw); err != nil {
+	if err := rows.expandPlan(); err != nil {
 		return err
 	}
 
@@ -284,7 +280,16 @@ func (n *insertNode) Start() error {
 		}
 	}
 
+	n.run.buildEditNodePlan(&n.editNodeBase, rows, n.tw)
 	return nil
+}
+
+func (n *insertNode) Start() error {
+	if err := n.run.rows.Start(); err != nil {
+		return err
+	}
+
+	return n.run.tw.init(n.p.txn)
 }
 
 func (n *insertNode) Next() bool {

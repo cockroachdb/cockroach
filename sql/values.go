@@ -95,7 +95,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 	return v, nil
 }
 
-func (n *valuesNode) Start() error {
+func (n *valuesNode) expandPlan() error {
 	if n.n == nil {
 		return nil
 	}
@@ -140,6 +140,10 @@ func (n *valuesNode) Start() error {
 		}
 		n.rows = append(n.rows, row)
 	}
+	return nil
+}
+
+func (n *valuesNode) Start() error {
 	return nil
 }
 
