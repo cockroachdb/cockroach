@@ -552,7 +552,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeTimestamp,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return &DTimestamp{Time: timeutil.Now()}, nil
+				return MakeDTimestamp(timeutil.Now()), nil
 			},
 		},
 	},

@@ -96,9 +96,7 @@ var errTableDeleted = errors.New("table is being deleted")
 // being deleted, the error will be errTableDeleted.
 func (s LeaseStore) Acquire(txn *client.Txn, tableID sqlbase.ID, minVersion sqlbase.DescriptorVersion) (*LeaseState, error) {
 	lease := &LeaseState{}
-	lease.expiration = parser.DTimestamp{
-		Time: time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration()),
-	}
+	lease.expiration = *parser.MakeDTimestamp(time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration()))
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.

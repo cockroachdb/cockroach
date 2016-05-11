@@ -268,7 +268,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestamp,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-				return &DTimestamp{Time: duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration)}, nil
+				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration)), nil
 			},
 		},
 		BinOp{
@@ -276,7 +276,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeTimestamp,
 			ReturnType: TypeTimestamp,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-				return &DTimestamp{Time: duration.Add(right.(*DTimestamp).Time, left.(*DInterval).Duration)}, nil
+				return MakeDTimestamp(duration.Add(right.(*DTimestamp).Time, left.(*DInterval).Duration)), nil
 			},
 		},
 		BinOp{
@@ -285,7 +285,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: TypeTimestampTZ,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration)
-				return &DTimestampTZ{t}, nil
+				return MakeDTimestampTZ(t), nil
 			},
 		},
 		BinOp{
@@ -294,7 +294,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: TypeTimestampTZ,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(right.(*DTimestampTZ).Time, left.(*DInterval).Duration)
-				return &DTimestampTZ{t}, nil
+				return MakeDTimestampTZ(t), nil
 			},
 		},
 		BinOp{
@@ -375,7 +375,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestamp,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-				return &DTimestamp{Time: duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1))}, nil
+				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1))), nil
 			},
 		},
 		BinOp{
@@ -384,7 +384,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: TypeTimestampTZ,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
-				return &DTimestampTZ{t}, nil
+				return MakeDTimestampTZ(t), nil
 			},
 		},
 		BinOp{
@@ -1202,12 +1202,12 @@ func (ctx *EvalContext) GetTxnTimestamp() *DTimestamp {
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
-	ctx.txnTimestamp.Time = ts
+	ctx.txnTimestamp = *MakeDTimestamp(ts)
 }
 
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
-	ctx.stmtTimestamp.Time = ts
+	ctx.stmtTimestamp = *MakeDTimestamp(ts)
 }
 
 var tenBillion = big.NewInt(1e10)
@@ -1486,23 +1486,23 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			return ctx.ParseTimestamp(*d)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
-			return &DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation())}, nil
+			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation())), nil
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:
-			return &DTimestamp{d.Time}, nil
+			return MakeDTimestamp(d.Time), nil
 		}
 
 	case *TimestampTZColType:
 		switch d := d.(type) {
 		case *DString:
 			t, err := ctx.ParseTimestamp(*d)
-			return &DTimestampTZ{Time: t.Time}, err
+			return MakeDTimestampTZ(t.Time), err
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
-			return &DTimestampTZ{Time: time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation())}, nil
+			return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation())), nil
 		case *DTimestamp:
-			return &DTimestampTZ{Time: d.Time}, nil
+			return MakeDTimestampTZ(d.Time), nil
 		case *DTimestampTZ:
 			return d, nil
 		}
@@ -1995,10 +1995,12 @@ func foldComparisonExpr(
 // time.Time formats.
 const (
 	dateFormat                            = "2006-01-02"
-	timestampFormat                       = "2006-01-02 15:04:05.999999999"
-	timestampWithOffsetZoneFormat         = "2006-01-02 15:04:05.999999999-07:00"
-	timestampWithNamedZoneFormat          = "2006-01-02 15:04:05.999999999 MST"
-	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05.999999999"
+	timestampFormat                       = "2006-01-02 15:04:05"
+	timestampWithOffsetZoneFormat         = timestampFormat + "-07:00"
+	timestampWithNamedZoneFormat          = timestampFormat + " MST"
+	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
+
+	timestampNodeFormat = timestampFormat + ".999999-07:00"
 )
 
 var dateFormats = []string{
@@ -2032,7 +2034,9 @@ func (ctx EvalContext) ParseTimestamp(s DString) (*DTimestamp, error) {
 
 	for _, format := range timeFormats {
 		if t, err := time.ParseInLocation(format, str, ctx.GetLocation()); err == nil {
-			return &DTimestamp{Time: t}, nil
+			n := (t.Nanosecond() / 1000) * 1000
+			t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), n, t.Location())
+			return MakeDTimestamp(t), nil
 		}
 	}
 

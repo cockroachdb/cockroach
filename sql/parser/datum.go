@@ -667,6 +667,18 @@ type DTimestamp struct {
 	time.Time
 }
 
+func MakeDTimestamp(t time.Time) *DTimestamp {
+	n := (t.Nanosecond() / 1000) * 1000
+	d := DTimestamp{time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), n, t.Location())}
+	return &d
+}
+
+func MakeDTimestampTZ(t time.Time) *DTimestampTZ {
+	m := MakeDTimestamp(t)
+	d := DTimestampTZ{m.Time}
+	return &d
+}
+
 // ReturnType implements the TypedExpr interface.
 func (*DTimestamp) ReturnType() Datum {
 	return TypeTimestamp
@@ -709,7 +721,7 @@ func (*DTimestamp) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DTimestamp) Prev() Datum {
-	return &DTimestamp{Time: d.Add(-1)}
+	return &DTimestamp{Time: d.Add(-time.Microsecond)}
 }
 
 // HasNext implements the Datum interface.
@@ -719,7 +731,7 @@ func (*DTimestamp) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d *DTimestamp) Next() Datum {
-	return &DTimestamp{Time: d.Add(1)}
+	return &DTimestamp{Time: d.Add(time.Microsecond)}
 }
 
 // IsMax implements the Datum interface.
@@ -736,7 +748,7 @@ func (d *DTimestamp) IsMin() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
+	buf.WriteString(d.UTC().Format(timestampNodeFormat))
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
@@ -786,7 +798,7 @@ func (d *DTimestampTZ) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DTimestampTZ) Prev() Datum {
-	return &DTimestampTZ{Time: d.Add(-1)}
+	return &DTimestampTZ{Time: d.Add(-time.Microsecond)}
 }
 
 // HasNext implements the Datum interface.
@@ -796,7 +808,7 @@ func (d *DTimestampTZ) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d *DTimestampTZ) Next() Datum {
-	return &DTimestampTZ{Time: d.Add(1)}
+	return &DTimestampTZ{Time: d.Add(time.Microsecond)}
 }
 
 // IsMax implements the Datum interface.
@@ -813,7 +825,7 @@ func (d *DTimestampTZ) IsMin() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
+	buf.WriteString(d.UTC().Format(timestampNodeFormat))
 }
 
 // DInterval is the interval Datum.

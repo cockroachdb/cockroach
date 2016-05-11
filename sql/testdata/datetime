@@ -370,10 +370,35 @@ SELECT extract(microsecond from timestamp '2001-04-10 12:04:59.34565423')
 ----
 345654
 
+# nanoseconds are truncated to microseconds
 query I
 SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 ----
-345654230
+345654000
+
+# now() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from now()) - extract(microsecond from now()) * 1000
+----
+0
+
+# statement_timestamp() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from statement_timestamp()) - extract(microsecond from statement_timestamp()) * 1000
+----
+0
+
+# clock_timestamp() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from clock_timestamp()) % 1000
+----
+0
+
+# statement_timestamp() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from statement_timestamp()) - extract(microsecond from statement_timestamp()) * 1000
+----
+0
 
 query error extract: unsupported timespan: nansecond
 SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')

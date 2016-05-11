@@ -781,12 +781,12 @@ SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 query T
 SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
 ----
-2016-02-10 19:46:33.306157519+00:00
+2016-02-10 19:46:33.306157+00:00
 
 query T
 SELECT (timestamptz '2016-02-10 19:46:33.306157519')::string
 ----
-2016-02-10 19:46:33.306157519+00:00
+2016-02-10 19:46:33.306157+00:00
 
 query I
 SELECT extract(milliseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
@@ -811,12 +811,12 @@ SELECT extract(microsecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
 query I
 SELECT extract(nanoseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
-306157519
+306157000
 
 query I
 SELECT extract(nanosecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
-306157519
+306157000
 
 query I
 SELECT extract(second FROM '2016-02-10 19:46:33.306157519'::timestamp)
