@@ -2207,7 +2207,7 @@ func (r *Replica) splitTrigger(
 						}
 					}
 				}
-				if err != nil || !foundReplica {
+				if !foundReplica {
 					log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
 					return
 				}
