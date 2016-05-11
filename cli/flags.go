@@ -222,6 +222,10 @@ Interpret keys as raw bytes.`),
 
 	cliflags.ValuesName: wrapText(`
 Print values along with their associated key.`),
+
+	cliflags.RaftTickIntervalName: wrapText(`
+The resolution of the Raft timer; other raft timeouts are
+defined in terms of multiples of this value.`),
 }
 
 const usageIndentation = 8
@@ -363,6 +367,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&httpPort, cliflags.HTTPPortName, base.DefaultHTTPPort, usageNoEnv(forServer(cliflags.HTTPPortName)))
 		f.StringVar(&ctx.Attrs, cliflags.AttrsName, ctx.Attrs, usageNoEnv(cliflags.AttrsName))
 		f.VarP(&ctx.Stores, cliflags.StoreName, "s", usageNoEnv(cliflags.StoreName))
+		f.DurationVar(&ctx.RaftTickInterval, cliflags.RaftTickIntervalName, base.DefaultRaftTickInterval, usageNoEnv(cliflags.RaftTickIntervalName))
 		f.BoolVar(&startBackground, cliflags.BackgroundName, false, usageNoEnv(cliflags.BackgroundName))
 
 		// Usage for the unix socket is odd as we use a real file, whereas

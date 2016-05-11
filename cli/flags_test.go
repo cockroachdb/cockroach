@@ -20,7 +20,9 @@ import (
 	"flag"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -66,5 +68,27 @@ func TestCacheFlagValue(t *testing.T) {
 	const expectedCacheSize = 100 * 1000 * 1000
 	if expectedCacheSize != ctx.CacheSize {
 		t.Errorf("expected %d, but got %d", expectedCacheSize, ctx.CacheSize)
+	}
+}
+
+func TestRaftTickIntervalFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args     []string
+		expected time.Duration
+	}{
+		{nil, base.DefaultRaftTickInterval},
+		{[]string{"--raft-tick-interval", "200ms"}, 200 * time.Millisecond},
+	}
+	ctx := cliContext
+	for i, td := range testData {
+		if err := f.Parse(td.args); err != nil {
+			t.Fatal(err)
+		}
+		if td.expected != ctx.RaftTickInterval {
+			t.Errorf("%d. RaftTickInterval expected %d, but got %d", i, td.expected, ctx.RaftTickInterval)
+		}
 	}
 }
