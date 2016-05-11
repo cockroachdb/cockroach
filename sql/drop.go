@@ -87,6 +87,10 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	return &dropDatabaseNode{n: n, p: p, dbDesc: dbDesc, td: td}, nil
 }
 
+func (n *dropDatabaseNode) FinalizePlan() error {
+	return nil
+}
+
 func (n *dropDatabaseNode) Start() error {
 	tbNameStrings := make([]string, len(n.td))
 	for i, tbDesc := range n.td {
@@ -175,6 +179,10 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		}
 	}
 	return &dropIndexNode{n: n, p: p}, nil
+}
+
+func (n *dropIndexNode) FinalizePlan() error {
+	return nil
 }
 
 func (n *dropIndexNode) Start() error {
@@ -273,6 +281,10 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		return &emptyNode{}, nil
 	}
 	return &dropTableNode{p: p, n: n, td: td}, nil
+}
+
+func (n *dropTableNode) FinalizePlan() error {
+	return nil
 }
 
 func (n *dropTableNode) Start() error {

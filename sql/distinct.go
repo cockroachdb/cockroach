@@ -58,6 +58,7 @@ func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
 	return d
 }
 
+// distinctNode de-duplicates row returned by a wrapped planNode.
 type distinctNode struct {
 	plan planNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
@@ -73,6 +74,7 @@ type distinctNode struct {
 	debugVals  debugValues
 }
 
+func (n *distinctNode) FinalizePlan() error     { return n.plan.FinalizePlan() }
 func (n *distinctNode) Start() error            { return n.plan.Start() }
 func (n *distinctNode) Columns() []ResultColumn { return n.plan.Columns() }
 func (n *distinctNode) Values() parser.DTuple   { return n.plan.Values() }

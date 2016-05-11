@@ -72,7 +72,7 @@ type editNodeRun struct {
 	done      bool
 }
 
-func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWriter) error {
+func (r *editNodeRun) buildEditNodePlan(en *editNodeBase, rows planNode, tw tableWriter) {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
@@ -80,7 +80,6 @@ func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWri
 
 	r.rows = rows
 	r.tw = tw
-	return r.tw.init(en.p.txn)
 }
 
 type updateNode struct {
@@ -224,7 +223,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	return un, nil
 }
 
-func (u *updateNode) Start() error {
+func (u *updateNode) FinalizePlan() error {
 	exprs := make([]parser.UpdateExpr, len(u.n.Exprs))
 	for i, expr := range u.n.Exprs {
 		exprs[i] = *expr
@@ -277,15 +276,20 @@ func (u *updateNode) Start() error {
 		return err
 	}
 
-	if err := rows.Start(); err != nil {
+	if err := rows.FinalizePlan(); err != nil {
 		return err
 	}
 
-	if err := u.run.startEditNode(&u.editNodeBase, rows, &u.tw); err != nil {
-		return err
-	}
-
+	u.run.buildEditNodePlan(&u.editNodeBase, rows, &u.tw)
 	return nil
+}
+
+func (u *updateNode) Start() error {
+	if err := u.run.rows.Start(); err != nil {
+		return err
+	}
+
+	return u.run.tw.init(u.p.txn)
 }
 
 func (u *updateNode) Next() bool {

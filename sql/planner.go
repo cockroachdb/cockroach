@@ -193,9 +193,9 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	if err != nil {
 		return nil, err
 	}
-	//if err := plan.BuildPlan(); err != nil {
-	//return nil, err
-	//}
+	if err := plan.FinalizePlan(); err != nil {
+		return nil, err
+	}
 	if err := plan.Start(); err != nil {
 		return nil, err
 	}
@@ -221,9 +221,9 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	//if err := plan.BuildPlan(); err != nil {
-	//	return 0, err
-	//}
+	if err := plan.FinalizePlan(); err != nil {
+		return 0, err
+	}
 	if err := plan.Start(); err != nil {
 		return 0, err
 	}

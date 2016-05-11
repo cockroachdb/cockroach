@@ -251,6 +251,11 @@ func (n *groupNode) DebugValues() debugValues {
 	return vals
 }
 
+func (n *groupNode) FinalizePlan() error {
+	// TODO(knz) Some code from groupBy() above really belongs here.
+	return n.plan.FinalizePlan()
+}
+
 func (n *groupNode) Start() error {
 	return n.plan.Start()
 }

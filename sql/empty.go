@@ -35,8 +35,7 @@ func (*emptyNode) ExplainTypes(_ func(string, string)) {}
 func (*emptyNode) Start() error                        { return nil }
 func (*emptyNode) SetLimitHint(_ int64, _ bool)        {}
 func (*emptyNode) MarkDebug(_ explainMode)             {}
-
-// func (*emptyNode) BuildPlan() error                    { return nil }
+func (*emptyNode) FinalizePlan() error                 { return nil }
 
 func (*emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "empty", "-", nil
