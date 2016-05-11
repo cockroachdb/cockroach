@@ -56,7 +56,7 @@ message ColumnDescriptor {
   // value is provided.
   optional string default_expr = 5;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
-  optional string check_expr = 7;
+  reserved 7;
 }
 
 message IndexDescriptor {
@@ -271,6 +271,9 @@ message TableDescriptor {
     DROP = 2;
   }
   optional State state = 19 [(gogoproto.nullable) = false];
+
+  repeated string check_expr = 20;
+
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -43,16 +43,33 @@ func TestShowCreateTable(t *testing.T) {
 	}{
 		{
 			stmt: `CREATE TABLE %s (
+	i INT,
+	s STRING NULL,
+	v FLOAT NOT NULL,
+	t TIMESTAMP DEFAULT NOW(),
+	CHECK (i > 0)
+)`,
+			expect: `CREATE TABLE %s (
+	i INT NULL,
+	s STRING NULL,
+	v FLOAT NOT NULL,
+	t TIMESTAMP NULL DEFAULT NOW(),
+	CHECK (i > 0)
+)`,
+		},
+		{
+			stmt: `CREATE TABLE %s (
 	i INT CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
 	t TIMESTAMP DEFAULT NOW()
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL CHECK (i > 0),
+	i INT NULL,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT NOW()
+	t TIMESTAMP NULL DEFAULT NOW(),
+	CHECK (i > 0)
 )`,
 		},
 		{

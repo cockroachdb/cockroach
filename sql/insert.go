@@ -128,7 +128,7 @@ func (p *planner) Insert(
 
 	// Construct the check expressions. The returned slice will be nil if no
 	// column in the table has a check expression.
-	checkExprs, err := p.makeCheckExprs(cols)
+	checkExprs, err := p.makeCheckExprs(en.tableDesc.CheckExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -340,11 +340,11 @@ func (n *insertNode) Next() bool {
 		for ref, qval := range n.qvals {
 			// The colIdx is 0-based, we need to change it to 1-based.
 			ri, has := n.insertColIDtoRowIndex[sqlbase.ColumnID(ref.colIdx+1)]
-			if !has {
-				n.run.err = fmt.Errorf("failed to to find column %d in row", sqlbase.ColumnID(ref.colIdx+1))
-				return false
+			if has {
+				qval.datum = rowVals[ri]
+			} else {
+				qval.datum = parser.DNull
 			}
-			qval.datum = rowVals[ri]
 		}
 		for _, expr := range n.checkExprs {
 			if d, err := expr.Eval(n.p.evalCtx); err != nil {
@@ -353,7 +353,7 @@ func (n *insertNode) Next() bool {
 			} else if res, err := parser.GetBool(d); err != nil {
 				n.run.err = err
 				return false
-			} else if !res {
+			} else if !res && d != parser.DNull {
 				// Failed to satisfy CHECK constraint.
 				n.run.err = fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr.String())
 				return false
@@ -502,26 +502,14 @@ func makeDefaultExprs(
 	return defaultExprs, nil
 }
 
-func (p *planner) makeCheckExprs(cols []sqlbase.ColumnDescriptor) ([]parser.Expr, error) {
-	// Check to see if any of the columns have CHECK expressions. If there are
-	// no CHECK expressions, we don't bother with constructing it.
-	numCheck := 0
-	for _, col := range cols {
-		if col.CheckExpr != nil {
-			numCheck++
-			break
-		}
-	}
-	if numCheck == 0 {
+func (p *planner) makeCheckExprs(checks []string) ([]parser.Expr, error) {
+	if len(checks) == 0 {
 		return nil, nil
 	}
 
-	checkExprs := make([]parser.Expr, 0, numCheck)
-	for _, col := range cols {
-		if col.CheckExpr == nil {
-			continue
-		}
-		expr, err := parser.ParseExprTraditional(*col.CheckExpr)
+	checkExprs := make([]parser.Expr, 0, len(checks))
+	for _, check := range checks {
+		expr, err := parser.ParseExprTraditional(check)
 		if err != nil {
 			return nil, err
 		}
