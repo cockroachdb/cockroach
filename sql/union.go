@@ -51,11 +51,11 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 		return nil, util.Errorf("%v is not supported", n.Type)
 	}
 
-	left, err := p.makePlan(n.Left, desiredTypes, autoCommit)
+	left, err := p.newPlan(n.Left, desiredTypes, autoCommit)
 	if err != nil {
 		return nil, err
 	}
-	right, err := p.makePlan(n.Right, desiredTypes, autoCommit)
+	right, err := p.newPlan(n.Right, desiredTypes, autoCommit)
 	if err != nil {
 		return nil, err
 	}
