@@ -51,12 +51,16 @@ type TransportFactory func(
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
+// All calls to Transport methods are made from a single thread, so
+// Transports are not required to be thread-safe.
 type Transport interface {
 	// IsExhausted returns true if there are no more replicas to try.
 	IsExhausted() bool
 
 	// SendNext sends the rpc (captured at creation time) to the next
-	// replica. May panic if the transport is exhausted.
+	// replica. May panic if the transport is exhausted. Should not
+	// block; the transport is responsible for starting other goroutines
+	// as needed.
 	SendNext(chan BatchCall)
 
 	// Close is called when the transport is no longer needed. It may

@@ -168,7 +168,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			}
 			if pending == 0 {
 				return nil, roachpb.NewSendError(
-					fmt.Sprintf("failed to send to any of %d replicas failed: %v",
+					fmt.Sprintf("sending to all %d replicas failed; last error: %v",
 						len(replicas), err), true)
 			}
 		}
