@@ -53,7 +53,7 @@ type Transport interface {
 
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted.
-	SendNext(chan batchCall)
+	SendNext(chan BatchCall)
 }
 
 // grpcTransportFactory is the default TransportFactory, using GRPC.
@@ -121,7 +121,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func (gt *grpcTransport) SendNext(done chan batchCall) {
+func (gt *grpcTransport) SendNext(done chan BatchCall) {
 	client := gt.orderedClients[0]
 	gt.orderedClients = gt.orderedClients[1:]
 
@@ -135,7 +135,7 @@ func (gt *grpcTransport) SendNext(done chan batchCall) {
 		defer cancel()
 
 		reply, err := localServer.Batch(ctx, &client.args)
-		done <- batchCall{reply: reply, err: err}
+		done <- BatchCall{Reply: reply, Err: err}
 		return
 	}
 
@@ -146,16 +146,16 @@ func (gt *grpcTransport) SendNext(done chan batchCall) {
 		c := client.conn
 		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
 			if err != nil {
-				done <- batchCall{err: err}
+				done <- BatchCall{Err: err}
 				return
 			}
 			if state == grpc.Shutdown {
-				done <- batchCall{err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
+				done <- BatchCall{Err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
 				return
 			}
 		}
 
 		reply, err := client.client.Batch(ctx, &client.args)
-		done <- batchCall{reply: reply, err: err}
+		done <- BatchCall{Reply: reply, Err: err}
 	}()
 }

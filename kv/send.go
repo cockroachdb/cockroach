@@ -80,9 +80,12 @@ func shuffleClients(clients []batchClient) {
 	}
 }
 
-type batchCall struct {
-	reply *roachpb.BatchResponse
-	err   error
+// BatchCall contains a response and an RPC error (note that the
+// response contains its own roachpb.Error, which is separate from
+// BatchCall.Err), and is analogous to the net/rpc.Call struct.
+type BatchCall struct {
+	Reply *roachpb.BatchResponse
+	Err   error
 }
 
 // Send sends one or more RPCs to clients specified by the slice of
@@ -98,7 +101,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 				len(replicas), 1), false)
 	}
 
-	done := make(chan batchCall, len(replicas))
+	done := make(chan BatchCall, len(replicas))
 
 	transportFactory := opts.transportFactory
 	if transportFactory == nil {
@@ -132,16 +135,16 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 		case call := <-done:
 			pending--
-			err := call.err
+			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof("RPC reply: %+v", call.reply)
-				} else if log.V(1) && call.reply.Error != nil {
-					log.Infof("application error: %s", call.reply.Error)
+					log.Infof("RPC reply: %+v", call.Reply)
+				} else if log.V(1) && call.Reply.Error != nil {
+					log.Infof("application error: %s", call.Reply.Error)
 				}
 
-				if !isPerReplicaError(call.reply.Error) {
-					return call.reply, nil
+				if !isPerReplicaError(call.Reply.Error) {
+					return call.Reply, nil
 				}
 
 				// Extract the detail so it can be included in the error
@@ -151,7 +154,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 				// one to return; we may want to remember the "best" error
 				// we've seen (for example, a NotLeaderError conveys more
 				// information than a RangeNotFound).
-				err = call.reply.Error.GoError()
+				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
 				log.Warningf("RPC error: %s", err)
 			}
