@@ -2198,6 +2198,8 @@ func (r *Replica) splitTrigger(
 				replica, err := r.store.GetReplica(newRng.RangeID)
 				foundReplica := false
 				if err == nil {
+					replica.mu.Lock()
+					defer replica.mu.Unlock()
 					for _, rep := range split.NewDesc.Replicas {
 						if rep.ReplicaID == replica.mu.replicaID {
 							foundReplica = true
@@ -2209,9 +2211,7 @@ func (r *Replica) splitTrigger(
 					log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
 					return
 				}
-				newRng.mu.Lock()
-				_ = newRng.mu.raftGroup.Campaign()
-				newRng.mu.Unlock()
+				_ = replica.mu.raftGroup.Campaign()
 			})
 		}
 	})

@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -1010,7 +1009,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 		}
 
 		replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
-		if td.remove || td.replace {
+		if td.remove {
 			// Simulate second replica being transferred by removing it.
 			if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
 				t.Fatal(err)
@@ -1023,11 +1022,20 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 		}
 
 		states := make(map[raft.StateType]bool)
-		for ti := timeutil.Now(); timeutil.Since(ti) < 100*time.Millisecond; {
-			time.Sleep(1 * time.Millisecond)
-			state := replica2.RaftStatus().RaftState
-			states[state] = true
+		ticker := time.NewTicker(1 * time.Millisecond)
+		timer := time.NewTimer(100 * time.Millisecond)
+	L:
+		for {
+			select {
+			case <-ticker.C:
+				state := replica2.RaftStatus().RaftState
+				states[state] = true
+			case <-timer.C:
+				ticker.Stop()
+				break L
+			}
 		}
+
 		for _, state := range td.expected {
 			if !states[state] {
 				t.Errorf("%d. replica state was never expected %d", i, state)
