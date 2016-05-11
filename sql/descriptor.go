@@ -35,7 +35,32 @@ var (
 	errNoTable           = errors.New("no table specified")
 )
 
-// checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
+// DescriptorAccessor provides helper methods for using descriptors
+// to SQL objects.
+type DescriptorAccessor interface {
+	// checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
+	checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error
+
+	// createDescriptor takes a Table or Database descriptor and creates it if
+	// needed, incrementing the descriptor counter. Returns true if the descriptor
+	// is actually created, false if it already existed.
+	createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error)
+
+	// getDescriptor looks up the descriptor for `plainKey`, validates it,
+	// and unmarshals it into `descriptor`.
+	// If `plainKey` doesn't exist, returns false and nil error.
+	// In most cases you'll want to use wrappers: `getDatabaseDesc` or
+	// `getTableDesc`.
+	getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto) (bool, error)
+
+	// getDescriptorsFromTargetList examines a TargetList and fetches the
+	// appropriate descriptors.
+	getDescriptorsFromTargetList(targets parser.TargetList)
+}
+
+var _ DescriptorAccessor = &planner{}
+
+// checkPrivilege implements the DescriptorAccessor interface.
 func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error {
 	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
 		return nil
@@ -44,9 +69,7 @@ func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege p
 		p.session.User, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
-// createDescriptor takes a Table or Database descriptor and creates it if
-// needed, incrementing the descriptor counter. Returns true if the descriptor
-// is actually created, false if it already existed.
+// createDescriptor implements the DescriptorAccessor interface.
 func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error) {
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
@@ -98,11 +121,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 	return true, p.txn.Run(&b)
 }
 
-// getDescriptor looks up the descriptor for `plainKey`, validates it,
-// and unmarshals it into `descriptor`.
-// If `plainKey` doesn't exist, returns false and nil error.
-// In most cases you'll want to use wrappers: `getDatabaseDesc` or
-// `getTableDesc`.
+// getDescriptor implements the DescriptorAccessor interface.
 func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
 	gr, err := p.txn.Get(plainKey.Key())
@@ -140,8 +159,7 @@ func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlba
 	return true, nil
 }
 
-// getDescriptorsFromTargetList examines a TargetList and fetches the
-// appropriate descriptors.
+// getDescriptorsFromTargetList implements the DescriptorAccessor interface.
 func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 	[]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
@@ -183,46 +201,4 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 		}
 	}
 	return descs, nil
-}
-
-// expandTableGlob expands wildcards from the end of `expr` and
-// returns the list of matching tables.
-// `expr` is possibly modified to be qualified with the database it refers to.
-// `expr` is assumed to be of one of several forms:
-// 		database.table
-// 		table
-// 		*
-func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
-	parser.QualifiedNames, error) {
-	if len(expr.Indirect) == 0 {
-		return parser.QualifiedNames{expr}, nil
-	}
-
-	if err := expr.QualifyWithDatabase(p.session.Database); err != nil {
-		return nil, err
-	}
-	// We must have a single indirect: either .table or .*
-	if len(expr.Indirect) != 1 {
-		return nil, fmt.Errorf("invalid table glob: %s", expr)
-	}
-
-	switch expr.Indirect[0].(type) {
-	case parser.NameIndirection:
-		return parser.QualifiedNames{expr}, nil
-	case parser.StarIndirection:
-		dbDesc, err := p.getDatabaseDesc(string(expr.Base))
-		if err != nil {
-			return nil, err
-		}
-		if dbDesc == nil {
-			return nil, databaseDoesNotExistError(string(expr.Base))
-		}
-		tableNames, err := p.getTableNames(dbDesc)
-		if err != nil {
-			return nil, err
-		}
-		return tableNames, nil
-	default:
-		return nil, fmt.Errorf("invalid table glob: %s", expr)
-	}
 }
