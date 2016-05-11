@@ -95,8 +95,11 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // is insufficient.
 // Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
+	snap, err := r.store.NewSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	defer r.store.FinishSnapshot(snap)
 	return entries(snap, r.RangeID, r.isInitializedLocked(), lo, hi, maxBytes)
 }
 
@@ -192,8 +195,11 @@ func iterateEntries(
 // Term implements the raft.Storage interface.
 // Term requires that the replica lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
+	snap, err := r.store.NewSnapshot()
+	if err != nil {
+		return 0, err
+	}
+	defer r.store.FinishSnapshot(snap)
 	return term(snap, r.RangeID, r.isInitializedLocked(), i)
 }
 
@@ -387,8 +393,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	ch := make(chan (raftpb.Snapshot))
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
-		snap := r.store.NewSnapshot()
-		defer snap.Close()
+		snap, err := r.store.NewSnapshot()
+		if err != nil {
+			return
+		}
+		defer r.store.FinishSnapshot(snap)
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.

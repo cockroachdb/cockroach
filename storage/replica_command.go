@@ -1635,11 +1635,14 @@ func (r *Replica) ComputeChecksum(
 	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
 	desc := *r.mu.desc
 	r.mu.Unlock()
-	snap := r.store.NewSnapshot()
+	snap, err := r.store.NewSnapshot()
+	if err != nil {
+		return roachpb.ComputeChecksumResponse{}, err
+	}
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if !stopper.RunAsyncTask(func() {
-		defer snap.Close()
+		defer r.store.FinishSnapshot(snap)
 		var snapshot *roachpb.RaftSnapshotData
 		if args.Snapshot {
 			snapshot = &roachpb.RaftSnapshotData{}
@@ -1651,7 +1654,7 @@ func (r *Replica) ComputeChecksum(
 		}
 		r.computeChecksumDone(id, sha, snapshot)
 	}) {
-		defer snap.Close()
+		defer r.store.FinishSnapshot(snap)
 		// Set checksum to nil.
 		r.computeChecksumDone(id, nil, nil)
 	}
@@ -1955,9 +1958,12 @@ func (r *Replica) AdminSplit(
 	{
 		foundSplitKey := args.SplitKey
 		if len(foundSplitKey) == 0 {
-			snap := r.store.NewSnapshot()
-			defer snap.Close()
-			var err error
+			snap, err := r.store.NewSnapshot()
+			if err != nil {
+				return reply, roachpb.NewError(err)
+			}
+			defer r.store.FinishSnapshot(snap)
+
 			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, nil /* logFn */)
 			if err != nil {
 				return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
