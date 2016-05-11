@@ -159,6 +159,10 @@ func (b *writeBuffer) writeString(s string) error {
 	if _, err := b.WriteString(s); err != nil {
 		return err
 	}
+	return b.nullTerminate()
+}
+
+func (b *writeBuffer) nullTerminate() error {
 	return b.WriteByte(0)
 }
 

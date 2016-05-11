@@ -656,7 +656,7 @@ func (c *v3Conn) executeStatements(
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	c.writeBuf.initMsg(serverMsgCommandComplete)
 	c.writeBuf.Write(tag)
-	c.writeBuf.WriteByte(0)
+	c.writeBuf.nullTerminate()
 	return c.writeBuf.finishMsg(c.wr)
 }
 
@@ -702,7 +702,7 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errToSend string) error {
 	if err := c.writeBuf.writeString(errToSend); err != nil {
 		return err
 	}
-	if err := c.writeBuf.WriteByte(0); err != nil {
+	if err := c.writeBuf.nullTerminate(); err != nil {
 		return err
 	}
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
