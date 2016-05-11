@@ -33,6 +33,7 @@ type returningHelper struct {
 	qvals        qvalMap
 	rowCount     int
 	desiredTypes []parser.Datum
+	table        *tableInfo
 }
 
 func (p *planner) makeReturningHelper(
@@ -50,14 +51,14 @@ func (p *planner) makeReturningHelper(
 	}
 
 	rh.columns = make([]ResultColumn, 0, len(r))
-	table := tableInfo{
+	rh.table = &tableInfo{
 		columns: makeResultColumns(tablecols),
 		alias:   alias,
 	}
 	rh.qvals = make(qvalMap)
 	rh.untypedExprs = make([]parser.Expr, 0, len(r))
 	for _, target := range r {
-		if isStar, cols, exprs, err := checkRenderStar(target, &table, rh.qvals); err != nil {
+		if isStar, cols, exprs, err := checkRenderStar(target, rh.table, rh.qvals); err != nil {
 			return returningHelper{}, err
 		} else if isStar {
 			for _, expr := range exprs {
@@ -72,7 +73,7 @@ func (p *planner) makeReturningHelper(
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		expr, err := resolveQNames(target.Expr, &table, rh.qvals, &p.qnameVisitor)
+		expr, err := resolveQNames(target.Expr, []*tableInfo{rh.table}, rh.qvals, &p.qnameVisitor)
 		if err != nil {
 			return returningHelper{}, err
 		}
@@ -90,7 +91,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 		rh.rowCount++
 		return rowVals, nil
 	}
-	rh.qvals.populateQVals(rowVals)
+	rh.qvals.populateQVals(rh.table, rowVals)
 	resRow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(rh.p.evalCtx)
