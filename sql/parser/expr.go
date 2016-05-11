@@ -892,6 +892,7 @@ const (
 	Minus
 	Mult
 	Div
+	FloorDiv
 	Mod
 	Concat
 	LShift
@@ -899,17 +900,18 @@ const (
 )
 
 var binaryOpName = [...]string{
-	Bitand: "&",
-	Bitor:  "|",
-	Bitxor: "^",
-	Plus:   "+",
-	Minus:  "-",
-	Mult:   "*",
-	Div:    "/",
-	Mod:    "%",
-	Concat: "||",
-	LShift: "<<",
-	RShift: ">>",
+	Bitand:   "&",
+	Bitor:    "|",
+	Bitxor:   "^",
+	Plus:     "+",
+	Minus:    "-",
+	Mult:     "*",
+	Div:      "/",
+	FloorDiv: "//",
+	Mod:      "%",
+	Concat:   "||",
+	LShift:   "<<",
+	RShift:   ">>",
 }
 
 func (i BinaryOperator) String() string {
