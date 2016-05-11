@@ -1484,7 +1484,12 @@ table_constraint:
   }
 
 constraint_elem:
-  CHECK '(' a_expr ')' { unimplemented() }
+  CHECK '(' a_expr ')'
+  {
+    $$.val = &CheckConstraintTableDef{
+      Expr: $3.expr(),
+    }
+  }
 | UNIQUE '(' name_list ')' opt_storing
   {
     $$.val = &UniqueConstraintTableDef{

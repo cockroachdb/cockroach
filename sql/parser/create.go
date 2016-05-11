@@ -109,8 +109,8 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// TableDef represents a column or index definition within a CREATE TABLE
-// statement.
+// TableDef represents a column, index or constraint definition within a CREATE
+// TABLE statement.
 type TableDef interface {
 	NodeFormatter
 	// Placeholder function to ensure that only desired types (*TableDef) conform
@@ -325,6 +325,30 @@ func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Storing)
 		buf.WriteByte(')')
 	}
+}
+
+func (*CheckConstraintTableDef) tableDef()           {}
+func (*CheckConstraintTableDef) constraintTableDef() {}
+
+// CheckConstraintTableDef represents a check constraint within a CREATE
+// TABLE statement.
+type CheckConstraintTableDef struct {
+	name Name
+	Expr Expr
+}
+
+func (node *CheckConstraintTableDef) setName(name Name) {
+	node.name = name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.name != "" {
+		fmt.Fprintf(buf, "CONSTRAINT %s ", node.name)
+	}
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.Expr)
+	buf.WriteByte(')')
 }
 
 // CreateTable represents a CREATE TABLE statement.
