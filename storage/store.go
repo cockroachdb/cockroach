@@ -288,6 +288,11 @@ type Store struct {
 	initComplete            sync.WaitGroup // Signaled by async init tasks
 	raftRequestChan         chan *RaftMessageRequest
 
+	// This is 1 if there is an active snapshot. This field must be checked
+	// and set atomically.
+	// TODO(marc): This may be better inside of `mu`, but is not currently feasible.
+	hasActiveSnapshot int32
+
 	// drainLeadership holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend leader leases; see DrainLeadership().
 	//
@@ -1594,6 +1599,21 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 // NewSnapshot creates a new snapshot engine.
 func (s *Store) NewSnapshot() engine.Engine {
 	return s.engine.NewSnapshot()
+}
+
+// NewRateLimitedSnapshot creates a new snapshot engine.
+// Make sure to call store.FinishSnapshot(...) when finished.
+func (s *Store) NewRateLimitedSnapshot() (engine.Engine, error) {
+	if atomic.CompareAndSwapInt32(&s.hasActiveSnapshot, 0, 1) {
+		return s.engine.NewSnapshot(), nil
+	}
+	return nil, raft.ErrSnapshotTemporarilyUnavailable
+}
+
+// FinishSnapshot decrements the count of active snapshots and calls close.
+func (s *Store) FinishSnapshot(snap engine.Engine) {
+	atomic.AddInt32(&s.hasActiveSnapshot, -1)
+	snap.Close()
 }
 
 // Attrs returns the attributes of the underlying store.

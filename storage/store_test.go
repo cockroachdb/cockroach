@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/coreos/etcd/raft"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -1958,4 +1959,27 @@ func TestStoreChangeFrozen(t *testing.T) {
 			t.Fatal(pErr)
 		}
 	}
+}
+
+func TestStoreNoConcurrentSnapshots(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	snap, err := store.NewRateLimitedSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = store.NewRateLimitedSnapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
+		t.Fatalf("expected err %s, got %s", raft.ErrSnapshotTemporarilyUnavailable, err)
+	}
+
+	store.FinishSnapshot(snap)
+
+	snap2, err := store.NewRateLimitedSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.FinishSnapshot(snap2)
 }

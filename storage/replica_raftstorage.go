@@ -387,8 +387,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	ch := make(chan (raftpb.Snapshot))
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
-		snap := r.store.NewSnapshot()
-		defer snap.Close()
+		snap, err := r.store.NewRateLimitedSnapshot()
+		if err != nil {
+			return
+		}
+		defer r.store.FinishSnapshot(snap)
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
