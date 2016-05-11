@@ -39,12 +39,17 @@ ALTER TABLE t2 RENAME COLUMN b TO c
 statement error pq: qualified name "b" not found
 INSERT INTO t2 (c) VALUES (-1)
 
-# Check on a column can only refer to that column
-statement error pq: argument of CHECK cannot refer to other columns: "a"
+statement ok
 CREATE TABLE t3 (a INT, b INT CHECK (b < a))
 
+statement ok
+INSERT INTO t3 (a, b) VALUES (3, 2)
+
+statement error pq: failed to satisfy CHECK constraint \(b < a\)
+INSERT INTO t3 (a, b) VALUES (2, 3)
+
 # Verify we don't accept COUNT(*)
-statement error pq: argument of CHECK cannot refer to other columns: "*"
+statement error \\* not allowed in constraint
 CREATE TABLE t3 (a INT, b INT CHECK (COUNT(*) = 1))
 
 # non-boolean expressions are errors
@@ -55,5 +60,23 @@ CREATE TABLE t3 (a INT CHECK(1))
 statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE t3 (a INT CHECK (false - true))
 
-#### table CHECK constraints
-# TODO(seif):
+statement error column "b" not found for constraint
+CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
+
+statement ok
+CREATE TABLE t4 (a INT, b INT DEFAULT 5, c INT, d INT, CHECK (a < b), CONSTRAINT "all" CHECK (a+b+c+d < 20))
+
+statement ok
+INSERT INTO t4 (a, b) VALUES (2, 3)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t4 (a) VALUES (6)
+
+statement ok
+INSERT INTO t4 VALUES (1, 2, 3, 4)
+
+statement ok
+INSERT INTO t4 VALUES (NULL, 2, 22, NULL)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t4 VALUES (1, 2, 3, 19)

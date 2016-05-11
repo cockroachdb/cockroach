@@ -213,7 +213,19 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	return &createTableNode{p: p, n: n, dbDesc: dbDesc}, nil
 }
 
+func hoistConstraints(n *parser.CreateTable) {
+	for _, d := range n.Defs {
+		if col, ok := d.(*parser.ColumnTableDef); ok {
+			if col.CheckExpr != nil {
+				n.Defs = append(n.Defs, &parser.CheckConstraintTableDef{Expr: col.CheckExpr})
+				col.CheckExpr = nil
+			}
+		}
+	}
+}
+
 func (n *createTableNode) Start() error {
+	hoistConstraints(n.n)
 	desc, err := sqlbase.MakeTableDesc(n.n, n.dbDesc.ID)
 	if err != nil {
 		return err
