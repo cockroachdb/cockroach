@@ -157,6 +157,15 @@ type Engine interface {
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
+	// ApplyBatchRepr atomically applies a set of batched updates. Created by
+	// calling Repr() on a batch. Using this method is equivalent to constructing
+	// and committing a batch whose Repr() equals repr.
+	ApplyBatchRepr(repr []byte) error
+	// Repr returns the underlying representation of the batch and can be used to
+	// reconstitute the batch on a remote node using
+	// Engine.NewBatchFromRepr(). This method is only valid on engines created
+	// via NewBatch().
+	Repr() []byte
 	// Defer adds a callback to be run after the batch commits
 	// successfully.  If Commit() fails (or if this engine was not
 	// created via NewBatch()), deferred callbacks are not called. As
