@@ -407,7 +407,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 			}
 
 		default:
-			return util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+			return util.Errorf("TODO(pmattis): JOINs and SELECTs from multiple tables are not yet supported: %s", from)
 		}
 
 		if ate.As.Alias != "" {
