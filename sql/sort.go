@@ -292,6 +292,11 @@ func (n *sortNode) wrap(plan planNode) planNode {
 	return plan
 }
 
+func (n *sortNode) expandPlan() error {
+	// TODO(knz) Some code from orderBy() above really belongs here.
+	return n.plan.expandPlan()
+}
+
 func (n *sortNode) Start() error {
 	return n.plan.Start()
 }
