@@ -118,12 +118,10 @@ type DistSender struct {
 	rangeLookupMaxRanges int32
 	// leaderCache caches the last known leader replica for range
 	// consensus groups.
-	leaderCache *leaderCache
-	// RPCSend is used to send RPC calls and defaults to send
-	// outside of tests.
-	rpcSend         rpcSendFn
-	rpcContext      *rpc.Context
-	rpcRetryOptions retry.Options
+	leaderCache      *leaderCache
+	transportFactory TransportFactory
+	rpcContext       *rpc.Context
+	rpcRetryOptions  retry.Options
 }
 
 var _ client.Sender = &DistSender{}
@@ -146,9 +144,9 @@ type DistSenderContext struct {
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
 	nodeDescriptor *roachpb.NodeDescriptor
-	// The RPC dispatcher. Defaults to send but can be changed here for testing
+	// The RPC dispatcher. Defaults to grpc but can be changed here for testing
 	// purposes.
-	RPCSend           rpcSendFn
+	TransportFactory  TransportFactory
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	Tracer            opentracing.Tracer
@@ -190,9 +188,8 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if ctx.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
-	ds.rpcSend = send
-	if ctx.RPCSend != nil {
-		ds.rpcSend = ctx.RPCSend
+	if ctx.TransportFactory != nil {
+		ds.transportFactory = ctx.TransportFactory
 	}
 	ds.rpcRetryOptions = defaultRPCRetryOptions
 	if ctx.RPCRetryOptions != nil {
@@ -337,15 +334,16 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
-		Ordering:        order,
-		SendNextTimeout: defaultSendNextTimeout,
-		Timeout:         base.NetworkTimeout,
-		Context:         ctx,
+		Ordering:         order,
+		SendNextTimeout:  defaultSendNextTimeout,
+		Timeout:          base.NetworkTimeout,
+		Context:          ctx,
+		transportFactory: ds.transportFactory,
 	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := ds.rpcSend(rpcOpts, replicas, ba, ds.rpcContext)
+	reply, err := send(rpcOpts, replicas, ba, ds.rpcContext)
 	if err != nil {
 		return nil, err
 	}

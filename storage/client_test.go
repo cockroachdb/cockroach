@@ -36,7 +36,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -52,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -108,18 +106,6 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	sCtx.ScanMaxIdleTime = 1 * time.Second
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
-	rpcSend := func(_ kv.SendOptions, _ kv.ReplicaSlice,
-		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		sp := sCtx.Tracer.StartSpan("rpc send")
-		defer sp.Finish()
-		ctx := opentracing.ContextWithSpan(context.Background(), sp)
-		br, pErr := stores.Send(ctx, ba)
-		if br == nil {
-			br = &roachpb.BatchResponse{}
-		}
-		br.Error = pErr
-		return br, nil
-	}
 
 	if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -129,7 +115,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	retryOpts.Closer = stopper.ShouldDrain()
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
-		RPCSend:           rpcSend, // defined above
+		TransportFactory:  kv.SenderTransportFactory(sCtx.Tracer, stores),
 		RPCRetryOptions:   &retryOpts,
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
@@ -307,135 +293,92 @@ func (m *multiTestContext) Stop() {
 	}
 }
 
-// rpcSend implements the client.rpcSender interface. This
-// implementation of "rpcSend" is used to multiplex calls between many
-// local senders in a simple way; It sends the request to
-// multiTestContext's localSenders specified in addrs. The request is
-// sent in slice order, and there's a timeout on sending to a replica
-// before moving to the next.
-//
-// TODO(bdarnell): This is mostly obsolete now that we have a real network
-//   stack available. However, it's still needed to handle the interaction
-//   with our manual clock in the event of retries.
-func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
-	ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+type multiTestContextKVTransport struct {
+	mtc      *multiTestContext
+	ctx      context.Context
+	cancel   func()
+	replicas kv.ReplicaSlice
+	args     roachpb.BatchRequest
+}
 
-	// This wait group ensures that we don't leave any tasks open before
-	// existing and unlocking the mutex.
-	var wg sync.WaitGroup
-	defer func() {
-		wg.Wait()
-	}()
-
-	type result struct {
-		br   *roachpb.BatchResponse
-		pErr *roachpb.Error
-	}
-
-	// Cancellable context.
+func (m *multiTestContext) kvTransportFactory(
+	_ kv.SendOptions,
+	_ *rpc.Context,
+	replicas kv.ReplicaSlice,
+	args roachpb.BatchRequest,
+) (kv.Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	return &multiTestContextKVTransport{
+		mtc:      m,
+		ctx:      ctx,
+		cancel:   cancel,
+		replicas: replicas,
+		args:     args,
+	}, nil
+}
 
-	// Sending loop.
-	sendChan := make(chan result, len(replicas))
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for replicaIndex := range replicas {
-			// Reverse-map the address to its index.
-			var nodeID roachpb.NodeID
-			for i, addr := range m.nodeIDtoAddr {
-				if addr.String() == replicas[replicaIndex].NodeDesc.Address.String() {
-					nodeID = i
-					break
-				}
-			}
-			// Node IDs are assigned in the order the nodes are created by
-			// the multi test context, so we can derive the index for stoppers
-			// and senders by subtracting 1 from the node ID.
-			nodeIndex := int(nodeID) - 1
+func (t *multiTestContextKVTransport) IsExhausted() bool {
+	return len(t.replicas) == 0
+}
 
-			// The rpcSend method crosses store boundaries: it is possible that the
-			// destination store is stopped while the source is still running.
-			// Run the send in a Task on the destination store to simulate what
-			// would happen with real RPCs.
-			done := make(chan bool, 1)
-			wg.Add(1)
-			if s := m.stoppers[nodeIndex]; s == nil || !s.RunAsyncTask(func() {
-				defer wg.Done()
-				sender := m.senders[nodeIndex]
-				// Make a copy and clone txn of batch args for sending.
-				baCopy := ba
-				if txn := ba.Txn; txn != nil {
-					txnClone := ba.Txn.Clone()
-					baCopy.Txn = &txnClone
-				}
-				br, pErr := sender.Send(ctx, baCopy)
-				sendChan <- result{br, pErr}
-				done <- pErr == nil
-			}) {
-				wg.Done()
-				sendChan <- result{nil, roachpb.NewError(roachpb.NewSendError("store is stopped", true))}
-				m.expireLeaderLeases()
-				continue
-			}
+func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
+	rep := t.replicas[0]
+	t.replicas = t.replicas[1:]
 
-			select {
-			case <-time.After(100 * time.Millisecond):
-				log.Infof("timeout in client_test rpcSender to replica %s; trying next replica", m.stores[nodeIndex])
-			case success := <-done:
-				if success {
-					return
-				}
-			}
+	// Node IDs are assigned in the order the nodes are created by
+	// the multi test context, so we can derive the index for stoppers
+	// and senders by subtracting 1 from the node ID.
+	nodeIndex := int(rep.NodeID) - 1
+
+	// This method crosses store boundaries: it is possible that the
+	// destination store is stopped while the source is still running.
+	// Run the send in a Task on the destination store to simulate what
+	// would happen with real RPCs.
+	t.mtc.mu.RLock()
+	defer t.mtc.mu.RUnlock()
+	if s := t.mtc.stoppers[nodeIndex]; s == nil || !s.RunAsyncTask(func() {
+		t.mtc.mu.RLock()
+		defer t.mtc.mu.RUnlock()
+		sender := t.mtc.senders[nodeIndex]
+		// Make a copy and clone txn of batch args for sending.
+		baCopy := t.args
+		if txn := baCopy.Txn; txn != nil {
+			txnClone := baCopy.Txn.Clone()
+			baCopy.Txn = &txnClone
 		}
-	}()
-
-	fail := func(pErr *roachpb.Error) (*roachpb.BatchResponse, error) {
-		br := &roachpb.BatchResponse{}
+		br, pErr := sender.Send(t.ctx, baCopy)
+		if br == nil {
+			br = &roachpb.BatchResponse{}
+		}
+		if br.Error != nil {
+			panic(roachpb.ErrorUnexpectedlySet(sender, br))
+		}
 		br.Error = pErr
-		return br, nil
-	}
 
-	// Loop waiting for responses from replicas.
-	var pErr *roachpb.Error
-	for range replicas {
-		// Wait for next response.
-		res := <-sendChan
-		if res.pErr == nil {
-			return res.br, nil
-		}
-		pErr = res.pErr
+		// On certain errors, we must advance our manual clock to ensure
+		// that the next attempt has a chance of succeeding.
 		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.SendError:
-		case *roachpb.RangeKeyMismatchError:
 		case *roachpb.NotLeaderError:
 			if tErr.Leader == nil {
 				// stores has the range, is *not* the Leader, but the
 				// Leader is not known; this can happen if the leader is removed
 				// from the group. Move the manual clock forward in an attempt to
 				// expire the lease.
-				m.expireLeaderLeases()
-			} else if m.stores[tErr.Leader.NodeID-1] == nil {
+				t.mtc.expireLeaderLeases()
+			} else if t.mtc.stores[tErr.Leader.NodeID-1] == nil {
 				// The leader is known but down, so expire its lease.
-				m.expireLeaderLeases()
+				t.mtc.expireLeaderLeases()
 			}
-		default:
-			if testutils.IsPError(res.pErr, `store \d+ not found`) {
-				break
-			}
-			// If any store fails with an error that doesn't indicate we simply
-			// sent to the wrong store, it must have been the correct one and
-			// the command failed.
-			return fail(res.pErr)
 		}
+		done <- kv.BatchCall{Reply: br, Err: nil}
+	}) {
+		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped", true)}
+		t.mtc.expireLeaderLeases()
 	}
-	if pErr == nil {
-		panic("err must not be nil here")
-	}
-	return fail(pErr)
+}
+
+func (t *multiTestContextKVTransport) Close() {
+	t.cancel()
 }
 
 // rangeDescByAge implements sort.Interface for RangeDescriptor, sorting by the
@@ -575,7 +518,7 @@ func (m *multiTestContext) addStore() {
 			kv.NewDistSender(&kv.DistSenderContext{
 				Clock:             m.clock,
 				RangeDescriptorDB: m,
-				RPCSend:           m.rpcSend,
+				TransportFactory:  m.kvTransportFactory,
 				RPCRetryOptions:   &retryOpts,
 			}, m.gossips[idx]))
 		sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),

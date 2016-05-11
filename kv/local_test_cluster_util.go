@@ -20,17 +20,30 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+// localTestClusterTransport augments senderTransport with an optional
+// delay for each RPC, to simulate latency for benchmarking.
+// TODO(bdarnell): there's probably a better place to put this.
+type localTestClusterTransport struct {
+	Transport
+	latency time.Duration
+}
+
+func (l *localTestClusterTransport) SendNext(done chan BatchCall) {
+	if l.latency > 0 {
+		time.Sleep(l.latency)
+	}
+	l.Transport.SendNext(done)
+}
 
 // InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used
 // with LocalTestCluster.
@@ -43,30 +56,9 @@ func InitSenderForLocalTestCluster(
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
 ) client.Sender {
-	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
-		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		if latency > 0 {
-			time.Sleep(latency)
-		}
-		sp := tracer.StartSpan("node")
-		defer sp.Finish()
-		ctx := opentracing.ContextWithSpan(context.Background(), sp)
-		log.Trace(ctx, args.String())
-		br, pErr := stores.Send(ctx, args)
-		if br == nil {
-			br = &roachpb.BatchResponse{}
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(stores, br))
-		}
-		br.Error = pErr
-		if pErr != nil {
-			log.Trace(ctx, "error: "+pErr.String())
-		}
-		return br, nil
-	}
 	retryOpts := GetDefaultDistSenderRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
+	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	distSender := NewDistSender(&DistSenderContext{
 		Clock: clock,
 		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
@@ -74,8 +66,19 @@ func InitSenderForLocalTestCluster(
 		LeaderCacheSize:          defaultLeaderCacheSize,
 		RPCRetryOptions:          &retryOpts,
 		nodeDescriptor:           nodeDesc,
-		RPCSend:                  rpcSend,                    // defined above
-		RangeDescriptorDB:        stores.(RangeDescriptorDB), // for descriptor lookup
+		TransportFactory: func(
+			opts SendOptions,
+			rpcContext *rpc.Context,
+			replicas ReplicaSlice,
+			args roachpb.BatchRequest,
+		) (Transport, error) {
+			transport, err := senderTransportFactory(opts, rpcContext, replicas, args)
+			if err != nil {
+				return nil, err
+			}
+			return &localTestClusterTransport{transport, latency}, nil
+		},
+		RangeDescriptorDB: stores.(RangeDescriptorDB), // for descriptor lookup
 	}, gossip)
 
 	return NewTxnCoordSender(distSender, clock, false /* !linearizable */, tracer,
