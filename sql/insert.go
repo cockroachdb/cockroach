@@ -162,7 +162,7 @@ func (p *planner) Insert(
 	for i, col := range cols {
 		desiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}
-	rows, err := p.makePlan(insertRows, desiredTypesFromSelect, false)
+	rows, err := p.newPlan(insertRows, desiredTypesFromSelect, false)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (n *insertNode) Start() error {
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	rows, err := n.p.makePlan(n.insertRows, n.desiredTypes, false)
+	rows, err := n.p.newPlan(n.insertRows, n.desiredTypes, false)
 	if err != nil {
 		return err
 	}

@@ -187,7 +187,18 @@ func (p *planner) resetTxn() {
 //
 // Note: The autoCommit parameter enables operations to enable the 1PC
 // optimization. This is a bit hackish/preliminary at present.
-func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
+func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
+	plan, err := p.newPlan(stmt, nil, autoCommit)
+	if err != nil {
+		return nil, err
+	}
+	// If any work needs to be done to finalize the plan, do it here.
+	return plan, nil
+}
+
+// newPlan constructs a planNode from a statement. This is used
+// recursively by the various node constructors.
+func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing
@@ -225,7 +236,7 @@ func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, a
 	case *parser.Insert:
 		return p.Insert(n, desiredTypes, autoCommit)
 	case *parser.ParenSelect:
-		return p.makePlan(n.Select, desiredTypes, autoCommit)
+		return p.newPlan(n.Select, desiredTypes, autoCommit)
 	case *parser.RenameColumn:
 		return p.RenameColumn(n)
 	case *parser.RenameDatabase:
@@ -317,7 +328,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.makePlan(stmt, nil, false)
+	return p.makePlan(stmt, false)
 }
 
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
