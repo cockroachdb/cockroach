@@ -77,7 +77,7 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 }
 
 func (ti *tableInserter) row(values parser.DTuple) (parser.DTuple, error) {
-	return nil, ti.ri.insertRow(ti.b, values)
+	return nil, ti.ri.insertRow(ti.b, values, false)
 }
 
 func (ti *tableInserter) finalize() error {
@@ -140,6 +140,8 @@ type tableUpsertEvaler interface {
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
 	eval(insertRow parser.DTuple, existingRow parser.DTuple) (parser.DTuple, error)
+
+	isIdentityEvaler() bool
 }
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
@@ -154,6 +156,7 @@ type tableUpserter struct {
 	// Set by init.
 	txn                   *client.Txn
 	tableDesc             *sqlbase.TableDescriptor
+	fastPathBatch         *client.Batch
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
@@ -169,9 +172,14 @@ type tableUpserter struct {
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
-
 	tu.tableDesc = tu.ri.helper.tableDesc
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
+
+	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
+		tu.evaler != nil && tu.evaler.isIdentityEvaler()
+	if len(tu.tableDesc.Indexes) == 0 && allColsIdentityExpr {
+		tu.fastPathBatch = tu.txn.NewBatch()
+		return nil
+	}
 
 	// TODO(dan): This could be made tighter, just the rows needed for the ON
 	// CONFLICT exprs.
@@ -206,16 +214,18 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		return err
 	}
 
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
+
 	return nil
 }
 
 func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
-	// TODO(dan): If a table has one index and every column is being upserted,
-	// then it can be done entirely with Puts. This would greatly help the
-	// key/value table case.
+	if tu.fastPathBatch != nil {
+		err := tu.ri.insertRow(tu.fastPathBatch, row, true)
+		return nil, err
+	}
 
 	tu.insertRows = append(tu.insertRows, row)
-
 	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
 	return nil, nil
 }
@@ -236,7 +246,7 @@ func (tu *tableUpserter) flush() error {
 		existingRow := existingRows[i]
 
 		if existingRow == nil {
-			err := tu.ri.insertRow(b, insertRow)
+			err := tu.ri.insertRow(b, insertRow, false)
 			if err != nil {
 				return err
 			}
@@ -375,6 +385,9 @@ func (tu *tableUpserter) fetchExisting() ([]parser.DTuple, error) {
 }
 
 func (tu *tableUpserter) finalize() error {
+	if tu.fastPathBatch != nil {
+		return tu.txn.Run(tu.fastPathBatch)
+	}
 	return tu.flush()
 }
 

@@ -125,7 +125,7 @@ func makeRowInserter(
 
 // insertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
-func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
+func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreConflicts bool) error {
 	if len(values) != len(ri.insertCols) {
 		return util.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
 	}
@@ -151,21 +151,35 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 	// secondary indexes first, we may get an error that looks like a
 	// uniqueness violation on a non-unique index.
 	ri.key = keys.MakeNonColumnKey(primaryIndexKey)
-	if log.V(2) {
-		log.Infof("CPut %s -> NULL", ri.key)
-	}
 	// Each sentinel value needs a distinct RawBytes field as the computed
 	// checksum includes the key the value is associated with.
 	ri.sentinelValue.SetBytes([]byte{})
-	b.CPut(&ri.key, &ri.sentinelValue, nil)
+	if ignoreConflicts {
+		if log.V(2) {
+			log.Infof("Put %s -> NULL", ri.key)
+		}
+		b.Put(&ri.key, &ri.sentinelValue)
+	} else {
+		if log.V(2) {
+			log.Infof("CPut %s -> NULL", ri.key)
+		}
+		b.CPut(&ri.key, &ri.sentinelValue, nil)
+	}
 	ri.key = nil
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		if log.V(2) {
-			log.Infof("CPut %s -> %v", secondaryIndexEntry.Key, secondaryIndexEntry.Value)
-		}
 		ri.key = secondaryIndexEntry.Key
-		b.CPut(&ri.key, secondaryIndexEntry.Value, nil)
+		if ignoreConflicts {
+			if log.V(2) {
+				log.Infof("Put %s -> %v", secondaryIndexEntry.Key, secondaryIndexEntry.Value)
+			}
+			b.Put(&ri.key, secondaryIndexEntry.Value)
+		} else {
+			if log.V(2) {
+				log.Infof("CPut %s -> %v", secondaryIndexEntry.Key, secondaryIndexEntry.Value)
+			}
+			b.CPut(&ri.key, secondaryIndexEntry.Value, nil)
+		}
 	}
 	ri.key = nil
 
@@ -186,11 +200,18 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 			// the row exists.
 
 			ri.key = keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
-			if log.V(2) {
-				log.Infof("CPut %s -> %v", ri.key, val)
-			}
 
-			b.CPut(&ri.key, &ri.marshalled[i], nil)
+			if ignoreConflicts {
+				if log.V(2) {
+					log.Infof("Put %s -> %v", ri.key, val)
+				}
+				b.Put(&ri.key, &ri.marshalled[i])
+			} else {
+				if log.V(2) {
+					log.Infof("CPut %s -> %v", ri.key, val)
+				}
+				b.CPut(&ri.key, &ri.marshalled[i], nil)
+			}
 			ri.key = nil
 		}
 	}
@@ -400,7 +421,7 @@ func (ru *rowUpdater) updateRow(
 		if err != nil {
 			return nil, err
 		}
-		err = ru.ri.insertRow(b, ru.newValues)
+		err = ru.ri.insertRow(b, ru.newValues, false)
 		return ru.newValues, err
 	}
 

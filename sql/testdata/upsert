@@ -33,7 +33,7 @@ statement error duplicate key value \(k\)=\(3\) violates unique constraint "prim
 INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 
 statement error UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time
-UPSERT INTO kv VALUES (10, 10), (10, 11)
+INSERT INTO kv VALUES (10, 10), (10, 11) ON CONFLICT (k) DO UPDATE SET v = excluded.v + 1
 
 # TODO(dan): Implement RETURNING with upsert
 statement error RETURNING is not supported with UPSERT
@@ -44,6 +44,16 @@ INSERT INTO kv VALUES (9, 9) ON CONFLICT (k) DO UPDATE SET (k, v) = (excluded.k 
 
 statement ok
 INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING
+
+# For better or worse, the fast path allows updating the same row twice in one
+# statement. The last one clobbers the earlier ones.
+statement ok
+UPSERT INTO kv VALUES (14, 14), (14, 15)
+
+# For better or worse, the fast path allows updating the same row twice in one
+# statement. The last one clobbers the earlier ones.
+statement ok
+INSERT INTO kv VALUES (15, 15), (15, 16) ON CONFLICT (k) DO UPDATE SET k = excluded.k, v = excluded.v
 
 query II
 SELECT * FROM kv ORDER BY (k, v)
@@ -56,6 +66,8 @@ SELECT * FROM kv ORDER BY (k, v)
 7 7
 11 12
 13 13
+14 15
+15 16
 
 
 statement ok
