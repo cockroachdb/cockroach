@@ -976,20 +976,20 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
-		expected []raft.StateType
+		advance bool
 		// only one of these may be true
 		remove, replace bool
 	}{
 		{ // Replica removed
-			expected: []raft.StateType{raft.StateFollower},
-			remove:   true,
+			advance: false,
+			remove:  true,
 		},
 		{ // Replica replaced by different replica
-			expected: []raft.StateType{raft.StateFollower},
-			replace:  true,
+			advance: false,
+			replace: true,
 		},
 		{ // Default behavior
-			expected: []raft.StateType{raft.StateFollower, raft.StateCandidate, raft.StateLeader},
+			advance: true,
 		},
 	}
 
@@ -998,54 +998,49 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 	key2 := roachpb.Key("z")
 
 	for i, td := range testData {
-		mtc := startMultiTestContext(t, 2)
-		// Replicate range to enable raft campaigning.
-		mtc.replicateRange(rangeID, 1)
-		store0 := mtc.stores[0]
+		func() {
+			mtc := startMultiTestContext(t, 2)
+			defer mtc.Stop()
 
-		// Make the split
-		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
-		if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
-			t.Fatal(err)
-		}
+			// Replicate range to enable raft campaigning.
+			mtc.replicateRange(rangeID, 1)
+			store0 := mtc.stores[0]
 
-		replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
-		if td.remove {
-			// Simulate second replica being transferred by removing it.
-			if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
+			// Make the split
+			splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+			if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 				t.Fatal(err)
 			}
-		} else if td.replace {
-			// Simulate replacement by changing replica ID.
-			desc := replica2.GetReplica()
-			desc.ReplicaID += 1234
-		}
 
-		states := make(map[raft.StateType]struct{})
-		ticker := time.NewTicker(1 * time.Millisecond)
-		timer := time.NewTimer(100 * time.Millisecond)
-	L:
-		for {
-			select {
-			case <-ticker.C:
-				state := replica2.RaftStatus().RaftState
-				states[state] = struct{}{}
-			case <-timer.C:
-				ticker.Stop()
-				break L
+			replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
+			if td.remove || td.replace {
+				// Simulate second replica being transferred by removing it.
+				if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
+			if td.replace {
+				// Simulate replacement by adding a new replica.
+				desc := *replica2.Desc()
+				desc.RangeID = 0
+				replica3, err := storage.NewReplica(&desc, store0, 0)
+				if err != nil {
+					t.Error(err)
+				}
+				if err := store0.AddReplicaTest(replica3); err != nil {
+					t.Error(err)
+				}
+			}
 
-		for _, state := range td.expected {
-			if _, ok := states[state]; !ok {
-				t.Errorf("%d. replica state was never expected %d", i, state)
+			originalTerm := replica2.RaftStatus().Term
+			time.Sleep(100 * time.Millisecond)
+			term := replica2.RaftStatus().Term
+			if td.advance && term <= originalTerm {
+				t.Errorf("%d. raft term should have advanced", i)
+			} else if !td.advance && term > originalTerm {
+				t.Errorf("%d. raft term should not have advanced", i)
 			}
-			delete(states, state)
-		}
-		for state := range states {
-			t.Errorf("%d. unexpected replica state %d", i, state)
-		}
-		mtc.Stop()
+		}()
 	}
 }
 
