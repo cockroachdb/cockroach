@@ -42,6 +42,9 @@ UPSERT INTO kv VALUES (10, 10) RETURNING *
 statement ok
 INSERT INTO kv VALUES (9, 9) ON CONFLICT (k) DO UPDATE SET (k, v) = (excluded.k + 2, excluded.v + 3)
 
+statement ok
+INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING
+
 query II
 SELECT * FROM kv ORDER BY (k, v)
 ----
@@ -52,6 +55,7 @@ SELECT * FROM kv ORDER BY (k, v)
 6 6
 7 7
 11 12
+13 13
 
 
 statement ok

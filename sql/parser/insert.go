@@ -56,10 +56,14 @@ func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
 		buf.WriteString(" ON CONFLICT (")
 		FormatNode(buf, f, node.OnConflict.Columns)
-		buf.WriteString(") DO UPDATE SET ")
-		FormatNode(buf, f, node.OnConflict.Exprs)
-		if node.OnConflict.Where != nil {
-			FormatNode(buf, f, node.OnConflict.Where)
+		if node.OnConflict.DoNothing {
+			buf.WriteString(") DO NOTHING")
+		} else {
+			buf.WriteString(") DO UPDATE SET ")
+			FormatNode(buf, f, node.OnConflict.Exprs)
+			if node.OnConflict.Where != nil {
+				FormatNode(buf, f, node.OnConflict.Where)
+			}
 		}
 	}
 	FormatNode(buf, f, node.Returning)
@@ -77,12 +81,13 @@ func (node *Insert) DefaultValues() bool {
 // uses the primary key for as the conflict index and the values being inserted
 // for Exprs.
 type OnConflict struct {
-	Columns NameList
-	Exprs   UpdateExprs
-	Where   *Where
+	Columns   NameList
+	Exprs     UpdateExprs
+	Where     *Where
+	DoNothing bool
 }
 
 // IsUpsertAlias returns true if the UPSERT syntactic sugar was used.
 func (oc *OnConflict) IsUpsertAlias() bool {
-	return oc != nil && oc.Columns == nil && oc.Exprs == nil && oc.Where == nil
+	return oc != nil && oc.Columns == nil && oc.Exprs == nil && oc.Where == nil && oc.DoNothing == false
 }
