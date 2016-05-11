@@ -1959,3 +1959,24 @@ func TestStoreChangeFrozen(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreNoConcurrentRaftSnapshots(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	if !store.AcquireRaftSnapshot() {
+		t.Fatal("expected true")
+	}
+
+	if store.AcquireRaftSnapshot() {
+		t.Fatalf("expected false")
+	}
+
+	store.ReleaseRaftSnapshot()
+
+	if !store.AcquireRaftSnapshot() {
+		t.Fatal("expected true")
+	}
+	store.ReleaseRaftSnapshot()
+}

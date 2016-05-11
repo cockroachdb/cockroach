@@ -381,6 +381,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		}
 	}
 
+	// See if there is already a snapshot running for this store.
+	if !r.store.AcquireRaftSnapshot() {
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	}
+
 	// Use an unbuffered channel so the worker stays alive until someone
 	// reads from the channel, and can abandon the snapshot if it gets
 	// stale.
@@ -389,6 +394,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		defer close(ch)
 		snap := r.store.NewSnapshot()
 		defer snap.Close()
+		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
