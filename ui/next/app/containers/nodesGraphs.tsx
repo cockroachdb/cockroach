@@ -2,16 +2,12 @@
 import * as React from "react";
 
 /**
- * Renders the main content of the help us page.
+ * Renders the graphs tab of the nodes page.
  */
 export default class extends React.Component<{}, {}> {
-  static title() {
-    return <h2>Help Cockroach Labs</h2>;
-  }
-
   render() {
     return <div className="section">
-      <h1>HelpUs Page</h1>
+      <h1>Nodes Graphs Page</h1>
     </div>;
   }
 }
