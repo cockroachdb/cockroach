@@ -22,8 +22,11 @@
 package storage
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -95,12 +98,22 @@ func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.Replica
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
 func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
-	for {
+	retryOptions := retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     50 * time.Millisecond,
+		Multiplier:     2,
+	}
+	for retry := retry.Start(retryOptions); retry.Next(); {
 		r.mu.Lock()
 		snap, err := r.Snapshot()
 		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
+			if snapshotChan == nil {
+				// The call to Snapshot() didn't start an async process due to
+				// rate limiting. Try again later.
+				continue
+			}
 			var ok bool
 			snap, ok = <-snapshotChan
 			if ok {
@@ -113,4 +126,5 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 			return snap, err
 		}
 	}
+	panic("unreachable") // due to infinite retries
 }
