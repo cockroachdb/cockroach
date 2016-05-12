@@ -21,9 +21,13 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
+	"math/big"
 	"reflect"
 	"strconv"
 	"time"
+
+	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -53,6 +57,25 @@ type pgType struct {
 	// To get the right value, "SELECT oid, typlen FROM pg_type"
 	// on a postgres server.
 	size int
+}
+
+//go:generate stringer -type=pgNumericSign
+type pgNumericSign uint16
+
+const (
+	pgNumericPos pgNumericSign = 0x0000
+	pgNumericNeg pgNumericSign = 0x4000
+	// pgNumericNan pgNumericSign = 0xC000
+)
+
+// The number of decimal digits per int16 Postgres "digit".
+const pgDecDigits = 4
+
+var decShift = big.NewInt(int64(math.Pow10(pgDecDigits)))
+
+type pgNumeric struct {
+	ndigits, weight, dscale int16
+	sign                    pgNumericSign
 }
 
 func typeForDatum(d parser.Datum) pgType {
@@ -179,13 +202,92 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		return
 	}
 	switch v := d.(type) {
+	case *parser.DBool:
+		b.putInt32(1)
+		if *v {
+			b.writeByte(1)
+		} else {
+			b.writeByte(0)
+		}
+
 	case *parser.DInt:
 		b.putInt32(8)
 		b.putInt64(int64(*v))
 
+	case *parser.DFloat:
+		b.putInt32(8)
+		b.putInt64(int64(math.Float64bits(float64(*v))))
+
+	case *parser.DDecimal:
+		alloc := struct {
+			pgNum pgNumeric
+
+			bigI              big.Int
+			wholeDec, fracDec inf.Dec
+		}{}
+
+		if v.Sign() >= 0 {
+			alloc.pgNum.sign = pgNumericPos
+		} else {
+			alloc.pgNum.sign = pgNumericNeg
+		}
+
+		alloc.wholeDec.Abs(&v.Dec)
+		alloc.wholeDec.Round(&alloc.wholeDec, 0, inf.RoundDown)
+
+		alloc.fracDec.Abs(&v.Dec)
+		alloc.fracDec.Sub(&alloc.fracDec, &alloc.wholeDec)
+
+		alloc.pgNum.dscale = int16(alloc.fracDec.Scale())
+
+		for big := alloc.bigI.Set(alloc.wholeDec.UnscaledBig()); big.Sign() > 0; big.Div(big, decShift) {
+			alloc.pgNum.ndigits++
+			alloc.pgNum.weight++
+		}
+
+		if alloc.pgNum.weight > 0 {
+			alloc.pgNum.weight--
+		}
+
+		for big := alloc.bigI.Set(alloc.fracDec.UnscaledBig()); big.Sign() > 0; big.Div(big, decShift) {
+			alloc.pgNum.ndigits++
+		}
+
+		b.putInt32(int32(2 * (4 + alloc.pgNum.ndigits)))
+		b.putInt16(alloc.pgNum.ndigits)
+		b.putInt16(alloc.pgNum.weight)
+		b.putInt16(int16(alloc.pgNum.sign))
+		b.putInt16(alloc.pgNum.dscale)
+
+		for i := int16(0); i < alloc.pgNum.weight+1; i++ {
+			big := alloc.bigI.Set(alloc.wholeDec.UnscaledBig())
+			for j := i + 1; j < alloc.pgNum.weight+1; j++ {
+				big.Div(big, decShift)
+			}
+			big.Mod(big, decShift)
+			b.putInt16(int16(big.Int64()))
+		}
+
+		for i := alloc.pgNum.weight + 1; i < alloc.pgNum.ndigits; i++ {
+			// Push pgDecDigits ahead of the decimal point.
+			alloc.fracDec.SetScale(alloc.fracDec.Scale() - pgDecDigits)
+
+			// Reuse wholeDesc now that we're done with it.
+			dec := alloc.wholeDec.Round(&alloc.fracDec, 0, inf.RoundDown)
+
+			// Send the stuff left of the decimal point.
+			b.putInt16(int16(dec.UnscaledBig().Int64()))
+
+			// Remove the stuff past the decimal point.
+			alloc.fracDec.Sub(&alloc.fracDec, dec)
+		}
+
 	case *parser.DBytes:
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
+
+	case *parser.DString:
+		b.writeLengthPrefixedString(string(*v))
 
 	default:
 		b.setError(util.Errorf("unsupported type %T", d))
@@ -288,6 +390,15 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, err
 			}
 			d = parser.MakeDBool(parser.DBool(v))
+		case formatBinary:
+			switch b[0] {
+			case 0:
+				d = parser.MakeDBool(false)
+			case 1:
+				d = parser.MakeDBool(true)
+			default:
+				return d, util.Errorf("unsupported binary bool: %q", b)
+			}
 		default:
 			return d, util.Errorf("unsupported bool format code: %d", code)
 		}
@@ -389,12 +500,56 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return nil, util.Errorf("could not parse string %q as decimal", b)
 			}
 			d = dd
+		case formatBinary:
+			r := bytes.NewReader(b)
+
+			alloc := struct {
+				pgNum pgNumeric
+				i16   int16
+				dec   inf.Dec
+
+				dd parser.DDecimal
+			}{}
+
+			for _, ptr := range []interface{}{
+				&alloc.pgNum.ndigits,
+				&alloc.pgNum.weight,
+				&alloc.pgNum.sign,
+				&alloc.pgNum.dscale,
+			} {
+				if err := binary.Read(r, binary.BigEndian, ptr); err != nil {
+					return d, err
+				}
+			}
+			for i := int16(0); i < alloc.pgNum.ndigits; i++ {
+				if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+					return d, err
+				}
+				scale := (i - alloc.pgNum.weight) * pgDecDigits
+				if overPrecision := scale - alloc.pgNum.dscale; overPrecision > 0 {
+					scale -= overPrecision
+					alloc.i16 /= int16(math.Pow10(int(overPrecision)))
+				}
+				alloc.dec.SetScale(inf.Scale(scale))
+				alloc.dec.SetUnscaled(int64(alloc.i16))
+				alloc.dd.Add(&alloc.dd.Dec, &alloc.dec)
+			}
+
+			switch alloc.pgNum.sign {
+			case pgNumericPos:
+			case pgNumericNeg:
+				alloc.dd.Neg(&alloc.dd.Dec)
+			default:
+				return d, util.Errorf("unsupported numeric sign: %d", alloc.pgNum.sign)
+			}
+
+			d = &alloc.dd
 		default:
 			return d, util.Errorf("unsupported numeric format code: %d", code)
 		}
 	case oid.T_text, oid.T_varchar:
 		switch code {
-		case formatText:
+		case formatText, formatBinary:
 			d = parser.NewDString(string(b))
 		default:
 			return d, util.Errorf("unsupported text format code: %d", code)
