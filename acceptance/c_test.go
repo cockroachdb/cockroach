@@ -22,65 +22,198 @@ import (
 )
 
 func TestDockerC(t *testing.T) {
-	testDockerSuccess(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "3", 1)})
-	testDockerFail(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "a", 1)})
+	testDockerSuccess(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5", 1)})
+	testDockerFail(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
 }
 
 const c = `
 set -e
 cat > main.c << 'EOF'
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
 #include <libpq-fe.h>
+#include <libpqtypes.h>
+#include <limits.h>
+#include <string.h>
+#include <sys/param.h>
 
-int
-main(int argc, char **argv)
-{
-	PGconn *conn;
-	PGresult *res;
-	const char *paramValues[1];
-	int paramLengths[1];
-	int paramFormats[1];
-	uint32_t binaryIntVal;
-
-	conn = PQconnectdb("");
+int main(int argc, char const *argv[]) {
+	PGconn *conn = PQconnectdb("");
 	if (PQstatus(conn) != CONNECTION_OK) {
 		fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
-		exit(1);
+		return 1;
 	}
 
-	paramValues[0] = "%v";
+	/* Always call first on any conn that is to be used with libpqtypes */
+	PQinitTypes(conn);
 
-	// TODO(mjibson): test with binary results
-	res = PQexecParams(conn,
-		"SELECT 1, 2 > $1, $1",
-		1, /* one param */
-		NULL, /* let the backend deduce param type */
-		paramValues,
-		NULL, /* don't need param lengths since text */
-		NULL, /* default to all text params */
-		0); /* ask for text results */
+	const char *query = "%v";
 
-	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-		fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
-		exit(1);
+	PGparam *param = PQparamCreate(conn);
+
+	PGbool b = 1;
+	if (!PQputf(param, "%bool", b)) {
+		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		return 1;
 	}
 
-	char *aptr = PQgetvalue(res, 0, 0);
-	char *bptr = PQgetvalue(res, 0, 1);
-	char *cptr = PQgetvalue(res, 0, 2);
+	char bytes[] = "hello";
+	PGbytea bytea;
+	bytea.len = sizeof(bytes);
+	bytea.data = bytes;
+	if (!PQputf(param, "%bytea", &bytea)) {
+		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		return 1;
+	}
 
-	if (strcmp(aptr, "1") || strcmp(bptr, "f") || strcmp(cptr, "3")) {
-		printf("unexpected: %s, %s, %s\n", aptr, bptr, cptr);
-		exit(1);
+  // // '1401-01-19 BC'
+  // PGdate date;
+  // date.isbc = 1;
+  // date.year = 1401;
+  // date.mon  = 0;
+  // date.mday = 19;
+  // if (!PQputf(param, "%date", &date)) {
+  // 	fprintf(stderr, "ERROR: %s\n", PQgeterror());
+  // 	return 1;
+  // }
+
+	PGnumeric numeric = "-1728718718271827121233.1212121212";
+	if (!PQputf(param, "%numeric", numeric)) {
+		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		return 1;
+	}
+
+	// PGfloat8 f8 = 123456.789;
+	// if (!PQputf(param, "%float8", f8)) {
+	// 	fprintf(stderr, "ERROR: %s\n", PQgeterror());
+	// 	return 1;
+	// }
+
+	PGint8 i8 = INT_MAX;
+	if (!PQputf(param, "%int8", i8)) {
+		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		return 1;
+	}
+
+ //  // "20 years 8 months 9 hours 10 mins 15 secs 123456 usecs"
+ //  PGinterval interval;
+ //  interval.years = 20;
+ //  interval.mons  = 8;
+ //  interval.days  = 0; // not used, set to 0
+ //  interval.hours = 9;
+ //  interval.mins  = 10;
+ //  interval.secs  = 15;
+ //  interval.usecs = 123456;
+ //  if (!PQputf(param, "%interval", &interval)) {
+ //  	fprintf(stderr, "ERROR: %s\n", PQgeterror());
+ //  	return 1;
+ //  }
+
+	PGtext text = "foobar";
+	if (!PQputf(param, "%text", text)) {
+		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		return 1;
+	}
+
+ //  // '2000-01-19 10:41:06'
+ //  PGtimestamp ts;
+ //  ts.date.isbc   = 0;
+ //  ts.date.year   = 2000;
+ //  ts.date.mon    = 0;
+ //  ts.date.mday   = 19;
+ //  ts.time.hour   = 10;
+ //  ts.time.min    = 41;
+ //  ts.time.sec    = 6;
+ //  ts.time.usec   = 0;
+ //  if (!PQputf(param, "%timestamp", &ts)) {
+ //  	fprintf(stderr, "ERROR: %s\n", PQgeterror());
+ //  	return 1;
+ //  }
+
+ //  // '2000-01-19 10:41:06-05'
+ //  PGtimestamp tstz;
+ //  tstz.date.isbc   = 0;
+ //  tstz.date.year   = 2000;
+ //  tstz.date.mon    = 0;
+ //  tstz.date.mday   = 19;
+ //  tstz.time.hour   = 10;
+ //  tstz.time.min    = 41;
+ //  tstz.time.sec    = 6;
+ //  tstz.time.usec   = 0;
+ //  tstz.time.gmtoff = -18000;
+ //  if (!PQputf(param, "%timestamptz", &tstz)) {
+ //  	fprintf(stderr, "ERROR: %s\n", PQgeterror());
+ //  	return 1;
+ //  }
+
+	// resultFormat: 0 for text, 1 for binary.
+	for (int resultFormat = 0; resultFormat <= 1; ++resultFormat) {
+			PGresult *result = PQparamExec(conn, param, query, resultFormat);
+			if(!result) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+
+			PGbool recvb;
+			if (!PQgetf(result, 0, "%bool", 0, &recvb)) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+			if (recvb != b) {
+				fprintf(stderr, "expected: %d, got: %d\n", b, recvb);
+				return 1;
+			}
+
+			PGbytea recvbytea;
+			if (!PQgetf(result, 0, "%bytea", 1, &recvbytea)) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+			if (memcmp(recvbytea.data, bytea.data, MIN(recvbytea.len, bytea.len)) != 0) {
+				fprintf(stderr, "expected (%d bytes): ", bytea.len);
+				for (int i = 0; i < bytea.len; ++i) {
+					fprintf(stderr, "%c", bytea.data[i]);
+				}
+				fprintf(stderr, " got (%d bytes): ", recvbytea.len);
+				for (int i = 0; i < recvbytea.len; ++i) {
+					fprintf(stderr, "%c", recvbytea.data[i]);
+				}
+				fprintf(stderr, "\n");
+				return 1;
+			}
+
+			PGnumeric recvnumeric;
+			if (!PQgetf(result, 0, "%numeric", 2, &recvnumeric)) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+			if (strcmp(recvnumeric, numeric)) {
+				fprintf(stderr, "expected: %s, got: %s\n", numeric, recvnumeric);
+				return 1;
+			}
+
+			PGint8 recvi8;
+			if (!PQgetf(result, 0, "%int8", 3, &recvi8)) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+			if (recvi8 != i8) {
+				fprintf(stderr, "expected: %lld, got: %lld\n", i8, recvi8);
+				return 1;
+			}
+
+			PGtext recvtext;
+			if (!PQgetf(result, 0, "%text", 4, &recvtext)) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+			if (strcmp(recvtext, text)) {
+				fprintf(stderr, "expected: %s, got: %s\n", text, recvtext);
+				return 1;
+			}
 	}
 
 	return 0;
 }
 EOF
-gcc -std=c99 -I/usr/include/postgresql/ -lpq main.c
+gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
 ./a.out
 `
