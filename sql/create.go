@@ -120,7 +120,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {

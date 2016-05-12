@@ -195,7 +195,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 				return nil, err
 			}
 			if descriptor == nil {
-				return nil, tableDoesNotExistError(table.String())
+				return nil, newUndefinedTableError(table.String())
 			}
 			descs = append(descs, descriptor)
 		}

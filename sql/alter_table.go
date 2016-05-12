@@ -55,7 +55,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		if n.IfExists {
 			return &emptyNode{}, nil
 		}
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
