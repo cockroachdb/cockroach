@@ -95,13 +95,14 @@ func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.Replica
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
 func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	for {
+		r.mu.Lock()
 		snap, err := r.Snapshot()
+		snapshotChan := r.mu.snapshotChan
+		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
 			var ok bool
-			snap, ok = <-r.mu.snapshotChan
+			snap, ok = <-snapshotChan
 			if ok {
 				return snap, nil
 			}
