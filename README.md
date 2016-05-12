@@ -6,25 +6,31 @@
 ## A Scalable, Survivable, Strongly-Consistent SQL Database
 
 - [What is CockroachDB?](#what-is-cockroachdb)
+- [Docs](#docs)
 - [Quickstart](#quickstart)
 - [Client Drivers](#client-drivers)
 - [Deployment](#deployment)
 - [Get In Touch](#get-in-touch)
 - [Contributing](#contributing)
-- [Talks](#talks)
+- [Tech Talks](#tech-talks)
 - [Design](#design)
 
 ## What is CockroachDB?
 
 CockroachDB is a distributed SQL database built on a transactional and strongly-consistent key-value store. It **scales** horizontally; **survives** disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention; supports **strongly-consistent** ACID transactions; and provides a familiar **SQL** API for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://www.cockroachlabs.com/docs/frequently-asked-questions.html), [documentation](https://www.cockroachlabs.com/docs), and [design overview](#design).
+For more details, see our [FAQ](https://cockroachlabs.com/docs/frequently-asked-questions) and original [design document](
+https://github.com/cockroachdb/cockroach#design).
 
 ## Status
 
 CockroachDB is currently in beta. See our
-[Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
+[Roadmap](https://github.com/cockroachdb/cockroach/wiki) and
 [Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development.
+
+## Docs
+
+For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs).
 
 ## Quickstart 
 
@@ -82,7 +88,7 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 -   [Manual](https://www.cockroachlabs.com/docs/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
 
--   [Cloud](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws) - A sample configuration to run an insecure CockroachDB cluster on AWS using [Terraform](https://terraform.io/).
+-   [Cloud](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws) - Configuration files and instructions for deploying an insecure development or test cluster on GCE or AWS using [Terraform](https://terraform.io/).
 
 ## Get In Touch
 
@@ -106,35 +112,9 @@ We're an open source project and welcome contributions.
 
 4.  Make your changes according to our [code review workflow](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#code-review-workflow).
 
-## Talks
+## Tech Talks
 
-The best ones to start with:
-
--   10/28/2015: [Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball), 30min  
-    Architecture & overview.
-
--   6/16/2015: [Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball), 23min  
-    A short, less technical presentation of CockroachDB.
-
-Other talks of interest:
-
--   12/2/2015: [Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball), 21min  
-    CockroachDB's MVCC model.
-
--   8/21/2015: [Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell), 52min
-
--   6/10/2015: [NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf), 15min  
-    A short, non-technical talk with a small cluster survivability demo.
-
--   5/27/2015: [CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball), 25min  
-    An introduction to the goals and design of CockroachDB. 
-
--   3/4/2015: [The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf), 45min  
-    The most technical talk given thus far, going through the implementation of transactions in some detail.
-
--   11/5/2014: [The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf), 1h 25min
-
--   9/5/2014: [Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball), 1h
+For recordings and slides from talks given by CockroachDB founders and engineers, see [Tech Talks](https://www.cockroachlabs.com/docs/tech-talks.html).
 
 ## Design
 
