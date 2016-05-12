@@ -247,6 +247,13 @@ func (n *unionNode) readLeft() bool {
 	return false
 }
 
+func (n *unionNode) expandPlan() error {
+	if err := n.right.expandPlan(); err != nil {
+		return err
+	}
+	return n.left.expandPlan()
+}
+
 func (n *unionNode) Start() error {
 	if err := n.right.Start(); err != nil {
 		return err

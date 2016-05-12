@@ -116,8 +116,12 @@ func TestValues(t *testing.T) {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}
 		if plan != nil {
+			if err := plan.expandPlan(); err != nil {
+				t.Errorf("%d: unexpected error in expandPlan: %v", i, err)
+				continue
+			}
 			if err := plan.Start(); err != nil {
-				t.Errorf("%d: unexpected error in start: %v", i, err)
+				t.Errorf("%d: unexpected error in Start: %v", i, err)
 				continue
 			}
 			var rows []parser.DTuple
