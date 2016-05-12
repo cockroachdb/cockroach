@@ -344,7 +344,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := send(rpcOpts, replicas, ba, ds.rpcContext)
+	reply, err := ds.sendToReplicas(rpcOpts, replicas, ba, ds.rpcContext)
 	if err != nil {
 		return nil, err
 	}
@@ -972,11 +972,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	}
 }
 
-// Send sends one or more RPCs to clients specified by the slice of
+// sendToReplicas sends one or more RPCs to clients specified by the slice of
 // replicas. On success, Send returns the first successful reply. Otherwise,
 // Send returns an error if and as soon as the number of failed RPCs exceeds
 // the available endpoints less the number of required replies.
-func send(opts SendOptions, replicas ReplicaSlice,
+func (ds *DistSender) sendToReplicas(opts SendOptions, replicas ReplicaSlice,
 	args roachpb.BatchRequest, rpcContext *rpc.Context) (*roachpb.BatchResponse, error) {
 
 	if len(replicas) < 1 {
@@ -1028,7 +1028,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 					log.Infof("application error: %s", call.Reply.Error)
 				}
 
-				if !isPerReplicaError(call.Reply.Error) {
+				if !ds.isPerReplicaError(call.Reply.Error) {
 					return call.Reply, nil
 				}
 
@@ -1062,7 +1062,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 // isPerReplicaError returns true if the given error is likely to be
 // unique to the replica that reported it, and retrying on other
 // replicas is likely to produce different results.
-func isPerReplicaError(pErr *roachpb.Error) bool {
+func (ds *DistSender) isPerReplicaError(pErr *roachpb.Error) bool {
 	switch pErr.GetDetail().(type) {
 	case *roachpb.RangeNotFoundError:
 		return true
