@@ -81,7 +81,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
 	}
 
-	plan, err := p.makePlan(n.Statement, nil, autoCommit)
+	plan, err := p.newPlan(n.Statement, nil, autoCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -146,10 +146,13 @@ func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return e.plan.ExplainPlan(v)
 }
 
+func (e *explainTypesNode) expandPlan() error {
+	// TODO(knz) This will not need to call expandPlan() any more once all
+	// the type checking occurs earlier.
+	return e.plan.expandPlan()
+}
+
 func (e *explainTypesNode) Start() error {
-	if err := e.plan.Start(); err != nil {
-		return err
-	}
 	populateTypes(e.results, e.plan, 0)
 	return nil
 }
@@ -210,14 +213,12 @@ func (e *explainPlanNode) DebugValues() debugValues             { return e.resul
 func (e *explainPlanNode) Err() error                           { return e.results.Err() }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainPlanNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
+func (e *explainPlanNode) expandPlan() error                    { return e.plan.expandPlan() }
 func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return e.plan.ExplainPlan(v)
 }
 
 func (e *explainPlanNode) Start() error {
-	if err := e.plan.Start(); err != nil {
-		return err
-	}
 	populateExplain(e.verbose, e.results, e.plan, 0)
 	return nil
 }
@@ -325,13 +326,15 @@ func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
 
 func (n *explainDebugNode) Err() error { return n.plan.Err() }
-func (n *explainDebugNode) Start() error {
-	if err := n.plan.Start(); err != nil {
+func (n *explainDebugNode) expandPlan() error {
+	if err := n.plan.expandPlan(); err != nil {
 		return err
 	}
 	n.plan.MarkDebug(explainDebug)
 	return nil
 }
+
+func (n *explainDebugNode) Start() error { return n.plan.Start() }
 
 func (n *explainDebugNode) Next() bool { return n.plan.Next() }
 

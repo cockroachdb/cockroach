@@ -87,6 +87,10 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	return &dropDatabaseNode{n: n, p: p, dbDesc: dbDesc, td: td}, nil
 }
 
+func (n *dropDatabaseNode) expandPlan() error {
+	return nil
+}
+
 func (n *dropDatabaseNode) Start() error {
 	tbNameStrings := make([]string, len(n.td))
 	for i, tbDesc := range n.td {
@@ -177,6 +181,10 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 	return &dropIndexNode{n: n, p: p}, nil
 }
 
+func (n *dropIndexNode) expandPlan() error {
+	return nil
+}
+
 func (n *dropIndexNode) Start() error {
 	for _, index := range n.n.IndexList {
 		// Need to retrieve the descriptor again for each index name in
@@ -185,8 +193,8 @@ func (n *dropIndexNode) Start() error {
 		// drop need to be visible to the second drop.
 		tableDesc, err := n.p.getTableDesc(index.Table)
 		if err != nil || tableDesc == nil {
-			// makePlan() and Start() ultimately run within the same
-			// transaction. If we got a descriptor during makePlan(), we
+			// newPlan() and Start() ultimately run within the same
+			// transaction. If we got a descriptor during newPlan(), we
 			// must have it here too.
 			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.Table))
 		}
@@ -273,6 +281,10 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		return &emptyNode{}, nil
 	}
 	return &dropTableNode{p: p, n: n, td: td}, nil
+}
+
+func (n *dropTableNode) expandPlan() error {
+	return nil
 }
 
 func (n *dropTableNode) Start() error {

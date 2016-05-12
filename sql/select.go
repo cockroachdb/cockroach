@@ -105,6 +105,12 @@ func (s *selectNode) DebugValues() debugValues {
 	return s.debugVals
 }
 
+func (s *selectNode) expandPlan() error {
+	// TODO(knz) Some code from the constructor in Select() and initSelect() really
+	// belongs here.
+	return s.table.node.expandPlan()
+}
+
 func (s *selectNode) Start() error {
 	return s.table.node.Start()
 }
@@ -214,7 +220,7 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
 	default:
-		plan, err := p.makePlan(s, desiredTypes, autoCommit)
+		plan, err := p.newPlan(s, desiredTypes, autoCommit)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +407,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 				return fmt.Errorf("subquery in FROM must have an alias")
 			}
 
-			s.table.node, s.err = p.makePlan(expr.Select, nil, false)
+			s.table.node, s.err = p.newPlan(expr.Select, nil, false)
 			if s.err != nil {
 				return s.err
 			}
