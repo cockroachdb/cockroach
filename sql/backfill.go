@@ -179,6 +179,68 @@ func (sc *SchemaChanger) getTableSpan() (sqlbase.Span, error) {
 	}, nil
 }
 
+// Get the checkpoint from the first column mutation.
+func (sc *SchemaChanger) getColumnCheckpoint(tableDesc *sqlbase.TableDescriptor) roachpb.Key {
+	for _, m := range tableDesc.Mutations {
+		if m.MutationID != sc.mutationID {
+			break
+		}
+		switch m.Descriptor_.(type) {
+		case *sqlbase.DescriptorMutation_Column:
+			return m.CheckpointKey
+		}
+	}
+	return nil
+}
+
+// Get the checkpoint from the first add index mutation.
+func (sc *SchemaChanger) getAddIndexCheckpoint(tableDesc *sqlbase.TableDescriptor) roachpb.Key {
+	for _, m := range tableDesc.Mutations {
+		if m.MutationID != sc.mutationID {
+			break
+		}
+		switch m.Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			switch m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Index:
+				return m.CheckpointKey
+			}
+		}
+	}
+	return nil
+}
+
+// Write a checkpoint into the first column mutation.
+func (sc *SchemaChanger) setColumnCheckpoint(tableDesc *sqlbase.TableDescriptor, key roachpb.Key) {
+	for i, m := range tableDesc.Mutations {
+		if m.MutationID != sc.mutationID {
+			break
+		}
+		switch m.Descriptor_.(type) {
+		case *sqlbase.DescriptorMutation_Column:
+			tableDesc.Mutations[i].CheckpointKey = key
+			return
+		}
+	}
+}
+
+// Write a checkpoint into the first add index mutation.
+func (sc *SchemaChanger) setAddIndexCheckpoint(tableDesc *sqlbase.TableDescriptor, key roachpb.Key) {
+	for i, m := range tableDesc.Mutations {
+		if m.MutationID != sc.mutationID {
+			break
+		}
+		switch m.Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			switch m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Index:
+				tableDesc.Mutations[i].CheckpointKey = key
+				return
+			}
+		}
+	}
+}
+
 // ColumnTruncateAndBackfillChunkSize is the maximum number of rows of keys
 // processed per chunk during the column truncate or backfill.
 //
@@ -228,7 +290,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			*lease = l
 
 			// Add and delete columns for a chunk of the key space.
-			sp.Start, done, err = sc.truncateAndBackfillColumnsChunk(
+			done, err = sc.truncateAndBackfillColumnsChunk(
 				added, dropped, nonNullableColumn, defaultExprs, evalCtx, sp,
 			)
 			if err != nil {
@@ -246,8 +308,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	defaultExprs []parser.TypedExpr,
 	evalCtx parser.EvalContext,
 	sp sqlbase.Span,
-) (roachpb.Key, bool, error) {
-	var curSentinel roachpb.Key
+) (bool, error) {
 	done := false
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
@@ -258,6 +319,10 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if tableDesc.Deleted() {
 			done = true
 			return nil
+		}
+
+		if key := sc.getColumnCheckpoint(tableDesc); key != nil {
+			sp.Start = key
 		}
 
 		// Run a scan across the table using the primary key. Running
@@ -274,6 +339,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		// Use a different batch to truncate/backfill columns.
 		writeBatch := &client.Batch{}
 		marshalled := make([]roachpb.Value, len(defaultExprs))
+		var curSentinel roachpb.Key
 		done = true
 		for _, result := range b.Results {
 			var sentinelKey roachpb.Key
@@ -340,12 +406,19 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 				}
 			}
 		}
+		// Write a checkpoint with the next key.
+		sc.setColumnCheckpoint(tableDesc, curSentinel.PrefixEnd())
+		writeBatch.Put(
+			sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+		)
+		txn.SetSystemConfigTrigger()
+
 		if err := txn.Run(writeBatch); err != nil {
 			return convertBackfillError(tableDesc, writeBatch)
 		}
 		return nil
 	})
-	return curSentinel.PrefixEnd(), done, err
+	return done, err
 }
 
 func (sc *SchemaChanger) truncateIndexes(
@@ -422,7 +495,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		}
 		*lease = l
 
-		sp.Start, done, err = sc.backfillIndexesChunk(added, sp)
+		done, err = sc.backfillIndexesChunk(added, sp)
 		if err != nil {
 			return err
 		}
@@ -433,8 +506,7 @@ func (sc *SchemaChanger) backfillIndexes(
 func (sc *SchemaChanger) backfillIndexesChunk(
 	added []sqlbase.IndexDescriptor,
 	sp sqlbase.Span,
-) (roachpb.Key, bool, error) {
-	var nextKey roachpb.Key
+) (bool, error) {
 	done := false
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
@@ -457,6 +529,9 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// because the schema change is in the correct state to handle
 		// intermediate OLTP commands which delete and add values during the
 		// scan.
+		if key := sc.getAddIndexCheckpoint(tableDesc); key != nil {
+			sp.Start = key
+		}
 		scan := &scanNode{
 			planner: makePlanner(),
 			txn:     txn,
@@ -497,18 +572,17 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		if rows.Err() != nil {
 			return rows.Err()
 		}
+		// Write a checkpoint with the next key.
+		sc.setAddIndexCheckpoint(tableDesc, scan.fetcher.Key())
+		b.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+		txn.SetSystemConfigTrigger()
 		// Write the new index values.
 		if err := txn.Run(b); err != nil {
 			return convertBackfillError(tableDesc, b)
 		}
 		// Have we processed all the table rows?
-		if numRows < IndexBackfillChunkSize {
-			done = true
-			return nil
-		}
-		// Keep track of the next key.
-		nextKey = scan.fetcher.Key()
+		done = numRows < IndexBackfillChunkSize
 		return nil
 	})
-	return nextKey, done, err
+	return done, err
 }

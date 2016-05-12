@@ -426,6 +426,8 @@ func (sc *SchemaChanger) reverseMutations() error {
 			case sqlbase.DescriptorMutation_DROP:
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
 			}
+			// Reset checkpoint.
+			desc.Mutations[i].CheckpointKey = nil
 		}
 		// Publish() will increment the version.
 		return nil

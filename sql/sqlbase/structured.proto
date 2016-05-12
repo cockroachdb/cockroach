@@ -158,6 +158,11 @@ message DescriptorMutation {
   // unique constraint index.
   optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+
+  // A checkpoint key used when restarting the backfill for this mutation.
+  // An unset value implies the beginning.
+  optional bytes checkpoint_key = 6
+  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.Key"];
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata
