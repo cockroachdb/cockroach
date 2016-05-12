@@ -89,6 +89,52 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 					primaryIndexColumnSet[c.Column] = struct{}{}
 				}
 			}
+		case *parser.CheckConstraintTableDef:
+			// CHECK expressions seem to vary across databases. Wikipedia's entry on
+			// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
+			// that if the constraint refers to a single column only, it is possible to
+			// specify the constraint as part of the column definition. Postgres allows
+			// specifying them anywhere about any columns, but it moves all constraints to
+			// the table level (i.e., columns never have a check constraint themselves). We
+			// will adhere to the stricter definition.
+
+			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+				qname, ok := expr.(*parser.QualifiedName)
+				if !ok {
+					// Not a qname, don't do anything to this node.
+					return nil, true, expr
+				}
+
+				if err := qname.NormalizeColumnName(); err != nil {
+					return err, false, nil
+				}
+
+				if qname.IsStar() {
+					return fmt.Errorf("* not allowed in constraint %q", d.Expr.String()), false, nil
+				}
+				col, err := desc.FindActiveColumnByName(qname.Column())
+				if err != nil {
+					return fmt.Errorf("column %q not found for constraint %q", qname.String(), d.Expr.String()), false, nil
+				}
+				// Convert to a dummy datum of the correct type.
+				return nil, false, col.Type.ToDatumType()
+			}
+
+			expr, err := parser.SimpleVisit(d.Expr, preFn)
+			if err != nil {
+				return desc, err
+			}
+			if typedExpr, err := expr.TypeCheck(nil, parser.TypeBool); err != nil {
+				return desc, err
+			} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.TypeBool) {
+				return desc, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
+			}
+			check := &TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
+			if len(d.Name) > 0 {
+				check.Name = string(d.Name)
+			}
+			desc.Checks = append(desc.Checks, check)
+
 		default:
 			return desc, util.Errorf("unsupported table def: %T", def)
 		}
@@ -198,45 +244,6 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		}
 		s := d.DefaultExpr.String()
 		col.DefaultExpr = &s
-	}
-
-	// CHECK expressions seem to vary across databases. Wikipedia's entry on
-	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
-	// that if the constraint refers to a single column only, it is possible to
-	// specify the constraint as part of the column definition. Postgres allows
-	// specifying them anywhere about any columns, but it moves all constraints to
-	// the table level (i.e., columns never have a check constraint themselves). We
-	// will adhere to the stricter definition.
-	if d.CheckExpr != nil {
-		s := d.CheckExpr.String()
-		col.CheckExpr = &s
-
-		preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-			qname, ok := expr.(*parser.QualifiedName)
-			if !ok {
-				// Not a qname, don't do anything to this node.
-				return nil, true, expr
-			}
-			if err := qname.NormalizeColumnName(); err != nil {
-				return err, false, nil
-			}
-			if qname.IsStar() || qname.Base != "" || qname.Column() != col.Name {
-				err := fmt.Errorf("argument of CHECK cannot refer to other columns: \"%s\"", qname)
-				return err, false, nil
-			}
-			// Convert to a dummy datum of the correct type.
-			return nil, false, colDatumType
-		}
-
-		expr, err := parser.SimpleVisit(d.CheckExpr, preFn)
-		if err != nil {
-			return nil, nil, err
-		}
-		if typedExpr, err := expr.TypeCheck(nil, parser.TypeBool); err != nil {
-			return nil, nil, err
-		} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.TypeBool) {
-			return nil, nil, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
-		}
 	}
 
 	var idx *IndexDescriptor

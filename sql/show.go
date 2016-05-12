@@ -125,9 +125,6 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		if col.DefaultExpr != nil {
 			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
 		}
-		if col.CheckExpr != nil {
-			fmt.Fprintf(&buf, " CHECK (%s)", *col.CheckExpr)
-		}
 		if desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
@@ -149,6 +146,15 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			storing,
 		)
 	}
+
+	for _, e := range desc.Checks {
+		fmt.Fprintf(&buf, ",\n\t")
+		if len(e.Name) > 0 {
+			fmt.Fprintf(&buf, "CONSTRAINT %s ", quoteNames(e.Name))
+		}
+		fmt.Fprintf(&buf, "CHECK (%s)", e.Expr)
+	}
+
 	buf.WriteString("\n)")
 	v.rows = append(v.rows, []parser.Datum{
 		parser.NewDString(n.Table.String()),
