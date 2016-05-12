@@ -66,6 +66,16 @@ const (
 	serverMsgNoData               serverMessageType = 'n'
 )
 
+//go:generate stringer -type=serverErrFieldType
+type serverErrFieldType byte
+
+// http://www.postgresql.org/docs/current/static/protocol-error-fields.html
+const (
+	serverErrFieldSeverity   serverErrFieldType = 'S'
+	serverErrFieldSQLState   serverErrFieldType = 'C'
+	serverErrFieldMsgPrimary serverErrFieldType = 'M'
+)
+
 //go:generate stringer -type=prepareType
 type prepareType byte
 
@@ -195,9 +205,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	} {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		for _, str := range [...]string{key, value} {
-			if err := c.writeBuf.writeString(str); err != nil {
-				return err
-			}
+			c.writeBuf.writeTerminatedString(str)
 		}
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
 			return err
@@ -231,7 +239,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			if log.V(2) {
 				log.Infof("pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
-			c.writeBuf.WriteByte(txnStatus)
+			c.writeBuf.writeByte(txnStatus)
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
 				return err
 			}
@@ -645,8 +653,8 @@ func (c *v3Conn) executeStatements(
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	c.writeBuf.initMsg(serverMsgCommandComplete)
-	c.writeBuf.Write(tag)
-	c.writeBuf.WriteByte(0)
+	c.writeBuf.write(tag)
+	c.writeBuf.nullTerminate()
 	return c.writeBuf.finishMsg(c.wr)
 }
 
@@ -674,27 +682,13 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errToSend string) error {
 	}
 
 	c.writeBuf.initMsg(serverMsgErrorResponse)
-	if err := c.writeBuf.WriteByte('S'); err != nil {
-		return err
-	}
-	if err := c.writeBuf.writeString("ERROR"); err != nil {
-		return err
-	}
-	if err := c.writeBuf.WriteByte('C'); err != nil {
-		return err
-	}
-	if err := c.writeBuf.writeString(errCode); err != nil {
-		return err
-	}
-	if err := c.writeBuf.WriteByte('M'); err != nil {
-		return err
-	}
-	if err := c.writeBuf.writeString(errToSend); err != nil {
-		return err
-	}
-	if err := c.writeBuf.WriteByte(0); err != nil {
-		return err
-	}
+	c.writeBuf.putErrFieldMsg(serverErrFieldSeverity)
+	c.writeBuf.writeTerminatedString("ERROR")
+	c.writeBuf.putErrFieldMsg(serverErrFieldSQLState)
+	c.writeBuf.writeTerminatedString(errCode)
+	c.writeBuf.putErrFieldMsg(serverErrFieldMsgPrimary)
+	c.writeBuf.writeTerminatedString(errToSend)
+	c.writeBuf.nullTerminate()
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err
 	}
@@ -754,15 +748,11 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 					}
 					switch fmtCode {
 					case formatText:
-						if err := c.writeBuf.writeTextDatum(col, c.session.Location); err != nil {
-							return err
-						}
+						c.writeBuf.writeTextDatum(col, c.session.Location)
 					case formatBinary:
-						if err := c.writeBuf.writeBinaryDatum(col); err != nil {
-							return err
-						}
+						c.writeBuf.writeBinaryDatum(col)
 					default:
-						return util.Errorf("unsupported format code %s", fmtCode)
+						c.writeBuf.setError(util.Errorf("unsupported format code %s", fmtCode))
 					}
 				}
 				if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -802,9 +792,7 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 		if log.V(2) {
 			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ)
 		}
-		if err := c.writeBuf.writeString(column.Name); err != nil {
-			return err
-		}
+		c.writeBuf.writeTerminatedString(column.Name)
 
 		typ := typeForDatum(column.Typ)
 		c.writeBuf.putInt32(0) // Table OID (optional).

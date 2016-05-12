@@ -144,9 +144,13 @@ func (b *readBuffer) getInt32() (int32, error) {
 	return v, nil
 }
 
+// writeBuffer is a wrapper around bytes.Buffer that provides a convenient interface
+// for writing PGWire results. The buffer preserves any errors it encounters when writing,
+// and will turn all subsequent write attempts into no-ops until finishMsg is called.
 type writeBuffer struct {
-	bytes.Buffer
-	putbuf [64]byte
+	wrapped bytes.Buffer
+	err     error
+	putbuf  [64]byte
 
 	// bytecount counts the number of bytes written across all pgwire connections, not just this
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
@@ -154,40 +158,100 @@ type writeBuffer struct {
 	bytecount *metric.Counter
 }
 
-// writeString writes a null-terminated string.
-func (b *writeBuffer) writeString(s string) error {
-	if _, err := b.WriteString(s); err != nil {
-		return err
+func (b *writeBuffer) writeByte(c byte) {
+	if b.err == nil {
+		b.err = b.wrapped.WriteByte(c)
 	}
-	return b.WriteByte(0)
+}
+
+func (b *writeBuffer) write(p []byte) {
+	if b.err == nil {
+		_, b.err = b.wrapped.Write(p)
+	}
+}
+
+func (b *writeBuffer) writeString(s string) {
+	if b.err == nil {
+		_, b.err = b.wrapped.WriteString(s)
+	}
+}
+
+func (b *writeBuffer) nullTerminate() {
+	if b.err == nil {
+		b.err = b.wrapped.WriteByte(0)
+	}
+}
+
+// writeString writes a length-prefixed string. The length is encoded as
+// an int32.
+func (b *writeBuffer) writeLengthPrefixedString(s string) {
+	b.putInt32(int32(len(s)))
+	b.writeString(s)
+}
+
+// writeString writes a null-terminated string.
+func (b *writeBuffer) writeTerminatedString(s string) {
+	b.writeString(s)
+	b.nullTerminate()
 }
 
 func (b *writeBuffer) putInt16(v int16) {
-	binary.BigEndian.PutUint16(b.putbuf[:], uint16(v))
-	b.Write(b.putbuf[:2])
+	if b.err == nil {
+		binary.BigEndian.PutUint16(b.putbuf[:], uint16(v))
+		_, b.err = b.wrapped.Write(b.putbuf[:2])
+	}
 }
 
 func (b *writeBuffer) putInt32(v int32) {
-	binary.BigEndian.PutUint32(b.putbuf[:], uint32(v))
-	b.Write(b.putbuf[:4])
+	if b.err == nil {
+		binary.BigEndian.PutUint32(b.putbuf[:], uint32(v))
+		_, b.err = b.wrapped.Write(b.putbuf[:4])
+	}
 }
 
 func (b *writeBuffer) putInt64(v int64) {
-	binary.BigEndian.PutUint64(b.putbuf[:], uint64(v))
-	b.Write(b.putbuf[:8])
+	if b.err == nil {
+		binary.BigEndian.PutUint64(b.putbuf[:], uint64(v))
+		_, b.err = b.wrapped.Write(b.putbuf[:8])
+	}
 }
 
+func (b *writeBuffer) putErrFieldMsg(field serverErrFieldType) {
+	if b.err == nil {
+		b.err = b.wrapped.WriteByte(byte(field))
+	}
+}
+
+func (b *writeBuffer) reset() {
+	b.wrapped.Reset()
+	b.err = nil
+}
+
+// initMsg begins writing a message into the writeBuffer with the provided type.
 func (b *writeBuffer) initMsg(typ serverMessageType) {
-	b.Reset()
+	b.reset()
 	b.putbuf[0] = byte(typ)
-	b.Write(b.putbuf[:5]) // message type + message length
+	_, b.err = b.wrapped.Write(b.putbuf[:5]) // message type + message length
 }
 
+// finishMsg attempts to write the data it has accumulated to the provided io.Writer.
+// If the writeBuffer previously encountered an error since the last call to initMsg,
+// or if it encounters an error while writing to w, it will return an error.
 func (b *writeBuffer) finishMsg(w io.Writer) error {
-	bytes := b.Bytes()
-	binary.BigEndian.PutUint32(bytes[1:5], uint32(b.Len()-1))
+	defer b.reset()
+	if b.err != nil {
+		return b.err
+	}
+	bytes := b.wrapped.Bytes()
+	binary.BigEndian.PutUint32(bytes[1:5], uint32(b.wrapped.Len()-1))
 	n, err := w.Write(bytes)
 	b.bytecount.Inc(int64(n))
-	b.Reset()
 	return err
+}
+
+// setError sets the writeBuffer's error, if it does not already have one.
+func (b *writeBuffer) setError(err error) {
+	if b.err == nil {
+		b.err = err
+	}
 }
