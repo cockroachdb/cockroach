@@ -3,34 +3,40 @@ import * as React from "react";
 type TSResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
 
 /** 
- * SelectorProps reperesents the properties assigned to a selector component. A
+ * MetricProps reperesents the properties assigned to a selector component. A
  * selector describes a single time series that should be queried from the
  * server, along with some basic information on how that data should be rendered
  * in a graph context.
  */
-export interface SelectorProps {
+export interface MetricProps {
   name: string;
   sources?: string[];
   title?: string;
+  rate?: boolean;
+  nonNegativeRate?: boolean;
 }
 
 /**
- * Selector is a React component which describes a selector. This exists as a
+ * Metric is a React component which describes a selector. This exists as a
  * component for convenient syntax, and should not be rendered directly; rather,
- * a renderable component will contain selectors, but will use them
+ * a renderable component will contain metrics, but will use them
  * only informationally within rendering them.
  */
-export class Selector extends React.Component<SelectorProps, {}> {
+export class Metric extends React.Component<MetricProps, {}> {
   render(): React.ReactElement<any> {
-    throw new Error("Component <Selector /> should never render.");
+    throw new Error("Component <Metric /> should never render.");
   }
 };
 
 /**
  * AxisProps represents the properties of a renderable graph axis.
  */
-interface AxisProps {
-  title?: string;
+export interface AxisProps {
+  label?: string;
+  format?: (n: number) => string;
+  range?: number[];
+  yLow?: number;
+  yHigh?: number;
 }
 
 /**
@@ -40,6 +46,11 @@ interface AxisProps {
  * informationally without rendering them.
  */
 export class Axis extends React.Component<AxisProps, {}> {
+  static defaultProps: AxisProps = {
+    yLow: 0,
+    yHigh: 1,
+  };
+
   render(): React.ReactElement<any> {
     throw new Error("Component <Axis /> should never render.");
   }
@@ -53,7 +64,7 @@ export interface MetricsDataComponentProps {
 }
 
 // TextGraph is a proof-of-concept component used to demonstrate that
-// MetricsDataProvider is working correctly.
+// MetricsDataProvider is working correctly. Used in tests.
 export class TextGraph extends React.Component<MetricsDataComponentProps, {}> {
   render() {
     return <div>{

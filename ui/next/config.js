@@ -56,12 +56,13 @@ System.config({
   },
 
   map: {
-    "d3": "npm:d3@3.5.16",
+    "d3": "npm:d3@3.5.17",
     "es6-promise": "npm:es6-promise@3.1.2",
     "isomorphic-fetch": "npm:isomorphic-fetch@2.2.1",
     "lodash": "npm:lodash@4.11.2",
     "long": "npm:long@3.1.0",
     "moment": "npm:moment@2.13.0",
+    "nvd3": "npm:nvd3@1.8.3",
     "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
     "react": "npm:react@15.0.2",
@@ -302,6 +303,9 @@ System.config({
       "url": "github:jspm/nodelibs-url@0.1.0",
       "util": "github:jspm/nodelibs-util@0.1.0",
       "zlib": "github:jspm/nodelibs-zlib@0.1.0"
+    },
+    "npm:nvd3@1.8.3": {
+      "d3": "npm:d3@3.5.17"
     },
     "npm:once@1.3.3": {
       "wrappy": "npm:wrappy@1.0.1"

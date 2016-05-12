@@ -6,7 +6,7 @@ import Long = require("long");
 import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";
-import { TextGraph, Axis, Selector } from "../components/graphs";
+import { TextGraph, Axis, Metric } from "../components/graphs";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "./metricsDataProvider";
 import { MetricsQuery } from "../redux/metrics";
 
@@ -19,11 +19,11 @@ function makeDataProvider(id: string,
   return shallow(<MetricsDataProvider id={id} metrics={metrics} timeSpan={timeSpan} queryMetrics={queryMetrics}>
     <TextGraph>
       <Axis>
-        <Selector name="test.metric.1" />
-        <Selector name="test.metric.2" />
+        <Metric name="test.metric.1" />
+        <Metric name="test.metric.2" />
       </Axis>
       <Axis>
-        <Selector name="test.metric.3" />
+        <Metric name="test.metric.3" />
       </Axis>
     </TextGraph>
   </MetricsDataProvider>);
@@ -139,12 +139,12 @@ describe("<MetricsDataProvider>", function() {
                                queryMetrics={spy}>
             <TextGraph>
               <Axis>
-                <Selector name="test.metrics.1" />
+                <Metric name="test.metrics.1" />
               </Axis>
             </TextGraph>
             <TextGraph>
               <Axis>
-                <Selector name="test.metrics.2" />
+                <Metric name="test.metrics.2" />
               </Axis>
             </TextGraph>
           </MetricsDataProvider>
