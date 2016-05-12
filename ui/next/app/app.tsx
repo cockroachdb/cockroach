@@ -50,7 +50,7 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { createStore, combineReducers, applyMiddleware, compose } from "redux";
 import { Provider } from "react-redux";
-import { Router, Route, IndexRedirect, hashHistory } from "react-router";
+import { Router, Route, IndexRoute, IndexRedirect, hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer } from "react-router-redux";
 import thunk from "redux-thunk";
 
@@ -59,10 +59,15 @@ import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
 
 import Layout from "./containers/layout";
-import { ClusterMain, ClusterTitle } from "./containers/cluster";
-import { DatabasesMain, DatabasesTitle } from "./containers/databases";
-import { HelpUsMain, HelpUsTitle } from "./containers/helpus";
-import { NodesMain, NodesTitle } from "./containers/nodes";
+import Cluster from "./containers/cluster";
+import ClusterOverview from "./containers/clusterOverview";
+import ClusterEvents from "./containers/clusterEvents";
+import Databases from "./containers/databases";
+import HelpUs from "./containers/helpus";
+import Nodes from "./containers/nodes";
+import NodesOverview from "./containers/nodesOverview";
+import NodesGraphs from "./containers/nodesGraphs";
+import Node from "./containers/node";
 
 // TODO(mrtracy): Redux now provides official typings, and their Store
 // definition is generic. That would let us enforce that the store actually has
@@ -92,14 +97,23 @@ ReactDOM.render(
     <Router history={history}>
       <Route path="/" component={Layout}>
         <IndexRedirect to="cluster" />
-        <Route path="cluster"
-               components={{main: ClusterMain, title:ClusterTitle}}/>
-        <Route path="nodes"
-               components={{main: NodesMain, title:NodesTitle}}/>
-        <Route path="databases"
-               components={{main: DatabasesMain, title:DatabasesTitle}}/>
-        <Route path="help-us/reporting"
-               components={{main: HelpUsMain, title:HelpUsTitle}}/>
+        <Route path="cluster" component={ Cluster }>
+          <IndexRoute component={ ClusterOverview } />
+          <Route path="events" component={ ClusterEvents } />
+        </Route>
+        <Route path="nodes" component={ Nodes }>
+          <IndexRedirect to="overview" />
+          <Route path="overview" component={ NodesOverview } />
+          <Route path="graphs" component={ NodesGraphs } />
+        </Route>
+        <Route path="nodes">
+          // This path has to match the "nodes" route for the purpose of
+          // highlighting links, but the page does not render as a child of the
+          // Nodes component.
+          <Route path=":node_id" component={ Node } />
+        </Route>
+        <Route path="databases" component={ Databases } />
+        <Route path="help-us/reporting" component={ HelpUs } />
       </Route>
     </Router>
   </Provider>,
