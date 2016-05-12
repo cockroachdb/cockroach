@@ -322,7 +322,7 @@ func (u *updateNode) Next() bool {
 	for i, col := range u.updateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
-			u.run.err = fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
+			u.run.err = newNonNullViolationError(col.Name)
 			return false
 		}
 	}

@@ -328,7 +328,7 @@ func (n *insertNode) Next() bool {
 	for _, col := range n.tableDesc.Columns {
 		if !col.Nullable {
 			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-				n.run.err = fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
+				n.run.err = newNonNullViolationError(col.Name)
 				return false
 			}
 		}
