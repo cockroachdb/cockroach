@@ -37,7 +37,10 @@ function fetch_docker() {
 # the argument causing the commands in the if-branch to be executed
 # within the docker container.
 if [ "${1-}" = "docker" ]; then
-  go get -u github.com/robfig/glock
+  # Fetch glock without -u: glock will update itself (and once
+  # glock has updated itself, "go get -u" no longer works because
+  # the clone's head is detached).
+  go get github.com/robfig/glock
   glock sync -n < GLOCKFILE
 
   # Be careful to keep the dependencies built for each shard in sync
