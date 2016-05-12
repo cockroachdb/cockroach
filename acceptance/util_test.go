@@ -286,7 +286,7 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 
 const (
 	postgresTestImage = "cockroachdb/postgres-test"
-	postgresTestTag   = "20160414-1710"
+	postgresTestTag   = "20160512-1936"
 )
 
 func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
