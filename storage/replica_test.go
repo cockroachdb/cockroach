@@ -383,11 +383,11 @@ func setLeaderLease(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
-	pendingCmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
+	ch, _, err := r.proposeRaftCommand(r.context(context.Background()), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
-		err = (<-pendingCmd.done).Err.GoError()
+		err = (<-ch).Err.GoError()
 	}
 	return err
 }
@@ -979,12 +979,12 @@ func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.rng.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
-	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
+	ch, _, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
 		// Remove ambiguity about where the "replica not found" error comes from.
-		err = (<-pendingCmd.done).Err.GoError()
+		err = (<-ch).Err.GoError()
 	}
 	if !testutils.IsError(err, "replica not found") {
 		t.Errorf("unexpected error obtaining lease for invalid store: %v", err)
@@ -2883,11 +2883,11 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft replay) and
 		// also avoid updating the timestamp cache; verify WriteTooOldError.
 		ba.Timestamp = txn.OrigTimestamp
-		pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
+		ch, _, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
-		respWithErr := <-pendingCmd.done
+		respWithErr := <-ch
 		if _, ok := respWithErr.Err.GetDetail().(*roachpb.WriteTooOldError); !ok {
 			t.Fatalf("%d: expected WriteTooOldError; got %s", i, respWithErr.Err)
 		}
@@ -5531,5 +5531,67 @@ func TestSyncSnapshot(t *testing.T) {
 	}
 	if len(snap.Data) == 0 {
 		t.Fatal("snapshot is empty")
+	}
+}
+
+func TestRaftOutOfOrderReproposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+
+	type magicKey struct{}
+
+	var c int32 // updated atomically
+
+	tc.rng.mu.Lock()
+	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
+		if v := cmd.ctx.Value(magicKey{}); v != nil {
+			atomic.AddInt32(&c, 1)
+		}
+		return defaultProposeRaftCommandLocked(tc.rng, cmd)
+	}
+	tc.rng.mu.Unlock()
+
+	var ai uint64
+	util.SucceedsSoon(t, func() error {
+		tc.rng.mu.Lock()
+		ai = tc.rng.mu.appliedIndex
+		tc.rng.mu.Unlock()
+		if ai == 0 {
+			return errors.New("nothing applied yet")
+		}
+		return nil
+	})
+
+	wrongIndex := ai - 1 // will commit at least at ai+1
+
+	var ba roachpb.BatchRequest
+	ba.Timestamp = tc.clock.Now()
+	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key("a")}})
+
+	replica := *tc.rng.GetReplica()
+	ch := func() chan roachpb.ResponseWithError {
+		tc.rng.mu.Lock()
+		defer tc.rng.mu.Unlock()
+		cmd, err := tc.rng.prepareRaftCommandLocked(
+			context.WithValue(context.Background(), magicKey{}, "foo"),
+			makeIDKey(), replica, ba)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd.raftCmd.MustIndex = wrongIndex
+		tc.rng.insertRaftCommandLocked(cmd)
+		if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
+			t.Fatal(err)
+		}
+
+		return cmd.done
+	}()
+	if rwe := <-ch; rwe.Err != nil {
+		t.Fatal(rwe.Err)
+	}
+	if n := atomic.LoadInt32(&c); n != 2 {
+		t.Fatalf("no (or too many) proposal(s), expected two: %d", n)
 	}
 }
