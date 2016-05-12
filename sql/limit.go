@@ -104,6 +104,7 @@ type limitNode struct {
 }
 
 func (n *limitNode) ExplainTypes(f func(string, string)) { n.plan.ExplainTypes(f) }
+func (n *limitNode) expandPlan() error                   { return n.plan.expandPlan() }
 func (n *limitNode) Err() error                          { return n.plan.Err() }
 func (n *limitNode) Start() error                        { return n.plan.Start() }
 func (n *limitNode) Columns() []ResultColumn             { return n.plan.Columns() }
