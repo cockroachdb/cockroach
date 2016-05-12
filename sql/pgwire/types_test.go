@@ -20,7 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 // The assertions in this test should also be caught by the integration tests on
@@ -80,5 +82,24 @@ func TestTimestampRoundtrip(t *testing.T) {
 	}
 	if actual := parse(formatTs(ts, EST)); !ts.Equal(actual) {
 		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
+	}
+}
+
+func BenchmarkWriteBinaryDecimal(b *testing.B) {
+	buf := writeBuffer{bytecount: metric.NewCounter()}
+
+	dec := new(parser.DDecimal)
+	dec.SetString("-1728718718271827121233.1212121212")
+
+	// Warm up the buffer.
+	buf.writeBinaryDatum(dec)
+	buf.wrapped.Reset()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf.writeBinaryDatum(dec)
+		b.StopTimer()
+		buf.wrapped.Reset()
+		b.StartTimer()
 	}
 }
