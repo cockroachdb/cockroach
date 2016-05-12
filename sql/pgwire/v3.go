@@ -71,9 +71,12 @@ type serverErrFieldType byte
 
 // http://www.postgresql.org/docs/current/static/protocol-error-fields.html
 const (
-	serverErrFieldSeverity   serverErrFieldType = 'S'
-	serverErrFieldSQLState   serverErrFieldType = 'C'
-	serverErrFieldMsgPrimary serverErrFieldType = 'M'
+	serverErrFieldSeverity    serverErrFieldType = 'S'
+	serverErrFieldSQLState    serverErrFieldType = 'C'
+	serverErrFieldMsgPrimary  serverErrFieldType = 'M'
+	serverErrFieldSrcFile     serverErrFieldType = 'F'
+	serverErrFieldSrcLine     serverErrFieldType = 'L'
+	serverErrFieldSrcFunction serverErrFieldType = 'R'
 )
 
 //go:generate stringer -type=prepareType
@@ -659,35 +662,51 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 }
 
 func (c *v3Conn) sendError(err error) error {
-	var errCode string
 	if sqlErr, ok := err.(sql.ErrorWithPGCode); ok {
-		errCode = sqlErr.Code()
-	} else {
-		errCode = sql.CodeInternalError
+		return c.sendErrorWithCode(sqlErr.Code(), sqlErr.SrcContext(), err.Error())
 	}
-	return c.sendErrorWithCode(errCode, err.Error())
+	return c.sendInternalError(err.Error())
 }
 
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendErrorWithCode(sql.CodeInternalError, errToSend)
+	return c.sendErrorWithCode(sql.CodeInternalError, sql.SrcCtx{}, errToSend)
 }
 
 // errCode is a postgres error code, plus our extensions.
 // See http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-func (c *v3Conn) sendErrorWithCode(errCode string, errToSend string) error {
+func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sql.SrcCtx, errToSend string) error {
 	if c.doingExtendedQueryMessage {
 		c.ignoreTillSync = true
 	}
 
 	c.writeBuf.initMsg(serverMsgErrorResponse)
+
 	c.writeBuf.putErrFieldMsg(serverErrFieldSeverity)
 	c.writeBuf.writeTerminatedString("ERROR")
+
 	c.writeBuf.putErrFieldMsg(serverErrFieldSQLState)
 	c.writeBuf.writeTerminatedString(errCode)
+
 	c.writeBuf.putErrFieldMsg(serverErrFieldMsgPrimary)
 	c.writeBuf.writeTerminatedString(errToSend)
+
+	if errCtx.File != "" {
+		c.writeBuf.putErrFieldMsg(serverErrFieldSrcFile)
+		c.writeBuf.writeTerminatedString(errCtx.File)
+	}
+
+	if errCtx.Line > 0 {
+		c.writeBuf.putErrFieldMsg(serverErrFieldSrcLine)
+		c.writeBuf.writeTerminatedString(strconv.Itoa(errCtx.Line))
+	}
+
+	if errCtx.Function != "" {
+		c.writeBuf.putErrFieldMsg(serverErrFieldSrcFunction)
+		c.writeBuf.writeTerminatedString(errCtx.Function)
+	}
+
 	c.writeBuf.nullTerminate()
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err

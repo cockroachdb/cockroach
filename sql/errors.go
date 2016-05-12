@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -55,11 +56,24 @@ const (
 	CodeTransactionCommittedError string = "CR001"
 )
 
+// SrcCtx contains contextual information about the source of an error.
+type SrcCtx struct {
+	File     string
+	Line     int
+	Function string
+}
+
+func makeSrcCtx(depth int) SrcCtx {
+	f, l, fun := caller.Lookup(depth + 1)
+	return SrcCtx{File: f, Line: l, Function: fun}
+}
+
 // ErrorWithPGCode represents errors that carries an error code to the user.
 // pgwire recognizes this interfaces and extracts the code.
 type ErrorWithPGCode interface {
 	error
 	Code() string
+	SrcContext() SrcCtx
 }
 
 var _ ErrorWithPGCode = &errNonNullViolation{}
@@ -76,8 +90,13 @@ const (
 	txnRetryMsgPrefix = "restart transaction:"
 )
 
+func newRetryError(msg string) error {
+	return &errRetry{ctx: makeSrcCtx(1), msg: msg}
+}
+
 // errRetry means that the transaction can be retried.
 type errRetry struct {
+	ctx SrcCtx
 	msg string
 }
 
@@ -89,7 +108,16 @@ func (*errRetry) Code() string {
 	return CodeRetriableError
 }
 
+func (e *errRetry) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newTransactionAbortedError(customMsg string) error {
+	return &errTransactionAborted{ctx: makeSrcCtx(1), CustomMsg: customMsg}
+}
+
 type errTransactionAborted struct {
+	ctx       SrcCtx
 	CustomMsg string
 }
 
@@ -105,9 +133,19 @@ func (*errTransactionAborted) Code() string {
 	return CodeTransactionAbortedError
 }
 
-type errTransactionCommitted struct{}
+func (e *errTransactionAborted) SrcContext() SrcCtx {
+	return e.ctx
+}
 
-func (e *errTransactionCommitted) Error() string {
+func newTransactionCommittedError() error {
+	return &errTransactionCommitted{ctx: makeSrcCtx(1)}
+}
+
+type errTransactionCommitted struct {
+	ctx SrcCtx
+}
+
+func (*errTransactionCommitted) Error() string {
 	return txnCommittedMsg
 }
 
@@ -115,7 +153,16 @@ func (*errTransactionCommitted) Code() string {
 	return CodeTransactionCommittedError
 }
 
+func (e *errTransactionCommitted) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newNonNullViolationError(columnName string) error {
+	return &errNonNullViolation{ctx: makeSrcCtx(1), columnName: columnName}
+}
+
 type errNonNullViolation struct {
+	ctx        SrcCtx
 	columnName string
 }
 
@@ -127,7 +174,22 @@ func (*errNonNullViolation) Code() string {
 	return CodeNonNullViolationError
 }
 
+func (e *errNonNullViolation) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newUniquenessConstraintViolationError(
+	index *sqlbase.IndexDescriptor, vals []parser.Datum,
+) error {
+	return &errUniquenessConstraintViolation{
+		ctx:   makeSrcCtx(1),
+		index: index,
+		vals:  vals,
+	}
+}
+
 type errUniquenessConstraintViolation struct {
+	ctx   SrcCtx
 	index *sqlbase.IndexDescriptor
 	vals  []parser.Datum
 }
@@ -146,6 +208,10 @@ func (e *errUniquenessConstraintViolation) Error() string {
 		strings.Join(e.index.ColumnNames, ","),
 		strings.Join(valStrs, ","),
 		e.index.Name)
+}
+
+func (e *errUniquenessConstraintViolation) SrcContext() SrcCtx {
+	return e.ctx
 }
 
 func isIntegrityConstraintError(err error) bool {
@@ -195,7 +261,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) erro
 				return err
 			}
 
-			return &errUniquenessConstraintViolation{index: index, vals: vals}
+			return newUniquenessConstraintViolationError(index, vals)
 		}
 	}
 	return origPErr.GoError()
@@ -214,7 +280,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	if _, ok := err.(*roachpb.RetryableTxnError); ok {
-		return &errRetry{msg: txnRetryMsgPrefix + " " + err.Error()}
+		return newRetryError(fmt.Sprintf("%s %v", txnRetryMsgPrefix, err))
 	}
 	return err
 }
