@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -969,6 +970,108 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		}
 		log.Trace(ctx, "querying next range")
 	}
+}
+
+// Send sends one or more RPCs to clients specified by the slice of
+// replicas. On success, Send returns the first successful reply. Otherwise,
+// Send returns an error if and as soon as the number of failed RPCs exceeds
+// the available endpoints less the number of required replies.
+func send(opts SendOptions, replicas ReplicaSlice,
+	args roachpb.BatchRequest, rpcContext *rpc.Context) (*roachpb.BatchResponse, error) {
+
+	if len(replicas) < 1 {
+		return nil, roachpb.NewSendError(
+			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
+				len(replicas), 1), false)
+	}
+
+	done := make(chan BatchCall, len(replicas))
+
+	transportFactory := opts.transportFactory
+	if transportFactory == nil {
+		transportFactory = grpcTransportFactory
+	}
+	transport, err := transportFactory(opts, rpcContext, replicas, args)
+	if err != nil {
+		return nil, err
+	}
+	defer transport.Close()
+
+	// Send the first request.
+	pending := 1
+	transport.SendNext(done)
+
+	// Wait for completions. This loop will retry operations that fail
+	// with errors that reflect per-replica state and may succeed on
+	// other replicas.
+	var sendNextTimer timeutil.Timer
+	defer sendNextTimer.Stop()
+	for {
+		sendNextTimer.Reset(opts.SendNextTimeout)
+		select {
+		case <-sendNextTimer.C:
+			sendNextTimer.Read = true
+			// On successive RPC timeouts, send to additional replicas if available.
+			if !transport.IsExhausted() {
+				log.Trace(opts.Context, "timeout, trying next peer")
+				pending++
+				transport.SendNext(done)
+			}
+
+		case call := <-done:
+			pending--
+			err := call.Err
+			if err == nil {
+				if log.V(2) {
+					log.Infof("RPC reply: %+v", call.Reply)
+				} else if log.V(1) && call.Reply.Error != nil {
+					log.Infof("application error: %s", call.Reply.Error)
+				}
+
+				if !isPerReplicaError(call.Reply.Error) {
+					return call.Reply, nil
+				}
+
+				// Extract the detail so it can be included in the error
+				// message if this is our last replica.
+				//
+				// TODO(bdarnell): The last error is not necessarily the best
+				// one to return; we may want to remember the "best" error
+				// we've seen (for example, a NotLeaderError conveys more
+				// information than a RangeNotFound).
+				err = call.Reply.Error.GoError()
+			} else if log.V(1) {
+				log.Warningf("RPC error: %s", err)
+			}
+
+			// Send to additional replicas if available.
+			if !transport.IsExhausted() {
+				log.Trace(opts.Context, "error, trying next peer")
+				pending++
+				transport.SendNext(done)
+			}
+			if pending == 0 {
+				return nil, roachpb.NewSendError(
+					fmt.Sprintf("sending to all %d replicas failed; last error: %v",
+						len(replicas), err), true)
+			}
+		}
+	}
+}
+
+// isPerReplicaError returns true if the given error is likely to be
+// unique to the replica that reported it, and retrying on other
+// replicas is likely to produce different results.
+func isPerReplicaError(pErr *roachpb.Error) bool {
+	switch pErr.GetDetail().(type) {
+	case *roachpb.RangeNotFoundError:
+		return true
+	case *roachpb.NodeUnavailableError:
+		return true
+		// TODO(bdarnell): add NotLeaderError here after refactoring so we
+		// can interact with the leader cache from here.
+	}
+	return false
 }
 
 // updateLeaderCache updates the cached leader for the given range,
