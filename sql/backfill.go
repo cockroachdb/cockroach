@@ -281,7 +281,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 				// Still processing table.
 				done = false
 				if nonNullableColumn != "" {
-					return &errNonNullViolation{columnName: nonNullableColumn}
+					return newNonNullViolationError(nonNullableColumn)
 				}
 				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
 					// Sentinel keys have a 0 suffix indicating 0 bytes of
