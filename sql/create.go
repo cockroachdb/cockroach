@@ -62,6 +62,10 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	return &createDatabaseNode{p: p, n: n}, nil
 }
 
+func (n *createDatabaseNode) expandPlan() error {
+	return nil
+}
+
 func (n *createDatabaseNode) Start() error {
 	desc := makeDatabaseDesc(n.n)
 
@@ -124,6 +128,10 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	}
 
 	return &createIndexNode{p: p, tableDesc: tableDesc, n: n}, nil
+}
+
+func (n *createIndexNode) expandPlan() error {
+	return nil
 }
 
 func (n *createIndexNode) Start() error {
@@ -222,6 +230,10 @@ func hoistConstraints(n *parser.CreateTable) {
 			}
 		}
 	}
+}
+
+func (n *createTableNode) expandPlan() error {
+	return nil
 }
 
 func (n *createTableNode) Start() error {

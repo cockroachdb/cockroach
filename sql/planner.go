@@ -184,7 +184,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.makePlan(stmt, nil, false)
+	return p.makePlan(stmt, false)
 }
 
 // queryRow implements the queryRunner interface.
