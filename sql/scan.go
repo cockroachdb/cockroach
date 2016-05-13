@@ -114,20 +114,17 @@ func (n *scanNode) expandPlan() error {
 }
 
 func (n *scanNode) Start() error {
+	if err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse,
+		n.isSecondaryIndex, n.valNeededForCol); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // initScan sets up the rowFetcher and starts a scan. On error, sets n.err and
 // returns false.
 func (n *scanNode) initScan() (success bool) {
-	// TODO(radu): we could call init() just once, after the index and
-	// valNeededForCol are set.
-	err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex,
-		n.valNeededForCol)
-	if err != nil {
-		n.err = err
-		return false
-	}
 
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our

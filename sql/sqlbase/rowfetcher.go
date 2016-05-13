@@ -32,12 +32,12 @@ import (
 // RowFetcher handles fetching kvs and forming table rows.
 // Usage:
 //   var rf RowFetcher
-//   err := rf.init(..)
+//   err := rf.Init(..)
 //   // Handle err
-//   err := rf.startScan(..)
+//   err := rf.StartScan(..)
 //   // Handle err
 //   for {
-//      row, err := rf.nextRow()
+//      row, err := rf.NextRow()
 //      // Handle err
 //      if row == nil {
 //         // Done
