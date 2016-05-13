@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -65,7 +64,7 @@ type replicaSet interface {
 type replicaScanner struct {
 	targetInterval time.Duration  // Target duration interval for scan loop
 	maxIdleTime    time.Duration  // Max idle time for scan loop
-	waitTimer      util.Timer     // Shared timer to avoid allocations.
+	waitTimer      timeutil.Timer // Shared timer to avoid allocations.
 	replicas       replicaSet     // Replicas to be scanned
 	queues         []replicaQueue // Replica queues managed by this scanner
 	removed        chan *Replica  // Replicas to remove from queues

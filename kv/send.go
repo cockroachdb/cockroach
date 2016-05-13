@@ -26,8 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // orderingPolicy is an enum for ordering strategies when there
@@ -120,7 +120,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
-	var sendNextTimer util.Timer
+	var sendNextTimer timeutil.Timer
 	defer sendNextTimer.Stop()
 	for {
 		sendNextTimer.Reset(opts.SendNextTimeout)

@@ -27,11 +27,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func init() {
@@ -185,7 +185,7 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 	request := PingRequest{Addr: ctx.localAddr}
 	heartbeatClient := NewHeartbeatClient(cc)
 
-	var heartbeatTimer util.Timer
+	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
 	for {
 		sendTime := ctx.localClock.PhysicalTime()
