@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -226,10 +227,24 @@ func makePGClient(t *testing.T, dest string) *gosql.DB {
 	return db
 }
 
+// joinURL joins a base url and the relative path.
+func joinURL(base, rel string) (string, error) {
+	absURL, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	absURL.Path = rel
+	return absURL.String(), nil
+}
+
 // getJSON retrieves the URL specified by the parameters and
 // and unmarshals the result into the supplied interface.
-func getJSON(url, rel string, v interface{}) error {
-	resp, err := cluster.HTTPClient().Get(url + rel)
+func getJSON(base, rel string, v interface{}) error {
+	url, err := joinURL(base, rel)
+	if err != nil {
+		return err
+	}
+	resp, err := cluster.HTTPClient().Get(url)
 	if err != nil {
 		if log.V(1) {
 			log.Info(err)

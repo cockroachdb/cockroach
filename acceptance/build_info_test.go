@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -31,26 +32,26 @@ func TestBuildInfo(t *testing.T) {
 func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))
 
+	var r server.DetailsResponse
 	util.SucceedsSoon(t, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
-			return nil
 		default:
 		}
-		var r struct {
-			BuildInfo map[string]string
-		}
-		if err := getJSON(c.URL(0), "/_status/details/local", &r); err != nil {
-			return err
-		}
-		for _, key := range []string{"go_version", "tag", "time", "dependencies"} {
-			if val, ok := r.BuildInfo[key]; !ok {
-				t.Errorf("build info missing for \"%s\"", key)
-			} else if val == "" {
-				t.Errorf("build info not set for \"%s\"", key)
-			}
-		}
-		return nil
+		return getJSON(c.URL(0), "/_status/details/local", &r)
 	})
+
+	bi := r.BuildInfo
+	testData := map[string]string{
+		"go_version":   bi.GoVersion,
+		"tag":          bi.Tag,
+		"time":         bi.Time,
+		"dependencies": bi.Dependencies,
+	}
+	for key, val := range testData {
+		if val == "" {
+			t.Errorf("build info not set for \"%s\"", key)
+		}
+	}
 }

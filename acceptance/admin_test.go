@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -39,7 +40,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	// Get the ids for each node.
 	idMap := make(map[int]string)
 	for i := 0; i < c.NumNodes(); i++ {
-		var detail details
+		var detail server.DetailsResponse
 		if err := getJSON(c.URL(i), "/_status/details/local", &detail); err != nil {
 			t.Fatal(err)
 		}

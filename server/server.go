@@ -30,8 +30,12 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
+	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/base"
@@ -50,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -233,15 +238,28 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
-	s.admin = newAdminServer(s)
-	s.stopper.AddCloser(s.admin)
-	RegisterAdminServer(s.grpc, s.admin)
-
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
-	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.node.stores)
+
+	s.admin = newAdminServer(s)
+	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.rpcContext, s.node.stores)
+	for _, gw := range []grpcGatewayServer{s.admin, s.status} {
+		gw.RegisterService(s.grpc)
+	}
 
 	return s, nil
+}
+
+// grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
+// gateway.
+type grpcGatewayServer interface {
+	RegisterService(g *grpc.Server)
+	RegisterGateway(
+		ctx context.Context,
+		mux *gwruntime.ServeMux,
+		addr string,
+		opts []grpc.DialOption,
+	) error
 }
 
 // Start starts the server on the specified port, starts gossip and
@@ -406,9 +424,36 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	// Register GRPCGateway. Must happen after serving starts.
-	if err := s.admin.RegisterGRPCGateway(s.ctx); err != nil {
-		return err
+	// Initialize grpc-gateway mux and context.
+	jsonpb := new(protoutil.JSONPb)
+	gwMux := gwruntime.NewServeMux(gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb))
+	gwCtx, gwCancel := context.WithCancel(context.Background())
+	s.stopper.AddCloser(stop.CloserFn(gwCancel))
+
+	// Setup HTTP<->gRPC handlers.
+	var opts []grpc.DialOption
+	if s.ctx.Insecure {
+		opts = append(opts, grpc.WithInsecure())
+	} else {
+		tlsConfig, err := s.ctx.GetClientTLSConfig()
+		if err != nil {
+			return err
+		}
+		opts = append(
+			opts,
+			// TODO(tamird): remove this timeout. It is currently necessary because
+			// GRPC will not actually bail on a bad certificate error - it will just
+			// retry indefinitely. See https://github.com/grpc/grpc-go/issues/622.
+			grpc.WithTimeout(base.NetworkTimeout),
+			grpc.WithBlock(),
+			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		)
+	}
+
+	for _, gw := range []grpcGatewayServer{s.admin, s.status} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, s.ctx.Addr, opts); err != nil {
+			return err
+		}
 	}
 
 	if err := sdnotify.Ready(); err != nil {

@@ -2,6 +2,74 @@ module.exports = require("protobufjs").newBuilder({})['import']({
     "package": "cockroach",
     "messages": [
         {
+            "name": "build",
+            "fields": [],
+            "options": {
+                "go_package": "build"
+            },
+            "messages": [
+                {
+                    "name": "Info",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "go_version",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "tag",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "time",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "dependencies",
+                            "id": 4,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "cgo_compiler",
+                            "id": 5,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "platform",
+                            "id": 6,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "name": "util",
             "fields": [],
             "options": {
@@ -267,19 +335,92 @@ module.exports = require("protobufjs").newBuilder({})['import']({
             ]
         },
         {
-            "name": "build",
+            "name": "server",
             "fields": [],
             "options": {
-                "go_package": "build"
+                "go_package": "server"
             },
             "messages": [
                 {
-                    "name": "Info",
+                    "name": "DetailsRequest",
                     "fields": [
                         {
                             "rule": "optional",
                             "type": "string",
-                            "name": "go_version",
+                            "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "DetailsResponse",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "node_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.customname)": "NodeID",
+                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "util.UnresolvedAddr",
+                            "name": "address",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "build.Info",
+                            "name": "build_info",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "NodesRequest",
+                    "fields": []
+                },
+                {
+                    "name": "NodesResponse",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "status.NodeStatus",
+                            "name": "nodes",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "NodeRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "RangeInfo",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "roachpb.RangeDescriptor",
+                            "name": "desc",
                             "id": 1,
                             "options": {
                                 "(gogoproto.nullable)": false
@@ -288,59 +429,36 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "rule": "optional",
                             "type": "string",
-                            "name": "tag",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
+                            "name": "raft_state",
+                            "id": 2
+                        }
+                    ]
+                },
+                {
+                    "name": "RangesRequest",
+                    "fields": [
                         {
                             "rule": "optional",
                             "type": "string",
-                            "name": "time",
-                            "id": 3,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
+                            "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "RangesResponse",
+                    "fields": [
                         {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "dependencies",
-                            "id": 4,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "cgo_compiler",
-                            "id": 5,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "platform",
-                            "id": 6,
+                            "rule": "repeated",
+                            "type": "RangeInfo",
+                            "name": "ranges",
+                            "id": 1,
                             "options": {
                                 "(gogoproto.nullable)": false
                             }
                         }
                     ]
-                }
-            ]
-        },
-        {
-            "name": "server",
-            "fields": [],
-            "options": {
-                "go_package": "server"
-            },
-            "messages": [
+                },
                 {
                     "name": "DatabasesRequest",
                     "fields": []
@@ -939,6 +1057,41 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                 }
             ],
             "services": [
+                {
+                    "name": "Status",
+                    "options": {},
+                    "rpc": {
+                        "Details": {
+                            "request": "DetailsRequest",
+                            "response": "DetailsResponse",
+                            "options": {
+                                "(google.api.http).get": "/_status/details/{node_id}",
+                                "(google.api.http).additional_bindings.get": "/health"
+                            }
+                        },
+                        "Nodes": {
+                            "request": "NodesRequest",
+                            "response": "NodesResponse",
+                            "options": {
+                                "(google.api.http).get": "/_status/nodes"
+                            }
+                        },
+                        "Node": {
+                            "request": "NodeRequest",
+                            "response": "status.NodeStatus",
+                            "options": {
+                                "(google.api.http).get": "/_status/nodes/{node_id}"
+                            }
+                        },
+                        "Ranges": {
+                            "request": "RangesRequest",
+                            "response": "RangesResponse",
+                            "options": {
+                                "(google.api.http).get": "/_status/ranges/{node_id}"
+                            }
+                        }
+                    }
+                },
                 {
                     "name": "Admin",
                     "options": {},
