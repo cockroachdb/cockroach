@@ -40,6 +40,7 @@ var maxResults int64
 var connURL string
 var connUser, connHost, connPort, httpPort, connDBName string
 var startBackground bool
+var undoHaltCluster bool
 
 // cliContext is the CLI Context used for the command-line client.
 var cliContext = NewContext()
@@ -226,6 +227,9 @@ Print values along with their associated key.`),
 	cliflags.RaftTickIntervalName: wrapText(`
 The resolution of the Raft timer; other raft timeouts are
 defined in terms of multiples of this value.`),
+
+	cliflags.UndoHaltClusterName: wrapText(`
+Attempt to undo an earlier attempt to halt the cluster.`),
 }
 
 const usageIndentation = 8
@@ -414,7 +418,7 @@ func initFlags(ctx *Context) {
 	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, envutil.EnvOrDefaultString(cliflags.PasswordName, ""), usageEnv(cliflags.PasswordName))
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, exterminateCmd, quitCmd, /* startCmd is covered above */
+		sqlShellCmd, exterminateCmd, quitCmd, haltClusterCmd, /* startCmd is covered above */
 	}
 	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
@@ -448,11 +452,15 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need an http port.
-	httpCmds := []*cobra.Command{quitCmd}
+	httpCmds := []*cobra.Command{quitCmd, haltClusterCmd}
 	httpCmds = append(httpCmds, nodeCmds...)
 	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&httpPort, cliflags.HTTPPortName, envutil.EnvOrDefaultString(cliflags.HTTPPortName, base.DefaultHTTPPort), usageEnv(forClient(cliflags.HTTPPortName)))
+	}
+	{
+		f := haltClusterCmd.PersistentFlags()
+		f.BoolVar(&undoHaltCluster, cliflags.UndoHaltClusterName, false, usageNoEnv(cliflags.UndoHaltClusterName))
 	}
 
 	// Commands that establish a SQL connection.

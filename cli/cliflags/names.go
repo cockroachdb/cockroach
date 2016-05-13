@@ -45,4 +45,5 @@ const (
 	RawName              = "raw"
 	ValuesName           = "values"
 	RaftTickIntervalName = "raft-tick-interval"
+	UndoHaltClusterName  = "undo"
 )

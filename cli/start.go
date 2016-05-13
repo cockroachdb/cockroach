@@ -348,3 +348,31 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	fmt.Printf("node drained and shutdown: %s\n", body)
 	return nil
 }
+
+// haltClusterCmd command issues a cluster-wide freeze.
+var haltClusterCmd = &cobra.Command{
+	Use:   "halt-cluster",
+	Short: "halt the cluster in preparation for an update",
+	Long: `
+Disables all Raft groups and stops new commands from being executed in preparation
+for a stop-the-world update of the cluster. Once the command has completed, the
+nodes in the cluster should be terminated, all binaries updated, and only then
+restarted. A failed or incomplete invocation of this command can be rolled back
+using the --undo flag, or by restarting all the nodes in the cluster.
+`,
+	SilenceUsage: true,
+	RunE:         runHaltCluster,
+}
+
+func runHaltCluster(_ *cobra.Command, _ []string) error {
+	admin, err := client.NewAdminClient(&cliContext.Context.Context, cliContext.HTTPAddr, "cluster/freeze")
+	if err != nil {
+		return err
+	}
+	_, err = admin.Post(&server.ClusterFreezeRequest{Freeze: !undoHaltCluster})
+	if err != nil {
+		return err
+	}
+	fmt.Println("ok")
+	return nil
+}
