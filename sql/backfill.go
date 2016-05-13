@@ -467,6 +467,11 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		if err != nil {
 			return err
 		}
+
+		if err := rows.Start(); err != nil {
+			return err
+		}
+
 		// Construct a map from column ID to the index the value appears at
 		// within a row.
 		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
