@@ -1,7 +1,7 @@
 /**
  * This module maintains the state of a read-only, periodically refreshed query
  * for the status of all nodes in the cluster. Data is fetched from the
- * '/_status/nodes/' endpoint.
+ * '/_status/nodes' endpoint.
  */
 
 import _ = require("lodash");
@@ -135,7 +135,7 @@ export function refreshNodes() {
     dispatch(requestNodes());
 
     // Fetch node status from the servers and convert it to JSON.
-    fetch("/_status/nodes/").then((response) => {
+    fetch("/_status/nodes").then((response) => {
       return response.json();
     }).then((json: any) => {
       // Extract the result, an array of NodeStatus objects.

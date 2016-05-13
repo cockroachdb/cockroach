@@ -81,7 +81,7 @@ module Models {
       public totalStatus: Utils.ReadOnlyProperty<Proto.StatusMetrics>;
 
       private _data: Utils.QueryCache<Proto.NodeStatus[]> = new Utils.QueryCache((): promise<Proto.NodeStatus[]> => {
-        return Utils.Http.Get("/_status/nodes/")
+        return Utils.Http.Get("/_status/nodes")
           .then((results: NodeStatusResponseSet) => {
             let statuses = results.d;
             statuses.forEach((ns: Proto.NodeStatus) => {
