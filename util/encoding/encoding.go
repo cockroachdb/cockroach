@@ -221,6 +221,27 @@ func EncodeVarintDescending(b []byte, v int64) []byte {
 	return EncodeVarintAscending(b, ^v)
 }
 
+// getVarintLen returns the encoded length of an encoded varint. Returns len(b)
+// if the encoding is malformed.
+func getVarintLen(b []byte) int {
+	length := int(b[0]) - intZero
+	if length < 0 {
+		// tag and -length bytes
+		length = 1 - length
+	} else if length > intSmall {
+		// tag and length-intSmall bytes
+		length = 1 + length - intSmall
+	} else {
+		// just the tag
+		return 1
+	}
+	if length > len(b) {
+		// Malformed encoding.
+		return len(b)
+	}
+	return length
+}
+
 // DecodeVarintAscending decodes a value encode by EncodeVaringAscending.
 func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
@@ -490,6 +511,29 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 		}
 
 		b = b[i+2:]
+	}
+}
+
+// getBytesLength finds the length of a bytes encoding. If the encoding is not
+// valid, returns the length of the slice.
+func getBytesLength(b []byte, e escapes) int {
+	skipped := 0
+	for {
+		i := bytes.IndexByte(b, e.escape)
+		if i == -1 || i+1 >= len(b) {
+			// Malformed buffer.
+			return skipped + len(b)
+		}
+		v := b[i+1]
+		if v == e.escapedTerm {
+			return skipped + i + 2
+		}
+		if v != e.escaped00 {
+			// Unknown escape sequence.
+			return skipped + len(b)
+		}
+		b = b[i+2:]
+		skipped += i + 2
 	}
 }
 
@@ -801,6 +845,43 @@ func PeekType(b []byte) Type {
 		}
 	}
 	return Unknown
+}
+
+func getMultiVarintLen(b []byte, num int) int {
+	p := 0
+	for i := 0; i < num && p < len(b); i++ {
+		p += getVarintLen(b[p:])
+	}
+	return p
+}
+
+// PeekLength returns the length of the encoded value at the start of b. If the
+// encoded value is malformed, returns the length of the slice.
+func PeekLength(b []byte) int {
+	if len(b) == 0 {
+		return 0
+	}
+	m := b[0]
+	switch m {
+	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
+		floatNaN, floatNaNDesc, floatZero, decimalZero:
+		return 1
+	case bytesMarker:
+		return 1 + getBytesLength(b[1:], ascendingEscapes)
+	case bytesDescMarker:
+		return 1 + getBytesLength(b[1:], descendingEscapes)
+	case timeMarker:
+		return 1 + getMultiVarintLen(b[1:], 2)
+	case durationBigNegMarker, durationMarker, durationBigPosMarker:
+		return 1 + getMultiVarintLen(b[1:], 3)
+	case floatNeg, floatPos:
+		// the marker is followed by 8 bytes
+		if len(b) < 9 {
+			return len(b)
+		}
+		return 9
+	}
+	return getDecimalLen(b)
 }
 
 // PrettyPrintValue returns the string representation of all contiguous decodable

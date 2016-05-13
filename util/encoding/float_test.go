@@ -113,6 +113,7 @@ func TestEncodeFloat(t *testing.T) {
 			} else if dec != c.Value {
 				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 			}
+			testPeekLength(t, enc)
 			lastEncoded = enc
 		}
 
