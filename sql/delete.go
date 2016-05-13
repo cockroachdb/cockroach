@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -49,13 +50,26 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
+	var requestedCols []sqlbase.ColumnDescriptor
+	if len(en.rh.exprs) > 0 {
+		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
+		// exprs.
+		requestedCols = en.tableDesc.Columns
+	}
+
+	rd, err := makeRowDeleter(en.tableDesc, requestedCols)
+	if err != nil {
+		return nil, err
+	}
+	tw := tableDeleter{rd: rd, autoCommit: autoCommit}
+
 	// TODO(knz): Until we split the creation of the node from Start()
 	// for the SelectClause too, we cannot cache this. This is because
 	// this node's initSelect() method both does type checking and also
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
 	_, err = p.SelectClause(&parser.SelectClause{
-		Exprs: en.tableDesc.AllColumnsSelector(),
+		Exprs: sqlbase.ColumnsSelectors(rd.fetchCols),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
 	}, nil)
@@ -66,13 +80,6 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 	if err := en.rh.TypeCheck(); err != nil {
 		return nil, err
 	}
-
-	rd, err := makeRowDeleter(en.tableDesc)
-	if err != nil {
-		return nil, err
-	}
-	// TODO(dan): Use rd.fetchCols to compute the fetch selectors.
-	tw := tableDeleter{rd: rd, autoCommit: autoCommit}
 
 	dn := &deleteNode{
 		n:            n,
@@ -85,7 +92,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 func (d *deleteNode) expandPlan() error {
 	// TODO(knz): See the comment above in Delete().
 	rows, err := d.p.SelectClause(&parser.SelectClause{
-		Exprs: d.tableDesc.AllColumnsSelector(),
+		Exprs: sqlbase.ColumnsSelectors(d.tw.rd.fetchCols),
 		From:  []parser.TableExpr{d.n.Table},
 		Where: d.n.Where,
 	}, nil)

@@ -65,9 +65,8 @@ query ITTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
 0  delete  result    ()
-1  select  result    (k int, v int)
+1  select  result    (k int)
 1  select  render 0  (k)[int]
-1  select  render 1  (v)[int]
 2  scan    result    (k int, v int)
 2  scan    filter    ((v)[int] > (1)[int])[bool]
 
@@ -75,10 +74,9 @@ query ITTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
 0  update  result    ()
-1  select  result    (k int, v int, "k + 1" int)
+1  select  result    (k int, "k + 1" int)
 1  select  render 0  (k)[int]
-1  select  render 1  (v)[int]
-1  select  render 2  ((k)[int] + (1)[int])[int]
+1  select  render 1  ((k)[int] + (1)[int])[int]
 2  scan    result    (k int, v int)
 2  scan    filter    ((v)[int] > (123)[int])[bool]
 

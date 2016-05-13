@@ -554,6 +554,23 @@ func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescript
 	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
 }
 
+// FindColumnByID finds the column with specified ID.
+func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, error) {
+	for i, c := range desc.Columns {
+		if c.ID == id {
+			return &desc.Columns[i], nil
+		}
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			if c.ID == id {
+				return c, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
 // FindActiveColumnByID finds the active column with specified ID.
 func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
@@ -687,12 +704,11 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	return cols
 }
 
-// AllColumnsSelector geneartes a Select expression for all columns of the
-// table.
-func (desc *TableDescriptor) AllColumnsSelector() parser.SelectExprs {
-	exprs := make(parser.SelectExprs, len(desc.Columns))
-	qnames := make([]parser.QualifiedName, len(desc.Columns))
-	for i, col := range desc.Columns {
+// ColumnsSelectors generates Select expressions for cols.
+func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
+	exprs := make(parser.SelectExprs, len(cols))
+	qnames := make([]parser.QualifiedName, len(cols))
+	for i, col := range cols {
 		qnames[i].Base = parser.Name(col.Name)
 		exprs[i].Expr = &qnames[i]
 	}
