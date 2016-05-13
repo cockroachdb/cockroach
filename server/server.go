@@ -238,7 +238,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
-	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.node.stores)
+	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.rpcContext, s.node.stores)
+	s.stopper.AddCloser(s.status)
+	RegisterStatusServer(s.grpc, s.status)
 
 	return s, nil
 }
@@ -405,8 +407,11 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	// Register GRPCGateway. Must happen after serving starts.
+	// Register GRPCGateways. Must happen after serving starts.
 	if err := s.admin.RegisterGRPCGateway(s.ctx); err != nil {
+		return err
+	}
+	if err := s.status.RegisterGRPCGateway(s.ctx); err != nil {
 		return err
 	}
 

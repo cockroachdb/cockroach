@@ -50,6 +50,9 @@ GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_
 ADMIN_PROTO := $(REPO_ROOT)/server/admin.proto
 ADMIN_GW_GO := $(ADMIN_PROTO:%.proto=%.pb.gw.go)
 
+STATUS_PROTO := $(REPO_ROOT)/server/status.proto
+STATUS_GW_GO := $(STATUS_PROTO:%.proto=%.pb.gw.go)
+
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
@@ -62,7 +65,7 @@ ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
 ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 
 .PHONY: protos
-protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(ADMIN_GW_GO)
+protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(ADMIN_GW_GO) $(STATUS_GW_GO)
 
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
@@ -78,9 +81,14 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	done
 
 $(ADMIN_GW_GO) : $(ADMIN_PROTO) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
+	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '$(ADMIN_GW_GO)' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(ADMIN_PROTO)
 	sed -i~ -E 's!golang/protobuf/proto!gogo/protobuf/proto!' $(ADMIN_GW_GO)
+
+$(STATUS_GW_GO) : $(STATUS_PROTO) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
+	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '$(STATUS_GW_GO)' | xargs rm -f)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(STATUS_PROTO)
+	sed -i~ -E 's!golang/protobuf/proto!gogo/protobuf/proto!' $(STATUS_GW_GO)
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
