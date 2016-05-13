@@ -19,6 +19,7 @@ package encoding
 import (
 	"bytes"
 	"math"
+	"math/rand"
 	"regexp"
 	"testing"
 	"time"
@@ -390,6 +391,24 @@ func TestDecodeInvalid(t *testing.T) {
 	}
 }
 
+// testPeekLength appends some random garbage to an encoding and verifies
+// that PeekLength returns the correct length.
+func testPeekLength(t *testing.T, encoded []byte) {
+	gLen := rand.Intn(10)
+	garbage := make([]byte, gLen)
+	_, _ = rand.Read(garbage)
+
+	var buf []byte
+	buf = append(buf, encoded...)
+	buf = append(buf, garbage...)
+
+	if l, err := PeekLength(buf); err != nil {
+		t.Fatal(err)
+	} else if l != len(encoded) {
+		t.Errorf("PeekLength returned incorrect length: %d, expected %d", l, len(encoded))
+	}
+}
+
 func TestEncodeDecodeBytes(t *testing.T) {
 	testCases := []struct {
 		value   []byte
@@ -429,6 +448,8 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		if len(remainder) != 0 {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
+
+		testPeekLength(t, enc)
 
 		enc = append(enc, []byte("remainder")...)
 		remainder, _, err = DecodeBytesAscending(enc, nil)
@@ -482,6 +503,8 @@ func TestEncodeDecodeBytesDescending(t *testing.T) {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 
+		testPeekLength(t, enc)
+
 		enc = append(enc, []byte("remainder")...)
 		remainder, _, err = DecodeBytesDescending(enc, nil)
 		if err != nil {
@@ -534,6 +557,8 @@ func TestEncodeDecodeUnsafeString(t *testing.T) {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 
+		testPeekLength(t, enc)
+
 		enc = append(enc, "remainder"...)
 		remainder, _, err = DecodeUnsafeStringAscending(enc, nil)
 		if err != nil {
@@ -585,6 +610,8 @@ func TestEncodeDecodeUnsafeStringDescending(t *testing.T) {
 		if len(remainder) != 0 {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
+
+		testPeekLength(t, enc)
 
 		enc = append(enc, "remainder"...)
 		remainder, _, err = DecodeUnsafeStringDescending(enc, nil)
@@ -683,6 +710,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 				if !decodedCurrent.Equal(current) {
 					t.Fatalf("lossy transport: before (%v) vs after (%v)", current, decodedCurrent)
 				}
+				testPeekLength(t, b)
 				if i > 0 {
 					if (bytes.Compare(lastEncoded, b) >= 0 && dir == Ascending) ||
 						(bytes.Compare(lastEncoded, b) <= 0 && dir == Descending) {
@@ -723,6 +751,7 @@ func testBasicEncodeDuration(
 		if bytes.Compare(lastEnc, enc) != -1 {
 			t.Errorf("%d ordered constraint violated for %s: [% x] vs. [% x]", i, test.value, enc, lastEnc)
 		}
+		testPeekLength(t, enc)
 		lastEnc = enc
 	}
 }
@@ -748,6 +777,7 @@ func testCustomEncodeDuration(
 		if test.value != decoded {
 			t.Errorf("%d duration changed during roundtrip [%s] vs [%s]", i, test.value, decoded)
 		}
+		testPeekLength(t, enc)
 	}
 }
 
