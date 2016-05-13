@@ -1062,14 +1062,16 @@ func BenchmarkEncodeDuration(b *testing.B) {
 
 	vals := make([]duration.Duration, 10000)
 	for i := range vals {
-		vals[i] = duration.Duration{Months: rng.Int63(), Days: rng.Int63(), Nanos: rng.Int63()}
+		vals[i] = duration.Duration{Months: rng.Int63n(1000), Days: rng.Int63n(1000), Nanos: rng.Int63n(1000000)}
 	}
 
 	buf := make([]byte, 0, 1000)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = EncodeDurationAscending(buf, vals[i%len(vals)])
+		if _, err := EncodeDurationAscending(buf, vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -1078,12 +1080,17 @@ func BenchmarkDecodeDuration(b *testing.B) {
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
-		d := duration.Duration{Months: rng.Int63(), Days: rng.Int63(), Nanos: rng.Int63()}
-		vals[i], _ = EncodeDurationAscending(nil, d)
+		d := duration.Duration{Months: rng.Int63n(1000), Days: rng.Int63n(1000), Nanos: rng.Int63n(1000000)}
+		var err error
+		if vals[i], err = EncodeDurationAscending(nil, d); err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeDurationAscending(vals[i%len(vals)])
+		if _, _, err := DecodeDurationAscending(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
