@@ -65,6 +65,12 @@ func TestStatusLocalStacks(t *testing.T) {
 	}
 }
 
+// ignoreWhitespace replaces all whitespace sequences with regex whitespace
+// matches so you can match sequences without format mattering.
+func ignoreWhitespace(text string) string {
+	return regexp.MustCompile(`\s+`).ReplaceAllString(text, `\s*`)
+}
+
 // TestStatusJson verifies that status endpoints return expected Json results.
 // The content type of the responses is always util.JSONContentType.
 func TestStatusJson(t *testing.T) {
@@ -82,23 +88,23 @@ func TestStatusJson(t *testing.T) {
 		t.Fatal(err)
 	}
 	testCases := []TestCase{
-		{statusNodesPrefix, "\\\"d\\\":"},
+		{statusNodesPrefix, "\\\"nodes\\\":"},
 	}
-	expectedResult := fmt.Sprintf(`{
-  "nodeID": 1,
-  "address": {
-    "network_field": "%s",
-    "address_field": "%s"
-  },
-  "buildInfo": {
-    "go_version": "%s",
-    "tag": "unknown",
-    "time": "",
-    "dependencies": "",
-    "cgo_compiler": ".*",
-    "platform": ".*"
-  }
-}`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
+	expectedResult := fmt.Sprintf(ignoreWhitespace(`{
+		"node_id": 1,
+		"address": {
+			"network_field": "%s",
+			"address_field": "%s"
+		},
+		"build_info": {
+			"go_version": "%s",
+			"tag": "unknown",
+			"time": "",
+			"dependencies": "",
+			"cgo_compiler": ".*",
+			"platform": ".*"
+		}
+	}`), addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
 	testCases = append(testCases, TestCase{"/health", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/local", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/1", expectedResult})
@@ -109,7 +115,7 @@ func TestStatusJson(t *testing.T) {
 	}
 	for _, spec := range testCases {
 		contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
-		for _, contentType := range contentTypes {
+		for i, contentType := range contentTypes {
 			req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+spec.keyPrefix, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -121,18 +127,18 @@ func TestStatusJson(t *testing.T) {
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
-				t.Errorf("endpoint %s unexpected status code: %v", spec.keyPrefix, resp.StatusCode)
+				t.Errorf("%d. endpoint %s unexpected status code: %v", i, spec.keyPrefix, resp.StatusCode)
 			}
 			returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 			if returnedContentType != util.JSONContentType {
-				t.Errorf("endpoint %s unexpected content type: %v", spec.keyPrefix, returnedContentType)
+				t.Errorf("%d. endpoint %s unexpected content type: %v", i, spec.keyPrefix, returnedContentType)
 			}
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if re := regexp.MustCompile(spec.expected); !re.Match(body) {
-				t.Errorf("endpoint %s expected match %s; got %s", spec.keyPrefix, spec.expected, body)
+				t.Errorf("%d. endpoint %s expected match %s; got %s", i, spec.keyPrefix, spec.expected, body)
 			}
 		}
 	}
@@ -457,14 +463,11 @@ func TestNodeStatusResponse(t *testing.T) {
 	body := getRequest(t, ts, statusNodesPrefix)
 
 	// First fetch all the node statuses.
-	type nsWrapper struct {
-		Data []status.NodeStatus `json:"d"`
-	}
-	wrapper := nsWrapper{}
+	wrapper := NodesResponse{}
 	if err := json.Unmarshal(body, &wrapper); err != nil {
 		t.Fatal(err)
 	}
-	nodeStatuses := wrapper.Data
+	nodeStatuses := wrapper.Nodes
 
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
@@ -477,7 +480,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodesPrefix, oldNodeStatus.Desc.NodeID))
+		requestBody := getRequest(t, ts, PathForNodeStatus(oldNodeStatus.Desc.NodeID.String()))
 		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
@@ -537,9 +540,7 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
-	var response struct {
-		Ranges []rangeInfo
-	}
+	var response RangesResponse
 	body := getRequest(t, ts, statusRangesPrefix+"local")
 	if err := json.Unmarshal(body, &response); err != nil {
 		t.Fatal(err)

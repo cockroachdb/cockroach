@@ -40,7 +40,7 @@ npm.installed: package.json npm-shrinkwrap.json
 	npm install --no-progress
 	touch $@
 
-typings.installed: typings.json npm.installed generated/protos.d.ts
+typings.installed: typings.json npm.installed
 	typings install
 	typings prune
 	touch $@
@@ -50,7 +50,7 @@ jspm.installed: npm.installed
 	jspm install
 	touch $@
 
-PBJS_ARGS = --path ../../../ ../../server/status/status.proto ../../ts/timeseries.proto
+PBJS_ARGS = --path ../../../ ../../server/status.proto ../../server/status/status.proto ../../ts/timeseries.proto
 
 app/js/protos.js: npm.installed
 	pbjs -t commonjs $(PBJS_ARGS) > $@
