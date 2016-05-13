@@ -42,10 +42,20 @@ type indexJoinNode struct {
 	debugVals        debugValues
 }
 
-func (p *planner) makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
+// makeIndexJoin build an index join node.
+// This destroys the original table scan node argument and reuses its
+// storage to construct a new index scan node. A new table scan node
+// is created separately as a member of the resulting index join node.
+// The new index scan node is also returned alongside the new index join
+// node.
+func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan *indexJoinNode, indexScan *scanNode) {
+	// Reuse the input argument's scanNode and its initialized parameters
+	// at a starting point to build the new indexScan node.
+	indexScan = origScan
+
 	// Create a new table scan node with the primary index.
 	table := p.Scan()
-	table.desc = indexScan.desc
+	table.desc = origScan.desc
 	table.initDescDefaults()
 	table.initOrdering(0)
 
@@ -65,9 +75,9 @@ func (p *planner) makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoin
 		colIDtoRowIndex[colID] = idx
 	}
 
-	for i := range indexScan.valNeededForCol {
+	for i := range origScan.valNeededForCol {
 		// We transfer valNeededForCol to the table node.
-		table.valNeededForCol[i] = indexScan.valNeededForCol[i]
+		table.valNeededForCol[i] = origScan.valNeededForCol[i]
 
 		// For the index node, we set valNeededForCol for columns that are part of the index.
 		id := indexScan.desc.Columns[i].ID
@@ -75,14 +85,14 @@ func (p *planner) makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoin
 		indexScan.valNeededForCol[i] = found
 	}
 
-	if indexScan.filter != nil {
+	if origScan.filter != nil {
 		// Transfer the filter to the table node. We must first convert the
 		// IndexedVars associated with indexNode.
 		convFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
 			iv := expr.(*parser.IndexedVar)
 			return true, table.filterVars.IndexedVar(iv.Idx)
 		}
-		table.filter = exprConvertVars(indexScan.filter, convFunc)
+		table.filter = exprConvertVars(origScan.filter, convFunc)
 
 		// Now we split the filter by extracting the part that can be evaluated using just the index
 		// columns.
@@ -105,7 +115,7 @@ func (p *planner) makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoin
 		table:            table,
 		primaryKeyPrefix: primaryKeyPrefix,
 		colIDtoRowIndex:  colIDtoRowIndex,
-	}
+	}, indexScan
 }
 
 func (n *indexJoinNode) Columns() []ResultColumn {
