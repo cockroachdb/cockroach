@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -729,7 +730,7 @@ func (g *Gossip) bootstrap() {
 	stopper := g.server.stopper
 
 	stopper.RunWorker(func() {
-		var bootstrapTimer util.Timer
+		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
 			stopper.RunTask(func() {

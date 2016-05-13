@@ -14,7 +14,7 @@
 //
 // Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
-package util
+package timeutil
 
 import "time"
 
@@ -31,7 +31,7 @@ import "time"
 // channel is read from, the next call to Timer.Reset will deadlock.
 // This pattern looks something like:
 //
-//  var timer util.Timer
+//  var timer timeutil.Timer
 //  defer timer.Stop()
 //  for {
 //      timer.Reset(wait)

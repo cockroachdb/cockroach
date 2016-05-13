@@ -25,10 +25,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -195,7 +195,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 // heard from in longer than timeUntilStoreDead.
 func (sp *StorePool) start(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		var timeoutTimer util.Timer
+		var timeoutTimer timeutil.Timer
 		defer timeoutTimer.Stop()
 		for {
 			var timeout time.Duration

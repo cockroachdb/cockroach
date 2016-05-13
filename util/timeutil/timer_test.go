@@ -14,7 +14,7 @@
 //
 // Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
-package util
+package timeutil
 
 import (
 	"testing"
