@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -724,4 +725,75 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 		t.Fatal(err)
 	}
 	mt.makeMutationsActive()
+}
+
+func TestUnknownColumnIDDuringMutation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// The descriptor changes made must have an immediate effect.
+	defer csql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// read table descriptor
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
+	}
+
+	mt := mutationTest{
+		T:       t,
+		kvDB:    kvDB,
+		sqlDB:   sqlDB,
+		descKey: descKey,
+		desc:    desc,
+	}
+
+	def := parser.ColumnTableDef{Name: "foo1", Type: &parser.BoolColType{Name: "BOOL"}, Nullable: parser.Null, Unique: true}
+	col, idx, err := sqlbase.MakeColumnDefDescs(&def)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := mt.desc.GetTable()
+	tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
+	tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
+
+	if _, err := tableDesc.FinalizeMutation(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tableDesc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tableDesc.Validate(); err != nil {
+		mt.Fatal(err)
+	}
+	if err := mt.kvDB.Put(mt.descKey, mt.desc); err != nil {
+		mt.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DELETE from t.test`); err != nil {
+		mt.Fatal(err)
+	}
 }
