@@ -49,12 +49,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	// TODO(knz): Until we split the creation of the node from Start()
-	// for the SelectClause too, we cannot cache this. This is because
-	// this node's initSelect() method both does type checking and also
-	// performs index selection. We cannot perform index selection
-	// properly until the placeholder values are known.
-	_, err = p.SelectClause(&parser.SelectClause{
+	rows, err := p.SelectClause(&parser.SelectClause{
 		Exprs: en.tableDesc.AllColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
@@ -79,30 +74,19 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		editNodeBase: en,
 		tw:           tw,
 	}
+	dn.run.initEditNode(rows)
 	return dn, nil
 }
 
 func (d *deleteNode) expandPlan() error {
-	// TODO(knz): See the comment above in Delete().
-	rows, err := d.p.SelectClause(&parser.SelectClause{
-		Exprs: d.tableDesc.AllColumnsSelector(),
-		From:  []parser.TableExpr{d.n.Table},
-		Where: d.n.Where,
-	}, nil, nil, nil)
-	if err != nil {
+	if err := d.rh.expandPlans(); err != nil {
 		return err
 	}
-
-	if err := rows.expandPlan(); err != nil {
-		return err
-	}
-
-	d.run.buildEditNodePlan(&d.editNodeBase, rows, &d.tw)
-	return nil
+	return d.run.expandEditNodePlan(&d.editNodeBase, &d.tw)
 }
 
 func (d *deleteNode) Start() error {
-	if err := d.run.rows.Start(); err != nil {
+	if err := d.run.startEditNode(); err != nil {
 		return err
 	}
 
@@ -116,6 +100,10 @@ func (d *deleteNode) Start() error {
 		d.run.err = d.fastDelete()
 		d.run.done = true
 		return d.run.err
+	}
+
+	if err := d.rh.startPlans(); err != nil {
+		return err
 	}
 
 	return d.run.tw.init(d.p.txn)

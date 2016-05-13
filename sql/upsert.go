@@ -30,7 +30,7 @@ import (
 const upsertExcludedTable = "excluded"
 
 type upsertHelper struct {
-	evalCtx            parser.EvalContext
+	p                  *planner
 	qvals              qvalMap
 	evalExprs          []parser.TypedExpr
 	table              *tableInfo
@@ -81,7 +81,7 @@ func (p *planner) makeUpsertHelper(
 	var normExprs []parser.TypedExpr
 	qvals := make(qvalMap)
 	for _, expr := range untupledExprs {
-		expandedExpr, err := p.expandSubqueries(expr, 1)
+		expandedExpr, err := p.replaceSubqueries(expr, 1)
 		if err != nil {
 			return nil, err
 		}
@@ -104,13 +104,22 @@ func (p *planner) makeUpsertHelper(
 	}
 
 	helper := &upsertHelper{
-		evalCtx:            p.evalCtx,
+		p:                  p,
 		qvals:              qvals,
 		evalExprs:          normExprs,
 		table:              table,
 		excludedAliasTable: excludedAliasTable,
 	}
 	return helper, nil
+}
+
+func (uh *upsertHelper) expand() error {
+	for _, evalExpr := range uh.evalExprs {
+		if err := uh.p.expandSubqueryPlans(evalExpr); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // eval returns the values for the update case of an upsert, given the row
@@ -124,7 +133,7 @@ func (uh *upsertHelper) eval(
 	var err error
 	ret := make([]parser.Datum, len(uh.evalExprs))
 	for i, evalExpr := range uh.evalExprs {
-		ret[i], err = evalExpr.Eval(uh.evalCtx)
+		ret[i], err = evalExpr.Eval(uh.p.evalCtx)
 		if err != nil {
 			return nil, err
 		}

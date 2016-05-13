@@ -103,6 +103,24 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 	return resRow, nil
 }
 
+func (rh *returningHelper) expandPlans() error {
+	for _, expr := range rh.exprs {
+		if err := rh.p.expandSubqueryPlans(expr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (rh *returningHelper) startPlans() error {
+	for _, expr := range rh.exprs {
+		if err := rh.p.startSubqueryPlans(expr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // TypeCheck ensures that the expressions mentioned in the
 // returningHelper have the right type.
 // TODO(knz): this both annotates the type of placeholders
@@ -111,11 +129,17 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 // ought to be split into two phases.
 func (rh *returningHelper) TypeCheck() error {
 	for i, expr := range rh.untypedExprs {
+
+		baseExpr, bErr := rh.p.replaceSubqueries(expr, 1)
+		if bErr != nil {
+			return bErr
+		}
+
 		desired := parser.NoTypePreference
 		if len(rh.desiredTypes) > i {
 			desired = rh.desiredTypes[i]
 		}
-		typedExpr, err := parser.TypeCheck(expr, rh.p.evalCtx.Args, desired)
+		typedExpr, err := parser.TypeCheck(baseExpr, rh.p.evalCtx.Args, desired)
 		if err != nil {
 			return err
 		}

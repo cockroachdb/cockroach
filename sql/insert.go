@@ -35,8 +35,6 @@ type insertNode struct {
 	insertRows   parser.SelectStatement
 	checkExprs   []parser.TypedExpr
 
-	desiredTypes []parser.Datum // This will go away when we only type check once.
-
 	insertCols            []sqlbase.ColumnDescriptor
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 	tw                    tableWriter
@@ -241,26 +239,14 @@ func (p *planner) Insert(
 		insertRows:            insertRows,
 		insertCols:            ri.insertCols,
 		insertColIDtoRowIndex: ri.insertColIDtoRowIndex,
-		desiredTypes:          desiredTypesFromSelect,
-		tw:                    tw,
+		tw: tw,
 	}
+	in.run.initEditNode(rows)
 	return in, nil
 }
 
 func (n *insertNode) expandPlan() error {
-	// TODO(knz): We need to re-run makePlan here again
-	// because that's when we can expand sub-queries.
-	// This goes away when sub-query expansion is moved
-	// to the Start() method of the insertRows object.
-
-	// Transform the values into a rows object. This expands SELECT statements or
-	// generates rows from the values contained within the query.
-	rows, err := n.p.newPlan(n.insertRows, n.desiredTypes, false)
-	if err != nil {
-		return err
-	}
-
-	if err := rows.expandPlan(); err != nil {
+	if err := n.rh.startPlans(); err != nil {
 		return err
 	}
 
@@ -287,12 +273,11 @@ func (n *insertNode) expandPlan() error {
 		}
 	}
 
-	n.run.buildEditNodePlan(&n.editNodeBase, rows, n.tw)
-	return nil
+	return n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
 }
 
 func (n *insertNode) Start() error {
-	if err := n.run.rows.Start(); err != nil {
+	if err := n.run.startEditNode(); err != nil {
 		return err
 	}
 

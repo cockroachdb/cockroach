@@ -471,7 +471,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	}
 
 	var untypedFilter parser.Expr
-	untypedFilter, s.err = s.planner.expandSubqueries(where.Expr, 1)
+	untypedFilter, s.err = s.planner.replaceSubqueries(where.Expr, 1)
 	if s.err != nil {
 		return s.err
 	}
@@ -582,7 +582,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	if resolved, s.err = s.resolveQNames(target.Expr); s.err != nil {
 		return s.err
 	}
-	if resolved, s.err = s.planner.expandSubqueries(resolved, 1); s.err != nil {
+	if resolved, s.err = s.planner.replaceSubqueries(resolved, 1); s.err != nil {
 		return s.err
 	}
 
