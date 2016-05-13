@@ -215,8 +215,10 @@ func selectIndex(
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
-		// Note: makeIndexJoin can modify s.filter.
-		plan = s.p.makeIndexJoin(s, c.exactPrefix)
+		// Note: makeIndexJoin destroys s and returns a new index scan
+		// node. The filter in that node may be different from the
+		// original table filter.
+		plan, s = s.p.makeIndexJoin(s, c.exactPrefix)
 	}
 
 	// If we have no filter, we can request a single key in some cases.
