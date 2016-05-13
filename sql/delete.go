@@ -72,7 +72,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		Exprs: sqlbase.ColumnsSelectors(rd.fetchCols),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	}, nil)
+	}, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (d *deleteNode) expandPlan() error {
 		Exprs: sqlbase.ColumnsSelectors(d.tw.rd.fetchCols),
 		From:  []parser.TableExpr{d.n.Table},
 		Where: d.n.Where,
-	}, nil)
+	}, nil, nil, nil)
 	if err != nil {
 		return err
 	}

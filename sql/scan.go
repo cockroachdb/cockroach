@@ -19,7 +19,6 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -30,10 +29,9 @@ import (
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	planner *planner
-	txn     *client.Txn
-	desc    sqlbase.TableDescriptor
-	index   *sqlbase.IndexDescriptor
+	p     *planner
+	desc  sqlbase.TableDescriptor
+	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
 	specifiedIndex *sqlbase.IndexDescriptor
@@ -71,6 +69,10 @@ type scanNode struct {
 	fetcher         sqlbase.RowFetcher
 
 	limitHint int64
+}
+
+func (p *planner) Scan() *scanNode {
+	return &scanNode{p: p}
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -112,20 +114,17 @@ func (n *scanNode) expandPlan() error {
 }
 
 func (n *scanNode) Start() error {
+	if err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse,
+		n.isSecondaryIndex, n.valNeededForCol); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // initScan sets up the rowFetcher and starts a scan. On error, sets n.err and
 // returns false.
 func (n *scanNode) initScan() (success bool) {
-	// TODO(radu): we could call init() just once, after the index and
-	// valNeededForCol are set.
-	err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex,
-		n.valNeededForCol)
-	if err != nil {
-		n.err = err
-		return false
-	}
 
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
@@ -135,7 +134,7 @@ func (n *scanNode) initScan() (success bool) {
 		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 
-	n.err = n.fetcher.StartScan(n.txn, n.spans, n.limitHint)
+	n.err = n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint)
 	if n.err != nil {
 		return false
 	}
@@ -153,7 +152,7 @@ func (n *scanNode) debugNext() bool {
 	}
 
 	if n.row != nil {
-		passesFilter, err := sqlbase.RunFilter(n.filter, n.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
 			n.err = err
 			return false
@@ -192,7 +191,7 @@ func (n *scanNode) Next() bool {
 		if n.err != nil || n.row == nil {
 			return false
 		}
-		passesFilter, err := sqlbase.RunFilter(n.filter, n.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
 			n.err = err
 			return false
@@ -261,22 +260,6 @@ func (n *scanNode) initTable(
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
 	n.initDescDefaults()
 	return alias, nil
-}
-
-// makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
-	cols := make([]ResultColumn, 0, len(colDescs))
-	for _, colDesc := range colDescs {
-		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
-		typ := colDesc.Type.ToDatumType()
-		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
-		}
-
-		hidden := colDesc.Hidden
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
-	}
-	return cols
 }
 
 // setNeededColumns sets the flags indicating which columns are needed by the upper layer.

@@ -212,8 +212,7 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 	case *parser.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		node := &selectNode{planner: p}
-		return p.initSelect(node, s, orderBy, limit, desiredTypes)
+		return p.SelectClause(s, orderBy, limit, desiredTypes)
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
 	// through. Instead of continuing this special casing, it may be worth
@@ -249,14 +248,8 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) SelectClause(parsed *parser.SelectClause, desiredTypes []parser.Datum) (planNode, error) {
-	node := &selectNode{planner: p}
-	return p.initSelect(node, parsed, nil, nil, desiredTypes)
-}
-
-func (p *planner) initSelect(
-	s *selectNode, parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit, desiredTypes []parser.Datum,
-) (planNode, error) {
+func (p *planner) SelectClause(parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit, desiredTypes []parser.Datum) (planNode, error) {
+	s := &selectNode{planner: p}
 
 	s.qvals = make(qvalMap)
 
@@ -394,7 +387,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 		switch expr := ate.Expr.(type) {
 		case *parser.QualifiedName:
 			// Usual case: a table.
-			scan := &scanNode{planner: p, txn: p.txn}
+			scan := p.Scan()
 			s.table.alias, s.err = scan.initTable(p, expr, ate.Hints)
 			if s.err != nil {
 				return s.err

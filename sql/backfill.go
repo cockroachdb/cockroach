@@ -457,17 +457,21 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// because the schema change is in the correct state to handle
 		// intermediate OLTP commands which delete and add values during the
 		// scan.
-		scan := &scanNode{
-			planner: makePlanner(),
-			txn:     txn,
-			desc:    *tableDesc,
-			spans:   []sqlbase.Span{sp},
-		}
+		planner := makePlanner()
+		planner.setTxn(txn)
+		scan := planner.Scan()
+		scan.desc = *tableDesc
+		scan.spans = []sqlbase.Span{sp}
 		scan.initDescDefaults()
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
 			return err
 		}
+
+		if err := rows.Start(); err != nil {
+			return err
+		}
+
 		// Construct a map from column ID to the index the value appears at
 		// within a row.
 		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
