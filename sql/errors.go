@@ -64,6 +64,7 @@ var _ ErrorWithPGCode = &errNonNullViolation{}
 var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
 var _ ErrorWithPGCode = &errTransactionAborted{}
 var _ ErrorWithPGCode = &errTransactionCommitted{}
+var _ ErrorWithPGCode = &errUndefinedDatabase{}
 var _ ErrorWithPGCode = &errUndefinedTable{}
 var _ ErrorWithPGCode = &errRetry{}
 
@@ -217,6 +218,32 @@ func (*errUndefinedTable) Code() string {
 }
 
 func (e *errUndefinedTable) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newUndefinedDatabaseError(name string) error {
+	return &errUndefinedDatabase{ctx: makeSrcCtx(1), name: name}
+}
+
+type errUndefinedDatabase struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *errUndefinedDatabase) Error() string {
+	return fmt.Sprintf("database %q does not exist", e.name)
+}
+
+func (*errUndefinedDatabase) Code() string {
+	// Postgres will return an UndefinedTable error on queries that go to a "relation"
+	// that does not exist (a query to a non-existent table or database), but will
+	// return an InvalidCatalogName error when connecting to a database that does
+	// not exist. We've chosen to return this code for all cases where the error cause
+	// is a missing database.
+	return pgerror.CodeInvalidCatalogNameError
+}
+
+func (e *errUndefinedDatabase) SrcContext() SrcCtx {
 	return e.ctx
 }
 

@@ -58,7 +58,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 			// Noop.
 			return &emptyNode{}, nil
 		}
-		return nil, databaseDoesNotExistError(string(n.Name))
+		return nil, newUndefinedDatabaseError(string(n.Name))
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {

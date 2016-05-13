@@ -53,7 +53,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(string(n.Name))
+		return nil, newUndefinedDatabaseError(string(n.Name))
 	}
 
 	if n.Name == n.NewName {
@@ -122,7 +122,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(n.Name.Database())
+		return nil, newUndefinedDatabaseError(n.Name.Database())
 	}
 
 	tbKey := tableKey{dbDesc.ID, n.Name.Table()}.Key()
@@ -146,7 +146,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 	if targetDbDesc == nil {
-		return nil, databaseDoesNotExistError(n.NewName.Database())
+		return nil, newUndefinedDatabaseError(n.NewName.Database())
 	}
 
 	if err := p.checkPrivilege(targetDbDesc, privilege.CREATE); err != nil {
@@ -307,7 +307,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(n.Table.Database())
+		return nil, newUndefinedDatabaseError(n.Table.Database())
 	}
 
 	// Check if table exists.
