@@ -108,11 +108,9 @@ func (q *qvalue) String() string { return parser.AsString(q) }
 
 // Walk implements the Expr interface.
 func (q *qvalue) Walk(v parser.Visitor) parser.Expr {
-	e, _ := parser.WalkExpr(v, q.datum)
-	// Typically Walk implementations are not supposed to modify nodes in-place, in order to
-	// preserve the original transaction statement and expressions. However, `qvalue` is our type
-	// (which we have "stiched" into an expression) so we aren't modifying an original expression.
-	q.datum = e.(parser.Datum)
+	if e, changed := parser.WalkExpr(v, q.datum); changed {
+		return &qvalue{datum: e.(parser.Datum), colRef: q.colRef}
+	}
 	return q
 }
 
