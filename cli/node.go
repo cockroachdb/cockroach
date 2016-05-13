@@ -54,13 +54,13 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	}
 
 	// Extract Node IDs from NodeStatuses.
-	nodeStatuses := map[string][]status.NodeStatus{}
+	nodeStatuses := server.NodesResponse{}
 	if err := getJSON(cliContext.HTTPAddr, server.PathForNodeStatus(""), &nodeStatuses); err != nil {
 		return err
 	}
 
 	var rows [][]string
-	for _, nodeStatus := range nodeStatuses["d"] {
+	for _, nodeStatus := range nodeStatuses.Nodes {
 		rows = append(rows, []string{
 			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 		})
@@ -103,11 +103,11 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 	switch len(args) {
 	case 0:
 		// Show status for all nodes.
-		jsonResponse := map[string][]status.NodeStatus{}
-		if err := getJSON(cliContext.HTTPAddr, server.PathForNodeStatus(""), &jsonResponse); err != nil {
+		resp := server.NodesResponse{}
+		if err := getJSON(cliContext.HTTPAddr, server.PathForNodeStatus(""), &resp); err != nil {
 			return err
 		}
-		nodeStatuses = jsonResponse["d"]
+		nodeStatuses = resp.Nodes
 
 	case 1:
 		nodeStatus := status.NodeStatus{}
