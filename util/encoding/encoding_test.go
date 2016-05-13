@@ -19,6 +19,7 @@ package encoding
 import (
 	"bytes"
 	"math"
+	"math/rand"
 	"regexp"
 	"testing"
 	"time"
@@ -101,8 +102,12 @@ func TestEncodeDecodeUint32Descending(t *testing.T) {
 	testCustomEncodeUint32(testCases, EncodeUint32Descending, t)
 }
 
-func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
-	decFunc func([]byte) ([]byte, uint64, error), descending bool, t *testing.T) {
+func testBasicEncodeDecodeUint64(
+	encFunc func([]byte, uint64) []byte,
+	decFunc func([]byte) ([]byte, uint64, error),
+	descending, testPeekLen bool,
+	t *testing.T,
+) {
 	testCases := []uint64{
 		0, 1,
 		1<<8 - 1, 1 << 8,
@@ -135,12 +140,19 @@ func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
 		if decode != v {
 			t.Errorf("decode yielded different value than input: %d vs. %d", decode, v)
 		}
+		if testPeekLen {
+			testPeekLength(t, enc)
+		}
 		lastEnc = enc
 	}
 }
 
-func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
-	decFunc func([]byte) ([]byte, int64, error), descending bool, t *testing.T) {
+func testBasicEncodeDecodeInt64(
+	encFunc func([]byte, int64) []byte,
+	decFunc func([]byte) ([]byte, int64, error),
+	descending, testPeekLen bool,
+	t *testing.T,
+) {
 	testCases := []int64{
 		math.MinInt64, math.MinInt64 + 1,
 		-1<<56 - 1, -1 << 56,
@@ -181,6 +193,9 @@ func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
 		if decode != v {
 			t.Errorf("decode yielded different value than input: %d vs. %d [%x]", decode, v, enc)
 		}
+		if testPeekLen {
+			testPeekLength(t, enc)
+		}
 		lastEnc = enc
 	}
 }
@@ -216,7 +231,7 @@ func testCustomEncodeUint64(testCases []testCaseUint64,
 }
 
 func TestEncodeDecodeUint64(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUint64Ascending, DecodeUint64Ascending, false, t)
+	testBasicEncodeDecodeUint64(EncodeUint64Ascending, DecodeUint64Ascending, false, false, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 		{1, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
@@ -227,7 +242,7 @@ func TestEncodeDecodeUint64(t *testing.T) {
 }
 
 func TestEncodeDecodeUint64Descending(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUint64Descending, DecodeUint64Descending, true, t)
+	testBasicEncodeDecodeUint64(EncodeUint64Descending, DecodeUint64Descending, true, false, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 		{1, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
@@ -238,7 +253,7 @@ func TestEncodeDecodeUint64Descending(t *testing.T) {
 }
 
 func TestEncodeDecodeVarint(t *testing.T) {
-	testBasicEncodeDecodeInt64(EncodeVarintAscending, DecodeVarintAscending, false, t)
+	testBasicEncodeDecodeInt64(EncodeVarintAscending, DecodeVarintAscending, false, true, t)
 	testCases := []testCaseInt64{
 		{math.MinInt64, []byte{0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 		{math.MinInt64 + 1, []byte{0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
@@ -255,7 +270,7 @@ func TestEncodeDecodeVarint(t *testing.T) {
 }
 
 func TestEncodeDecodeVarintDescending(t *testing.T) {
-	testBasicEncodeDecodeInt64(EncodeVarintDescending, DecodeVarintDescending, true, t)
+	testBasicEncodeDecodeInt64(EncodeVarintDescending, DecodeVarintDescending, true, true, t)
 	testCases := []testCaseInt64{
 		{math.MinInt64, []byte{0xfd, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 		{math.MinInt64 + 1, []byte{0xfd, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
@@ -271,7 +286,7 @@ func TestEncodeDecodeVarintDescending(t *testing.T) {
 }
 
 func TestEncodeDecodeUvarint(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUvarintAscending, DecodeUvarintAscending, false, t)
+	testBasicEncodeDecodeUint64(EncodeUvarintAscending, DecodeUvarintAscending, false, true, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0x88}},
 		{1, []byte{0x89}},
@@ -284,7 +299,7 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 }
 
 func TestEncodeDecodeUvarintDescending(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUvarintDescending, DecodeUvarintDescending, true, t)
+	testBasicEncodeDecodeUint64(EncodeUvarintDescending, DecodeUvarintDescending, true, true, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0x88}},
 		{1, []byte{0x87, 0xfe}},
@@ -390,6 +405,24 @@ func TestDecodeInvalid(t *testing.T) {
 	}
 }
 
+// testPeekLength appends some random garbage to an encoding and verifies
+// that PeekLength returns the correct length.
+func testPeekLength(t *testing.T, encoded []byte) {
+	gLen := rand.Intn(10)
+	garbage := make([]byte, gLen)
+	_, _ = rand.Read(garbage)
+
+	var buf []byte
+	buf = append(buf, encoded...)
+	buf = append(buf, garbage...)
+
+	if l, err := PeekLength(buf); err != nil {
+		t.Fatal(err)
+	} else if l != len(encoded) {
+		t.Errorf("PeekLength returned incorrect length: %d, expected %d", l, len(encoded))
+	}
+}
+
 func TestEncodeDecodeBytes(t *testing.T) {
 	testCases := []struct {
 		value   []byte
@@ -429,6 +462,8 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		if len(remainder) != 0 {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
+
+		testPeekLength(t, enc)
 
 		enc = append(enc, []byte("remainder")...)
 		remainder, _, err = DecodeBytesAscending(enc, nil)
@@ -482,6 +517,8 @@ func TestEncodeDecodeBytesDescending(t *testing.T) {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 
+		testPeekLength(t, enc)
+
 		enc = append(enc, []byte("remainder")...)
 		remainder, _, err = DecodeBytesDescending(enc, nil)
 		if err != nil {
@@ -534,6 +571,8 @@ func TestEncodeDecodeUnsafeString(t *testing.T) {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 
+		testPeekLength(t, enc)
+
 		enc = append(enc, "remainder"...)
 		remainder, _, err = DecodeUnsafeStringAscending(enc, nil)
 		if err != nil {
@@ -585,6 +624,8 @@ func TestEncodeDecodeUnsafeStringDescending(t *testing.T) {
 		if len(remainder) != 0 {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
+
+		testPeekLength(t, enc)
 
 		enc = append(enc, "remainder"...)
 		remainder, _, err = DecodeUnsafeStringDescending(enc, nil)
@@ -683,6 +724,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 				if !decodedCurrent.Equal(current) {
 					t.Fatalf("lossy transport: before (%v) vs after (%v)", current, decodedCurrent)
 				}
+				testPeekLength(t, b)
 				if i > 0 {
 					if (bytes.Compare(lastEncoded, b) >= 0 && dir == Ascending) ||
 						(bytes.Compare(lastEncoded, b) <= 0 && dir == Descending) {
@@ -723,6 +765,7 @@ func testBasicEncodeDuration(
 		if bytes.Compare(lastEnc, enc) != -1 {
 			t.Errorf("%d ordered constraint violated for %s: [% x] vs. [% x]", i, test.value, enc, lastEnc)
 		}
+		testPeekLength(t, enc)
 		lastEnc = enc
 	}
 }
@@ -748,6 +791,7 @@ func testCustomEncodeDuration(
 		if test.value != decoded {
 			t.Errorf("%d duration changed during roundtrip [%s] vs [%s]", i, test.value, decoded)
 		}
+		testPeekLength(t, enc)
 	}
 }
 
@@ -899,6 +943,20 @@ func BenchmarkDecodeVarint(b *testing.B) {
 	}
 }
 
+func BenchmarkPeekLengthVarint(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeVarintAscending(nil, rng.Int63())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = PeekLength(vals[i%len(vals)])
+	}
+}
+
 func BenchmarkEncodeUvarint(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -926,6 +984,20 @@ func BenchmarkDecodeUvarint(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _, _ = DecodeUvarintAscending(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkPeekLengthUvarint(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUvarintAscending(nil, uint64(rng.Int63()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = PeekLength(vals[i%len(vals)])
 	}
 }
 
@@ -977,6 +1049,20 @@ func BenchmarkDecodeBytes(b *testing.B) {
 	}
 }
 
+func BenchmarkPeekLengthBytes(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBytesAscending(nil, randutil.RandBytes(rng, 100))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = PeekLength(vals[i%len(vals)])
+	}
+}
+
 func BenchmarkDecodeBytesDescending(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -990,6 +1076,20 @@ func BenchmarkDecodeBytesDescending(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _, _ = DecodeBytesDescending(vals[i%len(vals)], buf)
+	}
+}
+
+func BenchmarkPeekLengthBytesDescending(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBytesDescending(nil, randutil.RandBytes(rng, 100))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = PeekLength(vals[i%len(vals)])
 	}
 }
 
@@ -1085,5 +1185,20 @@ func BenchmarkDecodeDuration(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _, _ = DecodeDurationAscending(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkPeekLengthDuration(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		d := duration.Duration{Months: rng.Int63(), Days: rng.Int63(), Nanos: rng.Int63()}
+		vals[i], _ = EncodeDurationAscending(nil, d)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = PeekLength(vals[i%len(vals)])
 	}
 }

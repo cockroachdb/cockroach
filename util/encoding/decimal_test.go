@@ -184,6 +184,7 @@ func TestEncodeDecimal(t *testing.T) {
 					t.Error(err)
 					continue
 				}
+				testPeekLength(t, enc)
 				if dec.Cmp(c.Value) != 0 {
 					t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
 				}
@@ -236,6 +237,8 @@ func TestEncodeDecimalRand(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+
+					testPeekLength(t, enc)
 
 					// Make sure we decode the same value we encoded.
 					if cur.Cmp(res) != 0 {
@@ -442,6 +445,21 @@ func BenchmarkDecodeDecimal(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _, _ = DecodeDecimalAscending(vals[i%len(vals)], buf)
+	}
+}
+
+func BenchmarkPeekLengthDecimal(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		d := decimal.NewDecFromFloat(rng.Float64())
+		vals[i] = EncodeDecimalAscending(nil, d)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = PeekLength(vals[i%len(vals)])
 	}
 }
 
