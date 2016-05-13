@@ -25,14 +25,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
-
-type details struct {
-	NodeID roachpb.NodeID `json:"nodeID"`
-}
 
 var retryOptions = retry.Options{
 	InitialBackoff: 100 * time.Millisecond,
@@ -43,7 +40,10 @@ var retryOptions = retry.Options{
 // get performs an HTTPS GET to the specified path for a specific node.
 func get(t *testing.T, base, rel string) []byte {
 	// TODO(bram) #2059: Remove retry logic.
-	url := fmt.Sprintf("%s/%s", base, rel)
+	url, err := joinURL(base, rel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for r := retry.Start(retryOptions); r.Next(); {
 		resp, err := cluster.HTTPClient().Get(url)
 		if err != nil {
@@ -72,20 +72,31 @@ func get(t *testing.T, base, rel string) []byte {
 // checkNode checks all the endpoints of the status server hosted by node and
 // requests info for the node with otherNodeID. That node could be the same
 // other node, the same node or "local".
-func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expectedNodeID string) {
-	var detail details
-	if err := getJSON(c.URL(i), "/_status/details/"+otherNodeID, &detail); err != nil {
-		t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
+func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expectedNodeID roachpb.NodeID) {
+	urlIDs := []string{otherNodeID.String()}
+	if nodeID == otherNodeID {
+		urlIDs = append(urlIDs, "local")
 	}
-	if actualNodeID := detail.NodeID.String(); actualNodeID != expectedNodeID {
-		t.Fatal(util.ErrorfSkipFrames(1, "%s calling %s: node ids don't match - expected %s, actual %s", nodeID, otherNodeID, expectedNodeID, actualNodeID))
-	}
+	var details server.DetailsResponse
+	for _, urlID := range urlIDs {
+		if err := getJSON(c.URL(i), fmt.Sprintf("/_status/details/%s", urlID), &details); err != nil {
+			t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
+		}
+		if details.NodeID != expectedNodeID {
+			t.Fatal(util.ErrorfSkipFrames(1, "%d calling %s: node ids don't match - expected %d, actual %d", nodeID, urlID, expectedNodeID, details.NodeID))
+		}
 
-	get(t, c.URL(i), fmt.Sprintf("/_status/gossip/%s", otherNodeID))
-	get(t, c.URL(i), fmt.Sprintf("/_status/logfiles/%s", otherNodeID))
-	get(t, c.URL(i), fmt.Sprintf("/_status/logs/%s", otherNodeID))
-	get(t, c.URL(i), fmt.Sprintf("/_status/stacks/%s", otherNodeID))
-	get(t, c.URL(i), fmt.Sprintf("/_status/nodes/%s", otherNodeID))
+		get(t, c.URL(i), fmt.Sprintf("/_status/gossip/%s", urlID))
+		get(t, c.URL(i), fmt.Sprintf("/_status/nodes/%s", urlID))
+
+		// TODO(wiz): Once the rest of the status HTTP endpoints are ported to grpc
+		// remove this if statement. See #5530.
+		if nodeID == otherNodeID {
+			get(t, c.URL(i), fmt.Sprintf("/_status/logfiles/%s", urlID))
+			get(t, c.URL(i), fmt.Sprintf("/_status/logs/%s", urlID))
+			get(t, c.URL(i), fmt.Sprintf("/_status/stacks/%s", urlID))
+		}
+	}
 }
 
 // TestStatusServer starts up an N node cluster and tests the status server on
@@ -96,25 +107,20 @@ func TestStatusServer(t *testing.T) {
 
 func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	// Get the ids for each node.
-	idMap := make(map[int]string)
+	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
-		var detail details
-		if err := getJSON(c.URL(i), "/_status/details/local", &detail); err != nil {
+		var details server.DetailsResponse
+		if err := getJSON(c.URL(i), "/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
-		idMap[i] = detail.NodeID.String()
+		idMap[i] = details.NodeID
 	}
 
 	// Check local response for the every node.
 	for i := 0; i < c.NumNodes(); i++ {
-		checkNode(t, c, i, idMap[i], "local", idMap[i])
+		id := idMap[i]
+		checkNode(t, c, i, id, id, id)
 		get(t, c.URL(i), "/_status/nodes")
-	}
-
-	// TODO(tamird): remove this after #5530. The `if` here is present to trick
-	// `go vet`.
-	if true {
-		return
 	}
 
 	// Proxy from the first node to the last node.

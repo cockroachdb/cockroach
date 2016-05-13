@@ -41,7 +41,6 @@ import (
 	"github.com/rcrowley/go-metrics/exp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
@@ -54,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -174,12 +172,6 @@ type adminServer struct {
 	*http.ServeMux
 
 	server *Server
-	// Mux provided by grpc-gateway to handle HTTP/gRPC proxying.
-	gwMux *gwruntime.ServeMux
-	// Context for grpc-gateway.
-	gwCtx context.Context
-	// Cancels outstanding grpc-gateway operations.
-	gwCancel context.CancelFunc
 }
 
 // newAdminServer allocates and returns a new REST server for
@@ -196,48 +188,29 @@ func newAdminServer(s *Server) *adminServer {
 	server.ServeMux.HandleFunc(quitPath, server.handleQuit)
 	server.ServeMux.HandleFunc(healthPath, server.handleHealth)
 
-	// Initialize grpc-gateway mux and context.
-	jsonpb := new(protoutil.JSONPb)
-	server.gwMux = gwruntime.NewServeMux(gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb))
-	server.gwCtx, server.gwCancel = context.WithCancel(context.Background())
-
 	return server
 }
 
-// RegisterGRPCGateway starts the gateway (i.e. reverse proxy) that proxies
-// HTTP requests to the appropriate gRPC endpoints.
-func (s *adminServer) RegisterGRPCGateway(serverCtx *Context) error {
-	// Setup HTTP<->gRPC handlers.
-	var opts []grpc.DialOption
-	if serverCtx.Insecure {
-		opts = append(opts, grpc.WithInsecure())
-	} else {
-		tlsConfig, err := serverCtx.GetClientTLSConfig()
-		if err != nil {
-			return err
-		}
-		opts = append(
-			opts,
-			// TODO(tamird): remove this timeout. It is currently necessary because
-			// GRPC will not actually bail on a bad certificate error - it will just
-			// retry indefinitely. See https://github.com/grpc/grpc-go/issues/622.
-			grpc.WithTimeout(base.NetworkTimeout),
-			grpc.WithBlock(),
-			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-		)
-	}
-	if err := RegisterAdminHandlerFromEndpoint(s.gwCtx, s.gwMux, serverCtx.Addr, opts); err != nil {
+// RegisterService registers the GRPC service.
+func (s *adminServer) RegisterService(g *grpc.Server) {
+	RegisterAdminServer(g, s)
+}
+
+// Register starts the gateway (i.e. reverse proxy) that proxies HTTP requests
+// to the appropriate gRPC endpoints.
+func (s *adminServer) RegisterGateway(
+	ctx context.Context,
+	mux *gwruntime.ServeMux,
+	addr string,
+	opts []grpc.DialOption,
+) error {
+	if err := RegisterAdminHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
 		return util.Errorf("error constructing grpc-gateway: %s. are your certificates valid?", err)
 	}
 
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
-	s.ServeMux.Handle(apiEndpoint, s.gwMux)
+	s.ServeMux.Handle(apiEndpoint, mux)
 	return nil
-}
-
-// Close cleans up resources used by the adminServer.
-func (s *adminServer) Close() {
-	s.gwCancel()
 }
 
 // handleHealth responds to health requests from monitoring services.

@@ -7,6 +7,7 @@
 
 	It is generated from these files:
 		cockroach/server/admin.proto
+		cockroach/server/status.proto
 
 	It has these top-level messages:
 		DatabasesRequest
@@ -29,6 +30,14 @@
 		DrainResponse
 		ClusterFreezeRequest
 		ClusterFreezeResponse
+		DetailsRequest
+		DetailsResponse
+		NodesRequest
+		NodesResponse
+		NodeRequest
+		RangeInfo
+		RangesRequest
+		RangesResponse
 */
 package server
 
