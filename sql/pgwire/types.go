@@ -413,7 +413,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, util.Errorf("unsupported binary bool: %q", b)
 			}
 		default:
-			return d, util.Errorf("unsupported bool format code: %d", code)
+			return d, util.Errorf("unsupported bool format code: %s", code)
 		}
 	case oid.T_int2:
 		switch code {
@@ -431,7 +431,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		default:
-			return d, util.Errorf("unsupported int2 format code: %d", code)
+			return d, util.Errorf("unsupported int2 format code: %s", code)
 		}
 	case oid.T_int4:
 		switch code {
@@ -449,7 +449,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		default:
-			return d, util.Errorf("unsupported int4 format code: %d", code)
+			return d, util.Errorf("unsupported int4 format code: %s", code)
 		}
 	case oid.T_int8:
 		switch code {
@@ -467,7 +467,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		default:
-			return d, util.Errorf("unsupported int8 format code: %d", code)
+			return d, util.Errorf("unsupported int8 format code: %s", code)
 		}
 	case oid.T_float4:
 		switch code {
@@ -485,7 +485,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
-			return d, util.Errorf("unsupported float4 format code: %d", code)
+			return d, util.Errorf("unsupported float4 format code: %s", code)
 		}
 	case oid.T_float8:
 		switch code {
@@ -503,7 +503,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
-			return d, util.Errorf("unsupported float8 format code: %d", code)
+			return d, util.Errorf("unsupported float8 format code: %s", code)
 		}
 	case oid.T_numeric:
 		switch code {
@@ -562,19 +562,19 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			case pgNumericNeg:
 				alloc.dd.Neg(&alloc.dd.Dec)
 			default:
-				return d, util.Errorf("unsupported numeric sign: %d", alloc.pgNum.sign)
+				return d, util.Errorf("unsupported numeric sign: %s", alloc.pgNum.sign)
 			}
 
 			d = &alloc.dd
 		default:
-			return d, util.Errorf("unsupported numeric format code: %d", code)
+			return d, util.Errorf("unsupported numeric format code: %s", code)
 		}
 	case oid.T_text, oid.T_varchar:
 		switch code {
 		case formatText, formatBinary:
 			d = parser.NewDString(string(b))
 		default:
-			return d, util.Errorf("unsupported text format code: %d", code)
+			return d, util.Errorf("unsupported text format code: %s", code)
 		}
 	case oid.T_bytea:
 		switch code {
@@ -597,7 +597,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		case formatBinary:
 			d = parser.NewDBytes(parser.DBytes(b))
 		default:
-			return d, util.Errorf("unsupported bytea format code: %d", code)
+			return d, util.Errorf("unsupported bytea format code: %s", code)
 		}
 	case oid.T_timestamp, oid.T_timestamptz:
 		switch code {
@@ -608,7 +608,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = &parser.DTimestamp{Time: ts}
 		default:
-			return d, util.Errorf("unsupported timestamp format code: %d", code)
+			return d, util.Errorf("unsupported timestamp format code: %s", code)
 		}
 	case oid.T_date:
 		switch code {
@@ -620,7 +620,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
 		default:
-			return d, util.Errorf("unsupported date format code: %d", code)
+			return d, util.Errorf("unsupported date format code: %s", code)
 		}
 	default:
 		return d, util.Errorf("unsupported OID: %v", id)
