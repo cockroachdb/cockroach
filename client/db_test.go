@@ -35,6 +35,7 @@ func setup() (*server.TestServer, *client.DB) {
 }
 
 func TestDB_Get(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -50,6 +51,7 @@ func TestDB_Get(t *testing.T) {
 }
 
 func TestDB_Put(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -68,6 +70,7 @@ func TestDB_Put(t *testing.T) {
 }
 
 func TestDB_CPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -125,6 +128,7 @@ func TestDB_CPut(t *testing.T) {
 }
 
 func TestDB_InitPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -148,6 +152,7 @@ func TestDB_InitPut(t *testing.T) {
 }
 
 func TestDB_Inc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -165,6 +170,7 @@ func TestDB_Inc(t *testing.T) {
 }
 
 func TestBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -192,6 +198,7 @@ func TestBatch(t *testing.T) {
 }
 
 func TestDB_Scan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -223,6 +230,7 @@ func TestDB_Scan(t *testing.T) {
 }
 
 func TestDB_ReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -254,6 +262,7 @@ func TestDB_ReverseScan(t *testing.T) {
 }
 
 func TestDB_Del(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -288,6 +297,7 @@ func TestDB_Del(t *testing.T) {
 }
 
 func TestTxn_Commit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -327,6 +337,7 @@ func TestTxn_Commit(t *testing.T) {
 }
 
 func TestDB_Put_insecure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
 	s.Ctx.Insecure = true
