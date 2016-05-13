@@ -519,7 +519,6 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			alloc := struct {
 				pgNum pgNumeric
 				i16   int16
-				dec   inf.Dec
 
 				dd parser.DDecimal
 			}{}
@@ -534,21 +533,29 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 					return d, err
 				}
 			}
-			for i := int16(0); i < alloc.pgNum.ndigits; i++ {
+
+			decDigits := make([]byte, 0, alloc.pgNum.ndigits*pgDecDigits)
+			for i := int16(0); i < alloc.pgNum.ndigits-1; i++ {
 				if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
 					return d, err
 				}
-				scale := (i - alloc.pgNum.weight) * pgDecDigits
-				if overPrecision := scale - alloc.pgNum.dscale; overPrecision > 0 {
-					scale -= overPrecision
-					for i := int16(0); i < overPrecision; i++ {
-						alloc.i16 /= 10
-					}
-				}
-				alloc.dec.SetScale(inf.Scale(scale))
-				alloc.dec.SetUnscaled(int64(alloc.i16))
-				alloc.dd.Add(&alloc.dd.Dec, &alloc.dec)
+				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
 			}
+
+			// The last digit may contain padding, which we need to deal with.
+			if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+				return d, err
+			}
+			dscale := (alloc.pgNum.ndigits - 1 - alloc.pgNum.weight) * pgDecDigits
+			if overScale := dscale - alloc.pgNum.dscale; overScale > 0 {
+				dscale -= overScale
+				for i := int16(0); i < overScale; i++ {
+					alloc.i16 /= 10
+				}
+			}
+			decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+			alloc.dd.UnscaledBig().SetString(string(decDigits), 10)
+			alloc.dd.SetScale(inf.Scale(dscale))
 
 			switch alloc.pgNum.sign {
 			case pgNumericPos:
