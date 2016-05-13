@@ -29,6 +29,22 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// sortNode represents a node that sorts the rows returned by its
+// sub-node.
+type sortNode struct {
+	plan     planNode
+	columns  []ResultColumn
+	ordering columnOrdering
+	err      error
+
+	needSort     bool
+	sortStrategy sortingStrategy
+	valueIter    valueIterator
+
+	explain   explainMode
+	debugVals debugValues
+}
+
 // orderBy constructs a sortNode based on the ORDER BY clause.
 //
 // In the general case (SELECT/UNION/VALUES), we can sort by a column index or a
@@ -92,7 +108,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				if err := qname.NormalizeColumnName(); err != nil {
 					return nil, err
 				}
-				if qname.Table() == "" || sqlbase.EqualName(s.table.alias, qname.Table()) {
+				if qname.Table() == "" || sqlbase.EqualName(s.source.info.alias, qname.Table()) {
 					qnameCol := sqlbase.NormalizeName(qname.Column())
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
@@ -123,7 +139,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
-				if err := s.addRender(parser.SelectExpr{Expr: expr}, parser.TypeInt); err != nil {
+				if err := s.addRender(parser.SelectExpr{Expr: expr}, nil); err != nil {
 					return nil, err
 				}
 				index = len(s.columns) - 1
@@ -166,20 +182,6 @@ func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
 		// expr doesn't look like a col index (i.e. not a constant).
 		return -1, nil
 	}
-}
-
-type sortNode struct {
-	plan     planNode
-	columns  []ResultColumn
-	ordering columnOrdering
-	err      error
-
-	needSort     bool
-	sortStrategy sortingStrategy
-	valueIter    valueIterator
-
-	explain   explainMode
-	debugVals debugValues
 }
 
 func (n *sortNode) Columns() []ResultColumn {
@@ -263,38 +265,41 @@ func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 }
 
 // wrap the supplied planNode with the sortNode if sorting is required.
-func (n *sortNode) wrap(plan planNode) planNode {
-	if n != nil {
+func wrapSort(n **sortNode, plan planNode) planNode {
+	if *n != nil {
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
 		existingOrdering := plan.Ordering()
 		if log.V(2) {
-			log.Infof("Sort: existing=%d desired=%d", existingOrdering, n.ordering)
+			log.Infof("Sort: existing=%d desired=%d", existingOrdering, (*n).ordering)
 		}
-		match := computeOrderingMatch(n.ordering, existingOrdering, false)
-		if match < len(n.ordering) {
-			n.plan = plan
-			n.needSort = true
-			return n
+		match := computeOrderingMatch((*n).ordering, existingOrdering, false)
+		if match < len((*n).ordering) {
+			(*n).plan = plan
+			(*n).needSort = true
+			return *n
 		}
 
-		if len(n.columns) < len(plan.Columns()) {
+		if len((*n).columns) < len(plan.Columns()) {
 			// No sorting required, but we have to strip off the extra render
 			// expressions we added.
-			n.plan = plan
-			return n
+			(*n).plan = plan
+			return *n
 		}
+
+		if log.V(2) {
+			log.Infof("Sort: no sorting required")
+		}
+		*n = nil
 	}
 
-	if log.V(2) {
-		log.Infof("Sort: no sorting required")
-	}
 	return plan
 }
 
 func (n *sortNode) expandPlan() error {
-	// TODO(knz) Some code from orderBy() above really belongs here.
-	return n.plan.expandPlan()
+	// We do not need to recurse into the child node here; selectTopNode
+	// does this for us.
+	return nil
 }
 
 func (n *sortNode) Start() error {

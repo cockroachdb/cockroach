@@ -24,45 +24,106 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
+// limitNode represents a node that limits the number of rows
+// returned or only return them past a given number (offset).
+type limitNode struct {
+	p          *planner
+	plan       planNode
+	countExpr  parser.TypedExpr
+	offsetExpr parser.TypedExpr
+	count      int64
+	offset     int64
+	rowIndex   int64
+	explain    explainMode
+	debugVals  debugValues
+}
+
+// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
+func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
+	if n == nil || (n.Count == nil && n.Offset == nil) {
+		// No LIMIT nor OFFSET; there is nothing special to do.
+		return nil, nil
+	}
+
+	res := limitNode{p: p}
+
+	if n.Count != nil {
+		typedExpr, err := parser.TypeCheckAndRequire(n.Count, p.evalCtx.Args,
+			parser.TypeInt, "LIMIT")
+		if err != nil {
+			return nil, err
+		}
+		res.countExpr = typedExpr
+	}
+	if n.Offset != nil {
+		typedExpr, err := parser.TypeCheckAndRequire(n.Offset, p.evalCtx.Args,
+			parser.TypeInt, "OFFSET")
+		if err != nil {
+			return nil, err
+		}
+		res.offsetExpr = typedExpr
+	}
+
+	return &res, nil
+}
+
+func wrapLimit(n **limitNode, plan planNode) planNode {
+	if *n == nil {
+		return plan
+	}
+	(*n).plan = plan
+	return *n
+}
+
+func (n *limitNode) expandPlan() error {
+	// We do not need to recurse into the child node here; selectTopNode
+	// does this for us.
+	return nil
+}
+
+func (n *limitNode) Start() error {
+	if err := n.plan.Start(); err != nil {
+		return err
+	}
+
+	if err := n.evalLimit(); err != nil {
+		return err
+	}
+
+	if n.count != math.MaxInt64 {
+		if n.offset > math.MaxInt64-n.count {
+			n.count = math.MaxInt64 - n.offset
+		}
+		n.plan.SetLimitHint(n.offset+n.count, false /* hard */)
+	}
+	return nil
+}
+
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
-func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error) {
-	count = math.MaxInt64
-	offset = 0
-
-	if limit == nil {
-		return count, offset, nil
-	}
+func (n *limitNode) evalLimit() error {
+	n.count = math.MaxInt64
+	n.offset = 0
 
 	data := []struct {
 		name string
-		src  parser.Expr
+		src  parser.TypedExpr
 		dst  *int64
 	}{
-		{"LIMIT", limit.Count, &count},
-		{"OFFSET", limit.Offset, &offset},
+		{"LIMIT", n.countExpr, &n.count},
+		{"OFFSET", n.offsetExpr, &n.offset},
 	}
 
 	for _, datum := range data {
 		if datum.src != nil {
-			typedSrc, err := parser.TypeCheckAndRequire(datum.src, p.evalCtx.Args,
-				parser.TypeInt, datum.name)
+			normalized, err := n.p.parser.NormalizeExpr(n.p.evalCtx, datum.src)
 			if err != nil {
-				return 0, 0, err
+				return err
 			}
 
-			normalized, err := p.parser.NormalizeExpr(p.evalCtx, typedSrc)
+			dstDatum, err := normalized.Eval(n.p.evalCtx)
 			if err != nil {
-				return 0, 0, err
-			}
-
-			if p.evalCtx.PrepareOnly {
-				continue
-			}
-
-			dstDatum, err := normalized.Eval(p.evalCtx)
-			if err != nil {
-				return 0, 0, err
+				return err
 			}
 
 			if dstDatum == parser.DNull {
@@ -73,43 +134,27 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 			dstDInt := *dstDatum.(*parser.DInt)
 			val := int64(dstDInt)
 			if val < 0 {
-				return 0, 0, fmt.Errorf("negative value for %s", datum.name)
+				return fmt.Errorf("negative value for %s", datum.name)
 			}
 			*datum.dst = val
 		}
 	}
-	return count, offset, nil
+	return nil
 }
 
-// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) limit(count, offset int64, plan planNode) planNode {
-	if count == math.MaxInt64 && offset == 0 {
-		return plan
+func (n *limitNode) ExplainTypes(regTypes func(string, string)) {
+	if n.countExpr != nil {
+		regTypes("limit", parser.AsStringWithFlags(n.countExpr, parser.FmtShowTypes))
 	}
-
-	if count != math.MaxInt64 {
-		plan.SetLimitHint(offset+count, false /* hard */)
+	if n.offsetExpr != nil {
+		regTypes("offset", parser.AsStringWithFlags(n.offsetExpr, parser.FmtShowTypes))
 	}
-
-	return &limitNode{plan: plan, count: count, offset: offset}
 }
 
-type limitNode struct {
-	plan      planNode
-	count     int64
-	offset    int64
-	rowIndex  int64
-	explain   explainMode
-	debugVals debugValues
-}
-
-func (n *limitNode) ExplainTypes(f func(string, string)) { n.plan.ExplainTypes(f) }
-func (n *limitNode) expandPlan() error                   { return n.plan.expandPlan() }
-func (n *limitNode) Err() error                          { return n.plan.Err() }
-func (n *limitNode) Start() error                        { return n.plan.Start() }
-func (n *limitNode) Columns() []ResultColumn             { return n.plan.Columns() }
-func (n *limitNode) Values() parser.DTuple               { return n.plan.Values() }
-func (n *limitNode) Ordering() orderingInfo              { return n.plan.Ordering() }
+func (n *limitNode) Err() error              { return n.plan.Err() }
+func (n *limitNode) Columns() []ResultColumn { return n.plan.Columns() }
+func (n *limitNode) Values() parser.DTuple   { return n.plan.Values() }
+func (n *limitNode) Ordering() orderingInfo  { return n.plan.Ordering() }
 
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

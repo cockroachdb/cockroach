@@ -252,8 +252,9 @@ func (n *groupNode) DebugValues() debugValues {
 }
 
 func (n *groupNode) expandPlan() error {
-	// TODO(knz) Some code from groupBy() above really belongs here.
-	return n.plan.expandPlan()
+	// We do not need to recurse into the child node here; selectTopNode
+	// does this for us.
+	return nil
 }
 
 func (n *groupNode) Start() error {
@@ -386,12 +387,12 @@ func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
 
 // wrap the supplied planNode with the groupNode if grouping/aggregation is required.
-func (n *groupNode) wrap(plan planNode) planNode {
-	if n == nil {
+func wrapGroup(n **groupNode, plan planNode) planNode {
+	if *n == nil {
 		return plan
 	}
-	n.plan = plan
-	return n
+	(*n).plan = plan
+	return *n
 }
 
 // isNotNullFilter adds as a "col IS NOT NULL" constraint to the expression if

@@ -19,6 +19,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -181,6 +182,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &selectTopNode{}
 var _ planNode = &selectNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &emptyNode{}
@@ -199,6 +201,7 @@ var _ planNode = &alterTableNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
+	log.Warningf("PREPARE: %s", stmt.String())
 	plan, err := p.newPlan(stmt, nil, autoCommit)
 	if err != nil {
 		return nil, err

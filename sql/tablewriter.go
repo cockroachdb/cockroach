@@ -41,6 +41,9 @@ import (
 //   // Handle err.
 type tableWriter interface {
 
+	// expand expands the tableWriter's sub-plans, if any.
+	expand() error
+
 	// init provides the tableWriter with a Txn to write to and returns an error
 	// if it was misconfigured.
 	init(*client.Txn) error
@@ -68,6 +71,10 @@ type tableInserter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+}
+
+func (ti *tableInserter) expand() error {
+	return nil
 }
 
 func (ti *tableInserter) init(txn *client.Txn) error {
@@ -107,6 +114,10 @@ type tableUpdater struct {
 	b   *client.Batch
 }
 
+func (tu *tableUpdater) expand() error {
+	return nil
+}
+
 func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
 	tu.b = txn.NewBatch()
@@ -137,6 +148,9 @@ func (tu *tableUpdater) finalize() error {
 }
 
 type tableUpsertEvaler interface {
+	// expand expands the evaler's sub-plans, if any.
+	expand() error
+
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
 	eval(insertRow parser.DTuple, existingRow parser.DTuple) (parser.DTuple, error)
@@ -166,6 +180,8 @@ type tableUpserter struct {
 	// For allocation avoidance.
 	indexKeyPrefix []byte
 }
+
+func (tu *tableUpserter) expand() error { return tu.evaler.expand() }
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
@@ -386,6 +402,10 @@ type tableDeleter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+}
+
+func (td *tableDeleter) expand() error {
+	return nil
 }
 
 func (td *tableDeleter) init(txn *client.Txn) error {

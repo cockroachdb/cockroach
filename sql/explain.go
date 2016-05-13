@@ -118,10 +118,11 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return node, nil
 
 	case explainTrace:
-		return (&sortNode{
+		sort := &sortNode{
 			ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
 			columns:  traceColumns,
-		}).wrap(&explainTraceNode{plan: plan, txn: p.txn}), nil
+		}
+		return wrapSort(&sort, &explainTraceNode{plan: plan, txn: p.txn}), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
