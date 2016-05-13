@@ -41,6 +41,15 @@ const (
 	// CodeTransactionAbortedError signals that the user tried to execute a
 	// statement in the context of a SQL txn that's already aborted.
 	CodeTransactionAbortedError string = "25P02"
+	// CodeInvalidCatalogNameError signals that the user tried to interact with
+	// a database that does not exist.
+	//
+	// Postgres will return an UndefinedTable error on queries that go to a "relation"
+	// that does not exist (a query to a non-existant table or database), but will
+	// return an InvalidCatalogName error when connecting to a database that does
+	// not exist. We've chosen to return this code for all cases where the error cause
+	// is a missing database.
+	CodeInvalidCatalogNameError string = "3D000"
 	// CodeUndefinedTableError signals that the user tried to interact with
 	// a table that does not exist.
 	CodeUndefinedTableError string = "42P01"
@@ -83,6 +92,7 @@ var _ ErrorWithPGCode = &errNonNullViolation{}
 var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
 var _ ErrorWithPGCode = &errTransactionAborted{}
 var _ ErrorWithPGCode = &errTransactionCommitted{}
+var _ ErrorWithPGCode = &errUndefinedDatabase{}
 var _ ErrorWithPGCode = &errUndefinedTable{}
 var _ ErrorWithPGCode = &errRetry{}
 
@@ -236,6 +246,27 @@ func (*errUndefinedTable) Code() string {
 }
 
 func (e *errUndefinedTable) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newUndefinedDatabaseError(name string) error {
+	return &errUndefinedDatabase{ctx: makeSrcCtx(1), name: name}
+}
+
+type errUndefinedDatabase struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *errUndefinedDatabase) Error() string {
+	return fmt.Sprintf("database %q does not exist", e.name)
+}
+
+func (*errUndefinedDatabase) Code() string {
+	return CodeInvalidCatalogNameError
+}
+
+func (e *errUndefinedDatabase) SrcContext() SrcCtx {
 	return e.ctx
 }
 

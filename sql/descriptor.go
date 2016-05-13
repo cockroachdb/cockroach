@@ -173,7 +173,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 				return nil, err
 			}
 			if descriptor == nil {
-				return nil, databaseDoesNotExistError(database)
+				return nil, newUndefinedDatabaseError(database)
 			}
 			descs = append(descs, descriptor)
 		}
