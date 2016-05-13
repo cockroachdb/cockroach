@@ -222,9 +222,12 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		alloc := struct {
 			pgNum pgNumeric
 
-			bigI              big.Int
-			wholeDec, fracDec inf.Dec
-		}{}
+			bigI big.Int
+		}{
+			pgNum: pgNumeric{
+				dscale: int16(v.Scale()),
+			},
+		}
 
 		if v.Sign() >= 0 {
 			alloc.pgNum.sign = pgNumericPos
@@ -232,26 +235,19 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 			alloc.pgNum.sign = pgNumericNeg
 		}
 
-		alloc.wholeDec.Abs(&v.Dec)
-		alloc.wholeDec.Round(&alloc.wholeDec, 0, inf.RoundDown)
+		digitStr := alloc.bigI.Abs(v.UnscaledBig()).String()
 
-		alloc.fracDec.Abs(&v.Dec)
-		alloc.fracDec.Sub(&alloc.fracDec, &alloc.wholeDec)
+		// Much of this logic is cribbed from libpqtypes' str2num.
 
-		alloc.pgNum.dscale = int16(alloc.fracDec.Scale())
+		ddigits := len(digitStr)
+		dweight := ddigits - int(alloc.pgNum.dscale) - 1
 
-		for big := alloc.bigI.Set(alloc.wholeDec.UnscaledBig()); big.Sign() > 0; big.Div(big, decShift) {
-			alloc.pgNum.ndigits++
-			alloc.pgNum.weight++
-		}
-
-		if alloc.pgNum.weight > 0 {
-			alloc.pgNum.weight--
-		}
-
-		for big := alloc.bigI.Set(alloc.fracDec.UnscaledBig()); big.Sign() > 0; big.Div(big, decShift) {
-			alloc.pgNum.ndigits++
-		}
+		weight := (dweight+1+pgDecDigits-1)/pgDecDigits - 1
+		alloc.pgNum.weight = int16(weight)
+		// The number of decimal zeroes to insert before the first given digit to
+		// have a correctly aligned first NBASE digit
+		offset := (weight+1)*pgDecDigits - (dweight + 1)
+		alloc.pgNum.ndigits = int16(ddigits+offset+pgDecDigits-1) / pgDecDigits
 
 		b.putInt32(int32(2 * (4 + alloc.pgNum.ndigits)))
 		b.putInt16(alloc.pgNum.ndigits)
@@ -259,28 +255,33 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		b.putInt16(int16(alloc.pgNum.sign))
 		b.putInt16(alloc.pgNum.dscale)
 
-		for i := int16(0); i < alloc.pgNum.weight+1; i++ {
-			big := alloc.bigI.Set(alloc.wholeDec.UnscaledBig())
-			for j := i + 1; j < alloc.pgNum.weight+1; j++ {
-				big.Div(big, decShift)
+		// First and last digits are "padded".
+		firstDigitEnd := pgDecDigits - offset
+		firstDigit, err := strconv.ParseInt(digitStr[:firstDigitEnd], 10, 16)
+		if err != nil {
+			b.setError(err)
+			return
+		}
+		digitStr = digitStr[firstDigitEnd:]
+		b.putInt16(int16(firstDigit))
+
+		for i := int16(1); i < alloc.pgNum.ndigits-1; i++ {
+			digit, err := strconv.ParseInt(digitStr[:pgDecDigits], 10, 16)
+			if err != nil {
+				b.setError(err)
+				return
 			}
-			big.Mod(big, decShift)
-			b.putInt16(int16(big.Int64()))
+			digitStr = digitStr[pgDecDigits:]
+			b.putInt16(int16(digit))
 		}
 
-		for i := alloc.pgNum.weight + 1; i < alloc.pgNum.ndigits; i++ {
-			// Push pgDecDigits ahead of the decimal point.
-			alloc.fracDec.SetScale(alloc.fracDec.Scale() - pgDecDigits)
-
-			// Reuse wholeDesc now that we're done with it.
-			dec := alloc.wholeDec.Round(&alloc.fracDec, 0, inf.RoundDown)
-
-			// Send the stuff left of the decimal point.
-			b.putInt16(int16(dec.UnscaledBig().Int64()))
-
-			// Remove the stuff past the decimal point.
-			alloc.fracDec.Sub(&alloc.fracDec, dec)
+		lastDigit, err := strconv.ParseInt(digitStr, 10, 16)
+		if err != nil {
+			b.setError(err)
+			return
 		}
+		lastDigit = lastDigit * int64(math.Pow10(pgDecDigits-len(digitStr)))
+		b.putInt16(int16(lastDigit))
 
 	case *parser.DBytes:
 		b.putInt32(int32(len(*v)))
