@@ -238,7 +238,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		// Much of this logic is cribbed from libpqtypes' str2num, but padding is
 		// managed manually instead of actually padding the string, for reasons of
 		// performance.
-		decDigits := alloc.bigI.Abs(v.UnscaledBig()).Append(nil, 10)
+		decDigits := alloc.bigI.Abs(v.UnscaledBig()).String()
 
 		// Convert pure-decimal representation to base NBASE. First we need to
 		// determine the converted weight and ndigits.
