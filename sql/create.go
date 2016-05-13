@@ -211,7 +211,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(n.Table.Database())
+		return nil, newUndefinedDatabaseError(n.Table.Database())
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {

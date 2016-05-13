@@ -322,7 +322,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(string(name.Base))
+		return nil, newUndefinedDatabaseError(string(name.Base))
 	}
 
 	tableNames, err := p.getTableNames(dbDesc)

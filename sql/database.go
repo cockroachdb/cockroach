@@ -28,10 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func databaseDoesNotExistError(name string) error {
-	return fmt.Errorf("database %q does not exist", name)
-}
-
 // databaseKey implements sqlbase.DescriptorKey.
 type databaseKey struct {
 	name string
@@ -95,7 +91,7 @@ func getKeysForDatabaseDescriptor(
 type DatabaseAccessor interface {
 	// getDatabaseDesc looks up the database descriptor given its name.
 	// Returns nil if the descriptor is not found. If you want to turn the "not
-	// found" condition into an error, use databaseDoesNotExistError().
+	// found" condition into an error, use newUndefinedDatabaseError().
 	getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
 	// getCachedDatabaseDesc looks up the database descriptor from
@@ -176,7 +172,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 			return 0, err
 		}
 		if desc == nil {
-			return 0, databaseDoesNotExistError(name)
+			return 0, newUndefinedDatabaseError(name)
 		}
 	}
 
