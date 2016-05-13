@@ -184,6 +184,7 @@ func TestEncodeDecimal(t *testing.T) {
 					t.Error(err)
 					continue
 				}
+				testPeekLength(t, enc)
 				if dec.Cmp(c.Value) != 0 {
 					t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
 				}
@@ -236,6 +237,8 @@ func TestEncodeDecimalRand(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+
+					testPeekLength(t, enc)
 
 					// Make sure we decode the same value we encoded.
 					if cur.Cmp(res) != 0 {
