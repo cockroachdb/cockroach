@@ -163,7 +163,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Name.String())
+		return nil, newUndefinedTableError(n.Name.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
@@ -227,7 +227,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Index.Table.String())
+		return nil, newUndefinedTableError(n.Index.Table.String())
 	}
 
 	idxName := string(n.Index.Index)
@@ -316,7 +316,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 
 	colName := string(n.Name)

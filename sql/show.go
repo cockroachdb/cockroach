@@ -65,7 +65,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -99,7 +99,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -258,7 +258,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 
 	v := &valuesNode{

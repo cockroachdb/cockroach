@@ -42,10 +42,6 @@ func TestDisableTableLeases() func() {
 	}
 }
 
-func tableDoesNotExistError(name string) error {
-	return fmt.Errorf("table %q does not exist", name)
-}
-
 // tableKey implements sqlbase.DescriptorKey.
 type tableKey struct {
 	parentID sqlbase.ID
@@ -113,8 +109,8 @@ type SchemaAccessor interface {
 	expandTableGlob(expr *parser.QualifiedName) (parser.QualifiedNames, error)
 
 	// getTableDesc returns a table descriptor, or nil if the descriptor
-	// is not found.  If you want to transform the not found condition
-	// into an error, use tableDoesNotExistError().
+	// is not found. If you want to transform the not found condition
+	// into an error, use newUndefinedTableError().
 	getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
 	// getTableID retrieves the table ID for the specified table. It uses the
@@ -190,7 +186,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			return sqlbase.TableDescriptor{}, err
 		}
 		if desc == nil {
-			return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
+			return sqlbase.TableDescriptor{}, newUndefinedTableError(qname.String())
 		}
 		return *desc, nil
 	}
@@ -215,7 +211,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			if err == errDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
 				// table's name.
-				return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
+				return sqlbase.TableDescriptor{}, newUndefinedTableError(qname.String())
 			}
 			return sqlbase.TableDescriptor{}, err
 		}
@@ -256,7 +252,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, tableDoesNotExistError(qname.String())
+		return 0, newUndefinedTableError(qname.String())
 	}
 	return sqlbase.ID(gr.ValueInt()), nil
 }

@@ -41,6 +41,9 @@ const (
 	// CodeTransactionAbortedError signals that the user tried to execute a
 	// statement in the context of a SQL txn that's already aborted.
 	CodeTransactionAbortedError string = "25P02"
+	// CodeUndefinedTableError signals that the user tried to interact with
+	// a table that does not exist.
+	CodeUndefinedTableError string = "42P01"
 	// CodeInternalError represents all internal cockroach errors, plus acts
 	// as a catch-all for random errors for which we haven't implemented the
 	// appropriate error code.
@@ -80,6 +83,7 @@ var _ ErrorWithPGCode = &errNonNullViolation{}
 var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
 var _ ErrorWithPGCode = &errTransactionAborted{}
 var _ ErrorWithPGCode = &errTransactionCommitted{}
+var _ ErrorWithPGCode = &errUndefinedTable{}
 var _ ErrorWithPGCode = &errRetry{}
 
 const (
@@ -211,6 +215,27 @@ func (e *errUniquenessConstraintViolation) Error() string {
 }
 
 func (e *errUniquenessConstraintViolation) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newUndefinedTableError(name string) error {
+	return &errUndefinedTable{ctx: makeSrcCtx(1), name: name}
+}
+
+type errUndefinedTable struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *errUndefinedTable) Error() string {
+	return fmt.Sprintf("table %q does not exist", e.name)
+}
+
+func (*errUndefinedTable) Code() string {
+	return CodeUndefinedTableError
+}
+
+func (e *errUndefinedTable) SrcContext() SrcCtx {
 	return e.ctx
 }
 
