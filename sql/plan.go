@@ -165,6 +165,9 @@ type planNode interface {
 	Err() error
 }
 
+// planNodeFastPath is implemented by nodes that can perform all their
+// work during Start(), possibly affecting even multiple rows. For
+// example, DELETE can do this.
 type planNodeFastPath interface {
 	// FastPathResults returns the affected row count and true if the
 	// node has no result set and has already executed when Start() completes.
