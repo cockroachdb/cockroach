@@ -132,11 +132,17 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	ru, err := makeRowUpdater(en.tableDesc, updateCols)
+	var requestedCols []sqlbase.ColumnDescriptor
+	if len(en.rh.exprs) > 0 {
+		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
+		// exprs.
+		requestedCols = en.tableDesc.Columns
+	}
+
+	ru, err := makeRowUpdater(en.tableDesc, updateCols, requestedCols)
 	if err != nil {
 		return nil, err
 	}
-	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 	tw := tableUpdater{ru: ru, autoCommit: autoCommit}
 
 	tracing.AnnotateTrace()
@@ -147,9 +153,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// expressions for tuple assignments just as we flattened the column names
 	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
 	// "*, 1, 2", not "*, (1, 2)".
-	// TODO(radu): we only need to select columns necessary to generate primary and
-	// secondary indexes keys, and columns needed by returningHelper.
-	targets := en.tableDesc.AllColumnsSelector()
+	targets := sqlbase.ColumnsSelectors(ru.fetchCols)
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
@@ -238,10 +242,7 @@ func (u *updateNode) expandPlan() error {
 		exprs[i].Expr = newExpr
 	}
 
-	// Really generate the list of select targets.
-	// TODO(radu): we only need to select columns necessary to generate primary and
-	// secondary indexes keys, and columns needed by returningHelper.
-	targets := u.tableDesc.AllColumnsSelector()
+	targets := sqlbase.ColumnsSelectors(u.tw.ru.fetchCols)
 	i := 0
 	for _, expr := range exprs {
 		if expr.Tuple {
@@ -311,8 +312,8 @@ func (u *updateNode) Next() bool {
 
 	// Our updated value expressions occur immediately after the plain
 	// columns in the output.
-	updateValues := oldValues[len(u.tableDesc.Columns):]
-	oldValues = oldValues[:len(u.tableDesc.Columns)]
+	updateValues := oldValues[len(u.tw.ru.fetchCols):]
+	oldValues = oldValues[:len(u.tw.ru.fetchCols)]
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {

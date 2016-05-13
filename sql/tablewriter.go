@@ -173,19 +173,19 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.tableDesc = tu.ri.helper.tableDesc
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
 
+	// TODO(dan): This could be made tighter, just the rows needed for the ON
+	// CONFLICT exprs.
+	requestedCols := tu.tableDesc.Columns
+
 	var err error
-	var fetchCols []sqlbase.ColumnDescriptor
 	if len(tu.updateCols) == 0 {
-		fetchCols = tu.tableDesc.Columns
-		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(tu.tableDesc.Columns)
+		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
-		tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols)
+		tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols, requestedCols)
 		if err != nil {
 			return err
 		}
-		fetchCols = tu.ru.fetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.fetchColIDtoRowIndex
-		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 
 		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
 		for i, updateCol := range tu.ru.updateCols {
@@ -193,11 +193,11 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
-	valNeededForCol := make([]bool, len(fetchCols))
+	valNeededForCol := make([]bool, len(tu.tableDesc.Columns))
 	for i := range valNeededForCol {
-		// TODO(dan): We only need the primary key columns, the update columns, and
-		// anything referenced by an UpdateExpr.
-		valNeededForCol[i] = true
+		if _, ok := tu.fetchColIDtoRowIndex[tu.tableDesc.Columns[i].ID]; ok {
+			valNeededForCol[i] = true
+		}
 	}
 	err = tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,

@@ -222,15 +222,13 @@ type rowUpdater struct {
 // that will be passed to updateRow.
 //
 // The returned rowUpdater contains a fetchCols field that defines the
-// expectation of which values are passed as oldValues to updateRow.
+// expectation of which values are passed as oldValues to updateRow. Any column
+// passed in requestedCols will be included in fetchCols.
 func makeRowUpdater(
 	tableDesc *sqlbase.TableDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
+	requestedCols []sqlbase.ColumnDescriptor,
 ) (rowUpdater, error) {
-	// TODO(dan): makeRowUpdater should take a param for the sql rows needed for
-	// returningHelper, etc.
-	requestedCols := tableDesc.Columns
-
 	updateColIDtoRowIndex := colIDtoRowIndexFromCols(updateCols)
 
 	primaryIndexCols := make(map[sqlbase.ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
@@ -299,20 +297,44 @@ func makeRowUpdater(
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		var err error
-		if ru.rd, err = makeRowDeleter(tableDesc); err != nil {
+		// When changing the primary key, we delete the old values and reinsert
+		// them, so request them all.
+		if ru.rd, err = makeRowDeleter(tableDesc, tableDesc.Columns); err != nil {
 			return rowUpdater{}, err
 		}
 		ru.fetchCols = ru.rd.fetchCols
+		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
 		if ru.ri, err = makeRowInserter(tableDesc, tableDesc.Columns); err != nil {
 			return rowUpdater{}, err
 		}
 	} else {
-		// TODO(radu): we only need to select columns necessary to generate primary and
-		// secondary indexes keys, and columns needed by returningHelper.
 		ru.fetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
-	}
+		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
 
-	ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
+		maybeAddCol := func(colID sqlbase.ColumnID) error {
+			if _, ok := ru.fetchColIDtoRowIndex[colID]; !ok {
+				col, err := tableDesc.FindColumnByID(colID)
+				if err != nil {
+					return err
+				}
+				ru.fetchColIDtoRowIndex[col.ID] = len(ru.fetchCols)
+				ru.fetchCols = append(ru.fetchCols, *col)
+			}
+			return nil
+		}
+		for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+			if err := maybeAddCol(colID); err != nil {
+				return rowUpdater{}, err
+			}
+		}
+		for _, index := range indexes {
+			for _, colID := range index.ColumnIDs {
+				if err := maybeAddCol(colID); err != nil {
+					return rowUpdater{}, err
+				}
+			}
+		}
+	}
 
 	return ru, nil
 }
@@ -451,14 +473,12 @@ type rowDeleter struct {
 // makeRowDeleter creates a rowDeleter for the given table.
 //
 // The returned rowDeleter contains a fetchCols field that defines the
-// expectation of which values are passed as values to deleteRow.
+// expectation of which values are passed as values to deleteRow. Any column
+// passed in requestedCols will be included in fetchCols.
 func makeRowDeleter(
 	tableDesc *sqlbase.TableDescriptor,
+	requestedCols []sqlbase.ColumnDescriptor,
 ) (rowDeleter, error) {
-	// TODO(dan): makeRowDeleter should take a param for the sql rows needed for
-	// returningHelper, etc.
-	requestedCols := tableDesc.Columns
-
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
@@ -468,16 +488,27 @@ func makeRowDeleter(
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
 	fetchColIDtoRowIndex := colIDtoRowIndexFromCols(fetchCols)
+
+	maybeAddCol := func(colID sqlbase.ColumnID) error {
+		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
+			col, err := tableDesc.FindColumnByID(colID)
+			if err != nil {
+				return err
+			}
+			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
+			fetchCols = append(fetchCols, *col)
+		}
+		return nil
+	}
+	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+		if err := maybeAddCol(colID); err != nil {
+			return rowDeleter{}, err
+		}
+	}
 	for _, index := range indexes {
 		for _, colID := range index.ColumnIDs {
-			if _, ok := fetchColIDtoRowIndex[colID]; !ok {
-				// TODO(dan): What about non-active columns?
-				col, err := tableDesc.FindActiveColumnByID(colID)
-				if err != nil {
-					return rowDeleter{}, err
-				}
-				fetchColIDtoRowIndex[colID] = len(fetchCols)
-				fetchCols = append(fetchCols, *col)
+			if err := maybeAddCol(colID); err != nil {
+				return rowDeleter{}, err
 			}
 		}
 	}
