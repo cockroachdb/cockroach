@@ -50,9 +50,11 @@ type planner struct {
 	params parameters
 
 	// Avoid allocations by embedding commonly used visitors.
-	isAggregateVisitor isAggregateVisitor
-	subqueryVisitor    subqueryVisitor
-	qnameVisitor       qnameVisitor
+	isAggregateVisitor          isAggregateVisitor
+	subqueryVisitor             subqueryVisitor
+	subqueryPlanVisitor         subqueryPlanVisitor
+	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
+	qnameVisitor                qnameVisitor
 
 	execCtx *ExecutorContext
 }

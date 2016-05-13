@@ -32,6 +32,7 @@ type valuesNode struct {
 	p        *planner
 	columns  []ResultColumn
 	ordering columnOrdering
+	tuples   [][]parser.TypedExpr
 	rows     []parser.DTuple
 
 	desiredTypes []parser.Datum // This can be removed when we only type check once.
@@ -52,6 +53,10 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 	}
 
 	numCols := len(n.Tuples[0].Exprs)
+
+	v.tuples = make([][]parser.TypedExpr, 0, len(n.Tuples))
+	tupleBuf := make([]parser.TypedExpr, len(n.Tuples)*numCols)
+
 	v.columns = make([]ResultColumn, 0, numCols)
 
 	for num, tuple := range n.Tuples {
@@ -59,13 +64,12 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
+		// Chop off prefix of tupleBuf and limit its capacity.
+		tupleRow := tupleBuf[:numCols:numCols]
+		tupleBuf = tupleBuf[numCols:]
+
 		for i, expr := range tuple.Exprs {
-			// TODO(knz): We need to expand subqueries two times, once here
-			// and once in Start() below, until the logic for select is split
-			// between makePlan and Start(). This is because a first call is
-			// needed for typechecking, and a separate call is needed to
-			// select indexes.
-			expr, err := p.expandSubqueries(expr, 1)
+			expr, err := p.replaceSubqueries(expr, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -90,7 +94,10 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			} else if typ != parser.DNull && !typ.TypeEqual(v.columns[i].Typ) {
 				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
+
+			tupleRow[i] = typedExpr
 		}
+		v.tuples = append(v.tuples, tupleRow)
 	}
 
 	return v, nil
@@ -101,39 +108,46 @@ func (n *valuesNode) expandPlan() error {
 		return nil
 	}
 
-	n.rows = make([]parser.DTuple, 0, len(n.n.Tuples))
+	// This node is coming from a SQL query (as opposed to sortNode and
+	// others that create a valuesNode internally for storing results
+	// from other planNodes), so it may contain subqueries.
+
+	for _, tupleRow := range n.tuples {
+		for _, typedExpr := range tupleRow {
+			if err := n.p.expandSubqueryPlans(typedExpr); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (n *valuesNode) Start() error {
+	if n.n == nil {
+		return nil
+	}
 
 	// This node is coming from a SQL query (as opposed to sortNode and
 	// others that create a valuesNode internally for storing results
-	// from other planNodes), so it needs to evaluate expressions.
+	// from other planNodes), so its expressions need evaluting.
+	// This may run subqueries.
 
 	numCols := len(n.columns)
+	n.rows = make([]parser.DTuple, 0, len(n.n.Tuples))
 	rowBuf := make(parser.DTuple, len(n.n.Tuples)*numCols)
+	for _, tupleRow := range n.tuples {
 
-	for _, tuple := range n.n.Tuples {
 		// Chop off prefix of rowBuf and limit its capacity.
 		row := rowBuf[:numCols:numCols]
 		rowBuf = rowBuf[numCols:]
 
-		for i, expr := range tuple.Exprs {
-			// TODO(knz): see comment above about expandSubqueries in ValuesClause().
-			expr, err := n.p.expandSubqueries(expr, 1)
-			if err != nil {
-				return err
-			}
-			desired := parser.NoTypePreference
-			if len(n.desiredTypes) > i {
-				desired = n.desiredTypes[i]
-			}
-			typedExpr, err := parser.TypeCheck(expr, n.p.evalCtx.Args, desired)
-			if err != nil {
-				return err
-			}
-			typedExpr, err = n.p.parser.NormalizeExpr(n.p.evalCtx, typedExpr)
-			if err != nil {
+		for i, typedExpr := range tupleRow {
+
+			if err := n.p.startSubqueryPlans(typedExpr); err != nil {
 				return err
 			}
 
+			var err error
 			row[i], err = typedExpr.Eval(n.p.evalCtx)
 			if err != nil {
 				return err
@@ -141,10 +155,6 @@ func (n *valuesNode) expandPlan() error {
 		}
 		n.rows = append(n.rows, row)
 	}
-	return nil
-}
-
-func (n *valuesNode) Start() error {
 	return nil
 }
 

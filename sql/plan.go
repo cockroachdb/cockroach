@@ -181,6 +181,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &selectTopNode{}
 var _ planNode = &selectNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &emptyNode{}
