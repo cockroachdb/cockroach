@@ -23,7 +23,7 @@ module Models {
     }
 
     export interface NodeStatusResponseSet {
-      d: Proto.NodeStatus[];
+      nodes: Proto.NodeStatus[];
     }
 
     export interface NodeStatusMap {
@@ -81,9 +81,9 @@ module Models {
       public totalStatus: Utils.ReadOnlyProperty<Proto.StatusMetrics>;
 
       private _data: Utils.QueryCache<Proto.NodeStatus[]> = new Utils.QueryCache((): promise<Proto.NodeStatus[]> => {
-        return Utils.Http.Get("/_status/nodes/")
+        return Utils.Http.Get("/_status/nodes")
           .then((results: NodeStatusResponseSet) => {
-            let statuses = results.d;
+            let statuses = results.nodes;
             statuses.forEach((ns: Proto.NodeStatus) => {
               // store_statuses will be null if the associated node has no
               // bootstrapped stores; this causes significant null-handling
