@@ -65,7 +65,8 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 	numVals := 0
 	for ; rows.Next(); i++ {
 		if i >= len(e) {
-			mt.Fatalf("expected less than %d rows, got %d rows:, %v", len(e), i, e)
+			mt.Errorf("expected less than %d rows, got %d rows:, %v", len(e), i, e)
+			return numVals
 		}
 		if err := rows.Scan(vals...); err != nil {
 			mt.Fatal(err)
@@ -80,16 +81,16 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 					s = fmt.Sprint(val)
 				}
 				if e[i][j] != s {
-					mt.Fatalf("expected %v, found %v", e[i][j], s)
+					mt.Errorf("expected %v, found %v", e[i][j], s)
 				}
 				numVals++
 			} else if e[i][j] != "NULL" {
-				mt.Fatalf("expected %v, found %v", e[i][j], "NULL")
+				mt.Errorf("expected %v, found %v", e[i][j], "NULL")
 			}
 		}
 	}
 	if i != len(e) {
-		mt.Fatalf("fewer rows read than expected: found %d, expected %v", i, e)
+		mt.Errorf("fewer rows read than expected: found %d, expected %v", i, e)
 	}
 	return numVals
 }
@@ -103,9 +104,9 @@ func (mt mutationTest) checkTableSize(e int) {
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := mt.kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
-		mt.Fatal(err)
+		mt.Error(err)
 	} else if len(kvs) != e {
-		mt.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+		mt.Errorf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
 
@@ -153,13 +154,17 @@ func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMu
 // State or the Direction is undefined, these values are populated via
 // picking random values before the mutation is written.
 func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
+	tableDesc := mt.desc.GetTable()
 	if m.Direction == sqlbase.DescriptorMutation_NONE {
-		// randomly pick ADD/DROP mutation.
-		r := rand.Intn(2)
-		if r == 0 {
-			m.Direction = sqlbase.DescriptorMutation_ADD
+		// randomly pick ADD/DROP mutation if this is the first mutation, or
+		// pick the direction already chosen for the first mutation.
+		if len(tableDesc.Mutations) > 0 {
+			m.Direction = tableDesc.Mutations[0].Direction
 		} else {
 			m.Direction = sqlbase.DescriptorMutation_DROP
+			if rand.Intn(2) == 0 {
+				m.Direction = sqlbase.DescriptorMutation_ADD
+			}
 		}
 	}
 	if m.State == sqlbase.DescriptorMutation_UNKNOWN {
@@ -171,7 +176,6 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 			m.State = sqlbase.DescriptorMutation_WRITE_ONLY
 		}
 	}
-	tableDesc := mt.desc.GetTable()
 	tableDesc.Mutations = append(tableDesc.Mutations, m)
 	if err := tableDesc.Validate(); err != nil {
 		mt.Fatal(err)
@@ -503,6 +507,147 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	tableDesc.Indexes = tableDesc.Indexes[:len(tableDesc.Indexes)-1]
 	if err := tableDesc.Validate(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
+	}
+}
+
+// TestOperationsWithUniqueColumnMutation tests all the operations while an
+// index mutation refers to a column mutation.
+func TestOperationsWithUniqueColumnMutation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer csql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	// Create a table with column i and an index on v and i.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v));
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// read table descriptor
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
+	}
+
+	mTest := mutationTest{
+		T:       t,
+		kvDB:    kvDB,
+		sqlDB:   sqlDB,
+		descKey: descKey,
+		desc:    desc,
+	}
+
+	starQuery := `SELECT * FROM t.test`
+	indexQuery := `SELECT i FROM t.test@foo`
+	// Run the tests for both states.
+	for _, state := range []sqlbase.DescriptorMutation_State{
+		sqlbase.DescriptorMutation_DELETE_ONLY,
+		sqlbase.DescriptorMutation_WRITE_ONLY,
+	} {
+		// Init table to start state.
+		if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
+			t.Fatal(err)
+		}
+		initRows := [][]string{{"a", "z", "q"}}
+		for _, row := range initRows {
+			if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1, $2, $3)`, row[0], row[1], row[2]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Check that the table only contains the initRows.
+		_ = mTest.checkQueryResponse(starQuery, initRows)
+
+		// Add index "foo" as a mutation.
+		mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
+		// Make column "i" a mutation.
+		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+
+		// Insert a row into the table.
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('c', 'x')`); err != nil {
+			t.Error(err)
+		}
+
+		// Make column "i" and index "foo" live.
+		mTest.makeMutationsActive()
+		// column "i" has no entry.
+		_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z", "q"}, {"c", "x", "NULL"}})
+		if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+			// No index entry for row "c"
+			_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}})
+		} else {
+			// Index entry for row "c"
+			_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}})
+		}
+
+		// Add index "foo" as a mutation.
+		mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
+		// Make column "i" a mutation.
+		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+
+		// Updating column "i" for a row fails.
+		if _, err := sqlDB.Exec(`UPDATE t.test SET (v, i) = ('u', 'u') WHERE k = 'a'`); !testutils.IsError(err, `column "i" does not exist`) {
+			t.Error(err)
+		}
+
+		// TODO(vivek): Fix #6691.
+		// Update a row without specifying  mutation column "i".
+		//if _, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE k = 'a'`); err != nil {
+		//	t.Error(err)
+		//}
+		// Make column "i" and index "foo" live.
+		mTest.makeMutationsActive()
+
+		// The update to column "v" is seen; there is no effect on column "i".
+		//_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
+		// No change in index "foo"
+		//if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}})
+		//} else {
+		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}})
+		//}
+
+		// Add index "foo" as a mutation.
+		//mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
+		// Make column "i" a mutation.
+		//mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+
+		// Delete row "a".
+		//if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = 'a'`); err != nil {
+		//	t.Error(err)
+		//}
+		// Make column "i" and index "foo" live.
+		// mTest.makeMutationsActive()
+		// Row "a" is deleted. numVals is the number of non-NULL values seen,
+		// or the number of KV values belonging to all the rows in the table
+		// excluding row "a" since it's deleted.
+		//numVals := mTest.checkQueryResponse(starQuery, [][]string{{"c", "x", "NULL"}})
+		//if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{})
+		//} else {
+		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}})
+		//}
+		// Check that there are no hidden KV values for row "a",
+		// and column "i" for row "a" was deleted.
+		//mTest.checkTableSize(numVals)
 	}
 }
 
