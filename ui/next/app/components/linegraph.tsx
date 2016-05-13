@@ -7,6 +7,7 @@ import _ = require("lodash");
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";
 import { MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps } from "./graphs";
+import Visualization from "./visualization";
 
 // Chart margins to match design.
 const CHART_MARGINS: nvd3.Margin = {top: 20, right: 60, bottom: 20, left: 60};
@@ -177,15 +178,12 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    return <div className="visualization-wrapper">
-      <div className="viz-top"></div>
-        <div className="linegraph">
-          <svg className="graph" ref={(svg) => this.svgEl = svg}/>
-        </div>
-      <div className="viz-bottom">
-        <div className="viz-title">{this.props.title}</div>
+    let { title, tooltip } = this.props;
+    return <Visualization title={title} tooltip={tooltip}>
+      <div className="linegraph">
+        <svg className="graph" ref={(svg) => this.svgEl = svg}/>
       </div>
-    </div>;
+    </Visualization>;
   }
 }
 

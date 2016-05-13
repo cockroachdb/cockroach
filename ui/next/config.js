@@ -56,6 +56,7 @@ System.config({
   },
 
   map: {
+    "classnames": "npm:classnames@2.2.5",
     "d3": "npm:d3@3.5.17",
     "es6-promise": "npm:es6-promise@3.1.2",
     "isomorphic-fetch": "npm:isomorphic-fetch@2.2.1",

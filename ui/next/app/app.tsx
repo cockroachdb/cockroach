@@ -8,10 +8,7 @@
  * - Visualization Components
  *    - Graphs
  *      - Greyed-out display on error
- *      - Display Tooltips
  *      - Stacked Line Graph
- *    - Tooltip component
- *    - Visualization Wrapper
  *    - "Big number" visualization
  *    ! Events table
  *    ! Global Timespan Selector
