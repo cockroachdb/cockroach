@@ -740,19 +740,20 @@ Usage:
   cockroach [command]
 
 Available Commands:
-  start       start a node
-  cert        create ca, node, and client certs
-  exterminate destroy all data held by the node
-  quit        drain and shutdown node
+  start        start a node
+  cert         create ca, node, and client certs
+  exterminate  destroy all data held by the node
+  halt-cluster halt the cluster in preparation for an update
+  quit         drain and shutdown node
 
-  sql         open a sql shell
-  user        get, set, list and remove users
-  zone        get, set, list and remove zones
-  node        list nodes and show their status
+  sql          open a sql shell
+  user         get, set, list and remove users
+  zone         get, set, list and remove zones
+  node         list nodes and show their status
 
-  gen         generate manpages and bash completion file
-  version     output version information
-  debug       debugging commands
+  gen          generate manpages and bash completion file
+  version      output version information
+  debug        debugging commands
 
 Flags:
       --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default NONE)
@@ -792,6 +793,19 @@ func Example_node() {
 	// +----+
 	// node status 10000
 	// Error: node 10000 doesn't exist
+}
+
+func Example_halt() {
+	c := newCLITest()
+	defer c.stop()
+
+	c.Run("halt-cluster")
+	c.Run("halt-cluster --undo")
+	// Output:
+	// halt-cluster
+	// ok
+	// halt-cluster --undo
+	// ok
 }
 
 func TestNodeStatus(t *testing.T) {
