@@ -740,19 +740,19 @@ Usage:
   cockroach [command]
 
 Available Commands:
-  start       start a node
-  cert        create ca, node, and client certs
-  exterminate destroy all data held by the node
-  quit        drain and shutdown node
+  start          start a node
+  cert           create ca, node, and client certs
+  freeze-cluster freeze the cluster in preparation for an update
+  quit           drain and shutdown node
 
-  sql         open a sql shell
-  user        get, set, list and remove users
-  zone        get, set, list and remove zones
-  node        list nodes and show their status
+  sql            open a sql shell
+  user           get, set, list and remove users
+  zone           get, set, list and remove zones
+  node           list nodes and show their status
 
-  gen         generate manpages and bash completion file
-  version     output version information
-  debug       debugging commands
+  gen            generate manpages and bash completion file
+  version        output version information
+  debug          debugging commands
 
 Flags:
       --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default NONE)
@@ -792,6 +792,19 @@ func Example_node() {
 	// +----+
 	// node status 10000
 	// Error: node 10000 doesn't exist
+}
+
+func Example_freeze() {
+	c := newCLITest()
+	defer c.stop()
+
+	c.Run("freeze-cluster")
+	c.Run("freeze-cluster --undo")
+	// Output:
+	// freeze-cluster
+	// ok
+	// freeze-cluster --undo
+	// ok
 }
 
 func TestNodeStatus(t *testing.T) {
