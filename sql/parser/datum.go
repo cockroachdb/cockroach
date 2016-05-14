@@ -667,6 +667,11 @@ type DTimestamp struct {
 	time.Time
 }
 
+// MakeDTimestamp creates a DTimestamp with specified precision.
+func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
+	return &DTimestamp{Time: t.Round(precision)}
+}
+
 // ReturnType implements the TypedExpr interface.
 func (*DTimestamp) ReturnType() Datum {
 	return TypeTimestamp
@@ -736,12 +741,17 @@ func (d *DTimestamp) IsMin() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
+	buf.WriteString(d.UTC().Format(timestampNodeFormat))
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
 type DTimestampTZ struct {
 	time.Time
+}
+
+// MakeDTimestampTZ creates a DTimestampTZ with specified precision.
+func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
+	return &DTimestampTZ{Time: t.Round(precision)}
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -813,7 +823,7 @@ func (d *DTimestampTZ) IsMin() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
+	buf.WriteString(d.UTC().Format(timestampNodeFormat))
 }
 
 // DInterval is the interval Datum.

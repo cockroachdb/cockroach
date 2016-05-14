@@ -370,10 +370,66 @@ SELECT extract(microsecond from timestamp '2001-04-10 12:04:59.34565423')
 ----
 345654
 
+# nanoseconds are truncated to microseconds
 query I
 SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 ----
-345654230
+345654000
+
+# verify that nanosecond uniqueness is not preserved
+statement error pq: duplicate key value
+INSERT INTO t (a) VALUES ('2001-04-10 12:04:59.000000001'::timestamp), ('2001-04-10 12:04:59.000000002'::timestamp)
+
+# nanosecond uniqueness is preserved with parse_timestamp_ns
+statement ok
+INSERT INTO t (a) VALUES (parse_timestamp_ns('2001-04-10 12:04:59.000000001')), (parse_timestamp_ns('2001-04-10 12:04:59.000000002'))
+
+# parse_timestamp_ns retains nanoseconds
+query I
+SELECT extract(nanosecond from parse_timestamp_ns('2001-04-10 12:04:59.345654423'))
+----
+345654423
+
+# current_timestamp_ns has nanoseconds
+query B
+SELECT extract(nanosecond from current_timestamp_ns()) % 1000 != 0
+----
+true
+
+query TT
+SELECT format_timestamp_ns('2001-04-10 12:04:59.345654423'::timestamp), format_timestamp_ns(parse_timestamp_ns('2001-04-10 12:04:59.345654423'))
+----
+2001-04-10 12:04:59.345654 2001-04-10 12:04:59.345654423
+
+# now() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from now()) % 1000
+----
+0
+
+# statement_timestamp() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from statement_timestamp()) % 1000
+----
+0
+
+# clock_timestamp() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from clock_timestamp()) % 1000
+----
+0
+
+# statement_timestamp() should not return any nanoseconds
+query I
+SELECT extract(nanosecond from statement_timestamp()) % 1000
+----
+0
+
+# system.lease should still have nanoseconds
+query B
+SELECT extract(nanosecond from expiration) % 1000 != 0 from system.lease LIMIT 1
+----
+true
 
 query error extract: unsupported timespan: nansecond
 SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
