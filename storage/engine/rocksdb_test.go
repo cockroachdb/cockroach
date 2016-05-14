@@ -62,7 +62,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after := b.NewIterator(false)
+	after := b.NewIterator(true)
 	defer after.Close()
 
 	if after.Seek(k); !after.Valid() {

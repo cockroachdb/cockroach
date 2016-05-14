@@ -511,10 +511,28 @@ func (r *rocksDBSnapshot) GetStats() (*Stats, error) {
 	return nil, util.Errorf("GetStats is not implemented for %T", r)
 }
 
+// rocksDBBatchIterator wraps rocksDBIterator and allows reuse of an iterator
+// for the lifetime of a batch.
+type rocksDBBatchIterator struct {
+	rocksDBIterator
+	inuse bool
+}
+
+func (r *rocksDBBatchIterator) Close() {
+	// rocksDBBatchIterator.Close() is a no-op. The iterator is left open until
+	// the associated batch is closed.
+	if !r.inuse {
+		panic("closing idle iterator")
+	}
+	r.inuse = false
+}
+
 type rocksDBBatch struct {
-	parent *RocksDB
-	batch  *C.DBEngine
-	defers []func()
+	parent     *RocksDB
+	batch      *C.DBEngine
+	defers     []func()
+	prefixIter rocksDBBatchIterator
+	normalIter rocksDBBatchIterator
 }
 
 func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
@@ -529,6 +547,16 @@ func (r *rocksDBBatch) Open() error {
 }
 
 func (r *rocksDBBatch) Close() {
+	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
+		// Calling DBIterDestroy directly because rocksDBIterator.Close places the
+		// iterator back in the sync.Pool which isn't correct here.
+		C.DBIterDestroy(i.iter)
+	}
+	if i := &r.normalIter.rocksDBIterator; i.iter != nil {
+		// Calling DBIterDestroy directly because rocksDBIterator.Close places the
+		// iterator back in the sync.Pool which isn't correct here.
+		C.DBIterDestroy(i.iter)
+	}
 	if r.batch != nil {
 		C.DBClose(r.batch)
 	}
@@ -587,7 +615,20 @@ func (r *rocksDBBatch) Flush() error {
 }
 
 func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(r.batch, prefix, r)
+	// Used the cached iterator, creating it on first access.
+	iter := &r.normalIter
+	if prefix {
+		iter = &r.prefixIter
+	}
+	if iter.rocksDBIterator.iter == nil {
+		iter.rocksDBIterator.iter = C.DBNewIter(r.batch, C.bool(prefix))
+		iter.rocksDBIterator.engine = r
+	}
+	if iter.inuse {
+		panic("iterator already in use")
+	}
+	iter.inuse = true
+	return iter
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
@@ -638,6 +679,8 @@ type rocksDBIterator struct {
 	value  C.DBSlice
 }
 
+// TODO(peter): Is this pool useful now that rocksDBBatch.NewIterator doesn't
+// allocate by returning internal pointers?
 var iterPool = sync.Pool{
 	New: func() interface{} {
 		return &rocksDBIterator{}
