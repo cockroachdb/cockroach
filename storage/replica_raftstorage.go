@@ -368,10 +368,15 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	rangeID := r.RangeID
+
+	r.store.snapMu.Lock()
+	defer r.store.snapMu.Unlock()
+
 	// If a snapshot is in progress, see if it's ready.
-	if r.mu.snapshotChan != nil {
+	if pendingSnapshotChan, ok := r.store.snapMu.snapshots[rangeID]; ok {
 		select {
-		case snapData, ok := <-r.mu.snapshotChan:
+		case snapData, ok := <-pendingSnapshotChan:
 			if ok {
 				return snapData, nil
 			}
@@ -383,26 +388,30 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		}
 	}
 
-	// See if there is already a snapshot running for this store.
-	if !r.store.AcquireRaftSnapshot() {
+	// See if too many snapshots are already running for this store.
+	if len(r.store.snapMu.snapshots) >= r.store.ctx.concurrentSnapshotLimit {
 		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
 	// Use an unbuffered channel so the worker stays alive until someone
-	// reads from the channel, and can abandon the snapshot if it gets
-	// stale.
+	// reads from the channel, and can abandon the snapshot if it gets stale.
 	ch := make(chan (raftpb.Snapshot))
+
 	if r.store.Stopper().RunAsyncTask(func() {
-		defer close(ch)
+		defer func() {
+			r.store.snapMu.Lock()
+			delete(r.store.snapMu.snapshots, rangeID)
+			r.store.snapMu.Unlock()
+			close(ch)
+		}()
 		snap := r.store.NewSnapshot()
 		defer snap.Close()
-		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(snap, r.RangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
+		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
 		if err != nil {
-			log.Errorf("range %s: error generating snapshot: %s", r.RangeID, err)
+			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
 			select {
 			case ch <- snapData:
@@ -412,14 +421,14 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			}
 		}
 	}) {
-		r.mu.snapshotChan = ch
+		r.store.snapMu.snapshots[rangeID] = ch
 	} else {
-		r.store.ReleaseRaftSnapshot()
+		close(ch)
 	}
 
 	if r.store.ctx.BlockingSnapshotDuration > 0 {
 		select {
-		case snap, ok := <-r.mu.snapshotChan:
+		case snap, ok := <-ch:
 			if ok {
 				return snap, nil
 			}
@@ -441,15 +450,16 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 	for retry := retry.Start(retryOptions); retry.Next(); {
 		r.mu.Lock()
 		snap, err := r.Snapshot()
-		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
-			if snapshotChan == nil {
+			r.store.snapMu.Lock()
+			snapshotChan, ok := r.store.snapMu.snapshots[r.RangeID]
+			r.store.snapMu.Unlock()
+			if !ok {
 				// The call to Snapshot() didn't start an async process due to
 				// rate limiting. Try again later.
 				continue
 			}
-			var ok bool
 			snap, ok = <-snapshotChan
 			if ok {
 				return snap, nil

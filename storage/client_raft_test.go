@@ -1053,21 +1053,15 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			case <-stopper.ShouldStop():
 				return
 			default:
-				rng := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-				if rng == nil {
+				if rng := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil); rng == nil {
 					t.Fatal("failed to look up min range")
-				}
-				_, err := rng.GetSnapshot()
-				if err != nil {
+				} else if _, err := rng.GetSnapshot(); err != nil {
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
 
-				rng = mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil)
-				if rng == nil {
+				if rng := mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil); rng == nil {
 					t.Fatal("failed to look up max range")
-				}
-				_, err = rng.GetSnapshot()
-				if err != nil {
+				} else if _, err := rng.GetSnapshot(); err != nil {
 					t.Fatalf("failed to snapshot max range: %s", err)
 				}
 			}
