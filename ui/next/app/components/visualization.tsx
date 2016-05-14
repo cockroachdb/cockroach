@@ -23,6 +23,7 @@ class ToolTip extends React.Component<ToolTipProps, {}> {
 
 interface VisualizationProps {
   title: string;
+  subtitle?: string;
   tooltip?: string;
   stale?: boolean;
 }
@@ -57,7 +58,10 @@ export default class extends React.Component<VisualizationProps, {}> {
       </div>
         { this.props.children }
       <div className="viz-bottom">
-        <div className="viz-title">{this.props.title}</div>
+        <div className="viz-title">
+          <div>{this.props.title}</div>
+          { this.props.subtitle ? <div className="small">{this.props.subtitle}</div> : null }
+        </div>
       </div>
     </div>;
   }

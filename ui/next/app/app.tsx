@@ -9,7 +9,7 @@
  *    - Graphs
  *      - Greyed-out display on error
  *      - Stacked Line Graph
- *    - "Big number" visualization
+ *      - Max/Min aggregators
  *    ! Events table
  *    ! Global Timespan Selector
  *      - UI Component
@@ -20,8 +20,6 @@
  *    - Cluster Unreachable
  *    - Cockroach out of date
  * - Cluster Page
- *    - Finish converting all existing graphs onto Cluster page
- *    - "Big Number" Visualizations
  *    - Events page
  * - Nodes Page
  *    - Graphs tab, with all graphs from existing page
@@ -39,7 +37,16 @@
  * ! HelpUs Modal
  * ! Persistent Settings Reducer
  * - Layout Footer
- * 
+ *
+ *
+ * NICE TO HAVE:
+ *  - "generateCacheReducer()" method; most of our data reducers are extremely
+ *  similar (storing read-only, cachable data queried from the server), we could
+ *  cut down on a lot of boilerplate and testing by creating such a function.
+ *  
+ *  - Create a "NodeStatusProvider" similar to "MetricsDataProvider", allowing
+ *  different components to access nodes data.
+ *
  */
 
 import * as React from "react";

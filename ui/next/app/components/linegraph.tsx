@@ -17,6 +17,7 @@ const MAX_LEGEND_SERIES: number = 3;
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
+  subtitle?: string;
   legend?: boolean;
   xAxis?: boolean;
   tooltip?: string;
@@ -178,8 +179,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    let { title, tooltip } = this.props;
-    return <Visualization title={title} tooltip={tooltip}>
+    let { title, subtitle, tooltip } = this.props;
+    return <Visualization title={title} subtitle={subtitle} tooltip={tooltip}>
       <div className="linegraph">
         <svg className="graph" ref={(svg) => this.svgEl = svg}/>
       </div>

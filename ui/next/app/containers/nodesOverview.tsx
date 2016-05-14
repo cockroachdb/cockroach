@@ -12,7 +12,7 @@ import { setUISetting } from "../redux/ui";
 import { SortableTable, SortableColumn, SortSetting } from "../components/sortabletable";
 import { NanoToMilli } from "../util/convert";
 import { BytesToUnitValue } from "../util/format";
-import { NodeStatus, MetricConstants } from  "../util/proto";
+import { NodeStatus, MetricConstants, TotalCpu, BytesUsed } from  "../util/proto";
 
 // Constant used to store sort settings in the redux UI store.
 const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
@@ -110,9 +110,9 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.Bytes,
     title: "Bytes",
-    cell: (ns) => formatBytes(byteSum(ns)),
-    sort: (ns) => byteSum(ns),
-    rollup: (rows) => formatBytes(_.sumBy(rows, (row) => byteSum(row))),
+    cell: (ns) => formatBytes(BytesUsed(ns)),
+    sort: (ns) => BytesUsed(ns),
+    rollup: (rows) => formatBytes(_.sumBy(rows, (row) => BytesUsed(row))),
   },
   // Replicas - displays the total number of replicas on the node.
   {
@@ -134,9 +134,9 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.CPU,
     title: "CPU Usage",
-    cell: (ns) => d3.format(".2%")(totalCpu(ns)),
-    sort: (ns) => totalCpu(ns),
-    rollup: (rows) => d3.format(".2%")(_.sumBy(rows, (row) => totalCpu(row))),
+    cell: (ns) => d3.format(".2%")(TotalCpu(ns)),
+    sort: (ns) => TotalCpu(ns),
+    rollup: (rows) => d3.format(".2%")(_.sumBy(rows, (row) => TotalCpu(row))),
   },
   // Mem Usage - total memory being used on this node.
   {
@@ -368,26 +368,3 @@ function formatBytes(bytes: number): React.ReactNode {
     <span className="units">{b.units}</span>
   </div>;
 }
-
-/**
- * totalCpu computes the total CPU usage accounted for in a NodeStatus.
- */
-function totalCpu(status: NodeStatus): number {
-  let metrics = status.metrics;
-  return metrics.get(MetricConstants.sysCPUPercent) + metrics.get(MetricConstants.userCPUPercent);
-}
-
-/**
- * byteSum computes the total byte usage accounted for in a NodeStatus.
- */
-let aggregateByteKeys = [
-  MetricConstants.liveBytes,
-  MetricConstants.intentBytes,
-  MetricConstants.sysBytes,
-];
-
-function byteSum(s: NodeStatus): number {
-  return _.sumBy(aggregateByteKeys, (key: string) => {
-    return s.metrics.get(key);
-  });
-};
