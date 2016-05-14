@@ -64,7 +64,6 @@ func init() {
 	cockroachCmd.AddCommand(
 		startCmd,
 		certCmd,
-		exterminateCmd,
 		haltClusterCmd,
 		quitCmd,
 

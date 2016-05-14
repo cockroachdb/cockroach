@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -284,44 +283,6 @@ func rerunBackground() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return sdnotify.Exec(cmd)
-}
-
-// exterminateCmd command shuts down the node server and
-// destroys all data held by the node.
-var exterminateCmd = &cobra.Command{
-	Use:   "exterminate",
-	Short: "destroy all data held by the node",
-	Long: `
-First shuts down the system and then destroys all data held by the
-node, cycling through each store specified by --store flags.
-`,
-	SilenceUsage: true,
-	RunE:         runExterminate,
-}
-
-// runExterminate destroys the data held in the specified stores.
-func runExterminate(_ *cobra.Command, _ []string) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	if err := cliContext.InitStores(stopper); err != nil {
-		return util.Errorf("failed to initialize context: %s", err)
-	}
-
-	if err := runQuit(nil, nil); err != nil {
-		return util.Errorf("shutdown node error: %s", err)
-	}
-
-	// Exterminate all data held in specified stores.
-	for _, e := range cliContext.Engines {
-		if rocksdb, ok := e.(*engine.RocksDB); ok {
-			log.Infof("exterminating data from store %s", e)
-			if err := rocksdb.Destroy(); err != nil {
-				return util.Errorf("unable to destroy store %s: %s", e, err)
-			}
-		}
-	}
-	log.Infof("exterminated all data from stores %s", cliContext.Engines)
-	return nil
 }
 
 // quitCmd command shuts down the node server.

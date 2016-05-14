@@ -742,7 +742,6 @@ Usage:
 Available Commands:
   start        start a node
   cert         create ca, node, and client certs
-  exterminate  destroy all data held by the node
   halt-cluster halt the cluster in preparation for an update
   quit         drain and shutdown node
 
