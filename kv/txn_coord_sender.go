@@ -792,16 +792,16 @@ func (tc *TxnCoordSender) updateState(
 	case nil:
 		// Nothing to do here, avoid the default case.
 	default:
-		if pErr.GetTxn() != nil {
-			if pErr.CanRetry() {
-				log.Fatalf("retryable internal error must not happen at this level: %s", pErr)
-			} else {
-				// Do not clean up the transaction here since the client might still
-				// want to continue the transaction. For example, a client might
-				// continue its transaction after receiving ConditionFailedError, which
-				// can come from a unique index violation.
-			}
-		}
+		// Do not clean up the transaction here since the client might still
+		// want to continue the transaction. For example, a client might
+		// continue its transaction after receiving ConditionFailedError, which
+		// can come from a unique index violation.
+		//
+		// TODO(bdarnell): Is this valid? Unless there is a single CPut in
+		// the batch, it is difficult to be able to continue after a
+		// ConditionFailedError because it is unclear which parts of the
+		// batch had succeeded on other ranges before one range hit the
+		// failed condition. It may be better to clean up the transaction here.
 	}
 
 	txnID := *newTxn.ID
