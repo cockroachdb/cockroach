@@ -17,6 +17,8 @@
 package client
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -69,6 +71,18 @@ func (a *AdminClient) Get() (string, error) {
 		return "", err
 	}
 	return string(body), nil
+}
+
+// Post the given data as JSON, returning the json-encoded response or an error.
+func (a *AdminClient) Post(data interface{}) (string, error) {
+	req, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	reader := bytes.NewReader(req)
+	body, err := a.do("POST", a.adminURI(), util.JSONContentType,
+		util.JSONContentType, reader)
+	return string(body), err
 }
 
 // do issues the http request to 'url' using 'method'.

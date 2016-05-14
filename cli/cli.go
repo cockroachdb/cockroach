@@ -65,6 +65,7 @@ func init() {
 		startCmd,
 		certCmd,
 		exterminateCmd,
+		haltClusterCmd,
 		quitCmd,
 
 		sqlShellCmd,
