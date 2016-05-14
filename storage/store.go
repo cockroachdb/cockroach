@@ -286,11 +286,6 @@ type Store struct {
 	initComplete            sync.WaitGroup // Signaled by async init tasks
 	raftRequestChan         chan *RaftMessageRequest
 
-	// This is 1 if there is an active raft snapshot. This field must be checked
-	// and set atomically.
-	// TODO(marc): This may be better inside of `mu`, but is not currently feasible.
-	hasActiveRaftSnapshot int32
-
 	// drainLeadership holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend leader leases; see DrainLeadership().
 	//
@@ -320,6 +315,13 @@ type Store struct {
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 
 		replicaDescCache *cache.UnorderedCache
+
+		// Values are set to an open channel while a snapshot is being generated
+		// for the given key (range ID). Keys for which a snapshot is not in
+		// progress are either not present, or have values which are closed
+		// channels. If an error occurs during generation, values may be closed
+		// without producing a result.
+		snapshots map[roachpb.RangeID]chan raftpb.Snapshot
 	}
 
 	// pendingRaftGroups contains the ranges that should be checked for
@@ -405,6 +407,12 @@ type StoreContext struct {
 	AsyncSnapshotMaxAge time.Duration
 
 	TestingKnobs StoreTestingKnobs
+
+	// concurrentSnapshotLimit is the maximum number of snapshots that are
+	// permitted to proceed concurrently. Snapshots count against this limit from
+	// the start of their generation until they are either discarded or sent on
+	// the wire.
+	concurrentSnapshotLimit int
 
 	// leaderLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
@@ -647,6 +655,7 @@ func (sc *StoreContext) setDefaults() {
 	}
 
 	raftElectionTimeout := time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval
+	sc.concurrentSnapshotLimit = 5
 	sc.leaderLeaseActiveDuration = leaderLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
 	sc.leaderLeaseRenewalDuration = sc.leaderLeaseActiveDuration / leaderLeaseRenewalDivisor
 }
@@ -683,6 +692,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 			return size > maxReplicaDescCacheSize
 		},
 	})
+	s.mu.snapshots = make(map[roachpb.RangeID]chan raftpb.Snapshot)
 	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
 
 	s.mu.Unlock()
@@ -1608,17 +1618,6 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 // NewSnapshot creates a new snapshot engine.
 func (s *Store) NewSnapshot() engine.Reader {
 	return s.engine.NewSnapshot()
-}
-
-// AcquireRaftSnapshot returns true if a new raft snapshot can start.
-// If true is returned, the caller MUST call ReleaseRaftSnapshot.
-func (s *Store) AcquireRaftSnapshot() bool {
-	return atomic.CompareAndSwapInt32(&s.hasActiveRaftSnapshot, 0, 1)
-}
-
-// ReleaseRaftSnapshot decrements the count of active snapshots.
-func (s *Store) ReleaseRaftSnapshot() {
-	atomic.SwapInt32(&s.hasActiveRaftSnapshot, 0)
 }
 
 // Attrs returns the attributes of the underlying store.
