@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -163,7 +164,7 @@ type DBContext struct {
 func DefaultDBContext() DBContext {
 	return DBContext{
 		UserPriority:    roachpb.NormalUserPriority,
-		TxnRetryOptions: defaultTxnRetryOptions,
+		TxnRetryOptions: base.DefaultRetryOptions(),
 	}
 }
 

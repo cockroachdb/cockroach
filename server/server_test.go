@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -227,7 +228,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
-	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldDrain()
 	ds := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           s.Clock(),
@@ -323,7 +324,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		s := StartTestServer(t)
 		defer s.Stop()
-		retryOpts := kv.GetDefaultDistSenderRetryOptions()
+		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = s.stopper.ShouldDrain()
 		ds := kv.NewDistSender(&kv.DistSenderContext{
 			Clock:           s.Clock(),

@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -29,14 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// idAllocationRetryOpts sets the retry options for handling RangeID
-// allocation errors.
-var idAllocationRetryOpts = retry.Options{
-	InitialBackoff: 50 * time.Millisecond,
-	MaxBackoff:     5 * time.Second,
-	Multiplier:     2,
-}
 
 // An idAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
@@ -100,7 +92,7 @@ func (ia *idAllocator) start() {
 					err error
 					res client.KeyValue
 				)
-				for r := retry.Start(idAllocationRetryOpts); r.Next(); {
+				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
 					if !ia.stopper.RunTask(func() {
 						res, err = ia.db.Inc(idKey, int64(ia.blockSize))

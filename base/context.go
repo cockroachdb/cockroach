@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // Base context defaults.
@@ -176,4 +177,17 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 	}
 
 	return ctx.httpClient, nil
+}
+
+// DefaultRetryOptions should be used for retrying most
+// network-dependent operations.
+func DefaultRetryOptions() retry.Options {
+	// TODO(bdarnell): This should vary with network latency.
+	// Derive the retry options from a configured or measured
+	// estimate of latency.
+	return retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     2,
+	}
 }

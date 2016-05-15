@@ -810,13 +810,9 @@ func (s *adminServer) waitForStoreFrozen(
 		oks: make(map[roachpb.StoreID]bool),
 	}
 
-	opts := retry.Options{
-		Closer:         s.server.stopper.ShouldDrain(),
-		InitialBackoff: 100 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
-		Multiplier:     2,
-		MaxRetries:     20,
-	}
+	opts := base.DefaultRetryOptions()
+	opts.Closer = s.server.stopper.ShouldDrain()
+	opts.MaxRetries = 20
 	sem := make(chan struct{}, 256)
 	errChan := make(chan error, 1)
 	sendErr := func(err error) {

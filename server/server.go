@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
@@ -145,7 +146,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	// However, on a single-node setup (such as a test), retries will never
 	// succeed because the only server has been shut down; thus, thus the
 	// DistSender needs to know that it should not retry in this situation.
-	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
 	s.distSender = kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           s.clock,

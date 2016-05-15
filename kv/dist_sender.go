@@ -52,23 +52,6 @@ const (
 	defaultRangeDescriptorCacheSize = 1 << 20
 )
 
-var defaultRPCRetryOptions = retry.Options{
-	// This is an aggressive initial backoff to support situations where retries
-	// which are expected to succeed in a low number of iterations should occur in
-	// quick succession. An example of this is when the rangeDescriptorCache returns
-	// a lookupMismatchError.
-	InitialBackoff: 100 * time.Microsecond,
-	MaxBackoff:     30 * time.Second,
-	Multiplier:     2,
-}
-
-// GetDefaultDistSenderRetryOptions returns the default retry options for a
-// DistSender. This is helpful for users that want to overwrite a subset of the
-// default options when creating a custom DistSenderContext.
-func GetDefaultDistSenderRetryOptions() retry.Options {
-	return defaultRPCRetryOptions
-}
-
 // A firstRangeMissingError indicates that the first range has not yet
 // been gossiped. This will be the case for a node which hasn't yet
 // joined the gossip network.
@@ -191,7 +174,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if ctx.TransportFactory != nil {
 		ds.transportFactory = ctx.TransportFactory
 	}
-	ds.rpcRetryOptions = defaultRPCRetryOptions
+	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	if ctx.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *ctx.RPCRetryOptions
 	}
