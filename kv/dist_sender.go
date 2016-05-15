@@ -635,17 +635,17 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			log.Trace(ctx, "meta descriptor lookup")
 			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, isReverse)
 
-			// getDescriptors may fail retryably if the first range isn't
-			// available via Gossip.
+			// getDescriptors may fail retryably if, for example, the first
+			// range isn't available via Gossip. Assume that all errors at
+			// this level are retryable. Non-retryable errors would be for
+			// things like malformed requests which we should have checked
+			// for before reaching this point.
 			if pErr != nil {
 				log.Trace(ctx, "range descriptor lookup failed: "+pErr.String())
-				if pErr.Retryable {
-					if log.V(1) {
-						log.Warning(pErr)
-					}
-					continue
+				if log.V(1) {
+					log.Warning(pErr)
 				}
-				break
+				continue
 			} else {
 				log.Trace(ctx, "looked up range descriptor")
 			}
