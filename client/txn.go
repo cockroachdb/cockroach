@@ -516,7 +516,7 @@ func (txn *Txn) Exec(
 	}()
 
 	if opt.AutoRetry {
-		retryOptions = txn.db.txnRetryOptions
+		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
 RetryLoop:
 	for r := retry.Start(retryOptions); r.Next(); {

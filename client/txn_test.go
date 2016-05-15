@@ -38,13 +38,6 @@ var (
 	testPutResp = roachpb.PutResponse{}
 )
 
-func newDB(sender Sender) *DB {
-	return &DB{
-		sender:          sender,
-		txnRetryOptions: DefaultTxnRetryOptions,
-	}
-}
-
 // TestSender mocks out some of the txn coordinator sender's
 // functionality. It responds to PutRequests using testPutResp.
 func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
@@ -122,7 +115,7 @@ func TestInitPut(t *testing.T) {
 	// This test is mostly an excuse to exercise otherwise unused code.
 	// TODO(vivekmenezes): update test or remove when InitPut is being
 	// considered sufficiently tested and this path exercised.
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		return br, nil
 	}, nil))
@@ -179,7 +172,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
 	}, nil))
 
@@ -200,11 +193,13 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := NewDB(newTestSender(nil, nil))
-	db.userPriority = 101
+	dbCtx := DefaultDBContext()
+	dbCtx.UserPriority = 101
+	db := NewDBWithContext(newTestSender(nil, nil), dbCtx)
 	if err := db.Txn(func(txn *Txn) error {
-		if txn.db.userPriority != db.userPriority {
-			t.Errorf("expected txn user priority %f; got %f", db.userPriority, txn.db.userPriority)
+		if txn.db.ctx.UserPriority != db.ctx.UserPriority {
+			t.Errorf("expected txn user priority %f; got %f",
+				db.ctx.UserPriority, txn.db.ctx.UserPriority)
 		}
 		return nil
 	}); err != nil {
@@ -218,7 +213,7 @@ func TestTransactionConfig(t *testing.T) {
 func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var calls []roachpb.Method
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}, nil))
@@ -241,7 +236,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, withGet := range []bool{true, false} {
 		var calls []roachpb.Method
-		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			calls = append(calls, ba.Methods()...)
 			return ba.CreateReply(), nil
 		}, nil))
@@ -270,7 +265,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var calls []roachpb.Method
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		if bt, ok := ba.GetArg(roachpb.BeginTransaction); ok && !bt.Header().Key.Equal(roachpb.Key("a")) {
 			t.Errorf("expected begin transaction key to be \"a\"; got %s", bt.Header().Key)
@@ -314,7 +309,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 func TestTxnInsertBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var calls []roachpb.Method
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}, nil))
@@ -336,7 +331,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 // when a BeginTransaction command causes an error.
 func TestBeginTransactionErrorIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		pErr := roachpb.NewError(&roachpb.WriteIntentError{})
 		pErr.SetErrorIndex(0)
 		return nil, pErr
@@ -383,7 +378,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 // transaction does not prompt an EndTransaction call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
@@ -406,7 +401,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	for _, success := range []bool{true, false} {
 		expCalls := []roachpb.Method{roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
 		var calls []roachpb.Method
-		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			calls = append(calls, ba.Methods()...)
 			return ba.CreateReply(), nil
 		}, nil))
@@ -439,7 +434,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 func TestAbortMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var calls []roachpb.Method
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && et.(*roachpb.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be false")
@@ -481,17 +476,19 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 
 	for i, test := range testCases {
 		count := 0
-		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		dbCtx := DefaultDBContext()
+		dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
+		db := NewDBWithContext(newTestSender(
+			func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
-			if _, ok := ba.GetArg(roachpb.Put); ok {
-				count++
-				if count == 1 {
-					return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
+				if _, ok := ba.GetArg(roachpb.Put); ok {
+					count++
+					if count == 1 {
+						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
+					}
 				}
-			}
-			return ba.CreateReply(), nil
-		}, nil))
-		db.txnRetryOptions.InitialBackoff = 1 * time.Millisecond
+				return ba.CreateReply(), nil
+			}, nil), dbCtx)
 		err := db.Txn(func(txn *Txn) error {
 			return txn.Put("a", "b")
 		})
@@ -520,7 +517,7 @@ func TestAbortedRetryPreservesTimestamp(t *testing.T) {
 
 	// Create a TestSender that aborts a transaction 2 times before succeeding.
 	count := 0
-	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Put); ok {
 			count++
 			if count < 3 {
@@ -662,7 +659,7 @@ func TestCommitInBatchWrongTxn(t *testing.T) {
 // Txn timestamp using client.TxnExecOptions.
 func TestTimestampSelectionInOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := newDB(newTestSender(nil, nil))
+	db := NewDB(newTestSender(nil, nil))
 	txn := NewTxn(context.Background(), *db)
 
 	var execOpt TxnExecOptions
@@ -728,7 +725,7 @@ func TestSetPriority(t *testing.T) {
 // be retried.
 func TestWrongTxnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := newDB(newTestSender(nil, nil))
+	db := NewDB(newTestSender(nil, nil))
 
 	var retries int
 	txnClosure := func(outerTxn *Txn) error {

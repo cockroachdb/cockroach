@@ -147,16 +147,31 @@ func (r Result) String() string {
 	return buf.String()
 }
 
+// DBContext contains configuration parameters for DB.
+type DBContext struct {
+	// UserPriority is the default user priority to set on API calls. If
+	// userPriority is set to any value except 1 in call arguments, this
+	// value is ignored.
+	UserPriority roachpb.UserPriority
+
+	// TxnRetryOptions controls the retries of restarted transactions.
+	TxnRetryOptions retry.Options
+}
+
+// DefaultDBContext returns (a copy of) the default options for
+// NewDBWithContext.
+func DefaultDBContext() DBContext {
+	return DBContext{
+		UserPriority:    roachpb.NormalUserPriority,
+		TxnRetryOptions: DefaultTxnRetryOptions,
+	}
+}
+
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
 	sender Sender
-
-	// userPriority is the default user priority to set on API calls. If
-	// userPriority is set to any value except 1 in call arguments, this
-	// value is ignored.
-	userPriority    roachpb.UserPriority
-	txnRetryOptions retry.Options
+	ctx    DBContext
 }
 
 // GetSender returns the underlying Sender. Only exported for tests.
@@ -166,18 +181,15 @@ func (db *DB) GetSender() Sender {
 
 // NewDB returns a new DB.
 func NewDB(sender Sender) *DB {
-	return &DB{
-		sender:          sender,
-		userPriority:    roachpb.NormalUserPriority,
-		txnRetryOptions: DefaultTxnRetryOptions,
-	}
+	return NewDBWithContext(sender, DefaultDBContext())
 }
 
-// NewDBWithPriority returns a new DB.
-func NewDBWithPriority(sender Sender, userPriority roachpb.UserPriority) *DB {
-	db := NewDB(sender)
-	db.userPriority = userPriority
-	return db
+// NewDBWithContext returns a new DB with the given parameters.
+func NewDBWithContext(sender Sender, ctx DBContext) *DB {
+	return &DB{
+		sender: sender,
+		ctx:    ctx,
+	}
 }
 
 // NewBatch creates and returns a new empty batch object for use with the DB.
@@ -449,8 +461,8 @@ func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 		}
 	}
 
-	if db.userPriority != 1 {
-		ba.UserPriority = db.userPriority
+	if db.ctx.UserPriority != 1 {
+		ba.UserPriority = db.ctx.UserPriority
 	}
 
 	tracing.AnnotateTrace()

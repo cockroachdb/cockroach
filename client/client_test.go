@@ -97,7 +97,9 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority) (*client.DB, *notifyingSender) {
 	db := createTestClient(t, stopper, addr)
 	sender := &notifyingSender{wrapped: db.GetSender()}
-	return client.NewDBWithPriority(sender, priority), sender
+	dbCtx := client.DefaultDBContext()
+	dbCtx.UserPriority = priority
+	return client.NewDBWithContext(sender, dbCtx), sender
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
