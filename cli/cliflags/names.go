@@ -46,4 +46,6 @@ const (
 	ValuesName           = "values"
 	RaftTickIntervalName = "raft-tick-interval"
 	UndoHaltClusterName  = "undo"
+	DrainOnlyName        = "drain-only"
+	ResumeOnlyName       = "resume"
 )

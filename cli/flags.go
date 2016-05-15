@@ -41,6 +41,7 @@ var connURL string
 var connUser, connHost, connPort, httpPort, connDBName string
 var startBackground bool
 var undoHaltCluster bool
+var drainOnly, resumeOnly bool
 
 // cliContext is the CLI Context used for the command-line client.
 var cliContext = NewContext()
@@ -230,6 +231,12 @@ defined in terms of multiples of this value.`),
 
 	cliflags.UndoHaltClusterName: wrapText(`
 Attempt to undo an earlier attempt to halt the cluster.`),
+
+	cliflags.DrainOnlyName: wrapText(`
+Drain the server, but do not terminate the process.`),
+
+	cliflags.ResumeOnlyName: wrapText(`
+Undo any earlier drain operation.`),
 }
 
 const usageIndentation = 8
@@ -411,6 +418,11 @@ func initFlags(ctx *Context) {
 	}
 
 	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, envutil.EnvOrDefaultString(cliflags.PasswordName, ""), usageEnv(cliflags.PasswordName))
+	{
+		f := quitCmd.Flags()
+		f.BoolVar(&drainOnly, cliflags.DrainOnlyName, false, usageNoEnv(cliflags.DrainOnlyName))
+		f.BoolVar(&resumeOnly, cliflags.ResumeOnlyName, false, usageNoEnv(cliflags.ResumeOnlyName))
+	}
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, quitCmd, haltClusterCmd, /* startCmd is covered above */
@@ -442,7 +454,7 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{haltClusterCmd}
+	simpleCmds := []*cobra.Command{quitCmd, haltClusterCmd}
 	simpleCmds = append(simpleCmds, kvCmds...)
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
@@ -451,7 +463,7 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need an http port.
-	httpCmds := []*cobra.Command{quitCmd}
+	var httpCmds []*cobra.Command
 	httpCmds = append(httpCmds, nodeCmds...)
 	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()

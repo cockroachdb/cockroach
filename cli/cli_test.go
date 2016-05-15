@@ -169,7 +169,7 @@ func (c cliTest) RunWithArgs(a []string) {
 		fmt.Println(err)
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
-	if a[0] == "node" || a[0] == "quit" {
+	if a[0] == "node" {
 		_, httpPort, err := net.SplitHostPort(c.HTTPAddr())
 		if err != nil {
 			fmt.Println(err)
@@ -192,15 +192,38 @@ func (c cliTest) RunWithArgs(a []string) {
 	}
 }
 
-func TestQuit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func Example_quit() {
 	c := newCLITest()
-	c.Run("quit")
+
+	// TODO(tschottdorf): Flag values are not reset between invocations, so
+	// we require explicit --drain-only=false after the first --drain-only
+	// invocation. Looked around but found no easy way to "unparse" all flags.
+	c.RunWithArgs([]string{"quit", "--drain-only=true"})
+	c.RunWithArgs([]string{"sql", "-e", "SELECT 1"})
+	c.RunWithArgs([]string{"quit", "--resume=true", "--drain-only=false"})
+	c.RunWithArgs([]string{"sql", "-e", "SELECT 1"})
+	c.RunWithArgs([]string{"quit", "--resume=false", "--drain-only=false"})
+
 	// Wait until this async command stops the server.
 	<-c.Stopper().IsStopped()
 	// Manually run the cleanup functions.
 	c.cleanupFunc()
 	security.SetReadFileFn(securitytest.Asset)
+
+	// Output:
+	// quit --drain-only=true
+	// ok
+	// sql -e SELECT 1
+	// pq: server is not accepting clients
+	// pq: server is not accepting clients
+	// quit --resume=true --drain-only=false
+	// ok
+	// sql -e SELECT 1
+	// 1 row
+	// 1
+	// 1
+	// quit --resume=false --drain-only=false
+	// ok
 }
 
 func Example_basic() {
@@ -743,7 +766,7 @@ Available Commands:
   start        start a node
   cert         create ca, node, and client certs
   halt-cluster halt the cluster in preparation for an update
-  quit         drain and shutdown node
+  quit         drain and/or shutdown node
 
   sql          open a sql shell
   user         get, set, list and remove users
