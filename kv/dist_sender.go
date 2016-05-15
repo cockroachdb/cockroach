@@ -41,7 +41,7 @@ import (
 
 // Default constants for timeouts.
 const (
-	defaultSendNextTimeout = 10 * time.Second // for now; see #2500
+	defaultSendNextTimeout = 500 * time.Millisecond
 	defaultClientTimeout   = 10 * time.Second
 
 	// The default maximum number of ranges to return from a range
