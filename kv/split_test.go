@@ -37,19 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-// setTestRetryOptions sets client retry options for speedier testing.
-func setTestRetryOptions() func() {
-	origRetryOpts := client.DefaultTxnRetryOptions
-	client.DefaultTxnRetryOptions = retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     10 * time.Millisecond,
-		Multiplier:     2,
-	}
-	return func() {
-		client.DefaultTxnRetryOptions = origRetryOpts
-	}
-}
-
 // startTestWriter creates a writer which initiates a sequence of
 // transactions, each which writes up to 10 times to random keys with
 // random values. If not nil, txnChannel is written to non-blockingly
@@ -181,11 +168,16 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	cfg.RangeMaxBytes = 1 << 18
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
-	s, _ := createTestDB(t)
+	dbCtx := client.DefaultDBContext()
+	dbCtx.TxnRetryOptions = retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     10 * time.Millisecond,
+		Multiplier:     2,
+	}
+	s, _ := createTestDBWithContext(t, dbCtx)
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()
-	defer setTestRetryOptions()()
 
 	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
 	done := make(chan struct{})

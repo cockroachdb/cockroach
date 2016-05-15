@@ -37,28 +37,26 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-// setCorrectnessRetryOptions sets client for aggressive retries with a
-// limit on number of attempts so we don't get stuck behind indefinite
+// correctnessTestRetryOptions uses aggressive retries with a limit on
+// number of attempts so we don't get stuck behind indefinite
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
-func setCorrectnessRetryOptions(stores *storage.Stores) func() {
-	origRetryOpts := client.DefaultTxnRetryOptions
-	client.DefaultTxnRetryOptions = retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     50 * time.Millisecond,
-		Multiplier:     10,
-		MaxRetries:     2,
-	}
+//
+// Note that these options are used twice, at the stores via
+// setCorrectnessRetryOptions, and when constructing the client.
+var correctnessTestRetryOptions = retry.Options{
+	InitialBackoff: 1 * time.Millisecond,
+	MaxBackoff:     50 * time.Millisecond,
+	Multiplier:     10,
+	MaxRetries:     2,
+}
 
+func setCorrectnessRetryOptions(stores *storage.Stores) {
 	if err := stores.VisitStores(func(s *storage.Store) error {
-		s.SetRangeRetryOptions(client.DefaultTxnRetryOptions)
+		s.SetRangeRetryOptions(correctnessTestRetryOptions)
 		return nil
 	}); err != nil {
 		panic(err)
-	}
-
-	return func() {
-		client.DefaultTxnRetryOptions = origRetryOpts
 	}
 }
 
@@ -685,9 +683,11 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cm
 func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []string,
 	verify *verifier, expSuccess bool, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	s, _ := createTestDB(t)
+	dbCtx := client.DefaultDBContext()
+	dbCtx.TxnRetryOptions = correctnessTestRetryOptions
+	s, _ := createTestDBWithContext(t, dbCtx)
 	defer s.Stop()
-	defer setCorrectnessRetryOptions(s.Stores)()
+	setCorrectnessRetryOptions(s.Stores)
 	verifier.run(isolations, s.DB, t)
 }
 

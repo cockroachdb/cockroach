@@ -34,10 +34,9 @@ import (
 	basictracer "github.com/opentracing/basictracer-go"
 )
 
-// DefaultTxnRetryOptions are the standard retry options used
+// defaultTxnRetryOptions are the standard retry options used
 // for transactions.
-// This is exported for testing purposes only.
-var DefaultTxnRetryOptions = retry.Options{
+var defaultTxnRetryOptions = retry.Options{
 	InitialBackoff: 50 * time.Millisecond,
 	MaxBackoff:     5 * time.Second,
 	Multiplier:     2,

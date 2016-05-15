@@ -163,7 +163,7 @@ type DBContext struct {
 func DefaultDBContext() DBContext {
 	return DBContext{
 		UserPriority:    roachpb.NormalUserPriority,
-		TxnRetryOptions: DefaultTxnRetryOptions,
+		TxnRetryOptions: defaultTxnRetryOptions,
 	}
 }
 

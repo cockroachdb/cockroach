@@ -70,7 +70,15 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
-	s := &localtestcluster.LocalTestCluster{}
+	return createTestDBWithContext(t, client.DefaultDBContext())
+}
+
+func createTestDBWithContext(
+	t testing.TB, dbCtx client.DBContext,
+) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
+	s := &localtestcluster.LocalTestCluster{
+		DBContext: &dbCtx,
+	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	return s, s.Sender.(*TxnCoordSender)
 }
