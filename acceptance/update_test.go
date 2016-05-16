@@ -47,6 +47,7 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (server.C
 }
 
 func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+	t.Skip("#6715")
 	minAffected := int64(server.ExpectedInitialRangeCount())
 
 	const long = time.Minute
