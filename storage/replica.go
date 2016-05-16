@@ -1315,6 +1315,39 @@ func (r *Replica) tryAbandon(idKey storagebase.CmdIDKey) bool {
 	return ok
 }
 
+func (r *Replica) prepareRaftCommandLocked(
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	replica roachpb.ReplicaDescriptor,
+	ba roachpb.BatchRequest,
+) (*pendingCmd, error) {
+	pendingCmd := &pendingCmd{
+		ctx:   ctx,
+		idKey: idKey,
+		done:  make(chan roachpb.ResponseWithError, 1),
+		raftCmd: roachpb.RaftCommand{
+			RangeID:       r.RangeID,
+			OriginReplica: replica,
+			Cmd:           ba,
+		},
+	}
+	return pendingCmd, nil
+}
+
+func (r *Replica) insertRaftCommandLocked(pCmd *pendingCmd) {
+	idKey := pCmd.idKey
+	if _, ok := r.mu.pendingCmds[idKey]; ok {
+		log.Fatalf("pending command already exists for %s", idKey)
+	}
+	r.mu.pendingCmds[idKey] = pCmd
+}
+
+func makeIDKey() storagebase.CmdIDKey {
+	idKeyBuf := make([]byte, 0, raftCommandIDLen)
+	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
+	return storagebase.CmdIDKey(idKeyBuf)
+}
+
 // proposeRaftCommand prepares necessary pending command struct and
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
@@ -1326,30 +1359,17 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	if replica == nil {
 		return nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
-	idKeyBuf := make([]byte, 0, raftCommandIDLen)
-	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
-	idKey := storagebase.CmdIDKey(idKeyBuf)
-	pendingCmd := &pendingCmd{
-		ctx:   ctx,
-		idKey: idKey,
-		done:  make(chan roachpb.ResponseWithError, 1),
-		raftCmd: roachpb.RaftCommand{
-			RangeID:       r.RangeID,
-			OriginReplica: *replica,
-			Cmd:           ba,
-		},
-	}
-
-	if _, ok := r.mu.pendingCmds[idKey]; ok {
-		log.Fatalf("pending command already exists for %s", idKey)
-	}
-	r.mu.pendingCmds[idKey] = pendingCmd
-
-	if err := r.proposePendingCmdLocked(pendingCmd); err != nil {
-		delete(r.mu.pendingCmds, idKey)
+	pCmd, err := r.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
+	if err != nil {
 		return nil, err
 	}
-	return pendingCmd, nil
+	r.insertRaftCommandLocked(pCmd)
+
+	if err := r.proposePendingCmdLocked(pCmd); err != nil {
+		delete(r.mu.pendingCmds, pCmd.idKey)
+		return nil, err
+	}
+	return pCmd, nil
 }
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
@@ -1606,6 +1626,10 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		log.Fatalc(r.context(context.TODO()), "processRaftCommand requires a non-zero index")
 	}
 
+	// TODO(tschottdorf): will clients know to handle the errors potentially
+	// generated in reproposal scenarios? After all, they are not usually
+	// received on the 'done' channel.
+	var forcedErr *roachpb.Error
 	r.mu.Lock()
 	cmd := r.mu.pendingCmds[idKey]
 	delete(r.mu.pendingCmds, idKey)
@@ -1624,7 +1648,8 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	br, err := r.applyRaftCommand(idKey, ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
+	br, err := r.applyRaftCommand(idKey, ctx, index, raftCmd.OriginReplica,
+		raftCmd.Cmd, forcedErr)
 	err = r.maybeSetCorrupt(err)
 
 	if cmd != nil {
@@ -1640,9 +1665,14 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Context, index uint64,
-	originReplica roachpb.ReplicaDescriptor, ba roachpb.BatchRequest) (
-	*roachpb.BatchResponse, *roachpb.Error) {
+func (r *Replica) applyRaftCommand(
+	idKey storagebase.CmdIDKey,
+	ctx context.Context,
+	index uint64,
+	originReplica roachpb.ReplicaDescriptor,
+	ba roachpb.BatchRequest,
+	forcedError *roachpb.Error,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
@@ -1666,7 +1696,10 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	var intents []intentsWithArg
 	var rErr *roachpb.Error
 
-	if mayApply {
+	if forcedError != nil {
+		batch = r.store.Engine().NewBatch()
+		br, rErr = nil, forcedError
+	} else if mayApply {
 		batch, ms, br, intents, rErr = r.applyRaftCommandInBatch(ctx, idKey,
 			originReplica, ba)
 	} else {
