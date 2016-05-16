@@ -505,9 +505,11 @@ func (t *tableState) acquire(txn *client.Txn, version sqlbase.DescriptorVersion,
 
 // releaseLeasesIfNotActive releases the leases in `leases` with refcount 0.
 // t.mu must be locked.
+// leases must be a not overlap t.active.data, since t.active.data will
+// be changed by this function.
 func (t *tableState) releaseLeasesIfNotActive(
-	leases []*LeaseState, store LeaseStore) error {
-
+	leases []*LeaseState, store LeaseStore,
+) error {
 	for _, s := range leases {
 		if s.Refcount() != 0 {
 			continue
@@ -618,10 +620,10 @@ func (t *tableState) purgeOldLeases(
 			if deleted {
 				t.deleted = true
 				// If the table has been deleted, all leases are stale.
-				toRelease = t.active.data
+				toRelease = append([]*LeaseState(nil), t.active.data...)
 			} else {
 				// Otherwise, all but the lease we just took are stale.
-				toRelease = t.active.data[:len(t.active.data)-1]
+				toRelease = append([]*LeaseState(nil), t.active.data[:len(t.active.data)-1]...)
 			}
 			if err := t.releaseLeasesIfNotActive(toRelease, store); err != nil {
 				return err
