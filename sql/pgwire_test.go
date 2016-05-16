@@ -427,10 +427,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT $1::date, $2::timestamp": {
 			base.Params(
 				time.Date(2006, 7, 8, 0, 0, 0, 9, time.FixedZone("", 0)),
-				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			).Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
-				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			),
 		},
 		"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
@@ -454,9 +454,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"INSERT INTO d.ts (a) VALUES ($1) RETURNING a": {
 			base.Params(
-				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
+				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			).Results(
-				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
+				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {

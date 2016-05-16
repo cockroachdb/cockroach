@@ -1072,7 +1072,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return t, true
 	// Time datatypes get special representation in the database.
 	case time.Time:
-		return &parser.DTimestamp{Time: t}, true
+		return parser.MakeDTimestamp(t, time.Microsecond), true
 	case time.Duration:
 		return &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}, true
 	case *inf.Dec:
