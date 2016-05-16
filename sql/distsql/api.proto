@@ -30,12 +30,17 @@ message SetupFlowsRequest {
   repeated FlowSpec flows = 2 [(gogoproto.nullable) = false];
 }
 
-message SetupFlowsResponse {
+message SimpleResponse {
   optional roachpb.Error error = 1;
 }
 
 service DistSQL {
   // SetupFlows instantiates a set of flows (subgraphs of a distributed SQL
   // computation) on the receiving node.
-  rpc SetupFlows(SetupFlowsRequest) returns (SetupFlowsResponse);
+  rpc SetupFlows(SetupFlowsRequest) returns (SimpleResponse);
+
+  // RunSimpleFlow instantiates a flow and returns the results of that flow as a
+  // stream. The request must contain one flow, and that flow must have a single
+  // mailbox of the special simple response type.
+  rpc RunSimpleFlow(SetupFlowsRequest) returns (stream StreamMessage);
 }

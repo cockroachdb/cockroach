@@ -58,20 +58,30 @@ func (ds *ServerImpl) setupTxn(
 	return txn
 }
 
+// SetupSyncFlow is part of the DistSQLServer interface.
+func (ds *ServerImpl) SetupSyncFlow(
+	req *SetupFlowsRequest, stream DistSQL_SetupSyncFlowServer,
+) error {
+	if len(req.Flows) != 1 {
+		return fmt.Errorf("expected exactly one flow, got %d", len(req.Flows))
+	}
+	flow := req.Flows[0]
+	txn := ds.setupTxn(stream.Context(), &req.Txn)
+
+	// TODO(radu): for now we expect exactly one processor (a table reader)
+	reader, err := newTableReader(flow.Processors[0].Core.TableReader, txn, ds.evalCtx)
+	if err != nil {
+		return err
+	}
+	if err := reader.run(); err != nil {
+		fmt.Println(err)
+	}
+	return nil
+}
+
 // SetupFlows is part of the DistSQLServer interface.
 func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
-	*SetupFlowsResponse, error,
+	*SimpleResponse, error,
 ) {
-	txn := ds.setupTxn(ctx, &req.Txn)
-	for _, f := range req.Flows {
-		// TODO(radu): for now we expect exactly one processor (a table reader)
-		reader, err := newTableReader(f.Processors[0].Core.TableReader, txn, ds.evalCtx)
-		if err != nil {
-			return nil, err
-		}
-		if err := reader.run(); err != nil {
-			fmt.Println(err)
-		}
-	}
-	return &SetupFlowsResponse{}, nil
+	return nil, fmt.Errorf("not implemented")
 }
