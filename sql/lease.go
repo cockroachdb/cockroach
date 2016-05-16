@@ -621,7 +621,7 @@ func (t *tableState) purgeOldLeases(
 				toRelease = t.active.data
 			} else {
 				// Otherwise, all but the lease we just took are stale.
-				toRelease = t.active.data[:len(t.active.data)-1]
+				toRelease = append([]*LeaseState(nil), t.active.data[:len(t.active.data)-1]...)
 			}
 			if err := t.releaseLeasesIfNotActive(toRelease, store); err != nil {
 				return err
