@@ -325,11 +325,11 @@ func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
 // incorporating the Range ID are not (e.g. abort cache entries, and range
 // stats).
 func Addr(k roachpb.Key) (roachpb.RKey, error) {
-	if k == nil {
-		return nil, nil
+	if !bytes.HasPrefix(k, localPrefix) {
+		return roachpb.RKey(k), nil
 	}
 
-	for bytes.HasPrefix(k, localPrefix) {
+	for {
 		if bytes.HasPrefix(k, localStorePrefix) {
 			return nil, util.Errorf("store-local key %q is not addressable", k)
 		}
@@ -345,6 +345,9 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 		// Decode the encoded key, throw away the suffix and detail.
 		if _, k, err = encoding.DecodeBytesAscending(k, nil); err != nil {
 			return nil, err
+		}
+		if !bytes.HasPrefix(k, localPrefix) {
+			break
 		}
 	}
 	return roachpb.RKey(k), nil
@@ -370,7 +373,7 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	if err != nil {
 		return rk, err
 	}
-	if local := !rk.Equal(k); local {
+	if bytes.HasPrefix(k, localPrefix) {
 		// The upper bound for a range-local key that addresses to key k
 		// is the key directly after k.
 		rk = rk.Next()
@@ -555,7 +558,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
-		if req.Method() == roachpb.Noop {
+		if _, ok := req.(*roachpb.NoopRequest); ok {
 			continue
 		}
 		h := req.Header()
@@ -567,16 +570,20 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 		if err != nil {
 			return roachpb.RSpan{}, err
 		}
-		if bytes.Compare(key, roachpb.RKeyMax) > 0 {
-			return roachpb.RSpan{}, util.Errorf("%s must be less than KeyMax", key)
-		}
 		if key.Less(from) {
 			// Key is smaller than `from`.
 			from = key
 		}
 		if !key.Less(to) {
 			// Key.Next() is larger than `to`.
+			if bytes.Compare(key, roachpb.RKeyMax) > 0 {
+				return roachpb.RSpan{}, util.Errorf("%s must be less than KeyMax", key)
+			}
 			to = key.Next()
+		}
+
+		if len(h.EndKey) == 0 {
+			continue
 		}
 		endKey, err := AddrUpperBound(h.EndKey)
 		if err != nil {
