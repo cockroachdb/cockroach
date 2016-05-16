@@ -40,6 +40,7 @@ var maxResults int64
 var connURL string
 var connUser, connHost, connPort, httpPort, connDBName string
 var startBackground bool
+var undoFreezeCluster bool
 
 // cliContext is the CLI Context used for the command-line client.
 var cliContext = NewContext()
@@ -226,6 +227,9 @@ Print values along with their associated key.`),
 	cliflags.RaftTickIntervalName: wrapText(`
 The resolution of the Raft timer; other raft timeouts are
 defined in terms of multiples of this value.`),
+
+	cliflags.UndoFreezeClusterName: wrapText(`
+Attempt to undo an earlier attempt to freeze the cluster.`),
 }
 
 const usageIndentation = 8
@@ -414,7 +418,7 @@ func initFlags(ctx *Context) {
 	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, envutil.EnvOrDefaultString(cliflags.PasswordName, ""), usageEnv(cliflags.PasswordName))
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, exterminateCmd, quitCmd, /* startCmd is covered above */
+		sqlShellCmd, exterminateCmd, quitCmd, freezeClusterCmd, /* startCmd is covered above */
 	}
 	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
@@ -437,9 +441,13 @@ func initFlags(ctx *Context) {
 		f := sqlShellCmd.Flags()
 		f.VarP(&ctx.execStmts, cliflags.ExecuteName, "e", usageNoEnv(cliflags.ExecuteName))
 	}
+	{
+		f := freezeClusterCmd.PersistentFlags()
+		f.BoolVar(&undoFreezeCluster, cliflags.UndoFreezeClusterName, false, usageNoEnv(cliflags.UndoFreezeClusterName))
+	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{exterminateCmd}
+	simpleCmds := []*cobra.Command{exterminateCmd, freezeClusterCmd}
 	simpleCmds = append(simpleCmds, kvCmds...)
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {

@@ -30,12 +30,16 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -346,5 +350,51 @@ func runQuit(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	fmt.Printf("node drained and shutdown: %s\n", body)
+	return nil
+}
+
+// freezeClusterCmd command issues a cluster-wide freeze.
+var freezeClusterCmd = &cobra.Command{
+	Use:   "freeze-cluster",
+	Short: "freeze the cluster in preparation for an update",
+	Long: `
+Disables all Raft groups and stops new commands from being executed in preparation
+for a stop-the-world update of the cluster. Once the command has completed, the
+nodes in the cluster should be terminated, all binaries updated, and only then
+restarted. A failed or incomplete invocation of this command can be rolled back
+using the --undo flag, or by restarting all the nodes in the cluster.
+`,
+	SilenceUsage: true,
+	RunE:         runFreezeCluster,
+}
+
+func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
+	stopper := stop.NewStopper()
+	rpcContext := rpc.NewContext(&cliContext.Context.Context, hlc.NewClock(hlc.UnixNano),
+		stopper)
+	conn, err := rpcContext.GRPCDial(cliContext.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return server.NewAdminClient(conn), stopper, nil
+}
+
+func stopperContext(stopper *stop.Stopper) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	stopper.AddCloser(stop.CloserFn(cancel))
+	return ctx
+}
+
+func runFreezeCluster(_ *cobra.Command, _ []string) error {
+	c, stopper, err := getAdminClient()
+	if err != nil {
+		return err
+	}
+	defer stopper.Stop()
+	if _, err := c.ClusterFreeze(stopperContext(stopper),
+		&server.ClusterFreezeRequest{Freeze: !undoFreezeCluster}); err != nil {
+		return err
+	}
+	fmt.Println("ok")
 	return nil
 }
