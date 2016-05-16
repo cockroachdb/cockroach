@@ -40,7 +40,7 @@ var maxResults int64
 var connURL string
 var connUser, connHost, connPort, httpPort, connDBName string
 var startBackground bool
-var undoHaltCluster bool
+var undoFreezeCluster bool
 var drainOnly, resumeOnly bool
 
 // cliContext is the CLI Context used for the command-line client.
@@ -229,8 +229,8 @@ Print values along with their associated key.`),
 The resolution of the Raft timer; other raft timeouts are
 defined in terms of multiples of this value.`),
 
-	cliflags.UndoHaltClusterName: wrapText(`
-Attempt to undo an earlier attempt to halt the cluster.`),
+	cliflags.UndoFreezeClusterName: wrapText(`
+Attempt to undo an earlier attempt to freeze the cluster.`),
 
 	cliflags.DrainOnlyName: wrapText(`
 Drain the server, but do not terminate the process.`),
@@ -425,7 +425,7 @@ func initFlags(ctx *Context) {
 	}
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, quitCmd, haltClusterCmd, /* startCmd is covered above */
+		sqlShellCmd, quitCmd, freezeClusterCmd, /* startCmd is covered above */
 	}
 	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
@@ -449,12 +449,12 @@ func initFlags(ctx *Context) {
 		f.VarP(&ctx.execStmts, cliflags.ExecuteName, "e", usageNoEnv(cliflags.ExecuteName))
 	}
 	{
-		f := haltClusterCmd.PersistentFlags()
-		f.BoolVar(&undoHaltCluster, cliflags.UndoHaltClusterName, false, usageNoEnv(cliflags.UndoHaltClusterName))
+		f := freezeClusterCmd.PersistentFlags()
+		f.BoolVar(&undoFreezeCluster, cliflags.UndoFreezeClusterName, false, usageNoEnv(cliflags.UndoFreezeClusterName))
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{quitCmd, haltClusterCmd}
+	simpleCmds := []*cobra.Command{quitCmd, freezeClusterCmd}
 	simpleCmds = append(simpleCmds, kvCmds...)
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {

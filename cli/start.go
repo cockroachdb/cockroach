@@ -335,10 +335,10 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// haltClusterCmd command issues a cluster-wide freeze.
-var haltClusterCmd = &cobra.Command{
-	Use:   "halt-cluster",
-	Short: "halt the cluster in preparation for an update",
+// freezeClusterCmd command issues a cluster-wide freeze.
+var freezeClusterCmd = &cobra.Command{
+	Use:   "freeze-cluster",
+	Short: "freeze the cluster in preparation for an update",
 	Long: `
 Disables all Raft groups and stops new commands from being executed in preparation
 for a stop-the-world update of the cluster. Once the command has completed, the
@@ -347,7 +347,7 @@ restarted. A failed or incomplete invocation of this command can be rolled back
 using the --undo flag, or by restarting all the nodes in the cluster.
 `,
 	SilenceUsage: true,
-	RunE:         runHaltCluster,
+	RunE:         runFreezeCluster,
 }
 
 func stopperContext(stopper *stop.Stopper) context.Context {
@@ -356,14 +356,14 @@ func stopperContext(stopper *stop.Stopper) context.Context {
 	return ctx
 }
 
-func runHaltCluster(_ *cobra.Command, _ []string) error {
+func runFreezeCluster(_ *cobra.Command, _ []string) error {
 	c, stopper, err := getAdminClient()
 	if err != nil {
 		return err
 	}
 	defer stopper.Stop()
 	if _, err := c.ClusterFreeze(stopperContext(stopper),
-		&server.ClusterFreezeRequest{Freeze: !undoHaltCluster}); err != nil {
+		&server.ClusterFreezeRequest{Freeze: !undoFreezeCluster}); err != nil {
 		return err
 	}
 	fmt.Println("ok")
