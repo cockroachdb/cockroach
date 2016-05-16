@@ -1,8 +1,8 @@
 - Feature Name: UPSERT
-- Status: draft
+- Status: completed
 - Start Date: 2016-04-26
 - Authors: Daniel Harrison
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: [#6331](https://github.com/cockroachdb/cockroach/pull/6331)
 - Cockroach Issue: [#1962](https://github.com/cockroachdb/cockroach/issues/1962)
 
 
