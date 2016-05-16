@@ -19,7 +19,6 @@ package sqlbase
 import (
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 	"unicode/utf8"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -1107,7 +1107,8 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	case ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {
 			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
-				return fmt.Errorf("value too long for type %s (column %q)", col.Type.SQLString(), col.Name)
+				return fmt.Errorf("value too long for type %s (column %q)",
+					col.Type.SQLString(), col.Name)
 			}
 		}
 	case ColumnType_DECIMAL:
@@ -1127,13 +1128,16 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				}
 
 				// Check that the precision is not exceeded.
-				maxDigitsLeft := big.NewInt(10)
-				maxDigitsLeft.Exp(maxDigitsLeft, big.NewInt(int64(col.Type.Precision-col.Type.Width)), nil)
+				maxDigitsLeft := decimal.PowerOfTenDec(int(col.Type.Precision - col.Type.Width))
 
-				var absRounded inf.Dec
-				absRounded.Abs(&v.Dec)
-				if absRounded.Cmp(inf.NewDecBig(maxDigitsLeft, 0)) != -1 {
-					return fmt.Errorf("too many digits for type %s (column %q)", col.Type.SQLString(), col.Name)
+				absRounded := &v.Dec
+				if absRounded.Sign() == -1 {
+					// Only force the allocation on negative decimals.
+					absRounded = new(inf.Dec).Neg(&v.Dec)
+				}
+				if absRounded.Cmp(maxDigitsLeft) != -1 {
+					return fmt.Errorf("too many digits for type %s (column %q)",
+						col.Type.SQLString(), col.Name)
 				}
 			}
 		}

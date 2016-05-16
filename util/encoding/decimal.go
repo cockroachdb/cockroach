@@ -29,12 +29,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
-)
-
-var (
-	bigInt10   = big.NewInt(10)
-	bigInt100  = big.NewInt(100)
-	bigInt1000 = big.NewInt(1000)
+	"github.com/cockroachdb/cockroach/util/decimal"
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal
@@ -595,21 +590,7 @@ func normalizeBigInt(bi *big.Int, copyOnWrite bool, formatted, tmp []byte) *big.
 		if copyOnWrite {
 			bi = new(big.Int)
 		}
-
-		var div *big.Int
-		switch tens {
-		case 1:
-			div = bigInt10
-		case 2:
-			div = bigInt100
-		case 3:
-			div = bigInt1000
-		default:
-			div = big.NewInt(10)
-			pow := big.NewInt(int64(tens))
-			div.Exp(div, pow, nil)
-		}
-		bi.Div(from, div)
+		bi.Div(from, decimal.PowerOfTenInt(tens))
 	}
 	return bi
 }

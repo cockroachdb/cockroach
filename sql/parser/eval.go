@@ -1174,19 +1174,16 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// Compute Walltime * 10^10 + Logical.
 	// We need 10 decimals for the Logical field because its maximum
 	// value is 4294967295 (2^32-1), a value with 10 decimal digits.
-	var val, sp big.Int
+	var res DDecimal
+	val := res.UnscaledBig()
 	val.SetInt64(ctx.clusterTimestamp.WallTime)
-	val.Mul(&val, tenBillion)
-	sp.SetInt64(int64(ctx.clusterTimestamp.Logical))
-	val.Add(&val, &sp)
-	// Store the result.
-	res := &DDecimal{}
-	res.Dec.SetUnscaledBig(&val)
+	val.Mul(val, decimal.PowerOfTenInt(10))
+	val.Add(val, big.NewInt(int64(ctx.clusterTimestamp.Logical)))
+
 	// Shift 10 decimals to the right, so that the logical
 	// field appears as fractional part.
 	res.Dec.SetScale(10)
-
-	return res
+	return &res
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
@@ -1209,8 +1206,6 @@ func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
 func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 	ctx.stmtTimestamp = ts
 }
-
-var tenBillion = big.NewInt(1e10)
 
 // SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
