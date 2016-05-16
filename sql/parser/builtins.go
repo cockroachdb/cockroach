@@ -1051,6 +1051,12 @@ var Builtins = map[string][]Builtin{
 	},
 }
 
+func init() {
+	for k, v := range Builtins {
+		Builtins[strings.ToUpper(k)] = v
+	}
+}
+
 // identityFn returns the first argument provided.
 func identityFn(_ EvalContext, args DTuple) (Datum, error) {
 	return args[0], nil

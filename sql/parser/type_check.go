@@ -242,9 +242,15 @@ func (expr *FuncExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	}
 
 	name := string(expr.Name.Base)
-	candidates, ok := Builtins[strings.ToLower(name)]
+	// Optimize for the case where name is already normalized to upper/lower
+	// case. Note that the Builtins map contains duplicate entries for
+	// upper/lower case names.
+	candidates, ok := Builtins[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown function: %s", name)
+		candidates, ok = Builtins[strings.ToLower(name)]
+		if !ok {
+			return nil, fmt.Errorf("unknown function: %s", name)
+		}
 	}
 
 	overloads := make([]overloadImpl, len(candidates))
