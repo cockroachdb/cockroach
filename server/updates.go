@@ -205,7 +205,7 @@ func (s *Server) checkForUpdates() {
 	}
 
 	for _, v := range r.Details {
-		log.Info("A new version is available: %s\n\t%s", v.Version, v.Details)
+		log.Infof("A new version is available: %s, details: %s", v.Version, v.Details)
 	}
 }
 
