@@ -221,7 +221,7 @@ type Replica struct {
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
 		// Most recent timestamps for keys / key ranges.
-		tsCache *TimestampCache
+		tsCache *timestampCache
 		// Slice of channels to send on after leader lease acquisition.
 		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -274,7 +274,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	defer r.mu.Unlock()
 
 	r.mu.cmdQ = NewCommandQueue()
-	r.mu.tsCache = NewTimestampCache(clock)
+	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	r.setDescWithoutProcessUpdateLocked(desc)
