@@ -83,10 +83,6 @@ DBStatus DBFlush(DBEngine* db);
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
-// Returns the approximate file system spaced used by keys in the
-// range [start,end].
-uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end);
-
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 

@@ -1369,15 +1369,6 @@ DBStatus DBCompact(DBEngine* db) {
   return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), NULL, NULL));
 }
 
-uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end) {
-  std::string s = EncodeKey(start);
-  std::string e = EncodeKey(end);
-  const rocksdb::Range r(s, e);
-  uint64_t result;
-  db->rep->GetApproximateSizes(&r, 1, &result);
-  return result;
-}
-
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
   return ToDBStatus(rep->Put(options, EncodeKey(key), ToSlice(value)));
