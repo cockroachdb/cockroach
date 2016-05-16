@@ -23,7 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -107,5 +109,196 @@ func TestLeaseSet(t *testing.T) {
 		if s := set.String(); d.expected != s {
 			t.Fatalf("%d: expected %s, but found %s", i, d.expected, s)
 		}
+	}
+}
+
+func TestPurgeOldLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB, cleanup := sqlutils.SetupServer(t)
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	var leases []*LeaseState
+	err := kvDB.Txn(func(txn *client.Txn) error {
+		for i := 0; i < 3; i++ {
+			lease, err := leaseManager.acquireFreshestFromStore(txn, tableDesc.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			leases = append(leases, lease)
+			if err := leaseManager.Release(lease); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := leaseManager.findTableState(tableDesc.ID, false, nil)
+	if numLeases := len(ts.active.data); numLeases != 3 {
+		t.Fatalf("found %d leases instead of 3", numLeases)
+	}
+
+	if err := ts.purgeOldLeases(
+		kvDB, false, 1 /* minVersion */, leaseManager.LeaseStore); err != nil {
+		t.Fatal(err)
+	}
+
+	if numLeases := len(ts.active.data); numLeases != 1 {
+		t.Fatalf("found %d leases instead of 1", numLeases)
+	}
+	if ts.active.data[0] != leases[2] {
+		t.Fatalf("wrong lease survived purge")
+	}
+}
+
+// Test that changing a descriptor's name updates the name cache.
+func TestNameCacheIsUpdated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE DATABASE t1;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate the name cache.
+	if _, err := sqlDB.Exec("SELECT * FROM t.test;"); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Rename.
+	if _, err := sqlDB.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the cache has been updated.
+	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock()) != nil {
+		t.Fatalf("old name still in cache")
+	}
+
+	lease := leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock())
+	if lease == nil {
+		t.Fatalf("new name not found in cache")
+	}
+	if lease.ID != tableDesc.ID {
+		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
+	}
+	if err := leaseManager.Release(lease); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rename to a different database.
+	if _, err := sqlDB.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-read the descriptor, to get the new ParentID.
+	newTableDesc := sqlbase.GetTableDescriptor(kvDB, "t1", "test2")
+	if tableDesc.ParentID == newTableDesc.ParentID {
+		t.Fatalf("database didn't change")
+	}
+
+	// Check that the cache has been updated.
+	if leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock()) != nil {
+		t.Fatalf("old name still in cache")
+	}
+
+	lease = leaseManager.tableNames.get(newTableDesc.ParentID, "test2", s.Clock())
+	if lease == nil {
+		t.Fatalf("new name not found in cache")
+	}
+	if lease.ID != tableDesc.ID {
+		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
+	}
+	if err := leaseManager.Release(lease); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Tests that a name cache entry with by an expired lease is not returned.
+func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate the name cache.
+	if _, err := sqlDB.Exec("SELECT * FROM t.test;"); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Check the assumptions this tests makes: that there is a cache entry
+	// (with a valid lease).
+	lease := leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock())
+	if lease == nil {
+		t.Fatalf("no name cache entry")
+	}
+	if err := leaseManager.Release(lease); err != nil {
+		t.Fatal(err)
+	}
+	// Advance the clock to expire the lease.
+	s.Clock().SetMaxOffset(10 * LeaseDuration)
+	s.Clock().Update(s.Clock().Now().Add(int64(2*LeaseDuration), 0))
+
+	// Check the the name no longer resolves.
+	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock()) != nil {
+		t.Fatalf("name resolves when it shouldn't")
+	}
+}
+
+// Test that table names are not treated as case sensitive by the name cache.
+func TestTableNameNotCaseSensitive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate the name cache.
+	if _, err := sqlDB.Exec("SELECT * FROM t.test;"); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Check that we can get the table by a different name.
+	lease := leaseManager.tableNames.get(tableDesc.ParentID, "tEsT", s.Clock())
+	if lease == nil {
+		t.Fatalf("no name cache entry")
+	}
+	if err := leaseManager.Release(lease); err != nil {
+		t.Fatal(err)
 	}
 }
