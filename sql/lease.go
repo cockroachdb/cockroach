@@ -241,18 +241,12 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 func (s LeaseStore) Publish(
 	tableID sqlbase.ID, update func(*sqlbase.TableDescriptor) error,
 ) (*sqlbase.Descriptor, error) {
-	retryOpts := retry.Options{
-		InitialBackoff: 20 * time.Millisecond,
-		MaxBackoff:     2 * time.Second,
-		Multiplier:     2,
-	}
-
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
-		expectedVersion, err := s.waitForOneVersion(tableID, retryOpts)
+		expectedVersion, err := s.waitForOneVersion(tableID, base.DefaultRetryOptions())
 		if err != nil {
 			return nil, err
 		}

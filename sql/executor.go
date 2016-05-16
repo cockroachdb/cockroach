@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -51,12 +50,6 @@ var errNotRetriable = errors.New("the transaction is not in a retriable state")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
-
-var defaultRetryOpt = retry.Options{
-	InitialBackoff: 20 * time.Millisecond,
-	MaxBackoff:     200 * time.Millisecond,
-	Multiplier:     2,
-}
 
 type traceResult struct {
 	tag   string

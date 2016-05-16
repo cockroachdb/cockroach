@@ -917,7 +917,11 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
-	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
+	// TODO(bdarnell): need to be able to pass other parts of DBContext
+	// through here.
+	dbCtx := client.DefaultDBContext()
+	dbCtx.UserPriority = ba.UserPriority
+	tmpDB := client.NewDBWithContext(tc, dbCtx)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)

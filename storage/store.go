@@ -71,16 +71,6 @@ const (
 	raftReqBufferSize = 100
 )
 
-var (
-	// defaultRangeRetryOptions are default retry options for retrying commands
-	// sent to the store's ranges, for WriteIntent errors.
-	defaultRangeRetryOptions = retry.Options{
-		InitialBackoff: 50 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
-		Multiplier:     2,
-	}
-)
-
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
 	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
@@ -623,7 +613,7 @@ func (sc *StoreContext) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
 func (sc *StoreContext) setDefaults() {
-	sc.RangeRetryOptions = defaultRangeRetryOptions
+	sc.RangeRetryOptions = base.DefaultRetryOptions()
 
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = base.DefaultRaftTickInterval
@@ -1039,12 +1029,8 @@ func (s *Store) startGossip() {
 // the lease instead of waiting for the next sentinelGossipInterval
 // to transpire.
 func (s *Store) maybeGossipFirstRange() error {
-	retryOptions := retry.Options{
-		InitialBackoff: 100 * time.Millisecond, // first backoff at 100ms
-		MaxBackoff:     1 * time.Second,        // max backoff is 1s
-		Multiplier:     2,                      // doubles
-		Closer:         s.stopper.ShouldStop(), // stop no matter what on stopper
-	}
+	retryOptions := base.DefaultRetryOptions()
+	retryOptions.Closer = s.stopper.ShouldStop()
 	for loop := retry.Start(retryOptions); loop.Next(); {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {

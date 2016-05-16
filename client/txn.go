@@ -19,7 +19,6 @@ package client
 import (
 	"errors"
 	"strconv"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -33,15 +32,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	basictracer "github.com/opentracing/basictracer-go"
 )
-
-// DefaultTxnRetryOptions are the standard retry options used
-// for transactions.
-// This is exported for testing purposes only.
-var DefaultTxnRetryOptions = retry.Options{
-	InitialBackoff: 50 * time.Millisecond,
-	MaxBackoff:     5 * time.Second,
-	Multiplier:     2,
-}
 
 // txnSender implements the Sender interface and is used to keep the Send
 // method out of the Txn method set.
@@ -516,7 +506,7 @@ func (txn *Txn) Exec(
 	}()
 
 	if opt.AutoRetry {
-		retryOptions = txn.db.txnRetryOptions
+		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
 RetryLoop:
 	for r := retry.Start(retryOptions); r.Next(); {

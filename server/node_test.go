@@ -29,6 +29,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -83,7 +84,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(grpcServer, ln.Addr())
 	}
 	ctx.Gossip = g
-	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           ctx.Clock,

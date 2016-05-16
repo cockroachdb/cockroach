@@ -111,7 +111,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 		t.Fatal(err)
 	}
 
-	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
@@ -512,7 +512,7 @@ func (m *multiTestContext) addStore() {
 		m.storePools = append(m.storePools, storage.NewStorePool(m.gossips[idx], m.clock, m.timeUntilStoreDead, m.clientStopper))
 	}
 	if len(m.dbs) <= idx {
-		retryOpts := kv.GetDefaultDistSenderRetryOptions()
+		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = m.clientStopper.ShouldDrain()
 		m.distSenders = append(m.distSenders,
 			kv.NewDistSender(&kv.DistSenderContext{
