@@ -953,64 +953,11 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	}
 }
 
-func frozenWaitTrigger(r *Replica, br roachpb.BatchResponse, waitForIndex uint64) error {
-	// The current command froze this Replica. We must make sure that *all*
-	// Replicas have applied this (not only a majority).
-	// TODO(tschottdorf): the below is interim code which does not guarantee
-	// that all Replicas have applied it, only that they have acknowledged it.
-	// Replace with a mechanism which is actually precise (but in the meantime,
-	// this should allow working out some of the bugs).
-	if err := util.RetryForDuration(3*time.Second, func() error {
-		r.mu.Lock()
-		stillFrozen := r.mu.frozen
-		r.mu.Unlock()
-		if !stillFrozen {
-			return nil
-		}
-
-		_, oldestAcknowledged, err := getTruncatableIndexes(r)
-		if err != nil {
-			return err
-		}
-		if waitForIndex > oldestAcknowledged {
-			return util.Errorf("waiting for index %d to be unused "+
-				"(still using %d)", waitForIndex, oldestAcknowledged)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("timed out waiting for Range %s to freeze: %s",
-			r.Desc(), err)
-	}
-	return nil
-}
-
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
 func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) (rErr *roachpb.Error) {
 	r.mu.Lock()
-	if r.mu.frozen && pErr == nil {
-		// Deferred to run outside of the lock and after leaving the command
-		// queue.
-		//
-		// Note that r.mu.appliedIndex is not necessarily the index of the
-		// freeze itself (another command could have applied in parallel),
-		// but all we need is that it's greater or equal.
-		//
-		// TODO(tschottdorf): unintuitively buried here since this is where
-		// we get the "convenient" lock to avoid overhead. Consider finding
-		// better place during future refactors.
-		defer func(waitFor uint64) {
-			arg, ok := br.Responses[0].GetInner().(*roachpb.ChangeFrozenResponse)
-			if !ok || arg.RangesAffected == 0 {
-				return
-			}
-
-			if err := frozenWaitTrigger(r, *br, waitFor); err != nil {
-				rErr = roachpb.NewError(err)
-			}
-		}(r.mu.appliedIndex)
-	}
 	defer r.mu.Unlock()
 
 	// Only update the timestamp cache if the command succeeded and is
