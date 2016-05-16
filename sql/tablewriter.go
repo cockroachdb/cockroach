@@ -412,7 +412,11 @@ func (tu *tableUpserter) fetchExisting() ([]parser.DTuple, error) {
 			return nil, err
 		}
 
-		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = row
+		// The rows returned by rowFetcher are invalidated after the call to
+		// NextRow, so we have to copy them to save them.
+		rowCopy := make(parser.DTuple, len(row))
+		copy(rowCopy, row)
+		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = rowCopy
 	}
 	return rows, nil
 }

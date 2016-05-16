@@ -123,3 +123,19 @@ INSERT INTO excluded VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 
 statement error column reference "excluded.b" is ambiguous
 UPSERT INTO excluded VALUES (1, 1)
+
+# For #6710. Add an unused column to disable the fast path which doesn't have this bug.
+statement ok
+CREATE TABLE issue_6710 (a INT PRIMARY KEY, b STRING, c INT)
+
+statement ok
+INSERT INTO issue_6710 (a, b) VALUES (1, 'foo'), (2, 'bar')
+
+statement ok
+UPSERT INTO issue_6710 (a, b) VALUES (1, 'test1'), (2, 'test2')
+
+query IT
+SELECT a, b from issue_6710;
+----
+1 test1
+2 test2
