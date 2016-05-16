@@ -1686,3 +1686,69 @@ func TestCountRanges(t *testing.T) {
 		}
 	}
 }
+
+type slowLeaderTransport struct {
+	created     bool
+	count       int
+	slowReqChan chan BatchCall
+}
+
+func (t *slowLeaderTransport) factory(
+	_ SendOptions,
+	_ *rpc.Context,
+	_ ReplicaSlice,
+	_ roachpb.BatchRequest,
+) (Transport, error) {
+	if t.created {
+		return nil, util.Errorf("should not create multiple transports")
+	}
+	t.created = true
+	return t, nil
+}
+
+func (t *slowLeaderTransport) IsExhausted() bool {
+	if t.count >= 3 {
+		// When we've tried all replicas, let the slow request finish.
+		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
+		return true
+	}
+	return false
+}
+
+func (t *slowLeaderTransport) SendNext(done chan BatchCall) {
+	if t.count == 0 {
+		// Save the first request to finish later.
+		t.slowReqChan = done
+	} else {
+		// Other requests fail immediately with NotLeaderError.
+		var br roachpb.BatchResponse
+		br.Error = roachpb.NewError(&roachpb.NotLeaderError{})
+		done <- BatchCall{Reply: &br}
+	}
+	t.count++
+}
+
+func (t *slowLeaderTransport) Close() {
+}
+
+// TestSlowLeaderRetry verifies that when the leader is slow, we wait
+// for it to finish, instead of restarting the process because of
+// NotLeaderErrors returned by faster followers.
+func TestSlowLeaderRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	transport := slowLeaderTransport{}
+	ds := NewDistSender(&DistSenderContext{
+		TransportFactory:  transport.factory,
+		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		SendNextTimeout:   time.Millisecond,
+	}, g)
+
+	var ba roachpb.BatchRequest
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")))
+	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+}
