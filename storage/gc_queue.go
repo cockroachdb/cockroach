@@ -315,7 +315,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		return err
 	}
 
-	gcq.eventLog.Infof(true, "completed with stats %+v", info)
+	gcq.eventLog.VInfof(true, "completed with stats %+v", info)
 
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest

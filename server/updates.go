@@ -147,7 +147,7 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 		nextRetry := whenToCheck.Add(updateCheckRetryFrequency)
 		if err := s.db.CPut(key, nextRetry, whenToCheck); err != nil {
 			if log.V(2) {
-				log.Infof("Could not set next version check time (maybe another node checked?)", err)
+				log.Infof("Could not set next version check time (maybe another node checked?): %v", err)
 			}
 			return updateCheckRetryFrequency
 		}
@@ -205,7 +205,7 @@ func (s *Server) checkForUpdates() {
 	}
 
 	for _, v := range r.Details {
-		log.Info("A new version is available: %s\n\t%s", v.Version, v.Details)
+		log.Infof("A new version is available: %s, details: %s", v.Version, v.Details)
 	}
 }
 

@@ -245,7 +245,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
 	// an integrity constraint violation. All other errors are transient
 	// errors that are resolved by retrying the backfill.
 	if isIntegrityConstraintError(err) {
-		log.Warning("reversing schema change due to irrecoverable error: %s", err)
+		log.Warningf("reversing schema change due to irrecoverable error: %s", err)
 		if errReverse := sc.reverseMutations(); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation
 			// and made a decision to reverse the mutations,
@@ -540,7 +540,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				cfg, _ := s.gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info("received a new config %v", cfg)
+					log.Infof("received a new config %v", cfg)
 				}
 				schemaChanger := SchemaChanger{
 					nodeID:   roachpb.NodeID(s.leaseMgr.nodeID),
