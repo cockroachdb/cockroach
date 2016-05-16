@@ -37,7 +37,7 @@ func TestRaftUpdate(t *testing.T) {
 
 func postFreeze(c cluster.Cluster, freeze bool) (server.ClusterFreezeResponse, error) {
 	httpClient := cluster.HTTPClient()
-	httpClient.Timeout = 10 * time.Second
+	httpClient.Timeout = time.Minute
 
 	var resp server.ClusterFreezeResponse
 	err := postJSON(httpClient, c.URL(0), "/_admin/v1/cluster/freeze",
