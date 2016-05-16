@@ -32,7 +32,7 @@ REMOTE_DEPS   := npm.installed jspm.installed typings.installed
 all: lint $(REMOTE_DEPS) app/js/protos.js generated/protos.d.ts
 
 .PHONY: lint
-lint: npm.installed
+lint: npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 npm.installed: package.json npm-shrinkwrap.json
