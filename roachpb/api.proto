@@ -792,7 +792,6 @@ message RaftCommand {
   optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
   // When the command is applied, its result is an error unless the log position
   // at which it applies is equal to must_index.
-  // TODO(tschottdorf): actually enforce this.
   optional uint64 must_index = 4 [(gogoproto.nullable) = false];
 }
 

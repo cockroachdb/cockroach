@@ -1272,7 +1272,6 @@ type RaftCommand struct {
 	Cmd           BatchRequest      `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 	// When the command is applied, its result is an error unless the log position
 	// at which it applies is equal to must_index.
-	// TODO(tschottdorf): actually enforce this.
 	MustIndex uint64 `protobuf:"varint,4,opt,name=must_index,json=mustIndex" json:"must_index"`
 }
 
