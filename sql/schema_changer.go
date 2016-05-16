@@ -540,7 +540,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				cfg, _ := s.gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info("received a new config %v", cfg)
+					log.Infof("received a new config %v", cfg)
 				}
 				schemaChanger := SchemaChanger{
 					nodeID:   roachpb.NodeID(s.leaseMgr.nodeID),
