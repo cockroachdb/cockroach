@@ -269,7 +269,7 @@ func (n *sortNode) wrap(plan planNode) planNode {
 		// ordering.
 		existingOrdering := plan.Ordering()
 		if log.V(2) {
-			log.Infof("Sort: existing=%d desired=%d", existingOrdering, n.ordering)
+			log.Infof("Sort: existing=%+v desired=%+v", existingOrdering, n.ordering)
 		}
 		match := computeOrderingMatch(n.ordering, existingOrdering, false)
 		if match < len(n.ordering) {
