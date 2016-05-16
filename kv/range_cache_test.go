@@ -547,12 +547,9 @@ func testRangeCacheHandleDoubleSplit(t *testing.T, useReverseScan bool) {
 				// Each request goes to a different key.
 				var pErr *roachpb.Error
 				if desc, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(key, reqEvictToken, false /* considerIntents */, useReverseScan, waitJoinCopied); pErr != nil {
-					if pErr.CanRetry() {
-						waitJoinCopied = nil
-						atomic.AddInt64(&numRetries, 1)
-						continue
-					}
-					panic(fmt.Sprintf("Unexpected error from LookupRangeDescriptor: %s", pErr))
+					waitJoinCopied = nil
+					atomic.AddInt64(&numRetries, 1)
+					continue
 				}
 				break
 			}

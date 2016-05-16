@@ -25,7 +25,6 @@ type testError struct{}
 
 func (t *testError) Error() string              { return "test" }
 func (t *testError) message(pErr *Error) string { return "test" }
-func (t *testError) CanRetry() bool             { return true }
 
 // TestNewError verifies that a test error that
 // implements retryable or indexed is converted properly into a generic error.
@@ -33,9 +32,6 @@ func TestNewError(t *testing.T) {
 	pErr := NewError(&testError{})
 	if pErr.GoError().Error() != "test" {
 		t.Errorf("unexpected error: %s", pErr)
-	}
-	if !pErr.Retryable {
-		t.Error("expected generic error to be retryable")
 	}
 }
 

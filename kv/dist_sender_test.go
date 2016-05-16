@@ -626,7 +626,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 			first = false
 			if tc.rpcError {
-				return nil, roachpb.NewSendError(errString, tc.retryable)
+				return nil, roachpb.NewSendError(errString)
 			}
 			var err error
 			if tc.retryable {
