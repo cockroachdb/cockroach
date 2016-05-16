@@ -148,7 +148,6 @@ func (tr *tableReader) run() {
 		return
 	}
 	tr.row = make(row, len(tr.desc.Columns))
-	outRow := make(row, len(tr.outputCols))
 	var err error
 loop:
 	for {
@@ -173,6 +172,11 @@ loop:
 		if !passesFilter {
 			continue
 		}
+		// TODO(radu): investigate removing this allocation. We can't reuse the
+		// same slice because it is being read asynchronously on the other side
+		// of the channel. Perhaps streamMsg can store a few preallocated
+		// elements to avoid allocation in most cases.
+		outRow := make(row, len(tr.outputCols))
 		for i, col := range tr.outputCols {
 			outRow[i] = tr.row[col]
 		}
