@@ -68,9 +68,6 @@ const (
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
 
-	// statusGossipPattern exposes a view of the gossip network.
-	statusGossipPattern = statusPrefix + "gossip/:node_id"
-
 	// statusLogFilesListPattern exposes a list of log files.
 	statusLogFilesListPattern = statusPrefix + "logfiles/:node_id"
 	// statusLogFilePattern exposes a specific file on a node.
@@ -154,7 +151,6 @@ func newStatusServer(
 		stores:       stores,
 	}
 
-	server.router.GET(statusGossipPattern, server.handleGossip)
 	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
 	server.router.GET(statusLogFilePattern, server.handleLogFile)
 	server.router.GET(statusLogsPattern, server.handleLogs)
@@ -270,32 +266,22 @@ func (s *statusServer) proxyRequest(nodeID roachpb.NodeID, w http.ResponseWriter
 	}
 }
 
-// handleGossipLocal handles local requests for gossip network status.
-func (s *statusServer) handleGossipLocal(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	b, err := s.gossip.GetInfosAsJSON()
+// Gossip returns gossip network status.
+func (s *statusServer) Gossip(ctx context.Context, req *GossipRequest) (*gossip.InfoStatus, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// handleGossip handles GET requests for gossip network status.
-func (s *statusServer) handleGossip(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if local {
-		s.handleGossipLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
+		infoStatus := s.gossip.GetInfoStatus()
+		return &infoStatus, nil
 	}
+	status, err := s.dialNode(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return status.Gossip(ctx, req)
 }
 
 // Details returns node details.
