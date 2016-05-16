@@ -136,6 +136,33 @@ func request_Status_Ranges_0(ctx context.Context, client StatusClient, req *http
 
 }
 
+func request_Status_Gossip_0(ctx context.Context, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GossipRequest
+	var metadata runtime.ServerMetadata
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["node_id"]
+	if !ok {
+		return nil, metadata, grpc.Errorf(codes.InvalidArgument, "missing parameter %s", "node_id")
+	}
+
+	protoReq.NodeId, err = runtime.String(val)
+
+	if err != nil {
+		return nil, metadata, err
+	}
+
+	msg, err := client.Gossip(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
 // RegisterStatusHandlerFromEndpoint is same as RegisterStatusHandler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
 func RegisterStatusHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
@@ -281,6 +308,29 @@ func RegisterStatusHandler(ctx context.Context, mux *runtime.ServeMux, conn *grp
 
 	})
 
+	mux.Handle("GET", pattern_Status_Gossip_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		if cn, ok := w.(http.CloseNotifier); ok {
+			go func(done <-chan struct{}, closed <-chan bool) {
+				select {
+				case <-done:
+				case <-closed:
+					cancel()
+				}
+			}(ctx.Done(), cn.CloseNotify())
+		}
+		resp, md, err := request_Status_Gossip_0(runtime.AnnotateContext(ctx, req), client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, w, req, err)
+			return
+		}
+
+		forward_Status_Gossip_0(ctx, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -294,6 +344,8 @@ var (
 	pattern_Status_Node_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"_status", "nodes", "node_id"}, ""))
 
 	pattern_Status_Ranges_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"_status", "ranges", "node_id"}, ""))
+
+	pattern_Status_Gossip_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"_status", "gossip", "node_id"}, ""))
 )
 
 var (
@@ -306,4 +358,6 @@ var (
 	forward_Status_Node_0 = runtime.ForwardResponseMessage
 
 	forward_Status_Ranges_0 = runtime.ForwardResponseMessage
+
+	forward_Status_Gossip_0 = runtime.ForwardResponseMessage
 )
