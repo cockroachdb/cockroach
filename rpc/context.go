@@ -188,6 +188,14 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
 	for {
+		// If we should stop, return immediately. Note that we check this
+		// at the beginning and end of the loop because we may 'continue'
+		// before reaching the end.
+		select {
+		case <-ctx.Stopper.ShouldStop():
+			return nil
+		default:
+		}
 		sendTime := ctx.localClock.PhysicalTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
 		if err != nil {
