@@ -553,7 +553,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 }
 
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
-// lookup on retryable errors.
+// lookup on any error.
 func TestRetryOnDescriptorLookupError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
@@ -565,8 +565,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	pErrs := []*roachpb.Error{
-		roachpb.NewError(errors.New("fatal boom")),
-		roachpb.NewError(&roachpb.RangeKeyMismatchError{}), // retryable
+		roachpb.NewError(errors.New("boom")),
 		nil,
 		nil,
 	}
@@ -588,11 +587,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	// Fatal error on descriptor lookup, propagated to reply.
-	if _, pErr := client.SendWrapped(ds, nil, put); pErr.String() != "fatal boom" {
-		t.Errorf("unexpected error: %s", pErr)
-	}
-	// Retryable error on descriptor lookup, second attempt successful.
+	// Error on descriptor lookup, second attempt successful.
 	if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil {
 		t.Errorf("unexpected error: %s", pErr)
 	}
