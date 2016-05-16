@@ -57,7 +57,7 @@ func TestParseTs(t *testing.T) {
 
 func TestTimestampRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("UTC", 0))
+	ts := time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("UTC", 0))
 
 	parse := func(encoded []byte) time.Time {
 		decoded, err := parseTs(string(encoded))

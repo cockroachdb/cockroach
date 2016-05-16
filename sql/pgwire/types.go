@@ -307,8 +307,8 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 	}
 }
 
-const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
-const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999999"
+const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999"
+const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 
 // formatTs formats t into a format cockroachdb/pq understands.
 // Mostly cribbed from github.com/cockroachdb/pq.
@@ -606,7 +606,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err != nil {
 				return d, util.Errorf("could not parse string %q as timestamp", b)
 			}
-			d = &parser.DTimestamp{Time: ts}
+			d = parser.MakeDTimestamp(ts, time.Microsecond)
 		default:
 			return d, util.Errorf("unsupported timestamp format code: %s", code)
 		}
