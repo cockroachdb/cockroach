@@ -62,7 +62,10 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after := b.NewIterator(false)
+	// We use a prefix iterator for after in order to workaround the restriction
+	// on concurrent use of more than 1 prefix or normal (non-prefix) iterator on
+	// a batch.
+	after := b.NewIterator(true /* prefix */)
 	defer after.Close()
 
 	if after.Seek(k); !after.Valid() {
