@@ -323,7 +323,7 @@ func runStatements(conn *sqlConn, stmts []string) error {
 					break
 				}
 				fmt.Fprintln(osStderr, err)
-				os.Exit(1)
+				return err
 			}
 
 			if len(cols) == 0 {
