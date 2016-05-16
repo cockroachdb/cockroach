@@ -37,8 +37,8 @@ var (
 	decimalCbrtC1    = new(inf.Dec)
 	decimalCbrtC2    = new(inf.Dec)
 	decimalCbrtC3    = new(inf.Dec)
+	decimalE         = new(inf.Dec)
 	// Unused constants for now.
-	// decimalE          = new(inf.Dec)
 	// decimalPi         = new(inf.Dec)
 )
 
@@ -58,9 +58,9 @@ func init() {
 	if _, ok := decimalCbrtC3.SetString(strCbrtC3); !ok {
 		panic("error setting decimalCbrtC3")
 	}
-	// if _, ok := decimalE.SetString(strE); !ok {
-	// 	panic("error setting e")
-	// }
+	if _, ok := decimalE.SetString(strE); !ok {
+		panic("error setting e")
+	}
 	// if _, ok := decimalPi.SetString(strPi); !ok {
 	// 	panic("error setting pi")
 	// }
