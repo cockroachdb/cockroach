@@ -71,11 +71,11 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
-	  sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $$dir/*.pb.go; \
-	  sed -i~ -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $$dir/*.pb.go; \
-	  sed -i~ -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $$dir/*.pb.go; \
-	  gofmt -s -w $$dir/*.pb.go; \
 	done
+	sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
+	sed -i~ -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
+	sed -i~ -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	gofmt -s -w $(GO_SOURCES)
 
 $(ADMIN_GW_GO) : $(ADMIN_PROTO) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
