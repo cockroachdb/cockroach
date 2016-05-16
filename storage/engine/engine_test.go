@@ -19,7 +19,6 @@ package engine
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
@@ -673,19 +671,6 @@ func TestSnapshotMethods(t *testing.T) {
 				capacity.Capacity, capacitySnapshot.Capacity)
 		}
 
-		// Verify ApproximateSize.
-		approx, err := engine.ApproximateSize(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax))
-		if err != nil {
-			t.Fatal(err)
-		}
-		approxSnapshot, err := snap.ApproximateSize(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if approx != approxSnapshot {
-			t.Errorf("expected approx sizes to be equal: %d != %d", approx, approxSnapshot)
-		}
-
 		// Write a new key to engine.
 		newKey := mvccKey("c")
 		newVal := []byte("3")
@@ -738,34 +723,6 @@ func TestSnapshotNewBatch(t *testing.T) {
 	}, t)
 }
 
-func TestApproximateSize(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		var (
-			count    = 10000
-			keys     = make([]MVCCKey, count)
-			values   = make([][]byte, count) // Random values to prevent compression
-			rand, _  = randutil.NewPseudoRand()
-			valueLen = 10
-		)
-		for i := 0; i < count; i++ {
-			keys[i] = mvccKey(fmt.Sprintf("key%8d", i))
-			values[i] = randutil.RandBytes(rand, valueLen)
-		}
-
-		insertKeysAndValues(keys, values, engine, t)
-
-		if err := engine.Flush(); err != nil {
-			t.Fatalf("Error flushing InMem: %s", err)
-		}
-
-		sizePerRecord := len(keys[0].Key) + valueLen
-		verifyApproximateSize(keys, engine, sizePerRecord, 0.15, t)
-		verifyApproximateSize(keys[:count/2], engine, sizePerRecord, 0.15, t)
-		verifyApproximateSize(keys[:count/4], engine, sizePerRecord, 0.15, t)
-	}, t)
-}
-
 func insertKeys(keys []MVCCKey, engine Engine, t *testing.T) {
 	insertKeysAndValues(keys, nil, engine, t)
 }
@@ -783,23 +740,5 @@ func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *test
 		if err := engine.Put(keys[idx], val); err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
-	}
-}
-
-func verifyApproximateSize(keys []MVCCKey, engine Engine, sizePerRecord int, ratio float64, t *testing.T) {
-	sz, err := engine.ApproximateSize(keys[0], keys[len(keys)-1])
-	if err != nil {
-		t.Errorf("Error from ApproximateSize(): %s", err)
-	}
-
-	uncompressedTotalSize := uint64(sizePerRecord * len(keys))
-	// On-disk size may be lower than expected total size due to compression.
-	// If compression is disabled (e.g. snappy auto-detects uncompressable
-	// input and disables compression), the total size will be higher due to
-	// storage overhead.
-	minSize := uint64(float64(uncompressedTotalSize) * (float64(1) - ratio))
-	maxSize := uint64(float64(uncompressedTotalSize) * (float64(1) + ratio))
-	if sz < minSize || sz > maxSize {
-		t.Errorf("ApproximateSize %d outside of acceptable bounds %d - %d", sz, minSize, maxSize)
 	}
 }

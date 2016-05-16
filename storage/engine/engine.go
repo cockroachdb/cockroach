@@ -131,9 +131,6 @@ type Engine interface {
 	Merge(key MVCCKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
-	// ApproximateSize returns the approximate number of bytes the engine is
-	// using to store data for the given range of keys.
-	ApproximateSize(start, end MVCCKey) (uint64, error)
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error

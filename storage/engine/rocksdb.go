@@ -324,12 +324,6 @@ func (r *RocksDB) Destroy() error {
 	return statusToError(C.DBDestroy(goToCSlice([]byte(r.dir))))
 }
 
-// ApproximateSize returns the approximate number of bytes on disk that RocksDB
-// is using to store data for the given range of keys.
-func (r *RocksDB) ApproximateSize(start, end MVCCKey) (uint64, error) {
-	return uint64(C.DBApproximateSize(r.rdb, goToCKey(start), goToCKey(end))), nil
-}
-
 // Flush causes RocksDB to write all in-memory data to disk immediately.
 func (r *RocksDB) Flush() error {
 	return statusToError(C.DBFlush(r.rdb))
@@ -464,12 +458,6 @@ func (r *rocksDBSnapshot) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
-// ApproximateSize returns the approximate number of bytes the engine is
-// using to store data for the given range of keys.
-func (r *rocksDBSnapshot) ApproximateSize(start, end MVCCKey) (uint64, error) {
-	return r.parent.ApproximateSize(start, end)
-}
-
 // Flush is a no-op for snapshots.
 func (r *rocksDBSnapshot) Flush() error {
 	return nil
@@ -600,10 +588,6 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 
 func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
-}
-
-func (r *rocksDBBatch) ApproximateSize(start, end MVCCKey) (uint64, error) {
-	return r.parent.ApproximateSize(start, end)
 }
 
 func (r *rocksDBBatch) Flush() error {
