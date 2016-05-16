@@ -38,6 +38,7 @@
 		RangeInfo
 		RangesRequest
 		RangesResponse
+		GossipRequest
 */
 package server
 
