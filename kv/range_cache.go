@@ -157,9 +157,16 @@ type lookupRequestKey struct {
 //           requests to it will evict the descriptor. We set the key to hash to
 //           the start of the stale descriptor for lookup requests to the rebalanced
 //           descriptor so that all requests will be coalesced to the same lookupRequest.
+//
+// Note that the above description assumes that useReverseScan is false for simplicity.
+// If useReverseScan is true, we need to use the end key of the stale descriptor instead.
 func makeLookupRequestKey(key roachpb.RKey, evictToken *evictionToken, considerIntents, useReverseScan bool) lookupRequestKey {
 	if evictToken != nil {
-		key = evictToken.prevDesc.StartKey
+		if useReverseScan {
+			key = evictToken.prevDesc.EndKey
+		} else {
+			key = evictToken.prevDesc.StartKey
+		}
 	}
 	return lookupRequestKey{
 		key:             string(key),
