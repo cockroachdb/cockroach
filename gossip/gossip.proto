@@ -67,6 +67,11 @@ message Response {
   map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
 }
 
+// InfoStatus contains information about the current status of the infoStore.
+message InfoStatus {
+  map<string, Info> infos = 1;
+}
+
 // Info is the basic unit of information traded over the
 // gossip network.
 message Info {

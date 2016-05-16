@@ -19,9 +19,11 @@ package cockroach.server;
 option go_package = "server";
 
 import "cockroach/build/info.proto";
-import "cockroach/util/unresolved_addr.proto";
+import "cockroach/gossip/gossip.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/server/status/status.proto";
+import "cockroach/util/unresolved_addr.proto";
+
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
 
@@ -61,6 +63,10 @@ message RangesResponse {
   repeated RangeInfo ranges = 1;
 }
 
+message GossipRequest {
+  string node_id = 1;
+}
+
 service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
@@ -83,6 +89,11 @@ service Status {
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
       get: "/_status/ranges/{node_id}"
+    };
+  }
+  rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
+    option (google.api.http) = {
+      get: "/_status/gossip/{node_id}"
     };
   }
 }
