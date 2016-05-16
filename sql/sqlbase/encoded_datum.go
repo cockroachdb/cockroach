@@ -40,7 +40,7 @@ const (
 // reencoding. TODO(radu): It will also allow comparing encoded datums directly
 // (for certain encodings).
 type EncDatum struct {
-	typ ColumnType_Kind
+	Type ColumnType_Kind
 
 	// Encoding type. NoEncoding iff encoded is nil.
 	encoding DatumEncoding
@@ -59,7 +59,7 @@ func (ed *EncDatum) SetEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byt
 	if val == nil {
 		panic("nil encoded value given")
 	}
-	ed.typ = typ
+	ed.Type = typ
 	ed.encoding = enc
 	ed.encoded = val
 	ed.Datum = nil
@@ -74,7 +74,7 @@ func (ed *EncDatum) SetDatum(typ ColumnType_Kind, d parser.Datum) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
 			d.Type(), typ.ToDatumType().Type()))
 	}
-	ed.typ = typ
+	ed.Type = typ
 	ed.encoding = NoEncoding
 	ed.encoded = nil
 	ed.Datum = d
@@ -90,14 +90,14 @@ func (ed *EncDatum) Decode(a *DatumAlloc) error {
 	if ed.Datum != nil {
 		return nil
 	}
-	datTyp := ed.typ.ToDatumType()
+	datType := ed.Type.ToDatumType()
 	var err error
 	var rem []byte
 	switch ed.encoding {
 	case AscendingKeyEncoding:
-		ed.Datum, rem, err = DecodeTableKey(a, datTyp, ed.encoded, encoding.Ascending)
+		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
 	case DescendingKeyEncoding:
-		ed.Datum, rem, err = DecodeTableKey(a, datTyp, ed.encoded, encoding.Descending)
+		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
 	case NoEncoding:
 		panic("EncDatum without datum or encoding")
 	default:

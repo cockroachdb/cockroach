@@ -17,8 +17,6 @@
 package distsql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -35,6 +33,8 @@ type tableReader struct {
 	spans      sqlbase.Spans
 	outputCols []int
 
+	output rowReceiver
+
 	filter parser.TypedExpr
 	// filterVars is used to generate IndexedVars that are "backed" by the
 	// values in the row tuple.
@@ -44,7 +44,8 @@ type tableReader struct {
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
-	row parser.DTuple
+	row   row
+	alloc sqlbase.DatumAlloc
 }
 
 // tableReader implements parser.IndexedVarContainer.
@@ -57,7 +58,11 @@ func (tr *tableReader) IndexedVarReturnType(idx int) parser.Datum {
 
 // IndexedVarEval is part of the parser.IndexedVarContaine interface.
 func (tr *tableReader) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
-	return tr.row[idx].Eval(ctx)
+	err := tr.row[idx].Decode(&tr.alloc)
+	if err != nil {
+		return nil, err
+	}
+	return tr.row[idx].Datum.Eval(ctx)
 }
 
 // IndexedVarString is part of the parser.IndexedVarContaine interface.
@@ -66,12 +71,13 @@ func (tr *tableReader) IndexedVarString(idx int) string {
 }
 
 // newTableReader creates a tableReader. Exported for testing purposes.
-func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalContext) (
-	*tableReader, error,
-) {
+func newTableReader(
+	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx parser.EvalContext,
+) (*tableReader, error) {
 	tr := &tableReader{
 		desc:    spec.Table,
 		txn:     txn,
+		output:  output,
 		evalCtx: evalCtx,
 	}
 
@@ -111,7 +117,7 @@ func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 		index = &tr.desc.Indexes[spec.IndexIdx-1]
 		isSecondaryIndex = true
 	default:
-		return nil, fmt.Errorf("Invalid indexIdx %d", spec.IndexIdx)
+		return nil, util.Errorf("Invalid indexIdx %d", spec.IndexIdx)
 	}
 
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(tr.desc.Columns))
@@ -133,41 +139,44 @@ func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 }
 
 // run is the "main loop".
-func (tr *tableReader) run() error {
+func (tr *tableReader) run() {
 	if log.V(1) {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}
-	err := tr.fetcher.StartScan(tr.txn, tr.spans, 0)
-	if err != nil {
-		return err
+	if err := tr.fetcher.StartScan(tr.txn, tr.spans, 0); err != nil {
+		tr.output.close(err)
+		return
 	}
+	tr.row = make(row, len(tr.desc.Columns))
+	outRow := make(row, len(tr.outputCols))
+	var err error
+loop:
 	for {
-		tr.row, err = tr.fetcher.NextRow()
-		if err != nil {
-			return err
+		fetcherRow, err := tr.fetcher.NextRow()
+		if err != nil || fetcherRow == nil {
+			break loop
 		}
-		if tr.row == nil {
-			// No more rows.
-			break
-		}
-		passesFilter, err := sqlbase.RunFilter(tr.filter, tr.evalCtx)
-		if err != nil {
-			return err
-		}
-		if passesFilter {
-			// TODO(radu): these Printfs are temporary and only serve as a way
-			// to manually verify this is working as intended. They will be
-			// removed once we actually output the data to a stream.
-			fmt.Printf("RESULT:")
-			for _, d := range tr.row {
-				if d != nil {
-					fmt.Printf(" %s", d)
-				} else {
-					fmt.Printf(" <skipped>")
-				}
+
+		// TODO(radu): we are defeating the purpose of EncDatum here - we
+		// should modify RowFetcher to return EncDatums directly and avoid
+		// the cost of decoding/reencoding.
+		for i := range fetcherRow {
+			if fetcherRow[i] != nil {
+				tr.row[i].SetDatum(tr.desc.Columns[i].Type.Kind, fetcherRow[i])
 			}
-			fmt.Printf("\n")
 		}
+		var passesFilter bool
+		passesFilter, err = sqlbase.RunFilter(tr.filter, tr.evalCtx)
+		if err != nil {
+			break loop
+		}
+		if !passesFilter {
+			continue
+		}
+		for i, col := range tr.outputCols {
+			outRow[i] = tr.row[col]
+		}
+		tr.output.pushRow(outRow)
 	}
-	return nil
+	tr.output.close(err)
 }
