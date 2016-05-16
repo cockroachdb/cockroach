@@ -1468,7 +1468,7 @@ func (r *Replica) LeaderLease(
 			// in on the Lease struct.
 			log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
 				r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.tsCache.SetLowWater(prevLease.Expiration)
+			r.mu.tsCache.setLowWater(prevLease.Expiration)
 		} else if r.mu.raftGroup.Status().RaftState == raft.StateLeader {
 			// If this replica is the raft leader but it is not the new lease
 			// holder, then try to transfer the raft leadership to match the
@@ -2153,7 +2153,7 @@ func (r *Replica) splitTrigger(
 	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
 	newRng.mu.Lock()
-	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
+	r.mu.tsCache.mergeInto(newRng.mu.tsCache, true /* clear */)
 	newRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Trace(ctx, "copied timestamp cache")
@@ -2395,7 +2395,7 @@ func (r *Replica) mergeTrigger(
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
 	r.mu.Lock()
-	r.mu.tsCache.Clear(r.store.Clock())
+	r.mu.tsCache.clear(r.store.Clock())
 	r.mu.Unlock()
 
 	batch.Defer(func() {

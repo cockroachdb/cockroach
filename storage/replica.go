@@ -221,7 +221,7 @@ type Replica struct {
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
 		// Most recent timestamps for keys / key ranges.
-		tsCache *TimestampCache
+		tsCache *timestampCache
 		// Slice of channels to send on after leader lease acquisition.
 		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -274,7 +274,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	defer r.mu.Unlock()
 
 	r.mu.cmdQ = NewCommandQueue()
-	r.mu.tsCache = NewTimestampCache(clock)
+	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	r.setDescWithoutProcessUpdateLocked(desc)
@@ -1041,7 +1041,7 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 			}
 		}
 
-		r.mu.tsCache.AddRequest(cr)
+		r.mu.tsCache.addRequest(cr)
 	}
 	r.mu.cmdQ.remove(cmd)
 	return pErr
@@ -1069,9 +1069,9 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 	defer r.mu.Unlock()
 
 	if ba.Txn != nil {
-		r.mu.tsCache.ExpandRequests(ba.Txn.Timestamp)
+		r.mu.tsCache.expandRequests(ba.Txn.Timestamp)
 	} else {
-		r.mu.tsCache.ExpandRequests(ba.Timestamp)
+		r.mu.tsCache.expandRequests(ba.Timestamp)
 	}
 
 	for _, union := range ba.Requests {
@@ -1083,7 +1083,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, ba.GetTxnID())
-				wTS, wOK := r.mu.tsCache.GetMaxWrite(key, nil, nil)
+				wTS, wOK := r.mu.tsCache.getMaxWrite(key, nil, nil)
 				if wOK {
 					return roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
@@ -1101,7 +1101,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			}
 
 			// Forward the timestamp if there's been a more recent read.
-			rTS, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey, ba.GetTxnID())
+			rTS, _ := r.mu.tsCache.getMaxRead(header.Key, header.EndKey, ba.GetTxnID())
 			if ba.Txn != nil {
 				ba.Txn.Timestamp.Forward(rTS.Next())
 			} else {
@@ -1112,7 +1112,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS, _ := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey, ba.GetTxnID())
+			wTS, _ := r.mu.tsCache.getMaxWrite(header.Key, header.EndKey, ba.GetTxnID())
 			if ba.Txn != nil {
 				if !wTS.Less(ba.Txn.Timestamp) {
 					ba.Txn.Timestamp.Forward(wTS.Next())
