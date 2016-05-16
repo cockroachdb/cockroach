@@ -53,7 +53,6 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -548,12 +547,17 @@ func (g *Gossip) GetInfoProto(key string, msg proto.Message) error {
 	return proto.Unmarshal(bytes, msg)
 }
 
-// GetInfosAsJSON returns the contents of the infostore, marshalled to
-// JSON.
-func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
+// GetInfoStatus returns the a copy of the contents of the infostore.
+func (g *Gossip) GetInfoStatus() InfoStatus {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return json.MarshalIndent(g.is, "", "  ")
+	is := InfoStatus{
+		Infos: make(map[string]Info),
+	}
+	for k, v := range g.is.Infos {
+		is.Infos[k] = *protoutil.Clone(v).(*Info)
+	}
+	return is
 }
 
 // Callback is a callback method to be invoked on gossip update

@@ -155,15 +155,6 @@ func TestStatusGossipJson(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	type infos struct {
-		Infos struct {
-			FirstRange   *gossip.Info `json:"first-range"`
-			ClusterID    *gossip.Info `json:"cluster-id"`
-			Node1        *gossip.Info `json:"node:1"`
-			SystemConfig *gossip.Info `json:"system-db"`
-		} `json:"infos"`
-	}
-
 	httpClient, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -188,25 +179,21 @@ func TestStatusGossipJson(t *testing.T) {
 		if returnedContentType != util.JSONContentType {
 			t.Errorf("unexpected content type: %v", returnedContentType)
 		}
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
+		data := gossip.InfoStatus{}
+		if err = jsonpb.Unmarshal(resp.Body, &data); err != nil {
 			t.Fatal(err)
 		}
-		data := infos{}
-		if err = json.Unmarshal(body, &data); err != nil {
-			t.Fatal(err)
+		if _, ok := data.Infos["first-range"]; !ok {
+			t.Errorf("no first-range info returned: %v", data)
 		}
-		if data.Infos.FirstRange == nil {
-			t.Errorf("no first-range info returned: %v", body)
+		if _, ok := data.Infos["cluster-id"]; !ok {
+			t.Errorf("no clusterID info returned: %v", data)
 		}
-		if data.Infos.ClusterID == nil {
-			t.Errorf("no clusterID info returned: %v", body)
+		if _, ok := data.Infos["node:1"]; !ok {
+			t.Errorf("no node 1 info returned: %v", data)
 		}
-		if data.Infos.Node1 == nil {
-			t.Errorf("no node 1 info returned: %v", body)
-		}
-		if data.Infos.SystemConfig == nil {
-			t.Errorf("no system config info returned: %v", body)
+		if _, ok := data.Infos["system-db"]; !ok {
+			t.Errorf("no system config info returned: %v", data)
 		}
 	}
 }
