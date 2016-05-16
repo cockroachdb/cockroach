@@ -17,6 +17,7 @@
 package acceptance
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -35,9 +36,9 @@ func TestRaftUpdate(t *testing.T) {
 	runTestOnConfigs(t, testRaftUpdateInner)
 }
 
-func postFreeze(c cluster.Cluster, freeze bool) (server.ClusterFreezeResponse, error) {
+func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (server.ClusterFreezeResponse, error) {
 	httpClient := cluster.HTTPClient()
-	httpClient.Timeout = time.Minute
+	httpClient.Timeout = timeout
 
 	var resp server.ClusterFreezeResponse
 	err := postJSON(httpClient, c.URL(0), "/_admin/v1/cluster/freeze",
@@ -48,8 +49,11 @@ func postFreeze(c cluster.Cluster, freeze bool) (server.ClusterFreezeResponse, e
 func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	minAffected := int64(server.ExpectedInitialRangeCount())
 
+	const long = time.Minute
+	const short = 10 * time.Second
+
 	mustPost := func(freeze bool) server.ClusterFreezeResponse {
-		reply, err := postFreeze(c, freeze)
+		reply, err := postFreeze(c, freeze, long)
 		if err != nil {
 			t.Fatal(util.ErrorfSkipFrames(1, "%v", err))
 		}
@@ -86,7 +90,13 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 	// of the last node receiving the freeze command).
 	// Note that this is the freeze trigger stalling on the Replica, not the
 	// Store-polling mechanism.
-	if reply, err := postFreeze(c, true); !testutils.IsError(err, "timed out waiting for Range|Timeout exceeded while") {
+	acceptErrs := strings.Join([]string{
+		"timed out waiting for Range",
+		"Timeout exceeded while",
+		"connection is closing",
+		"deadline",
+	}, "|")
+	if reply, err := postFreeze(c, true, short); !testutils.IsError(err, acceptErrs) {
 		t.Fatalf("expected timeout, got %v: %v", err, reply)
 	}
 
@@ -127,7 +137,7 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 	}
 
 	// Unfreezing again should be a no-op.
-	if reply, err := postFreeze(c, false); err != nil {
+	if reply, err := postFreeze(c, false, long); err != nil {
 		t.Fatal(err)
 	} else if reply.RangesAffected > 0 {
 		t.Fatalf("still %d frozen ranges", reply.RangesAffected)
