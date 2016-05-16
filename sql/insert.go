@@ -351,7 +351,7 @@ func (n *insertNode) Next() bool {
 		// Populate qvals.
 		for ref, qval := range n.qvals {
 			// The colIdx is 0-based, we need to change it to 1-based.
-			ri, has := n.insertColIDtoRowIndex[sqlbase.ColumnID(ref.colIdx+1)]
+			ri, has := n.insertColIDtoRowIndex[n.tableDesc.Columns[ref.colIdx].ID]
 			if has {
 				qval.datum = rowVals[ri]
 			} else {

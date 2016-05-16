@@ -1,10 +1,13 @@
 #### column CHECK constraints
 
 statement ok
-CREATE TABLE t1 (a INT CHECK (a > 0), b INT CHECK (b < 0))
+CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0))
 
 statement ok
-INSERT INTO t1 VALUES (3, -1)
+INSERT INTO t1 VALUES (3, 0, -1)
+
+statement ok
+ALTER TABLE t1 DROP COLUMN to_delete;
 
 statement ok
 INSERT INTO t1 (a, b) VALUES (4, -2)
