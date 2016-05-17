@@ -8,8 +8,6 @@
  * - Visualization Components
  *    - Graphs
  *      - Greyed-out display on error
- *      - Stacked Line Graph
- *      - Max/Min aggregators
  *    ! Events table
  *    ! Global Timespan Selector
  *      - UI Component
@@ -21,8 +19,6 @@
  *    - Cockroach out of date
  * - Cluster Page
  *    - Events page
- * - Nodes Page
- *    - Graphs tab, with all graphs from existing page
  * - Node Page
  *    - Overview page with table
  *    - Graphs page
@@ -43,6 +39,12 @@
  *
  *  - Create a "NodeStatusProvider" similar to "MetricsDataProvider", allowing
  *  different components to access nodes data.
+ *
+ *  - Commonize code between different graph types (LineGraph and
+ *  StackedAreaGraph). This can likely be done by converting them into stateless
+ *  functions, that return an underlying "Common" graph component. The props of
+ *  the Common graph component would include the part of `initGraph` and
+ *  `drawGraph` that are different for these two chart types.
  *
  */
 

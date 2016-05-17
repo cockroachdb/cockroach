@@ -1,4 +1,6 @@
 import * as React from "react";
+import * as d3 from "d3";
+import _ = require("lodash");
 
 type TSResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
 
@@ -14,6 +16,10 @@ export interface MetricProps {
   title?: string;
   rate?: boolean;
   nonNegativeRate?: boolean;
+  aggregateMax?: boolean;
+  aggregateMin?: boolean;
+  downsampleMax?: boolean;
+  downsampleMin?: boolean;
 }
 
 /**
@@ -54,6 +60,77 @@ export class Axis extends React.Component<AxisProps, {}> {
   render(): React.ReactElement<any> {
     throw new Error("Component <Axis /> should never render.");
   }
+}
+
+/**
+ * AxisDomain is a helper class used to compute the domain of a set of numbers.
+ * It can also be used to 
+ */
+class AxisDomain {
+  min: number;
+  max: number;
+  constructor() {
+    this.min = Infinity;
+    this.max = -Infinity;
+  }
+
+  domain(): [number, number] {
+    return [this.min, this.max];
+  }
+
+  addPoints(values: number[]) {
+    this.min = Math.min(this.min, ...values);
+    this.max = Math.max(this.max, ...values);
+  }
+
+  ticks(transform: (n: number) => any = _.identity): number[] {
+    return _.map(_.uniq([this.min, (this.min + this.max) / 2, this.max]), transform);
+  }
+}
+
+// Global set of d3 colors.
+let colors: d3.scale.Ordinal<string, string> = d3.scale.category10();
+
+/** 
+ * ProcessDataPoints is a helper function to process graph data from the server
+ * into a format appropriate for display on an NVD3 graph. This includes the
+ * computation of domains and ticks for all axes.
+ */
+export function ProcessDataPoints(metrics: React.ReactElement<MetricProps>[],
+                                  axis: React.ReactElement<AxisProps>,
+                                  data: TSResponseMessage) {
+  let yAxisDomain = new AxisDomain();
+  let xAxisDomain = new AxisDomain();
+
+  let formattedData: any[] = [];
+  _.each(metrics, (s, idx) => {
+    let result = data.results[idx];
+    if (result) {
+      yAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.value));
+      xAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.timestamp_nanos.toNumber()));
+
+      formattedData.push({
+        values: result.datapoints || [],
+        key: s.props.title || s.props.name,
+        color: colors(s.props.name),
+        area: true,
+        fillOpacity: .1,
+      });
+    }
+  });
+
+  if (_.isNumber(axis.props.yLow)) {
+    yAxisDomain.addPoints([axis.props.yLow]);
+  }
+  if (_.isNumber(axis.props.yHigh)) {
+    yAxisDomain.addPoints([axis.props.yHigh]);
+  }
+
+  return {
+    formattedData,
+    yAxisDomain,
+    xAxisDomain,
+  };
 }
 
 // MetricsDataComponentProps is an interface that should be implemented by any
