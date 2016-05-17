@@ -66,4 +66,27 @@ export namespace MetricConstants {
   export var rss: string = "sys.rss";
 }
 
+/**
+ * TotalCPU computes the total CPU usage accounted for in a NodeStatus.
+ */
+export function TotalCpu(status: NodeStatus): number {
+  let metrics = status.metrics;
+  return metrics.get(MetricConstants.sysCPUPercent) + metrics.get(MetricConstants.userCPUPercent);
+}
+
+/**
+ * BytesUsed computes the total byte usage accounted for in a NodeStatus.
+ */
+let aggregateByteKeys = [
+  MetricConstants.liveBytes,
+  MetricConstants.intentBytes,
+  MetricConstants.sysBytes,
+];
+
+export function BytesUsed(s: NodeStatus): number {
+  return _.sumBy(aggregateByteKeys, (key: string) => {
+    return s.metrics.get(key);
+  });
+};
+
 export { NodeStatus };
