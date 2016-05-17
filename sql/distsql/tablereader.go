@@ -17,8 +17,6 @@
 package distsql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -35,6 +33,8 @@ type tableReader struct {
 	spans      sqlbase.Spans
 	outputCols []int
 
+	output rowReceiver
+
 	filter parser.TypedExpr
 	// filterVars is used to generate IndexedVars that are "backed" by the
 	// values in the row tuple.
@@ -44,34 +44,40 @@ type tableReader struct {
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
-	row parser.DTuple
+	row   row
+	alloc sqlbase.DatumAlloc
 }
 
 // tableReader implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &tableReader{}
 
-// IndexedVarReturnType is part of the parser.IndexedVarContaine interface.
+// IndexedVarReturnType is part of the parser.IndexedVarContainer interface.
 func (tr *tableReader) IndexedVarReturnType(idx int) parser.Datum {
 	return tr.desc.Columns[idx].Type.ToDatumType()
 }
 
-// IndexedVarEval is part of the parser.IndexedVarContaine interface.
+// IndexedVarEval is part of the parser.IndexedVarContainer interface.
 func (tr *tableReader) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
-	return tr.row[idx].Eval(ctx)
+	err := tr.row[idx].Decode(&tr.alloc)
+	if err != nil {
+		return nil, err
+	}
+	return tr.row[idx].Datum.Eval(ctx)
 }
 
-// IndexedVarString is part of the parser.IndexedVarContaine interface.
+// IndexedVarString is part of the parser.IndexedVarContainer interface.
 func (tr *tableReader) IndexedVarString(idx int) string {
 	return string(tr.desc.Columns[idx].Name)
 }
 
 // newTableReader creates a tableReader. Exported for testing purposes.
-func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalContext) (
-	*tableReader, error,
-) {
+func newTableReader(
+	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx parser.EvalContext,
+) (*tableReader, error) {
 	tr := &tableReader{
 		desc:    spec.Table,
 		txn:     txn,
+		output:  output,
 		evalCtx: evalCtx,
 	}
 
@@ -111,7 +117,7 @@ func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 		index = &tr.desc.Indexes[spec.IndexIdx-1]
 		isSecondaryIndex = true
 	default:
-		return nil, fmt.Errorf("Invalid indexIdx %d", spec.IndexIdx)
+		return nil, util.Errorf("Invalid indexIdx %d", spec.IndexIdx)
 	}
 
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(tr.desc.Columns))
@@ -132,42 +138,58 @@ func newTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 	return tr, nil
 }
 
-// run is the "main loop".
-func (tr *tableReader) run() error {
-	if log.V(1) {
-		log.Infof("TableReader filter: %s\n", tr.filter)
-	}
-	err := tr.fetcher.StartScan(tr.txn, tr.spans, 0)
-	if err != nil {
-		return err
-	}
+// nextRow processes table rows until it finds a row that passes the filter.
+// Returns a nil row when there are no more rows.
+func (tr *tableReader) nextRow() (row, error) {
 	for {
-		tr.row, err = tr.fetcher.NextRow()
-		if err != nil {
-			return err
+		fetcherRow, err := tr.fetcher.NextRow()
+		if err != nil || fetcherRow == nil {
+			return nil, err
 		}
-		if tr.row == nil {
-			// No more rows.
-			break
+
+		// TODO(radu): we are defeating the purpose of EncDatum here - we
+		// should modify RowFetcher to return EncDatums directly and avoid
+		// the cost of decoding/reencoding.
+		for i := range fetcherRow {
+			if fetcherRow[i] != nil {
+				tr.row[i].SetDatum(tr.desc.Columns[i].Type.Kind, fetcherRow[i])
+			}
 		}
 		passesFilter, err := sqlbase.RunFilter(tr.filter, tr.evalCtx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if passesFilter {
-			// TODO(radu): these Printfs are temporary and only serve as a way
-			// to manually verify this is working as intended. They will be
-			// removed once we actually output the data to a stream.
-			fmt.Printf("RESULT:")
-			for _, d := range tr.row {
-				if d != nil {
-					fmt.Printf(" %s", d)
-				} else {
-					fmt.Printf(" <skipped>")
-				}
-			}
-			fmt.Printf("\n")
+			break
 		}
 	}
-	return nil
+	// TODO(radu): investigate removing this allocation. We can't reuse the
+	// same slice because it is being read asynchronously on the other side
+	// of the channel. Perhaps streamMsg can store a few preallocated
+	// elements to avoid allocation in most cases.
+	outRow := make(row, len(tr.outputCols))
+	for i, col := range tr.outputCols {
+		outRow[i] = tr.row[col]
+	}
+	return outRow, nil
+}
+
+// run is the "main loop".
+func (tr *tableReader) run() {
+	if log.V(1) {
+		log.Infof("TableReader filter: %s\n", tr.filter)
+	}
+	if err := tr.fetcher.StartScan(tr.txn, tr.spans, 0); err != nil {
+		tr.output.close(err)
+		return
+	}
+	tr.row = make(row, len(tr.desc.Columns))
+	for {
+		outRow, err := tr.nextRow()
+		if err != nil || outRow == nil {
+			tr.output.close(err)
+			return
+		}
+		tr.output.pushRow(outRow)
+	}
 }
