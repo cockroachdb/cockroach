@@ -19,7 +19,10 @@
 
 package testingshim
 
-import "github.com/cockroachdb/cockroach/base"
+import (
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/rpc"
+)
 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
@@ -36,6 +39,9 @@ type TestServerInterface interface {
 
 	// KVDB() returns the *kv.DB instance as an interface{}.
 	KVDB() interface{}
+
+	// RPCContext returns the rpc context used by the test server.
+	RPCContext() *rpc.Context
 }
 
 // TestServerParams contains the parameters we can set when creating a test

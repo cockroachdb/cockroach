@@ -17,10 +17,10 @@
 package distsql
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // valArgsConvert is a parser.Visitor that converts ValArgs ($0, $1, etc.) to
@@ -34,7 +34,7 @@ func (v *valArgsConvert) VisitPre(expr parser.Expr) (recurse bool, newExpr parse
 	if val, ok := expr.(parser.ValArg); ok {
 		idx, err := strconv.Atoi(val.Name)
 		if err != nil || idx < 0 || idx >= v.h.NumVars() {
-			v.err = fmt.Errorf("invalid variable index %s", val.Name)
+			v.err = util.Errorf("invalid variable index %s", val.Name)
 			return false, expr
 		}
 
