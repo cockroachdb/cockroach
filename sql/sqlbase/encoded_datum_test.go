@@ -29,8 +29,9 @@ func TestEncDatum(t *testing.T) {
 	if !x.IsUnset() {
 		t.Errorf("empty EncDatum should be unset")
 	}
-	if x.Encoding() != NoEncoding {
-		t.Errorf("invalid encoding %d", x.Encoding())
+
+	if _, ok := x.Encoding(); ok {
+		t.Errorf("empty EncDatum has an encoding")
 	}
 
 	x.SetDatum(ColumnType_INT, parser.NewDInt(5))
@@ -38,21 +39,22 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("unset after SetDatum()")
 	}
 
-	encoded, err := x.Encode(a, AscendingKeyEncoding, nil)
+	encoded, err := x.Encode(a, DatumEncoding_ASCENDING_KEY, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	y := &EncDatum{}
-	y.SetEncoded(ColumnType_INT, AscendingKeyEncoding, encoded)
+	y.SetEncoded(ColumnType_INT, DatumEncoding_ASCENDING_KEY, encoded)
 
 	if y.IsUnset() {
 		t.Errorf("unset after SetEncoded()")
 	}
-	if y.Encoding() != AscendingKeyEncoding {
-		t.Errorf("invalid encoding %d", x.Encoding())
+	if enc, ok := y.Encoding(); !ok {
+		t.Error("no encoding after SetEncoded")
+	} else if enc != DatumEncoding_ASCENDING_KEY {
+		t.Errorf("invalid encoding %d", enc)
 	}
-
 	err = y.Decode(a)
 	if err != nil {
 		t.Fatal(err)
@@ -61,17 +63,21 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
 	}
 
-	enc2, err := y.Encode(a, DescendingKeyEncoding, nil)
+	enc2, err := y.Encode(a, DatumEncoding_DESCENDING_KEY, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// y's encoding should not change.
-	if y.Encoding() != AscendingKeyEncoding {
-		t.Errorf("invalid encoding %d", x.Encoding())
+	if enc, ok := y.Encoding(); !ok {
+		t.Error("no encoding")
+	} else if enc != DatumEncoding_ASCENDING_KEY {
+		t.Errorf("invalid encoding %d", enc)
 	}
-	x.SetEncoded(ColumnType_INT, DescendingKeyEncoding, enc2)
-	if x.Encoding() != DescendingKeyEncoding {
-		t.Errorf("invalid encoding %d", x.Encoding())
+	x.SetEncoded(ColumnType_INT, DatumEncoding_DESCENDING_KEY, enc2)
+	if enc, ok := x.Encoding(); !ok {
+		t.Error("no encoding")
+	} else if enc != DatumEncoding_DESCENDING_KEY {
+		t.Errorf("invalid encoding %d", enc)
 	}
 	err = x.Decode(a)
 	if err != nil {

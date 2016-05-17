@@ -24,6 +24,7 @@ option go_package = "distsql";
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/sqlbase/structured.proto";
+import "cockroach/sql/sqlbase/encoded_datum.proto";
 import weak "gogoproto/gogo.proto";
 
 message Expression {
@@ -130,16 +131,7 @@ message FlowSpec {
 }
 
 message DatumInfo {
-  enum EncodingType {
-    // Indicates that the datum is encoded using the order-preserving encoding
-    // used for keys (ascending order).
-    ASCENDING_KEY_ENCODING = 0;
-    // Indicates that the datum is encoded using the order-preserving encoding
-    // used for keys (descending order).
-    DESCENDING_KEY_ENCODING = 1;
-    // TODO: value encoding
-  }
-  optional EncodingType encoding = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.DatumEncoding encoding = 1 [(gogoproto.nullable) = false];
 }
 
 // StreamHeader is a message that is sent once at the beginning of a stream.
