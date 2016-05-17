@@ -1,6 +1,6 @@
 {
   "ambientDependencies": {
-    "bytebuffer": "registry:dt/bytebuffer#5.0.0+20160318204452",
+    "bytebuffer": "file:local_typings/bytebuffer/bytebuffer.d.ts",
     "chai": "registry:dt/chai#3.4.0+20160317120654",
     "classnames": "registry:dt/classnames#0.0.0+20160316155526",
     "cockroach-protos": "file:generated/protos.d.ts",
