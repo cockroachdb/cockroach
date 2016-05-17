@@ -54,7 +54,7 @@ type outbox struct {
 	// from the producer.
 	dataChan chan streamMsg
 	// noMoreRows is an atomic that signals we no longer accept rows via
-	// pushRow.
+	// PushRow.
 	noMoreRows  uint32
 	flushTicker *time.Ticker
 
@@ -82,8 +82,8 @@ func newOutbox(stream outboxStream) *outbox {
 	return &outbox{outStream: stream}
 }
 
-// pushRow is part of the rowReceiver interface.
-func (m *outbox) pushRow(row row) bool {
+// PushRow is part of the rowReceiver interface.
+func (m *outbox) PushRow(row row) bool {
 	if atomic.LoadUint32(&m.noMoreRows) == 1 {
 		return false
 	}
@@ -93,7 +93,7 @@ func (m *outbox) pushRow(row row) bool {
 }
 
 // close is part of the rowReceiver interface.
-func (m *outbox) close(err error) {
+func (m *outbox) Close(err error) {
 	if err != nil {
 		m.dataChan <- streamMsg{row: nil, err: err}
 	}

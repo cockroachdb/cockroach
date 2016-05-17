@@ -42,7 +42,7 @@ type testingReceiver struct {
 
 var _ rowReceiver = &testingReceiver{}
 
-func (tr *testingReceiver) pushRow(row row) bool {
+func (tr *testingReceiver) PushRow(row row) bool {
 	if tr.err != nil {
 		return false
 	}
@@ -58,7 +58,7 @@ func (tr *testingReceiver) pushRow(row row) bool {
 	return true
 }
 
-func (tr *testingReceiver) close(err error) {
+func (tr *testingReceiver) Close(err error) {
 	if tr.err != nil {
 		tr.err = err
 	}

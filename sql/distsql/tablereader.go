@@ -180,20 +180,20 @@ func (tr *tableReader) run() {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}
 	if err := tr.fetcher.StartScan(tr.txn, tr.spans, 0); err != nil {
-		tr.output.close(err)
+		tr.output.Close(err)
 		return
 	}
 	tr.row = make(row, len(tr.desc.Columns))
 	for {
 		outRow, err := tr.nextRow()
 		if err != nil || outRow == nil {
-			tr.output.close(err)
+			tr.output.Close(err)
 			return
 		}
 		// Push the row to the output rowReceiver; stop if they don't need more
 		// rows.
-		if !tr.output.pushRow(outRow) {
-			tr.output.close(nil)
+		if !tr.output.PushRow(outRow) {
+			tr.output.Close(nil)
 			return
 		}
 	}
