@@ -213,7 +213,7 @@ export function fetchMetricsComplete(): Action {
   };
 }
 
-/** 
+/**
  * queuedRequests is a list of requests that should be asynchronously sent to
  * the server. As a purely asynchronous concept, this lives outside of the redux
  * store.
@@ -278,14 +278,13 @@ export function queryMetrics(id: string, query: TSRequestMessage) {
           return fetch("/ts/query", {
             method: "POST",
             headers: {
-              "Accept": "application/json",
-              "Content-Type": "application/json",
+              "Accept": "application/x-protobuf",
+              "Content-Type": "application/x-protobuf",
             },
-            body: unifiedRequest.encodeJSON(),
-          }).then((response) => {
-            return response.json() as TSResponse;
-          }).then((json) => {
-            let response = new protos.cockroach.ts.TimeSeriesQueryResponse(json);
+            // TODO(tamird): how to get rid of any here?
+            body: unifiedRequest.toArrayBuffer() as any,
+          }).then((response) => response.arrayBuffer()).then((ab) => {
+            let response = protos.cockroach.ts.TimeSeriesQueryResponse.decode(ab);
 
             // The number of results should match the queries exactly, and should
             // be in the exact order passed.
