@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -252,4 +253,32 @@ func BenchmarkMVCCDeleteRange1Version32Bytes_RocksDB(b *testing.B) {
 
 func BenchmarkMVCCDeleteRange1Version256Bytes_RocksDB(b *testing.B) {
 	runMVCCDeleteRange(setupMVCCRocksDB, 256, b)
+}
+
+func BenchmarkBatchBuilderPut(b *testing.B) {
+	value := make([]byte, 10)
+	for i := range value {
+		value[i] = byte(i)
+	}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	b.ResetTimer()
+
+	const batchSize = 1000
+	batch := &rocksDBBatchBuilder{}
+	for i := 0; i < b.N; i += batchSize {
+		end := i + batchSize
+		if end > b.N {
+			end = b.N
+		}
+
+		for j := i; j < end; j++ {
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
+			ts := roachpb.Timestamp{WallTime: int64(j)}
+			batch.Put(MVCCKey{key, ts}, value)
+		}
+		batch.Finish()
+	}
+
+	b.StopTimer()
 }

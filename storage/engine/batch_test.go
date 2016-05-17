@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -597,5 +598,172 @@ func TestBatchDefer(t *testing.T) {
 	// Order was reversed when the defers were run.
 	if !reflect.DeepEqual(list, []string{"two", "one"}) {
 		t.Errorf("expected [two, one]; got %v", list)
+	}
+}
+
+func TestBatchBuilder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+
+	batch := e.NewBatch().(*rocksDBBatch)
+	defer batch.Close()
+
+	builder := &rocksDBBatchBuilder{}
+
+	testData := []struct {
+		key string
+		ts  roachpb.Timestamp
+	}{
+		{"a", roachpb.Timestamp{}},
+		{"b", roachpb.Timestamp{WallTime: 1}},
+		{"c", roachpb.Timestamp{WallTime: 1, Logical: 1}},
+	}
+	for _, data := range testData {
+		key := MVCCKey{roachpb.Key(data.key), data.ts}
+		if err := dbPut(batch.batch, key, []byte("value")); err != nil {
+			t.Fatal(err)
+		}
+		if err := dbClear(batch.batch, key); err != nil {
+			t.Fatal(err)
+		}
+		if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
+			t.Fatal(err)
+		}
+
+		builder.Put(key, []byte("value"))
+		builder.Clear(key)
+		builder.Merge(key, appender("bar"))
+	}
+
+	batchRepr := batch.Repr()
+	builderRepr := builder.Finish()
+	if !bytes.Equal(batchRepr, builderRepr) {
+		t.Fatalf("expected [% x], but got [% x]", batchRepr, builderRepr)
+	}
+}
+
+func TestBatchBuilderStress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+
+	rng, _ := randutil.NewPseudoRand()
+
+	for i := 0; i < 1000; i++ {
+		count := 1 + rng.Intn(1000)
+
+		func() {
+			batch := e.NewBatch().(*rocksDBBatch)
+			defer batch.Close()
+
+			builder := &rocksDBBatchBuilder{}
+
+			for j := 0; j < count; j++ {
+				var ts roachpb.Timestamp
+				if rng.Float32() <= 0.9 {
+					// Give 90% of keys timestamps.
+					ts.WallTime = rng.Int63()
+					if rng.Float32() <= 0.1 {
+						// Give 10% of timestamps a non-zero logical component.
+						ts.Logical = rng.Int31()
+					}
+				}
+				key := MVCCKey{
+					Key:       []byte(fmt.Sprintf("%d", rng.Intn(10000))),
+					Timestamp: ts,
+				}
+				// Generate a random mixture of puts, deletes and merges.
+				switch rng.Intn(3) {
+				case 0:
+					if err := dbPut(batch.batch, key, []byte("value")); err != nil {
+						t.Fatal(err)
+					}
+					builder.Put(key, []byte("value"))
+				case 1:
+					if err := dbClear(batch.batch, key); err != nil {
+						t.Fatal(err)
+					}
+					builder.Clear(key)
+				case 2:
+					if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
+						t.Fatal(err)
+					}
+					builder.Merge(key, appender("bar"))
+				}
+			}
+
+			batchRepr := batch.Repr()
+			builderRepr := builder.Finish()
+			if !bytes.Equal(batchRepr, builderRepr) {
+				t.Fatalf("expected [% x], but got [% x]", batchRepr, builderRepr)
+			}
+		}()
+	}
+}
+
+func TestBatchDistinct(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+
+	if err := e.Put(mvccKey("b"), []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+
+	batch := e.NewBatch()
+	defer batch.Close()
+
+	if err := batch.Put(mvccKey("a"), []byte("a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := batch.Clear(mvccKey("b")); err != nil {
+		t.Fatal(err)
+	}
+
+	// The original batch can see the writes to the batch.
+	if v, err := batch.Get(mvccKey("a")); err != nil {
+		t.Fatal(err)
+	} else if string(v) != "a" {
+		t.Fatalf("expected a, but got %s", v)
+	}
+
+	// The distinct batch will not see writes to the batch.
+	distinct := batch.(Batch).Distinct()
+	if v, err := distinct.Get(mvccKey("a")); err != nil {
+		t.Fatal(err)
+	} else if v != nil {
+		t.Fatalf("expected nothing, but found %s", v)
+	}
+	if v, err := distinct.Get(mvccKey("b")); err != nil {
+		t.Fatal(err)
+	} else if string(v) != "b" {
+		t.Fatalf("expected b, but got %s", v)
+	}
+
+	// Similarly, distinct batch iterators do not see writes to the batch.
+	iter := distinct.NewIterator(false)
+	iter.Seek(mvccKey("a"))
+	if !iter.Valid() {
+		t.Fatalf("expected iterator to be valid")
+	}
+	if string(iter.Key().Key) != "b" {
+		t.Fatalf("expected b, but got %s", iter.Key())
+	}
+
+	// Writes to the distinct batch are reflected in the original batch.
+	if err := distinct.Put(mvccKey("c"), []byte("c")); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := batch.Get(mvccKey("c")); err != nil {
+		t.Fatal(err)
+	} else if string(v) != "c" {
+		t.Fatalf("expected c, but got %s", v)
 	}
 }
