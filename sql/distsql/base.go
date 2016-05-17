@@ -24,7 +24,9 @@ type row []sqlbase.EncDatum
 // component. It can be an input synchronizer, a router, or a mailbox.
 type rowReceiver interface {
 	// pushRow sends a row to this receiver. May block.
-	pushRow(row row)
+	// Returns true if the row was sent, or false if the receiver does not need
+	// any more rows. In all cases, close() still needs to be called.
+	pushRow(row row) bool
 	// close is called when we have no more rows; it causes the rowReceiver to
 	// process all rows and clean up. If err is not null, the error is sent to
 	// the receiver (and the function may block).
