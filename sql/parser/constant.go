@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -141,7 +142,8 @@ func (expr *NumVal) canBeInt64() bool {
 // }
 
 // asInt64 returns the value as a 64-bit integer if possible, or returns an
-// error if not possible.
+// error if not possible. The method will set expr.resInt to the value of
+// this int64 if it is successful, avoiding the need to call the method again.
 func (expr *NumVal) asInt64() (int64, error) {
 	intVal, ok := expr.asConstantInt()
 	if !ok {
@@ -149,8 +151,9 @@ func (expr *NumVal) asInt64() (int64, error) {
 	}
 	i, exact := constant.Int64Val(intVal)
 	if !exact {
-		return 0, fmt.Errorf("representing %v as an int would overflow", intVal)
+		return 0, fmt.Errorf("integer value out of range: %v", intVal)
 	}
+	expr.resInt = DInt(i)
 	return i, nil
 }
 
@@ -164,25 +167,22 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 	return nil, false
 }
 
-var numValAvailIntFloatDec = []Datum{TypeInt, TypeFloat, TypeDecimal}
-var numValAvailFloatIntDec = []Datum{TypeFloat, TypeInt, TypeDecimal}
-var numValAvailFloatDec = []Datum{TypeFloat, TypeDecimal}
+var numValAvailIntFloatDec = []Datum{TypeInt, TypeDecimal, TypeFloat}
+var numValAvailDecFloatInt = []Datum{TypeDecimal, TypeFloat, TypeInt}
+var numValAvailDecFloat = []Datum{TypeDecimal, TypeFloat}
 
 // var numValAvailDec = []Datum{TypeDecimal}
 
 // AvailableTypes implements the Constant interface.
-//
-// TODO(nvanbenschoten) is there a limit past which we should only allow (or prefer)
-// Decimal and not Float? See issue #6369.
 func (expr *NumVal) AvailableTypes() []Datum {
 	switch {
 	case expr.canBeInt64():
 		if expr.Kind() == constant.Int {
 			return numValAvailIntFloatDec
 		}
-		return numValAvailFloatIntDec
+		return numValAvailDecFloatInt
 	default:
-		return numValAvailFloatDec
+		return numValAvailDecFloat
 	}
 }
 
@@ -190,19 +190,25 @@ func (expr *NumVal) AvailableTypes() []Datum {
 func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 	switch {
 	case typ.TypeEqual(TypeInt):
-		i, exact := constant.Int64Val(constant.ToInt(expr.Value))
-		if !exact {
-			return nil, fmt.Errorf("integer value out of range: %v", expr.Value)
+		// We may have already set expr.resInt in asInt64.
+		if expr.resInt == 0 {
+			if _, err := expr.asInt64(); err != nil {
+				return nil, err
+			}
 		}
-		expr.resInt = DInt(i)
 		return &expr.resInt, nil
 	case typ.TypeEqual(TypeFloat):
-		f, _ := constant.Float64Val(constant.ToFloat(expr.Value))
+		f, _ := constant.Float64Val(expr.Value)
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
 	case typ.TypeEqual(TypeDecimal):
 		dd := &expr.resDecimal
-		s := expr.ExactString()
+		s := expr.OrigString
+		if s == "" {
+			// TODO(nvanbenschoten) We should propagate width through constant folding so that we
+			// can control precision on folded values as well.
+			s = expr.ExactString()
+		}
 		if idx := strings.IndexRune(s, '/'); idx != -1 {
 			// Handle constant.ratVal, which will return a rational string
 			// like 6/7. If only we could call big.Rat.FloatString() on it...
@@ -219,18 +225,29 @@ func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 			}
 			dd.QuoRound(&dd.Dec, denDec, decimal.Precision, inf.RoundHalfUp)
 		} else {
+			// TODO(nvanbenschoten) Handling e will not be necessary once the TODO about the
+			// OrigString workaround from above is addressed.
+			eScale := inf.Scale(0)
+			if eIdx := strings.IndexRune(s, 'e'); eIdx != -1 {
+				eInt, err := strconv.ParseInt(s[eIdx+1:], 10, 32)
+				if err != nil {
+					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
+						"string %q: %v", expr, s, err)
+				}
+				eScale = inf.Scale(eInt)
+				s = s[:eIdx]
+			}
 			if _, ok := dd.SetString(s); !ok {
 				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
 					"string %q", expr, s)
 			}
+			dd.SetScale(dd.Scale() - eScale)
 		}
 		return dd, nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
-
-var numValTypePriority = []Datum{TypeInt, TypeFloat, TypeDecimal}
 
 // commonNumericConstantType returns the best constant type which is shared
 // between a set of provided numeric constants. Here, "best" is defined as
@@ -240,21 +257,12 @@ var numValTypePriority = []Datum{TypeInt, TypeFloat, TypeDecimal}
 // to wrap a *NumVal. The reason it does no take a slice of *NumVals instead
 // is to avoid forcing callers to allocate separate slices of *NumVals.
 func commonNumericConstantType(vals []indexedExpr) Datum {
-	bestType := 0
 	for _, c := range vals {
-		for {
-			// This will not work if the available types are not strictly
-			// supersets of their previous types in order of preference.
-			if shouldConstantBecome(c.e.(*NumVal), numValTypePriority[bestType]) {
-				break
-			}
-			bestType++
-			if bestType == len(numValTypePriority)-1 {
-				return numValTypePriority[bestType]
-			}
+		if !shouldConstantBecome(c.e.(*NumVal), TypeInt) {
+			return TypeDecimal
 		}
 	}
-	return numValTypePriority[bestType]
+	return TypeInt
 }
 
 // StrVal represents a constant string value.
