@@ -66,9 +66,6 @@ func (l lookupMismatchError) Error() string {
 	return fmt.Sprintf("key %q not contained in range lookup's resulting decriptor %v", l.desiredKey, l.mismatchedDesc)
 }
 
-// CanRetry implements the retry.Retryable interface.
-func (l lookupMismatchError) CanRetry() bool { return true }
-
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.

@@ -65,9 +65,6 @@ func (f firstRangeMissingError) Error() string {
 	return "the descriptor for the first range is not available via gossip"
 }
 
-// CanRetry implements the retry.Retryable interface.
-func (f firstRangeMissingError) CanRetry() bool { return true }
-
 // A noNodesAvailError specifies that no node addresses in a replica set
 // were available via the gossip network.
 type noNodeAddrsAvailError struct{}
@@ -76,9 +73,6 @@ type noNodeAddrsAvailError struct{}
 func (n noNodeAddrsAvailError) Error() string {
 	return "no replica node addresses available via gossip"
 }
-
-// CanRetry implements the retry.Retryable interface.
-func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 
 // A DistSender provides methods to access Cockroach's monolithic,
 // distributed key value store. Each method invocation triggers a
@@ -740,9 +734,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if err := evictToken.Evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
-				if tErr.CanRetry() {
-					continue
-				}
+				continue
 			case *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it. This is
 				// likely the result of a range split. If we have new range
@@ -771,13 +763,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					log.Warning(tErr)
 				}
 				continue
-			case retry.Retryable:
-				if tErr.CanRetry() {
-					if log.V(1) {
-						log.Warning(tErr)
-					}
-					continue
-				}
 			}
 			break
 		}
@@ -940,7 +925,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 	if len(replicas) < 1 {
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
-				len(replicas), 1), false)
+				len(replicas), 1))
 	}
 
 	done := make(chan BatchCall, len(replicas))
@@ -1011,7 +996,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 			if pending == 0 {
 				return nil, roachpb.NewSendError(
 					fmt.Sprintf("sending to all %d replicas failed; last error: %v",
-						len(replicas), err), true)
+						len(replicas), err))
 			}
 		}
 	}

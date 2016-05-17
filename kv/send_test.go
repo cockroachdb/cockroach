@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -153,15 +152,7 @@ func TestRetryableError(t *testing.T) {
 		Timeout:         100 * time.Millisecond,
 		Context:         context.Background(),
 	}
-	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err != nil {
-		retryErr, ok := err.(retry.Retryable)
-		if !ok {
-			t.Fatalf("Unexpected error type: %v", err)
-		}
-		if !retryErr.CanRetry() {
-			t.Errorf("Expected retryable error: %v", retryErr)
-		}
-	} else {
+	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err == nil {
 		t.Fatalf("Unexpected success")
 	}
 }
@@ -282,7 +273,7 @@ func TestSendNext_RPCErrorThenSuccess(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		doneChans[i] <- BatchCall{
 			Reply: nil,
-			Err:   roachpb.NewSendError("boom", true),
+			Err:   roachpb.NewSendError("boom"),
 		}
 	}
 
@@ -325,10 +316,8 @@ func TestSendNext_AllRPCErrors(t *testing.T) {
 
 	// The client side completes with a retryable send error.
 	bc := <-sendChan
-	if sErr, ok := bc.Err.(*roachpb.SendError); !ok {
+	if _, ok := bc.Err.(*roachpb.SendError); !ok {
 		t.Errorf("did not get expected SendError; got %T instead", bc.Err)
-	} else if !sErr.CanRetry() {
-		t.Errorf("expected a retryable error but got %s", sErr)
 	}
 }
 
@@ -441,15 +430,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Send RPC to an address where no server is running.
 	nodeContext := newNodeTestContext(nil, stopper)
-	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
-		retryErr, ok := err.(retry.Retryable)
-		if !ok {
-			t.Fatalf("Unexpected error type: %v", err)
-		}
-		if !retryErr.CanRetry() {
-			t.Errorf("Expected retryable error: %v", retryErr)
-		}
-	} else {
+	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err == nil {
 		t.Fatalf("Unexpected success")
 	}
 
@@ -504,11 +485,10 @@ func TestClientNotReady(t *testing.T) {
 // firstNErrorTransport is a mock transport that sends an error on
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
-	replicas           ReplicaSlice
-	args               roachpb.BatchRequest
-	numErrors          int
-	numRetryableErrors int
-	numSent            int
+	replicas  ReplicaSlice
+	args      roachpb.BatchRequest
+	numErrors int
+	numSent   int
 }
 
 func (f *firstNErrorTransport) IsExhausted() bool {
@@ -520,7 +500,7 @@ func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
 		Reply: &roachpb.BatchResponse{},
 	}
 	if f.numSent < f.numErrors {
-		call.Err = roachpb.NewSendError("test", f.numSent < f.numRetryableErrors)
+		call.Err = roachpb.NewSendError("test")
 	}
 	f.numSent++
 	done <- call
@@ -543,28 +523,21 @@ func TestComplexScenarios(t *testing.T) {
 	// Rework this test to incorporate application-level errors carried in
 	// the BatchResponse.
 	testCases := []struct {
-		numServers               int
-		numErrors                int
-		numRetryableErrors       int
-		success                  bool
-		isRetryableErrorExpected bool
+		numServers int
+		numErrors  int
+		success    bool
 	}{
 		// --- Success scenarios ---
-		{1, 0, 0, true, false},
-		{5, 0, 0, true, false},
+		{1, 0, true},
+		{5, 0, true},
 		// There are some errors, but enough RPCs succeed.
-		{5, 1, 0, true, false},
-		{5, 4, 0, true, false},
-		{5, 2, 0, true, false},
+		{5, 1, true},
+		{5, 4, true},
+		{5, 2, true},
 
 		// --- Failure scenarios ---
 		// All RPCs fail.
-		{5, 5, 0, false, true},
-		// All RPCs fail, but some of the errors are retryable.
-		{5, 5, 1, false, true},
-		{5, 5, 3, false, true},
-		// Some RPCs fail, but we do have enough remaining clients and recoverable errors.
-		{5, 5, 2, false, true},
+		{5, 5, false},
 	}
 	for i, test := range testCases {
 		var serverAddrs []net.Addr
@@ -584,28 +557,25 @@ func TestComplexScenarios(t *testing.T) {
 				args roachpb.BatchRequest,
 			) (Transport, error) {
 				return &firstNErrorTransport{
-					replicas:           replicas,
-					args:               args,
-					numErrors:          test.numErrors,
-					numRetryableErrors: test.numRetryableErrors,
+					replicas:  replicas,
+					args:      args,
+					numErrors: test.numErrors,
 				}, nil
 			},
 		}
 
 		reply, err := sendBatch(opts, serverAddrs, nodeContext)
 		if test.success {
+			if err != nil {
+				t.Errorf("%d: unexpected error: %s", i, err)
+			}
 			if reply == nil {
 				t.Errorf("%d: expected reply", i)
 			}
-			continue
-		}
-
-		retryErr, ok := err.(retry.Retryable)
-		if !ok {
-			t.Fatalf("%d: Unexpected error type: %v", i, err)
-		}
-		if retryErr.CanRetry() != test.isRetryableErrorExpected {
-			t.Errorf("%d: Unexpected error: %v", i, retryErr)
+		} else {
+			if err == nil {
+				t.Errorf("%d: unexpected success", i)
+			}
 		}
 	}
 }

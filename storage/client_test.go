@@ -372,7 +372,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 		}
 		done <- kv.BatchCall{Reply: br, Err: nil}
 	}) {
-		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped", true)}
+		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
 		t.mtc.expireLeaderLeases()
 	}
 }

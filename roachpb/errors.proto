@@ -174,7 +174,7 @@ message LeaseRejectedError {
 // the desired recipient(s).
 message SendError {
   optional string message = 1 [(gogoproto.nullable) = false];
-  optional bool retryable = 2 [(gogoproto.nullable) = false];
+  reserved 2;
 }
 
 // A RaftGroupDeletedError indicates a raft group has been deleted for
@@ -253,10 +253,6 @@ message Error {
   // message is a human-readable error message.
   optional string message = 1 [(gogoproto.nullable) = false];
 
-  // If retryable is true, the error condition may be transient and the failed
-  // operation may be retried (within the same transaction).
-  optional bool retryable = 2 [(gogoproto.nullable) = false];
-
   // If transaction_restart is not ABORT, the error condition may be handled by
   // restarting the transaction (with or without a backoff).
   optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
@@ -278,4 +274,6 @@ message Error {
   // now is the current time at the node sending the response,
   // which can be used by the receiver to update its local HLC.
   optional Timestamp now = 8 [(gogoproto.nullable) = false];
+
+  reserved 2;
 }
