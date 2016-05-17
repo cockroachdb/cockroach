@@ -1675,13 +1675,21 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	}
 	defer batch.Close()
 
+	// The only remaining use of the batch is for range-local keys which we know
+	// have not been previously written within this batch. Currently the only
+	// remaining writes are the raft applied index and the updated MVCC stats.
+	writer := batch
+	if b, ok := batch.(engine.Batch); ok {
+		writer = b.Distinct()
+	}
+
 	// Advance the last applied index and commit the batch.
-	if err := setAppliedIndex(batch, &ms, r.RangeID, index); err != nil {
+	if err := setAppliedIndex(writer, &ms, r.RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
 	// Flush the MVCC stats to the batch.
-	if err := r.stats.MergeMVCCStats(batch, ms); err != nil {
+	if err := r.stats.MergeMVCCStats(writer, ms); err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
