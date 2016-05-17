@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -671,7 +672,7 @@ func (c *v3Conn) sendError(err error) error {
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendErrorWithCode(sql.CodeInternalError, sql.SrcCtx{}, errToSend)
+	return c.sendErrorWithCode(pgerror.CodeInternalError, sql.SrcCtx{}, errToSend)
 }
 
 // errCode is a postgres error code, plus our extensions.
