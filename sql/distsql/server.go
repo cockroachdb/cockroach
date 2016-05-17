@@ -17,12 +17,12 @@
 package distsql
 
 import (
-	"fmt"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // ServerContext encompasses the configuration required to create a
@@ -58,30 +58,45 @@ func (ds *ServerImpl) setupTxn(
 	return txn
 }
 
-// SetupSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupSyncFlow(
-	req *SetupFlowsRequest, stream DistSQL_SetupSyncFlowServer,
+// RunSimpleFlow is part of the DistSQLServer interface.
+func (ds *ServerImpl) RunSimpleFlow(
+	req *SetupFlowsRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
 	if len(req.Flows) != 1 {
-		return fmt.Errorf("expected exactly one flow, got %d", len(req.Flows))
+		return util.Errorf("expected exactly one flow, got %d", len(req.Flows))
 	}
-	flow := req.Flows[0]
-	txn := ds.setupTxn(stream.Context(), &req.Txn)
 
-	// TODO(radu): for now we expect exactly one processor (a table reader)
-	reader, err := newTableReader(flow.Processors[0].Core.TableReader, txn, ds.evalCtx)
+	f := &flow{evalCtx: ds.evalCtx}
+	f.txn = ds.setupTxn(stream.Context(), &req.Txn)
+
+	// Set up the outgoing mailbox for the stream.
+	mbox := newOutbox(stream)
+	f.simpleFlowMailbox = mbox
+
+	flow := req.Flows[0]
+
+	// TODO(radu): for now we expect exactly one processor (a table reader).
+	if len(flow.Processors) != 1 {
+		return util.Errorf("only single-processor flows supported")
+	}
+	reader, err := f.setupProcessor(&flow.Processors[0])
 	if err != nil {
 		return err
 	}
-	if err := reader.run(); err != nil {
-		fmt.Println(err)
-	}
-	return nil
+
+	// TODO(radu): this stuff should probably be run through a stopper.
+	f.waitGroup.Add(1)
+	mbox.start(&f.waitGroup)
+	// The reader will run in its own goroutine once we support
+	// less trivial flows.
+	reader.run()
+	f.waitGroup.Wait()
+	return mbox.err
 }
 
 // SetupFlows is part of the DistSQLServer interface.
 func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	*SimpleResponse, error,
 ) {
-	return nil, fmt.Errorf("not implemented")
+	return nil, util.Errorf("not implemented")
 }
