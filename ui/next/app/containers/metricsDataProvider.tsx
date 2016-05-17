@@ -33,7 +33,7 @@ type TSResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
  *     https://github.com/frankwallis/plugin-typescript/issues/89
  *
  * 2. The Proto2Typescript generator (SINTEF-9012/Proto2TypeScript) outputs
- * enumerations as ambiently declared const enums. 
+ * enumerations as ambiently declared const enums.
  *
  * Unfortunately, it is not trivial to change either of these behaviors; the
  * plugin-typescript behavior is unfixable (fundamentally incompatible with its
@@ -121,11 +121,11 @@ type MetricsDataProviderProps = MetricsDataProviderConnectProps & MetricsDataPro
  * required by that LineGraph.
  *
  * <MetricsSet id="series-x-graph">
- *  <LineGraph data="[]"> 
- *    <Axis label="Series X over time."> 
- *      <Avg title="" name="series.x" sources="node.1"> 
- *    </Axis> 
- *  </LineGraph> 
+ *  <LineGraph data="[]">
+ *    <Axis label="Series X over time.">
+ *      <Avg title="" name="series.x" sources="node.1">
+ *    </Axis>
+ *  </LineGraph>
  * </MetricsSet>;
  *
  * Each MetricSet must have an ID field, which identifies this particular set to

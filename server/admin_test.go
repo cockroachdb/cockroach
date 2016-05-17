@@ -380,11 +380,11 @@ CREATE TABLE test.tbl (
 
 	// Verify columns.
 	expColumns := []TableDetailsResponse_Column{
-		{Name: "nulls_allowed", Type: "INT", Nullable: true, Default: ""},
-		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, Default: "1000"},
-		{Name: "default2", Type: "INT", Nullable: true, Default: "2"},
-		{Name: "string_default", Type: "STRING", Nullable: true, Default: "'default_string'"},
-		{Name: "rowid", Type: "INT", Nullable: false, Default: "unique_rowid()"},
+		{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
+		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
+		{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
+		{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
+		{Name: "rowid", Type: "INT", Nullable: false, DefaultValue: "unique_rowid()"},
 	}
 	testutils.SortStructs(expColumns, "Name")
 	testutils.SortStructs(resp.Columns, "Name")

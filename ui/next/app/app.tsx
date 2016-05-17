@@ -28,8 +28,7 @@
  *    - Graphs page
  *    ! Logs Page
  * ! Databases Page
- *    - Database table
- *    - Tables drilldown
+ *    - Databases drilldown
  *    - Table drilldown
  * ! HelpUs Page
  *    - Forms
@@ -43,7 +42,7 @@
  *  - "generateCacheReducer()" method; most of our data reducers are extremely
  *  similar (storing read-only, cachable data queried from the server), we could
  *  cut down on a lot of boilerplate and testing by creating such a function.
- *  
+ *
  *  - Create a "NodeStatusProvider" similar to "MetricsDataProvider", allowing
  *  different components to access nodes data.
  *
@@ -60,6 +59,7 @@ import thunk from "redux-thunk";
 import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
+import databaseListReducer from "./redux/databases";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -83,6 +83,7 @@ const store = createStore(
     nodes: nodesReducer,
     ui: uiReducer,
     metrics: metricsReducer,
+    databaseList: databaseListReducer,
   }),
   compose(
     applyMiddleware(thunk),
