@@ -42,19 +42,20 @@ type testingReceiver struct {
 
 var _ rowReceiver = &testingReceiver{}
 
-func (tr *testingReceiver) pushRow(row row) {
+func (tr *testingReceiver) pushRow(row row) bool {
 	if tr.err != nil {
-		return
+		return false
 	}
 	decodedRow := make([]parser.Datum, len(row))
 	for i := range row {
 		tr.err = row[i].Decode(&tr.datumAlloc)
 		if tr.err != nil {
-			return
+			return false
 		}
 		decodedRow[i] = row[i].Datum
 	}
 	tr.rows = append(tr.rows, decodedRow)
+	return true
 }
 
 func (tr *testingReceiver) close(err error) {

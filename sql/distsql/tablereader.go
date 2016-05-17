@@ -190,6 +190,11 @@ func (tr *tableReader) run() {
 			tr.output.close(err)
 			return
 		}
-		tr.output.pushRow(outRow)
+		// Push the row to the output rowReceiver; stop if they don't need more
+		// rows.
+		if !tr.output.pushRow(outRow) {
+			tr.output.close(nil)
+			return
+		}
 	}
 }
