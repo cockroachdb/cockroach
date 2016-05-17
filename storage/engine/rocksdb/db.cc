@@ -442,6 +442,26 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   }
 };
 
+class DBBatchInserter : public rocksdb::WriteBatch::Handler {
+ public:
+  DBBatchInserter(rocksdb::WriteBatchWithIndex* batch)
+      : batch_(batch) {
+  }
+
+  virtual void Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
+    batch_->Put(key, value);
+  }
+  virtual void Delete(const rocksdb::Slice& key) {
+    batch_->Delete(key);
+  }
+  virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
+    batch_->Merge(key, value);
+  }
+
+ private:
+  rocksdb::WriteBatchWithIndex* const batch_;
+};
+
 // Method used to sort InternalTimeSeriesSamples.
 bool TimeSeriesSampleOrdering(const cockroach::roachpb::InternalTimeSeriesSample* a,
         const cockroach::roachpb::InternalTimeSeriesSample* b) {
@@ -1477,10 +1497,13 @@ DBStatus DBImpl::ApplyBatchRepr(DBSlice repr) {
 }
 
 DBStatus DBBatch::ApplyBatchRepr(DBSlice repr) {
-  // TODO(peter): If needed, we could support applying a batch to
-  // another batch. We would have to iterate over the batch contents
-  // and perform the associated Put/Delete/Merge operations.
-  return FmtStatus("unsupported");
+  // TODO(peter): It would be slightly more efficient to iterate over
+  // repr directly instead of first converting it to a string.
+  DBBatchInserter inserter(&batch);
+  rocksdb::WriteBatch batch(ToString(repr));
+  batch.Iterate(&inserter);
+  updates += batch.Count();
+  return kSuccess;
 }
 
 DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr) {
