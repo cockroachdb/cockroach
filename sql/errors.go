@@ -24,33 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
+// Cockroach error extensions:
 const (
-	// PG error codes from:
-	// http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-
-	// CodeNonNullViolationError represents violation of a non-null constraint.
-	CodeNonNullViolationError string = "23502"
-	// CodeUniquenessConstraintViolationError represents violations of uniqueness
-	// constraints.
-	CodeUniquenessConstraintViolationError string = "23505"
-	// CodeTransactionAbortedError signals that the user tried to execute a
-	// statement in the context of a SQL txn that's already aborted.
-	CodeTransactionAbortedError string = "25P02"
-	// CodeUndefinedTableError signals that the user tried to interact with
-	// a table that does not exist.
-	CodeUndefinedTableError string = "42P01"
-	// CodeInternalError represents all internal cockroach errors, plus acts
-	// as a catch-all for random errors for which we haven't implemented the
-	// appropriate error code.
-	CodeInternalError string = "XX000"
-
-	// Cockroach extensions:
-
 	// CodeRetriableError signals to the user that the SQL txn entered the
 	// RESTART_WAIT state and that a RESTART statement should be issued.
 	CodeRetriableError string = "CR000"
@@ -134,7 +115,7 @@ func (e *errTransactionAborted) Error() string {
 }
 
 func (*errTransactionAborted) Code() string {
-	return CodeTransactionAbortedError
+	return pgerror.CodeInFailedSqlTransactionError
 }
 
 func (e *errTransactionAborted) SrcContext() SrcCtx {
@@ -175,7 +156,7 @@ func (e *errNonNullViolation) Error() string {
 }
 
 func (*errNonNullViolation) Code() string {
-	return CodeNonNullViolationError
+	return pgerror.CodeNotNullViolationError
 }
 
 func (e *errNonNullViolation) SrcContext() SrcCtx {
@@ -199,7 +180,7 @@ type errUniquenessConstraintViolation struct {
 }
 
 func (*errUniquenessConstraintViolation) Code() string {
-	return CodeUniquenessConstraintViolationError
+	return pgerror.CodeUniqueViolationError
 }
 
 func (e *errUniquenessConstraintViolation) Error() string {
@@ -232,7 +213,7 @@ func (e *errUndefinedTable) Error() string {
 }
 
 func (*errUndefinedTable) Code() string {
-	return CodeUndefinedTableError
+	return pgerror.CodeUndefinedTableError
 }
 
 func (e *errUndefinedTable) SrcContext() SrcCtx {
