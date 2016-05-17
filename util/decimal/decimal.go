@@ -25,8 +25,6 @@ import (
 	"gopkg.in/inf.v0"
 )
 
-var e = smallExp(inf.NewDec(1, 0), decimalOne, 1000)
-
 // NewDecFromFloat allocates and returns a new Dec set to the given
 // float64 value. The function will panic if the float is NaN or ±Inf.
 func NewDecFromFloat(f float64) *inf.Dec {
@@ -408,7 +406,7 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 		panic("integer out of range")
 	}
 
-	ex := integerPower(z, new(inf.Dec).Set(e), integer, s+2)
+	ex := integerPower(z, new(inf.Dec).Set(decimalE), integer, s+2)
 	return smallExp(ex, y, s-2)
 }
 
