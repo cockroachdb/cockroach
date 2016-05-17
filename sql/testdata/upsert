@@ -36,7 +36,7 @@ statement error UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second 
 UPSERT INTO kv VALUES (10, 10), (10, 11)
 
 # TODO(dan): Implement RETURNING with upsert
-statement error RETURNING is not supported with UPSERT
+statement error unimplemented \(see issue https://github.com/cockroachdb/cockroach/issues/6637\)
 UPSERT INTO kv VALUES (10, 10) RETURNING *
 
 statement ok
