@@ -47,8 +47,11 @@ func TestValues(t *testing.T) {
 	intVal := func(v int64) *parser.NumVal {
 		return &parser.NumVal{Value: constant.MakeInt64(v)}
 	}
-	floatVal := func(f float64) *parser.NumVal {
-		return &parser.NumVal{Value: constant.MakeFloat64(f)}
+	floatVal := func(f float64) *parser.CastExpr {
+		return &parser.CastExpr{
+			Expr: &parser.NumVal{Value: constant.MakeFloat64(f)},
+			Type: &parser.FloatColType{},
+		}
 	}
 	asRow := func(datums ...parser.Datum) []parser.DTuple {
 		return []parser.DTuple{datums}
