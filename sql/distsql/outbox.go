@@ -31,7 +31,7 @@ const outboxFlushPeriod = 100 * time.Microsecond
 
 // preferredEncoding is the encoding used for EncDatums that don't already have
 // an encoding available.
-const preferredEncoding = sqlbase.AscendingKeyEncoding
+const preferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
 
 // outboxStream is implemented by any protobuf generated type for a stream of
 // StreamMessage, such as DistSQL_RunSimpleFlowServer.
@@ -98,11 +98,11 @@ func (m *outbox) addRow(row []sqlbase.EncDatum) error {
 		// First row. Initialize encodings.
 		m.infos = make([]DatumInfo, len(row))
 		for i := range row {
-			enc := row[i].Encoding()
-			if enc == sqlbase.NoEncoding {
+			enc, ok := row[i].Encoding()
+			if !ok {
 				enc = preferredEncoding
 			}
-			m.infos[i].Encoding = datumEncodingToDatumInfoEncoding(enc)
+			m.infos[i].Encoding = enc
 		}
 	}
 	if len(m.infos) != len(row) {
@@ -110,9 +110,8 @@ func (m *outbox) addRow(row []sqlbase.EncDatum) error {
 			len(m.infos), len(row))
 	}
 	for i := range row {
-		enc := m.infos[i].Encoding.toDatumEncoding()
 		var err error
-		m.rowBuf, err = row[i].Encode(&m.alloc, enc, m.rowBuf)
+		m.rowBuf, err = row[i].Encode(&m.alloc, m.infos[i].Encoding, m.rowBuf)
 		if err != nil {
 			return err
 		}

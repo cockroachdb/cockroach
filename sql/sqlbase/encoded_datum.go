@@ -24,17 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-// DatumEncoding identifies the encoding used for an EncDatum.
-type DatumEncoding int32
-
-// Possible encodings.
-const (
-	NoEncoding DatumEncoding = iota
-	AscendingKeyEncoding
-	DescendingKeyEncoding
-	// ValueEncoding to be supported later.
-)
-
 // EncDatum represents a datum that is "backed" by an encoding and/or by a
 // parser.Datum. It allows "passing through" a Datum without decoding and
 // reencoding. TODO(radu): It will also allow comparing encoded datums directly
@@ -42,7 +31,7 @@ const (
 type EncDatum struct {
 	Type ColumnType_Kind
 
-	// Encoding type. NoEncoding iff encoded is nil.
+	// Encoding type. Valid only if encoded is not nil.
 	encoding DatumEncoding
 
 	// Encoded datum (according to the encoding field).
@@ -75,7 +64,6 @@ func (ed *EncDatum) SetDatum(typ ColumnType_Kind, d parser.Datum) {
 			d.Type(), typ.ToDatumType().Type()))
 	}
 	ed.Type = typ
-	ed.encoding = NoEncoding
 	ed.encoded = nil
 	ed.Datum = d
 }
@@ -90,38 +78,40 @@ func (ed *EncDatum) Decode(a *DatumAlloc) error {
 	if ed.Datum != nil {
 		return nil
 	}
+	if ed.encoded == nil {
+		panic("decoding unset EncDatum")
+	}
 	datType := ed.Type.ToDatumType()
 	var err error
 	var rem []byte
 	switch ed.encoding {
-	case AscendingKeyEncoding:
+	case DatumEncoding_ASCENDING_KEY:
 		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
-	case DescendingKeyEncoding:
+	case DatumEncoding_DESCENDING_KEY:
 		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
-	case NoEncoding:
-		panic("EncDatum without datum or encoding")
 	default:
-		panic(fmt.Sprintf("invalid encoding %d", ed.encoding))
+		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
 	if len(rem) != 0 {
+		ed.Datum = nil
 		return util.Errorf("%d trailing bytes in encoded value", len(rem))
 	}
 	return err
 }
 
-// Encoding returns the encoding that is already available
-// (NoEncoding if none).
-func (ed *EncDatum) Encoding() DatumEncoding {
-	return ed.encoding
+// Encoding returns the encoding that is already available (the latter indicated
+// by the bool return value).
+func (ed *EncDatum) Encoding() (DatumEncoding, bool) {
+	if ed.encoded == nil {
+		return 0, false
+	}
+	return ed.encoding, true
 }
 
 // Encode appends the encoded datum to the given slice using the requested
 // encoding.
 func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([]byte, error) {
-	if enc == NoEncoding {
-		panic("NoEncoding requested")
-	}
-	if enc == ed.encoding {
+	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches
 		return append(appendTo, ed.encoded...), nil
 	}
@@ -129,11 +119,11 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 		return nil, err
 	}
 	switch enc {
-	case AscendingKeyEncoding:
+	case DatumEncoding_ASCENDING_KEY:
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Ascending)
-	case DescendingKeyEncoding:
+	case DatumEncoding_DESCENDING_KEY:
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
 	default:
-		panic(fmt.Sprintf("invalid encoding requested %d", enc))
+		panic(fmt.Sprintf("unknown encoding requested %s", enc))
 	}
 }
