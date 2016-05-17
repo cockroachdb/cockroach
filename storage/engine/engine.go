@@ -177,6 +177,14 @@ type Engine interface {
 	GetStats() (*Stats, error)
 }
 
+// Batch is the interface for batch specific operations.
+//
+// TODO(peter): Move various methods of Engine to Batch, such as Commit() and Repr().
+type Batch interface {
+	Engine
+	FreezeFlushes()
+}
+
 // Stats is a set of RocksDB stats. These are all described in RocksDB
 //
 // Currently, we collect stats from the following sources:

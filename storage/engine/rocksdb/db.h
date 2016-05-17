@@ -102,8 +102,8 @@ DBStatus DBCommitBatch(DBEngine* db);
 
 // ApplyBatchRepr applies a batch of mutations encoded using that
 // batch representation returned by DBBatchRepr(). It is only valid to
-// call this function on an engine created by DBOpen() (i.e. not a
-// batch or snapshot).
+// call this function on an engine created by DBOpen() or DBNewBatch()
+// (i.e. not a snapshot).
 DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr);
 
 // Returns the internal batch representation. The returned value is
