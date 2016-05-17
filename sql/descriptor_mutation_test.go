@@ -156,15 +156,11 @@ func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMu
 func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 	tableDesc := mt.desc.GetTable()
 	if m.Direction == sqlbase.DescriptorMutation_NONE {
-		// randomly pick ADD/DROP mutation if this is the first mutation, or
-		// pick the direction already chosen for the first mutation.
-		if len(tableDesc.Mutations) > 0 {
-			m.Direction = tableDesc.Mutations[0].Direction
+		// randomly pick ADD/DROP mutation.
+		if rand.Intn(2) == 0 {
+			m.Direction = sqlbase.DescriptorMutation_ADD
 		} else {
 			m.Direction = sqlbase.DescriptorMutation_DROP
-			if rand.Intn(2) == 0 {
-				m.Direction = sqlbase.DescriptorMutation_ADD
-			}
 		}
 	}
 	if m.State == sqlbase.DescriptorMutation_UNKNOWN {
@@ -510,9 +506,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 }
 
-// TestOperationsWithUniqueColumnMutation tests all the operations while an
-// index mutation refers to a column mutation.
-func TestOperationsWithUniqueColumnMutation(t *testing.T) {
+// TestOperationsWithIndexReferringColumnMutation tests all the operations
+// while an index that refers to a column mutation is being added. The index
+// being added is tested only in the ABSENT state because mutations are
+// applied in a FIFO order, and an index mutation referring a column mutation
+// has the column mutation ahead of it in the queue. Only once the column is
+// live is the index state machine allowed to progress out of the ABSENT
+// state.
+func TestOperationsWithIndexReferringColumnMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
@@ -576,10 +577,19 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v));
 		// Check that the table only contains the initRows.
 		_ = mTest.checkQueryResponse(starQuery, initRows)
 
-		// Add index "foo" as a mutation.
-		mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 		// Make column "i" a mutation.
-		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{
+			Direction: sqlbase.DescriptorMutation_ADD,
+			State:     state,
+		},
+		)
+		// Add index "foo" as a mutation.
+		mTest.writeIndexMutation(
+			"foo", sqlbase.DescriptorMutation{
+				Direction: sqlbase.DescriptorMutation_ADD,
+				State:     sqlbase.DescriptorMutation_ABSENT,
+			},
+		)
 
 		// Insert a row into the table.
 		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('c', 'x')`); err != nil {
@@ -590,64 +600,71 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v));
 		mTest.makeMutationsActive()
 		// column "i" has no entry.
 		_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z", "q"}, {"c", "x", "NULL"}})
-		if state == sqlbase.DescriptorMutation_DELETE_ONLY {
-			// No index entry for row "c"
-			_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}})
-		} else {
-			// Index entry for row "c"
-			_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}})
-		}
+		// No index entry for row "c"
+		_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}})
 
-		// Add index "foo" as a mutation.
-		mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 		// Make column "i" a mutation.
-		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{
+			Direction: sqlbase.DescriptorMutation_ADD,
+			State:     state,
+		},
+		)
+		// Add index "foo" as a mutation.
+		mTest.writeIndexMutation(
+			"foo", sqlbase.DescriptorMutation{
+				Direction: sqlbase.DescriptorMutation_ADD,
+				State:     sqlbase.DescriptorMutation_ABSENT,
+			},
+		)
 
 		// Updating column "i" for a row fails.
 		if _, err := sqlDB.Exec(`UPDATE t.test SET (v, i) = ('u', 'u') WHERE k = 'a'`); !testutils.IsError(err, `column "i" does not exist`) {
 			t.Error(err)
 		}
 
-		// TODO(vivek): Fix #6691.
 		// Update a row without specifying  mutation column "i".
-		//if _, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE k = 'a'`); err != nil {
-		//	t.Error(err)
-		//}
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE k = 'a'`); err != nil {
+			t.Error(err)
+		}
 		// Make column "i" and index "foo" live.
 		mTest.makeMutationsActive()
 
 		// The update to column "v" is seen; there is no effect on column "i".
-		//_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
-		// No change in index "foo"
-		//if state == sqlbase.DescriptorMutation_DELETE_ONLY {
-		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}})
-		//} else {
-		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}})
-		//}
+		_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
+		// No change in index "foo". Update ignores the index.
+		_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}})
 
-		// Add index "foo" as a mutation.
-		//mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 		// Make column "i" a mutation.
-		//mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+		mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{
+			Direction: sqlbase.DescriptorMutation_ADD,
+			State:     state,
+		},
+		)
+		// Add index "foo" as a mutation.
+		mTest.writeIndexMutation(
+			"foo", sqlbase.DescriptorMutation{
+				Direction: sqlbase.DescriptorMutation_ADD,
+				State:     sqlbase.DescriptorMutation_ABSENT,
+			},
+		)
 
 		// Delete row "a".
-		//if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = 'a'`); err != nil {
-		//	t.Error(err)
-		//}
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = 'a'`); err != nil {
+			t.Error(err)
+		}
 		// Make column "i" and index "foo" live.
-		// mTest.makeMutationsActive()
+		mTest.makeMutationsActive()
 		// Row "a" is deleted. numVals is the number of non-NULL values seen,
 		// or the number of KV values belonging to all the rows in the table
 		// excluding row "a" since it's deleted.
-		//numVals := mTest.checkQueryResponse(starQuery, [][]string{{"c", "x", "NULL"}})
-		//if state == sqlbase.DescriptorMutation_DELETE_ONLY {
-		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{})
-		//} else {
-		//	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}})
-		//}
-		// Check that there are no hidden KV values for row "a",
-		// and column "i" for row "a" was deleted.
-		//mTest.checkTableSize(numVals)
+		numVals := mTest.checkQueryResponse(starQuery, [][]string{{"c", "x", "NULL"}})
+		// Check that there is an extra hidden KV values for row "a" which is the
+		// "foo" index value for the row. This is okay because we are checking
+		// that DELETE ignores the index in the ABSENT state and thus doesn't
+		// delete the index entry. The ABSENT state is only used while adding an
+		// index so in reality such index entries do not exist; it only exists
+		// in this test setup.
+		mTest.checkTableSize(numVals + 1)
 	}
 }
 

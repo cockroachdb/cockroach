@@ -301,13 +301,17 @@ func makeRowUpdater(
 	}
 
 	var deleteOnlyIndex map[int]struct{}
+	// There might also be indexes in the process of being added that are part
+	// of a Mutation.
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
 			if needsUpdate(*index) {
-				indexes = append(indexes, *index)
-
 				switch m.State {
+				case sqlbase.DescriptorMutation_ABSENT:
+					// Ignore indexes that are ABSENT.
+
 				case sqlbase.DescriptorMutation_DELETE_ONLY:
+					indexes = append(indexes, *index)
 					if deleteOnlyIndex == nil {
 						// Allocate at most once.
 						deleteOnlyIndex = make(map[int]struct{}, len(tableDesc.Mutations))
@@ -315,6 +319,7 @@ func makeRowUpdater(
 					deleteOnlyIndex[len(indexes)-1] = struct{}{}
 
 				case sqlbase.DescriptorMutation_WRITE_ONLY:
+					indexes = append(indexes, *index)
 				}
 			}
 		}
@@ -536,7 +541,13 @@ func makeRowDeleter(
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
-			indexes = append(indexes, *index)
+			switch m.State {
+			case sqlbase.DescriptorMutation_ABSENT:
+				// Ignore indexes in the ABSENT state.
+
+			case sqlbase.DescriptorMutation_DELETE_ONLY, sqlbase.DescriptorMutation_WRITE_ONLY:
+				indexes = append(indexes, *index)
+			}
 		}
 	}
 
