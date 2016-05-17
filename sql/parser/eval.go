@@ -414,21 +414,32 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
 		},
-		// The following two overloads are needed becauase DInt/DInt = DFloat.
+		// The following two overloads are needed becauase DInt/DInt = DDecimal. Due to this
+		// operation, normalization may sometimes create a DInt * DDecimal operation.
 		BinOp{
-			LeftType:   TypeFloat,
+			LeftType:   TypeDecimal,
 			RightType:  TypeInt,
-			ReturnType: TypeFloat,
+			ReturnType: TypeDecimal,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDFloat(*left.(*DFloat) * DFloat(*right.(*DInt))), nil
+				l := left.(*DDecimal).Dec
+				r := *right.(*DInt)
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(r))
+				dd.Mul(&dd.Dec, &l)
+				return dd, nil
 			},
 		},
 		BinOp{
 			LeftType:   TypeInt,
-			RightType:  TypeFloat,
-			ReturnType: TypeFloat,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDFloat(DFloat(*left.(*DInt)) * *right.(*DFloat)), nil
+				l := *left.(*DInt)
+				r := right.(*DDecimal).Dec
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(l))
+				dd.Mul(&dd.Dec, &r)
+				return dd, nil
 			},
 		},
 		BinOp{
@@ -465,13 +476,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		BinOp{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
-			ReturnType: TypeFloat,
+			ReturnType: TypeDecimal,
 			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := *right.(*DInt)
 				if rInt == 0 {
 					return nil, errDivByZero
 				}
-				return NewDFloat(DFloat(*left.(*DInt)) / DFloat(rInt)), nil
+				div := inf.NewDec(int64(rInt), 0)
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(*left.(*DInt)))
+				dd.QuoRound(&dd.Dec, div, decimal.Precision, inf.RoundHalfUp)
+				return dd, nil
 			},
 		},
 		BinOp{

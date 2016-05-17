@@ -14,7 +14,7 @@ SELECT * FROM f;
 statement ok
 CREATE TABLE i (x INT);
 
-statement error value type float doesn't match type INT of column "x"
+statement error value type decimal doesn't match type INT of column "x"
 INSERT INTO i(x) VALUES (4.5);
 
 statement ok
@@ -80,7 +80,7 @@ SELECT COALESCE(1::INT, 'foo');
 query R
 SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4));
 ----
-1.23456789e+08
+123456789
 
 # This is a current limitation where a nested constant that does not get folded (eg. ABS(-9))
 # will not be exposed to the same constant type resolution rules as other constants, meaning that
@@ -89,10 +89,10 @@ SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4));
 # TODO(nvanbenschoten) We may be able to address this by desiring the commonNumericConstantType
 #     of all constants for the first resolvableExpr in typeCheckSameTypedExprs when the parent
 #     expression has no desired type.
-query error GREATEST: expected -1.123 to be of type int, found type float
+query error GREATEST: expected -1.123 to be of type int, found type decimal
 SELECT GREATEST(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), ABS(-9));
 
 query R
 SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9.0));
 ----
-1.23456789e+08
+123456789

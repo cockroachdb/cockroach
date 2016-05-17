@@ -32,8 +32,8 @@ import (
 
 func TestNumericConstantAvailableTypes(t *testing.T) {
 	wantInt := numValAvailIntFloatDec
-	wantFloatButCanBeInt := numValAvailFloatIntDec
-	wantFloat := numValAvailFloatDec
+	wantDecButCanBeInt := numValAvailDecFloatInt
+	wantDec := numValAvailDecFloat
 
 	testCases := []struct {
 		str   string
@@ -43,15 +43,15 @@ func TestNumericConstantAvailableTypes(t *testing.T) {
 		{"0", wantInt},
 		{"-1", wantInt},
 		{"9223372036854775807", wantInt},
-		{"1.0", wantFloatButCanBeInt},
-		{"-1234.0000", wantFloatButCanBeInt},
-		{"1e10", wantFloatButCanBeInt},
-		{"1E10", wantFloatButCanBeInt},
-		{"1.1", wantFloat},
-		{"1e-10", wantFloat},
-		{"1E-10", wantFloat},
-		{"-1231.131", wantFloat},
-		{"876543234567898765436787654321", wantFloat},
+		{"1.0", wantDecButCanBeInt},
+		{"-1234.0000", wantDecButCanBeInt},
+		{"1e10", wantDecButCanBeInt},
+		{"1E10", wantDecButCanBeInt},
+		{"1.1", wantDec},
+		{"1e-10", wantDec},
+		{"1E-10", wantDec},
+		{"-1231.131", wantDec},
+		{"876543234567898765436787654321", wantDec},
 	}
 
 	for i, test := range testCases {
