@@ -9,6 +9,7 @@
     "long": "file:local_typings/long/long.d.ts",
     "mocha": "registry:dt/mocha#2.2.5+20160317120654",
     "object-assign": "registry:dt/object-assign#4.0.1+20160316155526",
+    "proxyquire": "registry:dt/proxyquire#1.3.0+20160316155526",
     "react": "registry:dt/react#0.14.0+20160319053454",
     "react-dom": "registry:dt/react-dom#0.14.0+20160316155526",
     "react-redux": "registry:dt/react-redux#4.4.0+20160406115600",
