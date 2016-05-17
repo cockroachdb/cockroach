@@ -150,7 +150,7 @@ type Engine interface {
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
-	NewBatch() Engine
+	NewBatch() Batch
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
@@ -175,6 +175,21 @@ type Engine interface {
 	Closed() bool
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
+}
+
+// Batch is the interface for batch specific operations.
+//
+// TODO(peter): Move various methods of Engine to Batch, such as Commit() and Repr().
+type Batch interface {
+	Engine
+	// Distinct returns a view of the existing batch which passes reads directly
+	// to the underlying engine (the one the batch was created from). That is,
+	// the returned batch will not read its own writes. This is used as an
+	// optimization to avoid flushing mutations buffered by the batch in
+	// situations where we know all of the batched operations are for distinct
+	// keys. Closing/committing the returned engine is equivalent to
+	// closing/committing the original batch.
+	Distinct() Engine
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB
