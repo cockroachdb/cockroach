@@ -1662,6 +1662,14 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	}
 	defer batch.Close()
 
+	// Freeze batch flushes as the only remaining use of the batch is for
+	// range-local keys which we know have not been previously written within
+	// this batch. Currently the only remaining writes are the raft applied index
+	// and the updated MVCC stats.
+	if b, ok := batch.(engine.Batch); ok {
+		b.FreezeFlushes()
+	}
+
 	// Advance the last applied index and commit the batch.
 	if err := setAppliedIndex(batch, &ms, r.RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
@@ -1842,6 +1850,14 @@ func (r *Replica) executeWriteBatch(
 	strippedBa := ba
 	strippedBa.Txn = nil
 	strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
+
+	if strippedBa.Header.DistinctSpans {
+		// Freeze batch flushes as all of the operations in the batch are for
+		// distinct spans so we don't need the batch to read its own writes.
+		if b, ok := batch.(engine.Batch); ok {
+			b.FreezeFlushes()
+		}
+	}
 
 	// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 	br, intents, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
