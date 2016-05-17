@@ -1,16 +1,17 @@
-/// <reference path="../../typings/main.d.ts" />
+/// <reference path="../../../typings/main.d.ts" />
 import * as React from "react";
+import { Link } from "react-router";
 import * as _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
-import { setUISetting } from "../redux/ui";
-import { SortableTable, SortableColumn, SortSetting } from "../components/sortabletable";
+import { setUISetting } from "../../redux/ui";
+import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
-import { refreshDatabaseList } from "../redux/databases";
+import { refreshDatabases } from "../../redux/databaseInfo";
 
 // Constant used to store sort settings in the redux UI store.
-const UI_DATABASES_SORT_SETTING_KEY = "databases/sort_setting";
+const UI_DATABASES_SORT_SETTING_KEY = "databaseList/sort_setting";
 
 /******************************
  *      COLUMN DEFINITION
@@ -50,7 +51,7 @@ let columnDescriptors: DatabasesColumnDescriptor[] = [
   {
     key: DatabasesTableColumn.Name,
     title: "Database Name",
-    cell: _.identity,
+    cell: (s) => <Link to={`databases/${s}`}>{s}</Link>,
     sort: _.identity,
   },
 ];
@@ -81,7 +82,7 @@ interface DatabasesMainActions {
   // Call if the user indicates they wish to change the sort of the table data.
   setUISetting(key: string, value: any): void;
 
-  refreshDatabaseList(): void;
+  refreshDatabases(): void;
 }
 
 /**
@@ -122,13 +123,13 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
 
   componentWillMount() {
     // Refresh databases when mounting.
-    this.props.refreshDatabaseList();
+    this.props.refreshDatabases();
   }
 
   componentWillReceiveProps(props: DatabasesMainProps) {
     // Refresh databases when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    // refreshDatabaseList();
+    // this.props.refreshDatabases();
   }
 
   render() {
@@ -137,18 +138,16 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
 
     if (databases) {
       content = <SortableTable count={databases.length}
-                       sortSetting={sortSetting}
-                       onChangeSortSetting={(setting) => this.changeSortSetting(setting)}>
-        {this.columns(this.props)}
+        sortSetting={sortSetting}
+        onChangeSortSetting={(setting) => this.changeSortSetting(setting) }>
+        {this.columns(this.props) }
       </SortableTable>;
     } else {
       content = <div>No results.</div>;
     }
 
-    return <div className="section">
-      <div className="sql-table">
-        { content }
-      </div>
+    return <div className="sql-table">
+      { content }
     </div>;
   }
 }
@@ -158,7 +157,7 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
  */
 
 // Base selectors to extract data from redux state.
-let databases = (state: any): string[] => state.databaseList.databaseList && state.databaseList.databaseList.databases;
+let databases = (state: any): string[] => state.databaseInfo && state.databaseInfo.databases && state.databaseInfo.databases.data  && state.databaseInfo.databases.data.databases;
 let sortSetting = (state: any): SortSetting => state.ui[UI_DATABASES_SORT_SETTING_KEY] || {};
 
 // Selector which sorts statuses according to current sort setting.
@@ -185,18 +184,9 @@ let databasesMainConnected = connect(
     };
   },
   {
-    setUISetting: setUISetting,
-    refreshDatabaseList: refreshDatabaseList,
+    setUISetting,
+    refreshDatabases,
   }
 )(DatabasesMain);
 
-export { databasesMainConnected as DatabasesMain };
-
-/**
- * DatabasesTitle renders the header of the databases page.
- */
-export class DatabasesTitle extends React.Component<{}, {}> {
-  render() {
-    return <h2>Databases</h2>;
-  }
-}
+export default databasesMainConnected;

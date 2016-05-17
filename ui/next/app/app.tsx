@@ -27,9 +27,6 @@
  *    - Overview page with table
  *    - Graphs page
  *    ! Logs Page
- * ! Databases Page
- *    - Databases drilldown
- *    - Table drilldown
  * ! HelpUs Page
  *    - Forms
  *    - Reducer
@@ -59,13 +56,16 @@ import thunk from "redux-thunk";
 import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
-import databaseListReducer from "./redux/databases";
+import databaseInfoReducer from "./redux/databaseInfo";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
 import ClusterOverview from "./containers/clusterOverview";
 import ClusterEvents from "./containers/clusterEvents";
-import Databases from "./containers/databases";
+import Databases from "./containers/databases/databases";
+import DatabaseList from "./containers/databases/databaseList";
+import DatabaseDetails from "./containers/databases/databaseDetails";
+import TableDetails from "./containers/databases/tableDetails";
 import HelpUs from "./containers/helpus";
 import Nodes from "./containers/nodes";
 import NodesOverview from "./containers/nodesOverview";
@@ -83,7 +83,7 @@ const store = createStore(
     nodes: nodesReducer,
     ui: uiReducer,
     metrics: metricsReducer,
-    databaseList: databaseListReducer,
+    databaseInfo: databaseInfoReducer,
   }),
   compose(
     applyMiddleware(thunk),
@@ -116,7 +116,13 @@ ReactDOM.render(
           // Nodes component.
           <Route path=":node_id" component={ Node } />
         </Route>
-        <Route path="databases" component={ Databases } />
+        <Route path="databases" component= { Databases }>
+          <IndexRoute component={ DatabaseList } />
+          <Route path=":database_name" >
+            <IndexRoute component={ DatabaseDetails } />
+            <Route path=":table_name" component={ TableDetails } />
+          </Route>
+        </Route>
         <Route path="help-us/reporting" component={ HelpUs } />
       </Route>
     </Router>
