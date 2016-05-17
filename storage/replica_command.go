@@ -816,7 +816,7 @@ func (r *Replica) RangeLookup(
 			return reply, nil, err
 		}
 	} else {
-		// Use MVCCScan to get first the first range. There are three cases:
+		// Use MVCCScan to get the first range. There are three cases:
 		// 1. args.Key is not an endpoint of the range and
 		// 2a. The args.Key is the start/end key of the range.
 		// 2b. Even worse, the body of args.Key is roachpb.KeyMax.
