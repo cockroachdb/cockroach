@@ -83,3 +83,20 @@ INSERT INTO t4 VALUES (NULL, 2, 22, NULL)
 
 statement error failed to satisfy CHECK constraint
 INSERT INTO t4 VALUES (1, 2, 3, 19)
+
+query II
+SELECT * from t3
+----
+3 2
+
+statement error failed to satisfy CHECK constraint
+UPDATE t3 SET b = 3 WHERE a = 3;
+
+statement ok
+UPDATE t3 SET b = 1 WHERE a = 3;
+
+statement error failed to satisfy CHECK constraint
+UPDATE t4 SET a = 2 WHERE c = 3;
+
+statement ok
+UPDATE t4 SET a = 0 WHERE c = 3;
