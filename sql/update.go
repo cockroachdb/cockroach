@@ -89,8 +89,9 @@ type updateNode struct {
 	n            *parser.Update
 	desiredTypes []parser.Datum
 
-	updateCols []sqlbase.ColumnDescriptor
-	tw         tableUpdater
+	updateCols  []sqlbase.ColumnDescriptor
+	tw          tableUpdater
+	checkHelper checkHelper
 
 	run struct {
 		// The following fields are populated during Start().
@@ -133,7 +134,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if len(en.rh.exprs) > 0 {
+	if len(en.rh.exprs) > 0 || len(en.tableDesc.Checks) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns
@@ -223,6 +224,9 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		defaultExprs: defaultExprs,
 		updateCols:   ru.updateCols,
 		tw:           tw,
+	}
+	if err := un.checkHelper.init(p, en.tableDesc); err != nil {
+		return nil, err
 	}
 	return un, nil
 }
@@ -314,6 +318,13 @@ func (u *updateNode) Next() bool {
 	// columns in the output.
 	updateValues := oldValues[len(u.tw.ru.fetchCols):]
 	oldValues = oldValues[:len(u.tw.ru.fetchCols)]
+
+	u.checkHelper.loadRow(u.tw.ru.fetchColIDtoRowIndex, oldValues, false)
+	u.checkHelper.updateRow(u.updateCols, updateValues)
+	if err := u.checkHelper.check(u.p.evalCtx); err != nil {
+		u.run.err = err
+		return false
+	}
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {

@@ -79,6 +79,19 @@ func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.DTuple
 	}
 }
 
+// Override values in the qvalues used by the CHECK exprs.
+func (c *checkHelper) updateRow(cols []sqlbase.ColumnDescriptor, row parser.DTuple) {
+	if len(c.exprs) == 0 {
+		return
+	}
+
+	m := make(map[sqlbase.ColumnID]int)
+	for i, col := range cols {
+		m[col.ID] = i
+	}
+	c.loadRow(m, row, true)
+}
+
 func (c *checkHelper) check(ctx parser.EvalContext) error {
 	for _, expr := range c.exprs {
 		if d, err := expr.Eval(ctx); err != nil {
