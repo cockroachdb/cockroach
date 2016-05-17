@@ -1,5 +1,6 @@
 import { NodeStatusState } from "../redux/nodes";
 import { UISettingsDict } from "../redux/ui";
+import { DatabaseInfoState } from "../redux/databaseInfo";
 
 export interface AdminUIStore {
   // Nodes status query.
@@ -8,4 +9,6 @@ export interface AdminUIStore {
   ui: UISettingsDict;
   // React-router-redux (we don't need access to this).
   routing: any;
+  // database info
+  databaseInfo: DatabaseInfoState;
 }

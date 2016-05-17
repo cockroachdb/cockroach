@@ -59,7 +59,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
         <div style={{float:"left"}} className="small half">
           <Visualization title="Capacity Used"
-                         tooltip={`You are using ${Bytes(bytesUsed)} of ${Bytes(availableCapacity)} storage 
+                         tooltip={`You are using ${Bytes(bytesUsed)} of ${Bytes(availableCapacity)} storage
                                    capacity across all nodes.`}>
             <div className="visualization">
               <div style={{zoom:"50%"}} className="number">{ d3.format("0.1%")(capacityPercent) }</div>
@@ -87,7 +87,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
           <StackedAreaGraph title="CPU Usage"
                      legend={ false }
-                     tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations 
+                     tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations
                                (Sys %) across all nodes.`}>
             <Axis format={ d3.format(".2%") }>
               <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %" />
