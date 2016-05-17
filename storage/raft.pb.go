@@ -659,7 +659,7 @@ func (m *ConfChangeContext) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Payload = append(m.Payload[:0], data[iNdEx:postIndex]...)
+			m.Payload = data[iNdEx:postIndex]
 			if m.Payload == nil {
 				m.Payload = []byte{}
 			}

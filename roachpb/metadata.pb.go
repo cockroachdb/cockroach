@@ -799,7 +799,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.StartKey = append(m.StartKey[:0], data[iNdEx:postIndex]...)
+			m.StartKey = data[iNdEx:postIndex]
 			if m.StartKey == nil {
 				m.StartKey = []byte{}
 			}
@@ -830,7 +830,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EndKey = append(m.EndKey[:0], data[iNdEx:postIndex]...)
+			m.EndKey = data[iNdEx:postIndex]
 			if m.EndKey == nil {
 				m.EndKey = []byte{}
 			}

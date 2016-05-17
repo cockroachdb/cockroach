@@ -23,6 +23,15 @@ import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import weak "gogoproto/gogo.proto";
 
+// RaftEntry is a mirror of raftpb.Entry which we use so that we can
+// tweak the generated code.
+message RaftEntry {
+  optional raftpb.EntryType Type = 1 [(gogoproto.nullable) = false];
+  optional uint64 Term = 2 [(gogoproto.nullable) = false];
+  optional uint64 Index = 3 [(gogoproto.nullable) = false];
+  optional bytes Data = 4;
+}
+
 // RaftTruncatedState contains metadata about the truncated portion of the raft log.
 // Raft requires access to the term of the last truncated log entry even after the
 // rest of the entry has been discarded.

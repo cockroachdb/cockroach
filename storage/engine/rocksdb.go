@@ -780,7 +780,10 @@ func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
 	if r.value.len <= 0 {
 		return nil
 	}
-	return proto.Unmarshal(r.unsafeValue(), msg)
+	// We can't use unsafeValue() here because proto unmarshalling does not copy
+	// []byte types, but instead shares the underlying data with the encoded
+	// proto.
+	return proto.Unmarshal(r.Value(), msg)
 }
 
 func (r *rocksDBIterator) unsafeKey() MVCCKey {
