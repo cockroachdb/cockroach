@@ -18,6 +18,7 @@ package distsql
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -51,7 +52,10 @@ type outbox struct {
 
 	// dataChan is the channel through which the outbox goroutine receives rows
 	// from the producer.
-	dataChan    chan streamMsg
+	dataChan chan streamMsg
+	// noMoreRows is an atomic that signals we no longer accept rows via
+	// pushRow.
+	noMoreRows  uint32
 	flushTicker *time.Ticker
 
 	// infos is initialized when the first row is received
@@ -79,8 +83,13 @@ func newOutbox(stream outboxStream) *outbox {
 }
 
 // pushRow is part of the rowReceiver interface.
-func (m *outbox) pushRow(row row) {
+func (m *outbox) pushRow(row row) bool {
+	if atomic.LoadUint32(&m.noMoreRows) == 1 {
+		return false
+	}
+
 	m.dataChan <- streamMsg{row: row, err: nil}
+	return true
 }
 
 // close is part of the rowReceiver interface.
@@ -177,6 +186,7 @@ loop:
 			}
 		}
 	}
+	atomic.StoreUint32(&m.noMoreRows, 1)
 	m.flushTicker.Stop()
 	if err != nil {
 		// Drain to allow senders to finish.
