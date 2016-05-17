@@ -190,13 +190,4 @@ let databasesMainConnected = connect(
   }
 )(DatabasesMain);
 
-export { databasesMainConnected as DatabasesMain };
-
-/**
- * DatabasesTitle renders the header of the databases page.
- */
-export class DatabasesTitle extends React.Component<{}, {}> {
-  render() {
-    return <h2>Databases</h2>;
-  }
-}
+export { databasesMainConnected as default };

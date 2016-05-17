@@ -32,9 +32,7 @@
  *    - Table drilldown
  * ! HelpUs Page
  *    - Forms
- *    - Reducer
  * ! HelpUs Modal
- * ! Persistent Settings Reducer
  * - Layout Footer
  *
  *
