@@ -503,24 +503,57 @@ func (r *rocksDBSnapshot) GetStats() (*Stats, error) {
 // for the lifetime of a batch.
 type rocksDBBatchIterator struct {
 	rocksDBIterator
-	inuse bool
+	batch *rocksDBBatch
 }
 
 func (r *rocksDBBatchIterator) Close() {
 	// rocksDBBatchIterator.Close() is a no-op. The iterator is left open until
 	// the associated batch is closed.
-	if !r.inuse {
+	if r.batch == nil {
 		panic("closing idle iterator")
 	}
-	r.inuse = false
+	r.batch = nil
+}
+
+func (r *rocksDBBatchIterator) Seek(key MVCCKey) {
+	r.batch.flushMutations()
+	r.rocksDBIterator.Seek(key)
+}
+
+func (r *rocksDBBatchIterator) SeekReverse(key MVCCKey) {
+	r.batch.flushMutations()
+	r.rocksDBIterator.SeekReverse(key)
+}
+
+func (r *rocksDBBatchIterator) Next() {
+	r.batch.flushMutations()
+	r.rocksDBIterator.Next()
+}
+
+func (r *rocksDBBatchIterator) Prev() {
+	r.batch.flushMutations()
+	r.rocksDBIterator.Prev()
+}
+
+func (r *rocksDBBatchIterator) NextKey() {
+	r.batch.flushMutations()
+	r.rocksDBIterator.NextKey()
+}
+
+func (r *rocksDBBatchIterator) PrevKey() {
+	r.batch.flushMutations()
+	r.rocksDBIterator.PrevKey()
 }
 
 type rocksDBBatch struct {
-	parent     *RocksDB
-	batch      *C.DBEngine
-	defers     []func()
-	prefixIter rocksDBBatchIterator
-	normalIter rocksDBBatchIterator
+	parent        *RocksDB
+	batch         *C.DBEngine
+	defers        []func()
+	flushes       int
+	flushesFrozen bool
+	prefixIter    rocksDBBatchIterator
+	normalIter    rocksDBBatchIterator
+	builder       rocksDBBatchBuilder
 }
 
 func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
@@ -557,33 +590,39 @@ func (r *rocksDBBatch) Attrs() roachpb.Attributes {
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
-	return dbPut(r.batch, key, value)
+	r.builder.Put(key, value)
+	return nil
 }
 
 func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
-	return dbMerge(r.batch, key, value)
+	r.builder.Merge(key, value)
+	return nil
 }
 
 // ApplyBatchRepr is illegal for a batch and returns an error.
 func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
-	return util.Errorf("cannot ApplyBatchRepr to a batch")
+	return dbApplyBatchRepr(r.batch, repr)
 }
 
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
+	r.flushMutations()
 	return dbGet(r.batch, key)
 }
 
 func (r *rocksDBBatch) GetProto(key MVCCKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
+	r.flushMutations()
 	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	r.flushMutations()
 	return dbIterate(r.batch, r, start, end, f)
 }
 
 func (r *rocksDBBatch) Clear(key MVCCKey) error {
-	return dbClear(r.batch, key)
+	r.builder.Clear(key)
+	return nil
 }
 
 func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
@@ -607,10 +646,10 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	if iter.rocksDBIterator.iter == nil {
 		iter.rocksDBIterator.init(r.batch, prefix, r)
 	}
-	if iter.inuse {
+	if iter.batch != nil {
 		panic("iterator already in use")
 	}
-	iter.inuse = true
+	iter.batch = r
 	return iter
 }
 
@@ -626,9 +665,19 @@ func (r *rocksDBBatch) Commit() error {
 	if r.batch == nil {
 		panic("this batch was already committed")
 	}
-	if err := statusToError(C.DBCommitBatch(r.batch)); err != nil {
-		return err
+
+	if r.flushes > 0 {
+		r.flushesFrozen = false
+		r.flushMutations()
+		if err := statusToError(C.DBCommitBatch(r.batch)); err != nil {
+			return err
+		}
+	} else if r.builder.count > 0 {
+		if err := r.parent.ApplyBatchRepr(r.builder.Finish()); err != nil {
+			return err
+		}
 	}
+
 	C.DBClose(r.batch)
 	r.batch = nil
 
@@ -642,6 +691,7 @@ func (r *rocksDBBatch) Commit() error {
 }
 
 func (r *rocksDBBatch) Repr() []byte {
+	r.flushMutations()
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }
 
@@ -652,6 +702,20 @@ func (r *rocksDBBatch) Defer(fn func()) {
 // GetStats is not implemented for rocksDBBatch.
 func (r *rocksDBBatch) GetStats() (*Stats, error) {
 	return nil, util.Errorf("GetStats is not implemented for %T", r)
+}
+
+func (r *rocksDBBatch) FreezeFlushes() {
+	r.flushesFrozen = true
+}
+
+func (r *rocksDBBatch) flushMutations() {
+	if r.flushesFrozen || r.builder.count == 0 {
+		return
+	}
+	r.flushes++
+	if err := r.ApplyBatchRepr(r.builder.Finish()); err != nil {
+		panic(err)
+	}
 }
 
 type rocksDBIterator struct {

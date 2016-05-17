@@ -599,3 +599,47 @@ func TestBatchDefer(t *testing.T) {
 		t.Errorf("expected [two, one]; got %v", list)
 	}
 }
+
+func TestBatchBuilder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+
+	batch := e.NewBatch().(*rocksDBBatch)
+	defer batch.Close()
+
+	builder := &rocksDBBatchBuilder{}
+
+	testData := []struct {
+		key string
+		ts  roachpb.Timestamp
+	}{
+		{"a", roachpb.Timestamp{}},
+		{"b", roachpb.Timestamp{WallTime: 1}},
+		{"c", roachpb.Timestamp{WallTime: 1, Logical: 1}},
+	}
+	for _, data := range testData {
+		key := MVCCKey{roachpb.Key(data.key), data.ts}
+		if err := dbPut(batch.batch, key, []byte("value")); err != nil {
+			t.Fatal(err)
+		}
+		if err := dbClear(batch.batch, key); err != nil {
+			t.Fatal(err)
+		}
+		if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
+			t.Fatal(err)
+		}
+
+		builder.Put(key, []byte("value"))
+		builder.Clear(key)
+		builder.Merge(key, appender("bar"))
+	}
+
+	batchRepr := batch.Repr()
+	builderRepr := builder.Finish()
+	if !bytes.Equal(batchRepr, builderRepr) {
+		t.Fatalf("expected [% x], but got [% x]", batchRepr, builderRepr)
+	}
+}
