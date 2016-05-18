@@ -46,3 +46,28 @@ func Errorf(format string, a ...interface{}) error {
 func ErrorfSkipFrames(skip int, format string, a ...interface{}) error {
 	return fmt.Errorf(getPrefix(defaultSkip+skip, errorPrefixFormat)+format, a...)
 }
+
+// UnimplementedWithIssueError is an error that links unimplemented functionality back
+// to its issue on GitHub.
+type UnimplementedWithIssueError struct {
+	issue int
+	msg   string
+}
+
+func (e UnimplementedWithIssueError) Error() string {
+	var fmtMsg string
+	if e.msg != "" {
+		fmtMsg = fmt.Sprintf(": %s", e.msg)
+	}
+	return fmt.Sprintf("unimplemented%s (see issue "+
+		"https://github.com/cockroachdb/cockroach/issues/%d)", fmtMsg, e.issue)
+}
+
+// UnimplementedWithIssueErrorf constructs an UnimplementedWithIssueError with the
+// provided issue and formatted message.
+func UnimplementedWithIssueErrorf(issue int, msg string, args ...interface{}) error {
+	return UnimplementedWithIssueError{
+		issue: issue,
+		msg:   fmt.Sprintf(msg, args...),
+	}
+}
