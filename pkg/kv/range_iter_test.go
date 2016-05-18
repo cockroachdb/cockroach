@@ -87,9 +87,9 @@ func TestRangeIterForward(t *testing.T) {
 
 	ctx := context.Background()
 
-	ri := NewRangeIterator(ds, false /*reverse*/)
+	ri := NewRangeIterator(ds)
 	i := 0
-	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin)); ri.Valid(); ri.Next(ctx) {
+	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin), Ascending); ri.Valid(); ri.Next(ctx) {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
@@ -115,9 +115,9 @@ func TestRangeIterSeekForward(t *testing.T) {
 
 	ctx := context.Background()
 
-	ri := NewRangeIterator(ds, false /*reverse*/)
+	ri := NewRangeIterator(ds)
 	i := 0
-	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin)); ri.Valid(); {
+	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin), Ascending); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
@@ -128,7 +128,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 			break
 		}
 		seekKey := roachpb.RKey([]byte{nextByte})
-		ri.Seek(ctx, seekKey)
+		ri.Seek(ctx, seekKey, Ascending)
 		if !ri.Key().Equal(seekKey) {
 			t.Errorf("expected iterator key %s; got %s", seekKey, ri.Key())
 		}
@@ -148,9 +148,9 @@ func TestRangeIterReverse(t *testing.T) {
 
 	ctx := context.Background()
 
-	ri := NewRangeIterator(ds, true /*reverse*/)
+	ri := NewRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
-	for ri.Seek(ctx, roachpb.RKey([]byte{'z'})); ri.Valid(); ri.Next(ctx) {
+	for ri.Seek(ctx, roachpb.RKey([]byte{'z'}), Descending); ri.Valid(); ri.Next(ctx) {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
@@ -176,9 +176,9 @@ func TestRangeIterSeekReverse(t *testing.T) {
 
 	ctx := context.Background()
 
-	ri := NewRangeIterator(ds, true /*reverse*/)
+	ri := NewRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
-	for ri.Seek(ctx, roachpb.RKey([]byte{'z'})); ri.Valid(); {
+	for ri.Seek(ctx, roachpb.RKey([]byte{'z'}), Descending); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
@@ -189,7 +189,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 			break
 		}
 		seekKey := roachpb.RKey([]byte{nextByte})
-		ri.Seek(ctx, seekKey)
+		ri.Seek(ctx, seekKey, Descending)
 		if !ri.Key().Equal(seekKey) {
 			t.Errorf("expected iterator key %s; got %s", seekKey, ri.Key())
 		}

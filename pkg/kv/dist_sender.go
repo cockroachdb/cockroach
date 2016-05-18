@@ -245,7 +245,7 @@ func (ds *DistSender) RangeLookup(
 		MaxRanges: ds.rangeLookupMaxRanges,
 		Reverse:   useReverseScan,
 	})
-	replicas := newReplicaSlice(ds.gossip, desc)
+	replicas := NewReplicaSlice(ds.gossip, desc)
 	replicas.Shuffle()
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
@@ -270,35 +270,6 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 		return nil, firstRangeMissingError{}
 	}
 	return rangeDesc, nil
-}
-
-// optimizeReplicaOrder sorts the replicas in the order in which they are to be
-// used for sending RPCs (meaning in the order in which they'll be probed for
-// the lease). "Closer" replicas (matching in more attributes) are ordered
-// first. Replicas matching in the same number of attributes are shuffled
-// randomly.
-// If the current node is a replica, then it'll be the first one.
-func (ds *DistSender) optimizeReplicaOrder(replicas ReplicaSlice) {
-	// TODO(spencer): going to need to also sort by affinity; closest
-	// ping time should win. Makes sense to have the rpc client/server
-	// heartbeat measure ping times. With a bit of seasoning, each
-	// node will be able to order the healthy replicas based on latency.
-
-	// Unless we know better, send the RPCs randomly.
-	nodeDesc := ds.getNodeDescriptor()
-	// If we don't know which node we're on, don't optimize anything.
-	if nodeDesc == nil {
-		replicas.Shuffle()
-		return
-	}
-	// Sort replicas by attribute affinity (if any), which we treat as a stand-in
-	// for proximity (for now).
-	replicas.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs)
-
-	// If there is a replica in local node, move it to the front.
-	if i := replicas.FindReplicaByNodeID(nodeDesc.NodeID); i > 0 {
-		replicas.MoveToFront(i)
-	}
 }
 
 // getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
@@ -370,8 +341,8 @@ func (ds *DistSender) sendRPC(
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
-	ri := NewRangeIterator(ds, false /*reverse*/)
-	for ri.Seek(ctx, rs.Key); ri.Valid(); ri.Next(ctx) {
+	ri := NewRangeIterator(ds)
+	for ri.Seek(ctx, rs.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		count++
 		if !ri.NeedAnother(rs) {
 			break
@@ -411,12 +382,12 @@ func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Try to send the call.
-	replicas := newReplicaSlice(ds.gossip, desc)
+	replicas := NewReplicaSlice(ds.gossip, desc)
 
 	// Rearrange the replicas so that those replicas with long common
 	// prefix of attributes end up first. If there's no prefix, this is a
 	// no-op.
-	ds.optimizeReplicaOrder(replicas)
+	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor())
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
@@ -659,15 +630,17 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 
 	// Get initial seek key depending on direction of iteration.
 	var seekKey roachpb.RKey
-	isReverse := ba.IsReverse()
-	if isReverse {
-		seekKey = rs.EndKey
-	} else {
+	var scanDir ScanDirection
+	if !ba.IsReverse() {
+		scanDir = Ascending
 		seekKey = rs.Key
+	} else {
+		scanDir = Descending
+		seekKey = rs.EndKey
 	}
 	// Send the request to one range per iteration.
-	ri := NewRangeIterator(ds, isReverse)
-	for ri.Seek(ctx, seekKey); ri.Valid(); ri.Seek(ctx, seekKey) {
+	ri := NewRangeIterator(ds)
+	for ri.Seek(ctx, seekKey, scanDir); ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Increase the sequence counter only once before sending RPCs to
 		// the ranges involved in this chunk of the batch (as opposed to
 		// for each RPC individually). On RPC errors, there's no guarantee
@@ -712,7 +685,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// consideration.
 		var err error
 		nextRS := rs
-		if isReverse {
+		if scanDir == Descending {
 			// In next iteration, query previous range.
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
