@@ -400,11 +400,6 @@ func initFlags(ctx *Context) {
 		f.Var(cacheSize, cliflags.CacheName, usageNoEnv(cliflags.CacheName))
 	}
 
-	{
-		f := exterminateCmd.Flags()
-		f.Var(&ctx.Stores, cliflags.StoreName, usageNoEnv(cliflags.StoreName))
-	}
-
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// Certificate flags.
@@ -418,7 +413,7 @@ func initFlags(ctx *Context) {
 	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, envutil.EnvOrDefaultString(cliflags.PasswordName, ""), usageEnv(cliflags.PasswordName))
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, exterminateCmd, quitCmd, freezeClusterCmd, /* startCmd is covered above */
+		sqlShellCmd, quitCmd, freezeClusterCmd, /* startCmd is covered above */
 	}
 	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
@@ -447,7 +442,7 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{exterminateCmd, freezeClusterCmd}
+	simpleCmds := []*cobra.Command{freezeClusterCmd}
 	simpleCmds = append(simpleCmds, kvCmds...)
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
