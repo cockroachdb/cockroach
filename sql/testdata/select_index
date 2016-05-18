@@ -288,7 +288,7 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
 0 scan t@bc /5/1-/5/2
 
-query error tuples \(b, c\), \(5.1, 1\) are not the same type: expected 5.1 to be of type int, found type float
+query error tuples \(b, c\), \(5.1, 1\) are not the same type: expected 5.1 to be of type int, found type decimal
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 
 query ITT

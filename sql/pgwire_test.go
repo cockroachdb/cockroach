@@ -266,7 +266,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of parameter $1",
 		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of parameter $1",
 		"SELECT $1 + $2, $2::FLOAT":                 "pq: could not determine data type of parameter $1",
-		"SELECT ($1 + 2) + ($1 + 2.5)":              "pq: unsupported binary operator: <int> + <float>",
+		"SELECT ($1 + 2) + ($1 + 2.5)":              "pq: unsupported binary operator: <int> + <decimal>",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
