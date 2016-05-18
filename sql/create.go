@@ -161,7 +161,7 @@ func (n *createIndexNode) Start() error {
 	}
 
 	n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
-	mutationID, err := n.tableDesc.FinalizeMutation()
+	mutationIDs, err := n.tableDesc.FinalizeMutation()
 	if err != nil {
 		return err
 	}
@@ -174,8 +174,9 @@ func (n *createIndexNode) Start() error {
 		sqlbase.WrapDescriptor(n.tableDesc)); err != nil {
 		return err
 	}
-	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
-
+	for _, m := range mutationIDs {
+		n.p.notifySchemaChange(n.tableDesc.ID, m)
+	}
 	return nil
 }
 

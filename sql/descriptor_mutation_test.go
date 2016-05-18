@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -886,4 +887,120 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 		t.Fatal(err)
 	}
 	mt.makeMutationsActive()
+}
+
+func TestTableMutationQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Disable synchronous and asynchronous schema change processing so that
+	// the mutations get queued up.
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+		},
+	}
+	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	// Create a table with column i and an index on v and i.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run some schema changes.
+
+	// This single command creates three columns sharing the same mutation ID,
+	// and two indexes sharing the next mutation id in the ABSENT state.
+	if _, err := sqlDB.Exec(
+		`ALTER TABLE t.test ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// This command creates two mutations sharing the same mutation ID. idx_f
+	// is created in the ABSENT state, while idx_g is created in the DELETE_ONLY
+	// state.
+	if _, err := sqlDB.Exec(
+		`ALTER TABLE t.test ADD g INT, ADD CONSTRAINT idx_f UNIQUE (f), ADD CONSTRAINT idx_v UNIQUE (v)`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// This command creates a single mutation in the ABSENT start state.
+	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_g ON t.test (g)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// This command creates a single mutation in the DELETE_ONLY start state.
+	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX foobar ON t.test (v)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// read table descriptor
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := desc.GetTable()
+
+	expected := []struct {
+		name  string
+		id    sqlbase.MutationID
+		state sqlbase.DescriptorMutation_State
+	}{
+		{"d", 1, sqlbase.DescriptorMutation_DELETE_ONLY},
+		{"e", 1, sqlbase.DescriptorMutation_DELETE_ONLY},
+		{"f", 1, sqlbase.DescriptorMutation_DELETE_ONLY},
+		{"test_d_key", 2, sqlbase.DescriptorMutation_ABSENT},
+		{"test_e_key", 2, sqlbase.DescriptorMutation_ABSENT},
+		{"g", 3, sqlbase.DescriptorMutation_DELETE_ONLY},
+		{"idx_f", 3, sqlbase.DescriptorMutation_ABSENT},
+		{"idx_v", 3, sqlbase.DescriptorMutation_DELETE_ONLY},
+		{"idx_g", 4, sqlbase.DescriptorMutation_ABSENT},
+		{"foobar", 5, sqlbase.DescriptorMutation_DELETE_ONLY},
+	}
+
+	if len(tableDesc.Mutations) != len(expected) {
+		t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.Mutations), len(expected))
+	}
+
+	for i, m := range tableDesc.Mutations {
+		name := expected[i].name
+		if col := m.GetColumn(); col != nil {
+			if col.Name != name {
+				t.Errorf("%d entry: name %s, expected %s", i, col.Name, name)
+			}
+		}
+		if idx := m.GetIndex(); idx != nil {
+			if idx.Name != name {
+				t.Errorf("%d entry: name %s, expected %s", i, idx.Name, name)
+			}
+		}
+		if id := expected[i].id; m.MutationID != id {
+			t.Errorf("%d entry: id %d, expected %d", i, m.MutationID, id)
+		}
+		if state := expected[i].state; m.State != state {
+			t.Errorf("%d entry: state %s, expected %s", i, m.State, state)
+		}
+	}
 }

@@ -115,6 +115,7 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 			if m.MutationID != sc.mutationID {
 				break
 			}
+
 			switch m.Direction {
 			case sqlbase.DescriptorMutation_ADD:
 				switch t := m.Descriptor_.(type) {

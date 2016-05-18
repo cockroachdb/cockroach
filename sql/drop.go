@@ -223,7 +223,7 @@ func (n *dropIndexNode) Start() error {
 				continue
 			}
 		}
-		mutationID, err := tableDesc.FinalizeMutation()
+		mutationIDs, err := tableDesc.FinalizeMutation()
 		if err != nil {
 			return err
 		}
@@ -233,7 +233,9 @@ func (n *dropIndexNode) Start() error {
 		if err := n.p.writeTableDesc(tableDesc); err != nil {
 			return err
 		}
-		n.p.notifySchemaChange(tableDesc.ID, mutationID)
+		for _, m := range mutationIDs {
+			n.p.notifySchemaChange(tableDesc.ID, m)
+		}
 	}
 	return nil
 }

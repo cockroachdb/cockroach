@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -332,53 +333,65 @@ func (sc *SchemaChanger) MaybeIncrementVersion() (*sqlbase.Descriptor, error) {
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
 func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
-	if _, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
-		var modified bool
-		// Apply mutations belonging to the same version.
-		for i, mutation := range desc.Mutations {
-			if mutation.MutationID != sc.mutationID {
-				// Mutations are applied in a FIFO order. Only apply the first set of
-				// mutations if they have the mutation ID we're looking for.
-				break
-			}
-			switch mutation.Direction {
-			case sqlbase.DescriptorMutation_ADD:
-				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
-					// TODO(vivek): while moving up the state is appropriate,
-					// it will be better to run the backfill of a unique index
-					// twice: once in the DELETE_ONLY state to confirm that
-					// the index can indeed be created, and subsequently in the
-					// WRITE_ONLY state to fill in the missing elements of the
-					// index (INSERT and UPDATE that happened in the interim).
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_WRITE_ONLY
-					modified = true
-
-				case sqlbase.DescriptorMutation_WRITE_ONLY:
-					// The state change has already moved forward.
+	for modified := true; modified; {
+		if _, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+			modified = false
+			// Apply mutations belonging to the same version.
+			for i, mutation := range desc.Mutations {
+				if mutation.MutationID != sc.mutationID {
+					// Mutations are applied in a FIFO order. Only apply the first set of
+					// mutations if they have the mutation ID we're looking for.
+					break
 				}
+				switch mutation.Direction {
+				case sqlbase.DescriptorMutation_ADD:
+					switch mutation.State {
+					case sqlbase.DescriptorMutation_ABSENT:
+						desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
+						modified = true
 
-			case sqlbase.DescriptorMutation_DROP:
-				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
-					// The state change has already moved forward.
+					case sqlbase.DescriptorMutation_DELETE_ONLY:
+						// TODO(vivek): while moving up the state is appropriate,
+						// it will be better to run the backfill of a unique index
+						// twice: once in the DELETE_ONLY state to confirm that
+						// the index can indeed be created, and subsequently in the
+						// WRITE_ONLY state to fill in the missing elements of the
+						// index (INSERT and UPDATE that happened in the interim).
+						desc.Mutations[i].State = sqlbase.DescriptorMutation_WRITE_ONLY
+						modified = true
 
-				case sqlbase.DescriptorMutation_WRITE_ONLY:
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
-					modified = true
+					case sqlbase.DescriptorMutation_WRITE_ONLY:
+						// The state change has already moved forward.
+					}
+
+				case sqlbase.DescriptorMutation_DROP:
+					switch mutation.State {
+					case sqlbase.DescriptorMutation_ABSENT:
+						panic(fmt.Sprintf("ABSENT mutation %v being dropped in %v", mutation, desc))
+
+					case sqlbase.DescriptorMutation_DELETE_ONLY:
+						// The state change has already moved forward.
+
+					case sqlbase.DescriptorMutation_WRITE_ONLY:
+						desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
+						modified = true
+					}
 				}
 			}
+			if !modified {
+				// Return error so that Publish() doesn't increment the version.
+				return errDidntUpdateDescriptor
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		if !modified {
-			// Return error so that Publish() doesn't increment the version.
-			return errDidntUpdateDescriptor
+		// wait for the state change to propagate to all leases.
+		if err := sc.waitToUpdateLeases(); err != nil {
+			return err
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
-	// wait for the state change to propagate to all leases.
-	return sc.waitToUpdateLeases()
+	return nil
 }
 
 // Wait until the entire cluster has been updated to the latest version
