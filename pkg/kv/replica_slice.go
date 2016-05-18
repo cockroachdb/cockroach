@@ -40,10 +40,10 @@ func (i ReplicaInfo) attrs() []string {
 // A ReplicaSlice is a slice of ReplicaInfo.
 type ReplicaSlice []ReplicaInfo
 
-// newReplicaSlice creates a ReplicaSlice from the replicas listed in the range
+// NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
-func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) ReplicaSlice {
+func NewReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) ReplicaSlice {
 	if gossip == nil {
 		return nil
 	}
@@ -65,6 +65,7 @@ func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) Repli
 }
 
 // ReplicaSlice implements shuffle.Interface.
+var _ shuffle.Interface = ReplicaSlice{}
 
 // Len returns the total number of replicas in the slice.
 func (rs ReplicaSlice) Len() int { return len(rs) }
@@ -139,4 +140,32 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	// Move the first i elements one index to the right
 	copy(rs[1:], rs[:i])
 	rs[0] = front
+}
+
+// OptimizeReplicaOrder sorts the replicas in the order in which they're to be
+// used for sending RPCs (meaning in the order in which they'll be probed for
+// the lease).  "Closer" (matching in more attributes) replicas are ordered
+// first. If the current node is a replica, then it'll be the first one.
+//
+// nodeDesc is the descriptor of the current node. It can be nil, in which case
+// information about the current descriptor is not used in optimizing the order.
+//
+// Note that this method is not concerned with any information the node might
+// have about who the lease holder might be. If there is such info (e.g. in a
+// LeaseHolderCache), the caller will probably want to further tweak the head of
+// the ReplicaSlice.
+func (rs ReplicaSlice) OptimizeReplicaOrder(nodeDesc *roachpb.NodeDescriptor) {
+	// If we don't know which node we're on, send the RPCs randomly.
+	if nodeDesc == nil {
+		shuffle.Shuffle(rs)
+		return
+	}
+	// Sort replicas by attribute affinity, which we treat as a stand-in for
+	// proximity (for now).
+	rs.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs)
+
+	// If there is a replica in local node, move it to the front.
+	if i := rs.FindReplicaByNodeID(nodeDesc.NodeID); i > 0 {
+		rs.MoveToFront(i)
+	}
 }
