@@ -964,9 +964,9 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeDecimal, TypeInt},
 			ReturnType: TypeDecimal,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				dec := args[0].(*DDecimal)
+				dec := &args[0].(*DDecimal).Dec
 				dd := &DDecimal{}
-				dd.Round(&dec.Dec, inf.Scale(*args[1].(*DInt)), inf.RoundHalfUp)
+				dd.Round(dec, inf.Scale(*args[1].(*DInt)), inf.RoundHalfUp)
 				return dd, nil
 			},
 		},
@@ -1238,8 +1238,8 @@ func decimalBuiltin1(f func(*inf.Dec) (Datum, error)) Builtin {
 		Types:      ArgTypes{TypeDecimal},
 		ReturnType: TypeDecimal,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			dec := args[0].(*DDecimal)
-			return f(&dec.Dec)
+			dec := &args[0].(*DDecimal).Dec
+			return f(dec)
 		},
 	}
 }
@@ -1249,9 +1249,9 @@ func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error)) Builtin {
 		Types:      ArgTypes{TypeDecimal, TypeDecimal},
 		ReturnType: TypeDecimal,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			dec1 := args[0].(*DDecimal)
-			dec2 := args[1].(*DDecimal)
-			return f(&dec1.Dec, &dec2.Dec)
+			dec1 := &args[0].(*DDecimal).Dec
+			dec2 := &args[1].(*DDecimal).Dec
+			return f(dec1, dec2)
 		},
 	}
 }
