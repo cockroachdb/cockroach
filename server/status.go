@@ -190,15 +190,6 @@ func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 
-// extractNodeID examines the node_id URL parameter and returns the nodeID and a
-// boolean showing if it is this node. If node_id is "local" or not present, it
-// returns the local nodeID.
-func (s *statusServer) extractNodeID(ps httprouter.Params) (roachpb.NodeID, bool, error) {
-	nodeIDParam := ps.ByName("node_id")
-
-	return s.parseNodeID(nodeIDParam)
-}
-
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
 	// No parameter provided or set to local.
 	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
@@ -223,48 +214,6 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (StatusClient, error) {
 		return nil, err
 	}
 	return NewStatusClient(conn), nil
-}
-
-// proxyRequest performs a GET request to another node's status server.
-func (s *statusServer) proxyRequest(nodeID roachpb.NodeID, w http.ResponseWriter, r *http.Request) {
-	addr, err := s.gossip.GetNodeIDAddress(nodeID)
-	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("node could not be located: %s", nodeID),
-			http.StatusBadRequest)
-		return
-	}
-
-	// Create a call to the other node. We might want to consider moving this
-	// to an RPC instead of just proxying it.
-	// Generate the redirect url and copy all the parameters to it.
-	requestURL := fmt.Sprintf("%s://%s%s?%s", s.ctx.HTTPRequestScheme(), addr, r.URL.Path, r.URL.RawQuery)
-	req, err := http.NewRequest("GET", requestURL, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	resp, err := s.proxyClient.Do(req)
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, resp.Header.Get(util.ContentTypeHeader))
-
-	// Only pass through a whitelisted set of status codes.
-	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNotFound, http.StatusBadRequest, http.StatusInternalServerError:
-		w.WriteHeader(resp.StatusCode)
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-
-	defer resp.Body.Close()
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		log.Error(err)
-	}
 }
 
 // Gossip returns gossip network status.
@@ -652,20 +601,6 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
-}
-
-func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {
-	b, contentType, err := util.MarshalResponse(r, response, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 // marshalJSONResponse converts an arbitrary value into a JSONResponse protobuf
