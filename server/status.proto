@@ -118,4 +118,5 @@ service Status {
     };
   }
   rpc Stacks(StacksRequest) returns (JSONResponse) {}
+  rpc Metrics(MetricsRequest) returns (JSONResponse) {}
 }
