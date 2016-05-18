@@ -174,6 +174,8 @@ func TestGCQueueProcess(t *testing.T) {
 	key7 := roachpb.Key("g")
 	key8 := roachpb.Key("h")
 	key9 := roachpb.Key("i")
+	key10 := roachpb.Key("j")
+	key11 := roachpb.Key("k")
 
 	data := []struct {
 		key roachpb.Key
@@ -181,12 +183,13 @@ func TestGCQueueProcess(t *testing.T) {
 		del bool
 		txn bool
 	}{
-		// For key1, we expect first two values to GC.
+		// For key1, we expect first value to GC.
 		{key1, ts1, false, false},
 		{key1, ts2, false, false},
 		{key1, ts5, false, false},
-		// For key2, we expect all values to GC, because most recent is deletion.
+		// For key2, we expect values before GC to GC, even though most recent is deletion.
 		{key2, ts1, false, false},
+		{key2, ts2.Prev(), false, false},
 		{key2, ts2, false, false},
 		{key2, ts5, true, false},
 		// For key3, we expect just ts1 to GC, because most recent deletion is intent.
@@ -209,7 +212,18 @@ func TestGCQueueProcess(t *testing.T) {
 		{key8, ts2, false, false},
 		{key8, ts3, true, true},
 		// For key9, resolve naked intent with no remaining values.
-		{key9, ts3, true, false},
+		{key9, ts3, false, true},
+		// For key10, GC values up until a non-deleted value.
+		{key10, ts1, false, false},
+		{key10, ts2, true, false},
+		{key10, ts3, true, false},
+		{key10, ts4, false, false},
+		{key10, ts5, false, false},
+		// For key11, we can't GC anything because ts1 isn't a delete.
+		{key11, ts1, false, false},
+		{key11, ts3, true, false},
+		{key11, ts4, true, false},
+		{key11, ts5, true, false},
 	}
 
 	for i, datum := range data {
@@ -260,6 +274,9 @@ func TestGCQueueProcess(t *testing.T) {
 		ts  roachpb.Timestamp
 	}{
 		{key1, ts5},
+		{key1, ts2},
+		{key2, ts5},
+		{key2, ts2},
 		{key3, roachpb.ZeroTimestamp},
 		{key3, ts5},
 		{key3, ts2},
@@ -271,6 +288,12 @@ func TestGCQueueProcess(t *testing.T) {
 		{key7, ts4},
 		{key7, ts2},
 		{key8, ts2},
+		{key10, ts5},
+		{key10, ts4},
+		{key11, ts5},
+		{key11, ts4},
+		{key11, ts3},
+		{key11, ts1},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
 	kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
