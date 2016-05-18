@@ -832,12 +832,14 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := db.Txn(func(txn *client.Txn) error {
+	// Use txn.Exec instead of db.Txn to disable auto retry.
+	txn := client.NewTxn(context.TODO(), *db)
+	if err := txn.Exec(client.TxnExecOptions{AutoRetry: false, AutoCommit: true}, func(txn *client.Txn, _ *client.TxnExecOptions) error {
 		// Set deadline to sometime in the past.
 		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
 		_, err := txn.Get("k")
 		return err
-	}); !testutils.IsError(err, "read-only txn timestamp violates deadline") {
+	}); !testutils.IsError(err, "txn aborted") {
 		t.Fatal(err)
 	}
 }
