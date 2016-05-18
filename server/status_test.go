@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -40,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -65,6 +68,12 @@ func TestStatusLocalStacks(t *testing.T) {
 	}
 }
 
+// ignoreWhitespace replaces all whitespace sequences with regex whitespace
+// matches so you can match sequences without format mattering.
+func ignoreWhitespace(text string) string {
+	return regexp.MustCompile(`\s+`).ReplaceAllString(text, `\s*`)
+}
+
 // TestStatusJson verifies that status endpoints return expected Json results.
 // The content type of the responses is always util.JSONContentType.
 func TestStatusJson(t *testing.T) {
@@ -82,23 +91,21 @@ func TestStatusJson(t *testing.T) {
 		t.Fatal(err)
 	}
 	testCases := []TestCase{
-		{statusNodesPrefix, "\\\"d\\\":"},
+		{statusNodesPrefix, "\\\"nodes\\\":"},
 	}
-	expectedResult := fmt.Sprintf(`{
-  "nodeID": 1,
-  "address": {
-    "network_field": "%s",
-    "address_field": "%s"
-  },
-  "buildInfo": {
-    "go_version": "%s",
-    "tag": "unknown",
-    "time": "",
-    "dependencies": "",
-    "cgo_compiler": ".*",
-    "platform": ".*"
-  }
-}`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
+	expectedResult := fmt.Sprintf(ignoreWhitespace(`{
+		"node_id": 1,
+		"address": {
+			"network_field": "%s",
+			"address_field": "%s"
+		},
+		"build_info": {
+			"go_version": "%s",
+			"tag": "unknown",
+			"cgo_compiler": ".*",
+			"platform": ".*"
+		}
+	}`), addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
 	testCases = append(testCases, TestCase{"/health", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/local", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/1", expectedResult})
@@ -109,31 +116,34 @@ func TestStatusJson(t *testing.T) {
 	}
 	for _, spec := range testCases {
 		contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
-		for _, contentType := range contentTypes {
-			req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+spec.keyPrefix, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			req.Header.Set(util.AcceptHeader, contentType)
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("endpoint %s unexpected status code: %v", spec.keyPrefix, resp.StatusCode)
-			}
-			returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-			if returnedContentType != util.JSONContentType {
-				t.Errorf("endpoint %s unexpected content type: %v", spec.keyPrefix, returnedContentType)
-			}
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if re := regexp.MustCompile(spec.expected); !re.Match(body) {
-				t.Errorf("endpoint %s expected match %s; got %s", spec.keyPrefix, spec.expected, body)
-			}
+		for i, contentType := range contentTypes {
+			util.SucceedsSoon(t, func() error {
+				req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+spec.keyPrefix, nil)
+				if err != nil {
+					return err
+				}
+				req.Header.Set(util.AcceptHeader, contentType)
+				resp, err := httpClient.Do(req)
+				if err != nil {
+					return err
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("%d. endpoint %s unexpected status code: %v", i, spec.keyPrefix, resp.StatusCode)
+				}
+				returnedContentType := resp.Header.Get(util.ContentTypeHeader)
+				if returnedContentType != util.JSONContentType {
+					return fmt.Errorf("%d. endpoint %s unexpected content type: %v", i, spec.keyPrefix, returnedContentType)
+				}
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return err
+				}
+				if re := regexp.MustCompile(spec.expected); !re.Match(body) {
+					return fmt.Errorf("%d. endpoint %s expected match %s; got %s", i, spec.keyPrefix, spec.expected, body)
+				}
+				return nil
+			})
 		}
 	}
 }
@@ -144,15 +154,6 @@ func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
-
-	type infos struct {
-		Infos struct {
-			FirstRange   *gossip.Info `json:"first-range"`
-			ClusterID    *gossip.Info `json:"cluster-id"`
-			Node1        *gossip.Info `json:"node:1"`
-			SystemConfig *gossip.Info `json:"system-db"`
-		} `json:"infos"`
-	}
 
 	httpClient, err := s.Ctx.GetHTTPClient()
 	if err != nil {
@@ -178,25 +179,21 @@ func TestStatusGossipJson(t *testing.T) {
 		if returnedContentType != util.JSONContentType {
 			t.Errorf("unexpected content type: %v", returnedContentType)
 		}
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
+		data := gossip.InfoStatus{}
+		if err = jsonpb.Unmarshal(resp.Body, &data); err != nil {
 			t.Fatal(err)
 		}
-		data := infos{}
-		if err = json.Unmarshal(body, &data); err != nil {
-			t.Fatal(err)
+		if _, ok := data.Infos["first-range"]; !ok {
+			t.Errorf("no first-range info returned: %v", data)
 		}
-		if data.Infos.FirstRange == nil {
-			t.Errorf("no first-range info returned: %v", body)
+		if _, ok := data.Infos["cluster-id"]; !ok {
+			t.Errorf("no clusterID info returned: %v", data)
 		}
-		if data.Infos.ClusterID == nil {
-			t.Errorf("no clusterID info returned: %v", body)
+		if _, ok := data.Infos["node:1"]; !ok {
+			t.Errorf("no node 1 info returned: %v", data)
 		}
-		if data.Infos.Node1 == nil {
-			t.Errorf("no node 1 info returned: %v", body)
-		}
-		if data.Infos.SystemConfig == nil {
-			t.Errorf("no system config info returned: %v", body)
+		if _, ok := data.Infos["system-db"]; !ok {
+			t.Errorf("no system config info returned: %v", data)
 		}
 	}
 }
@@ -207,9 +204,10 @@ var retryOptions = retry.Options{
 	Multiplier:     2,
 }
 
-// getRequest returns the results of a get request to the test server with
-// the given path.  It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts TestServer, path string) []byte {
+// getRequestReader returns the io.ReadCloser from a get request to the test
+// server with the given path. The returned closer should be closed by the
+// caller.
+func getRequestReader(t *testing.T, ts TestServer, path string) io.ReadCloser {
 	httpClient, err := ts.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -227,13 +225,12 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 			log.Infof("could not GET %s - %s", url, err)
 			continue
 		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Infof("could not ready body for %s - %s", url, err)
-			continue
-		}
 		if resp.StatusCode != http.StatusOK {
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Infof("could not read body for %s - %s", url, err)
+				continue
+			}
 			log.Infof("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
@@ -243,10 +240,31 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 			continue
 		}
 		log.Infof("OK response from %s", url)
-		return body
+		return resp.Body
 	}
 	t.Fatalf("There was an error retrieving %s", url)
-	return []byte("")
+	return nil
+}
+
+// getRequest returns the results of a get request to the test server with
+// the given path. It returns the contents of the body of the result.
+func getRequest(t *testing.T, ts TestServer, path string) []byte {
+	respBody := getRequestReader(t, ts, path)
+	defer respBody.Close()
+	body, err := ioutil.ReadAll(respBody)
+	if err != nil {
+		log.Infof("could not read body for %s - %s", path, err)
+		return nil
+	}
+	return body
+}
+
+// getRequestProto unmarshals the result of a get request to the test server
+// with the given path.
+func getRequestProto(t *testing.T, ts TestServer, path string, v proto.Message) error {
+	respBody := getRequestReader(t, ts, path)
+	defer respBody.Close()
+	return jsonpb.Unmarshal(respBody, v)
 }
 
 // startServer will start a server with a short scan interval, wait for
@@ -454,17 +472,12 @@ func TestNodeStatusResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
-	body := getRequest(t, ts, statusNodesPrefix)
-
 	// First fetch all the node statuses.
-	type nsWrapper struct {
-		Data []status.NodeStatus `json:"d"`
-	}
-	wrapper := nsWrapper{}
-	if err := json.Unmarshal(body, &wrapper); err != nil {
+	wrapper := NodesResponse{}
+	if err := getRequestProto(t, ts, statusNodesPrefix, &wrapper); err != nil {
 		t.Fatal(err)
 	}
-	nodeStatuses := wrapper.Data
+	nodeStatuses := wrapper.Nodes
 
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
@@ -477,8 +490,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodesPrefix, oldNodeStatus.Desc.NodeID))
-		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
+		if err := getRequestProto(t, ts, PathForNodeStatus(oldNodeStatus.Desc.NodeID.String()), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
@@ -537,11 +549,8 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
-	var response struct {
-		Ranges []rangeInfo
-	}
-	body := getRequest(t, ts, statusRangesPrefix+"local")
-	if err := json.Unmarshal(body, &response); err != nil {
+	var response RangesResponse
+	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
 		t.Fatal(err)
 	}
 	if len(response.Ranges) == 0 {

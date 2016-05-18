@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -37,13 +39,13 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	}
 
 	// Get the ids for each node.
-	idMap := make(map[int]string)
+	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
-		var detail details
+		var detail server.DetailsResponse
 		if err := getJSON(c.URL(i), "/_status/details/local", &detail); err != nil {
 			t.Fatal(err)
 		}
-		idMap[i] = detail.NodeID.String()
+		idMap[i] = detail.NodeID
 	}
 
 	// Leave only the first node alive.
@@ -60,7 +62,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	}
 	for i := 0; i < c.NumNodes(); i++ {
 		var nodeStatus interface{}
-		url := fmt.Sprintf("/_status/nodes/%s", idMap[i])
+		url := fmt.Sprintf("/_status/nodes/%d", idMap[i])
 		if err := getJSON(c.URL(0), url, &nodeStatus); err != nil {
 			t.Fatal(err)
 		}

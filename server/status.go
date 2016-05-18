@@ -25,6 +25,12 @@ import (
 	"runtime"
 	"strconv"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+
+	"golang.org/x/net/context"
+
+	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -33,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -61,12 +68,6 @@ const (
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
 
-	// statusGossipPattern exposes a view of the gossip network.
-	statusGossipPattern = statusPrefix + "gossip/:node_id"
-
-	// statusDetailsPattern exposes a node's details.
-	statusDetailsPattern = statusPrefix + "details/:node_id"
-
 	// statusLogFilesListPattern exposes a list of log files.
 	statusLogFilesListPattern = statusPrefix + "logfiles/:node_id"
 	// statusLogFilePattern exposes a specific file on a node.
@@ -83,9 +84,7 @@ const (
 	stackTraceApproxSize = 1024
 
 	// statusNodesPrefix exposes status for all nodes in the cluster.
-	statusNodesPrefix = statusPrefix + "nodes/"
-	// statusNodePattern exposes status for a single node.
-	statusNodePattern = statusPrefix + "nodes/:node_id"
+	statusNodesPrefix = statusPrefix + "nodes"
 
 	// statusMetricsPrefix exposes transient stats.
 	statusMetricsPrefix = statusPrefix + "metrics/"
@@ -94,8 +93,6 @@ const (
 
 	// statusRangesPrefix exposes range information.
 	statusRangesPrefix = statusPrefix + "ranges/"
-	// statusRangesPattern exposes range information for a node.
-	statusRangesPattern = statusPrefix + "ranges/:node_id"
 
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
@@ -118,6 +115,7 @@ type statusServer struct {
 	metricSource json.Marshaler
 	router       *httprouter.Router
 	ctx          *Context
+	rpcCtx       *rpc.Context
 	proxyClient  *http.Client
 	stores       *storage.Stores
 }
@@ -128,6 +126,7 @@ func newStatusServer(
 	gossip *gossip.Gossip,
 	metricSource json.Marshaler,
 	ctx *Context,
+	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
 	// Create an http client with a timeout
@@ -147,25 +146,42 @@ func newStatusServer(
 		metricSource: metricSource,
 		router:       httprouter.New(),
 		ctx:          ctx,
+		rpcCtx:       rpcCtx,
 		proxyClient:  httpClient,
 		stores:       stores,
 	}
 
-	server.router.GET(statusGossipPattern, server.handleGossip)
-	server.router.GET(statusDetailsPattern, server.handleDetails)
 	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
 	server.router.GET(statusLogFilePattern, server.handleLogFile)
 	server.router.GET(statusLogsPattern, server.handleLogs)
 	// TODO(tschottdorf): significant overlap with /debug/pprof/goroutine,
 	// except that this one allows querying by NodeID.
 	server.router.GET(statusStacksPattern, server.handleStacks)
-	server.router.GET(statusNodesPrefix, server.handleNodesStatus)
-	server.router.GET(statusNodePattern, server.handleNodeStatus)
 	server.router.GET(statusMetricsPattern, server.handleMetrics)
-	server.router.GET(statusRangesPattern, server.handleRanges)
 
-	server.router.GET(healthEndpoint, server.handleDetailsLocal)
 	return server
+}
+
+// RegisterService registers the GRPC service.
+func (s *statusServer) RegisterService(g *grpc.Server) {
+	RegisterStatusServer(g, s)
+}
+
+// RegisterGateway starts the gateway (i.e. reverse
+// proxy) that proxies HTTP requests to the appropriate gRPC endpoints.
+func (s *statusServer) RegisterGateway(
+	ctx context.Context,
+	mux *gwruntime.ServeMux,
+	addr string,
+	opts []grpc.DialOption,
+) error {
+	if err := RegisterStatusHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
+		return util.Errorf("error constructing grpc-gateway: %s. are your certificates valid?", err)
+	}
+
+	// Pass all requests for gRPC-based API endpoints to the gateway mux.
+	s.router.NotFound = mux
+	return nil
 }
 
 // ServeHTTP implements the http.Handler interface.
@@ -179,6 +195,10 @@ func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) extractNodeID(ps httprouter.Params) (roachpb.NodeID, bool, error) {
 	nodeIDParam := ps.ByName("node_id")
 
+	return s.parseNodeID(nodeIDParam)
+}
+
+func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
 	// No parameter provided or set to local.
 	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
 		return s.gossip.GetNodeID(), true, nil
@@ -190,6 +210,18 @@ func (s *statusServer) extractNodeID(ps httprouter.Params) (roachpb.NodeID, bool
 	}
 	nodeID := roachpb.NodeID(id)
 	return nodeID, nodeID == s.gossip.GetNodeID(), nil
+}
+
+func (s *statusServer) dialNode(nodeID roachpb.NodeID) (StatusClient, error) {
+	addr, err := s.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := s.rpcCtx.GRPCDial(addr.String())
+	if err != nil {
+		return nil, err
+	}
+	return NewStatusClient(conn), nil
 }
 
 // proxyRequest performs a GET request to another node's status server.
@@ -234,63 +266,45 @@ func (s *statusServer) proxyRequest(nodeID roachpb.NodeID, w http.ResponseWriter
 	}
 }
 
-// handleGossipLocal handles local requests for gossip network status.
-func (s *statusServer) handleGossipLocal(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	b, err := s.gossip.GetInfosAsJSON()
+// Gossip returns gossip network status.
+func (s *statusServer) Gossip(ctx context.Context, req *GossipRequest) (*gossip.InfoStatus, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// handleGossip handles GET requests for gossip network status.
-func (s *statusServer) handleGossip(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if local {
-		s.handleGossipLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
+		infoStatus := s.gossip.GetInfoStatus()
+		return &infoStatus, nil
 	}
-}
-
-// handleDetailsLocal handles local requests for node details.
-func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	local := struct {
-		NodeID    roachpb.NodeID      `json:"nodeID"`
-		Address   util.UnresolvedAddr `json:"address"`
-		BuildInfo build.Info          `json:"buildInfo"`
-	}{
-		NodeID:    s.gossip.GetNodeID(),
-		BuildInfo: build.GetInfo(),
-	}
-	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {
-		local.Address = *addr
-	}
-	respondAsJSON(w, r, local)
-}
-
-// handleDetails handles GET requests for node details.
-func (s *statusServer) handleDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+	status, err := s.dialNode(nodeID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
+	return status.Gossip(ctx, req)
+}
 
-	if local {
-		s.handleDetailsLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
+// Details returns node details.
+func (s *statusServer) Details(ctx context.Context, req *DetailsRequest) (*DetailsResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
+	if local {
+		resp := &DetailsResponse{
+			NodeID:    s.gossip.GetNodeID(),
+			BuildInfo: build.GetInfo(),
+		}
+		if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {
+			resp.Address = *addr
+		}
+		return resp, nil
+	}
+	status, err := s.dialNode(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return status.Details(ctx, req)
 }
 
 // handleLogFilesList handles local requests for a list of available log files.
@@ -527,8 +541,8 @@ func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps h
 	}
 }
 
-// handleNodesStatus handles GET requests for all node statuses.
-func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// Nodes returns all node statuses.
+func (s *statusServer) Nodes(_ context.Context, req *NodesRequest) (*NodesResponse, error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -537,30 +551,27 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	err := s.db.Run(b)
 	if err != nil {
 		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	rows := b.Results[0].Rows
 
-	nodeStatuses := []status.NodeStatus{}
-	for _, row := range rows {
-		nodeStatus := &status.NodeStatus{}
-		if err := row.ValueProto(nodeStatus); err != nil {
-			log.Error(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		nodeStatuses = append(nodeStatuses, *nodeStatus)
+	resp := NodesResponse{
+		Nodes: make([]status.NodeStatus, len(rows)),
 	}
-	respondAsJSON(w, r, nodeStatuses)
+	for i, row := range rows {
+		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
+			log.Error(err)
+			return nil, grpc.Errorf(codes.Internal, err.Error())
+		}
+	}
+	return &resp, nil
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
-func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, _, err := s.extractNodeID(ps)
+func (s *statusServer) Node(ctx context.Context, req *NodeRequest) (*status.NodeStatus, error) {
+	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	key := keys.NodeStatusKey(int32(nodeID))
@@ -568,18 +579,16 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	b.Get(key)
 	if err := s.db.Run(b); err != nil {
 		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 
 	var nodeStatus status.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = util.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
 		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
-	respondAsJSON(w, r, &nodeStatus)
+	return &nodeStatus, nil
 }
 
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -596,25 +605,23 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 	respondAsJSON(w, r, s.metricSource)
 }
 
-type rangeInfo struct {
-	Desc      roachpb.RangeDescriptor `json:"desc"`
-	RaftState string                  `json:"raft_state,omitempty"`
-}
-
-func (s *statusServer) handleRanges(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+// Ranges returns range info for the server specified
+func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
-		s.proxyRequest(nodeID, w, r)
-		return
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Ranges(ctx, req)
 	}
 
-	var output struct {
-		Ranges []rangeInfo `json:"ranges"`
+	output := RangesResponse{
+		Ranges: make([]RangeInfo, 0, s.stores.GetStoreCount()),
 	}
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		// Use IterateRangeDescriptors to read from the engine only
@@ -629,7 +636,7 @@ func (s *statusServer) handleRanges(w http.ResponseWriter, r *http.Request, ps h
 					// the most interesting bit for now.
 					raftState = status.RaftState.String()
 				}
-				output.Ranges = append(output.Ranges, rangeInfo{
+				output.Ranges = append(output.Ranges, RangeInfo{
 					Desc:      desc,
 					RaftState: raftState,
 				})
@@ -638,10 +645,9 @@ func (s *statusServer) handleRanges(w http.ResponseWriter, r *http.Request, ps h
 		return err
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
-	respondAsJSON(w, r, output)
+	return &output, nil
 }
 
 func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {
@@ -661,5 +667,8 @@ func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{})
 // PathForNodeStatus returns the path needed to issue a GET request for node status. If passed
 // an empty nodeID, this returns the path to GET status for all nodes.
 func PathForNodeStatus(nodeID string) string {
+	if len(nodeID) == 0 {
+		return statusNodesPrefix
+	}
 	return fmt.Sprintf("%s/%s", statusNodesPrefix, nodeID)
 }

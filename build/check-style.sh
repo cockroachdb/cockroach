@@ -97,7 +97,7 @@ TestReturnCheck() {
 TestVet() {
   ! go tool vet -printfuncs Info:0,Infof:0,Warning:0,Warningf:0 . 2>&1 | \
     grep -vE '^vet: cannot process directory .git' | \
-    grep -vE '^server/admin\..*\go:.+: constant [0-9]+ not a string in call to Errorf'
+    grep -vE '^server/(admin|status)\..*\go:.+: constant [0-9]+ not a string in call to Errorf'
   # To return proper HTTP error codes (e.g. 404 Not Found), we need to use
   # grpc.Errorf, which has an error code as its first parameter. 'go vet'
   # doesn't like that the first parameter isn't a format string.
