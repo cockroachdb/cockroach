@@ -207,7 +207,20 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		}
 	}
 
-	// If we didn't find a lease, acquire one.
+	// If we didn't find a lease or a lease is about to expire, acquire one.
+	if lease != nil && !lease.hasSomeLifeLeft(p.leaseMgr.clock) {
+		// Remove the lease from p.leases.
+		leases := make([]*LeaseState, len(p.leases)-1)
+		for _, l := range p.leases {
+			if l != lease {
+				leases = append(leases, lease)
+			}
+		}
+		p.leases = leases
+		lease = nil
+		// Reset the deadline so that a new deadline will be set after the lease is acquired.
+		p.txn.ResetDeadline()
+	}
 	if lease == nil {
 		var err error
 		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
