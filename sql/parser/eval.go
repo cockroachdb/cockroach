@@ -477,12 +477,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := *right.(*DInt)
 				if rInt == 0 {
 					return nil, errDivByZero
 				}
-				div := inf.NewDec(int64(rInt), 0)
+				div := ctx.getTmpDec().SetUnscaled(int64(rInt)).SetScale(0)
 				dd := &DDecimal{}
 				dd.SetUnscaled(int64(*left.(*DInt)))
 				dd.QuoRound(&dd.Dec, div, decimal.Precision, inf.RoundHalfUp)
@@ -719,17 +719,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
-				r := inf.NewDec(int64(*right.(*DInt)), 0)
+				r := ctx.getTmpDec().SetUnscaled(int64(*right.(*DInt))).SetScale(0)
 				return DBool(l.Cmp(r) == 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-				l := inf.NewDec(int64(*left.(*DInt)), 0)
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+				l := ctx.getTmpDec().SetUnscaled(int64(*left.(*DInt))).SetScale(0)
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) == 0), nil
 			},
@@ -737,17 +737,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
-				r := decimal.NewDecFromFloat(float64(*right.(*DFloat)))
+				r := decimal.SetFromFloat(ctx.getTmpDec(), float64(*right.(*DFloat)))
 				return DBool(l.Cmp(r) == 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-				l := decimal.NewDecFromFloat(float64(*left.(*DFloat)))
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+				l := decimal.SetFromFloat(ctx.getTmpDec(), float64(*left.(*DFloat)))
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) == 0), nil
 			},
@@ -852,17 +852,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
-				r := inf.NewDec(int64(*right.(*DInt)), 0)
+				r := ctx.getTmpDec().SetUnscaled(int64(*right.(*DInt))).SetScale(0)
 				return DBool(l.Cmp(r) < 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-				l := inf.NewDec(int64(*left.(*DInt)), 0)
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+				l := ctx.getTmpDec().SetUnscaled(int64(*left.(*DInt))).SetScale(0)
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) < 0), nil
 			},
@@ -870,17 +870,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
-				r := decimal.NewDecFromFloat(float64(*right.(*DFloat)))
+				r := decimal.SetFromFloat(ctx.getTmpDec(), float64(*right.(*DFloat)))
 				return DBool(l.Cmp(r) < 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-				l := decimal.NewDecFromFloat(float64(*left.(*DFloat)))
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+				l := decimal.SetFromFloat(ctx.getTmpDec(), float64(*left.(*DFloat)))
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) < 0), nil
 			},
@@ -985,17 +985,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
-				r := inf.NewDec(int64(*right.(*DInt)), 0)
+				r := ctx.getTmpDec().SetUnscaled(int64(*right.(*DInt))).SetScale(0)
 				return DBool(l.Cmp(r) <= 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-				l := inf.NewDec(int64(*left.(*DInt)), 0)
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+				l := ctx.getTmpDec().SetUnscaled(int64(*left.(*DInt))).SetScale(0)
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) <= 0), nil
 			},
@@ -1003,17 +1003,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
-				r := decimal.NewDecFromFloat(float64(*right.(*DFloat)))
+				r := decimal.SetFromFloat(ctx.getTmpDec(), float64(*right.(*DFloat)))
 				return DBool(l.Cmp(r) <= 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-				l := decimal.NewDecFromFloat(float64(*left.(*DFloat)))
+			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+				l := decimal.SetFromFloat(ctx.getTmpDec(), float64(*left.(*DFloat)))
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) <= 0), nil
 			},
@@ -1156,6 +1156,7 @@ type EvalContext struct {
 	clusterTimestamp roachpb.Timestamp
 
 	ReCache  *RegexpCache
+	TmpDec   *inf.Dec
 	Location *time.Location
 	Args     MapArgs
 
@@ -1242,6 +1243,13 @@ func (ctx EvalContext) makeDDate(t time.Time) (*DDate, error) {
 	year, month, day := t.In(ctx.GetLocation()).Date()
 	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
 	return NewDDate(DDate(secs / secondsInDay)), nil
+}
+
+func (ctx EvalContext) getTmpDec() *inf.Dec {
+	if ctx.TmpDec != nil {
+		return ctx.TmpDec
+	}
+	return new(inf.Dec)
 }
 
 // Eval implements the Expr interface.
