@@ -209,6 +209,12 @@ type ExecutorTestingKnobs struct {
 	// backfill for a schema change operation. It returns error to stop the
 	// backfill and return an error to the caller of the SchemaChanger.exec().
 	SchemaChangersStartBackfillNotification func() error
+
+	//SyncSchemaChangersRenameOldNameNotInUseNotification is called during a rename
+	//schema change, after all leases on the version of the descriptor with the
+	//old name are gone, and just before the mapping of the old name to the
+	//descriptor id is about to be deleted.
+	SyncSchemaChangersRenameOldNameNotInUseNotification func()
 }
 
 // NewExecutor creates an Executor and registers a callback on the

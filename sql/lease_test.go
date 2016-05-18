@@ -425,7 +425,7 @@ func acquire(s server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorV
 	var lease *csql.LeaseState
 	err := s.DB().Txn(func(txn *client.Txn) error {
 		var err error
-		lease, err = s.LeaseManager().Acquire(txn, descID, version)
+		lease, err = s.LeaseManager().(*csql.LeaseManager).Acquire(txn, descID, version)
 		return err
 	})
 	return lease, err
@@ -517,13 +517,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Release everything.
-	if err := s.LeaseManager().Release(lease1); err != nil {
+	if err := s.LeaseManager().(*csql.LeaseManager).Release(lease1); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LeaseManager().Release(lease2); err != nil {
+	if err := s.LeaseManager().(*csql.LeaseManager).Release(lease2); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LeaseManager().Release(lease3); err != nil {
+	if err := s.LeaseManager().(*csql.LeaseManager).Release(lease3); err != nil {
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
