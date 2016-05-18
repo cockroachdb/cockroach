@@ -252,12 +252,25 @@ message DrainRequest {
   // and it fails in pretty dramatic ways (panics the server).
   repeated int32 on = 1;
   repeated int32 off = 2;
+  // When true, terminates the process after the given drain modes have been
+  // activated.
+  bool shutdown = 3;
 }
 
 // DrainResponse is the response to a successful DrainRequest and lists the
 // modes which are activated after having processing the request.
 message DrainResponse {
   repeated int32 on = 1;
+}
+
+// HealthRequest inquires whether the addressed node is healthy.
+message HealthRequest {
+}
+
+// HealthResponse is the response to HealthRequest. It currently does not
+// contain any information.
+// TODO(tschottdorf): Should it contain information, and if so, what?
+message HealthResponse {
 }
 
 // ClusterFreezeRequest lets the receiving node go through all Ranges in the
@@ -359,7 +372,14 @@ service Admin {
     };
   }
 
-  // Drain puts the node into the specified drain mode(s).
+  rpc Health(HealthRequest) returns (HealthResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/health"
+    };
+  }
+
+  // Drain puts the node into the specified drain mode(s) and optionally
+  // instructs the process to terminate.
   rpc Drain(DrainRequest) returns (DrainResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/drain"

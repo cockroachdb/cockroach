@@ -169,7 +169,7 @@ func (c cliTest) RunWithArgs(a []string) {
 		fmt.Println(err)
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
-	if a[0] == "node" || a[0] == "quit" {
+	if a[0] == "node" {
 		_, httpPort, err := net.SplitHostPort(c.HTTPAddr())
 		if err != nil {
 			fmt.Println(err)

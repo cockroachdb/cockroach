@@ -442,7 +442,7 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{freezeClusterCmd}
+	simpleCmds := []*cobra.Command{quitCmd, freezeClusterCmd}
 	simpleCmds = append(simpleCmds, kvCmds...)
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
@@ -451,7 +451,7 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need an http port.
-	httpCmds := []*cobra.Command{quitCmd}
+	var httpCmds []*cobra.Command
 	httpCmds = append(httpCmds, nodeCmds...)
 	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()

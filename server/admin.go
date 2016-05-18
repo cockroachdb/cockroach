@@ -69,8 +69,6 @@ const (
 	apiEndpoint = adminEndpoint + "v1/"
 	// healthPath is the health endpoint.
 	healthPath = apiEndpoint + "health"
-	// quitPath is the quit endpoint.
-	quitPath = apiEndpoint + "quit"
 
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.
@@ -184,10 +182,6 @@ func newAdminServer(s *Server) *adminServer {
 
 	// Register HTTP handlers.
 	server.ServeMux.HandleFunc(debugEndpoint, server.handleDebug)
-	// TODO(cdo): Move quit and health endpoints to gRPC.
-	server.ServeMux.HandleFunc(quitPath, server.handleQuit)
-	server.ServeMux.HandleFunc(healthPath, server.handleHealth)
-
 	return server
 }
 
@@ -211,28 +205,6 @@ func (s *adminServer) RegisterGateway(
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
 	s.ServeMux.Handle(apiEndpoint, mux)
 	return nil
-}
-
-// handleHealth responds to health requests from monitoring services.
-func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-	fmt.Fprintln(w, "ok")
-}
-
-// handleQuit is the shutdown hook. The server is first placed into a
-// draining mode, followed by exit.
-// TODO(tschottdorf,cuongdo): fold this into Drain().
-func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-	if _, err := s.server.Drain(GracefulDrainModes); err != nil {
-		log.Warning(err)
-	}
-	s.server.stopper.Quiesce()
-	fmt.Fprintln(w, "ok")
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		s.server.stopper.Stop()
-	}()
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default
@@ -749,6 +721,10 @@ func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterR
 	return &ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
+func (s *adminServer) Health(ctx context.Context, req *HealthRequest) (*HealthResponse, error) {
+	return &HealthResponse{}, nil
+}
+
 func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainResponse, error) {
 	on := make([]DrainMode, len(req.On))
 	for i := range req.On {
@@ -769,6 +745,13 @@ func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainRespo
 	nowOnInts := make([]int32, len(nowOn))
 	for i := range nowOn {
 		nowOnInts[i] = int32(nowOn[i])
+	}
+	if req.Shutdown {
+		s.server.stopper.Quiesce()
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			s.server.stopper.Stop()
+		}()
 	}
 	return &DrainResponse{On: nowOnInts}, nil
 }
