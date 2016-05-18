@@ -39,6 +39,11 @@
 		RangesRequest
 		RangesResponse
 		GossipRequest
+		JSONResponse
+		LogFilesListRequest
+		LogFileRequest
+		StacksRequest
+		MetricsRequest
 */
 package server
 

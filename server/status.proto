@@ -67,6 +67,27 @@ message GossipRequest {
   string node_id = 1;
 }
 
+message JSONResponse {
+  bytes data = 1;
+}
+
+message LogFilesListRequest {
+  string node_id = 1;
+}
+
+message LogFileRequest {
+  string node_id = 1;
+  string file = 2;
+}
+
+message StacksRequest {
+  string node_id = 1;
+}
+
+message MetricsRequest {
+  string node_id = 1;
+}
+
 service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {

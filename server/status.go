@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -660,6 +661,28 @@ func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{})
 
 	w.Header().Set(util.ContentTypeHeader, contentType)
 	if _, err := w.Write(b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// marshalJSONResponse converts an arbitrary value into a JSONResponse protobuf
+// that can be sent via grpc.
+func marshalJSONResponse(value interface{}) (*JSONResponse, error) {
+	switch reflect.ValueOf(value).Kind() {
+	case reflect.Array, reflect.Slice:
+		value = util.JSONWrapper{Data: value}
+	}
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return nil, util.Errorf("unable to marshal %+v to json: %s", value, err)
+	}
+	return &JSONResponse{Data: data}, nil
+}
+
+// writeJSONResponse writes a JSONResponse to a http.ResponseWriter.
+func writeJSONResponse(w http.ResponseWriter, resp *JSONResponse) {
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
+	if _, err := w.Write(resp.Data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
