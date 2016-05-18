@@ -600,18 +600,30 @@ func (s *statusServer) Node(ctx context.Context, req *NodeRequest) (*status.Node
 	return &nodeStatus, nil
 }
 
-func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+// Metrics return metrics information for the server specified.
+func (s *statusServer) Metrics(ctx context.Context, req *MetricsRequest) (*JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
-		s.proxyRequest(nodeID, w, r)
-		return
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Metrics(ctx, req)
 	}
-	respondAsJSON(w, r, s.metricSource)
+	return marshalJSONResponse(s.metricSource)
+}
+
+func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	resp, err := s.Metrics(context.TODO(), &MetricsRequest{NodeId: ps.ByName("node_id")})
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	writeJSONResponse(w, resp)
 }
 
 // Ranges returns range info for the server specified
