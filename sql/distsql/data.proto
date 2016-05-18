@@ -22,6 +22,7 @@ package cockroach.sql.distsql;
 option go_package = "distsql";
 
 import "cockroach/roachpb/data.proto";
+import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/sqlbase/structured.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -39,7 +40,6 @@ message TableReaderSpan {
   // KVs. The span should be described as starting and ending lists of values
   // for a prefix of the index columns, along with inclusive/exclusive flags.
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
-  // TODO(radu): support the single-key optimization (span.count)
 }
 
 // TableReaderSpec is the specification for a table reader. A table reader
@@ -61,32 +61,31 @@ message TableReaderSpec {
   // The table reader will only produce values for these columns, referenced by
   // their indices in table.columns.
   repeated uint32 output_columns = 6 [packed = true];
+
+  // TODO(radu): support limits and the single-key optimization (span.count)
 }
 
+message MailboxSpec {
+  // If set, we are in a special "simple flow" mode. In this mode, we return
+  // results directly as part of the RPC call that set up the flow. This saves
+  // overhead (extra RPCs) compared to the normal mode where the RPC just sets
+  // up the flow. In this mode there are no remote endpoints so this must be the
+  // only mailbox in that flow.
+  optional bool simple_response = 1 [(gogoproto.nullable) = false];
+
+  // TODO(radu): info for how to connect to a remote machine will follow.
+}
 
 // StreamEndpointSpec describes one of the endpoints (input or output) of a physical
 // stream.
 message StreamEndpointSpec {
-  enum Type {
-    // The ending is part of the same flow.
-    LOCAL = 0;
-    // The stream crosses flows; the ending is a mailbox.
-    REMOTE = 1;
-    // This is a special mode used for simple flows with few expected
-    // results. In this "sync RPC" mode, we accumulate results and return
-    // them as part of the RPC call that set up the flow. This saves
-    // overhead (extra RPCs) compared to the normal "async" mode where the
-    // RPC just sets up the flow. There can be at most one such endpoint in
-    // one flow, and such a flow cannot have any REMOTE endpoints (i.e. all
-    // other endpoints must be LOCAL).
-    RPC_SYNC_RESP = 2;
-  }
-  optional Type type = 1 [(gogoproto.nullable) = false];
+  option (gogoproto.onlyone) = true;
 
-  // For the LOCAL type, this is the ID of the corresponding endpoint within
-  // the same flow. For the REMOTE type, this is the ID of a mailbox.
-  optional int32 id = 2 [(gogoproto.nullable) = false,
-                         (gogoproto.customname) = "ID"];
+  // If set, both ends of the stream are part of the flow on this machine. There
+  // will be a corresponding endpoint with the same local stream ID.
+  optional int32 local_stream_id = 1 [(gogoproto.customname) = "LocalStreamID"];
+  // If set, the stream crosses flows; the endpoint is a mailbox.
+  optional MailboxSpec mailbox = 2;
 }
 
 // OutputRouterSpec is the specification for the output router of a processor;
@@ -128,4 +127,44 @@ message ProcessorSpec {
 message FlowSpec {
   repeated ProcessorSpec processors = 1 [(gogoproto.nullable) = false];
   // TODO(radu): mailbox specs will go here.
+}
+
+message DatumInfo {
+  enum EncodingType {
+    // Indicates that the datum is encoded using the order-preserving encoding
+    // used for keys (ascending order).
+    ASCENDING_KEY_ENCODING = 0;
+    // Indicates that the datum is encoded using the order-preserving encoding
+    // used for keys (descending order).
+    DESCENDING_KEY_ENCODING = 1;
+    // TODO: value encoding
+  }
+  optional EncodingType encoding = 1 [(gogoproto.nullable) = false];
+}
+
+// StreamHeader is a message that is sent once at the beginning of a stream.
+message StreamHeader {
+  // There is one DatumInfo for each element in a row.
+  repeated DatumInfo info = 1 [(gogoproto.nullable) = false];
+}
+
+// StreamData is a message that can be sent multiple times as part of a stream.
+message StreamData {
+  // Encodes one or more data rows. Each datum is encoded according to the
+  // corresponding DatumInfo.
+  optional bytes raw_bytes = 1;
+}
+
+// StreamTrailer is a message that is sent once at the end of a stream.
+message StreamTrailer {
+  optional roachpb.Error error = 1;
+}
+
+message StreamMessage {
+  // Header is present in the first message.
+  optional StreamHeader header = 1;
+  // Data is present in all messages except possibly the first and last.
+  optional StreamData data = 2 [(gogoproto.nullable) = false];
+  // Trailer is present in the last message.
+  optional StreamTrailer trailer = 3;
 }
