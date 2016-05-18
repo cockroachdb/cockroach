@@ -71,7 +71,11 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 		case errUnimplemented:
 			err = errUnimplemented
 		default:
-			panic(r)
+			if u, ok := r.(unimplementedWithIssueError); ok {
+				err = u
+			} else {
+				panic(r)
+			}
 		}
 	}()
 	p.scanner.init(sql, syntax)
