@@ -118,65 +118,6 @@ func (*legacyTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
 func (*legacyTransportAdapter) Close() {
 }
 
-// TestMoveLocalReplicaToFront verifies that optimizeReplicaOrder correctly
-// move the local replica to the front.
-func TestMoveLocalReplicaToFront(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testCase := []struct {
-		slice         ReplicaSlice
-		localNodeDesc roachpb.NodeDescriptor
-	}{
-		{
-			// No attribute prefix
-			slice: ReplicaSlice{
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 2},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 3},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 1},
-				},
-			},
-			localNodeDesc: roachpb.NodeDescriptor{NodeID: 1},
-		},
-		{
-			// Sort replicas by attribute
-			slice: ReplicaSlice{
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 2, Attrs: roachpb.Attributes{Attrs: []string{"ad"}}},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 3, Attrs: roachpb.Attributes{Attrs: []string{"ab", "c"}}},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 1, Attrs: roachpb.Attributes{Attrs: []string{"ab"}}},
-				},
-			},
-			localNodeDesc: roachpb.NodeDescriptor{NodeID: 1, Attrs: roachpb.Attributes{Attrs: []string{"ab"}}},
-		},
-	}
-	for _, test := range testCase {
-		cfg := DistSenderConfig{
-			Clock:          hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-			nodeDescriptor: &test.localNodeDesc,
-		}
-		ds := NewDistSender(cfg, nil)
-		ds.optimizeReplicaOrder(test.slice)
-		if s := test.slice[0]; s.NodeID != cfg.nodeDescriptor.NodeID {
-			t.Errorf("unexpected header, wanted nodeid = %d, got %d", cfg.nodeDescriptor.NodeID, s.NodeID)
-		}
-	}
-
-}
-
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
 // lease holder, attributes and required consistency to determine where to send
 // remote requests.

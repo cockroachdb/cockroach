@@ -114,3 +114,57 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 }
+
+// TestMoveLocalReplicaToFront verifies that OptimizeReplicaOrder correctly
+// move the local replica to the front.
+func TestMoveLocalReplicaToFront(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCase := []struct {
+		slice         ReplicaSlice
+		localNodeDesc roachpb.NodeDescriptor
+	}{
+		{
+			// No attribute prefix
+			slice: ReplicaSlice{
+				ReplicaInfo{
+					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2},
+					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 2},
+				},
+				ReplicaInfo{
+					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
+					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 3},
+				},
+				ReplicaInfo{
+					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
+					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 1},
+				},
+			},
+			localNodeDesc: roachpb.NodeDescriptor{NodeID: 1},
+		},
+		{
+			// Sort replicas by attribute
+			slice: ReplicaSlice{
+				ReplicaInfo{
+					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2},
+					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 2, Attrs: roachpb.Attributes{Attrs: []string{"ad"}}},
+				},
+				ReplicaInfo{
+					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
+					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 3, Attrs: roachpb.Attributes{Attrs: []string{"ab", "c"}}},
+				},
+				ReplicaInfo{
+					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
+					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 1, Attrs: roachpb.Attributes{Attrs: []string{"ab"}}},
+				},
+			},
+			localNodeDesc: roachpb.NodeDescriptor{NodeID: 1, Attrs: roachpb.Attributes{Attrs: []string{"ab"}}},
+		},
+	}
+	for _, test := range testCase {
+		test.slice.OptimizeReplicaOrder(&test.localNodeDesc)
+		if s := test.slice[0]; s.NodeID != test.localNodeDesc.NodeID {
+			t.Errorf("unexpected header, wanted nodeid = %d, got %d", test.localNodeDesc.NodeID, s.NodeID)
+		}
+	}
+
+}
