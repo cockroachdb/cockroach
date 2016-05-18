@@ -58,9 +58,9 @@ func TestGarbageCollectorFilter(t *testing.T) {
 		expDelTS roachpb.Timestamp
 	}{
 		{gcA, makeTS(0, 0), aKeys, [][]byte{n, n, n}, roachpb.ZeroTimestamp},
-		{gcA, makeTS(0, 0), aKeys, [][]byte{d, d, d}, makeTS(2E9, 0)},
+		{gcA, makeTS(0, 0), aKeys, [][]byte{d, d, d}, roachpb.ZeroTimestamp},
 		{gcB, makeTS(0, 0), bKeys, [][]byte{n, n}, roachpb.ZeroTimestamp},
-		{gcB, makeTS(0, 0), bKeys, [][]byte{d, d}, makeTS(2E9, 0)},
+		{gcB, makeTS(0, 0), bKeys, [][]byte{d, d}, roachpb.ZeroTimestamp},
 		{gcA, makeTS(1E9, 0), aKeys, [][]byte{n, n, n}, roachpb.ZeroTimestamp},
 		{gcB, makeTS(1E9, 0), bKeys, [][]byte{n, n}, roachpb.ZeroTimestamp},
 		{gcA, makeTS(2E9, 0), aKeys, [][]byte{n, n, n}, roachpb.ZeroTimestamp},
