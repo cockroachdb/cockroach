@@ -381,7 +381,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
 		if !ok {
-			return util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+			return util.Errorf("unsupported FROM: %s (see issue #2970)", from)
 		}
 
 		switch expr := ate.Expr.(type) {
