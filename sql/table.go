@@ -144,7 +144,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(qname.Database())
+		return nil, newUndefinedDatabaseError(qname.Database())
 	}
 
 	desc := sqlbase.TableDescriptor{}
@@ -324,7 +324,7 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 			return nil, err
 		}
 		if dbDesc == nil {
-			return nil, databaseDoesNotExistError(string(expr.Base))
+			return nil, newUndefinedDatabaseError(string(expr.Base))
 		}
 		tableNames, err := p.getTableNames(dbDesc)
 		if err != nil {
