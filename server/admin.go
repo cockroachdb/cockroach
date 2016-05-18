@@ -182,9 +182,6 @@ func newAdminServer(s *Server) *adminServer {
 
 	// Register HTTP handlers.
 	server.ServeMux.HandleFunc(debugEndpoint, server.handleDebug)
-	// TODO(cdo): Move health endpoint to gRPC.
-	server.ServeMux.HandleFunc(healthPath, server.handleHealth)
-
 	return server
 }
 
@@ -208,12 +205,6 @@ func (s *adminServer) RegisterGateway(
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
 	s.ServeMux.Handle(apiEndpoint, mux)
 	return nil
-}
-
-// handleHealth responds to health requests from monitoring services.
-func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-	fmt.Fprintln(w, "ok")
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default
@@ -728,6 +719,10 @@ func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterR
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 	return &ClusterResponse{ClusterID: clusterID.String()}, nil
+}
+
+func (s *adminServer) Health(ctx context.Context, req *HealthRequest) (*HealthResponse, error) {
+	return &HealthResponse{}, nil
 }
 
 func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainResponse, error) {

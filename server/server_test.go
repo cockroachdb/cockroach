@@ -54,7 +54,7 @@ func TestSelfBootstrap(t *testing.T) {
 	defer s.Stop()
 }
 
-// TestHealth verifies that health endpoint return "ok".
+// TestHealth verifies that health endpoint returns an empty JSON response.
 func TestHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
@@ -73,7 +73,7 @@ func TestHealth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not read response body: %s", err)
 	}
-	expected := "ok"
+	expected := "{}"
 	if !strings.Contains(string(b), expected) {
 		t.Errorf("expected body to contain %q, got %q", expected, string(b))
 	}
@@ -108,7 +108,7 @@ func TestPlainHTTPServer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("could not read response body: %s", err)
 		}
-		if expected := "ok"; !strings.Contains(string(b), expected) {
+		if expected := "{}"; !strings.Contains(string(b), expected) {
 			t.Errorf("expected body to contain %q, got %q", expected, string(b))
 		}
 	}
@@ -215,7 +215,7 @@ func TestAcceptEncoding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("could not read '%s' response body: %s", d.acceptEncoding, err)
 		}
-		expected := "ok"
+		expected := "{}"
 		if !strings.Contains(string(b), expected) {
 			t.Errorf("expected body to contain %q, got %q", expected, b)
 		}
