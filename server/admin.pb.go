@@ -40,6 +40,7 @@
 		RangesResponse
 		GossipRequest
 		JSONResponse
+		LogsRequest
 		LogFilesListRequest
 		LogFileRequest
 		StacksRequest
