@@ -149,10 +149,13 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []roachpb.Intent,
-	h roachpb.Header, pushType roachpb.PushTxnType, skipIfInFlight bool) (
-	[]roachpb.Intent, *roachpb.Error) {
-
+func (ir *intentResolver) maybePushTransactions(
+	ctx context.Context,
+	intents []roachpb.Intent,
+	h roachpb.Header,
+	pushType roachpb.PushTxnType,
+	skipIfInFlight bool,
+) ([]roachpb.Intent, *roachpb.Error) {
 	now := ir.store.Clock().Now()
 
 	partialPusherTxn := h.Txn
@@ -166,7 +169,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		}
 	}
 
-	log.Trace(ctx, "intent resolution")
+	log.Trace(ctx, "pushing transaction")
 
 	// Split intents into those we need to push and those which are good to
 	// resolve.
@@ -351,6 +354,9 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // intents again.
 func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	intents []roachpb.Intent, wait bool, poison bool) error {
+	if len(intents) == 0 {
+		return nil
+	}
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
 	defer cleanup()

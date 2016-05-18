@@ -47,7 +47,6 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (server.C
 }
 
 func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	t.Skip("#6715")
 	minAffected := int64(server.ExpectedInitialRangeCount())
 
 	const long = time.Minute
@@ -116,7 +115,15 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 	// The cluster should now be fully operational (at least after waiting
 	// a little bit) since each node tries to unfreeze everything when it
 	// starts.
+	//
+	// TODO(tschottdorf): we unfreeze again in the loop since Raft reproposals
+	// can re-freeze Ranges unexpectedly. This should be re-evaluated after
+	// #6287 removes that problem.
 	if err := util.RetryForDuration(time.Minute, func() error {
+		if _, err := postFreeze(c, false, short); err != nil {
+			return err
+		}
+
 		// TODO(tschottdorf): moving the client creation outside of the retry
 		// loop will break the test with the following message:
 		//

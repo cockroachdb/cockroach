@@ -1874,8 +1874,13 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if pFrozen != b {
 			t.Fatal(util.ErrorfSkipFrames(1, "expected status %t, got %t", b, pFrozen))
 		}
-		if pFrozen != store.IsFrozen() {
+		frozen, thawed := store.FrozenStatus()
+		pThawed := !pFrozen
+		if pFrozen != frozen {
 			t.Fatal(util.ErrorfSkipFrames(1, "expected store to be frozen: %t", pFrozen))
+		}
+		if pThawed != thawed {
+			t.Fatal(util.ErrorfSkipFrames(1, "expected store to be thawed: %t", pFrozen))
 		}
 	}
 

@@ -2349,16 +2349,21 @@ func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 	s.mu.Unlock()
 }
 
-// IsFrozen returns whether all of the Store's replicas are frozen. It makes
-// no attempt to prevent new data being rebalanced to the Store, and thus does
-// not guarantee that the Store remains fully frozen.
-func (s *Store) IsFrozen() bool {
-	frozen := true
+// FrozenStatus returns whether all of the Store's replicas are frozen or
+// unfrozen (thawed). It makes no attempt to prevent new data being rebalanced
+// to the Store, and thus does not guarantee that the Store remains in the
+// reported state.
+func (s *Store) FrozenStatus() (frozen bool, thawed bool) {
+	frozen, thawed = true, true
 	newStoreRangeSet(s).Visit(func(r *Replica) bool {
+		if !r.IsInitialized() {
+			return true
+		}
 		r.mu.Lock()
-		frozen = r.mu.frozen
+		frozen = frozen && r.mu.frozen
+		thawed = thawed && !r.mu.frozen
 		r.mu.Unlock()
-		return frozen // stop if false
+		return frozen || thawed // stop early if both already false
 	})
-	return frozen
+	return frozen, thawed
 }
