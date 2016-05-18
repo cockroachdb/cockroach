@@ -184,6 +184,7 @@ var keywords = map[string]int{
 	"SEARCH":            SEARCH,
 	"SECOND":            SECOND,
 	"SELECT":            SELECT,
+	"SERIAL":            SERIAL,
 	"SERIALIZABLE":      SERIALIZABLE,
 	"SESSION":           SESSION,
 	"SESSION_USER":      SESSION_USER,

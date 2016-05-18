@@ -381,7 +381,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
 		if !ok {
-			return util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+			return util.UnimplementedWithIssueErrorf(2970, "unsupported FROM type %T", from[0])
 		}
 
 		switch expr := ate.Expr.(type) {
@@ -406,8 +406,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 			}
 
 		default:
-			return fmt.Errorf("JOINs and SELECTs from multiple tables are not yet supported: %s",
-				from)
+			panic(fmt.Sprintf("unexpected SimpleTableExpr type: %T", expr))
 		}
 
 		if ate.As.Alias != "" {
@@ -416,7 +415,8 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 		}
 		colAlias = ate.As.Cols
 	default:
-		s.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+		s.err = util.UnimplementedWithIssueErrorf(2970, "JOINs and SELECTs from multiple tables "+
+			"are not yet supported: %s", from)
 		return s.err
 	}
 
