@@ -117,7 +117,7 @@ TestGolint() {
 
 TestVarcheck() {
   ! varcheck -e "$PKG" | \
-    grep -vE '(_string.go|sql/parser/(yacctab|sql\.y)|\.pb\.go)'
+    grep -vE '(_string.go|sql/parser/(yacctab|sql\.y)|\.pb\.go|pgerror/codes.go)'
 }
 
 TestGofmtSimplify() {
@@ -129,7 +129,7 @@ TestGoimports() {
 }
 
 TestUnused() {
-  ! unused -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex)'
+  ! unused -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|pgerror/codes.go)'
 }
 
 # Run all the tests, wrapped in a similar output format to "go test"
