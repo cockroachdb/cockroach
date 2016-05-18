@@ -30,16 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-// Cockroach error extensions:
-const (
-	// CodeRetriableError signals to the user that the SQL txn entered the
-	// RESTART_WAIT state and that a RESTART statement should be issued.
-	CodeRetriableError string = "CR000"
-	// CodeTransactionCommittedError signals that the SQL txn is in the
-	// COMMIT_WAIT state and a COMMIT statement should be issued.
-	CodeTransactionCommittedError string = "CR001"
-)
-
 // SrcCtx contains contextual information about the source of an error.
 type SrcCtx struct {
 	File     string
@@ -80,7 +70,9 @@ func newRetryError(msg string) error {
 	return &errRetry{ctx: makeSrcCtx(1), msg: msg}
 }
 
-// errRetry means that the transaction can be retried.
+// errRetry means that the transaction can be retried. It signals to the user
+// that the SQL txn entered the RESTART_WAIT state after a serialization error,
+// and that a RESTART statement should be issued.
 type errRetry struct {
 	ctx SrcCtx
 	msg string
@@ -91,7 +83,7 @@ func (e *errRetry) Error() string {
 }
 
 func (*errRetry) Code() string {
-	return CodeRetriableError
+	return pgerror.CodeSerializationFailureError
 }
 
 func (e *errRetry) SrcContext() SrcCtx {
@@ -127,6 +119,8 @@ func newTransactionCommittedError() error {
 	return &errTransactionCommitted{ctx: makeSrcCtx(1)}
 }
 
+// errTransactionCommitted signals that the SQL txn is in the COMMIT_WAIT state
+// and that only a COMMIT statement will be accepted.
 type errTransactionCommitted struct {
 	ctx SrcCtx
 }
@@ -136,7 +130,7 @@ func (*errTransactionCommitted) Error() string {
 }
 
 func (*errTransactionCommitted) Code() string {
-	return CodeTransactionCommittedError
+	return pgerror.CodeInvalidTransactionStateError
 }
 
 func (e *errTransactionCommitted) SrcContext() SrcCtx {
