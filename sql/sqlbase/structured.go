@@ -655,27 +655,69 @@ func (desc *TableDescriptor) AddIndexMutation(idx IndexDescriptor, direction Des
 }
 
 func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
+	m.MutationID = desc.NextMutationID
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		m.State = DescriptorMutation_DELETE_ONLY
+		// An index referencing a column mutation is placed in the ABSENT state.
+		if idx := m.GetIndex(); idx != nil {
+			for _, c := range idx.ColumnNames {
+				// Ignore error because this error is caught by desc.Validate().
+				if status, i, err := desc.FindColumnByName(
+					c,
+				); err == nil && status == DescriptorIncomplete {
+					m.State = DescriptorMutation_ABSENT
+
+					// If this mutation is referencing another mutation with
+					// the same mutation ID use a new mutation ID. This
+					// guarantees that the referenced mutation is live before
+					// the referencing mutation moves from the ABSENT state.
+					if m.MutationID == desc.Mutations[i].MutationID {
+						m.MutationID++
+					}
+					break
+				}
+			}
+		}
 
 	case DescriptorMutation_DROP:
 		m.State = DescriptorMutation_WRITE_ONLY
 	}
-	m.MutationID = desc.NextMutationID
-	desc.Mutations = append(desc.Mutations, m)
+
+	// Insert after last entry with the same mutation ID. Although a single
+	// schema change normally adds mutations with the same mutation id, some
+	// schema changes like UNIQUE column use up two mutation ids: one for the
+	// column and the next for the unique index on the column. We ensure here
+	// that mutations are sorted so that other parts of the code can trust
+	// that.
+	i := 0
+	for _, mutation := range desc.Mutations {
+		if m.MutationID < mutation.MutationID {
+			break
+		}
+		i++
+	}
+	desc.Mutations = append(desc.Mutations[:i], append([]DescriptorMutation{m}, desc.Mutations[i:]...)...)
 }
 
-// FinalizeMutation returns the id that has been used by mutations appended
-// with addMutation() since the last time this function was called.
-// Future mutations will use a new ID.
-func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
+// FinalizeMutation returns the ids that have been used by mutations appended
+// with addMutation() since the last time this function was called. Future
+// mutations will use a new ID. Some schema changes like UNIQUE COLUMN use up
+// two mutation ids: one for the column and the next for the index.
+func (desc *TableDescriptor) FinalizeMutation() ([]MutationID, error) {
 	if err := desc.SetUpVersion(); err != nil {
-		return InvalidMutationID, err
+		return nil, err
 	}
-	mutationID := desc.NextMutationID
-	desc.NextMutationID++
-	return mutationID, nil
+
+	var mutationIDs []MutationID
+	lastUsedMutationID := desc.Mutations[len(desc.Mutations)-1].MutationID
+	// Add all the mutationIDs used up.
+	for desc.NextMutationID <= lastUsedMutationID {
+		mutationIDs = append(mutationIDs, desc.NextMutationID)
+		desc.NextMutationID++
+	}
+
+	return mutationIDs, nil
 }
 
 // Deleted returns true if the table is being deleted.

@@ -219,11 +219,12 @@ func (n *alterTableNode) Start() error {
 		return nil
 	}
 
-	mutationID := sqlbase.InvalidMutationID
+	var mutationIDs []sqlbase.MutationID
 	var err error
 	if addedMutations {
-		mutationID, err = n.tableDesc.FinalizeMutation()
+		mutationIDs, err = n.tableDesc.FinalizeMutation()
 	} else {
+		mutationIDs = []sqlbase.MutationID{sqlbase.InvalidMutationID}
 		err = n.tableDesc.SetUpVersion()
 	}
 	if err != nil {
@@ -237,7 +238,9 @@ func (n *alterTableNode) Start() error {
 	if err := n.p.writeTableDesc(n.tableDesc); err != nil {
 		return err
 	}
-	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
+	for _, m := range mutationIDs {
+		n.p.notifySchemaChange(n.tableDesc.ID, m)
+	}
 
 	return nil
 }

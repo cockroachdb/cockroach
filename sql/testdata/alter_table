@@ -180,6 +180,27 @@ ALTER TABLE t DROP CONSTRAINT t_d_key
 statement ok
 ALTER TABLE t DROP COLUMN d
 
+# Test that more than one column with constraints can be added in the
+# same statement. The constraints added here are functioning on columns
+# that are new and running through the schema change process.
+statement ok
+ALTER TABLE t ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT
+
+query ITTTIII colnames
+SELECT * FROM t
+----
+a   x     y     z     d     e     f
+1   NULL  1.3   1.4   NULL  NULL  NULL
+2   NULL  1.3   1.4   NULL  NULL  NULL
+3   NULL  1.3   1.4   NULL  NULL  NULL 
+4   NULL  1.3   1.4   NULL  NULL  NULL
+11  1     1.3   1.4   NULL  NULL  NULL
+13  NULL  1.3   1.4   NULL  NULL  NULL
+21  NULL  1     1.4   NULL  NULL  NULL
+23  NULL  1.3   1.4   NULL  NULL  NULL
+31  NULL  1.3   1.4   NULL  NULL  NULL
+33  2     2.1   2.2   NULL  NULL  NULL
+
 # Subsequent operations succeed because the table is empty
 statement ok
 CREATE TABLE tt (a INT PRIMARY KEY)
