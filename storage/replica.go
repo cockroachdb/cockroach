@@ -558,7 +558,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 					}
 				}
 				return c.Err
-			case <-r.store.Stopper().ShouldStop():
+			case <-r.store.Stopper().ShouldDrain():
 				return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
 			}
 		}()
