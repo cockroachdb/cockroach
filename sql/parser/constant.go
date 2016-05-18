@@ -18,6 +18,7 @@ package parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/constant"
 	"go/token"
@@ -141,17 +142,22 @@ func (expr *NumVal) canBeInt64() bool {
 // 	return expr.Kind() == constant.Int && expr.canBeInt64()
 // }
 
+// These errors are statically allocated, because they are returned in the
+// common path of asInt64.
+var errConstNotInt = errors.New("cannot represent numeric constant as an int")
+var errConstOutOfRange = errors.New("numeric constant out of int64 range")
+
 // asInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible. The method will set expr.resInt to the value of
 // this int64 if it is successful, avoiding the need to call the method again.
 func (expr *NumVal) asInt64() (int64, error) {
 	intVal, ok := expr.asConstantInt()
 	if !ok {
-		return 0, fmt.Errorf("cannot represent %v as an int", expr.Value)
+		return 0, errConstNotInt
 	}
 	i, exact := constant.Int64Val(intVal)
 	if !exact {
-		return 0, fmt.Errorf("integer value out of range: %v", intVal)
+		return 0, errConstOutOfRange
 	}
 	expr.resInt = DInt(i)
 	return i, nil
