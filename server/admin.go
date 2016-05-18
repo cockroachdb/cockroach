@@ -760,6 +760,7 @@ func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainRespo
 // unfrozen Replicas (or an error or timeout occurs).
 func (s *adminServer) waitForStoreFrozen(
 	stores map[roachpb.StoreID]roachpb.NodeID,
+	wantFrozen bool,
 ) error {
 	mu := struct {
 		sync.Mutex
@@ -803,13 +804,14 @@ func (s *adminServer) waitForStoreFrozen(
 						return
 					}
 					mu.Lock()
-					if resp.Frozen {
-						// If the Store is frozen, mark it as such. This means
-						// we won't try it again.
+					ok := (wantFrozen && resp.Frozen) || (!wantFrozen && resp.Thawed)
+					if ok {
+						// If the Store is in the right state, mark it as such.
+						// This means we won't try it again.
 						mu.oks[storeID] = true
 					} else {
-						// When not frozen, forget that we tried the Store so
-						// that the retry loop picks it up again.
+						// Otherwise, forget that we tried the Store so that
+						// the retry loop picks it up again.
 						delete(mu.oks, storeID)
 					}
 					mu.Unlock()
@@ -926,11 +928,7 @@ func (s *adminServer) ClusterFreeze(
 			return nil, err
 		}
 	}
-	var err error
-	if req.Freeze {
-		err = s.waitForStoreFrozen(stores)
-	}
-	return &resp, err
+	return &resp, s.waitForStoreFrozen(stores, req.Freeze)
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
