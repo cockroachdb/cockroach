@@ -664,6 +664,24 @@ func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{})
 	}
 }
 
+// marshalJSONResponse converts an arbitrary value into a JSONResponse protobuf
+// that can be sent via grpc.
+func marshalJSONResponse(value interface{}) (*JSONResponse, error) {
+	data, err := util.MarshalToJSON(value)
+	if err != nil {
+		return nil, err
+	}
+	return &JSONResponse{Data: data}, nil
+}
+
+// writeJSONResponse writes a JSONResponse to a http.ResponseWriter.
+func writeJSONResponse(w http.ResponseWriter, resp *JSONResponse) {
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
+	if _, err := w.Write(resp.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // PathForNodeStatus returns the path needed to issue a GET request for node status. If passed
 // an empty nodeID, this returns the path to GET status for all nodes.
 func PathForNodeStatus(nodeID string) string {
