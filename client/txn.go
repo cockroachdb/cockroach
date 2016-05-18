@@ -651,14 +651,13 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 
 	br, pErr := txn.db.send(ba)
 	if elideEndTxn && pErr == nil {
-		// Check that read only transactions do not violate their deadline.
+		// Check that read only transactions do not violate their deadline. This can happen
+		// when the transaction timestamp is updated by ReadWithinUncertaintyIntervalError
+		// (see TestTxnDeadlineExceededError).
 		if endTxnRequest.Deadline != nil {
 			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
-				return nil, roachpb.NewErrorf(
-					"read-only txn timestamp violates deadline: %s < %s",
-					endTxnRequest.Deadline,
-					txn.Proto.Timestamp,
-				)
+				txn.finalized = true
+				return nil, roachpb.NewError(roachpb.NewTransactionAbortedError())
 			}
 		}
 		// This normally happens on the server and sent back in response
