@@ -406,8 +406,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 			}
 
 		default:
-			return fmt.Errorf("JOINs and SELECTs from multiple tables are not yet supported: %s",
-				from)
+			panic(fmt.Sprintf("unexpected SimpleTableExpr type: %T", expr))
 		}
 
 		if ate.As.Alias != "" {
