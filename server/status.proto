@@ -117,4 +117,5 @@ service Status {
       get: "/_status/gossip/{node_id}"
     };
   }
+  rpc Stacks(StacksRequest) returns (JSONResponse) {}
 }

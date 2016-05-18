@@ -507,8 +507,21 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 	}
 }
 
-// handleStacksLocal handles local requests for goroutines stack traces.
-func (s *statusServer) handleStacksLocal(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+// Stacks handles returns goroutine stack traces.
+func (s *statusServer) Stacks(ctx context.Context, req *StacksRequest) (*JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Stacks(ctx, req)
+	}
+
 	bufSize := runtime.NumGoroutine() * stackTraceApproxSize
 	for {
 		buf := make([]byte, bufSize)
@@ -519,26 +532,21 @@ func (s *statusServer) handleStacksLocal(w http.ResponseWriter, _ *http.Request,
 			bufSize = bufSize * 2
 			continue
 		}
-		w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-		if _, err := w.Write(buf[:length]); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
+		return &JSONResponse{Data: buf[:length]}, nil
 	}
 }
 
 // handleStacksLocal handles GET requests for goroutine stack traces.
 func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+	resp, err := s.Stacks(context.TODO(), &StacksRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if local {
-		s.handleStacksLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
+	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
+	if _, err := w.Write(resp.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
