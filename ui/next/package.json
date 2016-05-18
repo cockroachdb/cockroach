@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "chai": "^3.5.0",
+    "d3": "^3.5.17",
     "enzyme": "^2.2.0",
     "fetch-mock": "^4.4.0",
     "isomorphic-fetch": "^2.2.1",

@@ -6,8 +6,9 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
 import { refreshNodes } from "../redux/nodes";
-import { MetricsDataProvider } from "../containers/metricsDataProvider";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
+import { StackedAreaGraph } from "../components/stackedgraph";
+import GraphGroup from "../components/graphGroup";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
 import { NodeStatus, MetricConstants, BytesUsed } from  "../util/proto";
@@ -66,30 +67,33 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
           </Visualization>
         </div>
 
-        <GraphGroup groupId="cluster.small" className="small half">
+        <GraphGroup groupId="cluster.small" childClassName="small half">
           <LineGraph title="Query Time"
                      subtitle="(Max Per Percentile)"
                      tooltip={`The latency between query requests and responses over a 1 minute period.
                                Percentiles are first calculated on each node.
                                For Each percentile, the maximum latency across all nodes is then shown.`}>
             <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
-              { /* TODO: Max Selectors. */ }
-              <Metric name="cr.node.exec.latency-1m-max" title="Max Latency" />
-              <Metric name="cr.node.exec.latency-1m-p99" title="99th percentile latency" />
-              <Metric name="cr.node.exec.latency-1m-p90" title="90th percentile latency" />
-              <Metric name="cr.node.exec.latency-1m-p50" title="50th percentile latency" />
+              <Metric name="cr.node.exec.latency-1m-max" title="Max Latency"
+                      aggregateMax downsampleMax />
+              <Metric name="cr.node.exec.latency-1m-p99" title="99th percentile latency"
+                      aggregateMax downsampleMax />
+              <Metric name="cr.node.exec.latency-1m-p90" title="90th percentile latency"
+                      aggregateMax downsampleMax />
+              <Metric name="cr.node.exec.latency-1m-p50" title="50th percentile latency"
+                      aggregateMax downsampleMax />
             </Axis>
           </LineGraph>
 
-          { /* TODO: Stacked Graph. */ }
-          <LineGraph title="CPU Usage"
+          <StackedAreaGraph title="CPU Usage"
+                     legend={ false }
                      tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations 
                                (Sys %) across all nodes.`}>
             <Axis format={ d3.format(".2%") }>
               <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %" />
               <Metric name="cr.node.sys.cpu.sys.percent" title="CPU Sys %" />
             </Axis>
-          </LineGraph>
+          </StackedAreaGraph>
 
           <LineGraph title="Memory Usage"
                      tooltip="The average memory in use across all nodes.">
@@ -163,23 +167,3 @@ let clusterMainConnected = connect(
 )(ClusterMain);
 
 export default clusterMainConnected;
-
-/** 
- * GraphGroup is a stateless react component that wraps a group of graphs (the
- * children of this component) in a MetricsDataProvider and some additional tags
- * relevant to the layout of the cluster page.
- */
-function GraphGroup(props: { groupId: string, className?: string, children?: any }) {
-  return <div>
-  {
-    React.Children.map(props.children, (child, idx) => {
-      let key = props.groupId + idx.toString();
-      return <div style={{float:"left"}} key={key} className={ props.className || "" }>
-        <MetricsDataProvider id={key}>
-          { child }
-        </MetricsDataProvider>
-      </div>;
-    })
-  }
-  </div>;
-}

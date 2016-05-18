@@ -17,7 +17,7 @@ const CHART_MARGINS: nvd3.Margin = {top: 20, right: 60, bottom: 20, left: 60};
 // Maximum number of series we will show in the legend. If there are more we hide the legend.
 const MAX_LEGEND_SERIES: number = 3;
 
-interface LineGraphProps extends MetricsDataComponentProps {
+interface StackedAreaGraphProps extends MetricsDataComponentProps {
   title?: string;
   subtitle?: string;
   legend?: boolean;
@@ -26,29 +26,28 @@ interface LineGraphProps extends MetricsDataComponentProps {
 }
 
 /**
- * LineGraph displays queried metrics in a line graph. It currently only
- * supports a single Y-axis, but multiple metrics can be graphed on the same
- * axis.
+ * StackedAreaGraph displays queried metrics in a stacked area graph. It
+ * currently only supports a single Y-axis, but multiple metrics can be graphed
+ * on the same axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, {}> {
-  static colors: d3.scale.Ordinal<string, string> = d3.scale.category10();
+export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}> {
 
   // The SVG Element in the DOM used to render the graph.
   svgEl: SVGElement;
 
   // A configured NVD3 chart used to render the chart.
-  chart: nvd3.LineChart;
+  chart: nvd3.StackedAreaChart;
 
   axis = createSelector(
     (props: {children?: any}) => props.children,
     (children) => {
       let axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children, Axis);
       if (axes.length === 0) {
-        console.warn("LineGraph requires the specification of at least one axis.");
+        console.warn("StackedAreaGraph requires the specification of at least one axis.");
         return null;
       }
       if (axes.length > 1) {
-        console.warn("LineGraph currently only supports a single axis; ignoring additional axes.");
+        console.warn("StackedAreaGraph currently only supports a single axis; ignoring additional axes.");
       }
       return axes[0];
     });
@@ -66,7 +65,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       return;
     }
 
-    this.chart = nvd3.models.lineChart();
+    this.chart = nvd3.models.stackedAreaChart();
     this.chart
       .x((d: cockroach.ts.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
       .y((d: cockroach.ts.TimeSeriesDatapoint) => d && d.value)
@@ -76,6 +75,11 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       .showXAxis(this.props.xAxis || true)
       .xScale(d3.time.scale())
       .margin(CHART_MARGINS);
+
+    /**
+     * TODO: This method is missing from the nvd3 typescript typings.
+     */
+    (this.chart as any).showControls(false);
 
     this.chart.xAxis
       .tickFormat((t) => typeof t === "string" ? t : d3.time.format("%H:%M:%S")(t))
@@ -88,8 +92,13 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       this.chart.yAxis.tickFormat(axis.props.format);
     }
 
-    if (axis.props.range) {
-      this.chart.forceY(axis.props.range);
+    let range = axis.props.range;
+    if (range) {
+      if (range.length !== 2) {
+        throw new Error("Unexpected range: " + range + ". " +
+                        "For a stacked area chart, the range must be an array of length 2.");
+      }
+      this.chart.yDomain(range);
     }
   }
 

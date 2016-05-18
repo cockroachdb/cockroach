@@ -65,12 +65,27 @@ const enum TimeSeriesQueryDerivative {
  * structure based on a MetricProps object.
  */
 function queryFromProps(props: MetricProps): TSQueryMessage {
+    let derivative = TimeSeriesQueryDerivative.NONE;
+    let sourceAggregator = TimeSeriesQueryAggregator.SUM;
+    let downsampler = TimeSeriesQueryAggregator.AVG;
+
     // Compute derivative function.
-    let derivative: TimeSeriesQueryDerivative = TimeSeriesQueryDerivative.NONE;
     if (props.rate) {
       derivative = TimeSeriesQueryDerivative.DERIVATIVE;
     } else if (props.nonNegativeRate) {
       derivative = TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE;
+    }
+    // Compute downsample function.
+    if (props.downsampleMax) {
+      downsampler = TimeSeriesQueryAggregator.MAX;
+    } else if (props.downsampleMin) {
+      downsampler = TimeSeriesQueryAggregator.MIN;
+    }
+    // Compute aggregation function.
+    if (props.aggregateMax) {
+      sourceAggregator = TimeSeriesQueryAggregator.MAX;
+    } else if (props.aggregateMin) {
+      sourceAggregator = TimeSeriesQueryAggregator.MIN;
     }
 
     return new protos.cockroach.ts.Query({
@@ -84,8 +99,8 @@ function queryFromProps(props: MetricProps): TSQueryMessage {
        * not available in the SystemJS compiler. Values are cast *through*
        * number, as apparently direct casts between enumerations are forbidden.
        */
-      downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.TimeSeriesQueryAggregator,
-      source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.TimeSeriesQueryAggregator,
+      downsampler: downsampler as number as cockroach.ts.TimeSeriesQueryAggregator,
+      source_aggregator: sourceAggregator as number as cockroach.ts.TimeSeriesQueryAggregator,
       derivative: derivative as number as cockroach.ts.TimeSeriesQueryDerivative,
     });
 }
