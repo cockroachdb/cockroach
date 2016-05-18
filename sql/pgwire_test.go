@@ -474,6 +474,10 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(1).Results(1, 2),
 			base.Params(3).Results(3, 4),
 		},
+		"INSERT INTO d.T VALUES (GREATEST(42, $1)) RETURNING a": {
+			base.Params(40).Results(42),
+			base.Params(45).Results(45),
+		},
 		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
 			base.Params(10, 5).Results(10),
 		},
