@@ -20,6 +20,7 @@
 package parser
 
 import (
+  "fmt"
 	"errors"
 	"go/constant"
 	"go/token"
@@ -31,6 +32,18 @@ var errUnimplemented = errors.New("unimplemented")
 
 func unimplemented() {
 	panic(errUnimplemented)
+}
+
+type unimplementedWithIssueError struct {
+	issueNum int
+}
+
+func (e unimplementedWithIssueError) Error() string {
+  return fmt.Sprintf("unimplemented (see issue #%d)", e.issueNum)
+}
+
+func unimplementedWithIssue(issueNum int) {
+  panic(unimplementedWithIssueError{issueNum})
 }
 %}
 
@@ -563,7 +576,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   SAVEPOINT SEARCH SECOND SELECT
-%token <str>   SERIALIZABLE SESSION SESSION_USER SET SHOW
+%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SNAPSHOT SOME SQL
 %token <str>   START STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC
@@ -832,7 +845,7 @@ opt_drop_behavior:
   }
 
 opt_collate_clause:
-  COLLATE any_name { unimplemented() }
+  COLLATE any_name { unimplementedWithIssue(2473) }
 | /* EMPTY */ {}
 
 alter_using:
@@ -2618,12 +2631,12 @@ typename:
     $$.val = $1.colType()
   }
   // SQL standard syntax, currently only one-dimensional
-| simple_typename ARRAY '[' ICONST ']' { unimplemented() }
-| simple_typename ARRAY { unimplemented() }
+| simple_typename ARRAY '[' ICONST ']' { unimplementedWithIssue(2115) }
+| simple_typename ARRAY { unimplementedWithIssue(2115) }
 
 opt_array_bounds:
-  opt_array_bounds '[' ']' { unimplemented() }
-| opt_array_bounds '[' ICONST ']' { unimplemented() }
+  opt_array_bounds '[' ']' { unimplementedWithIssue(2115) }
+| opt_array_bounds '[' ICONST ']' { unimplementedWithIssue(2115) }
 | /* EMPTY */ {}
 
 simple_typename:
@@ -2649,6 +2662,7 @@ simple_typename:
   {
     $$.val = stringColTypeText
   }
+| SERIAL { unimplementedWithIssue(4491) }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -4260,6 +4274,7 @@ col_name_keyword:
 | PRECISION
 | REAL
 | ROW
+| SERIAL
 | SMALLINT
 | STRING
 | SUBSTRING
