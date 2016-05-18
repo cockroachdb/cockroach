@@ -322,8 +322,7 @@ func runStatements(conn *sqlConn, stmts []string) error {
 				if err == pq.ErrNoMoreResults {
 					break
 				}
-				fmt.Fprintln(osStderr, err)
-				os.Exit(1)
+				return err
 			}
 
 			if len(cols) == 0 {
