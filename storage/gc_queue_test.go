@@ -181,11 +181,11 @@ func TestGCQueueProcess(t *testing.T) {
 		del bool
 		txn bool
 	}{
-		// For key1, we expect first two values to GC.
+		// For key1, we expect first value to GC.
 		{key1, ts1, false, false},
 		{key1, ts2, false, false},
 		{key1, ts5, false, false},
-		// For key2, we expect all values to GC, because most recent is deletion.
+		// For key2, we expect first value to GC, even though most recent is deletion.
 		{key2, ts1, false, false},
 		{key2, ts2, false, false},
 		{key2, ts5, true, false},
@@ -209,7 +209,7 @@ func TestGCQueueProcess(t *testing.T) {
 		{key8, ts2, false, false},
 		{key8, ts3, true, true},
 		// For key9, resolve naked intent with no remaining values.
-		{key9, ts3, true, false},
+		{key9, ts3, false, true},
 	}
 
 	for i, datum := range data {
@@ -260,6 +260,9 @@ func TestGCQueueProcess(t *testing.T) {
 		ts  roachpb.Timestamp
 	}{
 		{key1, ts5},
+		{key1, ts2},
+		{key2, ts5},
+		{key2, ts2},
 		{key3, roachpb.ZeroTimestamp},
 		{key3, ts5},
 		{key3, ts2},

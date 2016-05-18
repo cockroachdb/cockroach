@@ -54,34 +54,24 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Times
 	}
 
 	// Loop over values. All should be MVCC versions.
-	delTS := roachpb.ZeroTimestamp
-	survivors := false
 	for i, key := range keys {
 		if !key.IsValue() {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return roachpb.ZeroTimestamp
 		}
+		if gc.expiration.Less(key.Timestamp) {
+			continue
+		}
 		deleted := len(values[i]) == 0
-		if i == 0 {
-			// If the first value isn't a deletion tombstone, don't consider
-			// it for GC. It should always survive if non-deleted.
-			if !deleted {
-				survivors = true
-				continue
-			}
+		// If most recent after GC interval is empty, mark for deletion.
+		if i == 0 && deleted {
+			return key.Timestamp
 		}
-		// If we encounter a version older than our GC timestamp, mark for deletion.
-		if key.Timestamp.Less(gc.expiration) {
-			delTS = key.Timestamp
-			break
-		} else if !deleted {
-			survivors = true
+		// Otherwise mark the next timestamp for deletion.
+		if i := i + 1; i < len(keys) {
+			return keys[i].Timestamp
 		}
+		break
 	}
-	// If there are no non-deleted survivors, return timestamp of first key
-	// to delete all entries.
-	if !survivors {
-		return keys[0].Timestamp
-	}
-	return delTS
+	return roachpb.ZeroTimestamp
 }
