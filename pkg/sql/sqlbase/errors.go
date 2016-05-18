@@ -22,9 +22,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+)
+
+// Cockroach error extensions:
+const (
+	// CodeRangeUnavailable signals that some data from the cluster cannot be
+	// accessed (e.g. because all replicas awol).
+	// We're using the postgres "Internal Error" error class "XX".
+	CodeDataUnavailable string = "XXC00"
 )
 
 // SrcCtx contains contextual information about the source of an error.
@@ -413,4 +422,40 @@ func IsIntegrityConstraintError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// ErrRangeUnavailable represents a missing database error.
+type ErrRangeUnavailable struct {
+	ctx     SrcCtx
+	rangeID roachpb.RangeID
+	nodeIDs []roachpb.NodeID
+	origErr error
+}
+
+// NewRangeUnavailableError creates a new ErrRangeUnavailable.
+func NewRangeUnavailableError(
+	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
+) error {
+	err := &ErrRangeUnavailable{
+		ctx:     MakeSrcCtx(1),
+		rangeID: rangeID,
+		nodeIDs: nodeIDs,
+		origErr: origErr,
+	}
+	return err
+}
+
+func (e *ErrRangeUnavailable) Error() string {
+	return fmt.Sprintf("key range id:%d is unavailable; missing nodes: %s. Original error: %v",
+		e.rangeID, e.nodeIDs, e.origErr)
+}
+
+// Code implements the ErrorWithPGCode interface.
+func (*ErrRangeUnavailable) Code() string {
+	return CodeDataUnavailable
+}
+
+// SrcContext implements the ErrorWithPGCode interface.
+func (e *ErrRangeUnavailable) SrcContext() SrcCtx {
+	return e.ctx
 }

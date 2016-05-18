@@ -947,8 +947,10 @@ func encodeEndConstraintDescending(
 }
 
 // Encodes datum at the end of key, using direction `dir` for the encoding.
-// The key is a span end key, which is exclusive, but `val` needs to
-// be inclusive. So if datum is the last end constraint, we transform it accordingly.
+// It takes in an inclusive key and return an inclusive key if
+// isLastEndConstraint is not set, and an exclusive key otherwise (the idea is
+// that, for inclusive constraints, the value for the last column in the
+// constraint needs to be adapted to an exclusive span.EndKey).
 func encodeInclusiveEndValue(
 	key roachpb.Key, datum parser.Datum, dir encoding.Direction, isLastEndConstraint bool,
 ) roachpb.Key {
