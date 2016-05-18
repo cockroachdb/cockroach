@@ -29,17 +29,15 @@ module Models {
       });
     };
 
-    function endRefresh(): void {
+    export function endRefresh(): void {
       if (interval) {
         clearInterval(interval);
       }
     }
 
-    function startRefresh(): void {
+    export function startRefresh(): void {
       endRefresh();
       interval = setInterval(getHealth, 2000);
     }
-
-    startRefresh();
   }
 }
