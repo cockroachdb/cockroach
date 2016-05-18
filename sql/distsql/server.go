@@ -17,12 +17,12 @@
 package distsql
 
 import (
-	"fmt"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // ServerContext encompasses the configuration required to create a
@@ -58,20 +58,45 @@ func (ds *ServerImpl) setupTxn(
 	return txn
 }
 
+// RunSimpleFlow is part of the DistSQLServer interface.
+func (ds *ServerImpl) RunSimpleFlow(
+	req *SetupFlowsRequest, stream DistSQL_RunSimpleFlowServer,
+) error {
+	if len(req.Flows) != 1 {
+		return util.Errorf("expected exactly one flow, got %d", len(req.Flows))
+	}
+
+	f := &flow{evalCtx: ds.evalCtx}
+	f.txn = ds.setupTxn(stream.Context(), &req.Txn)
+
+	// Set up the outgoing mailbox for the stream.
+	mbox := newOutbox(stream)
+	f.simpleFlowMailbox = mbox
+
+	flow := req.Flows[0]
+
+	// TODO(radu): for now we expect exactly one processor (a table reader).
+	if len(flow.Processors) != 1 {
+		return util.Errorf("only single-processor flows supported")
+	}
+	reader, err := f.setupProcessor(&flow.Processors[0])
+	if err != nil {
+		return err
+	}
+
+	// TODO(radu): this stuff should probably be run through a stopper.
+	f.waitGroup.Add(1)
+	mbox.start(&f.waitGroup)
+	// The reader will run in its own goroutine once we support
+	// less trivial flows.
+	reader.run()
+	f.waitGroup.Wait()
+	return mbox.err
+}
+
 // SetupFlows is part of the DistSQLServer interface.
 func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
-	*SetupFlowsResponse, error,
+	*SimpleResponse, error,
 ) {
-	txn := ds.setupTxn(ctx, &req.Txn)
-	for _, f := range req.Flows {
-		// TODO(radu): for now we expect exactly one processor (a table reader)
-		reader, err := newTableReader(f.Processors[0].Core.TableReader, txn, ds.evalCtx)
-		if err != nil {
-			return nil, err
-		}
-		if err := reader.run(); err != nil {
-			fmt.Println(err)
-		}
-	}
-	return &SetupFlowsResponse{}, nil
+	return nil, util.Errorf("not implemented")
 }

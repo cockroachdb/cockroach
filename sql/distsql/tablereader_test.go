@@ -17,6 +17,7 @@
 package distsql
 
 import (
+	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -29,6 +30,40 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
+
+// testingReceiver is an implementation of rowReceiver that accumulates
+// results which we can later verify.
+type testingReceiver struct {
+	rows       [][]parser.Datum
+	datumAlloc sqlbase.DatumAlloc
+	closed     bool
+	err        error
+}
+
+var _ rowReceiver = &testingReceiver{}
+
+func (tr *testingReceiver) PushRow(row row) bool {
+	if tr.err != nil {
+		return false
+	}
+	decodedRow := make([]parser.Datum, len(row))
+	for i := range row {
+		tr.err = row[i].Decode(&tr.datumAlloc)
+		if tr.err != nil {
+			return false
+		}
+		decodedRow[i] = row[i].Datum
+	}
+	tr.rows = append(tr.rows, decodedRow)
+	return true
+}
+
+func (tr *testingReceiver) Close(err error) {
+	if tr.err != nil {
+		tr.err = err
+	}
+	tr.closed = true
+}
 
 func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -58,21 +93,22 @@ func TestTableReader(t *testing.T) {
 
 	txn := client.NewTxn(context.Background(), *kvDB)
 
-	tr, err := newTableReader(&ts, txn, parser.EvalContext{})
+	out := &testingReceiver{}
+	tr, err := newTableReader(&ts, txn, out, parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tr.run(); err != nil {
-		t.Fatal(err)
+	tr.run()
+	if out.err != nil {
+		t.Fatal(out.err)
 	}
-	// TODO(radu): currently the table reader just prints out stuff; when it
-	// will output results we will be able to verify them.
-	// Expected output:
-	// RESULT: 1 <skipped> 11 12
-	// RESULT: 3 <skipped> 31 32
-	// RESULT: 4 <skipped> 61 62
-	// RESULT: 5 <skipped> 51 52
-	// RESULT: 6 <skipped> 41 42
+	if !out.closed {
+		t.Fatalf("output rowReceiver not closed")
+	}
+	expected := "[[1 12] [3 32] [4 62] [5 52] [6 42]]"
+	if fmt.Sprintf("%s", out.rows) != expected {
+		t.Errorf("invalid results: %s, expected %s'", out.rows, expected)
+	}
 
 	// Read using the bc index
 	var span roachpb.Span
@@ -85,18 +121,22 @@ func TestTableReader(t *testing.T) {
 		Reverse:       true,
 		Spans:         []TableReaderSpan{{Span: span}},
 		Filter:        Expression{Expr: "$1 != 30"}, // b != 30
-		OutputColumns: []uint32{0, 1},               // a, c
+		OutputColumns: []uint32{0, 2},               // a, c
 	}
-	tr, err = newTableReader(&ts, txn, parser.EvalContext{})
+	out = &testingReceiver{}
+	tr, err = newTableReader(&ts, txn, out, parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = tr.run()
-	if err != nil {
-		t.Fatal(err)
+	tr.run()
+	if out.err != nil {
+		t.Fatal(out.err)
 	}
-	// Expected output:
-	// RESULT: 6 40 41 <skipped>
-	// RESULT: 2 20 21 <skipped>
-	// RESULT: 1 10 11 <skipped>
+	if !out.closed {
+		t.Fatalf("output rowReceiver not closed")
+	}
+	expected = "[[6 41] [2 21] [1 11]]"
+	if fmt.Sprintf("%s", out.rows) != expected {
+		t.Errorf("invalid results: %s, expected %s'", out.rows, expected)
+	}
 }

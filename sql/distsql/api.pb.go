@@ -11,15 +11,21 @@
 
 	It has these top-level messages:
 		SetupFlowsRequest
-		SetupFlowsResponse
+		SimpleResponse
 		Expression
 		TableReaderSpan
 		TableReaderSpec
+		MailboxSpec
 		StreamEndpointSpec
 		OutputRouterSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec
+		DatumInfo
+		StreamHeader
+		StreamData
+		StreamTrailer
+		StreamMessage
 */
 package distsql
 
@@ -57,18 +63,18 @@ func (m *SetupFlowsRequest) String() string            { return proto.CompactTex
 func (*SetupFlowsRequest) ProtoMessage()               {}
 func (*SetupFlowsRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{0} }
 
-type SetupFlowsResponse struct {
+type SimpleResponse struct {
 	Error *cockroach_roachpb2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 }
 
-func (m *SetupFlowsResponse) Reset()                    { *m = SetupFlowsResponse{} }
-func (m *SetupFlowsResponse) String() string            { return proto.CompactTextString(m) }
-func (*SetupFlowsResponse) ProtoMessage()               {}
-func (*SetupFlowsResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{1} }
+func (m *SimpleResponse) Reset()                    { *m = SimpleResponse{} }
+func (m *SimpleResponse) String() string            { return proto.CompactTextString(m) }
+func (*SimpleResponse) ProtoMessage()               {}
+func (*SimpleResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{1} }
 
 func init() {
 	proto.RegisterType((*SetupFlowsRequest)(nil), "cockroach.sql.distsql.SetupFlowsRequest")
-	proto.RegisterType((*SetupFlowsResponse)(nil), "cockroach.sql.distsql.SetupFlowsResponse")
+	proto.RegisterType((*SimpleResponse)(nil), "cockroach.sql.distsql.SimpleResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -84,7 +90,11 @@ const _ = grpc.SupportPackageIsVersion2
 type DistSQLClient interface {
 	// SetupFlows instantiates a set of flows (subgraphs of a distributed SQL
 	// computation) on the receiving node.
-	SetupFlows(ctx context.Context, in *SetupFlowsRequest, opts ...grpc.CallOption) (*SetupFlowsResponse, error)
+	SetupFlows(ctx context.Context, in *SetupFlowsRequest, opts ...grpc.CallOption) (*SimpleResponse, error)
+	// RunSimpleFlow instantiates a flow and streams back results of that flow.
+	// The request must contain one flow, and that flow must have a single mailbox
+	// of the special simple response type.
+	RunSimpleFlow(ctx context.Context, in *SetupFlowsRequest, opts ...grpc.CallOption) (DistSQL_RunSimpleFlowClient, error)
 }
 
 type distSQLClient struct {
@@ -95,8 +105,8 @@ func NewDistSQLClient(cc *grpc.ClientConn) DistSQLClient {
 	return &distSQLClient{cc}
 }
 
-func (c *distSQLClient) SetupFlows(ctx context.Context, in *SetupFlowsRequest, opts ...grpc.CallOption) (*SetupFlowsResponse, error) {
-	out := new(SetupFlowsResponse)
+func (c *distSQLClient) SetupFlows(ctx context.Context, in *SetupFlowsRequest, opts ...grpc.CallOption) (*SimpleResponse, error) {
+	out := new(SimpleResponse)
 	err := grpc.Invoke(ctx, "/cockroach.sql.distsql.DistSQL/SetupFlows", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
@@ -104,12 +114,48 @@ func (c *distSQLClient) SetupFlows(ctx context.Context, in *SetupFlowsRequest, o
 	return out, nil
 }
 
+func (c *distSQLClient) RunSimpleFlow(ctx context.Context, in *SetupFlowsRequest, opts ...grpc.CallOption) (DistSQL_RunSimpleFlowClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_DistSQL_serviceDesc.Streams[0], c.cc, "/cockroach.sql.distsql.DistSQL/RunSimpleFlow", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &distSQLRunSimpleFlowClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type DistSQL_RunSimpleFlowClient interface {
+	Recv() (*StreamMessage, error)
+	grpc.ClientStream
+}
+
+type distSQLRunSimpleFlowClient struct {
+	grpc.ClientStream
+}
+
+func (x *distSQLRunSimpleFlowClient) Recv() (*StreamMessage, error) {
+	m := new(StreamMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // Server API for DistSQL service
 
 type DistSQLServer interface {
 	// SetupFlows instantiates a set of flows (subgraphs of a distributed SQL
 	// computation) on the receiving node.
-	SetupFlows(context.Context, *SetupFlowsRequest) (*SetupFlowsResponse, error)
+	SetupFlows(context.Context, *SetupFlowsRequest) (*SimpleResponse, error)
+	// RunSimpleFlow instantiates a flow and streams back results of that flow.
+	// The request must contain one flow, and that flow must have a single mailbox
+	// of the special simple response type.
+	RunSimpleFlow(*SetupFlowsRequest, DistSQL_RunSimpleFlowServer) error
 }
 
 func RegisterDistSQLServer(s *grpc.Server, srv DistSQLServer) {
@@ -134,6 +180,27 @@ func _DistSQL_SetupFlows_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DistSQL_RunSimpleFlow_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SetupFlowsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DistSQLServer).RunSimpleFlow(m, &distSQLRunSimpleFlowServer{stream})
+}
+
+type DistSQL_RunSimpleFlowServer interface {
+	Send(*StreamMessage) error
+	grpc.ServerStream
+}
+
+type distSQLRunSimpleFlowServer struct {
+	grpc.ServerStream
+}
+
+func (x *distSQLRunSimpleFlowServer) Send(m *StreamMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _DistSQL_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cockroach.sql.distsql.DistSQL",
 	HandlerType: (*DistSQLServer)(nil),
@@ -143,7 +210,13 @@ var _DistSQL_serviceDesc = grpc.ServiceDesc{
 			Handler:    _DistSQL_SetupFlows_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "RunSimpleFlow",
+			Handler:       _DistSQL_RunSimpleFlow_Handler,
+			ServerStreams: true,
+		},
+	},
 }
 
 func (m *SetupFlowsRequest) Marshal() (data []byte, err error) {
@@ -184,7 +257,7 @@ func (m *SetupFlowsRequest) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *SetupFlowsResponse) Marshal() (data []byte, err error) {
+func (m *SimpleResponse) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -194,7 +267,7 @@ func (m *SetupFlowsResponse) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *SetupFlowsResponse) MarshalTo(data []byte) (int, error) {
+func (m *SimpleResponse) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -253,7 +326,7 @@ func (m *SetupFlowsRequest) Size() (n int) {
 	return n
 }
 
-func (m *SetupFlowsResponse) Size() (n int) {
+func (m *SimpleResponse) Size() (n int) {
 	var l int
 	_ = l
 	if m.Error != nil {
@@ -387,7 +460,7 @@ func (m *SetupFlowsRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *SetupFlowsResponse) Unmarshal(data []byte) error {
+func (m *SimpleResponse) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -410,10 +483,10 @@ func (m *SetupFlowsResponse) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SetupFlowsResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: SimpleResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SetupFlowsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SimpleResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -576,7 +649,7 @@ var (
 )
 
 var fileDescriptorApi = []byte{
-	// 289 bytes of a gzipped FileDescriptorProto
+	// 326 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0x92, 0x4f, 0xce, 0x4f, 0xce,
 	0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x2f, 0x2e, 0xcc, 0xd1, 0x4f, 0xc9, 0x2c, 0x2e, 0x01, 0xd1,
 	0x89, 0x05, 0x99, 0x7a, 0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0xa2, 0x70, 0x05, 0x7a, 0x40, 0x09,
@@ -588,12 +661,14 @@ var fileDescriptorApi = []byte{
 	0xe0, 0x36, 0x92, 0xd3, 0x43, 0x38, 0x18, 0x6a, 0xb7, 0x5e, 0x48, 0x51, 0x62, 0x5e, 0x71, 0x62,
 	0x72, 0x49, 0x66, 0x7e, 0x9e, 0x13, 0xcb, 0x89, 0x7b, 0xf2, 0x0c, 0x41, 0x20, 0x0d, 0x42, 0xd6,
 	0x5c, 0xac, 0x69, 0x20, 0x73, 0x24, 0x98, 0x14, 0x98, 0x81, 0x3a, 0xe5, 0xf5, 0xb0, 0x7a, 0x55,
-	0x0f, 0x64, 0x57, 0x70, 0x41, 0x6a, 0x32, 0x54, 0x2b, 0x44, 0x8f, 0x92, 0x0b, 0x97, 0x10, 0xb2,
-	0x4b, 0x8a, 0x0b, 0xf2, 0xf3, 0x8a, 0x53, 0x85, 0xf4, 0xb8, 0x58, 0xc1, 0x1e, 0x85, 0x3a, 0x46,
-	0x02, 0x8b, 0x63, 0x5c, 0x41, 0xf2, 0x41, 0x10, 0x65, 0x46, 0x39, 0x5c, 0xec, 0x2e, 0x40, 0x6b,
-	0x82, 0x03, 0x7d, 0x84, 0x12, 0xb9, 0xb8, 0x10, 0x06, 0x0a, 0x69, 0xe0, 0x70, 0x0c, 0x86, 0xef,
-	0xa5, 0x34, 0x89, 0x50, 0x09, 0x71, 0x9d, 0x93, 0xe2, 0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e, 0xc9,
-	0x31, 0x5e, 0x00, 0xe2, 0x1b, 0x40, 0xfc, 0x00, 0x88, 0x27, 0x3c, 0x96, 0x63, 0x88, 0x62, 0x87,
-	0xea, 0x8a, 0x60, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x35, 0xa2, 0x1a, 0xb5, 0x12, 0x02, 0x00,
-	0x00,
+	0x0f, 0x64, 0x57, 0x70, 0x41, 0x6a, 0x32, 0x54, 0x2b, 0x44, 0x8f, 0x92, 0x03, 0x17, 0x5f, 0x70,
+	0x66, 0x6e, 0x41, 0x4e, 0x6a, 0x50, 0x6a, 0x71, 0x41, 0x7e, 0x5e, 0x71, 0xaa, 0x90, 0x1e, 0x17,
+	0x2b, 0xd8, 0x93, 0x50, 0x87, 0x48, 0x60, 0x71, 0x88, 0x2b, 0x48, 0x3e, 0x08, 0xa2, 0xcc, 0xe8,
+	0x34, 0x23, 0x17, 0xbb, 0x0b, 0xd0, 0x8e, 0xe0, 0x40, 0x1f, 0xa1, 0x58, 0x2e, 0x2e, 0x84, 0xbf,
+	0x84, 0x34, 0x70, 0xb8, 0x04, 0xc3, 0xeb, 0x52, 0xaa, 0xb8, 0x54, 0xa2, 0x3a, 0x2d, 0x91, 0x8b,
+	0x37, 0xa8, 0x34, 0x0f, 0x22, 0x08, 0xd2, 0x4f, 0x82, 0x0d, 0x2a, 0xb8, 0x54, 0x96, 0x14, 0xa5,
+	0x26, 0xe6, 0xfa, 0xa6, 0x16, 0x17, 0x27, 0xa6, 0xa7, 0x1a, 0x30, 0x3a, 0x29, 0x9e, 0x78, 0x28,
+	0xc7, 0x70, 0xe2, 0x91, 0x1c, 0xe3, 0x05, 0x20, 0xbe, 0x01, 0xc4, 0x0f, 0x80, 0x78, 0xc2, 0x63,
+	0x39, 0x86, 0x28, 0x76, 0xa8, 0x96, 0x08, 0x66, 0x40, 0x00, 0x00, 0x00, 0xff, 0xff, 0x01, 0xa2,
+	0x10, 0xc5, 0x6e, 0x02, 0x00, 0x00,
 }
