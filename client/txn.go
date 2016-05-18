@@ -422,6 +422,11 @@ func (txn *Txn) UpdateDeadlineMaybe(deadline roachpb.Timestamp) bool {
 	return false
 }
 
+// ResetDeadline resets the deadline.
+func (txn *Txn) ResetDeadline() {
+	txn.deadline = nil
+}
+
 // Rollback sends an EndTransactionRequest with Commit=false.
 // The txn's status is set to ABORTED in case of error. txn is
 // considered finalized and cannot be used to send any more commands.
@@ -664,14 +669,12 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 
 	br, pErr := txn.db.send(ba)
 	if elideEndTxn && pErr == nil {
-		// Check that read only transactions do not violate their deadline.
+		// Check that read only transactions do not violate their deadline. This can happen
+		// when the transaction timestamp is updated by ReadWithinUncertaintyIntervalError
+		// (see TestTxnDeadline).
 		if endTxnRequest.Deadline != nil {
 			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
-				return nil, roachpb.NewErrorf(
-					"read-only txn timestamp violates deadline: %s < %s",
-					endTxnRequest.Deadline,
-					txn.Proto.Timestamp,
-				)
+				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn.Proto)
 			}
 		}
 		// This normally happens on the server and sent back in response
