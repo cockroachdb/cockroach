@@ -85,14 +85,9 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 
 		get(t, c.URL(i), fmt.Sprintf("/_status/gossip/%s", urlID))
 		get(t, c.URL(i), fmt.Sprintf("/_status/nodes/%s", urlID))
-
-		// TODO(wiz): Once the rest of the status HTTP endpoints are ported to grpc
-		// remove this if statement. See #5530.
-		if nodeID == otherNodeID {
-			get(t, c.URL(i), fmt.Sprintf("/_status/logfiles/%s", urlID))
-			get(t, c.URL(i), fmt.Sprintf("/_status/logs/%s", urlID))
-			get(t, c.URL(i), fmt.Sprintf("/_status/stacks/%s", urlID))
-		}
+		get(t, c.URL(i), fmt.Sprintf("/_status/logfiles/%s", urlID))
+		get(t, c.URL(i), fmt.Sprintf("/_status/logs/%s", urlID))
+		get(t, c.URL(i), fmt.Sprintf("/_status/stacks/%s", urlID))
 	}
 }
 
