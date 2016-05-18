@@ -33,7 +33,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/build"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -285,6 +284,23 @@ func rerunBackground() error {
 	return sdnotify.Exec(cmd)
 }
 
+func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
+	stopper := stop.NewStopper()
+	rpcContext := rpc.NewContext(&cliContext.Context.Context, hlc.NewClock(hlc.UnixNano),
+		stopper)
+	conn, err := rpcContext.GRPCDial(cliContext.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return server.NewAdminClient(conn), stopper, nil
+}
+
+func stopperContext(stopper *stop.Stopper) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	stopper.AddCloser(stop.CloserFn(cancel))
+	return ctx
+}
+
 // quitCmd command shuts down the node server.
 var quitCmd = &cobra.Command{
 	Use:   "quit",
@@ -300,17 +316,24 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) error {
-	admin, err := client.NewAdminClient(&cliContext.Context.Context, cliContext.HTTPAddr, client.Quit)
+	onModes := make([]int32, len(server.GracefulDrainModes))
+	for i, m := range server.GracefulDrainModes {
+		onModes[i] = int32(m)
+	}
+
+	c, stopper, err := getAdminClient()
 	if err != nil {
 		return err
 	}
-	body, err := admin.Get()
-	// TODO(tschottdorf): needs cleanup. An error here can happen if the shutdown
-	// happened faster than the HTTP request made it back.
-	if err != nil {
+	defer stopper.Stop()
+	if _, err := c.Drain(stopperContext(stopper),
+		&server.DrainRequest{
+			On:       onModes,
+			Shutdown: true,
+		}); err != nil {
 		return err
 	}
-	fmt.Printf("node drained and shutdown: %s\n", body)
+	fmt.Println("ok")
 	return nil
 }
 
@@ -327,23 +350,6 @@ using the --undo flag, or by restarting all the nodes in the cluster.
 `,
 	SilenceUsage: true,
 	RunE:         runFreezeCluster,
-}
-
-func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
-	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(&cliContext.Context.Context, hlc.NewClock(hlc.UnixNano),
-		stopper)
-	conn, err := rpcContext.GRPCDial(cliContext.Addr)
-	if err != nil {
-		return nil, nil, err
-	}
-	return server.NewAdminClient(conn), stopper, nil
-}
-
-func stopperContext(stopper *stop.Stopper) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	stopper.AddCloser(stop.CloserFn(cancel))
-	return ctx
 }
 
 func runFreezeCluster(_ *cobra.Command, _ []string) error {
