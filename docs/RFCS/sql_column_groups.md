@@ -114,15 +114,27 @@ CREATE TABLE t (
 
 `ALTER TABLE t ADD COLUMN d DECIMAL GROUP d`
 
-## MetaRFC Note
+## Heuristics for Fitting Columns into Groups
 
-In the interest of focusing the discussion, specific heuristics for
-automatically assigning columns to groups will be considered out of
-scope for the first commit of this RFC. Instead, the previous behavior
-of one column per group will be used if not user specified. In
-parallel to the implementation, heuristics will be reopened for
-discussion. Resolving this satisfactorily is considered _required_ for
-the scope of this work.
+- Fixed sized columns (`INT`, `DECIMAL` with precision, `FLOAT`, `BOOL`, `DATE`,
+`TIMESTAMP`, `INTERVAL`, `STRING` with length, `BYTES` with length) will be
+packed into a group, up to a threshold (initially 256 bytes).
+
+- `STRING` and `BYTES` columns without a length restriction (and `DECIMAL`
+without precision) get their own group.
+
+- If the declared length of a `STRING` or `BYTES` column is changed with an
+`ALTER COLUMN`, group assignments are unaffected.
+
+- Columns in the primary index are declared as group 0, but they're stored in
+the key, so they don't count against the byte limit.
+
+- Group 0 (the sentinel) always has at least one column (though it might be a
+primary index column stored in the key). Non-nullable and fixed sized columns
+are preferred.
+
+Note that these heuristics only apply at column creation, so there's no
+backwards compatibility issues in revisiting them at any time.
 
 # Drawbacks
 
