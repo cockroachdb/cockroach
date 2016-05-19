@@ -14,6 +14,7 @@ It has these top-level messages:
 	UserPrivileges
 	PrivilegeDescriptor
 	ColumnType
+	TableAndIndexID
 	ColumnDescriptor
 	IndexDescriptor
 	DescriptorMutation
