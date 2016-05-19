@@ -344,7 +344,8 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(rs, nil, false /*useReverseScan*/)
+		desc, needAnother, _, pErr := ds.getDescriptors(
+			context.Background(), rs, nil, false /*useReverseScan*/)
 		if pErr != nil {
 			return -1, pErr
 		}
@@ -372,7 +373,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // returned bool is true in case the given range reaches outside the returned
 // descriptor.
 func (ds *DistSender) getDescriptors(
-	rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
+	ctx context.Context, rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, bool, *evictionToken, *roachpb.Error) {
 	var descKey roachpb.RKey
 	if !useReverseScan {
@@ -396,7 +397,8 @@ func (ds *DistSender) getDescriptors(
 	// this will disable prefetching.
 	considerIntents := evictToken != nil
 
-	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
+	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(
+		ctx, descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
 		return nil, false, returnToken, pErr
 	}
@@ -632,7 +634,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			log.Trace(ctx, "meta descriptor lookup")
-			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, isReverse)
+			desc, needAnother, evictToken, pErr = ds.getDescriptors(ctx, rs, evictToken, isReverse)
 
 			// getDescriptors may fail retryably if, for example, the first
 			// range isn't available via Gossip. Assume that all errors at
@@ -645,8 +647,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					log.Warning(pErr)
 				}
 				continue
-			} else {
-				log.Trace(ctx, "looked up range descriptor")
 			}
 
 			if needAnother && br == nil {
@@ -683,7 +683,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				return desc.ContainsKey(rs.Key)
 			}
 			if !includesFrontOfCurSpan(desc) {
-				if err := evictToken.Evict(); err != nil {
+				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
@@ -718,7 +718,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
-			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("reply error: %s", pErr))
 
 			// Error handling: If the error indicates that our range
 			// descriptor is out of date, evict it from the cache and try
@@ -734,7 +734,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// they're all down, or we're using an out-of-date range
 				// descriptor. Invalidate the cache and try again with the new
 				// metadata.
-				if err := evictToken.Evict(); err != nil {
+				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				continue
@@ -757,7 +757,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 				}
 				// Same as Evict() if replacements is empty.
-				if err := evictToken.EvictAndReplace(replacements...); err != nil {
+				if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
@@ -992,7 +992,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Trace(opts.Context, "error, trying next peer")
+				log.Trace(opts.Context, fmt.Sprintf("error, trying next peer: %s", err))
 				pending++
 				transport.SendNext(done)
 			}

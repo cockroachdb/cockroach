@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -222,22 +224,28 @@ func (rdc *rangeDescriptorCache) makeEvictionToken(prevDesc *roachpb.RangeDescri
 
 // Evict instructs the evictionToken to evict the RangeDescriptor it was created
 // with from the rangeDescriptorCache.
-func (et *evictionToken) Evict() error {
-	return et.EvictAndReplace()
+func (et *evictionToken) Evict(ctx context.Context) error {
+	return et.EvictAndReplace(ctx)
 }
 
 // EvictAndReplace instructs the evictionToken to evict the RangeDescriptor it was
 // created with from the rangeDescriptorCache. It also allows the user to provide
 // new RangeDescriptors to insert into the cache, all atomically. When called without
 // arguments, EvictAndReplace will behave the same as Evict.
-func (et *evictionToken) EvictAndReplace(newDescs ...roachpb.RangeDescriptor) error {
+func (et *evictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachpb.RangeDescriptor) error {
 	var err error
 	et.doOnce.Do(func() {
 		et.doLocker.Lock()
 		defer et.doLocker.Unlock()
 		err = et.do()
-		if err == nil && len(newDescs) > 0 {
-			err = et.doReplace(newDescs...)
+		if err == nil {
+			if len(newDescs) > 0 {
+				err = et.doReplace(newDescs...)
+				log.Trace(ctx, fmt.Sprintf("evicting cached range descriptor with %d replacements",
+					len(newDescs)))
+			} else {
+				log.Trace(ctx, "evicting cached range descriptor")
+			}
 		}
 	})
 	return err
@@ -261,12 +269,13 @@ func (et *evictionToken) EvictAndReplace(newDescs ...roachpb.RangeDescriptor) er
 // the key's data and a token to manage evicting the RangeDescriptor
 // if it is found to be stale, or an error if any occurred.
 func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
+	ctx context.Context,
 	key roachpb.RKey,
 	evictToken *evictionToken,
 	considerIntents bool,
 	useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *evictionToken, *roachpb.Error) {
-	return rdc.lookupRangeDescriptorInternal(key, evictToken, considerIntents, useReverseScan, nil)
+	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, considerIntents, useReverseScan, nil)
 }
 
 // lookupRangeDescriptorInternal is called from LookupRangeDescriptor or from tests.
@@ -275,6 +284,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 // added to the inflight request map (with or without merging) or the
 // function finishes. Used for testing.
 func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
+	ctx context.Context,
 	key roachpb.RKey,
 	evictToken *evictionToken,
 	considerIntents bool,
@@ -298,6 +308,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		returnToken := rdc.makeEvictionToken(desc, func() error {
 			return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 		})
+		log.Trace(ctx, "looked up range descriptor from cache")
 		return desc, returnToken, nil
 	}
 
@@ -319,13 +330,14 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		doneWg()
 
 		res = <-resC
+		log.Trace(ctx, "looked up range descriptor with shared request")
 	} else {
 		rdc.lookupRequests.inflight[requestKey] = req
 		rdc.lookupRequests.Unlock()
 		rdc.rangeCache.RUnlock()
 		doneWg()
 
-		rs, preRs, pErr := rdc.performRangeLookup(key, considerIntents, useReverseScan)
+		rs, preRs, pErr := rdc.performRangeLookup(ctx, key, considerIntents, useReverseScan)
 		if pErr != nil {
 			res = lookupResult{pErr: pErr}
 		} else {
@@ -384,6 +396,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		delete(rdc.lookupRequests.inflight, requestKey)
 		rdc.lookupRequests.Unlock()
 		rdc.rangeCache.Unlock()
+		log.Trace(ctx, "looked up range descriptor")
 	}
 
 	// It rarely may be possible that we somehow got grouped in with the
@@ -403,7 +416,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 // performRangeLookup handles delegating the range lookup to the cache's
 // RangeDescriptorDB.
 func (rdc *rangeDescriptorCache) performRangeLookup(
-	key roachpb.RKey, considerIntents, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, considerIntents, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	// metadataKey is sent to RangeLookup to find the RangeDescriptor
 	// which contains key.
@@ -432,7 +445,8 @@ func (rdc *rangeDescriptorCache) performRangeLookup(
 	default:
 		// Look up desc from the cache, which will recursively call into
 		// this function if it is not cached.
-		if desc, _, pErr = rdc.LookupRangeDescriptor(metadataKey, nil, considerIntents, useReverseScan); pErr != nil {
+		if desc, _, pErr = rdc.LookupRangeDescriptor(ctx, metadataKey, nil, considerIntents,
+			useReverseScan); pErr != nil {
 			return nil, nil, pErr
 		}
 	}
