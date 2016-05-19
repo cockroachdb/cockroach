@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -196,7 +198,8 @@ func doLookupConsideringIntents(t *testing.T, rc *rangeDescriptorCache, key stri
 
 func doLookupWithToken(t *testing.T, rc *rangeDescriptorCache, key string, evictToken *evictionToken, considerIntents bool, useReverseScan bool, wg *sync.WaitGroup,
 ) (*roachpb.RangeDescriptor, *evictionToken) {
-	r, returnToken, pErr := rc.lookupRangeDescriptorInternal(roachpb.RKey(key), evictToken, considerIntents, useReverseScan, wg)
+	r, returnToken, pErr := rc.lookupRangeDescriptorInternal(
+		context.Background(), roachpb.RKey(key), evictToken, considerIntents, useReverseScan, wg)
 	if pErr != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
 	}
@@ -319,7 +322,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCount(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
-	if err := evictToken.Evict(); err != nil {
+	if err := evictToken.Evict(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	doLookup(t, db.cache, "cz")
@@ -399,7 +402,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
-	if err := evictToken.EvictAndReplace(mismatchErrRange); err != nil {
+	if err := evictToken.EvictAndReplace(context.Background(), mismatchErrRange); err != nil {
 		t.Fatal(err)
 	}
 	pauseLookupResumeAndAssert("az", 2, evictToken)
@@ -436,7 +439,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
-	if err := evictToken.EvictAndReplace(mismatchErrRange); err != nil {
+	if err := evictToken.EvictAndReplace(context.Background(), mismatchErrRange); err != nil {
 		// Evict the cached descriptor ["a", "b") and insert ["a"-"an")
 		t.Fatal(err)
 	}
@@ -510,7 +513,7 @@ func testRangeCacheHandleDoubleSplit(t *testing.T, useReverseScan bool) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
-	if err := evictToken.EvictAndReplace(mismatchErrRange); err != nil {
+	if err := evictToken.EvictAndReplace(context.Background(), mismatchErrRange); err != nil {
 		t.Fatal(err)
 	}
 
@@ -546,7 +549,9 @@ func testRangeCacheHandleDoubleSplit(t *testing.T, useReverseScan bool) {
 			for {
 				// Each request goes to a different key.
 				var pErr *roachpb.Error
-				if desc, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(key, reqEvictToken, false /* considerIntents */, useReverseScan, waitJoinCopied); pErr != nil {
+				if desc, reqEvictToken, pErr = db.cache.lookupRangeDescriptorInternal(
+					context.Background(), key, reqEvictToken, false, /* considerIntents */
+					useReverseScan, waitJoinCopied); pErr != nil {
 					waitJoinCopied = nil
 					atomic.AddInt64(&numRetries, 1)
 					continue
@@ -596,7 +601,7 @@ func TestRangeCacheConsiderIntents(t *testing.T) {
 	// The current descriptor is found to be stale, so it is evicted. The next cache
 	// lookup should return the descriptor from the intents, without performing another
 	// db lookup.
-	if err := evictToken.Evict(); err != nil {
+	if err := evictToken.Evict(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	abDescIntent, _ := doLookup(t, db.cache, "aa")

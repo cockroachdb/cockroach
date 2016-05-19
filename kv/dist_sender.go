@@ -683,7 +683,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				return desc.ContainsKey(rs.Key)
 			}
 			if !includesFrontOfCurSpan(desc) {
-				if err := evictToken.Evict(); err != nil {
+				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
@@ -734,7 +734,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// they're all down, or we're using an out-of-date range
 				// descriptor. Invalidate the cache and try again with the new
 				// metadata.
-				if err := evictToken.Evict(); err != nil {
+				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				continue
@@ -757,7 +757,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 				}
 				// Same as Evict() if replacements is empty.
-				if err := evictToken.EvictAndReplace(replacements...); err != nil {
+				if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
