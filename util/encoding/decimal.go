@@ -33,7 +33,7 @@ import (
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal
-// appended to b.
+// appended to the given buffer.
 //
 // Values are classified as large, medium, or small according to the value of
 // E. If E is 11 or more, the value is large. For E between 0 and 10, the value
@@ -49,28 +49,28 @@ import (
 // as a byte 0x25-E followed by the ones-complement of M. Large negative values
 // consist of the single byte 0x1a followed by a descending  varint encoding of
 // E followed by the ones-complement of M.
-func EncodeDecimalAscending(b []byte, d *inf.Dec) []byte {
-	return encodeDecimal(b, d, false)
+func EncodeDecimalAscending(appendTo []byte, d *inf.Dec) []byte {
+	return encodeDecimal(appendTo, d, false)
 }
 
 // EncodeDecimalDescending is the descending version of EncodeDecimalAscending.
-func EncodeDecimalDescending(b []byte, d *inf.Dec) []byte {
-	return encodeDecimal(b, d, true)
+func EncodeDecimalDescending(appendTo []byte, d *inf.Dec) []byte {
+	return encodeDecimal(appendTo, d, true)
 }
 
-func encodeDecimal(b []byte, d *inf.Dec, invert bool) []byte {
+func encodeDecimal(appendTo []byte, d *inf.Dec, invert bool) []byte {
 	neg := false
 	switch d.UnscaledBig().Sign() {
 	case -1:
 		neg = true
 	case 0:
-		return append(b, decimalZero)
+		return append(appendTo, decimalZero)
 	}
-	e, m := decimalMandE(d, b[len(b):])
-	return encodeMandE(b, neg != invert, e, m)
+	e, m := decimalEandM(d, appendTo[len(appendTo):])
+	return encodeEandM(appendTo, neg != invert, e, m)
 }
 
-// decimalMandE computes and returns the mantissa M and exponent E for d.
+// decimalEandM computes and returns the exponent E and mantissa M for d.
 //
 // The mantissa is a base-100 representation of the value. The exponent E
 // determines where to put the decimal point.
@@ -85,7 +85,7 @@ func encodeDecimal(b []byte, d *inf.Dec, invert bool) []byte {
 // If we assume all digits of the mantissa occur to the right of the decimal
 // point, then the exponent E is the power of one hundred by which one must
 // multiply the mantissa to recover the original value.
-func decimalMandE(d *inf.Dec, tmp []byte) (int, []byte) {
+func decimalEandM(d *inf.Dec, tmp []byte) (int, []byte) {
 	addedZero := false
 	if cap(tmp) > 0 {
 		tmp = tmp[:1]
@@ -149,68 +149,97 @@ func decimalMandE(d *inf.Dec, tmp []byte) (int, []byte) {
 	return e100, m
 }
 
-func encodeMandE(b []byte, negative bool, e int, m []byte) []byte {
+// encodeEandM encodes the exponent and mantissa, appending the encoding to a byte buffer.
+//
+// The mantissa m can be stored in the spare capacity of appendTo.
+func encodeEandM(appendTo []byte, negative bool, e int, m []byte) []byte {
 	var buf []byte
-	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
-		buf = b[len(b) : len(b)+n]
+	if n := len(m) + maxVarintSize + 2; n <= cap(appendTo)-len(appendTo) {
+		buf = appendTo[len(appendTo) : len(appendTo)+n]
 	} else {
 		buf = make([]byte, n)
 	}
 	switch {
 	case e < 0:
-		return append(b, encodeSmallNumber(negative, e, m, buf)...)
+		return append(appendTo, encodeSmallNumber(negative, e, m, buf)...)
 	case e >= 0 && e <= 10:
-		return append(b, encodeMediumNumber(negative, e, m, buf)...)
+		return append(appendTo, encodeMediumNumber(negative, e, m, buf)...)
 	case e >= 11:
-		return append(b, encodeLargeNumber(negative, e, m, buf)...)
+		return append(appendTo, encodeLargeNumber(negative, e, m, buf)...)
 	}
 	panic("unreachable")
 }
 
-func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
+// encodeVarExpNumber encodes a Uvarint exponent and mantissa into buf, only
+// used for small (less than 0) and large (greater than 10) exponents.
+// If required, the mantissa should already be in ones complement.
+//
+// The encoding must fit in buf. The mantissa m can overlap with buf.
+//
+// Returns the length-adjusted buffer.
+func encodeVarExpNumber(tag byte, expAscending bool, exp uint64, m []byte, buf []byte) []byte {
+	// Because m can overlap with buf, we must first copy m to the right place
+	// before modifying buf.
 	var n int
-	if negative {
-		buf[0] = decimalNegSmall
-		n = len(EncodeUvarintAscending(buf[1:1], uint64(-e)))
+	if expAscending {
+		n = EncLenUvarintAscending(exp)
 	} else {
-		buf[0] = decimalPosSmall
-		n = len(EncodeUvarintDescending(buf[1:1], uint64(-e)))
+		n = EncLenUvarintDescending(exp)
+	}
+	l := 1 + n + len(m)
+	if len(buf) < l {
+		panic("buffer too short")
 	}
 	copy(buf[1+n:], m)
-	l := 1 + n + len(m)
-	if negative {
-		onesComplement(buf[1+n : l]) // ones complement of mantissa
+	buf[0] = tag
+	if expAscending {
+		EncodeUvarintAscending(buf[1:1], exp)
+	} else {
+		EncodeUvarintDescending(buf[1:1], exp)
 	}
 	buf[l] = decimalTerminator
 	return buf[:l+1]
 }
 
+// encodeSmallNumber encodes the exponent and mantissa into buf, only used when
+// the exponent is negative. See encodeVarExpNumber.
+func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
+	if negative {
+		onesComplement(m)
+		return encodeVarExpNumber(decimalNegSmall, true, uint64(-e), m, buf)
+	}
+	return encodeVarExpNumber(decimalPosSmall, false, uint64(-e), m, buf)
+}
+
+// encodeLargeNumber encodes the exponent and mantissa into buf, only used when
+// the exponent is larger than 10. See encodeVarExpNumber.
+func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
+	if negative {
+		onesComplement(m)
+		return encodeVarExpNumber(decimalNegLarge, false, uint64(e), m, buf)
+	}
+	return encodeVarExpNumber(decimalPosLarge, true, uint64(e), m, buf)
+}
+
+// encodeMediumNumber encodes the exponent and mantissa into buf, only used when
+// the exponent is in [0, 10].
+//
+// The encoding must fit in buf. The mantissa m can overlap with buf.
+//
+// Returns the length-adjusted buffer.
 func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
-	copy(buf[1:], m)
 	l := 1 + len(m)
+	if len(buf) < l {
+		panic("buffer too short")
+	}
+	// Because m can overlap with buf, we must first copy m to the right place
+	// before modifying buf.
+	copy(buf[1:], m)
 	if negative {
 		buf[0] = decimalNegMedium - byte(e)
 		onesComplement(buf[1:l])
 	} else {
 		buf[0] = decimalPosMedium + byte(e)
-	}
-	buf[l] = decimalTerminator
-	return buf[:l+1]
-}
-
-func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
-	var n int
-	if negative {
-		buf[0] = decimalNegLarge
-		n = len(EncodeUvarintDescending(buf[1:1], uint64(e)))
-	} else {
-		buf[0] = decimalPosLarge
-		n = len(EncodeUvarintAscending(buf[1:1], uint64(e)))
-	}
-	copy(buf[1+n:], m)
-	l := 1 + n + len(m)
-	if negative {
-		onesComplement(buf[1+n : l]) // ones complement of mantissa
 	}
 	buf[l] = decimalTerminator
 	return buf[:l+1]

@@ -351,6 +351,41 @@ func EncodeUvarintDescending(b []byte, v uint64) []byte {
 	}
 }
 
+// highestByteIndex returns the index (0 to 7) of the highest nonzero byte in v.
+func highestByteIndex(v uint64) int {
+	l := 0
+	if v > 0xffffffff {
+		v >>= 32
+		l += 4
+	}
+	if v > 0xffff {
+		v >>= 16
+		l += 2
+	}
+	if v > 0xff {
+		l++
+	}
+	return l
+}
+
+// EncLenUvarintAscending returns the encoding length for EncodeUvarintAscending
+// without actually encoding.
+func EncLenUvarintAscending(v uint64) int {
+	if v <= intSmall {
+		return 1
+	}
+	return 2 + highestByteIndex(v)
+}
+
+// EncLenUvarintDescending returns the encoding length for
+// EncodeUvarintDescending without actually encoding.
+func EncLenUvarintDescending(v uint64) int {
+	if v == 0 {
+		return 1
+	}
+	return 2 + highestByteIndex(v)
+}
+
 // DecodeUvarintAscending decodes a varint encoded uint64 from the input
 // buffer. The remainder of the input buffer and the decoded uint64
 // are returned.
