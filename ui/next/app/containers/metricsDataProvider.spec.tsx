@@ -125,7 +125,6 @@ describe("<MetricsDataProvider>", function() {
     it("attaches metrics data to contained component", function() {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       let props: any = provider.first().props();
-      console.log(provider.first().type());
       assert.isDefined(props.data);
       assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
     });

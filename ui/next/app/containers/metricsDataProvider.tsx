@@ -8,6 +8,7 @@ import Long = require("long");
 
 import * as protos from  "../js/protos";
 import { queryMetrics, MetricsQuery } from "../redux/metrics";
+import * as timewindow from "../redux/timewindow";
 import { MetricProps, Metric, MetricsDataComponentProps } from "../components/graphs";
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
@@ -167,6 +168,9 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
    */
   refreshMetricsIfStale(props: MetricsDataProviderProps) {
     let { metrics, timeSpan, queryMetrics, id } = props;
+    if (!timeSpan) {
+      return;
+    }
     if (!metrics || !metrics.request ||
         !timeSpanMatch(metrics.request, timeSpan)) {
       let request = new protos.cockroach.ts.TimeSeriesQueryRequest({
@@ -197,18 +201,26 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
   }
 }
 
-// TODO: constTimeSpan is currently used in lieu of a globally managed timespan,
-// and should be removed in a subsequent PR.
-let end = new Date();
-let start = new Date(end.getTime() - 10 * 60 * 1000);
-let constTimeSpan = [Long.fromNumber(MilliToNano(start.getTime())), Long.fromNumber(MilliToNano(end.getTime()))];
+// timeSpanSelector converts the current global time window into a pair of Long
+// values, which can be sent with requests to the server.
+let timeSpanSelector = createSelector(
+  (state: any) => state.timewindow as timewindow.TimeWindowState,
+  (tw) => {
+    if (!_.isObject(tw.currentWindow)) {
+      return null;
+    }
+    return [
+      Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
+      Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
+    ];
+  });
 
 // Connect the MetricsDataProvider class to redux state.
 let metricsDataProviderConnected = connect(
   (state: any, ownProps: MetricsDataProviderExplicitProps) => {
     return {
       metrics: state.metrics.queries[ownProps.id],
-      timeSpan: constTimeSpan,
+      timeSpan: timeSpanSelector(state),
     };
   },
   {

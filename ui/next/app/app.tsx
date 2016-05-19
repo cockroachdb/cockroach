@@ -9,9 +9,7 @@
  *    - Graphs
  *      - Greyed-out display on error
  *    ! Events table
- *    ! Global Timespan Selector
- *      - UI Component
- *      - Reducer for current global timespan
+ *    - Global Timespan UI Component
  *    - Cluster health indicator
  * ! Notification Banners
  *    - Help Us
@@ -60,6 +58,7 @@ import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
 import databaseListReducer from "./redux/databases";
+import timeWindowReducer from "./redux/timewindow";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -84,6 +83,7 @@ const store = createStore(
     ui: uiReducer,
     metrics: metricsReducer,
     databaseList: databaseListReducer,
+    timewindow: timeWindowReducer,
   }),
   compose(
     applyMiddleware(thunk),
