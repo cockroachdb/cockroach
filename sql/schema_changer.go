@@ -473,21 +473,45 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 func (sc *SchemaChanger) reverseMutations() error {
 	// Reverse the flow of the state machine.
 	_, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
-		for i, mutation := range desc.Mutations {
-			if mutation.MutationID != sc.mutationID {
-				// Mutations are applied in a FIFO order. Only apply the first set of
-				// mutations if they have the mutation ID we're looking for.
-				break
-			}
-			log.Warningf("reversing schema change mutation: %v", desc.Mutations[i])
-			switch mutation.Direction {
-			case sqlbase.DescriptorMutation_ADD:
-				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_DROP
+		newMutations := make([]sqlbase.DescriptorMutation, 0, len(desc.Mutations))
+		// Keep track of the column mutations being reversed so that indexes
+		// referencing them can be removed.
+		cols := make(map[string]struct{})
 
-			case sqlbase.DescriptorMutation_DROP:
-				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
+	MutationLoop:
+		for _, mutation := range desc.Mutations {
+			// Always skip index mutations in the ABSENT state that reference
+			// column mutations being reversed.
+			if mutation.State == sqlbase.DescriptorMutation_ABSENT {
+				idx := mutation.GetIndex()
+				if idx == nil {
+					panic(fmt.Sprintf("non index mutation in ABSENT state: %v", mutation))
+				}
+				for _, name := range idx.ColumnNames {
+					if _, ok := cols[name]; ok {
+						// Skip adding this mutation.
+						continue MutationLoop
+					}
+				}
 			}
+
+			if mutation.MutationID == sc.mutationID {
+				log.Warningf("reversing schema change mutation: %v", mutation)
+				switch mutation.Direction {
+				case sqlbase.DescriptorMutation_ADD:
+					mutation.Direction = sqlbase.DescriptorMutation_DROP
+					// A column ADD being reversed gets placed in the map.
+					if col := mutation.GetColumn(); col != nil {
+						cols[col.Name] = struct{}{}
+					}
+
+				case sqlbase.DescriptorMutation_DROP:
+					mutation.Direction = sqlbase.DescriptorMutation_ADD
+				}
+			}
+			newMutations = append(newMutations, mutation)
 		}
+		desc.Mutations = newMutations
 		// Publish() will increment the version.
 		return nil
 	})

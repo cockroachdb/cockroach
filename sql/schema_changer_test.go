@@ -951,3 +951,132 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
+
+// TestSchemaChangeReverseMutations tests that schema changes get reversed
+// correctly when one of them violates a constraint.
+func TestSchemaChangeReverseMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Disable synchronous schema change processing so that the mutations get
+	// processed asynchronously.
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecQuickly: true,
+		},
+	}
+	server, sqlDB, _ := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	// Create a table with column i and an index on v and i.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some data
+	maxValue := 5 * csql.IndexBackfillChunkSize
+	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a column that is not NULL. This schema change doesn't return an
+	// error only because we've turned off the synchronous execution path; it
+	// will eventually fail when run by the asynchronous path.
+	if _, err := sqlDB.Exec(
+		`ALTER TABLE t.test ADD a INT NOT NULL`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add an index over a column that has been purged. This index will
+	// eventually not get added.
+	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_a ON t.test (a)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The purge of column 'a' doesn't influence these schema changes.
+
+	// Drop column 'v' moves along just fine.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP v`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add unique column 'b' moves along creating column b and the index on
+	// it.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b INT UNIQUE`); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+
+	// Verify that t.test has the expected data.
+	rows, err := sqlDB.Query(`SELECT * from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cols) != 2 || cols[0] != "k" || cols[1] != "b" {
+		t.Fatalf("incorrect columns: %v", cols)
+	}
+
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+	var count int64
+	for ; rows.Next(); count++ {
+		if err := rows.Scan(vals...); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		for j, v := range vals {
+			if j == 0 {
+				if val := *v.(*interface{}); val != nil {
+					switch k := val.(type) {
+					case int64:
+						if count != k {
+							t.Errorf("k = %d, expected %d", k, count)
+						}
+
+					default:
+						t.Errorf("error input of type %T", k)
+					}
+				} else {
+					t.Error("received nil value for column 'k'")
+				}
+			} else {
+				if val := *v.(*interface{}); val != nil {
+					t.Error("received non NULL value for column 'b'")
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := int64(maxValue + 1); eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// Check that the index on b that started off in the ABSENT state
+	// eventually goes live even though a schema change in front of it in the
+	// queue got purged. Not all mutations in the ABSENT state are skipped.
+	if _, err := sqlDB.Query(`SELECT * from t.test@test_b_key`); err != nil {
+		t.Fatal(err)
+	}
+}
