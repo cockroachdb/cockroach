@@ -6,6 +6,7 @@ import { RouteComponentProps } from "react-router";
 import { TitledComponent } from "../interfaces/layout";
 import SideBar from "../components/layoutSidebar";
 import Header from "../components/layoutHeader";
+import TimeWindowManager from "../containers/timewindow";
 
 function isTitledComponent(obj: any): obj is TitledComponent {
   return obj && _.isFunction(obj.title);
@@ -31,6 +32,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
     let title = titleComponent ? titleComponent.title(this.props) : "";
 
     return <div id="content">
+      <TimeWindowManager/>
       <SideBar/>
       <div id="page-container">
         <div id="root">
