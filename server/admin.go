@@ -804,7 +804,8 @@ func (s *adminServer) waitForStoreFrozen(
 						return
 					}
 					mu.Lock()
-					ok := (wantFrozen && resp.Frozen) || (!wantFrozen && resp.Thawed)
+					ok := (wantFrozen && resp.NumThawed == 0) ||
+						(!wantFrozen && resp.NumFrozen == 0)
 					if ok {
 						// If the Store is in the right state, mark it as such.
 						// This means we won't try it again.

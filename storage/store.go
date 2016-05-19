@@ -2353,17 +2353,19 @@ func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 // unfrozen (thawed). It makes no attempt to prevent new data being rebalanced
 // to the Store, and thus does not guarantee that the Store remains in the
 // reported state.
-func (s *Store) FrozenStatus() (frozen bool, thawed bool) {
-	frozen, thawed = true, true
+func (s *Store) FrozenStatus() (numFrozen int64, numThawed int64) {
 	newStoreRangeSet(s).Visit(func(r *Replica) bool {
 		if !r.IsInitialized() {
 			return true
 		}
 		r.mu.Lock()
-		frozen = frozen && r.mu.frozen
-		thawed = thawed && !r.mu.frozen
+		if r.mu.frozen {
+			numFrozen++
+		} else {
+			numThawed++
+		}
 		r.mu.Unlock()
-		return frozen || thawed // stop early if both already false
+		return true // want more
 	})
-	return frozen, thawed
+	return
 }

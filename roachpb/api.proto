@@ -800,18 +800,16 @@ message StoreRequestHeader {
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
-// A PollFrozenRequest asks the addressed Store whether all of its Replicas are
-// frozen or unfrozen.
+// A PollFrozenRequest asks addressed Store for counts of its frozen and
+// unfrozen replicas.
 message PollFrozenRequest {
   optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A PollFrozenResponse is the response returned from a PollFrozenRequest. If
-// all of the Store's replicas are frozen or operating, the corresponding
-// boolean will be set.
+// A PollFrozenResponse is the response returned from a PollFrozenRequest.
 message PollFrozenResponse {
-  optional bool frozen = 1 [(gogoproto.nullable) = false];
-  optional bool thawed = 2 [(gogoproto.nullable) = false];
+  optional int64 num_frozen = 1 [(gogoproto.nullable) = false];
+  optional int64 num_thawed = 2 [(gogoproto.nullable) = false];
 }
 
 // The two Batch services below are identical, except that some internal
