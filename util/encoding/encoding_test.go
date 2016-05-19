@@ -105,7 +105,7 @@ func TestEncodeDecodeUint32Descending(t *testing.T) {
 func testBasicEncodeDecodeUint64(
 	encFunc func([]byte, uint64) []byte,
 	decFunc func([]byte) ([]byte, uint64, error),
-	descending, testPeekLen bool,
+	descending, testPeekLen, testUvarintEncLen bool,
 	t *testing.T,
 ) {
 	testCases := []uint64{
@@ -142,6 +142,18 @@ func testBasicEncodeDecodeUint64(
 		}
 		if testPeekLen {
 			testPeekLength(t, enc)
+		}
+		if testUvarintEncLen {
+			var encLen int
+			if descending {
+				encLen = EncLenUvarintDescending(v)
+			} else {
+				encLen = EncLenUvarintAscending(v)
+			}
+			if encLen != len(enc) {
+				t.Errorf("EncLenUvarint for %d returned incorrect length %d, should be %d",
+					v, encLen, len(enc))
+			}
 		}
 		lastEnc = enc
 	}
@@ -231,7 +243,7 @@ func testCustomEncodeUint64(testCases []testCaseUint64,
 }
 
 func TestEncodeDecodeUint64(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUint64Ascending, DecodeUint64Ascending, false, false, t)
+	testBasicEncodeDecodeUint64(EncodeUint64Ascending, DecodeUint64Ascending, false, false, false, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 		{1, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
@@ -242,7 +254,7 @@ func TestEncodeDecodeUint64(t *testing.T) {
 }
 
 func TestEncodeDecodeUint64Descending(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUint64Descending, DecodeUint64Descending, true, false, t)
+	testBasicEncodeDecodeUint64(EncodeUint64Descending, DecodeUint64Descending, true, false, false, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 		{1, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
@@ -286,7 +298,7 @@ func TestEncodeDecodeVarintDescending(t *testing.T) {
 }
 
 func TestEncodeDecodeUvarint(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUvarintAscending, DecodeUvarintAscending, false, true, t)
+	testBasicEncodeDecodeUint64(EncodeUvarintAscending, DecodeUvarintAscending, false, true, true, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0x88}},
 		{1, []byte{0x89}},
@@ -299,7 +311,7 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 }
 
 func TestEncodeDecodeUvarintDescending(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUvarintDescending, DecodeUvarintDescending, true, true, t)
+	testBasicEncodeDecodeUint64(EncodeUvarintDescending, DecodeUvarintDescending, true, true, true, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0x88}},
 		{1, []byte{0x87, 0xfe}},
