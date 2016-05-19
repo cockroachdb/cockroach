@@ -1911,7 +1911,7 @@ opt_conf_expr:
 | ON CONSTRAINT name { unimplemented() }
 | /* EMPTY */
   {
-    $$.val = nil
+    $$.val = []string(nil)
   }
 
 returning_clause:
