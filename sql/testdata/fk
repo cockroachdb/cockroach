@@ -1,0 +1,64 @@
+statement ok
+CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE);
+
+statement ok
+CREATE TABLE products (
+  sku STRING PRIMARY KEY,
+  upc STRING UNIQUE,
+  vendor STRING
+);
+
+statement error referenced table "productz" not found
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES productz,
+  customer INT REFERENCES customers (id),
+  INDEX (product),
+  INDEX (customer)
+);
+
+statement error referenced table "customerz" not found
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products,
+  customer INT REFERENCES customerz (id),
+  INDEX (product),
+  INDEX (customer)
+);
+
+
+statement error foreign key requires a unique index on products.vendor
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products (vendor),
+  customer INT REFERENCES customers,
+  INDEX (product),
+  INDEX (customer)
+);
+
+
+statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products,
+  customer INT REFERENCES customers (email),
+  INDEX (product),
+  INDEX (customer)
+);
+
+statement error foreign key column "product" must be the prefix of an index
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products,
+  customer INT REFERENCES customers (email),
+  INDEX (customer)
+);
+
+statement ok
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products,
+  customer INT REFERENCES customers (id),
+  INDEX (product),
+  INDEX (customer)
+);
