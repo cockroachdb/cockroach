@@ -54,12 +54,16 @@ func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Rows)
 	}
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
-		buf.WriteString(" ON CONFLICT (")
-		FormatNode(buf, f, node.OnConflict.Columns)
+		buf.WriteString(" ON CONFLICT")
+		if len(node.OnConflict.Columns) > 0 {
+			buf.WriteString(" (")
+			FormatNode(buf, f, node.OnConflict.Columns)
+			buf.WriteString(")")
+		}
 		if node.OnConflict.DoNothing {
-			buf.WriteString(") DO NOTHING")
+			buf.WriteString(" DO NOTHING")
 		} else {
-			buf.WriteString(") DO UPDATE SET ")
+			buf.WriteString(" DO UPDATE SET ")
 			FormatNode(buf, f, node.OnConflict.Exprs)
 			if node.OnConflict.Where != nil {
 				FormatNode(buf, f, node.OnConflict.Where)
