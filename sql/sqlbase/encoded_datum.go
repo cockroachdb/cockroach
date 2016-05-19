@@ -45,13 +45,34 @@ type EncDatum struct {
 // value is stored as a shallow copy, so the caller must make sure the slice is
 // not modified for the lifetime of the EncDatum.
 func (ed *EncDatum) SetEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byte) {
-	if val == nil {
-		panic("nil encoded value given")
+	if len(val) == 0 {
+		panic("empty encoded value")
 	}
 	ed.Type = typ
 	ed.encoding = enc
 	ed.encoded = val
 	ed.Datum = nil
+}
+
+// SetFromBuffer initializes the EncDatum with an encoding that is possibly
+// followed by other data. Similar to SetEncoded, except that this function
+// figures out where the encoding stops and returns a slice for the rest of the
+// buffer.
+func (ed *EncDatum) SetFromBuffer(
+	typ ColumnType_Kind, enc DatumEncoding, buf []byte,
+) (remaining []byte, err error) {
+	var encLen int
+	switch enc {
+	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
+		encLen, err = encoding.PeekLength(buf)
+	default:
+		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
+	}
+	if err != nil {
+		return nil, err
+	}
+	ed.SetEncoded(typ, enc, buf[:encLen])
+	return buf[encLen:], nil
 }
 
 // SetDatum initializes the EncDatum with the given Datum.
