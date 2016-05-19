@@ -44,7 +44,9 @@ func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) Garbage
 // garbage collection policy for batches of values for the same key.
 // Returns the timestamp including, and after which, all values should
 // be garbage collected. If no values should be GC'd, returns
-// roachpb.ZeroTimestamp.
+// roachpb.ZeroTimestamp. keys must be in descending time order.
+// Values deleted at or before the returned timestamp can be deleted without
+// invalidating any reads in the time interval [gc.expiration, \infinity).
 func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Timestamp {
 	if gc.policy.TTLSeconds <= 0 {
 		return roachpb.ZeroTimestamp
@@ -54,34 +56,31 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Times
 	}
 
 	// Loop over values. All should be MVCC versions.
+	var i int
+	var key MVCCKey
 	delTS := roachpb.ZeroTimestamp
-	survivors := false
-	for i, key := range keys {
+	for i, key = range keys {
 		if !key.IsValue() {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return roachpb.ZeroTimestamp
 		}
-		deleted := len(values[i]) == 0
-		if i == 0 {
-			// If the first value isn't a deletion tombstone, don't consider
-			// it for GC. It should always survive if non-deleted.
-			if !deleted {
-				survivors = true
-				continue
-			}
+		if gc.expiration.Less(key.Timestamp) {
+			continue
 		}
-		// If we encounter a version older than our GC timestamp, mark for deletion.
-		if key.Timestamp.Less(gc.expiration) {
-			delTS = key.Timestamp
-			break
-		} else if !deleted {
-			survivors = true
+		// Now key.Timestamp is <= gc.expiration.
+		// Mark the previous timestamp for deletion.
+		if i+1 < len(keys) {
+			delTS = keys[i+1].Timestamp
 		}
+		break
 	}
-	// If there are no non-deleted survivors, return timestamp of first key
-	// to delete all entries.
-	if !survivors {
-		return keys[0].Timestamp
+	// We can GC deleted values.
+	for ; i >= 0; i-- {
+		deleted := len(values[i]) == 0
+		if !deleted {
+			break
+		}
+		delTS = keys[i].Timestamp
 	}
 	return delTS
 }
