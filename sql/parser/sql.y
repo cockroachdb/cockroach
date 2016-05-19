@@ -45,7 +45,7 @@ func unimplementedWithIssue(issue int) {
 // The purpose of the sqlSymUnion struct is to reduce the memory footprint of
 // the sqlSymType because only one value (of a variety of types) is ever needed
 // to be stored in the union field at a time.
-// 
+//
 // By using an empty interface, we lose the type checking previously provided
 // by yacc and the Go compiler when dealing with union values. Instead, runtime
 // type assertions must be relied upon in the methods below, and as such, the
@@ -883,13 +883,13 @@ drop_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
-| DROP TABLE any_name_list
+| DROP TABLE any_name_list opt_drop_behavior
   {
-    $$.val = &DropTable{Names: $3.qnames(), IfExists: false}
+    $$.val = &DropTable{Names: $3.qnames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP TABLE IF EXISTS any_name_list
+| DROP TABLE IF EXISTS any_name_list opt_drop_behavior
   {
-    $$.val = &DropTable{Names: $5.qnames(), IfExists: true}
+    $$.val = &DropTable{Names: $5.qnames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 
 any_name_list:

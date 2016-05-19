@@ -211,6 +211,27 @@ func (n *dropIndexNode) Start() error {
 		// Queue the mutation.
 		switch status {
 		case sqlbase.DescriptorActive:
+			idx := tableDesc.Indexes[i]
+
+			// If an index is either end of a FK constraint, it cannot be dropped.
+			if idx.ForeignKey != nil {
+				if n.n.DropBehavior == parser.DropCascade {
+					return fmt.Errorf("CASCADE is not yet supported and index %q is in use as a foreign key contraint", idx.Name)
+				}
+				return fmt.Errorf("index %q is in use as a foreign key contraint", idx.Name)
+			}
+			if len(idx.ReferencedBy) > 0 {
+				t, err := getTableDescFromID(n.p.txn, idx.ReferencedBy[0].Table)
+				if err != nil {
+					return util.Errorf("index %q is referenced by foreign key from table ID %d, err resolving ID: %v",
+						idx.Name, idx.ReferencedBy[0].Table, err)
+				}
+				if n.n.DropBehavior == parser.DropCascade {
+					return fmt.Errorf("CASCADE is not yet supported and index %q is referenced by foreign key from table %q", idx.Name, t.Name)
+				}
+				return fmt.Errorf("index %q is referenced by foreign key from table %q", idx.Name, t.Name)
+			}
+
 			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 
@@ -274,6 +295,19 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			}
 			// Table does not exist, but we want it to: error out.
 			return nil, newUndefinedTableError(name.String())
+		}
+		for _, idx := range droppedDesc.Indexes {
+			if len(idx.ReferencedBy) > 0 {
+				t, err := getTableDescFromID(p.txn, idx.ReferencedBy[0].Table)
+				if err != nil {
+					return nil, util.Errorf("%q is referenced by table ID %d, err resolving ID: %v",
+						droppedDesc.Name, idx.ReferencedBy[0].Table, err)
+				}
+				if n.DropBehavior == parser.DropCascade {
+					return nil, fmt.Errorf("CASCADE is not yet supported and %q is referenced by foreign key from table %q", droppedDesc.Name, t.Name)
+				}
+				return nil, fmt.Errorf("%q is referenced by foreign key from table %q", droppedDesc.Name, t.Name)
+			}
 		}
 		td = append(td, droppedDesc)
 	}
@@ -362,6 +396,39 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 		return err
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
+
+	// If this table had foreign key relationships to other tables, remove the
+	// back-references from those tables.
+	for _, idx := range tableDesc.Indexes {
+		if idx.ForeignKey != nil {
+			t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
+			if err != nil {
+				return util.Errorf("error resolving referenced table ID %d: %v",
+					idx.ForeignKey.Table, err)
+			}
+			for i := range t.Indexes {
+				if t.Indexes[i].ID == idx.ForeignKey.Index {
+					for k, ref := range t.Indexes[i].ReferencedBy {
+						if ref.Table == tableDesc.ID {
+							t.Indexes[i].ReferencedBy = append(t.Indexes[i].ReferencedBy[:k],
+								t.Indexes[i].ReferencedBy[k+1:]...)
+						}
+					}
+
+				}
+			}
+			if err := t.SetUpVersion(); err != nil {
+				return err
+			}
+			if err := t.Validate(); err != nil {
+				return err
+			}
+			if err := p.writeTableDesc(t); err != nil {
+				return err
+			}
+			p.notifySchemaChange(t.ID, sqlbase.InvalidMutationID)
+		}
+	}
 
 	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID sqlbase.ID) error {
 		desc, err := GetTableDesc(systemConfig, tableID)
