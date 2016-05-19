@@ -81,8 +81,9 @@ func (node *DropIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // DropTable represents a DROP TABLE statement.
 type DropTable struct {
-	Names    QualifiedNames
-	IfExists bool
+	Names        QualifiedNames
+	IfExists     bool
+	DropBehavior DropBehavior
 }
 
 // Format implements the NodeFormatter interface.
@@ -92,4 +93,8 @@ func (node *DropTable) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF EXISTS ")
 	}
 	FormatNode(buf, f, node.Names)
+	if node.DropBehavior != DropDefault {
+		buf.WriteByte(' ')
+		buf.WriteString(node.DropBehavior.String())
+	}
 }
