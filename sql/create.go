@@ -272,8 +272,25 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
+	var fkTargets []fkTargetUpdate
+	for _, def := range n.n.Defs {
+		if col, ok := def.(*parser.ColumnTableDef); ok {
+			if col.References.Table != nil {
+				modified, err := n.resolveColFK(&desc, string(col.Name), col.References.Table, string(col.References.Col))
+				if err != nil {
+					return err
+				}
+				fkTargets = append(fkTargets, modified)
+			}
+		}
+	}
+
 	created, err := n.p.createDescriptor(tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
 	if err != nil {
+		return err
+	}
+
+	if err := n.finalizeFKs(&desc, fkTargets); err != nil {
 		return err
 	}
 
@@ -307,4 +324,118 @@ func (n *createTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createTableNode) MarkDebug(mode explainMode)          {}
 func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create table", "", nil
+}
+
+// FK resolution runs before the child table is created, meaning the ID of the
+// of the child table, which is needed to edit the referenced tables, is not
+// yet determined. This struct accumulates the information needed to edit a
+// referenced table once child table ID is determined.
+type fkTargetUpdate struct {
+	target *sqlbase.TableDescriptor // table to update
+	idx    int                      // index into target.Indexes
+	srcIdx sqlbase.IndexID          // ID of source index
+}
+
+func (n *createTableNode) resolveColFK(
+	tbl *sqlbase.TableDescriptor, fromCol string, targetTable *parser.QualifiedName, targetCol string,
+) (fkTargetUpdate, error) {
+	var ret fkTargetUpdate
+	src, err := tbl.FindActiveColumnByName(fromCol)
+	if err != nil {
+		return ret, err
+	}
+
+	target, err := n.p.getTableDesc(targetTable)
+	if err != nil {
+		return ret, err
+	}
+	if target == nil {
+		return ret, fmt.Errorf("referenced table %q not found", targetTable.String())
+	}
+	ret.target = target
+	// If a column isn't specified, attempt to default to PK.
+	if targetCol == "" {
+		if len(target.PrimaryIndex.ColumnNames) != 1 {
+			return ret, util.Errorf("must specify a single unique column to reference %q", targetTable.String())
+		}
+		targetCol = target.PrimaryIndex.ColumnNames[0]
+	}
+
+	fk, err := target.FindActiveColumnByName(targetCol)
+	if err != nil {
+		return ret, err
+	}
+
+	if src.Type.Kind != fk.Type.Kind {
+		return ret, fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)", fromCol, src.Type.Kind, tbl.Name, fk.Name, fk.Type.Kind)
+	}
+
+	found := false
+	// Find the index corresponding to the referenced column.
+	for i, idx := range target.AllNonDropIndexes() {
+		if idx.Unique && idx.ColumnIDs[0] == fk.ID {
+			ret.idx = i
+			found = true
+			break
+		}
+	}
+	if !found {
+		return ret, fmt.Errorf("foreign key requires a unique index on %s.%s", targetTable.String(), targetCol)
+	}
+
+	found = false
+	for i, idx := range tbl.Indexes {
+		if tbl.Indexes[i].ColumnNames[0] == src.Name {
+			tbl.Indexes[i].ForeignKey = &sqlbase.TableAndIndexID{
+				Table: target.ID,
+				Index: target.Indexes[ret.idx].ID,
+			}
+			ret.srcIdx = idx.ID
+			found = true
+			break
+		}
+	}
+	if !found {
+		return ret, fmt.Errorf("foreign key column must be the prefix of an index")
+	}
+
+	tbl.State = sqlbase.TableDescriptor_ADD
+	return ret, nil
+}
+
+func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets []fkTargetUpdate) error {
+	for _, t := range fkTargets {
+		t.target.Indexes[t.idx].ReferencedBy = append(
+			t.target.Indexes[t.idx].ReferencedBy,
+			&sqlbase.TableAndIndexID{Table: desc.ID, Index: t.srcIdx},
+		)
+
+		mutationID, err := t.target.FinalizeMutation()
+		if err != nil {
+			return err
+		}
+		if err := t.target.Validate(); err != nil {
+			return err
+		}
+		if err := n.p.writeTableDesc(t.target); err != nil {
+			return err
+		}
+		n.p.notifySchemaChange(t.target.ID, mutationID)
+	}
+
+	if desc.State == sqlbase.TableDescriptor_ADD {
+		desc.State = sqlbase.TableDescriptor_PUBLIC
+		mutationID, err := desc.FinalizeMutation()
+		if err != nil {
+			return err
+		}
+		if err := desc.Validate(); err != nil {
+			return err
+		}
+		if err := n.p.writeTableDesc(desc); err != nil {
+			return err
+		}
+		n.p.notifySchemaChange(desc.ID, mutationID)
+	}
+	return nil
 }
