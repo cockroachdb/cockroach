@@ -1747,3 +1747,24 @@ func TestSlowLeaderRetry(t *testing.T) {
 		t.Fatal(pErr)
 	}
 }
+
+func TestSenderTransport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	transport, err := SenderTransportFactory(
+		tracing.NewTracer(),
+		client.SenderFunc(
+			func(
+				_ context.Context, _ roachpb.BatchRequest,
+			) (r *roachpb.BatchResponse, e *roachpb.Error) {
+				return
+			},
+		))(SendOptions{}, &rpc.Context{}, nil, roachpb.BatchRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport.SendNext(make(chan BatchCall, 1))
+	if !transport.IsExhausted() {
+		t.Fatalf("transport is not exhausted")
+	}
+	transport.Close()
+}
