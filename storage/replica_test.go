@@ -5544,6 +5544,11 @@ func TestReplicaIDChangePending(t *testing.T) {
 	defer tc.Stop()
 	rng := tc.rng
 
+	// Stop the command from being proposed to the raft group and being removed.
+	rng.mu.Lock()
+	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error { return nil }
+	rng.mu.Unlock()
+
 	// Add a command to the pending list
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
