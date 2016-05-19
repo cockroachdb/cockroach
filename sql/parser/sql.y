@@ -397,7 +397,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %type <Statement>  insert_rest
 %type <[]string> opt_conf_expr
-%type <*OnConflict> opt_on_conflict
+%type <*OnConflict> on_conflict
 
 %type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
 
@@ -1844,21 +1844,31 @@ opt_encoding_clause:
     $$.val = (*StrVal)(nil)
   }
 
+// TODO(dan): While RETURNING is not supported with UPSERT and ON CONFLICT
+// (#6637), we do some gymnastics with the grammar to make the diagrams in the
+// docs only show the supported combinations. This simplifies once #6637 is
+// resolved.
 insert_stmt:
-  opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict returning_clause
+  opt_with_clause INSERT INTO insert_target insert_rest returning_clause
+  {
+    $$.val = $5.stmt()
+    $$.val.(*Insert).Table = $4.tblExpr()
+    $$.val.(*Insert).Returning = $6.retExprs()
+  }
+| opt_with_clause INSERT INTO insert_target insert_rest on_conflict
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).OnConflict = $6.onConflict()
-    $$.val.(*Insert).Returning = $7.retExprs()
   }
-| opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
+| opt_with_clause INSERT INTO insert_target insert_rest on_conflict RETURNING target_list { unimplementedWithIssue(6637) }
+| opt_with_clause UPSERT INTO insert_target insert_rest
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).OnConflict = &OnConflict{}
-    $$.val.(*Insert).Returning = $6.retExprs()
   }
+| opt_with_clause UPSERT INTO insert_target insert_rest RETURNING target_list { unimplementedWithIssue(6637) }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
 // a shift/reduce conflict with VALUES as an optional alias. We could easily
@@ -1888,7 +1898,7 @@ insert_rest:
     $$.val = &Insert{Rows: &Select{}}
   }
 
-opt_on_conflict:
+on_conflict:
   ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause
   {
     $$.val = &OnConflict{Columns: NameList($3.strs()), Exprs: $7.updateExprs(), Where: newWhere(astWhere, $8.expr())}
@@ -1896,10 +1906,6 @@ opt_on_conflict:
 | ON CONFLICT opt_conf_expr DO NOTHING
   {
     $$.val = &OnConflict{Columns: NameList($3.strs()), DoNothing: true}
-  }
-| /* EMPTY */
-  {
-    $$.val = (*OnConflict)(nil)
   }
 
 opt_conf_expr:
