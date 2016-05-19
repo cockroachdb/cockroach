@@ -415,14 +415,38 @@ func TestDigitsLookupTable(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeDecimal(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+// randDecimal generates a random decimal with exponent in the
+// range [minExp, maxExp].
+func randDecimal(rng *rand.Rand, minExp, maxExp int) *inf.Dec {
+	exp := randutil.RandIntInRange(rng, minExp, maxExp+1)
+	// Transform random float in [0, 1) to [-1, 1) and multiply by 10^exp.
+	floatVal := (rng.Float64()*2 - 1) * math.Pow10(exp)
+	return decimal.NewDecFromFloat(floatVal)
+}
 
+// makeDecimalVals creates decimal values with exponents in
+// the range [minExp, maxExp].
+// range.
+func makeDecimalVals(minExp, maxExp int) []*inf.Dec {
+	rng, _ := randutil.NewPseudoRand()
 	vals := make([]*inf.Dec, 10000)
 	for i := range vals {
-		vals[i] = decimal.NewDecFromFloat(rng.Float64())
+		vals[i] = randDecimal(rng, minExp, maxExp)
 	}
+	return vals
+}
 
+func makeEncodedVals(minExp, maxExp int) [][]byte {
+	rng, _ := randutil.NewPseudoRand()
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeDecimalAscending(nil, randDecimal(rng, minExp, maxExp))
+	}
+	return vals
+}
+
+func BenchmarkEncodeDecimalSmall(b *testing.B) {
+	vals := makeDecimalVals(-40, -1)
 	buf := make([]byte, 0, 100)
 
 	b.ResetTimer()
@@ -431,15 +455,48 @@ func BenchmarkEncodeDecimal(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeDecimal(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+func BenchmarkDecodeDecimalSmall(b *testing.B) {
+	vals := makeEncodedVals(-40, -1)
+	buf := make([]byte, 0, 100)
 
-	vals := make([][]byte, 10000)
-	for i := range vals {
-		d := decimal.NewDecFromFloat(rng.Float64())
-		vals[i] = EncodeDecimalAscending(nil, d)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = DecodeDecimalAscending(vals[i%len(vals)], buf)
 	}
+}
 
+func BenchmarkEncodeDecimalMedium(b *testing.B) {
+	vals := makeDecimalVals(0, 10)
+	buf := make([]byte, 0, 100)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeDecimalAscending(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeDecimalMedium(b *testing.B) {
+	vals := makeEncodedVals(0, 10)
+	buf := make([]byte, 0, 100)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = DecodeDecimalAscending(vals[i%len(vals)], buf)
+	}
+}
+
+func BenchmarkEncodeDecimalLarge(b *testing.B) {
+	vals := makeDecimalVals(11, 40)
+	buf := make([]byte, 0, 100)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeDecimalAscending(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeDecimalLarge(b *testing.B) {
+	vals := makeEncodedVals(11, 40)
 	buf := make([]byte, 0, 100)
 
 	b.ResetTimer()
@@ -449,13 +506,7 @@ func BenchmarkDecodeDecimal(b *testing.B) {
 }
 
 func BenchmarkPeekLengthDecimal(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-
-	vals := make([][]byte, 10000)
-	for i := range vals {
-		d := decimal.NewDecFromFloat(rng.Float64())
-		vals[i] = EncodeDecimalAscending(nil, d)
-	}
+	vals := makeEncodedVals(-20, 20)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -464,13 +515,7 @@ func BenchmarkPeekLengthDecimal(b *testing.B) {
 }
 
 func BenchmarkNonsortingEncodeDecimal(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-
-	vals := make([]*inf.Dec, 10000)
-	for i := range vals {
-		vals[i] = decimal.NewDecFromFloat(rng.Float64())
-	}
-
+	vals := makeDecimalVals(-20, 20)
 	buf := make([]byte, 0, 100)
 
 	b.ResetTimer()
@@ -484,7 +529,7 @@ func BenchmarkNonsortingDecodeDecimal(b *testing.B) {
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
-		d := decimal.NewDecFromFloat(rng.Float64())
+		d := randDecimal(rng, -20, 20)
 		vals[i] = EncodeNonsortingDecimal(nil, d)
 	}
 
