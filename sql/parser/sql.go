@@ -5921,7 +5921,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
 		//line sql.y:1913
 		{
-			sqlVAL.union.val = nil
+			sqlVAL.union.val = []string(nil)
 		}
 	case 282:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
