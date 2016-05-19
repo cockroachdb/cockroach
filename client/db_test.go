@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -32,6 +33,24 @@ import (
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
 	return s, s.DB()
+}
+
+func checkResult(t *testing.T, expected, result client.KeyValue) {
+	isError := false
+	switch result.Value.GetTag() {
+	case roachpb.ValueType_BYTES:
+		if !bytes.Equal(expected.ValueBytes(), result.ValueBytes()) {
+			isError = true
+		}
+	case roachpb.ValueType_INT:
+		if expected.ValueInt() != result.ValueInt() {
+			isError = true
+		}
+	}
+
+	if isError {
+		t.Errorf("expected %s, got %s\n", expected, result)
+	}
 }
 
 func TestDB_Get(t *testing.T) {
@@ -44,10 +63,12 @@ func TestDB_Get(t *testing.T) {
 		panic(err)
 	}
 
-	expected := []byte("")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
+	expected := client.KeyValue{
+		Key:   roachpb.Key("aa"),
+		Value: roachpb.Value{RawBytes: []byte("")},
 	}
+
+	checkResult(t, expected, result)
 }
 
 func TestDB_Put(t *testing.T) {
@@ -165,7 +186,7 @@ func TestDB_Inc(t *testing.T) {
 	}
 	var expected int64 = 100
 	if result.ValueInt() != expected {
-		t.Errorf("expected aa=\"%d\", got aa=\"%d\"\n", result.ValueInt(), expected)
+		t.Errorf("expected aa=\"%d\", got aa=\"%d\"\n", expected, result.ValueInt())
 	}
 }
 
