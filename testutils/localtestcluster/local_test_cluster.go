@@ -45,17 +45,18 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
-	Manual  *hlc.ManualClock
-	Clock   *hlc.Clock
-	Gossip  *gossip.Gossip
-	Eng     engine.Engine
-	Store   *storage.Store
-	DB      *client.DB
-	Stores  *storage.Stores
-	Sender  client.Sender
-	Stopper *stop.Stopper
-	Latency time.Duration // sleep for each RPC sent
-	tester  util.Tester
+	Manual    *hlc.ManualClock
+	Clock     *hlc.Clock
+	Gossip    *gossip.Gossip
+	Eng       engine.Engine
+	Store     *storage.Store
+	DBContext *client.DBContext
+	DB        *client.DB
+	Stores    *storage.Stores
+	Sender    client.Sender
+	Stopper   *stop.Stopper
+	Latency   time.Duration // sleep for each RPC sent
+	tester    util.Tester
 }
 
 // InitSenderFn is a callback used to initiate the txn coordinator (we don't
@@ -91,7 +92,11 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 
 	ltc.Sender = initSender(nodeDesc, tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
 		ltc.Gossip)
-	ltc.DB = client.NewDB(ltc.Sender)
+	if ltc.DBContext == nil {
+		dbCtx := client.DefaultDBContext()
+		ltc.DBContext = &dbCtx
+	}
+	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
 	ctx := storage.TestStoreContext()
 	ctx.Clock = ltc.Clock

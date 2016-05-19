@@ -35,6 +35,7 @@ type upsertHelper struct {
 	evalExprs          []parser.TypedExpr
 	table              *tableInfo
 	excludedAliasTable *tableInfo
+	allExprsIdentity   bool
 }
 
 var _ tableUpsertEvaler = (*upsertHelper)(nil)
@@ -68,6 +69,22 @@ func (p *planner) makeUpsertHelper(
 			e := fillDefault(updateExpr.Expr, typ, i, defaultExprs)
 			untupledExprs = append(untupledExprs, e)
 			i++
+		}
+	}
+
+	allExprsIdentity := true
+	for i, expr := range untupledExprs {
+		qn, ok := expr.(*parser.QualifiedName)
+		if !ok {
+			allExprsIdentity = false
+			break
+		}
+		if err := qn.NormalizeColumnName(); err != nil {
+			return nil, err
+		}
+		if qn.Base != upsertExcludedTable || qn.Column() != updateCols[i].Name {
+			allExprsIdentity = false
+			break
 		}
 	}
 
@@ -109,6 +126,7 @@ func (p *planner) makeUpsertHelper(
 		evalExprs:          normExprs,
 		table:              table,
 		excludedAliasTable: excludedAliasTable,
+		allExprsIdentity:   allExprsIdentity,
 	}
 	return helper, nil
 }
@@ -130,6 +148,10 @@ func (uh *upsertHelper) eval(
 		}
 	}
 	return ret, nil
+}
+
+func (uh *upsertHelper) isIdentityEvaler() bool {
+	return uh.allExprsIdentity
 }
 
 // upsertExprsAndIndex returns the upsert conflict index and the (possibly

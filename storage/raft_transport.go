@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -231,7 +232,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 	snapStream := streams[0]
 	restStream := streams[1]
 
-	var raftIdleTimer util.Timer
+	var raftIdleTimer timeutil.Timer
 	defer raftIdleTimer.Stop()
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)

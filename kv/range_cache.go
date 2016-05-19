@@ -66,9 +66,6 @@ func (l lookupMismatchError) Error() string {
 	return fmt.Sprintf("key %q not contained in range lookup's resulting decriptor %v", l.desiredKey, l.mismatchedDesc)
 }
 
-// CanRetry implements the retry.Retryable interface.
-func (l lookupMismatchError) CanRetry() bool { return true }
-
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
@@ -157,9 +154,16 @@ type lookupRequestKey struct {
 //           requests to it will evict the descriptor. We set the key to hash to
 //           the start of the stale descriptor for lookup requests to the rebalanced
 //           descriptor so that all requests will be coalesced to the same lookupRequest.
+//
+// Note that the above description assumes that useReverseScan is false for simplicity.
+// If useReverseScan is true, we need to use the end key of the stale descriptor instead.
 func makeLookupRequestKey(key roachpb.RKey, evictToken *evictionToken, considerIntents, useReverseScan bool) lookupRequestKey {
 	if evictToken != nil {
-		key = evictToken.prevDesc.StartKey
+		if useReverseScan {
+			key = evictToken.prevDesc.EndKey
+		} else {
+			key = evictToken.prevDesc.StartKey
+		}
 	}
 	return lookupRequestKey{
 		key:             string(key),
@@ -533,18 +537,8 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	metaEndKey := k.(rangeCacheKey)
 	rd := v.(*roachpb.RangeDescriptor)
 
-	// Check that key actually belongs to the range.
-	if !rd.ContainsKey(key) {
-		// The key is the EndKey and we're inclusive, so just return the range descriptor.
-		if inclusive && key.Equal(rd.EndKey) {
-			return metaEndKey, rd, nil
-		}
-		return nil, nil, nil
-	}
-
-	// The key is the StartKey, but we're inclusive and thus need to return the
-	// previous range descriptor, but it is not in the cache yet.
-	if inclusive && key.Equal(rd.StartKey) {
+	// Return nil if the key does not belong to the range.
+	if (!inclusive && !rd.ContainsKey(key)) || (inclusive && !rd.ContainsExclusiveEndKey(key)) {
 		return nil, nil, nil
 	}
 	return metaEndKey, rd, nil

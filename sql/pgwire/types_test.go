@@ -20,7 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/pq/oid"
+
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 // The assertions in this test should also be caught by the integration tests on
@@ -53,7 +57,7 @@ func TestParseTs(t *testing.T) {
 
 func TestTimestampRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("UTC", 0))
+	ts := time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("UTC", 0))
 
 	parse := func(encoded []byte) time.Time {
 		decoded, err := parseTs(string(encoded))
@@ -80,5 +84,55 @@ func TestTimestampRoundtrip(t *testing.T) {
 	}
 	if actual := parse(formatTs(ts, EST)); !ts.Equal(actual) {
 		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
+	}
+}
+
+func BenchmarkWriteBinaryDecimal(b *testing.B) {
+	buf := writeBuffer{bytecount: metric.NewCounter()}
+
+	dec := new(parser.DDecimal)
+	dec.SetString("-1728718718271827121233.1212121212")
+
+	// Warm up the buffer.
+	buf.writeBinaryDatum(dec)
+	buf.wrapped.Reset()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StartTimer()
+		buf.writeBinaryDatum(dec)
+		b.StopTimer()
+		buf.wrapped.Reset()
+	}
+}
+
+func BenchmarkDecodeBinaryDecimal(b *testing.B) {
+	wbuf := writeBuffer{bytecount: metric.NewCounter()}
+
+	expected := new(parser.DDecimal)
+	expected.SetString("-1728718718271827121233.1212121212")
+	wbuf.writeBinaryDatum(expected)
+
+	rbuf := readBuffer{msg: wbuf.wrapped.Bytes()}
+
+	plen, err := rbuf.getInt32()
+	if err != nil {
+		b.Fatal(err)
+	}
+	bytes, err := rbuf.getBytes(int(plen))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StartTimer()
+		got, err := decodeOidDatum(oid.T_numeric, formatBinary, bytes)
+		b.StopTimer()
+		if err != nil {
+			b.Fatal(err)
+		} else if got.Compare(expected) != 0 {
+			b.Fatalf("expected %s, got %s", expected, got)
+		}
 	}
 }

@@ -24,30 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
+// Cockroach error extensions:
 const (
-	// PG error codes from:
-	// http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-
-	// CodeNonNullViolationError represents violation of a non-null constraint.
-	CodeNonNullViolationError string = "23502"
-	// CodeUniquenessConstraintViolationError represents violations of uniqueness
-	// constraints.
-	CodeUniquenessConstraintViolationError string = "23505"
-	// CodeTransactionAbortedError signals that the user tried to execute a
-	// statement in the context of a SQL txn that's already aborted.
-	CodeTransactionAbortedError string = "25P02"
-	// CodeInternalError represents all internal cockroach errors, plus acts
-	// as a catch-all for random errors for which we haven't implemented the
-	// appropriate error code.
-	CodeInternalError string = "XX000"
-
-	// Cockroach extensions:
-
 	// CodeRetriableError signals to the user that the SQL txn entered the
 	// RESTART_WAIT state and that a RESTART statement should be issued.
 	CodeRetriableError string = "CR000"
@@ -80,6 +64,8 @@ var _ ErrorWithPGCode = &errNonNullViolation{}
 var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
 var _ ErrorWithPGCode = &errTransactionAborted{}
 var _ ErrorWithPGCode = &errTransactionCommitted{}
+var _ ErrorWithPGCode = &errUndefinedDatabase{}
+var _ ErrorWithPGCode = &errUndefinedTable{}
 var _ ErrorWithPGCode = &errRetry{}
 
 const (
@@ -130,7 +116,7 @@ func (e *errTransactionAborted) Error() string {
 }
 
 func (*errTransactionAborted) Code() string {
-	return CodeTransactionAbortedError
+	return pgerror.CodeInFailedSQLTransactionError
 }
 
 func (e *errTransactionAborted) SrcContext() SrcCtx {
@@ -171,7 +157,7 @@ func (e *errNonNullViolation) Error() string {
 }
 
 func (*errNonNullViolation) Code() string {
-	return CodeNonNullViolationError
+	return pgerror.CodeNotNullViolationError
 }
 
 func (e *errNonNullViolation) SrcContext() SrcCtx {
@@ -195,7 +181,7 @@ type errUniquenessConstraintViolation struct {
 }
 
 func (*errUniquenessConstraintViolation) Code() string {
-	return CodeUniquenessConstraintViolationError
+	return pgerror.CodeUniqueViolationError
 }
 
 func (e *errUniquenessConstraintViolation) Error() string {
@@ -211,6 +197,53 @@ func (e *errUniquenessConstraintViolation) Error() string {
 }
 
 func (e *errUniquenessConstraintViolation) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newUndefinedTableError(name string) error {
+	return &errUndefinedTable{ctx: makeSrcCtx(1), name: name}
+}
+
+type errUndefinedTable struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *errUndefinedTable) Error() string {
+	return fmt.Sprintf("table %q does not exist", e.name)
+}
+
+func (*errUndefinedTable) Code() string {
+	return pgerror.CodeUndefinedTableError
+}
+
+func (e *errUndefinedTable) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+func newUndefinedDatabaseError(name string) error {
+	return &errUndefinedDatabase{ctx: makeSrcCtx(1), name: name}
+}
+
+type errUndefinedDatabase struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *errUndefinedDatabase) Error() string {
+	return fmt.Sprintf("database %q does not exist", e.name)
+}
+
+func (*errUndefinedDatabase) Code() string {
+	// Postgres will return an UndefinedTable error on queries that go to a "relation"
+	// that does not exist (a query to a non-existent table or database), but will
+	// return an InvalidCatalogName error when connecting to a database that does
+	// not exist. We've chosen to return this code for all cases where the error cause
+	// is a missing database.
+	return pgerror.CodeInvalidCatalogNameError
+}
+
+func (e *errUndefinedDatabase) SrcContext() SrcCtx {
 	return e.ctx
 }
 

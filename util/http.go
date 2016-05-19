@@ -19,6 +19,7 @@ package util
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"gopkg.in/yaml.v1"
 
@@ -113,6 +115,8 @@ func GetContentType(request *http.Request) string {
 	return contentType
 }
 
+var typeProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
+
 // UnmarshalRequest examines the request Content-Type header in order
 // to determine the encoding of the supplied body. Supported content
 // types include:
@@ -124,24 +128,34 @@ func GetContentType(request *http.Request) string {
 // The body is unmarshalled into the supplied value parameter. An
 // error is returned on an unmarshalling error or on an unsupported
 // content type.
-func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed []EncodingType) error {
+func UnmarshalRequest(r *http.Request, value interface{}, allowed []EncodingType) error {
 	contentType := GetContentType(r)
 	switch contentType {
 	case JSONContentType, AltJSONContentType:
 		if isAllowed(JSONEncoding, allowed) {
-			return json.Unmarshal(body, value)
+			if pb, ok := value.(proto.Message); ok {
+				return jsonpb.Unmarshal(r.Body, pb)
+			}
+			return json.NewDecoder(r.Body).Decode(value)
 		}
 	case ProtoContentType, AltProtoContentType:
 		if isAllowed(ProtoEncoding, allowed) {
-			msg, ok := value.(proto.Message)
-			if !ok {
-				return Errorf("unable to convert %+v to protobuf", value)
+			if pb, ok := value.(proto.Message); ok {
+				reqBody, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					return err
+				}
+				return proto.Unmarshal(reqBody, pb)
 			}
-			return proto.Unmarshal(body, msg)
+			return Errorf("unexpected type %T does not implement %s", value, typeProtoMessage)
 		}
 	case YAMLContentType, AltYAMLContentType:
 		if isAllowed(YAMLEncoding, allowed) {
-			return yaml.Unmarshal(body, value)
+			reqBody, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				return err
+			}
+			return yaml.Unmarshal(reqBody, value)
 		}
 	}
 	return Errorf("unsupported content type: %q", contentType)
@@ -252,14 +266,11 @@ func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface
 		return err
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	if resp.StatusCode != http.StatusOK {
-		return Errorf("status: %s, error: %s", resp.Status, b)
+		b, err := ioutil.ReadAll(resp.Body)
+		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
-	return json.Unmarshal(b, v)
+	return decodeJSON(resp.Body, v)
 }
 
 // PostJSON uses the supplied client to perform a POST to the URL specified
@@ -272,12 +283,16 @@ func PostJSON(httpClient *http.Client, scheme, hostport, path, body string, v in
 		return err
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	if resp.StatusCode != http.StatusOK {
-		return Errorf("status: %s, error: %s", resp.Status, b)
+		b, err := ioutil.ReadAll(resp.Body)
+		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
-	return json.Unmarshal(b, v)
+	return decodeJSON(resp.Body, v)
+}
+
+func decodeJSON(r io.Reader, v interface{}) error {
+	if pb, ok := v.(proto.Message); ok {
+		return jsonpb.Unmarshal(r, pb)
+	}
+	return json.NewDecoder(r).Decode(v)
 }

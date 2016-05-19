@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -141,11 +140,6 @@ func (e *internalError) message(_ *Error) string {
 	return (*Error)(e).String()
 }
 
-// CanRetry implements the retry.Retryable interface.
-func (e *internalError) CanRetry() bool {
-	return e.Retryable
-}
-
 func (e *internalError) canRestartTransaction() TransactionRestart {
 	return e.TransactionRestart
 }
@@ -157,11 +151,6 @@ type ErrorDetailInterface interface {
 	error
 	// message returns an error message.
 	message(*Error) string
-}
-
-// CanRetry implements the retry.Retryable interface.
-func (e *Error) CanRetry() bool {
-	return e.Retryable
 }
 
 // GoError returns a Go error converted from Error.
@@ -197,9 +186,6 @@ func (e *Error) setGoError(err error) {
 		e.Message = sErr.message(e)
 	} else {
 		e.Message = err.Error()
-	}
-	if r, ok := err.(retry.Retryable); ok {
-		e.Retryable = r.CanRetry()
 	}
 	var isTxnError bool
 	if r, ok := err.(transactionRestartError); ok {
@@ -272,19 +258,11 @@ func (e *LeaseRejectedError) message(_ *Error) string {
 	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
 }
 
-// CanRetry indicates that this error can not be retried; it should never
-// make it back to the client anyways.
-func (*LeaseRejectedError) CanRetry() bool {
-	return false
-}
-
 var _ ErrorDetailInterface = &LeaseRejectedError{}
 
-// NewSendError creates a SendError. canRetry should be true in most cases; the
-// only non-retryable SendErrors are for things like malformed (and not merely
-// unresolvable) addresses.
-func NewSendError(msg string, canRetry bool) *SendError {
-	return &SendError{Message: msg, Retryable: canRetry}
+// NewSendError creates a SendError.
+func NewSendError(msg string) *SendError {
+	return &SendError{Message: msg}
 }
 
 func (s SendError) Error() string {
@@ -294,9 +272,6 @@ func (s SendError) Error() string {
 func (s *SendError) message(_ *Error) string {
 	return "failed to send RPC: " + s.Message
 }
-
-// CanRetry implements the Retryable interface.
-func (s SendError) CanRetry() bool { return s.Retryable }
 
 var _ ErrorDetailInterface = &SendError{}
 
@@ -313,11 +288,6 @@ func (e *RangeNotFoundError) Error() string {
 
 func (e *RangeNotFoundError) message(_ *Error) string {
 	return fmt.Sprintf("range %d was not found", e.RangeID)
-}
-
-// CanRetry indicates whether or not this RangeNotFoundError can be retried.
-func (*RangeNotFoundError) CanRetry() bool {
-	return true
 }
 
 var _ ErrorDetailInterface = &RangeNotFoundError{}
@@ -346,11 +316,6 @@ func (e *RangeKeyMismatchError) message(_ *Error) string {
 			e.RequestStartKey, e.RequestEndKey, e.MismatchedRange.StartKey, e.MismatchedRange.EndKey)
 	}
 	return fmt.Sprintf("key range %s-%s could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
-}
-
-// CanRetry indicates whether or not this RangeKeyMismatchError can be retried.
-func (*RangeKeyMismatchError) CanRetry() bool {
-	return true
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}

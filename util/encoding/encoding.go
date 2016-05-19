@@ -221,6 +221,28 @@ func EncodeVarintDescending(b []byte, v int64) []byte {
 	return EncodeVarintAscending(b, ^v)
 }
 
+// getVarintLen returns the encoded length of an encoded varint. Assumes the
+// slice has at least one byte.
+func getVarintLen(b []byte) (int, error) {
+	length := int(b[0]) - intZero
+	if length >= 0 {
+		if length <= intSmall {
+			// just the tag
+			return 1, nil
+		}
+		// tag and length-intSmall bytes
+		length = 1 + length - intSmall
+	} else {
+		// tag and -length bytes
+		length = 1 - length
+	}
+
+	if length > len(b) {
+		return 0, util.Errorf("varint length %d exceeds slice length %d", length, len(b))
+	}
+	return length, nil
+}
+
 // DecodeVarintAscending decodes a value encode by EncodeVaringAscending.
 func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
@@ -471,7 +493,6 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 		if i+1 >= len(b) {
 			return nil, nil, util.Errorf("malformed escape in buffer %#x", b)
 		}
-
 		v := b[i+1]
 		if v == e.escapedTerm {
 			if r == nil {
@@ -482,14 +503,32 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 			return b[i+2:], r, nil
 		}
 
-		if v == e.escaped00 {
-			r = append(r, b[:i]...)
-			r = append(r, e.escapedFF)
-		} else {
+		if v != e.escaped00 {
 			return nil, nil, util.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
 		}
 
+		r = append(r, b[:i]...)
+		r = append(r, e.escapedFF)
 		b = b[i+2:]
+	}
+}
+
+// getBytesLength finds the length of a bytes encoding.
+func getBytesLength(b []byte, e escapes) (int, error) {
+	// Skip the tag.
+	skipped := 1
+	for {
+		i := bytes.IndexByte(b[skipped:], e.escape)
+		if i == -1 {
+			return 0, util.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
+		}
+		if i+1 >= len(b) {
+			return 0, util.Errorf("malformed escape in buffer %#x", b)
+		}
+		skipped += i + 2
+		if b[skipped-1] == e.escapedTerm {
+			return skipped, nil
+		}
 	}
 }
 
@@ -801,6 +840,56 @@ func PeekType(b []byte) Type {
 		}
 	}
 	return Unknown
+}
+
+// getMultiVarintLen find the length of <num> encoded varints that follow a
+// 1-byte tag.
+func getMultiVarintLen(b []byte, num int) (int, error) {
+	p := 1
+	for i := 0; i < num && p < len(b); i++ {
+		len, err := getVarintLen(b[p:])
+		if err != nil {
+			return 0, err
+		}
+		p += len
+	}
+	return p, nil
+}
+
+// PeekLength returns the length of the encoded value at the start of b.  Note:
+// if this function succeeds, it's not a guarantee that decoding the value will
+// succeed.
+func PeekLength(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, util.Errorf("empty slice")
+	}
+	m := b[0]
+	switch m {
+	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
+		floatNaN, floatNaNDesc, floatZero, decimalZero:
+		return 1, nil
+	case bytesMarker:
+		return getBytesLength(b, ascendingEscapes)
+	case bytesDescMarker:
+		return getBytesLength(b, descendingEscapes)
+	case timeMarker:
+		return getMultiVarintLen(b, 2)
+	case durationBigNegMarker, durationMarker, durationBigPosMarker:
+		return getMultiVarintLen(b, 3)
+	case floatNeg, floatPos:
+		// the marker is followed by 8 bytes
+		if len(b) < 9 {
+			return 0, util.Errorf("slice too short for float (%d)", len(b))
+		}
+		return 9, nil
+	}
+	if m >= IntMin && m <= IntMax {
+		return getVarintLen(b)
+	}
+	if m >= decimalNaN && m <= decimalNaNDesc {
+		return getDecimalLen(b)
+	}
+	return 0, util.Errorf("unknown tag %d", m)
 }
 
 // PrettyPrintValue returns the string representation of all contiguous decodable

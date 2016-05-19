@@ -44,7 +44,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(n.Table.Database())
+		return nil, newUndefinedDatabaseError(n.Table.Database())
 	}
 
 	tableDesc, err := p.getTableDesc(n.Table)
@@ -55,7 +55,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		if n.IfExists {
 			return &emptyNode{}, nil
 		}
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {

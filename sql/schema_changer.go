@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -41,7 +40,6 @@ type SchemaChanger struct {
 	mutationID sqlbase.MutationID
 	nodeID     roachpb.NodeID
 	db         client.DB
-	cfg        config.SystemConfig
 	leaseMgr   *LeaseManager
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
@@ -175,7 +173,10 @@ func isSchemaChangeRetryError(err error) bool {
 
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
-func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
+func (sc SchemaChanger) exec(
+	startBackfillNotification func() error,
+	oldNameNotInUseNotification func(),
+) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -201,14 +202,13 @@ func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
 	}
 
 	if desc.GetTable().Deleted() {
-		// Wait for everybody to see the version with the deleted bit set. When
-		// this returns, nobody has any leases on the table, nor can get new leases,
-		// so the table will no longer be modified.
-
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
 			return err
 		}
+		// Wait for everybody to see the version with the deleted bit set. When
+		// this returns, nobody has any leases on the table, nor can get new leases,
+		// so the table will no longer be modified.
 		if err := sc.waitToUpdateLeases(); err != nil {
 			return err
 		}
@@ -219,6 +219,48 @@ func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
 		}
 		needRelease = false
 		return nil
+	}
+
+	if desc.GetTable().Renamed() {
+		lease, err = sc.ExtendLease(lease)
+		if err != nil {
+			return err
+		}
+		// Wait for everyone to see the version with the new name. When this
+		// returns, no new transactions will be using the old name for the table, so
+		// the old name can now be re-used (by CREATE).
+		if err := sc.waitToUpdateLeases(); err != nil {
+			return err
+		}
+
+		if oldNameNotInUseNotification != nil {
+			oldNameNotInUseNotification()
+		}
+		// Free up the old name(s).
+		err := sc.db.Txn(func(txn *client.Txn) error {
+			b := client.Batch{}
+			for _, renameDetails := range desc.GetTable().Renames {
+				tbKey := tableKey{
+					sqlbase.ID(renameDetails.OldParentID), renameDetails.OldName}.Key()
+				b.Del(tbKey)
+			}
+			if err := txn.Run(&b); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		// Clean up - clear the descriptor's state.
+		_, err = sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+			desc.Renames = nil
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	// Wait for the schema change to propagate to all nodes after this function
@@ -245,7 +287,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
 	// an integrity constraint violation. All other errors are transient
 	// errors that are resolved by retrying the backfill.
 	if isIntegrityConstraintError(err) {
-		log.Warning("reversing schema change due to irrecoverable error: %s", err)
+		log.Warningf("reversing schema change due to irrecoverable error: %s", err)
 		if errReverse := sc.reverseMutations(); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation
 			// and made a decision to reverse the mutations,
@@ -349,7 +391,13 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
+	if log.V(2) {
+		log.Infof("waiting for a single version of table %d...", sc.tableID)
+	}
 	_, err := sc.leaseMgr.waitForOneVersion(sc.tableID, retryOpts)
+	if log.V(2) {
+		log.Infof("waiting for a single version of table %d... done", sc.tableID)
+	}
 	return err
 }
 
@@ -540,7 +588,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				cfg, _ := s.gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info("received a new config %v", cfg)
+					log.Info("received a new config")
 				}
 				schemaChanger := SchemaChanger{
 					nodeID:   roachpb.NodeID(s.leaseMgr.nodeID),
@@ -578,7 +626,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Deleted() || len(table.Mutations) > 0 {
+						if table.UpVersion || table.Deleted() ||
+							table.Renamed() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof("%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)
@@ -593,7 +642,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							} else {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
-							schemaChanger.cfg = cfg
 							schemaChanger.execAfter = execAfter
 							// Keep track of this schema change.
 							// Remove from oldSchemaChangers map.
@@ -625,7 +673,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						err := sc.exec(nil)
+						err := sc.exec(nil, nil)
 						if err != nil {
 							if err == errExistingSchemaChangeLease {
 							} else if err == errDescriptorNotFound {

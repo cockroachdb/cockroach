@@ -29,12 +29,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
-)
-
-var (
-	bigInt10   = big.NewInt(10)
-	bigInt100  = big.NewInt(100)
-	bigInt1000 = big.NewInt(1000)
+	"github.com/cockroachdb/cockroach/util/decimal"
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal
@@ -291,6 +286,32 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, *inf.Dec, error
 	}
 }
 
+// getDecimalLen returns the length of an encoded decimal.
+func getDecimalLen(buf []byte) (int, error) {
+	m := buf[0]
+	p := 1
+	if m < decimalNaN || m > decimalNaNDesc {
+		panic(fmt.Errorf("invalid tag %d", m))
+	}
+	switch m {
+	case decimalNaN, decimalNegativeInfinity, decimalNaNDesc, decimalInfinity, decimalZero:
+		return 1, nil
+	case decimalNegLarge, decimalNegSmall, decimalPosLarge, decimalPosSmall:
+		// Skip the varint exponent.
+		l, err := getVarintLen(buf[p:])
+		if err != nil {
+			return 0, err
+		}
+		p += l
+	}
+
+	idx, err := findDecimalTerminator(buf[p:])
+	if err != nil {
+		return 0, err
+	}
+	return p + idx + 1, nil
+}
+
 // makeDecimalFromMandE reconstructs the decimal from the mantissa M and
 // exponent E.
 func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *inf.Dec {
@@ -331,6 +352,19 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *inf.Dec {
 	return dec
 }
 
+// findDecimalTerminator finds the decimalTerminator in the given slice.
+func findDecimalTerminator(buf []byte) (int, error) {
+	// TODO(nvanbenschoten): bytes.IndexByte is inefficient for small slices. This is
+	// apparently fixed in go1.7. For now, we manually search for the terminator.
+	// idx := bytes.IndexByte(r, decimalTerminator)
+	for i, b := range buf {
+		if b == decimalTerminator {
+			return i, nil
+		}
+	}
+	return -1, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
+}
+
 func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, rest []byte, newTmp []byte, err error) {
 	var ex uint64
 	var r []byte
@@ -343,18 +377,9 @@ func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, 
 		return 0, nil, nil, nil, err
 	}
 
-	// TODO(nvanbenschoten): bytes.IndexByte is inefficient for small slices. This is
-	// apparently fixed in go1.7. For now, we manually search for the terminator.
-	// idx := bytes.IndexByte(r, decimalTerminator)
-	idx := -1
-	for i, b := range r {
-		if b == decimalTerminator {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		return 0, nil, nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, r)
+	idx, err := findDecimalTerminator(r)
+	if err != nil {
+		return 0, nil, nil, nil, err
 	}
 
 	m = r[:idx]
@@ -374,18 +399,9 @@ func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, 
 }
 
 func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, rest []byte, newTmp []byte, err error) {
-	// TODO(nvanbenschoten): bytes.IndexByte is inefficient for small slices. This is
-	// apparently fixed in go1.7. For now, we manually search for the terminator.
-	// idx := bytes.IndexByte(buf[1:], decimalTerminator)
-	idx := -1
-	for i, b := range buf[1:] {
-		if b == decimalTerminator {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		return 0, nil, nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf[1:])
+	idx, err := findDecimalTerminator(buf[1:])
+	if err != nil {
+		return 0, nil, nil, nil, err
 	}
 
 	m = buf[1 : idx+1]
@@ -419,18 +435,9 @@ func decodeLargeNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, 
 		return 0, nil, nil, nil, err
 	}
 
-	// TODO(nvanbenschoten): bytes.IndexByte is inefficient for small slices. This is
-	// apparently fixed in go1.7. For now, we manually search for the terminator.
-	// idx := bytes.IndexByte(r, decimalTerminator)
-	idx := -1
-	for i, b := range r {
-		if b == decimalTerminator {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		return 0, nil, nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, r)
+	idx, err := findDecimalTerminator(r)
+	if err != nil {
+		return 0, nil, nil, nil, err
 	}
 
 	m = r[:idx]
@@ -583,21 +590,7 @@ func normalizeBigInt(bi *big.Int, copyOnWrite bool, formatted, tmp []byte) *big.
 		if copyOnWrite {
 			bi = new(big.Int)
 		}
-
-		var div *big.Int
-		switch tens {
-		case 1:
-			div = bigInt10
-		case 2:
-			div = bigInt100
-		case 3:
-			div = bigInt1000
-		default:
-			div = big.NewInt(10)
-			pow := big.NewInt(int64(tens))
-			div.Exp(div, pow, nil)
-		}
-		bi.Div(from, div)
+		bi.Div(from, decimal.PowerOfTenInt(tens))
 	}
 	return bi
 }

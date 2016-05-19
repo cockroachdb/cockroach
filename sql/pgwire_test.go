@@ -266,7 +266,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of parameter $1",
 		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of parameter $1",
 		"SELECT $1 + $2, $2::FLOAT":                 "pq: could not determine data type of parameter $1",
-		"SELECT ($1 + 2) + ($1 + 2.5)":              "pq: unsupported binary operator: <int> + <float>",
+		"SELECT ($1 + 2) + ($1 + 2.5)":              "pq: unsupported binary operator: <int> + <decimal>",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
@@ -427,10 +427,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT $1::date, $2::timestamp": {
 			base.Params(
 				time.Date(2006, 7, 8, 0, 0, 0, 9, time.FixedZone("", 0)),
-				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			).Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
-				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			),
 		},
 		"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
@@ -454,9 +454,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"INSERT INTO d.ts (a) VALUES ($1) RETURNING a": {
 			base.Params(
-				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
+				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			).Results(
-				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
+				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
@@ -473,6 +473,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		"INSERT INTO d.T VALUES ($1) RETURNING $1, 1 + $1": {
 			base.Params(1).Results(1, 2),
 			base.Params(3).Results(3, 4),
+		},
+		"INSERT INTO d.T VALUES (GREATEST(42, $1)) RETURNING a": {
+			base.Params(40).Results(42),
+			base.Params(45).Results(45),
 		},
 		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
 			base.Params(10, 5).Results(10),

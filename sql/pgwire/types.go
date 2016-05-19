@@ -21,9 +21,13 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
+	"math/big"
 	"reflect"
 	"strconv"
 	"time"
+
+	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -53,6 +57,23 @@ type pgType struct {
 	// To get the right value, "SELECT oid, typlen FROM pg_type"
 	// on a postgres server.
 	size int
+}
+
+//go:generate stringer -type=pgNumericSign
+type pgNumericSign uint16
+
+const (
+	pgNumericPos pgNumericSign = 0x0000
+	pgNumericNeg pgNumericSign = 0x4000
+	// pgNumericNan pgNumericSign = 0xC000
+)
+
+// The number of decimal digits per int16 Postgres "digit".
+const pgDecDigits = 4
+
+type pgNumeric struct {
+	ndigits, weight, dscale int16
+	sign                    pgNumericSign
 }
 
 func typeForDatum(d parser.Datum) pgType {
@@ -179,21 +200,115 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		return
 	}
 	switch v := d.(type) {
+	case *parser.DBool:
+		b.putInt32(1)
+		if *v {
+			b.writeByte(1)
+		} else {
+			b.writeByte(0)
+		}
+
 	case *parser.DInt:
 		b.putInt32(8)
 		b.putInt64(int64(*v))
 
+	case *parser.DFloat:
+		b.putInt32(8)
+		b.putInt64(int64(math.Float64bits(float64(*v))))
+
+	case *parser.DDecimal:
+		alloc := struct {
+			pgNum pgNumeric
+
+			bigI big.Int
+		}{
+			pgNum: pgNumeric{
+				dscale: int16(v.Scale()),
+			},
+		}
+
+		if v.Sign() >= 0 {
+			alloc.pgNum.sign = pgNumericPos
+		} else {
+			alloc.pgNum.sign = pgNumericNeg
+		}
+
+		// Much of this logic is cribbed from libpqtypes' str2num, but padding is
+		// managed manually instead of actually padding the string, for reasons of
+		// performance.
+		decDigits := alloc.bigI.Abs(v.UnscaledBig()).String()
+
+		// Convert pure-decimal representation to base NBASE. First we need to
+		// determine the converted weight and ndigits.
+		ddigits := int16(len(decDigits))
+		dweight := ddigits - alloc.pgNum.dscale - 1
+		if dweight >= 0 {
+			alloc.pgNum.weight = (dweight+1+pgDecDigits-1)/pgDecDigits - 1
+		} else {
+			alloc.pgNum.weight = -((-dweight-1)/pgDecDigits + 1)
+		}
+
+		// The number of decimal zeroes to insert before the first given digit to
+		// have a correctly aligned first NBASE digit.
+		offset := (alloc.pgNum.weight+1)*pgDecDigits - (dweight + 1)
+		alloc.pgNum.ndigits = (ddigits + offset + pgDecDigits - 1) / pgDecDigits
+
+		b.putInt32(int32(2 * (4 + alloc.pgNum.ndigits)))
+		b.putInt16(alloc.pgNum.ndigits)
+		b.putInt16(alloc.pgNum.weight)
+		b.putInt16(int16(alloc.pgNum.sign))
+		b.putInt16(alloc.pgNum.dscale)
+
+		{
+			// Emulate leading padding.
+			digitLength := pgDecDigits - offset
+			var digit int16
+			for _, decDigit := range decDigits[:digitLength] {
+				digit *= 10
+				digit += int16(decDigit - '0')
+			}
+			b.putInt16(digit)
+			decDigits = decDigits[digitLength:]
+		}
+
+		// No padding for the middle digits.
+		for n := int16(0); n < alloc.pgNum.ndigits-2; n++ {
+			var digit int16
+			for _, decDigit := range decDigits[:pgDecDigits] {
+				digit *= 10
+				digit += int16(decDigit - '0')
+			}
+			b.putInt16(int16(digit))
+			decDigits = decDigits[pgDecDigits:]
+		}
+
+		{
+			var digit int16
+			for _, decDigit := range decDigits {
+				digit *= 10
+				digit += int16(decDigit - '0')
+			}
+			// Emulate trailing padding.
+			for i := 0; i < pgDecDigits-len(decDigits); i++ {
+				digit *= 10
+			}
+			b.putInt16(digit)
+		}
+
 	case *parser.DBytes:
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
+
+	case *parser.DString:
+		b.writeLengthPrefixedString(string(*v))
 
 	default:
 		b.setError(util.Errorf("unsupported type %T", d))
 	}
 }
 
-const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
-const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999999"
+const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999"
+const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 
 // formatTs formats t into a format cockroachdb/pq understands.
 // Mostly cribbed from github.com/cockroachdb/pq.
@@ -288,8 +403,17 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, err
 			}
 			d = parser.MakeDBool(parser.DBool(v))
+		case formatBinary:
+			switch b[0] {
+			case 0:
+				d = parser.MakeDBool(false)
+			case 1:
+				d = parser.MakeDBool(true)
+			default:
+				return d, util.Errorf("unsupported binary bool: %q", b)
+			}
 		default:
-			return d, fmt.Errorf("unsupported bool format code: %d", code)
+			return d, util.Errorf("unsupported bool format code: %s", code)
 		}
 	case oid.T_int2:
 		switch code {
@@ -307,7 +431,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		default:
-			return d, fmt.Errorf("unsupported int2 format code: %d", code)
+			return d, util.Errorf("unsupported int2 format code: %s", code)
 		}
 	case oid.T_int4:
 		switch code {
@@ -325,7 +449,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		default:
-			return d, fmt.Errorf("unsupported int4 format code: %d", code)
+			return d, util.Errorf("unsupported int4 format code: %s", code)
 		}
 	case oid.T_int8:
 		switch code {
@@ -343,7 +467,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		default:
-			return d, fmt.Errorf("unsupported int8 format code: %d", code)
+			return d, util.Errorf("unsupported int8 format code: %s", code)
 		}
 	case oid.T_float4:
 		switch code {
@@ -361,7 +485,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
-			return d, fmt.Errorf("unsupported float4 format code: %d", code)
+			return d, util.Errorf("unsupported float4 format code: %s", code)
 		}
 	case oid.T_float8:
 		switch code {
@@ -379,25 +503,78 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
-			return d, fmt.Errorf("unsupported float8 format code: %d", code)
+			return d, util.Errorf("unsupported float8 format code: %s", code)
 		}
 	case oid.T_numeric:
 		switch code {
 		case formatText:
 			dd := &parser.DDecimal{}
 			if _, ok := dd.SetString(string(b)); !ok {
-				return nil, fmt.Errorf("could not parse string %q as decimal", b)
+				return nil, util.Errorf("could not parse string %q as decimal", b)
 			}
 			d = dd
+		case formatBinary:
+			r := bytes.NewReader(b)
+
+			alloc := struct {
+				pgNum pgNumeric
+				i16   int16
+
+				dd parser.DDecimal
+			}{}
+
+			for _, ptr := range []interface{}{
+				&alloc.pgNum.ndigits,
+				&alloc.pgNum.weight,
+				&alloc.pgNum.sign,
+				&alloc.pgNum.dscale,
+			} {
+				if err := binary.Read(r, binary.BigEndian, ptr); err != nil {
+					return d, err
+				}
+			}
+
+			decDigits := make([]byte, 0, alloc.pgNum.ndigits*pgDecDigits)
+			for i := int16(0); i < alloc.pgNum.ndigits-1; i++ {
+				if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+					return d, err
+				}
+				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+			}
+
+			// The last digit may contain padding, which we need to deal with.
+			if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+				return d, err
+			}
+			dscale := (alloc.pgNum.ndigits - 1 - alloc.pgNum.weight) * pgDecDigits
+			if overScale := dscale - alloc.pgNum.dscale; overScale > 0 {
+				dscale -= overScale
+				for i := int16(0); i < overScale; i++ {
+					alloc.i16 /= 10
+				}
+			}
+			decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+			alloc.dd.UnscaledBig().SetString(string(decDigits), 10)
+			alloc.dd.SetScale(inf.Scale(dscale))
+
+			switch alloc.pgNum.sign {
+			case pgNumericPos:
+			case pgNumericNeg:
+				alloc.dd.Neg(&alloc.dd.Dec)
+			default:
+				return d, util.Errorf("unsupported numeric sign: %s", alloc.pgNum.sign)
+			}
+
+			d = &alloc.dd
 		default:
-			return d, fmt.Errorf("unsupported numeric format code: %d", code)
+			return d, util.Errorf("unsupported numeric format code: %s", code)
 		}
 	case oid.T_text, oid.T_varchar:
 		switch code {
-		case formatText:
+		case formatText, formatBinary:
 			d = parser.NewDString(string(b))
 		default:
-			return d, fmt.Errorf("unsupported text format code: %d", code)
+			return d, util.Errorf("unsupported text format code: %s", code)
 		}
 	case oid.T_bytea:
 		switch code {
@@ -415,38 +592,38 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 				d = parser.NewDBytes(parser.DBytes(result))
 			} else {
-				return d, fmt.Errorf("unsupported bytea encoding: %q", b)
+				return d, util.Errorf("unsupported bytea encoding: %q", b)
 			}
 		case formatBinary:
 			d = parser.NewDBytes(parser.DBytes(b))
 		default:
-			return d, fmt.Errorf("unsupported bytea format code: %d", code)
+			return d, util.Errorf("unsupported bytea format code: %s", code)
 		}
 	case oid.T_timestamp, oid.T_timestamptz:
 		switch code {
 		case formatText:
 			ts, err := parseTs(string(b))
 			if err != nil {
-				return d, fmt.Errorf("could not parse string %q as timestamp", b)
+				return d, util.Errorf("could not parse string %q as timestamp", b)
 			}
-			d = &parser.DTimestamp{Time: ts}
-		case formatBinary:
-			return d, fmt.Errorf("unsupported timestamp format code: %d", code)
+			d = parser.MakeDTimestamp(ts, time.Microsecond)
+		default:
+			return d, util.Errorf("unsupported timestamp format code: %s", code)
 		}
 	case oid.T_date:
 		switch code {
 		case formatText:
 			ts, err := parseTs(string(b))
 			if err != nil {
-				return d, fmt.Errorf("could not parse string %q as date", b)
+				return d, util.Errorf("could not parse string %q as date", b)
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
-		case formatBinary:
-			return d, fmt.Errorf("unsupported date format code: %d", code)
+		default:
+			return d, util.Errorf("unsupported date format code: %s", code)
 		}
 	default:
-		return d, fmt.Errorf("unsupported OID: %v", id)
+		return d, util.Errorf("unsupported OID: %v", id)
 	}
 	return d, nil
 }

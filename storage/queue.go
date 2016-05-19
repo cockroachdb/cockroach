@@ -135,7 +135,7 @@ type queueLog struct {
 	prefix   string
 }
 
-func (l queueLog) Infof(logv bool, format string, a ...interface{}) {
+func (l queueLog) VInfof(logv bool, format string, a ...interface{}) {
 	if logv {
 		log.InfofDepth(1, l.prefix+format, a...)
 	}
@@ -258,7 +258,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {
-		bq.eventLog.Infof(log.V(1), "no system config available. skipping")
+		bq.eventLog.VInfof(log.V(1), "no system config available. skipping")
 		return
 	}
 
@@ -266,7 +266,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	if !bq.impl.acceptsUnsplitRanges() && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		bq.eventLog.Infof(log.V(1), "%s: split needed; not adding", repl)
+		bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
 		return
 	}
 
@@ -274,7 +274,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	defer bq.mu.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl, cfg)
 	if err := bq.addInternal(repl, should, priority); err != nil {
-		bq.eventLog.Infof(log.V(3), "unable to add %s: %s", repl, err)
+		bq.eventLog.VInfof(log.V(3), "unable to add %s: %s", repl, err)
 	}
 }
 
@@ -284,7 +284,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 // added.
 func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) error {
 	if atomic.LoadInt32(&bq.disabled) == 1 {
-		bq.eventLog.Infof(false, "queue disabled")
+		bq.eventLog.VInfof(false, "queue disabled")
 		return errQueueDisabled
 	}
 
@@ -296,13 +296,13 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	item, ok := bq.mu.replicas[repl.RangeID]
 	if !should {
 		if ok {
-			bq.eventLog.Infof(false, "%s: removing", item.value)
+			bq.eventLog.VInfof(false, "%s: removing", item.value)
 			bq.remove(item)
 		}
 		return errReplicaNotAddable
 	} else if ok {
 		if item.priority != priority {
-			bq.eventLog.Infof(false, "%s: updating priority: %0.3f -> %0.3f",
+			bq.eventLog.VInfof(false, "%s: updating priority: %0.3f -> %0.3f",
 				repl, item.priority, priority)
 		}
 		// Replica has already been added; update priority.
@@ -310,7 +310,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 		return nil
 	}
 
-	bq.eventLog.Infof(log.V(3), "%s: adding: priority=%0.3f", repl, priority)
+	bq.eventLog.VInfof(log.V(3), "%s: adding: priority=%0.3f", repl, priority)
 	item = &replicaItem{value: repl, priority: priority}
 	heap.Push(&bq.mu.priorityQ, item)
 	bq.mu.replicas[repl.RangeID] = item
@@ -334,7 +334,7 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	if item, ok := bq.mu.replicas[repl.RangeID]; ok {
-		bq.eventLog.Infof(log.V(3), "%s: removing", item.value)
+		bq.eventLog.VInfof(log.V(3), "%s: removing", item.value)
 		bq.remove(item)
 	}
 }
@@ -399,7 +399,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {
-		bq.eventLog.Infof(log.V(1), "no system config available. skipping")
+		bq.eventLog.VInfof(log.V(1), "no system config available. skipping")
 		return nil
 	}
 
@@ -407,7 +407,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	if !bq.impl.acceptsUnsplitRanges() && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		bq.eventLog.Infof(log.V(3), "%s: split needed; skipping", repl)
+		bq.eventLog.VInfof(log.V(3), "%s: split needed; skipping", repl)
 		return nil
 	}
 
@@ -420,17 +420,17 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		defer sp.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {
-			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
+			bq.eventLog.VInfof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return nil
 		}
 	}
 
-	bq.eventLog.Infof(log.V(3), "%s: processing", repl)
+	bq.eventLog.VInfof(log.V(3), "%s: processing", repl)
 	start := timeutil.Now()
 	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
 		return err
 	}
-	bq.eventLog.Infof(log.V(2), "%s: done: %s", repl, timeutil.Since(start))
+	bq.eventLog.VInfof(log.V(2), "%s: done: %s", repl, timeutil.Since(start))
 	return nil
 }
 
@@ -454,7 +454,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 		return
 	}
 
-	bq.eventLog.Infof(log.V(2), "%s (purgatory): error: %v", repl, err)
+	bq.eventLog.VInfof(log.V(2), "%s (purgatory): error: %v", repl, err)
 
 	item := &replicaItem{value: repl}
 	bq.mu.replicas[repl.RangeID] = item
@@ -493,7 +493,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 				}
 				bq.mu.Lock()
 				if len(bq.mu.purgatory) == 0 {
-					bq.eventLog.Infof(log.V(0), "purgatory is now empty")
+					bq.eventLog.VInfof(log.V(0), "purgatory is now empty")
 					bq.mu.purgatory = nil
 					bq.mu.Unlock()
 					return

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -194,7 +195,7 @@ func NewTxnCoordSender(
 // stats).
 func (tc *TxnCoordSender) startStats() {
 	res := time.Millisecond // for duration logging resolution
-	var statusLogTimer util.Timer
+	var statusLogTimer timeutil.Timer
 	defer statusLogTimer.Stop()
 	scale := metric.Scale1M
 	for {
@@ -791,16 +792,16 @@ func (tc *TxnCoordSender) updateState(
 	case nil:
 		// Nothing to do here, avoid the default case.
 	default:
-		if pErr.GetTxn() != nil {
-			if pErr.CanRetry() {
-				log.Fatalf("retryable internal error must not happen at this level: %s", pErr)
-			} else {
-				// Do not clean up the transaction here since the client might still
-				// want to continue the transaction. For example, a client might
-				// continue its transaction after receiving ConditionFailedError, which
-				// can come from a unique index violation.
-			}
-		}
+		// Do not clean up the transaction here since the client might still
+		// want to continue the transaction. For example, a client might
+		// continue its transaction after receiving ConditionFailedError, which
+		// can come from a unique index violation.
+		//
+		// TODO(bdarnell): Is this valid? Unless there is a single CPut in
+		// the batch, it is difficult to be able to continue after a
+		// ConditionFailedError because it is unclear which parts of the
+		// batch had succeeded on other ranges before one range hit the
+		// failed condition. It may be better to clean up the transaction here.
 	}
 
 	txnID := *newTxn.ID
@@ -916,7 +917,11 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
-	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
+	// TODO(bdarnell): need to be able to pass other parts of DBContext
+	// through here.
+	dbCtx := client.DefaultDBContext()
+	dbCtx.UserPriority = ba.UserPriority
+	tmpDB := client.NewDBWithContext(tc, dbCtx)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)

@@ -324,12 +324,6 @@ func (r *RocksDB) Destroy() error {
 	return statusToError(C.DBDestroy(goToCSlice([]byte(r.dir))))
 }
 
-// ApproximateSize returns the approximate number of bytes on disk that RocksDB
-// is using to store data for the given range of keys.
-func (r *RocksDB) ApproximateSize(start, end MVCCKey) (uint64, error) {
-	return uint64(C.DBApproximateSize(r.rdb, goToCKey(start), goToCKey(end))), nil
-}
-
 // Flush causes RocksDB to write all in-memory data to disk immediately.
 func (r *RocksDB) Flush() error {
 	return statusToError(C.DBFlush(r.rdb))
@@ -464,12 +458,6 @@ func (r *rocksDBSnapshot) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
-// ApproximateSize returns the approximate number of bytes the engine is
-// using to store data for the given range of keys.
-func (r *rocksDBSnapshot) ApproximateSize(start, end MVCCKey) (uint64, error) {
-	return r.parent.ApproximateSize(start, end)
-}
-
 // Flush is a no-op for snapshots.
 func (r *rocksDBSnapshot) Flush() error {
 	return nil
@@ -511,10 +499,28 @@ func (r *rocksDBSnapshot) GetStats() (*Stats, error) {
 	return nil, util.Errorf("GetStats is not implemented for %T", r)
 }
 
+// rocksDBBatchIterator wraps rocksDBIterator and allows reuse of an iterator
+// for the lifetime of a batch.
+type rocksDBBatchIterator struct {
+	rocksDBIterator
+	inuse bool
+}
+
+func (r *rocksDBBatchIterator) Close() {
+	// rocksDBBatchIterator.Close() is a no-op. The iterator is left open until
+	// the associated batch is closed.
+	if !r.inuse {
+		panic("closing idle iterator")
+	}
+	r.inuse = false
+}
+
 type rocksDBBatch struct {
-	parent *RocksDB
-	batch  *C.DBEngine
-	defers []func()
+	parent     *RocksDB
+	batch      *C.DBEngine
+	defers     []func()
+	prefixIter rocksDBBatchIterator
+	normalIter rocksDBBatchIterator
 }
 
 func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
@@ -529,6 +535,12 @@ func (r *rocksDBBatch) Open() error {
 }
 
 func (r *rocksDBBatch) Close() {
+	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
+		i.destroy()
+	}
+	if i := &r.normalIter.rocksDBIterator; i.iter != nil {
+		i.destroy()
+	}
 	if r.batch != nil {
 		C.DBClose(r.batch)
 	}
@@ -578,16 +590,28 @@ func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
-func (r *rocksDBBatch) ApproximateSize(start, end MVCCKey) (uint64, error) {
-	return r.parent.ApproximateSize(start, end)
-}
-
 func (r *rocksDBBatch) Flush() error {
 	return util.Errorf("cannot flush a batch")
 }
 
+// NewIterator returns an iterator over the batch and underlying engine. Note
+// that the returned iterator is cached and re-used for the lifetime of the
+// batch. A panic will be thrown if multiple prefix or normal (non-prefix)
+// iterators are used simultaneously on the same batch.
 func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(r.batch, prefix, r)
+	// Used the cached iterator, creating it on first access.
+	iter := &r.normalIter
+	if prefix {
+		iter = &r.prefixIter
+	}
+	if iter.rocksDBIterator.iter == nil {
+		iter.rocksDBIterator.init(r.batch, prefix, r)
+	}
+	if iter.inuse {
+		panic("iterator already in use")
+	}
+	iter.inuse = true
+	return iter
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
@@ -638,6 +662,8 @@ type rocksDBIterator struct {
 	value  C.DBSlice
 }
 
+// TODO(peter): Is this pool useful now that rocksDBBatch.NewIterator doesn't
+// allocate by returning internal pointers?
 var iterPool = sync.Pool{
 	New: func() interface{} {
 		return &rocksDBIterator{}
@@ -654,9 +680,13 @@ func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Engine) Iterator {
 	// options field that should be carried over needs to be set here
 	// as well.
 	r := iterPool.Get().(*rocksDBIterator)
+	r.init(rdb, prefix, engine)
+	return r
+}
+
+func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Engine) {
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
 	r.engine = engine
-	return r
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
@@ -665,10 +695,14 @@ func (r *rocksDBIterator) checkEngineOpen() {
 	}
 }
 
-// The following methods implement the Iterator interface.
-func (r *rocksDBIterator) Close() {
+func (r *rocksDBIterator) destroy() {
 	C.DBIterDestroy(r.iter)
 	*r = rocksDBIterator{}
+}
+
+// The following methods implement the Iterator interface.
+func (r *rocksDBIterator) Close() {
+	r.destroy()
 	iterPool.Put(r)
 }
 

@@ -75,10 +75,15 @@ func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*
 }
 
 func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
-	return createTestClientForUser(t, stopper, addr, security.NodeUser)
+	return createTestClientForUser(t, stopper, addr, security.NodeUser, client.DefaultDBContext())
 }
 
-func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
+func createTestClientForUser(
+	t *testing.T,
+	stopper *stop.Stopper,
+	addr, user string,
+	dbCtx client.DBContext,
+) *client.DB {
 	rpcContext := rpc.NewContext(&base.Context{
 		User:       user,
 		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
@@ -89,7 +94,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(sender)
+	return client.NewDBWithContext(sender, dbCtx)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP
@@ -97,7 +102,9 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority) (*client.DB, *notifyingSender) {
 	db := createTestClient(t, stopper, addr)
 	sender := &notifyingSender{wrapped: db.GetSender()}
-	return client.NewDBWithPriority(sender, priority), sender
+	dbCtx := client.DefaultDBContext()
+	dbCtx.UserPriority = priority
+	return client.NewDBWithContext(sender, dbCtx), sender
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -228,22 +235,15 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}
 }
 
-func setTxnRetryBackoff(backoff time.Duration) func() {
-	savedBackoff := client.DefaultTxnRetryOptions.InitialBackoff
-	client.DefaultTxnRetryOptions.InitialBackoff = backoff
-	return func() {
-		client.DefaultTxnRetryOptions.InitialBackoff = savedBackoff
-	}
-}
-
 // TestClientRunTransaction verifies some simple transaction isolation
 // semantics.
 func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	defer setTxnRetryBackoff(1 * time.Millisecond)()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	dbCtx := client.DefaultDBContext()
+	dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
+	db := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser, dbCtx)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -687,8 +687,10 @@ func TestClientPermissions(t *testing.T) {
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	rootClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
+	nodeClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(),
+		security.NodeUser, client.DefaultDBContext())
+	rootClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(),
+		security.RootUser, client.DefaultDBContext())
 
 	testCases := []struct {
 		path    string
@@ -794,7 +796,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 
 	if err := db.Txn(func(txn *client.Txn) error {
 		// Set deadline to sometime in the past.
-		txn.SetDeadline(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
+		txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
 		_, err := txn.Get("k")
 		return err
 	}); !testutils.IsError(err, "read-only txn timestamp violates deadline") {

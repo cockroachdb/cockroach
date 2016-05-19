@@ -77,7 +77,7 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 }
 
 func (ti *tableInserter) row(values parser.DTuple) (parser.DTuple, error) {
-	return nil, ti.ri.insertRow(ti.b, values)
+	return nil, ti.ri.insertRow(ti.b, values, false)
 }
 
 func (ti *tableInserter) finalize() error {
@@ -137,12 +137,35 @@ func (tu *tableUpdater) finalize() error {
 }
 
 type tableUpsertEvaler interface {
+	// TODO(dan): The tableUpsertEvaler interface separation was an attempt to
+	// keep sql logic out of the mapping between table rows and kv operations.
+	// Unfortunately, it was a misguided effort. tableUpserter's responsibilities
+	// should really be defined as those needed in distributed sql leaf nodes,
+	// which will necessarily include expr evaluation.
+
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
 	eval(insertRow parser.DTuple, existingRow parser.DTuple) (parser.DTuple, error)
+
+	isIdentityEvaler() bool
 }
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
+//
+// There are two distinct "modes" that tableUpserter can use, one of which is
+// selected during `init`. In the general mode, rows are batched up from calls
+// to `row` and upserted using `flush`, which uses 1 or 2 `client.Batch`s from
+// the init'd txn to fetch the existing (conflicting) values, followed by one
+// more `client.Batch` with the appropriate inserts and updates. In this case,
+// all necessary `client.Batch`s are created and run within the lifetime of
+// `flush`.
+//
+// The other mode is the fast path. If certain conditions are met (no secondary
+// indexes, all table values being inserted, update expressions of the form `SET
+// a = excluded.a`) then the upsert can be done in one `client.Batch` and using
+// only `Put`s. In this case, the single batch is created during `init`,
+// operated on during `row`, and run during `finalize`. This is the same model
+// as the other `tableFoo`s, which are more simple than upsert.
 type tableUpserter struct {
 	ri            rowInserter
 	conflictIndex sqlbase.IndexDescriptor
@@ -160,6 +183,10 @@ type tableUpserter struct {
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	fetcher               sqlbase.RowFetcher
 
+	// Used for the fast path.
+	fastPathBatch *client.Batch
+	fastPathKeys  map[string]struct{}
+
 	// Batched up in run/flush.
 	insertRows []parser.DTuple
 
@@ -169,23 +196,30 @@ type tableUpserter struct {
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
-
 	tu.tableDesc = tu.ri.helper.tableDesc
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
 
+	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
+		tu.evaler != nil && tu.evaler.isIdentityEvaler()
+	if len(tu.tableDesc.Indexes) == 0 && allColsIdentityExpr {
+		tu.fastPathBatch = tu.txn.NewBatch()
+		tu.fastPathKeys = make(map[string]struct{})
+		return nil
+	}
+
+	// TODO(dan): This could be made tighter, just the rows needed for the ON
+	// CONFLICT exprs.
+	requestedCols := tu.tableDesc.Columns
+
 	var err error
-	var fetchCols []sqlbase.ColumnDescriptor
 	if len(tu.updateCols) == 0 {
-		fetchCols = tu.tableDesc.Columns
-		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(tu.tableDesc.Columns)
+		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
-		tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols)
+		tu.ru, err = makeRowUpdater(tu.tableDesc, tu.updateCols, requestedCols)
 		if err != nil {
 			return err
 		}
-		fetchCols = tu.ru.fetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.fetchColIDtoRowIndex
-		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 
 		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
 		for i, updateCol := range tu.ru.updateCols {
@@ -193,11 +227,11 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
-	valNeededForCol := make([]bool, len(fetchCols))
+	valNeededForCol := make([]bool, len(tu.tableDesc.Columns))
 	for i := range valNeededForCol {
-		// TODO(dan): We only need the primary key columns, the update columns, and
-		// anything referenced by an UpdateExpr.
-		valNeededForCol[i] = true
+		if _, ok := tu.fetchColIDtoRowIndex[tu.tableDesc.Columns[i].ID]; ok {
+			valNeededForCol[i] = true
+		}
 	}
 	err = tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
@@ -210,12 +244,21 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 }
 
 func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
-	// TODO(dan): If a table has one index and every column is being upserted,
-	// then it can be done entirely with Puts. This would greatly help the
-	// key/value table case.
+	if tu.fastPathBatch != nil {
+		primaryKey, _, err := sqlbase.EncodeIndexKey(
+			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := tu.fastPathKeys[string(primaryKey)]; ok {
+			return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
+		}
+		tu.fastPathKeys[string(primaryKey)] = struct{}{}
+		err = tu.ri.insertRow(tu.fastPathBatch, row, true)
+		return nil, err
+	}
 
 	tu.insertRows = append(tu.insertRows, row)
-
 	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
 	return nil, nil
 }
@@ -236,7 +279,7 @@ func (tu *tableUpserter) flush() error {
 		existingRow := existingRows[i]
 
 		if existingRow == nil {
-			err := tu.ri.insertRow(b, insertRow)
+			err := tu.ri.insertRow(b, insertRow, false)
 			if err != nil {
 				return err
 			}
@@ -369,12 +412,19 @@ func (tu *tableUpserter) fetchExisting() ([]parser.DTuple, error) {
 			return nil, err
 		}
 
-		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = row
+		// The rows returned by rowFetcher are invalidated after the call to
+		// NextRow, so we have to copy them to save them.
+		rowCopy := make(parser.DTuple, len(row))
+		copy(rowCopy, row)
+		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = rowCopy
 	}
 	return rows, nil
 }
 
 func (tu *tableUpserter) finalize() error {
+	if tu.fastPathBatch != nil {
+		return tu.txn.Run(tu.fastPathBatch)
+	}
 	return tu.flush()
 }
 

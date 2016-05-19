@@ -30,12 +30,14 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/build"
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -282,42 +284,21 @@ func rerunBackground() error {
 	return sdnotify.Exec(cmd)
 }
 
-// exterminateCmd command shuts down the node server and
-// destroys all data held by the node.
-var exterminateCmd = &cobra.Command{
-	Use:   "exterminate",
-	Short: "destroy all data held by the node",
-	Long: `
-First shuts down the system and then destroys all data held by the
-node, cycling through each store specified by --store flags.
-`,
-	SilenceUsage: true,
-	RunE:         runExterminate,
+func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
+	stopper := stop.NewStopper()
+	rpcContext := rpc.NewContext(&cliContext.Context.Context, hlc.NewClock(hlc.UnixNano),
+		stopper)
+	conn, err := rpcContext.GRPCDial(cliContext.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return server.NewAdminClient(conn), stopper, nil
 }
 
-// runExterminate destroys the data held in the specified stores.
-func runExterminate(_ *cobra.Command, _ []string) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	if err := cliContext.InitStores(stopper); err != nil {
-		return util.Errorf("failed to initialize context: %s", err)
-	}
-
-	if err := runQuit(nil, nil); err != nil {
-		return util.Errorf("shutdown node error: %s", err)
-	}
-
-	// Exterminate all data held in specified stores.
-	for _, e := range cliContext.Engines {
-		if rocksdb, ok := e.(*engine.RocksDB); ok {
-			log.Infof("exterminating data from store %s", e)
-			if err := rocksdb.Destroy(); err != nil {
-				return util.Errorf("unable to destroy store %s: %s", e, err)
-			}
-		}
-	}
-	log.Infof("exterminated all data from stores %s", cliContext.Engines)
-	return nil
+func stopperContext(stopper *stop.Stopper) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	stopper.AddCloser(stop.CloserFn(cancel))
+	return ctx
 }
 
 // quitCmd command shuts down the node server.
@@ -335,16 +316,52 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) error {
-	admin, err := client.NewAdminClient(&cliContext.Context.Context, cliContext.HTTPAddr, client.Quit)
+	onModes := make([]int32, len(server.GracefulDrainModes))
+	for i, m := range server.GracefulDrainModes {
+		onModes[i] = int32(m)
+	}
+
+	c, stopper, err := getAdminClient()
 	if err != nil {
 		return err
 	}
-	body, err := admin.Get()
-	// TODO(tschottdorf): needs cleanup. An error here can happen if the shutdown
-	// happened faster than the HTTP request made it back.
+	defer stopper.Stop()
+	if _, err := c.Drain(stopperContext(stopper),
+		&server.DrainRequest{
+			On:       onModes,
+			Shutdown: true,
+		}); err != nil {
+		return err
+	}
+	fmt.Println("ok")
+	return nil
+}
+
+// freezeClusterCmd command issues a cluster-wide freeze.
+var freezeClusterCmd = &cobra.Command{
+	Use:   "freeze-cluster",
+	Short: "freeze the cluster in preparation for an update",
+	Long: `
+Disables all Raft groups and stops new commands from being executed in preparation
+for a stop-the-world update of the cluster. Once the command has completed, the
+nodes in the cluster should be terminated, all binaries updated, and only then
+restarted. A failed or incomplete invocation of this command can be rolled back
+using the --undo flag, or by restarting all the nodes in the cluster.
+`,
+	SilenceUsage: true,
+	RunE:         runFreezeCluster,
+}
+
+func runFreezeCluster(_ *cobra.Command, _ []string) error {
+	c, stopper, err := getAdminClient()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("node drained and shutdown: %s\n", body)
+	defer stopper.Stop()
+	if _, err := c.ClusterFreeze(stopperContext(stopper),
+		&server.ClusterFreezeRequest{Freeze: !undoFreezeCluster}); err != nil {
+		return err
+	}
+	fmt.Println("ok")
 	return nil
 }

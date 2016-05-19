@@ -31,6 +31,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -690,7 +691,9 @@ func (n *Node) recordJoinEvent() {
 	}
 
 	n.stopper.RunWorker(func() {
-		for r := retry.Start(retry.Options{Closer: n.stopper.ShouldStop()}); r.Next(); {
+		retryOpts := base.DefaultRetryOptions()
+		retryOpts.Closer = n.stopper.ShouldStop()
+		for r := retry.Start(retryOpts); r.Next(); {
 			if err := n.ctx.DB.Txn(func(txn *client.Txn) error {
 				return n.eventLogger.InsertEventRecord(txn,
 					logEventType,

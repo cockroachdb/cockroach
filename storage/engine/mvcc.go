@@ -1393,7 +1393,7 @@ func MVCCDeleteRange(
 	var keys []roachpb.Key
 	num := int64(0)
 	buf := newPutBuffer()
-	iter := engine.NewIterator(false)
+	iter := engine.NewIterator(true)
 	f := func(kv roachpb.KeyValue) (bool, error) {
 		if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
 			return true, err

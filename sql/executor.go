@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -51,12 +50,6 @@ var errNotRetriable = errors.New("the transaction is not in a retriable state")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
-
-var defaultRetryOpt = retry.Options{
-	InitialBackoff: 20 * time.Millisecond,
-	MaxBackoff:     200 * time.Millisecond,
-	Multiplier:     2,
-}
 
 type traceResult struct {
 	tag   string
@@ -216,6 +209,12 @@ type ExecutorTestingKnobs struct {
 	// backfill for a schema change operation. It returns error to stop the
 	// backfill and return an error to the caller of the SchemaChanger.exec().
 	SchemaChangersStartBackfillNotification func() error
+
+	//SyncSchemaChangersRenameOldNameNotInUseNotification is called during a rename
+	//schema change, after all leases on the version of the descriptor with the
+	//old name are gone, and just before the mapping of the old name to the
+	//descriptor id is about to be deleted.
+	SyncSchemaChangersRenameOldNameNotInUseNotification func()
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -1072,7 +1071,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return t, true
 	// Time datatypes get special representation in the database.
 	case time.Time:
-		return &parser.DTimestamp{Time: t}, true
+		return parser.MakeDTimestamp(t, time.Microsecond), true
 	case time.Duration:
 		return &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}, true
 	case *inf.Dec:
@@ -1130,4 +1129,20 @@ func checkResultDatum(datum parser.Datum) error {
 		return util.Errorf("unsupported result type: %s", datum.Type())
 	}
 	return nil
+}
+
+// makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
+func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
+	cols := make([]ResultColumn, 0, len(colDescs))
+	for _, colDesc := range colDescs {
+		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
+		typ := colDesc.Type.ToDatumType()
+		if typ == nil {
+			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
+		}
+
+		hidden := colDesc.Hidden
+		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
+	}
+	return cols
 }

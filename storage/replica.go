@@ -221,7 +221,7 @@ type Replica struct {
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
 		// Most recent timestamps for keys / key ranges.
-		tsCache *TimestampCache
+		tsCache *timestampCache
 		// Slice of channels to send on after leader lease acquisition.
 		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -274,7 +274,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	defer r.mu.Unlock()
 
 	r.mu.cmdQ = NewCommandQueue()
-	r.mu.tsCache = NewTimestampCache(clock)
+	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	r.setDescWithoutProcessUpdateLocked(desc)
@@ -356,8 +356,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	} else if r.mu.replicaID > replicaID {
 		return util.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
 	} else if r.mu.replicaID != 0 {
-		// TODO(bdarnell): clean up previous raftGroup (cancel pending commands,
-		// update peers)
+		// TODO(bdarnell): clean up previous raftGroup (update peers)
 	}
 
 	raftCfg := &raft.Config{
@@ -376,6 +375,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if err != nil {
 		return err
 	}
+	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
 	r.mu.raftGroup = raftGroup
 
@@ -395,8 +395,15 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
-	if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].StoreID == r.store.StoreID() {
+	if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].ReplicaID == replicaID {
 		if err := raftGroup.Campaign(); err != nil {
+			return err
+		}
+	}
+
+	if previousReplicaID != 0 {
+		// propose pending commands under new replicaID
+		if err := r.reproposePendingCmdsLocked(); err != nil {
 			return err
 		}
 	}
@@ -551,7 +558,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 					}
 				}
 				return c.Err
-			case <-r.store.Stopper().ShouldStop():
+			case <-r.store.Stopper().ShouldDrain():
 				return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
 			}
 		}()
@@ -953,93 +960,42 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	}
 }
 
-func frozenWaitTrigger(r *Replica, br roachpb.BatchResponse, waitForIndex uint64) error {
-	// The current command froze this Replica. We must make sure that *all*
-	// Replicas have applied this (not only a majority).
-	// TODO(tschottdorf): the below is interim code which does not guarantee
-	// that all Replicas have applied it, only that they have acknowledged it.
-	// Replace with a mechanism which is actually precise (but in the meantime,
-	// this should allow working out some of the bugs).
-	if err := util.RetryForDuration(3*time.Second, func() error {
-		r.mu.Lock()
-		stillFrozen := r.mu.frozen
-		r.mu.Unlock()
-		if !stillFrozen {
-			return nil
-		}
-
-		_, oldestAcknowledged, err := getTruncatableIndexes(r)
-		if err != nil {
-			return err
-		}
-		if waitForIndex > oldestAcknowledged {
-			return util.Errorf("waiting for index %d to be unused "+
-				"(still using %d)", waitForIndex, oldestAcknowledged)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("timed out waiting for Range %s to freeze: %s",
-			r.Desc(), err)
-	}
-	return nil
-}
-
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
 func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) (rErr *roachpb.Error) {
 	r.mu.Lock()
-	if r.mu.frozen && pErr == nil {
-		// Deferred to run outside of the lock and after leaving the command
-		// queue.
-		//
-		// Note that r.mu.appliedIndex is not necessarily the index of the
-		// freeze itself (another command could have applied in parallel),
-		// but all we need is that it's greater or equal.
-		//
-		// TODO(tschottdorf): unintuitively buried here since this is where
-		// we get the "convenient" lock to avoid overhead. Consider finding
-		// better place during future refactors.
-		defer func(waitFor uint64) {
-			arg, ok := br.Responses[0].GetInner().(*roachpb.ChangeFrozenResponse)
-			if !ok || arg.RangesAffected == 0 {
-				return
-			}
-
-			if err := frozenWaitTrigger(r, *br, waitFor); err != nil {
-				rErr = roachpb.NewError(err)
-			}
-		}(r.mu.appliedIndex)
-	}
 	defer r.mu.Unlock()
 
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
-		timestamp := ba.Timestamp
+		cr := cacheRequest{
+			timestamp: ba.Timestamp,
+			txnID:     ba.GetTxnID(),
+		}
+
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if updatesTimestampCache(args) {
-				readTSCache := true
-				key := args.Header().Key
-				txnID := ba.GetTxnID()
+				header := args.Header()
 				switch args.(type) {
 				case *roachpb.DeleteRangeRequest:
 					// DeleteRange adds to the write timestamp cache to prevent
 					// subsequent writes from rewriting history.
-					readTSCache = false
+					cr.writes = append(cr.writes, header)
 				case *roachpb.EndTransactionRequest:
-					// EndTransaction adds to the write timestamp cache to ensure
-					// replays create a transaction record with WriteTooOld set.
-					// We set txnID=nil because we want hits for same txn ID.
-					key = keys.TransactionKey(key, txnID)
-					txnID = nil
-					readTSCache = false
+					// EndTransaction adds to the write timestamp cache to ensure replays
+					// create a transaction record with WriteTooOld set.
+					key := keys.TransactionKey(header.Key, cr.txnID)
+					cr.txn = roachpb.Span{Key: key}
+				default:
+					cr.reads = append(cr.reads, header)
 				}
-				header := args.Header()
-				r.mu.tsCache.Add(key, header.EndKey, timestamp, txnID, readTSCache)
 			}
 		}
+
+		r.mu.tsCache.AddRequest(cr)
 	}
 	r.mu.cmdQ.remove(cmd)
 	return pErr
@@ -1065,6 +1021,13 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if ba.Txn != nil {
+		r.mu.tsCache.ExpandRequests(ba.Txn.Timestamp)
+	} else {
+		r.mu.tsCache.ExpandRequests(ba.Timestamp)
+	}
+
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if consultsTimestampCache(args) {

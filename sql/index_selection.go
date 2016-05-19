@@ -206,7 +206,7 @@ func selectIndex(
 		// There are no spans to scan.
 		return &emptyNode{}, nil
 	}
-	s.filter = applyConstraints(s.filter, c.constraints)
+	s.filter = applyIndexConstraints(s.filter, c.constraints)
 	noFilter := (s.filter == nil)
 	s.reverse = c.reverse
 
@@ -215,8 +215,10 @@ func selectIndex(
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
-		// Note: makeIndexJoin can modify s.filter.
-		plan = makeIndexJoin(s, c.exactPrefix)
+		// Note: makeIndexJoin destroys s and returns a new index scan
+		// node. The filter in that node may be different from the
+		// original table filter.
+		plan, s = s.p.makeIndexJoin(s, c.exactPrefix)
 	}
 
 	// If we have no filter, we can request a single key in some cases.
@@ -421,6 +423,10 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	}
 }
 
+// getQValColIdx detects whether an expression is a straightforward
+// reference to a column or index variable. In this case it returns
+// the index of that column's in the descriptor's []Column array.
+// Used by indexInfo.makeIndexConstraints().
 func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 	switch q := expr.(type) {
 	case *qvalue:
@@ -704,12 +710,12 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 				// we can not include it in the index constraints because the index
 				// encoding would be incorrect. See #4313.
 				if preStart != *startExpr {
-					if isMixedTypeComparison(*startExpr) {
+					if (*startExpr).IsMixedTypeComparison() {
 						*startExpr = nil
 					}
 				}
 				if preEnd != *endExpr {
-					if isMixedTypeComparison(*endExpr) {
+					if (*endExpr).IsMixedTypeComparison() {
 						*endExpr = nil
 					}
 				}
@@ -775,33 +781,6 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 		}
 	}
 	return true
-}
-
-func isMixedTypeComparison(c *parser.ComparisonExpr) bool {
-	switch c.Operator {
-	case parser.In, parser.NotIn:
-		tuple := *c.Right.(*parser.DTuple)
-		for _, expr := range tuple {
-			if !sameTypeExprs(c.TypedLeft(), expr.(parser.TypedExpr)) {
-				return true
-			}
-		}
-		return false
-	default:
-		return !sameTypeExprs(c.TypedLeft(), c.TypedRight())
-	}
-}
-
-func sameTypeExprs(left, right parser.TypedExpr) bool {
-	leftType := left.ReturnType()
-	if leftType == parser.DNull {
-		return true
-	}
-	rightType := right.ReturnType()
-	if rightType == parser.DNull {
-		return true
-	}
-	return leftType.TypeEqual(rightType)
 }
 
 type indexInfoByCost []*indexInfo
@@ -1380,7 +1359,7 @@ func (oic orIndexConstraints) exactPrefix() int {
 // constraint is "a = 1", the expression is simplified to "b > 2".
 //
 // Note that applyConstraints currently only handles simple cases.
-func applyConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
+func applyIndexConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).
@@ -1488,7 +1467,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
 					return true, expr
 				}
-				diff := diffSorted(*datum.(*parser.DTuple), *cdatum.(*parser.DTuple))
+				diff := datum.(*parser.DTuple).SortedDifference(cdatum.(*parser.DTuple))
 				if len(*diff) == 0 {
 					return false, parser.DBoolTrue
 				}
@@ -1525,21 +1504,4 @@ func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	}
 
 	return expr
-}
-
-func diffSorted(a, b parser.DTuple) *parser.DTuple {
-	var r parser.DTuple
-	for len(a) > 0 && len(b) > 0 {
-		switch a[0].Compare(b[0]) {
-		case -1:
-			r = append(r, a[0])
-			a = a[1:]
-		case 0:
-			a = a[1:]
-			b = b[1:]
-		case 1:
-			b = b[1:]
-		}
-	}
-	return &r
 }

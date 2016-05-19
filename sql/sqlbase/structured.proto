@@ -167,6 +167,8 @@ message TableDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
+  // The table name. It should be normalized using sqlbase.NormalizeName()
+  // before comparing it.
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
@@ -254,8 +256,7 @@ message TableDescriptor {
   optional uint32 format_version = 17 [(gogoproto.nullable) = false,
       (gogoproto.casttype) = "FormatVersion"];
 
-  // replaced by State.
-  optional bool OBSOLETE_Deleted = 18 [(gogoproto.nullable) = false];
+  reserved 18;
 
   // State is set if this TableDescriptor is in the process of being added or deleted.
   // A non-public table descriptor cannot be leased.
@@ -279,6 +280,20 @@ message TableDescriptor {
 
   repeated CheckConstraint checks = 20;
 
+  message RenameInfo{
+    // The database that the table belonged to before the rename (tables can be
+    // renamed from one db to another).
+    optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false, 
+      (gogoproto.customname) = "OldParentID"];
+    optional string old_name = 2 [(gogoproto.nullable) = false];
+  }
+
+  // This array is populated if the descriptor was renamed. If the descriptor is
+  // renamed multiple times before the schema chage is processed, there will be
+  // one element for each rename.
+  // When this is detected in a schema change, the records for the old names are
+  // deleted and this field is cleared.
+  repeated RenameInfo renames = 21 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

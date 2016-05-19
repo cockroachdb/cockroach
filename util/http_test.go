@@ -18,8 +18,10 @@ package util_test
 
 import (
 	"bytes"
+	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -135,9 +137,10 @@ func TestUnmarshalRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		req.Body = ioutil.NopCloser(bytes.NewReader(test.body))
 		req.Header.Add(util.ContentTypeHeader, test.cType)
 		config := &config.ZoneConfig{}
-		err = util.UnmarshalRequest(req, test.body, config, util.AllEncodings)
+		err = util.UnmarshalRequest(req, config, util.AllEncodings)
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: unexpected success", i)
@@ -235,10 +238,10 @@ func TestProtoEncodingError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Body = ioutil.NopCloser(strings.NewReader("foo"))
 	req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
-	reqBody := []byte("foo")
 	var value string
-	err = util.UnmarshalRequest(req, reqBody, value, []util.EncodingType{util.ProtoEncoding})
+	err = util.UnmarshalRequest(req, value, []util.EncodingType{util.ProtoEncoding})
 	if err == nil {
 		t.Errorf("unexpected success")
 	}

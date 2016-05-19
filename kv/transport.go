@@ -19,6 +19,8 @@ package kv
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -34,6 +36,57 @@ import (
 // Allow local calls to be dispatched directly to the local server without
 // sending an RPC.
 var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
+
+// orderingPolicy is an enum for ordering strategies when there
+// are multiple endpoints available.
+type orderingPolicy int
+
+const (
+	// orderStable uses endpoints in the order provided.
+	orderStable orderingPolicy = iota
+	// orderRandom randomly orders available endpoints.
+	orderRandom
+)
+
+// A SendOptions structure describes the algorithm for sending RPCs to one or
+// more replicas, depending on error conditions and how many successful
+// responses are required.
+type SendOptions struct {
+	context.Context // must not be nil
+	// Ordering indicates how the available endpoints are ordered when
+	// deciding which to send to (if there are more than one).
+	Ordering orderingPolicy
+	// SendNextTimeout is the duration after which RPCs are sent to
+	// other replicas in a set.
+	SendNextTimeout time.Duration
+	// Timeout is the maximum duration of an RPC before failure.
+	// 0 for no timeout.
+	Timeout time.Duration
+
+	transportFactory TransportFactory
+}
+
+func (so SendOptions) contextWithTimeout() (context.Context, func()) {
+	if so.Timeout != 0 {
+		return context.WithTimeout(so.Context, so.Timeout)
+	}
+	return so.Context, func() {}
+}
+
+type batchClient struct {
+	remoteAddr string
+	conn       *grpc.ClientConn
+	client     roachpb.InternalClient
+	args       roachpb.BatchRequest
+}
+
+// BatchCall contains a response and an RPC error (note that the
+// response contains its own roachpb.Error, which is separate from
+// BatchCall.Err), and is analogous to the net/rpc.Call struct.
+type BatchCall struct {
+	Reply *roachpb.BatchResponse
+	Err   error
+}
 
 // TransportFactory encapsulates all interaction with the RPC
 // subsystem, allowing it to be mocked out for testing. The factory
@@ -176,6 +229,34 @@ func (*grpcTransport) Close() {
 	// TODO(bdarnell): Save the cancel functions of all pending RPCs and
 	// call them here. (it's fine to ignore them for now since they'll
 	// time out anyway)
+}
+
+func shuffleClients(clients []batchClient) {
+	for i, n := 0, len(clients); i < n-1; i++ {
+		j := rand.Intn(n-i) + i
+		clients[i], clients[j] = clients[j], clients[i]
+	}
+}
+
+// splitHealthy splits the provided client slice into healthy clients and
+// unhealthy clients, based on their connection state. Healthy clients will
+// be rearranged first in the slice, and unhealthy clients will be rearranged
+// last. Within these two groups, the rearrangement will be stable. The function
+// will then return the number of healthy clients.
+func splitHealthy(clients []batchClient) (int, error) {
+	var nHealthy int
+	for i, client := range clients {
+		clientState, err := client.conn.State()
+		if err != nil {
+			// This should not currently happen with the default grpc.Picker.
+			return 0, err
+		}
+		if clientState == grpc.Ready {
+			clients[i], clients[nHealthy] = clients[nHealthy], clients[i]
+			nHealthy++
+		}
+	}
+	return nHealthy, nil
 }
 
 // SenderTransportFactory wraps a client.Sender for use as a KV

@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
@@ -20,7 +21,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -40,10 +40,6 @@ func TestDisableTableLeases() func() {
 	return func() {
 		testDisableTableLeases = false
 	}
-}
-
-func tableDoesNotExistError(name string) error {
-	return fmt.Errorf("table %q does not exist", name)
 }
 
 // tableKey implements sqlbase.DescriptorKey.
@@ -90,13 +86,6 @@ func getKeysForTableDescriptor(
 	return
 }
 
-func updateCommitBy(commitBy time.Time, lease *LeaseState) time.Time {
-	if commitBy.IsZero() || commitBy.After(lease.Expiration()) {
-		return lease.Expiration()
-	}
-	return commitBy
-}
-
 // SchemaAccessor provides helper methods for using the SQL schema.
 type SchemaAccessor interface {
 	// getTableNames retrieves the list of qualified names of tables
@@ -113,14 +102,9 @@ type SchemaAccessor interface {
 	expandTableGlob(expr *parser.QualifiedName) (parser.QualifiedNames, error)
 
 	// getTableDesc returns a table descriptor, or nil if the descriptor
-	// is not found.  If you want to transform the not found condition
-	// into an error, use tableDoesNotExistError().
+	// is not found. If you want to transform the not found condition
+	// into an error, use newUndefinedTableError().
 	getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
-
-	// getTableID retrieves the table ID for the specified table. It uses the
-	// descriptor cache to perform lookups, falling back to the KV store when
-	// necessary.
-	getTableID(qname *parser.QualifiedName) (sqlbase.ID, error)
 
 	// NB: one can use getTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
@@ -160,7 +144,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(qname.Database())
+		return nil, newUndefinedDatabaseError(qname.Database())
 	}
 
 	desc := sqlbase.TableDescriptor{}
@@ -176,6 +160,9 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 
 // getTableLease implements the SchemaAccessor interface.
 func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error) {
+	if log.V(2) {
+		log.Infof("planner acquiring lease on table %q", qname)
+	}
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
@@ -190,75 +177,54 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			return sqlbase.TableDescriptor{}, err
 		}
 		if desc == nil {
-			return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
+			return sqlbase.TableDescriptor{}, newUndefinedTableError(qname.String())
 		}
 		return *desc, nil
 	}
 
-	tableID, err := p.getTableID(qname)
-	if err != nil {
-		return sqlbase.TableDescriptor{}, err
-	}
-
-	var lease *LeaseState
-	var commitBy time.Time
-	for _, l := range p.leases {
-		commitBy = updateCommitBy(commitBy, l)
-		if l.TableDescriptor.ID == tableID {
-			lease = l
-		}
-	}
-	if lease == nil {
-		var err error
-		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
-		if err != nil {
-			if err == errDescriptorNotFound {
-				// Transform the descriptor error into an error that references the
-				// table's name.
-				return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
-			}
-			return sqlbase.TableDescriptor{}, err
-		}
-		p.leases = append(p.leases, lease)
-		commitBy = updateCommitBy(commitBy, lease)
-	}
-	p.txn.SetDeadline(roachpb.Timestamp{WallTime: commitBy.UnixNano()})
-	return lease.TableDescriptor, nil
-}
-
-// getTableID implements the SchemaAccessor interface.
-func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return 0, err
+		return sqlbase.TableDescriptor{}, err
 	}
 
 	dbID, err := p.getDatabaseID(qname.Database())
 	if err != nil {
-		return 0, err
+		return sqlbase.TableDescriptor{}, err
 	}
 
-	// Lookup the ID of the table in the cache. The use of the cache might cause
-	// the usage of a recently renamed table, but that's a race that could occur
-	// anyways.
-	// TODO(andrei): remove the used of p.systemConfig as a cache for table names,
-	// replace it with using the leases for resolving names, and do away with any
-	// races due to renames. We'll probably have to rewrite renames to perform
-	// an async schema change.
-	nameKey := tableKey{dbID, qname.Table()}
-	key := nameKey.Key()
-	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
-		id, err := nameVal.GetInt()
-		return sqlbase.ID(id), err
+	// First, look to see if we already have a lease for this table.
+	// This ensures that, once a SQL transaction resolved name N to id X, it will
+	// continue to use N to refer to X even if N is renamed during the
+	// transaction.
+	var lease *LeaseState
+	for _, l := range p.leases {
+		if sqlbase.NormalizeName(l.Name) == sqlbase.NormalizeName(qname.Table()) &&
+			l.ParentID == dbID {
+			lease = l
+			if log.V(2) {
+				log.Infof("found lease in planner cache for table %q", qname)
+			}
+			break
+		}
 	}
 
-	gr, err := p.txn.Get(key)
-	if err != nil {
-		return 0, err
+	// If we didn't find a lease, acquire one.
+	if lease == nil {
+		var err error
+		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
+		if err != nil {
+			if err == errDescriptorNotFound {
+				// Transform the descriptor error into an error that references the
+				// table's name.
+				return sqlbase.TableDescriptor{}, newUndefinedTableError(qname.String())
+			}
+			return sqlbase.TableDescriptor{}, err
+		}
+		p.leases = append(p.leases, lease)
+		// If the lease we just acquired expires before the txn's deadline, reduce
+		// the deadline.
+		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
-	if !gr.Exists() {
-		return 0, tableDoesNotExistError(qname.String())
-	}
-	return sqlbase.ID(gr.ValueInt()), nil
+	return lease.TableDescriptor, nil
 }
 
 // getTableNames implements the SchemaAccessor interface.
@@ -311,7 +277,6 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 		tableID:    id,
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
-		cfg:        p.systemConfig,
 		leaseMgr:   p.leaseMgr,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
@@ -359,7 +324,7 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 			return nil, err
 		}
 		if dbDesc == nil {
-			return nil, databaseDoesNotExistError(string(expr.Base))
+			return nil, newUndefinedDatabaseError(string(expr.Base))
 		}
 		tableNames, err := p.getTableNames(dbDesc)
 		if err != nil {

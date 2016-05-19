@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -249,11 +250,10 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
-	retryOpt := defaultRetryOpt
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
 		sc.db = *e.ctx.DB
-		for r := retry.Start(retryOpt); r.Next(); {
+		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
 				log.Warning(err)
 				break
@@ -262,6 +262,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			}
 			if err := sc.exec(
 				e.ctx.TestingKnobs.SchemaChangersStartBackfillNotification,
+				e.ctx.TestingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification,
 			); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again

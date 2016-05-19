@@ -816,7 +816,7 @@ func (r *Replica) RangeLookup(
 			return reply, nil, err
 		}
 	} else {
-		// Use MVCCScan to get first the first range. There are three cases:
+		// Use MVCCScan to get the first range. There are three cases:
 		// 1. args.Key is not an endpoint of the range and
 		// 2a. The args.Key is the start/end key of the range.
 		// 2b. Even worse, the body of args.Key is roachpb.KeyMax.
@@ -1571,7 +1571,7 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 	now := timeutil.Now()
 	<-c.notify
 	if log.V(1) {
-		log.Info("waited for compute checksum for %s", timeutil.Since(now))
+		log.Infof("waited for compute checksum for %s", timeutil.Since(now))
 	}
 	r.mu.Lock()
 	c, ok = r.mu.checksums[id]

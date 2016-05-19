@@ -16,6 +16,10 @@ module Components {
     import Health = Models.Health;
 
     export function controller(): any {
+      Health.startRefresh();
+      return {
+        onunload: (): void => Health.endRefresh(),
+      };
     }
 
     export function view(ctrl: any): _mithril.MithrilVirtualElement {

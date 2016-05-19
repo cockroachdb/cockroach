@@ -41,7 +41,6 @@ import (
 	"github.com/rcrowley/go-metrics/exp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
@@ -70,8 +69,6 @@ const (
 	apiEndpoint = adminEndpoint + "v1/"
 	// healthPath is the health endpoint.
 	healthPath = apiEndpoint + "health"
-	// quitPath is the quit endpoint.
-	quitPath = apiEndpoint + "quit"
 
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.
@@ -173,12 +170,6 @@ type adminServer struct {
 	*http.ServeMux
 
 	server *Server
-	// Mux provided by grpc-gateway to handle HTTP/gRPC proxying.
-	gwMux *gwruntime.ServeMux
-	// Context for grpc-gateway.
-	gwCtx context.Context
-	// Cancels outstanding grpc-gateway operations.
-	gwCancel context.CancelFunc
 }
 
 // newAdminServer allocates and returns a new REST server for
@@ -191,73 +182,29 @@ func newAdminServer(s *Server) *adminServer {
 
 	// Register HTTP handlers.
 	server.ServeMux.HandleFunc(debugEndpoint, server.handleDebug)
-	// TODO(cdo): Move quit and health endpoints to gRPC.
-	server.ServeMux.HandleFunc(quitPath, server.handleQuit)
-	server.ServeMux.HandleFunc(healthPath, server.handleHealth)
-
-	// Initialize grpc-gateway mux and context.
-	server.gwMux = gwruntime.NewServeMux()
-	server.gwCtx, server.gwCancel = context.WithCancel(context.Background())
-
 	return server
 }
 
-// RegisterGRPCGateway starts the gateway (i.e. reverse proxy) that proxies
-// HTTP requests to the appropriate gRPC endpoints.
-func (s *adminServer) RegisterGRPCGateway(serverCtx *Context) error {
-	// Setup HTTP<->gRPC handlers.
-	var opts []grpc.DialOption
-	if serverCtx.Insecure {
-		opts = append(opts, grpc.WithInsecure())
-	} else {
-		tlsConfig, err := serverCtx.GetClientTLSConfig()
-		if err != nil {
-			return err
-		}
-		opts = append(
-			opts,
-			// TODO(tamird): remove this timeout. It is currently necessary because
-			// GRPC will not actually bail on a bad certificate error - it will just
-			// retry indefinitely. See https://github.com/grpc/grpc-go/issues/622.
-			grpc.WithTimeout(base.NetworkTimeout),
-			grpc.WithBlock(),
-			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-		)
-	}
-	if err := RegisterAdminHandlerFromEndpoint(s.gwCtx, s.gwMux, serverCtx.Addr, opts); err != nil {
+// RegisterService registers the GRPC service.
+func (s *adminServer) RegisterService(g *grpc.Server) {
+	RegisterAdminServer(g, s)
+}
+
+// Register starts the gateway (i.e. reverse proxy) that proxies HTTP requests
+// to the appropriate gRPC endpoints.
+func (s *adminServer) RegisterGateway(
+	ctx context.Context,
+	mux *gwruntime.ServeMux,
+	addr string,
+	opts []grpc.DialOption,
+) error {
+	if err := RegisterAdminHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
 		return util.Errorf("error constructing grpc-gateway: %s. are your certificates valid?", err)
 	}
 
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
-	s.ServeMux.Handle(apiEndpoint, s.gwMux)
+	s.ServeMux.Handle(apiEndpoint, mux)
 	return nil
-}
-
-// Close cleans up resources used by the adminServer.
-func (s *adminServer) Close() {
-	s.gwCancel()
-}
-
-// handleHealth responds to health requests from monitoring services.
-func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-	fmt.Fprintln(w, "ok")
-}
-
-// handleQuit is the shutdown hook. The server is first placed into a
-// draining mode, followed by exit.
-// TODO(tschottdorf,cuongdo): fold this into Drain().
-func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-	if _, err := s.server.Drain(GracefulDrainModes); err != nil {
-		log.Warning(err)
-	}
-	s.server.stopper.Quiesce()
-	fmt.Fprintln(w, "ok")
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		s.server.stopper.Stop()
-	}()
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default
@@ -463,7 +410,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 				return nil, err
 			}
 			if !isDefaultNull {
-				if err := scanner.Scan(row, defaultCol, &col.Default); err != nil {
+				if err := scanner.Scan(row, defaultCol, &col.DefaultValue); err != nil {
 					return nil, err
 				}
 			}
@@ -774,6 +721,10 @@ func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterR
 	return &ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
+func (s *adminServer) Health(ctx context.Context, req *HealthRequest) (*HealthResponse, error) {
+	return &HealthResponse{}, nil
+}
+
 func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainResponse, error) {
 	on := make([]DrainMode, len(req.On))
 	for i := range req.On {
@@ -795,6 +746,13 @@ func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainRespo
 	for i := range nowOn {
 		nowOnInts[i] = int32(nowOn[i])
 	}
+	if req.Shutdown {
+		s.server.stopper.Quiesce()
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			s.server.stopper.Stop()
+		}()
+	}
 	return &DrainResponse{On: nowOnInts}, nil
 }
 
@@ -810,13 +768,9 @@ func (s *adminServer) waitForStoreFrozen(
 		oks: make(map[roachpb.StoreID]bool),
 	}
 
-	opts := retry.Options{
-		Closer:         s.server.stopper.ShouldDrain(),
-		InitialBackoff: 100 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
-		Multiplier:     2,
-		MaxRetries:     20,
-	}
+	opts := base.DefaultRetryOptions()
+	opts.Closer = s.server.stopper.ShouldDrain()
+	opts.MaxRetries = 20
 	sem := make(chan struct{}, 256)
 	errChan := make(chan error, 1)
 	sendErr := func(err error) {

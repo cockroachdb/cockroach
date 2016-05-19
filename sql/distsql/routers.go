@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,11 +12,21 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Radu Berinde (radu@cockroachlabs.com)
 
-package retry
+package distsql
 
-// Retryable is an interface for conditions which may be retried.
-type Retryable interface {
-	CanRetry() bool
+import "github.com/cockroachdb/cockroach/util"
+
+func makeRouter(typ OutputRouterSpec_Type, streams []rowReceiver) (
+	rowReceiver, error,
+) {
+	if len(streams) == 0 {
+		panic("no streams")
+	}
+	if len(streams) == 1 {
+		// Special passthrough case - no router.
+		return streams[0], nil
+	}
+	return nil, util.Errorf("router type %s not supported", typ)
 }

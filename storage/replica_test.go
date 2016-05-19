@@ -1717,6 +1717,12 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	tc.rng.mu.Lock()
 	defer tc.rng.mu.Unlock()
+	_, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
+	_, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
+	if rOK || wOK {
+		t.Errorf("expected rOK=false and wOK=false; rOK=%t, wOK=%t", rOK, wOK)
+	}
+	tc.rng.mu.tsCache.ExpandRequests(roachpb.ZeroTimestamp)
 	rTS, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
 	wTS, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 || !rOK || wOK {
@@ -5525,5 +5531,52 @@ func TestSyncSnapshot(t *testing.T) {
 	}
 	if len(snap.Data) == 0 {
 		t.Fatal("snapshot is empty")
+	}
+}
+
+// TestReplicaIDChangePending verifies that on a replica ID change, pending
+// commands are re-proposed on the new raft group.
+func TestReplicaIDChangePending(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	rng := tc.rng
+
+	// Add a command to the pending list
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{
+			Key: roachpb.Key("a"),
+		},
+	})
+	expectedCommand, err := rng.proposeRaftCommand(context.Background(), ba)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set the raft command handler so we can tell if the command has been
+	// re-proposed.
+	commandProposed := make(chan struct{}, 1)
+	rng.mu.Lock()
+	defer rng.mu.Unlock()
+	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error {
+		if p == expectedCommand {
+			commandProposed <- struct{}{}
+		}
+		return nil
+	}
+
+	// Set the ReplicaID on the replica.
+	if err := rng.setReplicaIDLocked(2); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-commandProposed:
+	default:
+		t.Fatal("command was not re-proposed")
 	}
 }

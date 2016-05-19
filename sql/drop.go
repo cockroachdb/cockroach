@@ -58,7 +58,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 			// Noop.
 			return &emptyNode{}, nil
 		}
-		return nil, databaseDoesNotExistError(string(n.Name))
+		return nil, newUndefinedDatabaseError(string(n.Name))
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
@@ -171,7 +171,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 		if tableDesc == nil {
-			return nil, tableDoesNotExistError(index.Table.String())
+			return nil, newUndefinedTableError(index.Table.String())
 		}
 
 		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
@@ -273,7 +273,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, tableDoesNotExistError(name.String())
+			return nil, newUndefinedTableError(name.String())
 		}
 		td = append(td, droppedDesc)
 	}

@@ -53,7 +53,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(string(n.Name))
+		return nil, newUndefinedDatabaseError(string(n.Name))
 	}
 
 	if n.Name == n.NewName {
@@ -122,7 +122,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(n.Name.Database())
+		return nil, newUndefinedDatabaseError(n.Name.Database())
 	}
 
 	tbKey := tableKey{dbDesc.ID, n.Name.Table()}.Key()
@@ -146,7 +146,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 	if targetDbDesc == nil {
-		return nil, databaseDoesNotExistError(n.NewName.Database())
+		return nil, newUndefinedDatabaseError(n.NewName.Database())
 	}
 
 	if err := p.checkPrivilege(targetDbDesc, privilege.CREATE); err != nil {
@@ -162,8 +162,8 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Name.String())
+	if tableDesc == nil || tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+		return nil, newUndefinedTableError(n.Name.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
@@ -183,10 +183,23 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	descID := tableDesc.GetID()
 	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
+	if err := tableDesc.SetUpVersion(); err != nil {
+		return nil, err
+	}
+	renameDetails := sqlbase.TableDescriptor_RenameInfo{
+		OldParentID: uint32(dbDesc.ID),
+		OldName:     n.Name.Table()}
+	tableDesc.Renames = append(tableDesc.Renames, renameDetails)
+	if err := p.writeTableDesc(tableDesc); err != nil {
+		return nil, err
+	}
+
+	// We update the descriptor to the new name, but also leave the mapping of the
+	// old name to the id, so that the name is not reused until the schema changer
+	// has made sure it's not in use any more.
 	b := client.Batch{}
 	b.Put(descKey, descDesc)
 	b.CPut(newTbKey, descID, nil)
-	b.Del(tbKey)
 
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
@@ -194,6 +207,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		}
 		return nil, err
 	}
+	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
 	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
@@ -202,7 +216,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
 			return err
 		}
-		return expectDeleted(systemConfig, tbKey)
+		return nil
 	})
 
 	return &emptyNode{}, nil
@@ -227,7 +241,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Index.Table.String())
+		return nil, newUndefinedTableError(n.Index.Table.String())
 	}
 
 	idxName := string(n.Index.Index)
@@ -293,7 +307,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, databaseDoesNotExistError(n.Table.Database())
+		return nil, newUndefinedDatabaseError(n.Table.Database())
 	}
 
 	// Check if table exists.
@@ -316,7 +330,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, tableDoesNotExistError(n.Table.String())
+		return nil, newUndefinedTableError(n.Table.String())
 	}
 
 	colName := string(n.Name)

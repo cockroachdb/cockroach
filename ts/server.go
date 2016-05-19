@@ -17,7 +17,6 @@
 package ts
 
 import (
-	"io/ioutil"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -59,15 +58,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // for one or more metrics over a specific time span. Query requests have a
 // significant body and thus are POST requests.
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	request := TimeSeriesQueryRequest{}
+	var request TimeSeriesQueryRequest
 
 	// Unmarshal query request.
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := util.UnmarshalRequest(r, reqBody, &request, util.AllEncodings); err != nil {
+	if err := util.UnmarshalRequest(r, &request, util.AllEncodings); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

@@ -70,7 +70,15 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
-	s := &localtestcluster.LocalTestCluster{}
+	return createTestDBWithContext(t, client.DefaultDBContext())
+}
+
+func createTestDBWithContext(
+	t testing.TB, dbCtx client.DBContext,
+) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
+	s := &localtestcluster.LocalTestCluster{
+		DBContext: &dbCtx,
+	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	return s, s.Sender.(*TxnCoordSender)
 }
@@ -426,15 +434,22 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				txn.SetDeadline(pushedTimestamp.Prev())
+				if !txn.UpdateDeadlineMaybe(pushedTimestamp.Prev()) {
+					t.Fatalf("did not update deadline")
+				}
 
 			case 2:
 				// Equal deadline.
-				txn.SetDeadline(pushedTimestamp)
+				if !txn.UpdateDeadlineMaybe(pushedTimestamp) {
+					t.Fatalf("did not update deadline")
+				}
 
 			case 3:
 				// Future deadline.
-				txn.SetDeadline(pushedTimestamp.Next())
+
+				if !txn.UpdateDeadlineMaybe(pushedTimestamp.Next()) {
+					t.Fatalf("did not update deadline")
+				}
 			}
 			err = txn.CommitOrCleanup()
 

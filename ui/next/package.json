@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "chai": "^3.5.0",
+    "d3": "^3.5.17",
     "enzyme": "^2.2.0",
     "fetch-mock": "^4.4.0",
     "isomorphic-fetch": "^2.2.1",
@@ -24,6 +25,7 @@
   },
   "jspm": {
     "dependencies": {
+      "classnames": "npm:classnames@^2.2.5",
       "d3": "npm:d3@^3.5.16",
       "es6-promise": "npm:es6-promise@^3.1.2",
       "isomorphic-fetch": "npm:isomorphic-fetch@^2.2.1",

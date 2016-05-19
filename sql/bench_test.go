@@ -132,9 +132,12 @@ func BenchmarkSelect1_MySQL(b *testing.B) {
 	benchmarkMySQL(b, runBenchmarkSelect1)
 }
 
-// runBenchmarkSelect2 Runs a SELECT query with non-trivial expressions. The main purpose is to
-// detect major regressions in query expression processing.
-func runBenchmarkSelect2(b *testing.B, db *gosql.DB) {
+func runBenchmarkSelectWithTargetsAndFilter(
+	b *testing.B,
+	db *gosql.DB,
+	targets, filter string,
+	args ...interface{},
+) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.select`); err != nil {
 		b.Fatal(err)
 	}
@@ -173,15 +176,21 @@ func runBenchmarkSelect2(b *testing.B, db *gosql.DB) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		targets := `a, b, c, a+b, a+1, (a+2)*(b+3)*(c+4)`
-		filter := `(a = 1) OR ((a = 2) and (b = c)) OR (a + b = 3) OR (2*a + 4*b = 4*c)`
-		rows, err := db.Query(fmt.Sprintf(`SELECT %s FROM bench.select WHERE %s`, targets, filter))
+		rows, err := db.Query(fmt.Sprintf(`SELECT %s FROM bench.select WHERE %s`, targets, filter), args...)
 		if err != nil {
 			b.Fatal(err)
 		}
 		rows.Close()
 	}
 	b.StopTimer()
+}
+
+// runBenchmarkSelect2 runs a SELECT query with non-trivial expressions. The main purpose is to
+// detect major regressions in query expression processing.
+func runBenchmarkSelect2(b *testing.B, db *gosql.DB) {
+	targets := `a, b, c, a+b, a+1, (a+2)*(b+3)*(c+4)`
+	filter := `(a = 1) OR ((a = 2) and (b = c)) OR (a + b = 3) OR (2*a + 4*b = 4*c)`
+	runBenchmarkSelectWithTargetsAndFilter(b, db, targets, filter)
 }
 
 func BenchmarkSelect2_Cockroach(b *testing.B) {
@@ -194,6 +203,27 @@ func BenchmarkSelect2_Postgres(b *testing.B) {
 
 func BenchmarkSelect2_MySQL(b *testing.B) {
 	benchmarkMySQL(b, runBenchmarkSelect2)
+}
+
+// runBenchmarkSelect3 runs a SELECT query with non-trivial expressions. The main purpose is to
+// quantify regressions in numeric type processing.
+func runBenchmarkSelect3(b *testing.B, db *gosql.DB) {
+	targets := `a/b, b/c, c != 3.3 + $1, a = 2.0, c * 9.0`
+	filter := `a > 1 AND b < 4.5`
+	args := []interface{}{1.0}
+	runBenchmarkSelectWithTargetsAndFilter(b, db, targets, filter, args...)
+}
+
+func BenchmarkSelect3_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkSelect3)
+}
+
+func BenchmarkSelect3_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkSelect3)
+}
+
+func BenchmarkSelect3_MySQL(b *testing.B) {
+	benchmarkMySQL(b, runBenchmarkSelect3)
 }
 
 // runBenchmarkInsert benchmarks inserting count rows into a table.

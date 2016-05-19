@@ -35,12 +35,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // Default constants for timeouts.
 const (
-	defaultSendNextTimeout = 10 * time.Second // for now; see #2500
+	// TODO(bdarnell): make SendNextTimeout configurable.
+	// https://github.com/cockroachdb/cockroach/issues/6719
+	//
+	// Temporarily increased from 500ms to 10s; see
+	// https://github.com/cockroachdb/cockroach/issues/6750
+	defaultSendNextTimeout = 10 * time.Second
 	defaultClientTimeout   = 10 * time.Second
 
 	// The default maximum number of ranges to return from a range
@@ -52,23 +58,6 @@ const (
 	defaultRangeDescriptorCacheSize = 1 << 20
 )
 
-var defaultRPCRetryOptions = retry.Options{
-	// This is an aggressive initial backoff to support situations where retries
-	// which are expected to succeed in a low number of iterations should occur in
-	// quick succession. An example of this is when the rangeDescriptorCache returns
-	// a lookupMismatchError.
-	InitialBackoff: 100 * time.Microsecond,
-	MaxBackoff:     30 * time.Second,
-	Multiplier:     2,
-}
-
-// GetDefaultDistSenderRetryOptions returns the default retry options for a
-// DistSender. This is helpful for users that want to overwrite a subset of the
-// default options when creating a custom DistSenderContext.
-func GetDefaultDistSenderRetryOptions() retry.Options {
-	return defaultRPCRetryOptions
-}
-
 // A firstRangeMissingError indicates that the first range has not yet
 // been gossiped. This will be the case for a node which hasn't yet
 // joined the gossip network.
@@ -79,9 +68,6 @@ func (f firstRangeMissingError) Error() string {
 	return "the descriptor for the first range is not available via gossip"
 }
 
-// CanRetry implements the retry.Retryable interface.
-func (f firstRangeMissingError) CanRetry() bool { return true }
-
 // A noNodesAvailError specifies that no node addresses in a replica set
 // were available via the gossip network.
 type noNodeAddrsAvailError struct{}
@@ -90,9 +76,6 @@ type noNodeAddrsAvailError struct{}
 func (n noNodeAddrsAvailError) Error() string {
 	return "no replica node addresses available via gossip"
 }
-
-// CanRetry implements the retry.Retryable interface.
-func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 
 // A DistSender provides methods to access Cockroach's monolithic,
 // distributed key value store. Each method invocation triggers a
@@ -122,6 +105,7 @@ type DistSender struct {
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
+	sendNextTimeout  time.Duration
 }
 
 var _ client.Sender = &DistSender{}
@@ -150,6 +134,7 @@ type DistSenderContext struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	Tracer            opentracing.Tracer
+	SendNextTimeout   time.Duration
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -191,7 +176,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if ctx.TransportFactory != nil {
 		ds.transportFactory = ctx.TransportFactory
 	}
-	ds.rpcRetryOptions = defaultRPCRetryOptions
+	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	if ctx.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *ctx.RPCRetryOptions
 	}
@@ -205,6 +190,11 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		ds.Tracer = ctx.Tracer
 	} else {
 		ds.Tracer = tracing.NewTracer()
+	}
+	if ctx.SendNextTimeout != 0 {
+		ds.sendNextTimeout = ctx.SendNextTimeout
+	} else {
+		ds.sendNextTimeout = defaultSendNextTimeout
 	}
 
 	return ds
@@ -335,7 +325,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
 		Ordering:         order,
-		SendNextTimeout:  defaultSendNextTimeout,
+		SendNextTimeout:  ds.sendNextTimeout,
 		Timeout:          base.NetworkTimeout,
 		Context:          ctx,
 		transportFactory: ds.transportFactory,
@@ -343,7 +333,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := send(rpcOpts, replicas, ba, ds.rpcContext)
+	reply, err := ds.sendToReplicas(rpcOpts, rangeID, replicas, ba, ds.rpcContext)
 	if err != nil {
 		return nil, err
 	}
@@ -644,17 +634,17 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			log.Trace(ctx, "meta descriptor lookup")
 			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, isReverse)
 
-			// getDescriptors may fail retryably if the first range isn't
-			// available via Gossip.
+			// getDescriptors may fail retryably if, for example, the first
+			// range isn't available via Gossip. Assume that all errors at
+			// this level are retryable. Non-retryable errors would be for
+			// things like malformed requests which we should have checked
+			// for before reaching this point.
 			if pErr != nil {
 				log.Trace(ctx, "range descriptor lookup failed: "+pErr.String())
-				if pErr.Retryable {
-					if log.V(1) {
-						log.Warning(pErr)
-					}
-					continue
+				if log.V(1) {
+					log.Warning(pErr)
 				}
-				break
+				continue
 			} else {
 				log.Trace(ctx, "looked up range descriptor")
 			}
@@ -747,9 +737,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if err := evictToken.Evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
-				if tErr.CanRetry() {
-					continue
-				}
+				continue
 			case *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it. This is
 				// likely the result of a range split. If we have new range
@@ -778,50 +766,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					log.Warning(tErr)
 				}
 				continue
-			case *roachpb.NotLeaderError:
-				newLeader := tErr.Leader
-				if newLeader != nil {
-					// Verify that leader is a known replica according to the
-					// descriptor. If not, we've got a stale range descriptor;
-					// evict cache.
-					if i, _ := desc.FindReplica(newLeader.StoreID); i == -1 {
-						if log.V(1) {
-							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
-						}
-						if err := evictToken.Evict(); err != nil {
-							return nil, roachpb.NewError(err), false
-						}
-					}
-				} else {
-					// If the new leader is unknown, we were talking to a
-					// replica that is partitioned away from the majority. Our
-					// range descriptor may be stale, so clear the cache.
-					//
-					// TODO(bdarnell): An unknown-leader error doesn't
-					// necessarily mean our descriptor is stale. Ideally we
-					// would treat these errors more like SendError: retry on
-					// another node (at a lower level), and then if it reaches
-					// this level then we know we've exhausted our options and
-					// must clear the cache.
-					if err := evictToken.Evict(); err != nil {
-						return nil, roachpb.NewError(err), false
-					}
-					newLeader = &roachpb.ReplicaDescriptor{}
-				}
-				// Next, cache the new leader.
-				ds.updateLeaderCache(roachpb.RangeID(desc.RangeID), *newLeader)
-				if log.V(1) {
-					log.Warning(tErr)
-				}
-				r.Reset()
-				continue
-			case retry.Retryable:
-				if tErr.CanRetry() {
-					if log.V(1) {
-						log.Warning(tErr)
-					}
-					continue
-				}
 			}
 			break
 		}
@@ -969,6 +913,120 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		}
 		log.Trace(ctx, "querying next range")
 	}
+}
+
+// sendToReplicas sends one or more RPCs to clients specified by the slice of
+// replicas. On success, Send returns the first successful reply. Otherwise,
+// Send returns an error if and as soon as the number of failed RPCs exceeds
+// the available endpoints less the number of required replies.
+func (ds *DistSender) sendToReplicas(opts SendOptions,
+	rangeID roachpb.RangeID,
+	replicas ReplicaSlice,
+	args roachpb.BatchRequest,
+	rpcContext *rpc.Context,
+) (*roachpb.BatchResponse, error) {
+	if len(replicas) < 1 {
+		return nil, roachpb.NewSendError(
+			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
+				len(replicas), 1))
+	}
+
+	done := make(chan BatchCall, len(replicas))
+
+	transportFactory := opts.transportFactory
+	if transportFactory == nil {
+		transportFactory = grpcTransportFactory
+	}
+	transport, err := transportFactory(opts, rpcContext, replicas, args)
+	if err != nil {
+		return nil, err
+	}
+	defer transport.Close()
+
+	// Send the first request.
+	pending := 1
+	transport.SendNext(done)
+
+	// Wait for completions. This loop will retry operations that fail
+	// with errors that reflect per-replica state and may succeed on
+	// other replicas.
+	var sendNextTimer timeutil.Timer
+	defer sendNextTimer.Stop()
+	for {
+		sendNextTimer.Reset(opts.SendNextTimeout)
+		select {
+		case <-sendNextTimer.C:
+			sendNextTimer.Read = true
+			// On successive RPC timeouts, send to additional replicas if available.
+			if !transport.IsExhausted() {
+				log.Trace(opts.Context, "timeout, trying next peer")
+				pending++
+				transport.SendNext(done)
+			}
+
+		case call := <-done:
+			pending--
+			err := call.Err
+			if err == nil {
+				if log.V(2) {
+					log.Infof("RPC reply: %+v", call.Reply)
+				} else if log.V(1) && call.Reply.Error != nil {
+					log.Infof("application error: %s", call.Reply.Error)
+				}
+
+				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
+					return call.Reply, nil
+				}
+
+				// Extract the detail so it can be included in the error
+				// message if this is our last replica.
+				//
+				// TODO(bdarnell): The last error is not necessarily the best
+				// one to return; we may want to remember the "best" error
+				// we've seen (for example, a NotLeaderError conveys more
+				// information than a RangeNotFound).
+				err = call.Reply.Error.GoError()
+			} else if log.V(1) {
+				log.Warningf("RPC error: %s", err)
+			}
+
+			// Send to additional replicas if available.
+			if !transport.IsExhausted() {
+				log.Trace(opts.Context, "error, trying next peer")
+				pending++
+				transport.SendNext(done)
+			}
+			if pending == 0 {
+				return nil, roachpb.NewSendError(
+					fmt.Sprintf("sending to all %d replicas failed; last error: %v",
+						len(replicas), err))
+			}
+		}
+	}
+}
+
+// handlePerReplicaError returns true if the given error is likely to
+// be unique to the replica that reported it, and retrying on other
+// replicas is likely to produce different results. This method should
+// be called only once for each error as it may have side effects such
+// as updating caches.
+func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roachpb.Error) bool {
+	switch tErr := pErr.GetDetail().(type) {
+	case *roachpb.RangeNotFoundError:
+		return true
+	case *roachpb.NodeUnavailableError:
+		return true
+	case *roachpb.NotLeaderError:
+		if tErr.Leader != nil {
+			// If the replica we contacted knows the new leader, update the cache.
+			ds.updateLeaderCache(rangeID, *tErr.Leader)
+
+			// TODO(bdarnell): Move the new leader to the head of the queue
+			// for the next retry.
+		}
+		return true
+	}
+	return false
 }
 
 // updateLeaderCache updates the cached leader for the given range,

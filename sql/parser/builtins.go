@@ -498,7 +498,7 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeTimestamp},
 			ReturnType: TypeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return timestampMinusBinOp.fn(e, e.GetTxnTimestamp(), args[0])
+				return timestampMinusBinOp.fn(e, e.GetTxnTimestamp(time.Microsecond), args[0])
 			},
 		},
 		Builtin{
@@ -515,7 +515,7 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.makeDDate(e.GetTxnTimestamp().Time)
+				return e.makeDDate(e.GetTxnTimestamp(time.Microsecond).Time)
 			},
 		},
 	},
@@ -552,7 +552,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeTimestamp,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return &DTimestamp{Time: timeutil.Now()}, nil
+				return MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
 			},
 		},
 	},
@@ -618,6 +618,42 @@ var Builtins = map[string][]Builtin{
 				default:
 					return DNull, fmt.Errorf("unsupported timespan: %s", timeSpan)
 				}
+			},
+		},
+	},
+
+	// Nanosecond functions.
+	// These functions are the only ways to create and read nanoseconds in
+	// timestamps. All other functions round to microseconds.
+
+	"parse_timestamp_ns": {
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeTimestamp,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return ctx.ParseTimestamp(*args[0].(*DString), time.Nanosecond)
+			},
+		},
+	},
+
+	"format_timestamp_ns": {
+		Builtin{
+			Types:      ArgTypes{TypeTimestamp},
+			ReturnType: TypeString,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				t := args[0].(*DTimestamp)
+				return NewDString(t.Time.UTC().Format(timestampFormatNS)), nil
+			},
+		},
+	},
+
+	"current_timestamp_ns": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: TypeTimestamp,
+			impure:     true,
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return e.GetTxnTimestamp(time.Nanosecond), nil
 			},
 		},
 	},
@@ -1015,6 +1051,12 @@ var Builtins = map[string][]Builtin{
 	},
 }
 
+func init() {
+	for k, v := range Builtins {
+		Builtins[strings.ToUpper(k)] = v
+	}
+}
+
 // identityFn returns the first argument provided.
 func identityFn(_ EvalContext, args DTuple) (Datum, error) {
 	return args[0], nil
@@ -1141,7 +1183,7 @@ var txnTSImpl = Builtin{
 	ReturnType: TypeTimestamp,
 	impure:     true,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return e.GetTxnTimestamp(), nil
+		return e.GetTxnTimestamp(time.Microsecond), nil
 	},
 }
 

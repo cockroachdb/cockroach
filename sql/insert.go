@@ -31,9 +31,8 @@ type insertNode struct {
 	editNodeBase
 	defaultExprs []parser.TypedExpr
 	n            *parser.Insert
-	qvals        qvalMap
 	insertRows   parser.SelectStatement
-	checkExprs   []parser.TypedExpr
+	checkHelper  checkHelper
 
 	desiredTypes []parser.Datum // This will go away when we only type check once.
 
@@ -126,37 +125,6 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	// Construct the check expressions. The returned slice will be nil if no
-	// column in the table has a check expression.
-	checkExprs, err := p.makeCheckExprs(en.tableDesc.Checks)
-	if err != nil {
-		return nil, err
-	}
-
-	// Prepare the check expressions.
-	var qvals qvalMap
-	typedCheckExprs := make([]parser.TypedExpr, 0, len(checkExprs))
-	if len(checkExprs) > 0 {
-		qvals = make(qvalMap)
-		table := tableInfo{
-			columns: makeResultColumns(en.tableDesc.Columns),
-		}
-		for i := range checkExprs {
-			expr, err := resolveQNames(checkExprs[i], []*tableInfo{&table}, qvals, &p.qnameVisitor)
-			if err != nil {
-				return nil, err
-			}
-			typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeBool)
-			if err != nil {
-				return nil, err
-			}
-			if typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr); err != nil {
-				return nil, err
-			}
-			typedCheckExprs = append(typedCheckExprs, typedExpr)
-		}
-	}
-
 	// Analyze the expressions for column information and typing.
 	desiredTypesFromSelect := make([]parser.Datum, len(cols))
 	for i, col := range cols {
@@ -236,13 +204,14 @@ func (p *planner) Insert(
 		n:                     n,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
-		checkExprs:            typedCheckExprs,
-		qvals:                 qvals,
 		insertRows:            insertRows,
 		insertCols:            ri.insertCols,
 		insertColIDtoRowIndex: ri.insertColIDtoRowIndex,
 		desiredTypes:          desiredTypesFromSelect,
 		tw:                    tw,
+	}
+	if err := in.checkHelper.init(p, en.tableDesc); err != nil {
+		return nil, err
 	}
 	return in, nil
 }
@@ -347,30 +316,10 @@ func (n *insertNode) Next() bool {
 		}
 	}
 
-	if len(n.checkExprs) > 0 {
-		// Populate qvals.
-		for ref, qval := range n.qvals {
-			// The colIdx is 0-based, we need to change it to 1-based.
-			ri, has := n.insertColIDtoRowIndex[sqlbase.ColumnID(ref.colIdx+1)]
-			if has {
-				qval.datum = rowVals[ri]
-			} else {
-				qval.datum = parser.DNull
-			}
-		}
-		for _, expr := range n.checkExprs {
-			if d, err := expr.Eval(n.p.evalCtx); err != nil {
-				n.run.err = err
-				return false
-			} else if res, err := parser.GetBool(d); err != nil {
-				n.run.err = err
-				return false
-			} else if !res && d != parser.DNull {
-				// Failed to satisfy CHECK constraint.
-				n.run.err = fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr.String())
-				return false
-			}
-		}
+	n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false)
+	if err := n.checkHelper.check(n.p.evalCtx); err != nil {
+		n.run.err = err
+		return false
 	}
 
 	_, err := n.tw.row(rowVals)
@@ -514,22 +463,6 @@ func makeDefaultExprs(
 	return defaultExprs, nil
 }
 
-func (p *planner) makeCheckExprs(checks []*sqlbase.TableDescriptor_CheckConstraint) ([]parser.Expr, error) {
-	if len(checks) == 0 {
-		return nil, nil
-	}
-
-	checkExprs := make([]parser.Expr, len(checks))
-	for i, check := range checks {
-		expr, err := parser.ParseExprTraditional(check.Expr)
-		if err != nil {
-			return nil, err
-		}
-		checkExprs[i] = expr
-	}
-	return checkExprs, nil
-}
-
 func (n *insertNode) Columns() []ResultColumn {
 	return n.rh.columns
 }
@@ -580,7 +513,7 @@ func (n *insertNode) ExplainTypes(regTypes func(string, string)) {
 	for i, dexpr := range n.defaultExprs {
 		regTypes(fmt.Sprintf("default %d", i), parser.AsStringWithFlags(dexpr, parser.FmtShowTypes))
 	}
-	for i, cexpr := range n.checkExprs {
+	for i, cexpr := range n.checkHelper.exprs {
 		regTypes(fmt.Sprintf("check %d", i), parser.AsStringWithFlags(cexpr, parser.FmtShowTypes))
 	}
 	cols := n.rh.columns

@@ -553,7 +553,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 }
 
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
-// lookup on retryable errors.
+// lookup on any error.
 func TestRetryOnDescriptorLookupError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
@@ -565,8 +565,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	pErrs := []*roachpb.Error{
-		roachpb.NewError(errors.New("fatal boom")),
-		roachpb.NewError(&roachpb.RangeKeyMismatchError{}), // retryable
+		roachpb.NewError(errors.New("boom")),
 		nil,
 		nil,
 	}
@@ -588,11 +587,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	// Fatal error on descriptor lookup, propagated to reply.
-	if _, pErr := client.SendWrapped(ds, nil, put); pErr.String() != "fatal boom" {
-		t.Errorf("unexpected error: %s", pErr)
-	}
-	// Retryable error on descriptor lookup, second attempt successful.
+	// Error on descriptor lookup, second attempt successful.
 	if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil {
 		t.Errorf("unexpected error: %s", pErr)
 	}
@@ -631,7 +626,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 			first = false
 			if tc.rpcError {
-				return nil, roachpb.NewSendError(errString, tc.retryable)
+				return nil, roachpb.NewSendError(errString)
 			}
 			var err error
 			if tc.retryable {
@@ -1684,5 +1679,71 @@ func TestCountRanges(t *testing.T) {
 		if a, e := count, tc.count; a != e {
 			t.Errorf("%d: # of ranges %d != expected %d", i, a, e)
 		}
+	}
+}
+
+type slowLeaderTransport struct {
+	created     bool
+	count       int
+	slowReqChan chan BatchCall
+}
+
+func (t *slowLeaderTransport) factory(
+	_ SendOptions,
+	_ *rpc.Context,
+	_ ReplicaSlice,
+	_ roachpb.BatchRequest,
+) (Transport, error) {
+	if t.created {
+		return nil, util.Errorf("should not create multiple transports")
+	}
+	t.created = true
+	return t, nil
+}
+
+func (t *slowLeaderTransport) IsExhausted() bool {
+	if t.count >= 3 {
+		// When we've tried all replicas, let the slow request finish.
+		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
+		return true
+	}
+	return false
+}
+
+func (t *slowLeaderTransport) SendNext(done chan BatchCall) {
+	if t.count == 0 {
+		// Save the first request to finish later.
+		t.slowReqChan = done
+	} else {
+		// Other requests fail immediately with NotLeaderError.
+		var br roachpb.BatchResponse
+		br.Error = roachpb.NewError(&roachpb.NotLeaderError{})
+		done <- BatchCall{Reply: &br}
+	}
+	t.count++
+}
+
+func (t *slowLeaderTransport) Close() {
+}
+
+// TestSlowLeaderRetry verifies that when the leader is slow, we wait
+// for it to finish, instead of restarting the process because of
+// NotLeaderErrors returned by faster followers.
+func TestSlowLeaderRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	transport := slowLeaderTransport{}
+	ds := NewDistSender(&DistSenderContext{
+		TransportFactory:  transport.factory,
+		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		SendNextTimeout:   time.Millisecond,
+	}, g)
+
+	var ba roachpb.BatchRequest
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")))
+	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
 	}
 }

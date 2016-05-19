@@ -35,10 +35,10 @@ func TestTimestampCache(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	// First simulate a read of just "a" at time 0.
-	tc.Add(roachpb.Key("a"), nil, clock.Now(), nil, true)
+	tc.add(roachpb.Key("a"), nil, clock.Now(), nil, true)
 	// Although we added "a" at time 0, the internal cache should still
 	// be empty because the t=0 < lowWater.
 	if tc.rCache.Len() > 0 {
@@ -63,7 +63,7 @@ func TestTimestampCache(t *testing.T) {
 
 	// Sim a read of "b"-"c" at time maxClockOffset + 1.
 	ts := clock.Now()
-	tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
+	tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
 
 	// Verify all permutations of direct and range access.
 	if rTS, ok := tc.GetMaxRead(roachpb.Key("b"), nil, nil); !rTS.Equal(ts) || !ok {
@@ -108,22 +108,22 @@ func TestTimestampCacheSetLowWater(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	// Increment time to the maxClockOffset low water mark + 10.
 	manual.Set(maxClockOffset.Nanoseconds() + 10)
 	aTS := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, aTS, nil, true)
+	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 
 	// Increment time by 10ns and add another key.
 	manual.Increment(10)
 	bTS := clock.Now()
-	tc.Add(roachpb.Key("b"), nil, bTS, nil, true)
+	tc.add(roachpb.Key("b"), nil, bTS, nil, true)
 
 	// Increment time by 10ns and add another key.
 	manual.Increment(10)
 	cTS := clock.Now()
-	tc.Add(roachpb.Key("c"), nil, cTS, nil, true)
+	tc.add(roachpb.Key("c"), nil, cTS, nil, true)
 
 	// Set low water mark.
 	tc.SetLowWater(bTS)
@@ -158,17 +158,17 @@ func TestTimestampCacheEviction(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 	tc.evictionSizeThreshold = 0
 
 	// Increment time to the maxClockOffset low water mark + 1.
 	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	aTS := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, aTS, nil, true)
+	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
-	tc.Add(roachpb.Key("b"), nil, clock.Now(), nil, true)
+	tc.add(roachpb.Key("b"), nil, clock.Now(), nil, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS, ok := tc.GetMaxRead(roachpb.Key("c"), nil, nil); !rTS.Equal(aTS) || ok {
@@ -184,19 +184,27 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	// Increment time to the maxClockOffset low water mark + 1.
 	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	aTS := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, aTS, nil, true)
+	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
+	tc.AddRequest(cacheRequest{
+		reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
+		timestamp: aTS,
+	})
 
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
-	tc.Add(roachpb.Key("b"), nil, clock.Now(), nil, true)
+	tc.add(roachpb.Key("b"), nil, clock.Now(), nil, true)
+	tc.AddRequest(cacheRequest{
+		reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
+		timestamp: clock.Now(),
+	})
 
-	// Verify that the cache still has 2 entries in it
-	if l, want := tc.Len(), 2; l != want {
+	// Verify that the cache still has 4 entries in it
+	if l, want := tc.len(), 4; l != want {
 		t.Errorf("expected %d entries to remain, got %d", want, l)
 	}
 }
@@ -214,23 +222,23 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 		{false, 7},
 	}
 	for _, test := range testCases {
-		tc1 := NewTimestampCache(clock)
-		tc2 := NewTimestampCache(clock)
+		tc1 := newTimestampCache(clock)
+		tc2 := newTimestampCache(clock)
 
 		bfTS := clock.Now()
-		tc2.Add(roachpb.Key("b"), roachpb.Key("f"), bfTS, nil, true)
+		tc2.add(roachpb.Key("b"), roachpb.Key("f"), bfTS, nil, true)
 
 		adTS := clock.Now()
-		tc1.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
+		tc1.add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
 
 		beTS := clock.Now()
-		tc1.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
+		tc1.add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
 
 		aaTS := clock.Now()
-		tc2.Add(roachpb.Key("aa"), nil, aaTS, nil, true)
+		tc2.add(roachpb.Key("aa"), nil, aaTS, nil, true)
 
 		cTS := clock.Now()
-		tc1.Add(roachpb.Key("c"), nil, cTS, nil, true)
+		tc1.add(roachpb.Key("c"), nil, cTS, nil, true)
 
 		tc1.MergeInto(tc2, test.useClear)
 
@@ -270,32 +278,32 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 }
 
 type layeredIntervalTestCase struct {
-	actions   []func(tc *TimestampCache, ts roachpb.Timestamp)
-	validator func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp)
+	actions   []func(tc *timestampCache, ts roachpb.Timestamp)
+	validator func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp)
 }
 
 // layeredIntervalTestCase1 tests the left partial overlap and old containing
 // new cases for adding intervals to the interval cache when tested in order,
 // and tests the cases' inverses when tested in reverse.
 var layeredIntervalTestCase1 = layeredIntervalTestCase{
-	actions: []func(tc *TimestampCache, ts roachpb.Timestamp){
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// No overlap forwards.
 			// Right partial overlap backwards.
-			tc.Add(roachpb.Key("a"), roachpb.Key("bb"), ts, nil, true)
+			tc.add(roachpb.Key("a"), roachpb.Key("bb"), ts, nil, true)
 		},
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// Left partial overlap forwards.
 			// New contains old backwards.
-			tc.Add(roachpb.Key("b"), roachpb.Key("e"), ts, nil, true)
+			tc.add(roachpb.Key("b"), roachpb.Key("e"), ts, nil, true)
 		},
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// Old contains new forwards.
 			// No overlap backwards.
-			tc.Add(roachpb.Key("c"), nil, ts, nil, true)
+			tc.add(roachpb.Key("c"), nil, ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
 		abbTS := tss[0]
 		beTS := tss[1]
 		cTS := tss[2]
@@ -338,24 +346,24 @@ var layeredIntervalTestCase1 = layeredIntervalTestCase{
 // old cases for adding intervals to the interval cache when tested in order,
 // and tests the cases' inverses when tested in reverse.
 var layeredIntervalTestCase2 = layeredIntervalTestCase{
-	actions: []func(tc *TimestampCache, ts roachpb.Timestamp){
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// No overlap forwards.
 			// Old contains new backwards.
-			tc.Add(roachpb.Key("d"), roachpb.Key("f"), ts, nil, true)
+			tc.add(roachpb.Key("d"), roachpb.Key("f"), ts, nil, true)
 		},
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// New contains old forwards.
 			// Left partial overlap backwards.
-			tc.Add(roachpb.Key("b"), roachpb.Key("f"), ts, nil, true)
+			tc.add(roachpb.Key("b"), roachpb.Key("f"), ts, nil, true)
 		},
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// Right partial overlap forwards.
 			// No overlap backwards.
-			tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
+			tc.add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
 		bfTS := tss[1]
 		acTS := tss[2]
 
@@ -391,19 +399,19 @@ var layeredIntervalTestCase2 = layeredIntervalTestCase{
 // for adding intervals to the interval cache when tested in order, and
 // tests a left partial overlap with a shared end when tested in reverse.
 var layeredIntervalTestCase3 = layeredIntervalTestCase{
-	actions: []func(tc *TimestampCache, ts roachpb.Timestamp){
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// No overlap forwards.
 			// Right partial overlap backwards.
-			tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
+			tc.add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
 		},
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// Left partial overlap forwards.
 			// No overlap backwards.
-			tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
+			tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
 		acTS := tss[0]
 		bcTS := tss[1]
 
@@ -433,19 +441,19 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 // for adding intervals to the interval cache when tested in order, and
 // tests a right partial overlap with a shared start when tested in reverse.
 var layeredIntervalTestCase4 = layeredIntervalTestCase{
-	actions: []func(tc *TimestampCache, ts roachpb.Timestamp){
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// No overlap forwards.
 			// Left partial overlap backwards.
-			tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
+			tc.add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
 		},
-		func(tc *TimestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts roachpb.Timestamp) {
 			// Right partial overlap forwards.
 			// No overlap backwards.
-			tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts, nil, true)
+			tc.add(roachpb.Key("a"), roachpb.Key("b"), ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
 		acTS := tss[0]
 		abTS := tss[1]
 
@@ -484,7 +492,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	for _, testCase := range []layeredIntervalTestCase{
 		layeredIntervalTestCase1,
@@ -521,12 +529,12 @@ func TestTimestampCacheClear(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	// Increment time to the maxClockOffset low water mark + 1.
 	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	ts := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, ts, nil, true)
+	tc.add(roachpb.Key("a"), nil, ts, nil, true)
 
 	// Clear the cache, which will reset the low water mark to
 	// the current time + maxClockOffset.
@@ -547,27 +555,27 @@ func TestTimestampCacheReplacements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	txn1ID := uuid.NewV4()
 	txn2ID := uuid.NewV4()
 
 	ts1 := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, ts1, nil, true)
+	tc.add(roachpb.Key("a"), nil, ts1, nil, true)
 	if ts, ok := tc.GetMaxRead(roachpb.Key("a"), nil, nil); !ts.Equal(ts1) || !ok {
 		t.Errorf("expected %s; got %s; ok=%t", ts1, ts, ok)
 	}
 	// Write overlapping value with txn1 and verify with txn1--we should get
 	// low water mark, not ts1.
 	ts2 := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, ts2, txn1ID, true)
+	tc.add(roachpb.Key("a"), nil, ts2, txn1ID, true)
 	if ts, ok := tc.GetMaxRead(roachpb.Key("a"), nil, txn1ID); !ts.Equal(tc.lowWater) || ok {
 		t.Errorf("expected low water (empty) time; got %s; ok=%t", ts, ok)
 	}
 	// Write range which overlaps "a" with txn2 and verify with txn2--we should
 	// get low water mark, not ts2.
 	ts3 := clock.Now()
-	tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts3, txn2ID, true)
+	tc.add(roachpb.Key("a"), roachpb.Key("c"), ts3, txn2ID, true)
 	if ts, ok := tc.GetMaxRead(roachpb.Key("a"), nil, txn2ID); !ts.Equal(tc.lowWater) || ok {
 		t.Errorf("expected low water (empty) time; got %s; ok=%t", ts, ok)
 	}
@@ -578,7 +586,7 @@ func TestTimestampCacheReplacements(t *testing.T) {
 	// Now, write to "b" with a higher timestamp and no txn. Should be
 	// visible to all txns.
 	ts4 := clock.Now()
-	tc.Add(roachpb.Key("b"), nil, ts4, nil, true)
+	tc.add(roachpb.Key("b"), nil, ts4, nil, true)
 	if ts, ok := tc.GetMaxRead(roachpb.Key("b"), nil, nil); !ts.Equal(ts4) || !ok {
 		t.Errorf("expected %s; got %s; ok=%t", ts4, ts, ok)
 	}
@@ -587,7 +595,7 @@ func TestTimestampCacheReplacements(t *testing.T) {
 	}
 	// Finally, write an earlier version of "a"; should simply get
 	// tossed and we should see ts4 still.
-	tc.Add(roachpb.Key("b"), nil, ts1, nil, true)
+	tc.add(roachpb.Key("b"), nil, ts1, nil, true)
 	if ts, ok := tc.GetMaxRead(roachpb.Key("b"), nil, nil); !ts.Equal(ts4) || !ok {
 		t.Errorf("expected %s; got %s; ok=%t", ts4, ts, ok)
 	}
@@ -599,16 +607,16 @@ func TestTimestampCacheWithTxnID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	// Add two successive txn entries.
 	txn1ID := uuid.NewV4()
 	txn2ID := uuid.NewV4()
 	ts1 := clock.Now()
-	tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts1, txn1ID, true)
+	tc.add(roachpb.Key("a"), roachpb.Key("c"), ts1, txn1ID, true)
 	ts2 := clock.Now()
 	// This entry will remove "a"-"b" from the cache.
-	tc.Add(roachpb.Key("b"), roachpb.Key("d"), ts2, txn2ID, true)
+	tc.add(roachpb.Key("b"), roachpb.Key("d"), ts2, txn2ID, true)
 
 	// Fetching with no transaction gets latest value.
 	if ts, ok := tc.GetMaxRead(roachpb.Key("b"), nil, nil); !ts.Equal(ts2) || !ok {
@@ -630,19 +638,19 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	// Add read-only non-txn entry at current time.
 	ts1 := clock.Now()
-	tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, nil, true)
+	tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, nil, true)
 
 	// Add two successive txn entries; one read-only and one read-write.
 	txn1ID := uuid.NewV4()
 	txn2ID := uuid.NewV4()
 	ts2 := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, ts2, txn1ID, true)
+	tc.add(roachpb.Key("a"), nil, ts2, txn1ID, true)
 	ts3 := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, ts3, txn2ID, false)
+	tc.add(roachpb.Key("a"), nil, ts3, txn2ID, false)
 
 	// Fetching with no transaction gets latest values.
 	rTS, rOK := tc.GetMaxRead(roachpb.Key("a"), nil, nil)
@@ -667,21 +675,21 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	tc := NewTimestampCache(clock)
+	tc := newTimestampCache(clock)
 
 	for i := 0; i < b.N; i++ {
 		tc.Clear(clock)
 
 		cdTS := clock.Now()
-		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
+		tc.add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
 
 		beTS := clock.Now()
-		tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
+		tc.add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
 
 		adTS := clock.Now()
-		tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
+		tc.add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
 
 		cfTS := clock.Now()
-		tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, nil, true)
+		tc.add(roachpb.Key("c"), roachpb.Key("f"), cfTS, nil, true)
 	}
 }

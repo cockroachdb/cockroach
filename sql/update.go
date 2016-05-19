@@ -89,8 +89,10 @@ type updateNode struct {
 	n            *parser.Update
 	desiredTypes []parser.Datum
 
-	updateCols []sqlbase.ColumnDescriptor
-	tw         tableUpdater
+	updateCols    []sqlbase.ColumnDescriptor
+	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
+	tw            tableUpdater
+	checkHelper   checkHelper
 
 	run struct {
 		// The following fields are populated during Start().
@@ -132,11 +134,17 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	ru, err := makeRowUpdater(en.tableDesc, updateCols)
+	var requestedCols []sqlbase.ColumnDescriptor
+	if len(en.rh.exprs) > 0 || len(en.tableDesc.Checks) > 0 {
+		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
+		// exprs.
+		requestedCols = en.tableDesc.Columns
+	}
+
+	ru, err := makeRowUpdater(en.tableDesc, updateCols, requestedCols)
 	if err != nil {
 		return nil, err
 	}
-	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 	tw := tableUpdater{ru: ru, autoCommit: autoCommit}
 
 	tracing.AnnotateTrace()
@@ -147,9 +155,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// expressions for tuple assignments just as we flattened the column names
 	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
 	// "*, 1, 2", not "*, (1, 2)".
-	// TODO(radu): we only need to select columns necessary to generate primary and
-	// secondary indexes keys, and columns needed by returningHelper.
-	targets := en.tableDesc.AllColumnsSelector()
+	targets := sqlbase.ColumnsSelectors(ru.fetchCols)
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
@@ -183,7 +189,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		Exprs: targets,
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	}, desiredTypesFromSelect)
+	}, nil, nil, desiredTypesFromSelect)
 	if err != nil {
 		return nil, err
 	}
@@ -212,13 +218,22 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
+	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.updateCols))
+	for i, col := range ru.updateCols {
+		updateColsIdx[col.ID] = i
+	}
+
 	un := &updateNode{
-		n:            n,
-		editNodeBase: en,
-		desiredTypes: desiredTypesFromSelect,
-		defaultExprs: defaultExprs,
-		updateCols:   ru.updateCols,
-		tw:           tw,
+		n:             n,
+		editNodeBase:  en,
+		desiredTypes:  desiredTypesFromSelect,
+		defaultExprs:  defaultExprs,
+		updateCols:    ru.updateCols,
+		updateColsIdx: updateColsIdx,
+		tw:            tw,
+	}
+	if err := un.checkHelper.init(p, en.tableDesc); err != nil {
+		return nil, err
 	}
 	return un, nil
 }
@@ -238,10 +253,7 @@ func (u *updateNode) expandPlan() error {
 		exprs[i].Expr = newExpr
 	}
 
-	// Really generate the list of select targets.
-	// TODO(radu): we only need to select columns necessary to generate primary and
-	// secondary indexes keys, and columns needed by returningHelper.
-	targets := u.tableDesc.AllColumnsSelector()
+	targets := sqlbase.ColumnsSelectors(u.tw.ru.fetchCols)
 	i := 0
 	for _, expr := range exprs {
 		if expr.Tuple {
@@ -271,7 +283,7 @@ func (u *updateNode) expandPlan() error {
 		Exprs: targets,
 		From:  []parser.TableExpr{u.n.Table},
 		Where: u.n.Where,
-	}, u.desiredTypes)
+	}, nil, nil, u.desiredTypes)
 	if err != nil {
 		return err
 	}
@@ -311,8 +323,15 @@ func (u *updateNode) Next() bool {
 
 	// Our updated value expressions occur immediately after the plain
 	// columns in the output.
-	updateValues := oldValues[len(u.tableDesc.Columns):]
-	oldValues = oldValues[:len(u.tableDesc.Columns)]
+	updateValues := oldValues[len(u.tw.ru.fetchCols):]
+	oldValues = oldValues[:len(u.tw.ru.fetchCols)]
+
+	u.checkHelper.loadRow(u.tw.ru.fetchColIDtoRowIndex, oldValues, false)
+	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
+	if err := u.checkHelper.check(u.p.evalCtx); err != nil {
+		u.run.err = err
+		return false
+	}
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {

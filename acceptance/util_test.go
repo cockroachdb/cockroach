@@ -228,8 +228,9 @@ func makePGClient(t *testing.T, dest string) *gosql.DB {
 
 // getJSON retrieves the URL specified by the parameters and
 // and unmarshals the result into the supplied interface.
-func getJSON(url, rel string, v interface{}) error {
-	resp, err := cluster.HTTPClient().Get(url + rel)
+func getJSON(base, rel string, v interface{}) error {
+	url := base + rel
+	resp, err := cluster.HTTPClient().Get(url)
 	if err != nil {
 		if log.V(1) {
 			log.Info(err)
@@ -286,7 +287,7 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 
 const (
 	postgresTestImage = "cockroachdb/postgres-test"
-	postgresTestTag   = "20160414-1710"
+	postgresTestTag   = "20160512-1936"
 )
 
 func testDockerSingleNode(t *testing.T, name string, cmd []string) error {

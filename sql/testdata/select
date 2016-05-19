@@ -174,7 +174,7 @@ SELECT * FROM xyzw OFFSET 1 + y
 query error argument of LIMIT must be type int, not type string
 SELECT * FROM xyzw LIMIT '1'
 
-query error argument of OFFSET must be type int, not type float
+query error argument of OFFSET must be type int, not type decimal
 SELECT * FROM xyzw OFFSET 1.5
 
 query error negative value for LIMIT

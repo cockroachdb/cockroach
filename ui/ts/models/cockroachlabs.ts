@@ -49,6 +49,7 @@ module Models {
       last_name: string;
       company: string;
       email: string;
+      product_updates: boolean;
     }
 
     export class CockroachLabs {
@@ -181,6 +182,7 @@ module Models {
             last_name: data.lastname,
             company: data.company,
             email: data.email,
+            product_updates: data.updates,
           });
         } else {
           p = this.unregister();

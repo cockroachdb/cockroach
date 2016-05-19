@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/decimal"
 )
 
 func TestTypeCheck(t *testing.T) {
@@ -94,7 +95,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`'10' > 2`, `unsupported comparison operator:`},
 		{`a`, `qualified name "a" not found`},
 		{`1 AND true`, `incompatible AND argument type: int`},
-		{`1.0 AND true`, `incompatible AND argument type: float`},
+		{`1.0 AND true`, `incompatible AND argument type: decimal`},
 		{`'a' OR true`, `incompatible OR argument type: string`},
 		{`(1, 2) OR true`, `incompatible OR argument type: tuple`},
 		{`NOT 1`, `incompatible NOT argument type: int`},
@@ -110,7 +111,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not the same type: expected 2 to be of type string, found type int`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): expected 1 to be of type string, found type int`},
 		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): expected 1 to be of type string, found type int`},
-		{`1.0 BETWEEN 2 AND '5'`, `expected 1.0 to be of type string, found type float`},
+		{`1.0 BETWEEN 2 AND '5'`, `expected 1.0 to be of type string, found type decimal`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
 		{`IF(true, 2, '5')`, `incompatible IF expressions: expected 2 to be of type string, found type int`},
 		{`IFNULL(1, '5')`, `incompatible IFNULL expressions: expected 1 to be of type string, found type int`},
@@ -129,11 +130,11 @@ func TestTypeCheckError(t *testing.T) {
 }
 
 var (
-	mapArgsInt           = MapArgs{"a": TypeInt}
-	mapArgsFloat         = MapArgs{"a": TypeFloat}
-	mapArgsIntAndInt     = MapArgs{"a": TypeInt, "b": TypeInt}
-	mapArgsIntAndFloat   = MapArgs{"a": TypeInt, "b": TypeFloat}
-	mapArgsFloatAndFloat = MapArgs{"a": TypeFloat, "b": TypeFloat}
+	mapArgsInt               = MapArgs{"a": TypeInt}
+	mapArgsDecimal           = MapArgs{"a": TypeDecimal}
+	mapArgsIntAndInt         = MapArgs{"a": TypeInt, "b": TypeInt}
+	mapArgsIntAndDecimal     = MapArgs{"a": TypeInt, "b": TypeDecimal}
+	mapArgsDecimalAndDecimal = MapArgs{"a": TypeDecimal, "b": TypeDecimal}
 )
 
 // copyableExpr can provide each test permutation with a deep copy of the expression tree.
@@ -159,7 +160,7 @@ func intConst(s string) copyableExpr {
 		return &NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
 	}
 }
-func floatConst(s string) copyableExpr {
+func decConst(s string) copyableExpr {
 	return func() Expr {
 		return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
 	}
@@ -169,9 +170,11 @@ func dint(i DInt) copyableExpr {
 		return NewDInt(i)
 	}
 }
-func dfloat(f DFloat) copyableExpr {
+func ddecimal(f float64) copyableExpr {
 	return func() Expr {
-		return NewDFloat(f)
+		dd := &DDecimal{}
+		decimal.SetFromFloat(&dd.Dec, f)
+		return dd
 	}
 }
 func valArg(name string) copyableExpr {
@@ -241,56 +244,56 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 	for i, d := range []sameTypedExprsTestCase{
 		// Constants.
 		{nil, nil, exprs(intConst("1")), TypeInt, nil},
-		{nil, nil, exprs(floatConst("1.1")), TypeFloat, nil},
-		{nil, nil, exprs(intConst("1"), floatConst("1.0")), TypeFloat, nil},
-		{nil, nil, exprs(intConst("1"), floatConst("1.1")), TypeFloat, nil},
+		{nil, nil, exprs(decConst("1.1")), TypeDecimal, nil},
+		{nil, nil, exprs(intConst("1"), decConst("1.0")), TypeDecimal, nil},
+		{nil, nil, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
 		// Resolved exprs.
 		{nil, nil, exprs(dint(1)), TypeInt, nil},
-		{nil, nil, exprs(dfloat(1)), TypeFloat, nil},
+		{nil, nil, exprs(ddecimal(1)), TypeDecimal, nil},
 		// Mixing constants and resolved exprs.
 		{nil, nil, exprs(dint(1), intConst("1")), TypeInt, nil},
-		{nil, nil, exprs(dint(1), floatConst("1.0")), TypeInt, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
+		{nil, nil, exprs(dint(1), decConst("1.0")), TypeInt, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
 		{nil, nil, exprs(dint(1), dint(1)), TypeInt, nil},
-		{nil, nil, exprs(dfloat(1), intConst("1")), TypeFloat, nil},
-		{nil, nil, exprs(dfloat(1), floatConst("1.1")), TypeFloat, nil},
-		{nil, nil, exprs(dfloat(1), dfloat(1)), TypeFloat, nil},
+		{nil, nil, exprs(ddecimal(1), intConst("1")), TypeDecimal, nil},
+		{nil, nil, exprs(ddecimal(1), decConst("1.1")), TypeDecimal, nil},
+		{nil, nil, exprs(ddecimal(1), ddecimal(1)), TypeDecimal, nil},
 		// Mixing resolved params with constants and resolved exprs.
-		{mapArgsFloat, nil, exprs(dfloat(1), valArg("a")), TypeFloat, mapArgsFloat},
-		{mapArgsFloat, nil, exprs(intConst("1"), valArg("a")), TypeFloat, mapArgsFloat},
-		{mapArgsFloat, nil, exprs(floatConst("1.1"), valArg("a")), TypeFloat, mapArgsFloat},
+		{mapArgsDecimal, nil, exprs(ddecimal(1), valArg("a")), TypeDecimal, mapArgsDecimal},
+		{mapArgsDecimal, nil, exprs(intConst("1"), valArg("a")), TypeDecimal, mapArgsDecimal},
+		{mapArgsDecimal, nil, exprs(decConst("1.1"), valArg("a")), TypeDecimal, mapArgsDecimal},
 		{mapArgsInt, nil, exprs(intConst("1"), valArg("a")), TypeInt, mapArgsInt},
-		{mapArgsInt, nil, exprs(floatConst("1.0"), valArg("a")), TypeInt, mapArgsInt},
-		{mapArgsFloatAndFloat, nil, exprs(valArg("b"), valArg("a")), TypeFloat, mapArgsFloatAndFloat},
+		{mapArgsInt, nil, exprs(decConst("1.0"), valArg("a")), TypeInt, mapArgsInt},
+		{mapArgsDecimalAndDecimal, nil, exprs(valArg("b"), valArg("a")), TypeDecimal, mapArgsDecimalAndDecimal},
 		// Mixing unresolved params with constants and resolved exprs.
-		{nil, nil, exprs(dfloat(1), valArg("a")), TypeFloat, mapArgsFloat},
+		{nil, nil, exprs(ddecimal(1), valArg("a")), TypeDecimal, mapArgsDecimal},
 		{nil, nil, exprs(intConst("1"), valArg("a")), TypeInt, mapArgsInt},
-		{nil, nil, exprs(floatConst("1.1"), valArg("a")), TypeFloat, mapArgsFloat},
+		{nil, nil, exprs(decConst("1.1"), valArg("a")), TypeDecimal, mapArgsDecimal},
 		// Verify dealing with Null.
 		{nil, nil, exprs(dnull), DNull, nil},
 		{nil, nil, exprs(dnull, dnull), DNull, nil},
 		{nil, nil, exprs(dnull, intConst("1")), TypeInt, nil},
-		{nil, nil, exprs(dnull, floatConst("1.1")), TypeFloat, nil},
+		{nil, nil, exprs(dnull, decConst("1.1")), TypeDecimal, nil},
 		{nil, nil, exprs(dnull, dint(1)), TypeInt, nil},
-		{nil, nil, exprs(dnull, dfloat(1)), TypeFloat, nil},
-		{nil, nil, exprs(dnull, dfloat(1), intConst("1")), TypeFloat, nil},
-		{nil, nil, exprs(dnull, dfloat(1), floatConst("1.1")), TypeFloat, nil},
-		{nil, nil, exprs(dnull, dfloat(1), floatConst("1.1")), TypeFloat, nil},
-		{nil, nil, exprs(dnull, intConst("1"), floatConst("1.1")), TypeFloat, nil},
+		{nil, nil, exprs(dnull, ddecimal(1)), TypeDecimal, nil},
+		{nil, nil, exprs(dnull, ddecimal(1), intConst("1")), TypeDecimal, nil},
+		{nil, nil, exprs(dnull, ddecimal(1), decConst("1.1")), TypeDecimal, nil},
+		{nil, nil, exprs(dnull, ddecimal(1), decConst("1.1")), TypeDecimal, nil},
+		{nil, nil, exprs(dnull, intConst("1"), decConst("1.1")), TypeDecimal, nil},
 		// Verify desired type when possible.
 		{nil, TypeInt, exprs(intConst("1")), TypeInt, nil},
 		{nil, TypeInt, exprs(dint(1)), TypeInt, nil},
-		{nil, TypeInt, exprs(floatConst("1.0")), TypeInt, nil},
-		{nil, TypeInt, exprs(floatConst("1.1")), TypeFloat, nil},
-		{nil, TypeInt, exprs(dfloat(1)), TypeFloat, nil},
-		{nil, TypeFloat, exprs(intConst("1")), TypeFloat, nil},
-		{nil, TypeFloat, exprs(dint(1)), TypeInt, nil},
-		{nil, TypeInt, exprs(intConst("1"), floatConst("1.0")), TypeInt, nil},
-		{nil, TypeInt, exprs(intConst("1"), floatConst("1.1")), TypeFloat, nil},
-		{nil, TypeFloat, exprs(intConst("1"), floatConst("1.1")), TypeFloat, nil},
+		{nil, TypeInt, exprs(decConst("1.0")), TypeInt, nil},
+		{nil, TypeInt, exprs(decConst("1.1")), TypeDecimal, nil},
+		{nil, TypeInt, exprs(ddecimal(1)), TypeDecimal, nil},
+		{nil, TypeDecimal, exprs(intConst("1")), TypeDecimal, nil},
+		{nil, TypeDecimal, exprs(dint(1)), TypeInt, nil},
+		{nil, TypeInt, exprs(intConst("1"), decConst("1.0")), TypeInt, nil},
+		{nil, TypeInt, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
+		{nil, TypeDecimal, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
 		// Verify desired type when possible with unresolved placeholders.
-		{nil, TypeFloat, exprs(valArg("a")), TypeFloat, mapArgsFloat},
-		{nil, TypeFloat, exprs(intConst("1"), valArg("a")), TypeFloat, mapArgsFloat},
-		{nil, TypeFloat, exprs(floatConst("1.1"), valArg("a")), TypeFloat, mapArgsFloat},
+		{nil, TypeDecimal, exprs(valArg("a")), TypeDecimal, mapArgsDecimal},
+		{nil, TypeDecimal, exprs(intConst("1"), valArg("a")), TypeDecimal, mapArgsDecimal},
+		{nil, TypeDecimal, exprs(decConst("1.1"), valArg("a")), TypeDecimal, mapArgsDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
@@ -302,36 +305,36 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 		{nil, nil, exprs(tuple(intConst("1"))), dtuple(TypeInt), nil},
 		{nil, nil, exprs(tuple(intConst("1"), intConst("1"))), dtuple(TypeInt, TypeInt), nil},
 		{nil, nil, exprs(tuple(intConst("1")), tuple(intConst("1"))), dtuple(TypeInt), nil},
-		{nil, nil, exprs(tuple(intConst("1")), tuple(floatConst("1.0"))), dtuple(TypeFloat), nil},
-		{nil, nil, exprs(tuple(intConst("1")), tuple(floatConst("1.1"))), dtuple(TypeFloat), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(decConst("1.0"))), dtuple(TypeDecimal), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(decConst("1.1"))), dtuple(TypeDecimal), nil},
 		// Resolved exprs.
 		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1))), dtuple(TypeInt), nil},
-		{nil, nil, exprs(tuple(dint(1), dfloat(1)), tuple(dint(1), dfloat(1))), dtuple(TypeInt, TypeFloat), nil},
+		{nil, nil, exprs(tuple(dint(1), ddecimal(1)), tuple(dint(1), ddecimal(1))), dtuple(TypeInt, TypeDecimal), nil},
 		// Mixing constants and resolved exprs.
-		{nil, nil, exprs(tuple(dint(1), floatConst("1.1")), tuple(intConst("1"), dfloat(1))), dtuple(TypeInt, TypeFloat), nil},
-		{nil, nil, exprs(tuple(dint(1), floatConst("1.0")), tuple(intConst("1"), dint(1))), dtuple(TypeInt, TypeInt), nil},
+		{nil, nil, exprs(tuple(dint(1), decConst("1.1")), tuple(intConst("1"), ddecimal(1))), dtuple(TypeInt, TypeDecimal), nil},
+		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), dtuple(TypeInt, TypeInt), nil},
 		// Mixing resolved params with constants and resolved exprs.
-		{mapArgsFloat, nil, exprs(tuple(dfloat(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeFloat, TypeFloat), mapArgsFloat},
-		{mapArgsFloatAndFloat, nil, exprs(tuple(valArg("b"), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeFloat, TypeFloat), mapArgsFloatAndFloat},
-		{mapArgsIntAndFloat, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(TypeInt, TypeFloat), mapArgsIntAndFloat},
+		{mapArgsDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeDecimal, TypeDecimal), mapArgsDecimal},
+		{mapArgsDecimalAndDecimal, nil, exprs(tuple(valArg("b"), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeDecimal, TypeDecimal), mapArgsDecimalAndDecimal},
+		{mapArgsIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(TypeInt, TypeDecimal), mapArgsIntAndDecimal},
 		// Mixing unresolved params with constants and resolved exprs.
-		{nil, nil, exprs(tuple(dfloat(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeFloat, TypeFloat), mapArgsFloat},
+		{nil, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeDecimal, TypeDecimal), mapArgsDecimal},
 		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(TypeInt, TypeInt), mapArgsIntAndInt},
 		// Verify dealing with Null.
-		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, floatConst("1"))), dtuple(TypeInt, TypeFloat), nil},
-		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, dfloat(1))), dtuple(TypeInt, TypeFloat), nil},
+		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, decConst("1"))), dtuple(TypeInt, TypeDecimal), nil},
+		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, ddecimal(1))), dtuple(TypeInt, TypeDecimal), nil},
 		// Verify desired type when possible.
-		{nil, dtuple(TypeInt, TypeFloat), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), dtuple(TypeInt, TypeFloat), nil},
+		{nil, dtuple(TypeInt, TypeDecimal), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), dtuple(TypeInt, TypeDecimal), nil},
 		// Verify desired type when possible with unresolved constants.
-		{nil, dtuple(TypeInt, TypeFloat), exprs(tuple(valArg("a"), intConst("1")), tuple(intConst("1"), valArg("b"))), dtuple(TypeInt, TypeFloat), mapArgsIntAndFloat},
+		{nil, dtuple(TypeInt, TypeDecimal), exprs(tuple(valArg("a"), intConst("1")), tuple(intConst("1"), valArg("b"))), dtuple(TypeInt, TypeDecimal), mapArgsIntAndDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
 }
 
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
-	floatIntMismatchErr := `expected .* to be of type (float|int), found type (float|int)`
-	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + floatIntMismatchErr
+	decimalIntMismatchErr := `expected .* to be of type (decimal|int), found type (decimal|int)`
+	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
 	tupleLenErr := `expected tuple .* to have a length of .*`
 	paramErr := `could not determine data type of parameter .*`
@@ -344,13 +347,13 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		expectedErr string
 	}{
 		// Single type mismatches.
-		{nil, nil, exprs(dint(1), floatConst("1.1")), floatIntMismatchErr},
-		{nil, nil, exprs(dint(1), dfloat(1)), floatIntMismatchErr},
-		{mapArgsInt, nil, exprs(dfloat(1.1), valArg("a")), floatIntMismatchErr},
-		{mapArgsInt, nil, exprs(floatConst("1.1"), valArg("a")), floatIntMismatchErr},
-		{mapArgsIntAndFloat, nil, exprs(valArg("b"), valArg("a")), floatIntMismatchErr},
+		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
+		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
+		{mapArgsInt, nil, exprs(ddecimal(1.1), valArg("a")), decimalIntMismatchErr},
+		{mapArgsInt, nil, exprs(decConst("1.1"), valArg("a")), decimalIntMismatchErr},
+		{mapArgsIntAndDecimal, nil, exprs(valArg("b"), valArg("a")), decimalIntMismatchErr},
 		// Tuple type mismatches.
-		{nil, nil, exprs(tuple(dint(1)), tuple(dfloat(1))), tupleFloatIntMismatchErr},
+		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1), dint(1))), tupleLenErr},
 		// Parameter ambiguity.

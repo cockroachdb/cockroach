@@ -56,7 +56,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 				return nil, err
 			}
 			if dbDesc == nil {
-				return nil, databaseDoesNotExistError(dbName)
+				return nil, newUndefinedDatabaseError(dbName)
 			}
 		}
 		p.session.Database = dbName
@@ -149,6 +149,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	case *parser.DDecimal:
 		sixty := inf.NewDec(60, 0)
 		sixty.Mul(sixty, sixty).Mul(sixty, &v.Dec)
+		sixty.Round(sixty, 0, inf.RoundDown)
 		var ok bool
 		if offset, ok = sixty.Unscaled(); !ok {
 			return nil, fmt.Errorf("time zone value %s would overflow an int64", sixty)

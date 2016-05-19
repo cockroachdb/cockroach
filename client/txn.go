@@ -19,7 +19,6 @@ package client
 import (
 	"errors"
 	"strconv"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -33,15 +32,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	basictracer "github.com/opentracing/basictracer-go"
 )
-
-// DefaultTxnRetryOptions are the standard retry options used
-// for transactions.
-// This is exported for testing purposes only.
-var DefaultTxnRetryOptions = retry.Options{
-	InitialBackoff: 50 * time.Millisecond,
-	MaxBackoff:     5 * time.Second,
-	Multiplier:     2,
-}
 
 // txnSender implements the Sender interface and is used to keep the Send
 // method out of the Txn method set.
@@ -422,9 +412,14 @@ func (txn *Txn) CommitOrCleanup() error {
 	return err
 }
 
-// SetDeadline sets the transactions deadline.
-func (txn *Txn) SetDeadline(deadline roachpb.Timestamp) {
-	txn.deadline = &deadline
+// UpdateDeadlineMaybe sets the transactions deadline to the lower of the
+// current one (if any) and the passed value.
+func (txn *Txn) UpdateDeadlineMaybe(deadline roachpb.Timestamp) bool {
+	if txn.deadline == nil || txn.deadline.Less(deadline) {
+		txn.deadline = &deadline
+		return true
+	}
+	return false
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
@@ -516,7 +511,7 @@ func (txn *Txn) Exec(
 	}()
 
 	if opt.AutoRetry {
-		retryOptions = txn.db.txnRetryOptions
+		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
 RetryLoop:
 	for r := retry.Start(retryOptions); r.Next(); {

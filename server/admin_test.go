@@ -380,11 +380,11 @@ CREATE TABLE test.tbl (
 
 	// Verify columns.
 	expColumns := []TableDetailsResponse_Column{
-		{Name: "nulls_allowed", Type: "INT", Nullable: true, Default: ""},
-		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, Default: "1000"},
-		{Name: "default2", Type: "INT", Nullable: true, Default: "2"},
-		{Name: "string_default", Type: "STRING", Nullable: true, Default: "'default_string'"},
-		{Name: "rowid", Type: "INT", Nullable: false, Default: "unique_rowid()"},
+		{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
+		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
+		{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
+		{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
+		{Name: "rowid", Type: "INT", Nullable: false, DefaultValue: "unique_rowid()"},
 	}
 	testutils.SortStructs(expColumns, "Name")
 	testutils.SortStructs(resp.Columns, "Name")
@@ -704,11 +704,11 @@ func TestClusterFreeze(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var resp map[string]int
+		var resp ClusterFreezeResponse
 		if err := apiPost(s, "cluster/freeze", string(reqBodyBytes), &resp); err != nil {
 			t.Fatal(err)
 		}
-		if aff := resp["ranges_affected"]; aff == 0 {
+		if aff := resp.RangesAffected; aff == 0 {
 			t.Fatalf("expected affected ranges: %+v", resp)
 		}
 
@@ -716,5 +716,4 @@ func TestClusterFreeze(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
 }

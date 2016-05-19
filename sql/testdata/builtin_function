@@ -29,7 +29,7 @@ SELECT UPPER('roacH7')
 UPPER('roacH7')
 ROACH7
 
-statement error unknown signature for UPPER: UPPER\(float\)
+statement error unknown signature for UPPER: UPPER\(decimal\)
 SELECT UPPER(2.2)
 
 query T colnames
@@ -58,7 +58,7 @@ SELECT CONCAT('RoacH', NULL)
 ----
 RoacH
 
-statement error unknown signature for CONCAT: CONCAT\(string, bool, float, bool\)
+statement error unknown signature for CONCAT: CONCAT\(string, bool, decimal, bool\)
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
 ----
 
@@ -395,7 +395,7 @@ SELECT right('abcde💩', 2)
 e💩
 
 query RRRIIR
-SELECT abs(-1.2), abs(1.2), abs(-0.0), abs(0), abs(1), abs(-1.2121::decimal)
+SELECT abs(-1.2::float), abs(1.2::float), abs(-0.0::float), abs(0), abs(1), abs(-1.2121::decimal)
 ----
 1.2 1.2 0 0 1 1.2121
 
@@ -438,12 +438,12 @@ SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 -1.1071487177940904 1.1071487177940904
 
 query RRR
-SELECT cbrt(-1.0), cbrt(27.0), cbrt(19.3::decimal)
+SELECT cbrt(-1.0::float), cbrt(27.0::float), cbrt(19.3::decimal)
 ----
 -1 3 2.6823725926296730
 
 query RRRRR
-SELECT ceil(-0.5), ceil(0.5), ceiling(0.5), ceil(0.1::decimal), ceiling(-0.9::decimal)
+SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
 ----
 -0 1 1 1 0
 
@@ -452,36 +452,31 @@ SELECT cos(-0.5), cos(0.5)
 ----
 0.8775825618903728 0.8775825618903728
 
-query RRRRR
-SELECT div(-1.0, 2.0), div(1.0, 2.0), div(9.0, 4.0), div(-9.0, 4.0), div(1.0, 0.0)
+query RRRRRR
+SELECT div(-1.0::float, 2.0), div(1.0::float, 2.0), div(9.0::float, 4.0), div(-9.0::float, 4.0), div(1.0::float, 0.0), div(1111.0::decimal, 9.44)
 ----
--0 0 2 -2 +Inf
+-0 0 2 -2 +Inf 117
 
 query RR
 SELECT degrees(-0.5), degrees(0.5)
 ----
 -28.64788975654116 28.64788975654116
 
-query RRRRRR
-SELECT div(-1.0, 2.0), div(1.0, 2.0), div(9.0, 4.0), div(-9.0, 4.0), div(1.0, 0.0), div(1111.0::decimal, 9.44::decimal)
-----
--0 0 2 -2 +Inf 117
-
 query error div: division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
 
 query RRR
-SELECT exp(-1.0), exp(1.0), exp(2.0::decimal)
+SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
 ----
 0.36787944117144233 2.718281828459045 7.3890560989306502
 
 query RRR
-SELECT floor(-1.5), floor(1.5), floor(9.123456789::decimal)
+SELECT floor(-1.5::float), floor(1.5::float), floor(9.123456789::decimal)
 ----
 -2 1 9
 
 query RRR
-SELECT ln(-2.0), ln(2.0), ln(2.5::decimal)
+SELECT ln(-2.0::float), ln(2.0::float), ln(2.5::decimal)
 ----
 NaN 0.6931471805599453 0.9162907318741551
 
@@ -492,7 +487,7 @@ query error cannot take logarithm of zero
 SELECT ln(0::decimal)
 
 query RR
-SELECT log(10.0), log(100.000::decimal)
+SELECT log(10.0::float), log(100.000::decimal)
 ----
 1 2.0000000000000000
 
@@ -503,7 +498,7 @@ query error cannot take logarithm of zero
 SELECT log(0::decimal)
 
 query RRIR
-SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2), mod(19.3::decimal, 2::decimal)
+SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal, 2)
 ----
 1 NaN 1 1.3
 
@@ -559,22 +554,22 @@ SELECT mod(9223372036854775807, 4)
 # div and mod are a logical pair
 
 query R
-SELECT div(9.0, 2.0) * 2.0 + mod(9.0, 2.0)
+SELECT div(9.0::float, 2.0) * 2.0 + mod(9.0::float, 2.0)
 ----
 9
 
 query R
-SELECT div(9.0, -2.0) * -2.0 + mod(9.0, -2.0)
+SELECT div(9.0::float, -2.0) * -2.0 + mod(9.0::float, -2.0)
 ----
 9
 
 query R
-SELECT div(-9.0, 2.0) * 2.0 + mod(-9.0, 2.0)
+SELECT div(-9.0::float, 2.0) * 2.0 + mod(-9.0::float, 2.0)
 ----
 -9
 
 query R
-SELECT div(-9.0, -2.0) * -2.0 + mod(-9.0, -2.0)
+SELECT div(-9.0::float, -2.0) * -2.0 + mod(-9.0::float, -2.0)
 ----
 -9
 
@@ -584,7 +579,7 @@ SELECT pi()
 3.141592653589793
 
 query RRR
-SELECT pow(-3.0, 2.0), power(3.0, 2.0), pow(5.0::decimal, 2.0::decimal)
+SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)
 ----
 9 9 25.0000000000000000
 
@@ -602,28 +597,28 @@ SELECT radians(-45.0), radians(45.0)
 # not allow negative numbers of digits.
 
 query error round: number of digits must be greater than 0
-SELECT round(41.2, -1)
+SELECT round(41.2::float, -1)
 
 query RRR
-SELECT round(4.2, 0), round(4.2, 50), round(4.22222222::decimal, 3)
+SELECT round(4.2::float, 0), round(4.2::float, 50), round(4.22222222::decimal, 3)
 ----
 4 4.2 4.222
 
 query R
-SELECT round(1e-308, 324)
+SELECT round(1e-308::float, 324)
 ----
 1e-308
 
 # round to nearest even
 query RRRR
-SELECT round(-2.5, 0), round(-1.5, 0), round(1.5, 0), round(2.5, 0)
+SELECT round(-2.5::float, 0), round(-1.5::float, 0), round(1.5::float, 0), round(2.5::float, 0)
 ----
 -2 -2 2 2
 
 query RRRRRR
-SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
+SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::float), round(1.5::float), round(2.5::float)
 ----
--2 -2 0 0 2 2
+-2 -2 -0 0 2 2
 
 # round up for decimals
 query RRRR
@@ -645,7 +640,7 @@ SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.123456789012345678
 -2.12346 2.12346 2.12345678901235
 
 query RR
-SELECT round(-1.7976931348623157e+308, 1), round(1.7976931348623157e+308, 1)
+SELECT round(-1.7976931348623157e+308::float, 1), round(1.7976931348623157e+308::float, 1)
 ----
 -1.7976931348623157e+308 1.7976931348623157e+308
 
@@ -665,12 +660,12 @@ SELECT sin(-1.0), sin(0.0), sin(1.0)
 -0.8414709848078965 0 0.8414709848078965
 
 query RR
-SELECT sqrt(4.0), sqrt(9.0::decimal)
+SELECT sqrt(4.0::float), sqrt(9.0::decimal)
 ----
 2 3.0000000000000000
 
 query error cannot take square root of a negative number
-SELECT sqrt(-1.0)
+SELECT sqrt(-1.0::float)
 
 query error cannot take square root of a negative number
 SELECT sqrt(-1.0::decimal)
@@ -785,12 +780,12 @@ SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 query T
 SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
 ----
-2016-02-10 19:46:33.306157519+00:00
+2016-02-10 19:46:33.306158+00:00
 
 query T
 SELECT (timestamptz '2016-02-10 19:46:33.306157519')::string
 ----
-2016-02-10 19:46:33.306157519+00:00
+2016-02-10 19:46:33.306158+00:00
 
 query I
 SELECT extract(milliseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
@@ -805,22 +800,22 @@ SELECT extract(millisecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
 query I
 SELECT extract(microseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
-306157
+306158
 
 query I
 SELECT extract(microsecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
-306157
+306158
 
 query I
 SELECT extract(nanoseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
-306157519
+306158000
 
 query I
 SELECT extract(nanosecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
-306157519
+306158000
 
 query I
 SELECT extract(second FROM '2016-02-10 19:46:33.306157519'::timestamp)
@@ -987,27 +982,27 @@ SELECT GREATEST(1, 1.2)
 # Test float and int comparison.
 
 query BBBB
-select 1 = 1.0, 1.0 = 1, 1 = 2.0, 2.0 = 1
+select 1 = 1.0::float, 1.0::float = 1, 1 = 2.0::float, 2.0::float = 1
 ----
 true true false false
 
 query BBBB
-select 1 < 2.0, 1.0 < 2, 2.0 < 1, 2 < 1.0
+select 1 < 2.0::float, 1.0::float < 2, 2.0::float < 1, 2 < 1.0::float
 ----
 true true false false
 
 query BBBB
-select 1 <= 1.0, 1.0 <= 1, 2.0 <= 1, 2 <= 1.0
+select 1 <= 1.0::float, 1.0::float <= 1, 2.0::float <= 1, 2 <= 1.0::float
 ----
 true true false false
 
 query BBBB
-select 2 > 1.0, 2.0 > 1, 1 > 2.0, 1.0 > 2
+select 2 > 1.0::float, 2.0::float > 1, 1 > 2.0::float, 1.0::float > 2
 ----
 true true false false
 
 query BBBB
-select 1 >= 1.0, 1.0 >= 1, 1.0 >= 2, 1 >= 2.0
+select 1 >= 1.0::float, 1.0::float >= 1, 1.0::float >= 2, 1 >= 2.0::float
 ----
 true true false false
 
