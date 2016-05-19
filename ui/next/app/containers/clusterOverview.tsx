@@ -27,6 +27,8 @@ interface ClusterMainProps {
  * ClusterMain renders the main content of the cluster page.
  */
 class ClusterMain extends React.Component<ClusterMainProps, {}> {
+  static displayTimeScale = true;
+
   static title() {
     return <h2>Cluster</h2>;
   }

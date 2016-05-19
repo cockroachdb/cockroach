@@ -27,6 +27,11 @@ interface TimeWindowManagerState {
  * expired.
  */
 class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWindowManagerState> {
+  constructor() {
+    super();
+    this.state = { timeout: null };
+  }
+
   /**
    * checkWindow determines when the current time window will expire. If it is
    * already expired, a new time window is dispatched immediately. Otherwise,
@@ -35,22 +40,30 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
    */
   checkWindow(props: TimeWindowManagerProps) {
     // Clear any existing timeout.
-    if (this.state && this.state.timeout) {
+    if (this.state.timeout) {
       clearTimeout(this.state.timeout);
+      this.setState({ timeout: null });
+    }
+
+    // If there is no current window, or if scale have changed since this
+    // window was generated, set one immediately.
+    if (!props.timeWindow.currentWindow || props.timeWindow.scaleChanged) {
+      this.setWindow(props);
+      return;
     }
 
     let now = props.now ? props.now() : moment();
-    let tw = props.timeWindow.currentWindow;
-    let currentEnd = (tw && tw.end) || moment("01-01-1900", "MM-DD-YYYY");
-    let expires = currentEnd.clone().add(props.timeWindow.settings.windowValid);
+    let currentEnd = props.timeWindow.currentWindow.end;
+    let expires = currentEnd.clone().add(props.timeWindow.scale.windowValid);
     if (now.isAfter(expires))  {
       // Current time window is expired, reset it.
       this.setWindow(props);
-      this.setState({ timeout: null });
     } else {
       // Set a timeout to reset the window when the current window expires.
       let newTimeout = setTimeout(() => this.setWindow(props), expires.diff(now).valueOf());
-      this.setState({ timeout: newTimeout });
+      this.setState({
+        timeout: newTimeout,
+      });
     }
   }
 
@@ -59,12 +72,12 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
    * current time.
    */
   setWindow(props: TimeWindowManagerProps) {
-    this.setState({ timeout: null });
     let now = props.now ? props.now() : moment();
     props.setTimeWindow({
-      start: now.clone().subtract(props.timeWindow.settings.windowSize),
+      start: now.clone().subtract(props.timeWindow.scale.windowSize),
       end: now,
     });
+    this.setState({ timeout: null });
   }
 
   componentWillMount() {

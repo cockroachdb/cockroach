@@ -8,11 +8,11 @@ import _ = require("lodash");
 import moment = require("moment");
 
 export const SET_WINDOW = "cockroachui/timewindow/SET_WINDOW";
-export const SET_SETTINGS = "cockroachui/timewindow/SET_SETTINGS";
+export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
 
 /**
- * TimeWindow represents an absolute window of time, defined with a start and end
- * time.
+ * TimeWindow represents an absolute window of time, defined with a start and
+ * end time.
  */
 export interface TimeWindow {
   start: moment.Moment;
@@ -20,10 +20,12 @@ export interface TimeWindow {
 }
 
 /**
- * TimeWindowSettings stores the user-specifies time window setting.
+ * TimeScale describes the requested dimensions of TimeWindows; it
+ * prescribes a length for the window, along with a period of time that a
+ * newly created TimeWindow will remain valid.
  */
-export interface TimeWindowSettings {
-  // The size of the global time window. Default is ten minutes.
+export interface TimeScale {
+  // The size of a global time window. Default is ten minutes.
   windowSize: moment.Duration;
   // The length of time the global time window is valid. The current time window
   // is invalid if now > (currentWindow.end + windowValid). Default is ten
@@ -31,14 +33,46 @@ export interface TimeWindowSettings {
   windowValid: moment.Duration;
 }
 
+export interface TimeScaleCollection {
+  [key: string]: TimeScale;
+}
+
+/**
+ * availableTimeScales is a preconfigured set of time scales that can be
+ * selected by the user.
+ */
+export let availableTimeScales: TimeScaleCollection = {
+  "10 min": {
+    windowSize: moment.duration(10, "minutes"),
+    windowValid: moment.duration(10, "seconds"),
+  },
+  "1 hour": {
+    windowSize: moment.duration(1, "hour"),
+    windowValid: moment.duration(1, "minute"),
+  },
+  "6 hours": {
+    windowSize: moment.duration(6, "hours"),
+    windowValid: moment.duration(5, "minutes"),
+  },
+  "12 hours": {
+    windowSize: moment.duration(12, "hours"),
+    windowValid: moment.duration(10, "minutes"),
+  },
+  "1 day": {
+    windowSize: moment.duration(1, "day"),
+    windowValid: moment.duration(10, "minutes"),
+  },
+};
+
 export class TimeWindowState {
-  settings: TimeWindowSettings;
+  // Currently selected scale.
+  scale: TimeScale;
+  // Currently established time window.
   currentWindow: TimeWindow;
+  // True if scale has changed since currentWindow was generated.
+  scaleChanged: boolean;
   constructor() {
-    this.settings = {
-      windowSize: moment.duration(10, "m"),
-      windowValid: moment.duration(10, "s"),
-    };
+    this.scale = availableTimeScales["10 min"];
   }
 }
 
@@ -48,11 +82,13 @@ export default function(state = new TimeWindowState(), action: Action): TimeWind
       let { payload: tw } = action as PayloadAction<TimeWindow>;
       state = _.clone(state);
       state.currentWindow = tw;
+      state.scaleChanged = false;
       return state;
-    case SET_SETTINGS:
-      let { payload: settings } = action as PayloadAction<TimeWindowSettings>;
+    case SET_SCALE:
+      let { payload: scale } = action as PayloadAction<TimeScale>;
       state = _.clone(state);
-      state.settings = settings;
+      state.scale = scale;
+      state.scaleChanged = true;
       return state;
     default:
       return state;
@@ -66,9 +102,10 @@ export function setTimeWindow(tw: TimeWindow): PayloadAction<TimeWindow> {
   };
 }
 
-export function setTimeWindowSettings(tws: TimeWindowSettings): PayloadAction<TimeWindowSettings> {
+export function setTimeScale(ts: TimeScale): PayloadAction<TimeScale> {
   return {
-    type: SET_SETTINGS,
-    payload: tws,
+    type: SET_SCALE,
+    payload: ts,
   };
 }
+

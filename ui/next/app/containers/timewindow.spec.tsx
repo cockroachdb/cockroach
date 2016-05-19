@@ -26,30 +26,46 @@ describe("<TimeWindowManager>", function() {
     getManager();
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.firstCall.args[0], {
-      start: now().subtract(state.settings.windowSize),
+      start: now().subtract(state.scale.windowSize),
       end: now(),
     });
   });
 
   it("resets time window immediately if expired", function() {
     state.currentWindow = {
-      start: now().subtract(state.settings.windowSize),
-      end: now().subtract(state.settings.windowValid).subtract(1),
+      start: now().subtract(state.scale.windowSize),
+      end: now().subtract(state.scale.windowValid).subtract(1),
     };
 
     getManager();
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.firstCall.args[0], {
-      start: now().subtract(state.settings.windowSize),
+      start: now().subtract(state.scale.windowSize),
+      end: now(),
+    });
+  });
+
+  it("resets time window immediately if scale has changed", function() {
+    // valid window.
+    state.currentWindow = {
+      start: now().subtract(state.scale.windowSize),
+      end: now(),
+    };
+    state.scaleChanged = true;
+
+    getManager();
+    assert.isTrue(spy.calledOnce);
+    assert.deepEqual(spy.firstCall.args[0], {
+      start: now().subtract(state.scale.windowSize),
       end: now(),
     });
   });
 
   it("resets time window later if current window is valid", function() {
     state.currentWindow = {
-      start: now().subtract(state.settings.windowSize),
+      start: now().subtract(state.scale.windowSize),
       // 5 milliseconds until expiration.
-      end: now().subtract(state.settings.windowValid.asMilliseconds() - 5),
+      end: now().subtract(state.scale.windowValid.asMilliseconds() - 5),
     };
 
     getManager();
@@ -61,7 +77,7 @@ describe("<TimeWindowManager>", function() {
         () => {
           assert.isTrue(spy.calledOnce);
           assert.deepEqual(spy.firstCall.args[0], {
-            start: now().subtract(state.settings.windowSize),
+            start: now().subtract(state.scale.windowSize),
             end: now(),
           });
           resolve();
@@ -72,9 +88,9 @@ describe("<TimeWindowManager>", function() {
 
   it("has only a single timeout at a time.", function() {
     state.currentWindow = {
-      start: now().subtract(state.settings.windowSize),
+      start: now().subtract(state.scale.windowSize),
       // 5 milliseconds until expiration.
-      end: now().subtract(state.settings.windowValid.asMilliseconds() - 5),
+      end: now().subtract(state.scale.windowValid.asMilliseconds() - 5),
     };
 
     let manager = getManager();
@@ -82,9 +98,9 @@ describe("<TimeWindowManager>", function() {
 
     // Set new props on currentWindow. The previous timeout should be abandoned.
     state.currentWindow = {
-      start: now().subtract(state.settings.windowSize),
+      start: now().subtract(state.scale.windowSize),
       // 10 milliseconds until expiration.
-      end: now().subtract(state.settings.windowValid.asMilliseconds() - 10),
+      end: now().subtract(state.scale.windowValid.asMilliseconds() - 10),
     };
     manager.setProps({
       timeWindow: state,
@@ -97,7 +113,7 @@ describe("<TimeWindowManager>", function() {
         () => {
           assert.isTrue(spy.calledOnce);
           assert.deepEqual(spy.firstCall.args[0], {
-            start: now().subtract(state.settings.windowSize),
+            start: now().subtract(state.scale.windowSize),
             end: now(),
           });
           resolve();

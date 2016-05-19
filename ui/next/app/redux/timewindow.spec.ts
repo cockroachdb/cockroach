@@ -23,14 +23,14 @@ describe("time window reducer", function() {
       let windowSize = moment.duration(10, "s");
       let windowValid = moment.duration(10, "s");
       const expectedSetting = {
-        type: timewindow.SET_SETTINGS,
+        type: timewindow.SET_SCALE,
         payload: {
           windowSize,
           windowValid,
         },
       };
       assert.deepEqual(
-        timewindow.setTimeWindowSettings({ windowSize, windowValid }),
+        timewindow.setTimeScale({ windowSize, windowValid }),
         expectedSetting);
     });
   });
@@ -42,7 +42,7 @@ describe("time window reducer", function() {
         new timewindow.TimeWindowState()
       );
       assert.deepEqual(
-        (new timewindow.TimeWindowState()).settings,
+        (new timewindow.TimeWindowState()).scale,
         {
           windowSize: moment.duration(10, "m"),
           windowValid: moment.duration(10, "s"),
@@ -59,6 +59,7 @@ describe("time window reducer", function() {
           start,
           end,
         };
+        expected.scaleChanged = false;
         assert.deepEqual(
           reducer(undefined, timewindow.setTimeWindow({ start, end })),
           expected
@@ -71,12 +72,13 @@ describe("time window reducer", function() {
       let newValid = moment.duration(1, "m");
       it("should correctly overwrite previous value", () => {
         let expected = new timewindow.TimeWindowState();
-        expected.settings = {
+        expected.scale = {
           windowSize: newSize,
           windowValid: newValid,
         };
+        expected.scaleChanged = true;
         assert.deepEqual(
-          reducer(undefined, timewindow.setTimeWindowSettings({
+          reducer(undefined, timewindow.setTimeScale({
             windowSize: newSize,
             windowValid: newValid,
           })),
