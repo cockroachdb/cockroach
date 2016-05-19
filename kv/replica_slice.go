@@ -137,6 +137,11 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
+// Shuffle randomizes the order of the replicas.
+func (rs ReplicaSlice) Shuffle() {
+	rs.randPerm(0, len(rs)-1, rand.Intn)
+}
+
 func (rs ReplicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
 	length := topIndex - startIndex + 1
 	for i := 1; i < length; i++ {

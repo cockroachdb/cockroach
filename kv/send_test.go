@@ -94,7 +94,6 @@ func TestSendToOneClient(t *testing.T) {
 	roachpb.RegisterInternalServer(s, Node(0))
 
 	opts := SendOptions{
-		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 		Context:         context.Background(),
@@ -147,7 +146,6 @@ func TestRetryableError(t *testing.T) {
 	waitForConnState(grpc.TransientFailure)
 
 	opts := SendOptions{
-		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
 		Context:         context.Background(),
@@ -199,7 +197,6 @@ func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.St
 	doneChanChan := make(chan chan BatchCall, len(addrs))
 
 	opts := SendOptions{
-		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Millisecond,
 		Timeout:         10 * time.Second,
 		Context:         context.Background(),
@@ -422,7 +419,6 @@ func TestClientNotReady(t *testing.T) {
 	defer ln.Close()
 
 	opts := SendOptions{
-		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Nanosecond,
 		Timeout:         100 * time.Nanosecond,
 		Context:         context.Background(),
@@ -547,7 +543,6 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		opts := SendOptions{
-			Ordering:        orderStable,
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
 			Context:         context.Background(),
