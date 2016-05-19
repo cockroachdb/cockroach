@@ -19,6 +19,8 @@ package distsql
 import (
 	"golang.org/x/net/context"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -42,8 +44,11 @@ var _ DistSQLServer = &ServerImpl{}
 // NewServer instantiates a DistSQLServer.
 func NewServer(ctx ServerContext) *ServerImpl {
 	ds := &ServerImpl{
-		ctx:     ctx,
-		evalCtx: parser.EvalContext{ReCache: parser.NewRegexpCache(512)},
+		ctx: ctx,
+		evalCtx: parser.EvalContext{
+			ReCache: parser.NewRegexpCache(512),
+			TmpDec:  new(inf.Dec),
+		},
 	}
 	return ds
 }

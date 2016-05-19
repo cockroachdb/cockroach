@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -170,6 +172,7 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.evalCtx = parser.EvalContext{
 		NodeID:   e.nodeID,
 		ReCache:  e.reCache,
+		TmpDec:   new(inf.Dec),
 		Location: p.session.Location,
 	}
 	p.session.TxnState.schemaChangers.curGroupNum++
