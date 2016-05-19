@@ -718,7 +718,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
-			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("reply error: %s", pErr))
 
 			// Error handling: If the error indicates that our range
 			// descriptor is out of date, evict it from the cache and try
@@ -992,7 +992,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Trace(opts.Context, "error, trying next peer")
+				log.Trace(opts.Context, fmt.Sprintf("error, trying next peer: %s", err))
 				pending++
 				transport.SendNext(done)
 			}
