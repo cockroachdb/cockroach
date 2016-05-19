@@ -9,7 +9,6 @@
  *    - Graphs
  *      - Greyed-out display on error
  *    ! Events table
- *    - Global Timespan UI Component
  *    - Cluster health indicator
  * ! Notification Banners
  *    - Help Us
@@ -43,6 +42,13 @@
  *  functions, that return an underlying "Common" graph component. The props of
  *  the Common graph component would include the part of `initGraph` and
  *  `drawGraph` that are different for these two chart types.
+ *
+ *  - It is possible to create race conditions using the time scale selector.
+ *  The issue: a user selects a new time scale, which immediately initiates a
+ *  server query. Before that query completes, change the time scale again,
+ *  initiating another query to the server. The order in which these queries
+ *  complete is indeterminate, and could result in the charts displaying data
+ *  for the wrong time scale.
  *
  */
 

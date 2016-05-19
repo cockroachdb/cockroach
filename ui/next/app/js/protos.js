@@ -1816,6 +1816,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "type": "int32",
                             "name": "off",
                             "id": 2
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "bool",
+                            "name": "shutdown",
+                            "id": 3
                         }
                     ]
                 },
@@ -1829,6 +1835,14 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "id": 1
                         }
                     ]
+                },
+                {
+                    "name": "HealthRequest",
+                    "fields": []
+                },
+                {
+                    "name": "HealthResponse",
+                    "fields": []
                 },
                 {
                     "name": "ClusterFreezeRequest",
@@ -2057,6 +2071,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "response": "ClusterResponse",
                             "options": {
                                 "(google.api.http).get": "/_admin/v1/cluster"
+                            }
+                        },
+                        "Health": {
+                            "request": "HealthRequest",
+                            "response": "HealthResponse",
+                            "options": {
+                                "(google.api.http).get": "/_admin/v1/health"
                             }
                         },
                         "Drain": {

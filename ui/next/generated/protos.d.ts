@@ -1911,6 +1911,8 @@ export interface serverBuilder {
 	ClusterResponse: server.ClusterResponseBuilder;
 	DrainRequest: server.DrainRequestBuilder;
 	DrainResponse: server.DrainResponseBuilder;
+	HealthRequest: server.HealthRequestBuilder;
+	HealthResponse: server.HealthResponseBuilder;
 	ClusterFreezeRequest: server.ClusterFreezeRequestBuilder;
 	ClusterFreezeResponse: server.ClusterFreezeResponseBuilder;
 	status: server.statusBuilder;
@@ -3375,6 +3377,15 @@ getOff?() : number[];
 
 
 
+shutdown?: boolean;
+		
+
+getShutdown?() : boolean;
+		setShutdown?(shutdown : boolean): void;
+		
+
+
+
 }
 	
 	export interface DrainRequestMessage extends DrainRequest {
@@ -3426,6 +3437,60 @@ export interface DrainResponseBuilder {
 	decode(buffer: ArrayBuffer) : DrainResponseMessage;
 	decode(buffer: ByteBuffer) : DrainResponseMessage;
 	decode64(buffer: string) : DrainResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface HealthRequest {
+	
+		
+
+}
+	
+	export interface HealthRequestMessage extends HealthRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HealthRequestBuilder {
+	new(data?: HealthRequest): HealthRequestMessage;
+	decode(buffer: ArrayBuffer) : HealthRequestMessage;
+	decode(buffer: ByteBuffer) : HealthRequestMessage;
+	decode64(buffer: string) : HealthRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface HealthResponse {
+	
+		
+
+}
+	
+	export interface HealthResponseMessage extends HealthResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HealthResponseBuilder {
+	new(data?: HealthResponse): HealthResponseMessage;
+	decode(buffer: ArrayBuffer) : HealthResponseMessage;
+	decode(buffer: ByteBuffer) : HealthResponseMessage;
+	decode64(buffer: string) : HealthResponseMessage;
 	
 }
 	
