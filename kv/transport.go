@@ -283,6 +283,10 @@ func (s *senderTransport) IsExhausted() bool {
 }
 
 func (s *senderTransport) SendNext(done chan BatchCall) {
+	if s.called {
+		panic("called an exhausted transport")
+	}
+	s.called = true
 	sp := s.tracer.StartSpan("node")
 	defer sp.Finish()
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
