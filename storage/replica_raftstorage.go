@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
+var _ raft.Storage = (*Replica)(nil)
+
 // All calls to raft.RawNode require that an exclusive lock is held.
 // All of the functions exposed via the raft.Storage interface will in
 // turn be called from RawNode. So the lock that guards raftGroup must
