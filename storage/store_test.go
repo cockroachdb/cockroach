@@ -1864,6 +1864,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		frozen := repl.mu.frozen
 		repl.mu.Unlock()
 		pFrozen, err := loadFrozenStatus(store.Engine(), 1)
+		pThawed := !pFrozen
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1874,8 +1875,16 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if pFrozen != b {
 			t.Fatal(util.ErrorfSkipFrames(1, "expected status %t, got %t", b, pFrozen))
 		}
-		if pFrozen != store.IsFrozen() {
-			t.Fatal(util.ErrorfSkipFrames(1, "expected store to be frozen: %t", pFrozen))
+		numFrozen, numThawed := store.FrozenStatus()
+		if pFrozen != (numThawed == 0) {
+			t.Fatal(util.ErrorfSkipFrames(1,
+				"expected store to be frozen: %t, got %d thawed replicas",
+				pFrozen, numThawed))
+		}
+		if pThawed != (numFrozen == 0) {
+			t.Fatal(util.ErrorfSkipFrames(1,
+				"expected store to be thawed: %t, got %d frozen replicas",
+				pThawed, numFrozen))
 		}
 	}
 

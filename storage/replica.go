@@ -2117,6 +2117,22 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 				// leaseRejectedError means we tried to get one but someone
 				// beat us to it.
 				pErr = nil
+			case *roachpb.RangeFrozenError:
+				storeID := r.store.StoreID()
+				// Let the replica with the smallest StoreID gossip.
+				// TODO(tschottdorf): this is silly and hopefully not necessary
+				// after #6722 (which prevents Raft reproposals from spuriously
+				// re-freezing ranges unfrozen at node startup)
+				hasLease = true
+				for _, replica := range r.Desc().Replicas {
+					if storeID < replica.StoreID {
+						hasLease = false
+						break
+					}
+				}
+				if hasLease {
+					pErr = nil
+				}
 			default:
 				// Any other error is worth being logged visibly.
 				log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)

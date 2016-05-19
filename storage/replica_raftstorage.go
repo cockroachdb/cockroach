@@ -467,7 +467,7 @@ func snapshot(
 
 	// Iterate over all the data in the range, including local-only data like
 	// the sequence cache.
-	iter := newReplicaDataIterator(&desc, snap, true /* !replicatedOnly */)
+	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 	var alloc engine.ChunkAllocator
 	for ; iter.Valid(); iter.Next() {
@@ -683,6 +683,11 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		return 0, err
 	}
 
+	frozen, err := loadFrozenStatus(batch, desc.RangeID)
+	if err != nil {
+		return 0, err
+	}
+
 	// Load updated range stats. The local newStats variable will be assigned
 	// to r.stats after the batch commits.
 	newStats, err := newRangeStats(desc.RangeID, batch)
@@ -711,6 +716,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		// the snapshot.
 		r.mu.appliedIndex = snap.Metadata.Index
 		r.mu.leaderLease = lease
+		r.mu.frozen = frozen
 		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.
