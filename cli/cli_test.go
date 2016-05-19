@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -169,15 +168,7 @@ func (c cliTest) RunWithArgs(a []string) {
 		fmt.Println(err)
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
-	if a[0] == "node" {
-		_, httpPort, err := net.SplitHostPort(c.HTTPAddr())
-		if err != nil {
-			fmt.Println(err)
-		}
-		args = append(args, fmt.Sprintf("--http-port=%s", httpPort))
-	} else {
-		args = append(args, fmt.Sprintf("--port=%s", p))
-	}
+	args = append(args, fmt.Sprintf("--port=%s", p))
 	// Always run in secure mode and use test certs.
 	args = append(args, "--insecure=false")
 	args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))

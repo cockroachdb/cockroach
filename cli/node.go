@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -53,9 +54,14 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		mustUsage(cmd)
 	}
 
-	// Extract Node IDs from NodeStatuses.
-	nodeStatuses := server.NodesResponse{}
-	if err := getJSON(cliContext.HTTPAddr, server.PathForNodeStatus(""), &nodeStatuses); err != nil {
+	c, stopper, err := getStatusClient()
+	if err != nil {
+		return err
+	}
+	defer stopper.Stop()
+
+	nodeStatuses, err := c.Nodes(stopperContext(stopper), &server.NodesRequest{})
+	if err != nil {
 		return err
 	}
 
@@ -100,19 +106,25 @@ var statusNodeCmd = &cobra.Command{
 func runStatusNode(cmd *cobra.Command, args []string) error {
 	var nodeStatuses []status.NodeStatus
 
+	c, stopper, err := getStatusClient()
+	if err != nil {
+		return err
+	}
+	defer stopper.Stop()
+
 	switch len(args) {
 	case 0:
 		// Show status for all nodes.
-		resp := server.NodesResponse{}
-		if err := getJSON(cliContext.HTTPAddr, server.PathForNodeStatus(""), &resp); err != nil {
+		nodes, err := c.Nodes(stopperContext(stopper), &server.NodesRequest{})
+		if err != nil {
 			return err
 		}
-		nodeStatuses = resp.Nodes
+		nodeStatuses = nodes.Nodes
 
 	case 1:
-		nodeStatus := status.NodeStatus{}
 		nodeID := args[0]
-		if err := getJSON(cliContext.HTTPAddr, server.PathForNodeStatus(nodeID), &nodeStatus); err != nil {
+		nodeStatus, err := c.Node(stopperContext(stopper), &server.NodeRequest{NodeId: nodeID})
+		if err != nil {
 			return err
 		}
 		if nodeStatus.Desc.NodeID == 0 {
@@ -122,7 +134,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 			// TODO(cdo): Look into why status call returns erroneous data when given node ID of 0.
 			return fmt.Errorf("Error: node %s doesn't exist", nodeID)
 		}
-		nodeStatuses = []status.NodeStatus{nodeStatus}
+		nodeStatuses = []status.NodeStatus{*nodeStatus}
 
 	default:
 		mustUsage(cmd)
@@ -189,4 +201,12 @@ var nodeCmd = &cobra.Command{
 
 func init() {
 	nodeCmd.AddCommand(nodeCmds...)
+}
+
+func getStatusClient() (server.StatusClient, *stop.Stopper, error) {
+	conn, stopper, err := getGRPCConn()
+	if err != nil {
+		return nil, nil, err
+	}
+	return server.NewStatusClient(conn), stopper, nil
 }
