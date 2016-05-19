@@ -326,7 +326,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
 
-%type <str>   name opt_name opt_to_savepoint
+%type <str>   name opt_name opt_name_parens opt_to_savepoint
 %type <str>   savepoint_name
 
 // %type <empty> subquery_op
@@ -1452,7 +1452,13 @@ col_qualification_elem:
     }
     $$.val = &ColumnDefault{Expr: $2.expr()}
   }
-| REFERENCES qualified_name opt_column_list key_match key_actions { unimplemented() }
+| REFERENCES qualified_name opt_name_parens key_match key_actions
+ {
+    $$.val = &ColumnFKConstraint{
+      Table: $2.qname(),
+      Col: Name($3),
+    }
+ }
 
 index_def:
   INDEX opt_name '(' index_params ')' opt_storing
@@ -4085,6 +4091,16 @@ name:
 
 opt_name:
   name
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
+opt_name_parens:
+  '(' name ')'
+  {
+    $$ = $2
+  }
 | /* EMPTY */
   {
     $$ = ""
