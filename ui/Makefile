@@ -133,6 +133,8 @@ $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
 	cp release/$(INDEX) $(INDEX)
 	chmod a-w $(INDEX)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_SOURCES)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
 	goimports -w $@
 
@@ -141,6 +143,8 @@ $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX
 	cp debug/$(INDEX) $(INDEX)
 	chmod a-w $(INDEX)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEBUG_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' >> $@
 
 watch: debug
 	gulp watch
