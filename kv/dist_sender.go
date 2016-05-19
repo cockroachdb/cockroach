@@ -225,9 +225,10 @@ func (ds *DistSender) RangeLookup(
 		Reverse:         useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
+	replicas.Shuffle()
 	// TODO(tschottdorf): Ideally we would use the trace of the request which
 	// caused this lookup.
-	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, orderRandom, ba)
+	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, nil, roachpb.NewError(err)
 	}
@@ -251,28 +252,36 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return rangeDesc, nil
 }
 
-func (ds *DistSender) optimizeReplicaOrder(replicas ReplicaSlice) orderingPolicy {
+// optimizeReplicaOrder sorts the replicas in the order in which they are to be
+// used for sending RPCs (meaning in the order in which they'll be probed for
+// leadership). "Closer" replicas (matching in more attributes) are ordered
+// first. Replicas matching in the same number of attributes are shuffled
+// randomly.
+// If the current node is a replica, then it'll be the first one.
+//
+// nodeDesc is the descriptor of the current node. It can be nil, in which case
+// information about the current descriptor is not used in optimizing the order.
+func (ds *DistSender) optimizeReplicaOrder(replicas ReplicaSlice) {
+	// TODO(spencer): going to need to also sort by affinity; closest
+	// ping time should win. Makes sense to have the rpc client/server
+	// heartbeat measure ping times. With a bit of seasoning, each
+	// node will be able to order the healthy replicas based on latency.
+
 	// Unless we know better, send the RPCs randomly.
-	order := orderRandom
 	nodeDesc := ds.getNodeDescriptor()
 	// If we don't know which node we're on, don't optimize anything.
 	if nodeDesc == nil {
-		return order
+		replicas.Shuffle()
+		return
 	}
-	// Sort replicas by attribute affinity, which we treat as a stand-in for
-	// proximity (for now).
-	if replicas.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs) > 0 {
-		// There's at least some attribute prefix, and we hope that the
-		// replicas that come early in the slice are now located close to
-		// us and hence better candidates.
-		order = orderStable
-	}
+	// Sort replicas by attribute affinity (if any), which we treat as a stand-in
+	// for proximity (for now).
+	replicas.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs)
+
 	// If there is a replica in local node, move it to the front.
 	if i := replicas.FindReplicaByNodeID(nodeDesc.NodeID); i > 0 {
 		replicas.MoveToFront(i)
-		order = orderStable
 	}
-	return order
 }
 
 // getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
@@ -305,14 +314,17 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied roachpb.Replica
-// slice. First, replicas which have gossiped addresses are corralled (and
-// rearranged depending on proximity and whether the request needs to go to a
-// leader) and then sent via Send, with requirement that one RPC to a server
-// must succeed. Returns an RPC error if the request could not be sent. Note
+// slice. Returns an RPC error if the request could not be sent. Note
 // that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice,
-	order orderingPolicy, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+// The replicas are assume to have been ordered by preference, closer ones (if
+// any) at the front.
+func (ds *DistSender) sendRPC(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicas ReplicaSlice,
+	ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
 		return nil, noNodeAddrsAvailError{}
 	}
@@ -324,7 +336,6 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
-		Ordering:         order,
 		SendNextTimeout:  ds.sendNextTimeout,
 		Timeout:          base.NetworkTimeout,
 		Context:          ctx,
@@ -434,7 +445,7 @@ func (ds *DistSender) sendSingleRange(
 	// Rearrange the replicas so that those replicas with long common
 	// prefix of attributes end up first. If there's no prefix, this is a
 	// no-op.
-	order := ds.optimizeReplicaOrder(replicas)
+	ds.optimizeReplicaOrder(replicas)
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
@@ -442,13 +453,12 @@ func (ds *DistSender) sendSingleRange(
 		if leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID)); leader.StoreID > 0 {
 			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
-				order = orderStable
 			}
 		}
 	}
 
 	// TODO(tschottdorf): should serialize the trace here, not higher up.
-	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, order, ba)
+	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
