@@ -344,7 +344,8 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(rs, nil, false /*useReverseScan*/)
+		desc, needAnother, _, pErr := ds.getDescriptors(
+			context.Background(), rs, nil, false /*useReverseScan*/)
 		if pErr != nil {
 			return -1, pErr
 		}
@@ -372,7 +373,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // returned bool is true in case the given range reaches outside the returned
 // descriptor.
 func (ds *DistSender) getDescriptors(
-	rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
+	ctx context.Context, rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, bool, *evictionToken, *roachpb.Error) {
 	var descKey roachpb.RKey
 	if !useReverseScan {
@@ -396,7 +397,8 @@ func (ds *DistSender) getDescriptors(
 	// this will disable prefetching.
 	considerIntents := evictToken != nil
 
-	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
+	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(
+		ctx, descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
 		return nil, false, returnToken, pErr
 	}
@@ -632,7 +634,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			log.Trace(ctx, "meta descriptor lookup")
-			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, isReverse)
+			desc, needAnother, evictToken, pErr = ds.getDescriptors(ctx, rs, evictToken, isReverse)
 
 			// getDescriptors may fail retryably if, for example, the first
 			// range isn't available via Gossip. Assume that all errors at
@@ -645,8 +647,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					log.Warning(pErr)
 				}
 				continue
-			} else {
-				log.Trace(ctx, "looked up range descriptor")
 			}
 
 			if needAnother && br == nil {
