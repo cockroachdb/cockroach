@@ -144,7 +144,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, newUndefinedDatabaseError(qname.Database())
+		return nil, sqlbase.NewUndefinedDatabaseError(qname.Database())
 	}
 
 	desc := sqlbase.TableDescriptor{}
@@ -177,7 +177,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			return sqlbase.TableDescriptor{}, err
 		}
 		if desc == nil {
-			return sqlbase.TableDescriptor{}, newUndefinedTableError(qname.String())
+			return sqlbase.TableDescriptor{}, sqlbase.NewUndefinedTableError(qname.String())
 		}
 		return *desc, nil
 	}
@@ -215,7 +215,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			if err == errDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
 				// table's name.
-				return sqlbase.TableDescriptor{}, newUndefinedTableError(qname.String())
+				return sqlbase.TableDescriptor{}, sqlbase.NewUndefinedTableError(qname.String())
 			}
 			return sqlbase.TableDescriptor{}, err
 		}
@@ -324,7 +324,7 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 			return nil, err
 		}
 		if dbDesc == nil {
-			return nil, newUndefinedDatabaseError(string(expr.Base))
+			return nil, sqlbase.NewUndefinedDatabaseError(string(expr.Base))
 		}
 		tableNames, err := p.getTableNames(dbDesc)
 		if err != nil {

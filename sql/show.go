@@ -65,7 +65,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, newUndefinedTableError(n.Table.String())
+		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -99,7 +99,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, newUndefinedTableError(n.Table.String())
+		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -258,7 +258,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, newUndefinedTableError(n.Table.String())
+		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 
 	v := &valuesNode{
@@ -322,7 +322,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, newUndefinedDatabaseError(string(name.Base))
+		return nil, sqlbase.NewUndefinedDatabaseError(string(name.Base))
 	}
 
 	tableNames, err := p.getTableNames(dbDesc)

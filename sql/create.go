@@ -120,7 +120,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, newUndefinedTableError(n.Table.String())
+		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
@@ -211,7 +211,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, newUndefinedDatabaseError(n.Table.Database())
+		return nil, sqlbase.NewUndefinedDatabaseError(n.Table.Database())
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {

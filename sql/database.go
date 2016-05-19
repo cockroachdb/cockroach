@@ -172,7 +172,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 			return 0, err
 		}
 		if desc == nil {
-			return 0, newUndefinedDatabaseError(name)
+			return 0, sqlbase.NewUndefinedDatabaseError(name)
 		}
 	}
 

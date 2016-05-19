@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -663,7 +664,7 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 }
 
 func (c *v3Conn) sendError(err error) error {
-	if sqlErr, ok := err.(sql.ErrorWithPGCode); ok {
+	if sqlErr, ok := err.(sqlbase.ErrorWithPGCode); ok {
 		return c.sendErrorWithCode(sqlErr.Code(), sqlErr.SrcContext(), err.Error())
 	}
 	return c.sendInternalError(err.Error())
@@ -672,12 +673,12 @@ func (c *v3Conn) sendError(err error) error {
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendErrorWithCode(pgerror.CodeInternalError, sql.SrcCtx{}, errToSend)
+	return c.sendErrorWithCode(pgerror.CodeInternalError, sqlbase.SrcCtx{}, errToSend)
 }
 
 // errCode is a postgres error code, plus our extensions.
 // See http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sql.SrcCtx, errToSend string) error {
+func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToSend string) error {
 	if c.doingExtendedQueryMessage {
 		c.ignoreTillSync = true
 	}
