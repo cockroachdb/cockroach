@@ -1907,16 +1907,21 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // range of keys being written is empty. If so, then the run can be
 // set to put "blindly", meaning no iterator need be used to read
 // existing values during the MVCC write.
-func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
+func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion, distinctSpans bool) {
 	var minKey, maxKey roachpb.Key
-	unique := make(map[string]struct{}, len(reqs))
+	var unique map[string]struct{}
+	if !distinctSpans {
+		unique = make(map[string]struct{}, len(reqs))
+	}
 	// Returns false on occurrence of a duplicate key.
 	maybeAddPut := func(key roachpb.Key) bool {
 		// Note that casting the byte slice key to a string does not allocate.
-		if _, ok := unique[string(key)]; ok {
-			return false
+		if unique != nil {
+			if _, ok := unique[string(key)]; ok {
+				return false
+			}
+			unique[string(key)] = struct{}{}
 		}
-		unique[string(key)] = struct{}{}
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
 		}
@@ -1926,7 +1931,7 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 		return true
 	}
 
-	for _, r := range reqs {
+	for i, r := range reqs {
 		switch t := r.GetInner().(type) {
 		case *roachpb.PutRequest:
 			if maybeAddPut(t.Key) {
@@ -1937,10 +1942,11 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 				continue
 			}
 		}
+		reqs = reqs[:i]
 		break
 	}
 
-	if len(unique) < optimizePutThreshold { // don't bother if below this threshold
+	if len(reqs) < optimizePutThreshold { // don't bother if below this threshold
 		return
 	}
 	iter := batch.NewIterator(false /* total order iterator */)
@@ -1957,7 +1963,7 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 	}
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.
-	for _, r := range reqs[:len(unique)] {
+	for _, r := range reqs {
 		if iterKey == nil || bytes.Compare(iterKey, r.GetInner().Header().Key) > 0 {
 			switch t := r.GetInner().(type) {
 			case *roachpb.PutRequest:
@@ -1987,7 +1993,7 @@ func (r *Replica) executeBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(ba.Requests) >= optimizePutThreshold {
-		optimizePuts(batch, ba.Requests)
+		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
 	for index, union := range ba.Requests {
