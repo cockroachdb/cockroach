@@ -741,6 +741,8 @@ message Header {
   // if set to a non-zero value, limits the total number of results for
   // Scan/ReverseScan requests in the batch.
   optional int64 max_scan_results = 8 [(gogoproto.nullable) = false];
+  // if set, all of the spans in the batch are distinct.
+  optional bool distinct_spans = 9 [(gogoproto.nullable) = false];
 }
 
 
