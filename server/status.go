@@ -189,15 +189,6 @@ func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 
-// extractNodeID examines the node_id URL parameter and returns the nodeID and a
-// boolean showing if it is this node. If node_id is "local" or not present, it
-// returns the local nodeID.
-func (s *statusServer) extractNodeID(ps httprouter.Params) (roachpb.NodeID, bool, error) {
-	nodeIDParam := ps.ByName("node_id")
-
-	return s.parseNodeID(nodeIDParam)
-}
-
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
 	// No parameter provided or set to local.
 	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
@@ -222,48 +213,6 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (StatusClient, error) {
 		return nil, err
 	}
 	return NewStatusClient(conn), nil
-}
-
-// proxyRequest performs a GET request to another node's status server.
-func (s *statusServer) proxyRequest(nodeID roachpb.NodeID, w http.ResponseWriter, r *http.Request) {
-	addr, err := s.gossip.GetNodeIDAddress(nodeID)
-	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("node could not be located: %s", nodeID),
-			http.StatusBadRequest)
-		return
-	}
-
-	// Create a call to the other node. We might want to consider moving this
-	// to an RPC instead of just proxying it.
-	// Generate the redirect url and copy all the parameters to it.
-	requestURL := fmt.Sprintf("%s://%s%s?%s", s.ctx.HTTPRequestScheme(), addr, r.URL.Path, r.URL.RawQuery)
-	req, err := http.NewRequest("GET", requestURL, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	resp, err := s.proxyClient.Do(req)
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, resp.Header.Get(util.ContentTypeHeader))
-
-	// Only pass through a whitelisted set of status codes.
-	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNotFound, http.StatusBadRequest, http.StatusInternalServerError:
-		w.WriteHeader(resp.StatusCode)
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-
-	defer resp.Body.Close()
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		log.Error(err)
-	}
 }
 
 // Gossip returns gossip network status.
@@ -307,45 +256,55 @@ func (s *statusServer) Details(ctx context.Context, req *DetailsRequest) (*Detai
 	return status.Details(ctx, req)
 }
 
-// handleLogFilesList handles local requests for a list of available log files.
-func (s *statusServer) handleLogFilesListLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// LogFilesList returns a list of available log files.
+func (s *statusServer) LogFilesList(ctx context.Context, req *LogFilesListRequest) (*JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.LogFilesList(ctx, req)
+	}
 	log.Flush()
 	logFiles, err := log.ListLogFiles()
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
-
-	respondAsJSON(w, r, logFiles)
+	return marshalJSONResponse(logFiles)
 }
 
 // handleLogFilesList handles GET requests for a list of available log files.
 func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+	resp, err := s.LogFilesList(context.TODO(), &LogFilesListRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
-	if local {
-		s.handleLogFilesListLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
-	}
+	writeJSONResponse(w, resp)
 }
 
-// handleLocalLogFile handles local requests for a single log. If no filename is
-// available, it returns 404. The log contents are returned in structured
-// format as JSON.
-func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+// LogFile returns a single log file.
+func (s *statusServer) LogFile(ctx context.Context, req *LogFileRequest) (*JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.LogFile(ctx, req)
+	}
+
 	log.Flush()
-	file := ps.ByName("file")
-	reader, err := log.GetLogReader(file, true /* restricted */)
+	reader, err := log.GetLogReader(req.File, true /* restricted */)
 	if reader == nil || err != nil {
-		log.Errorf("log file %s could not be opened: %s", file, err)
-		http.NotFound(w, r)
-		return
+		return nil, fmt.Errorf("log file %s could not be opened: %s", req.File, err)
 	}
 	defer reader.Close()
 
@@ -357,29 +316,26 @@ func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request
 			if err == io.EOF {
 				break
 			}
-			log.Error(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return nil, err
 		}
 		entries = append(entries, entry)
 	}
 
-	respondAsJSON(w, r, entries)
+	return marshalJSONResponse(entries)
 }
 
 // handleLogFile handles GET requests for a single log file.
 func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+	req := LogFileRequest{
+		NodeId: ps.ByName("node_id"),
+		File:   ps.ByName("file"),
+	}
+	resp, err := s.LogFile(context.TODO(), &req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
-	if local {
-		s.handleLogFileLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
-	}
+	writeJSONResponse(w, resp)
 }
 
 // parseInt64WithDefault attempts to parse the passed in string. If an empty
@@ -397,7 +353,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 	return result, nil
 }
 
-// handleLogsLocal returns the log entries parsed from the log files stored on
+// Logs returns the log entries parsed from the log files stored on
 // the server. Log entries are returned in reverse chronological order. The
 // following options are available:
 // * "starttime" query parameter filters the log entries to only ones that
@@ -410,104 +366,93 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   entries. Defaults to defaultMaxLogEntries.
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *statusServer) Logs(ctx context.Context, req *LogsRequest) (*JSONResponse, error) {
 	log.Flush()
 
-	level := r.URL.Query().Get("level")
 	var sev log.Severity
-	if len(level) == 0 {
+	if len(req.Level) == 0 {
 		sev = log.InfoLog
 	} else {
 		var sevFound bool
-		sev, sevFound = log.SeverityByName(level)
+		sev, sevFound = log.SeverityByName(req.Level)
 		if !sevFound {
-			http.Error(w,
-				fmt.Sprintf("level could not be determined: %s", level),
-				http.StatusBadRequest)
-			return
+			return nil, fmt.Errorf("level could not be determined: %s", req.Level)
 		}
 	}
 
 	startTimestamp, err := parseInt64WithDefault(
-		r.URL.Query().Get("starttime"),
+		req.StartTime,
 		timeutil.Now().AddDate(0, 0, -1).UnixNano())
 	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("starttime could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, "StartTime could not be parsed: %s", err)
 	}
 
-	endTimestamp, err := parseInt64WithDefault(
-		r.URL.Query().Get("endtime"),
-		timeutil.Now().UnixNano())
+	endTimestamp, err := parseInt64WithDefault(req.EndTime, timeutil.Now().UnixNano())
 	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("endtime could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, "EndTime could not be parsed: %s", err)
 	}
 
 	if startTimestamp > endTimestamp {
-		http.Error(w,
-			fmt.Sprintf("startime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp),
-			http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, "StartTime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp)
 	}
 
-	maxEntries, err := parseInt64WithDefault(
-		r.URL.Query().Get("max"),
-		defaultMaxLogEntries)
+	maxEntries, err := parseInt64WithDefault(req.Max, defaultMaxLogEntries)
 	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("max could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, "Max could not be parsed: %s", err)
 	}
 	if maxEntries < 1 {
-		http.Error(w,
-			fmt.Sprintf("max: %d should be set to a value greater than 0", maxEntries),
-			http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, "Max: %d should be set to a value greater than 0", maxEntries)
 	}
 
-	pattern := r.URL.Query().Get("pattern")
 	var regex *regexp.Regexp
-	if len(pattern) > 0 {
-		if regex, err = regexp.Compile(pattern); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "regex pattern could not be compiled: %s", err)
-			return
+	if len(req.Pattern) > 0 {
+		if regex, err = regexp.Compile(req.Pattern); err != nil {
+			return nil, grpc.Errorf(codes.InvalidArgument, "regex pattern could not be compiled: %s", err)
 		}
 	}
 
 	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries), regex)
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
-	respondAsJSON(w, r, entries)
+	return marshalJSONResponse(entries)
 }
 
 // handleLogs handles GET requests for log entires.
 func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+	q := r.URL.Query()
+	req := LogsRequest{
+		NodeId:    ps.ByName("node_id"),
+		Level:     q.Get("level"),
+		StartTime: q.Get("starttime"),
+		EndTime:   q.Get("endtime"),
+		Max:       q.Get("max"),
+		Pattern:   q.Get("pattern"),
+	}
+	resp, err := s.Logs(context.TODO(), &req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
-	if local {
-		s.handleLogsLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
-	}
+	writeJSONResponse(w, resp)
 }
 
-// handleStacksLocal handles local requests for goroutines stack traces.
-func (s *statusServer) handleStacksLocal(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+// Stacks handles returns goroutine stack traces.
+func (s *statusServer) Stacks(ctx context.Context, req *StacksRequest) (*JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Stacks(ctx, req)
+	}
+
 	bufSize := runtime.NumGoroutine() * stackTraceApproxSize
 	for {
 		buf := make([]byte, bufSize)
@@ -518,26 +463,21 @@ func (s *statusServer) handleStacksLocal(w http.ResponseWriter, _ *http.Request,
 			bufSize = bufSize * 2
 			continue
 		}
-		w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-		if _, err := w.Write(buf[:length]); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
+		return &JSONResponse{Data: buf[:length]}, nil
 	}
 }
 
 // handleStacksLocal handles GET requests for goroutine stack traces.
 func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+	resp, err := s.Stacks(context.TODO(), &StacksRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if local {
-		s.handleStacksLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
+	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
+	if _, err := w.Write(resp.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -591,18 +531,30 @@ func (s *statusServer) Node(ctx context.Context, req *NodeRequest) (*status.Node
 	return &nodeStatus, nil
 }
 
-func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
+// Metrics return metrics information for the server specified.
+func (s *statusServer) Metrics(ctx context.Context, req *MetricsRequest) (*JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
-		s.proxyRequest(nodeID, w, r)
-		return
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Metrics(ctx, req)
 	}
-	respondAsJSON(w, r, s.metricSource)
+	return marshalJSONResponse(s.metricSource)
+}
+
+func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	resp, err := s.Metrics(context.TODO(), &MetricsRequest{NodeId: ps.ByName("node_id")})
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	writeJSONResponse(w, resp)
 }
 
 // Ranges returns range info for the server specified
@@ -650,16 +602,20 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 	return &output, nil
 }
 
-func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {
-	b, contentType, err := util.MarshalResponse(r, response, []util.EncodingType{util.JSONEncoding})
+// marshalJSONResponse converts an arbitrary value into a JSONResponse protobuf
+// that can be sent via grpc.
+func marshalJSONResponse(value interface{}) (*JSONResponse, error) {
+	data, err := util.MarshalToJSON(value)
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
+	return &JSONResponse{Data: data}, nil
+}
 
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
+// writeJSONResponse writes a JSONResponse to a http.ResponseWriter.
+func writeJSONResponse(w http.ResponseWriter, resp *JSONResponse) {
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
+	if _, err := w.Write(resp.Data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

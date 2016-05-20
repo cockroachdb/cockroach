@@ -67,6 +67,36 @@ message GossipRequest {
   string node_id = 1;
 }
 
+message JSONResponse {
+  bytes data = 1;
+}
+
+message LogsRequest {
+  string node_id = 1;
+  string level = 2;
+  string start_time = 3;
+  string end_time = 4;
+  string max = 5;
+  string pattern = 6;
+}
+
+message LogFilesListRequest {
+  string node_id = 1;
+}
+
+message LogFileRequest {
+  string node_id = 1;
+  string file = 2;
+}
+
+message StacksRequest {
+  string node_id = 1;
+}
+
+message MetricsRequest {
+  string node_id = 1;
+}
+
 service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
@@ -96,4 +126,9 @@ service Status {
       get: "/_status/gossip/{node_id}"
     };
   }
+  rpc Stacks(StacksRequest) returns (JSONResponse) {}
+  rpc Metrics(MetricsRequest) returns (JSONResponse) {}
+  rpc Logs(LogsRequest) returns (JSONResponse) {}
+  rpc LogFilesList(LogFilesListRequest) returns (JSONResponse) {}
+  rpc LogFile(LogFileRequest) returns (JSONResponse) {}
 }
