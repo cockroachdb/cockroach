@@ -336,7 +336,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 					EndKey: endKey,
 				})
 			})
-			roachpb.MergeSpans(&et.IntentSpans)
+			// TODO(peter): Populate DistinctSpans on all batches, not just batches
+			// which contain an EndTransactionRequest.
+			ba.Header.DistinctSpans = roachpb.MergeSpans(&et.IntentSpans)
 			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state

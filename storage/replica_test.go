@@ -1499,7 +1499,7 @@ func TestOptimizePuts(t *testing.T) {
 		for _, r := range c.reqs {
 			batch.Add(r)
 		}
-		optimizePuts(tc.engine, batch.Requests)
+		optimizePuts(tc.engine, batch.Requests, false)
 		blind := []bool{}
 		for _, r := range batch.Requests {
 			switch t := r.GetInner().(type) {
