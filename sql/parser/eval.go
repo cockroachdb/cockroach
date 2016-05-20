@@ -23,7 +23,6 @@ import (
 	"math/big"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -1238,13 +1237,6 @@ func (ctx EvalContext) GetLocation() *time.Location {
 	return ctx.Location
 }
 
-// makeDDate constructs a DDate from a time.Time in the session time zone.
-func (ctx EvalContext) makeDDate(t time.Time) (*DDate, error) {
-	year, month, day := t.In(ctx.GetLocation()).Date()
-	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
-	return NewDDate(DDate(secs / secondsInDay)), nil
-}
-
 func (ctx EvalContext) getTmpDec() *inf.Dec {
 	if ctx.TmpDec != nil {
 		return ctx.TmpDec
@@ -1370,13 +1362,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case *DDecimal:
 			return MakeDBool(v.Sign() != 0), nil
 		case *DString:
-			// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
-			// spec. Is that ok?
-			b, err := strconv.ParseBool(string(*v))
-			if err != nil {
-				return nil, err
-			}
-			return MakeDBool(DBool(b)), nil
+			return ParseDBool(string(*v))
 		}
 
 	case *IntColType:
@@ -1403,11 +1389,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			}
 			return NewDInt(DInt(i)), nil
 		case *DString:
-			i, err := strconv.ParseInt(string(*v), 0, 64)
-			if err != nil {
-				return nil, err
-			}
-			return NewDInt(DInt(i)), nil
+			return ParseDInt(string(*v))
 		}
 
 	case *FloatColType:
@@ -1428,34 +1410,29 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			}
 			return NewDFloat(DFloat(f)), nil
 		case *DString:
-			f, err := strconv.ParseFloat(string(*v), 64)
-			if err != nil {
-				return nil, err
-			}
-			return NewDFloat(DFloat(f)), nil
+			return ParseDFloat(string(*v))
 		}
 
 	case *DecimalColType:
-		dd := &DDecimal{}
 		switch v := d.(type) {
 		case *DBool:
+			dd := &DDecimal{}
 			if *v {
 				dd.SetUnscaled(1)
 			}
 			return dd, nil
 		case *DInt:
+			dd := &DDecimal{}
 			dd.SetUnscaled(int64(*v))
 			return dd, nil
 		case *DFloat:
+			dd := &DDecimal{}
 			decimal.SetFromFloat(&dd.Dec, float64(*v))
 			return dd, nil
 		case *DDecimal:
 			return d, nil
 		case *DString:
-			if _, ok := dd.SetString(string(*v)); !ok {
-				return nil, fmt.Errorf("could not parse string %q as decimal", v)
-			}
-			return dd, nil
+			return ParseDDecimal(string(*v))
 		}
 
 	case *StringColType:
@@ -1491,17 +1468,17 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	case *DateColType:
 		switch d := d.(type) {
 		case *DString:
-			return ParseDate(*d)
+			return ParseDDate(string(*d), ctx.GetLocation())
 		case *DDate:
 			return d, nil
 		case *DTimestamp:
-			return ctx.makeDDate(d.Time)
+			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
 		}
 
 	case *TimestampColType:
 		switch d := d.(type) {
 		case *DString:
-			return ctx.ParseTimestamp(*d, time.Microsecond)
+			return ParseDTimestamp(string(*d), ctx.GetLocation(), time.Microsecond)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation()), time.Microsecond), nil
@@ -1514,8 +1491,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	case *TimestampTZColType:
 		switch d := d.(type) {
 		case *DString:
-			t, err := ctx.ParseTimestamp(*d, time.Microsecond)
-			return MakeDTimestampTZ(t.Time, time.Microsecond), err
+			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation()), time.Microsecond), nil
@@ -1528,33 +1504,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	case *IntervalColType:
 		switch v := d.(type) {
 		case *DString:
-			// At this time the only supported interval formats are:
-			// - Postgres compatible.
-			// - iso8601 format (with designators only), see interval.go for
-			//   sources of documentation.
-			// - Golang time.parseDuration compatible.
-
-			// If it's a blank string, exit early.
-			if len(*v) == 0 {
-				return nil, fmt.Errorf("could not parse string %s as an interval", *v)
-			}
-
-			str := string(*v)
-			if str[0] == 'P' {
-				// If it has a leading P we're most likely working with an iso8601
-				// interval.
-				dur, err := iso8601ToDuration(str)
-				return &DInterval{Duration: dur}, err
-			} else if strings.ContainsRune(str, ' ') {
-				// If it has a space, then we're most likely a postgres string,
-				// as neither iso8601 nor golang permit spaces.
-				dur, err := postgresToDuration(str)
-				return &DInterval{Duration: dur}, err
-			} else {
-				// Fallback to golang durations.
-				dur, err := time.ParseDuration(str)
-				return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, err
-			}
+			return ParseDInterval(string(*v))
 		case *DInt:
 			// An integer duration represents a duration in nanoseconds.
 			return &DInterval{Duration: duration.Duration{Nanos: int64(*v)}}, nil
@@ -2008,56 +1958,6 @@ func foldComparisonExpr(
 		return EQ, left, right, false, true
 	}
 	return op, left, right, false, false
-}
-
-// time.Time formats.
-const (
-	dateFormat                            = "2006-01-02"
-	timestampFormat                       = "2006-01-02 15:04:05"
-	timestampWithOffsetZoneFormat         = timestampFormat + "-07:00"
-	timestampWithNamedZoneFormat          = timestampFormat + " MST"
-	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
-
-	timestampNodeFormat = timestampFormat + ".999999-07:00"
-	timestampFormatNS   = timestampFormat + ".999999999"
-)
-
-var dateFormats = []string{
-	dateFormat,
-	time.RFC3339Nano,
-}
-
-var timeFormats = []string{
-	dateFormat,
-	timestampWithOffsetZoneFormat,
-	timestampFormat,
-	timestampWithNamedZoneFormat,
-	time.RFC3339Nano,
-	timestampRFC3339NanoWithoutZoneFormat,
-}
-
-// ParseDate parses a date.
-func ParseDate(s DString) (*DDate, error) {
-	// No need to ParseInLocation here because we're only parsing dates.
-	for _, format := range dateFormats {
-		if t, err := time.Parse(format, string(s)); err == nil {
-			return defaultContext.makeDDate(t)
-		}
-	}
-	return NewDDate(0), fmt.Errorf("could not parse '%s' in any supported date format", s)
-}
-
-// ParseTimestamp parses the timestamp.
-func (ctx EvalContext) ParseTimestamp(s DString, precision time.Duration) (*DTimestamp, error) {
-	str := string(s)
-
-	for _, format := range timeFormats {
-		if t, err := time.ParseInLocation(format, str, ctx.GetLocation()); err == nil {
-			return MakeDTimestamp(t, precision), nil
-		}
-	}
-
-	return &DTimestamp{}, fmt.Errorf("could not parse '%s' in any supported timestamp format", s)
 }
 
 // Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.

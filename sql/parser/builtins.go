@@ -515,7 +515,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.makeDDate(e.GetTxnTimestamp(time.Microsecond).Time)
+				t := e.GetTxnTimestamp(time.Microsecond).Time
+				return NewDDateFromTime(t, e.GetLocation()), nil
 			},
 		},
 	},
@@ -631,7 +632,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString},
 			ReturnType: TypeTimestamp,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
-				return ctx.ParseTimestamp(*args[0].(*DString), time.Nanosecond)
+				s := string(*args[0].(*DString))
+				return ParseDTimestamp(s, ctx.GetLocation(), time.Nanosecond)
 			},
 		},
 	},
