@@ -34,6 +34,46 @@ func setup() (server.TestServer, *client.DB) {
 	return s, s.DB()
 }
 
+func checkIntResult(t *testing.T, expected, result int64) {
+	if expected != result {
+		t.Errorf("expected %d, got %d\n", expected, result)
+	}
+}
+
+func checkResult(t *testing.T, expected, result []byte) {
+	if !bytes.Equal(expected, result) {
+		t.Errorf("expected \"%s\", got \"%s\"\n", expected, result)
+	}
+}
+
+func checkResults(t *testing.T, expected map[string][]byte, results []client.Result) {
+	count := 0
+	for _, result := range results {
+		checkRows(t, expected, result.Rows)
+		count++
+	}
+	checkLen(t, len(expected), count)
+}
+
+func checkRows(t *testing.T, expected map[string][]byte, rows []client.KeyValue) {
+	for i, row := range rows {
+		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
+			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"\n",
+				i,
+				row.Key,
+				expected[string(row.Key)],
+				row.Key,
+				row.ValueBytes())
+		}
+	}
+}
+
+func checkLen(t *testing.T, expected, count int) {
+	if expected != count {
+		t.Errorf("expected length to be %d, got %d", expected, count)
+	}
+}
+
 func TestDB_Get(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup()
@@ -43,11 +83,7 @@ func TestDB_Get(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-
-	expected := []byte("")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte(""), result.ValueBytes())
 }
 
 func TestDB_Put(t *testing.T) {
@@ -62,11 +98,7 @@ func TestDB_Put(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-
-	expected := []byte("1")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
 func TestDB_CPut(t *testing.T) {
@@ -84,11 +116,7 @@ func TestDB_CPut(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	var expected []byte
-	expected = []byte("2")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte("2"), result.ValueBytes())
 
 	if err = db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
@@ -97,10 +125,7 @@ func TestDB_CPut(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	expected = []byte("2")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte("2"), result.ValueBytes())
 
 	if err = db.CPut("bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
@@ -109,10 +134,7 @@ func TestDB_CPut(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	expected = []byte("")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected bb=\"%s\", got bb=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte(""), result.ValueBytes())
 
 	if err = db.CPut("bb", "4", nil); err != nil {
 		panic(err)
@@ -121,10 +143,7 @@ func TestDB_CPut(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	expected = []byte("4")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected bb=\"%s\", got bb=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte("4"), result.ValueBytes())
 }
 
 func TestDB_InitPut(t *testing.T) {
@@ -145,10 +164,7 @@ func TestDB_InitPut(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	expected := []byte("1")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
 func TestDB_Inc(t *testing.T) {
@@ -163,10 +179,7 @@ func TestDB_Inc(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	var expected int64 = 100
-	if result.ValueInt() != expected {
-		t.Errorf("expected aa=\"%d\", got aa=\"%d\"\n", result.ValueInt(), expected)
-	}
+	checkIntResult(t, 100, result.ValueInt())
 }
 
 func TestBatch(t *testing.T) {
@@ -180,21 +193,12 @@ func TestBatch(t *testing.T) {
 	if err := db.Run(b); err != nil {
 		panic(err)
 	}
+
 	expected := map[string][]byte{
 		"aa": []byte(""),
 		"bb": []byte("2"),
 	}
-	for _, result := range b.Results {
-		for _, row := range result.Rows {
-			if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
-				t.Errorf("expected %s=\"%s\", got %s=\"%s\"\n",
-					row.Key,
-					expected[string(row.Key)],
-					row.Key,
-					row.ValueBytes())
-			}
-		}
-	}
+	checkResults(t, expected, b.Results)
 }
 
 func TestDB_Scan(t *testing.T) {
@@ -217,16 +221,9 @@ func TestDB_Scan(t *testing.T) {
 		"aa": []byte("1"),
 		"ab": []byte("2"),
 	}
-	for i, row := range rows {
-		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
-			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"\n",
-				i,
-				row.Key,
-				expected[string(row.Key)],
-				row.Key,
-				row.ValueBytes())
-		}
-	}
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
 }
 
 func TestDB_ReverseScan(t *testing.T) {
@@ -249,16 +246,9 @@ func TestDB_ReverseScan(t *testing.T) {
 		"bb": []byte("3"),
 		"ab": []byte("2"),
 	}
-	for i, row := range rows {
-		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
-			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"\n",
-				i,
-				row.Key,
-				expected[string(row.Key)],
-				row.Key,
-				row.ValueBytes())
-		}
-	}
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
 }
 
 func TestDB_Del(t *testing.T) {
@@ -284,16 +274,8 @@ func TestDB_Del(t *testing.T) {
 		"aa": []byte("1"),
 		"ac": []byte("3"),
 	}
-	for i, row := range rows {
-		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
-			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"\n",
-				i,
-				row.Key,
-				expected[string(row.Key)],
-				row.Key,
-				row.ValueBytes())
-		}
-	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
 }
 
 func TestTxn_Commit(t *testing.T) {
@@ -321,19 +303,7 @@ func TestTxn_Commit(t *testing.T) {
 		"aa": []byte("1"),
 		"ab": []byte("2"),
 	}
-	for i, result := range b.Results {
-		for j, row := range result.Rows {
-			if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
-				t.Errorf("expected %d/%d: %s=\"%d\", got %s=\"%d\"\n",
-					i,
-					j,
-					row.Key,
-					expected[string(row.Key)],
-					row.Key,
-					row.ValueBytes())
-			}
-		}
-	}
+	checkResults(t, expected, b.Results)
 }
 
 func TestDB_Put_insecure(t *testing.T) {
@@ -356,10 +326,7 @@ func TestDB_Put_insecure(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	expected := []byte("1")
-	if !bytes.Equal(expected, result.ValueBytes()) {
-		t.Errorf("expected aa=\"%s\", got aa=\"%s\"\n", expected, result.ValueBytes())
-	}
+	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
 func TestDebugName(t *testing.T) {
