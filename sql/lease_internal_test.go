@@ -20,13 +20,18 @@ package sql
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestLeaseSet(t *testing.T) {
@@ -112,11 +117,39 @@ func TestLeaseSet(t *testing.T) {
 	}
 }
 
+func getNumLeases(ts *tableState) int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return len(ts.active.data)
+}
+
 func TestPurgeOldLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB, cleanup := sqlutils.SetupServer(t)
+	unblockGossip := make(chan interface{})
+	var mu sync.Mutex
+	gossipBlocked := false
+	// We're going to block gossip so it doesn't come randomly and clear up the
+	// leases we're artificially setting up.
+	serverParams := testingshim.TestServerParams{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &LeaseManagerTestingKnobs{
+				GossipUpdateEvent: func(cfg config.SystemConfig) {
+					mu.Lock()
+					defer mu.Unlock()
+					if gossipBlocked {
+						<-unblockGossip
+						gossipBlocked = false
+					}
+				},
+			},
+		},
+	}
+	s, db, kvDB, cleanup := sqlutils.SetupServerWithParams(t, serverParams)
 	defer cleanup()
 	leaseManager := s.LeaseManager().(*LeaseManager)
+	mu.Lock()
+	gossipBlocked = true
+	mu.Unlock()
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
@@ -124,6 +157,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
+
+	log.Infof("!!! test starting")
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	var leases []*LeaseState
@@ -144,7 +179,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 	ts := leaseManager.findTableState(tableDesc.ID, false, nil)
-	if numLeases := len(ts.active.data); numLeases != 3 {
+	if numLeases := getNumLeases(ts); numLeases != 3 {
 		t.Fatalf("found %d leases instead of 3", numLeases)
 	}
 
@@ -153,12 +188,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if numLeases := len(ts.active.data); numLeases != 1 {
+	if numLeases := getNumLeases(ts); numLeases != 1 {
 		t.Fatalf("found %d leases instead of 1", numLeases)
 	}
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	if ts.active.data[0] != leases[2] {
 		t.Fatalf("wrong lease survived purge")
 	}
+	close(unblockGossip)
 }
 
 // Test that changing a descriptor's name updates the name cache.

@@ -747,6 +747,11 @@ func (t *tableState) purgeOldLeases(
 
 // LeaseManagerTestingKnobs contains test affordances.
 type LeaseManagerTestingKnobs struct {
+	// A callback called when a gossip update is received, before the leases are
+	// refreshed. Careful when using this to block for too long - you can block
+	// all the gossip users in the system. Also keep in mind that this doesn't
+	// synchronize with a possible current update being processed.
+	GossipUpdateEvent func(config.SystemConfig)
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
 }
@@ -1065,6 +1070,9 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := gossip.GetSystemConfig()
+				if m.testingKnobs.GossipUpdateEvent != nil {
+					m.testingKnobs.GossipUpdateEvent(cfg)
+				}
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info("received a new config; will refresh leases")
