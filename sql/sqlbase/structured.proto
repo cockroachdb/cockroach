@@ -114,6 +114,7 @@ message DescriptorMutation {
   enum State {
     // Not used.
     UNKNOWN = 0;
+
     // Operations can use this invisible descriptor to implicitly
     // delete entries.
     // Column: A descriptor in this state is invisible to
@@ -126,6 +127,7 @@ message DescriptorMutation {
     // (column or index data) can only be mass deleted once
     // all the nodes have transitioned to the DELETE_ONLY state.
     DELETE_ONLY = 1;
+
     // Operations can use this invisible descriptor to implicitly
     // write and delete entries.
     // Column: INSERT will populate this column with the default
@@ -138,6 +140,12 @@ message DescriptorMutation {
     // (column default or index data) can only be backfilled once
     // all nodes have transitioned into the WRITE_ONLY state.
     WRITE_ONLY = 2;
+
+    // Operations cannot use this descriptor. This state is used by
+    // descriptors that reference other descriptors that are themselves
+    // mutations, e.g.: an index referring a column that is in the process of
+    // being added.
+    ABSENT = 3;
   }
   optional State state = 3 [(gogoproto.nullable) = false];
 
