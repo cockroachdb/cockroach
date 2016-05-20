@@ -43,28 +43,32 @@ func TestMergeSpans(t *testing.T) {
 	testCases := []struct {
 		spans    string
 		expected string
+		distinct bool
 	}{
-		{"", ""},
-		{"a", "a"},
-		{"a,b", "a,b"},
-		{"b,a", "a,b"},
-		{"a,a", "a"},
-		{"a-b", "a-b"},
-		{"a-b,b-c", "a-c"},
-		{"a-c,a-b", "a-c"},
-		{"a,b-c", "a,b-c"},
-		{"a,a-c", "a-c"},
-		{"a-c,b", "a-c"},
-		{"a-c,c", "a-c\x00"},
-		{"a-c,b-bb", "a-c"},
-		{"a-c,b-c", "a-c"},
+		{"", "", true},
+		{"a", "a", true},
+		{"a,b", "a,b", true},
+		{"b,a", "a,b", true},
+		{"a,a", "a", false},
+		{"a-b", "a-b", true},
+		{"a-b,b-c", "a-c", true},
+		{"a-c,a-b", "a-c", false},
+		{"a,b-c", "a,b-c", true},
+		{"a,a-c", "a-c", false},
+		{"a-c,b", "a-c", false},
+		{"a-c,c", "a-c\x00", true},
+		{"a-c,b-bb", "a-c", false},
+		{"a-c,b-c", "a-c", false},
 	}
 	for i, c := range testCases {
 		spans := makeSpans(c.spans)
-		MergeSpans(&spans)
+		distinct := MergeSpans(&spans)
 		expected := makeSpans(c.expected)
 		if !reflect.DeepEqual(expected, spans) {
 			t.Fatalf("%d: expected\n%s\n, but found:\n%s", i, expected, spans)
+		}
+		if c.distinct != distinct {
+			t.Fatalf("%d: expected %t, but found %t", i, c.distinct, distinct)
 		}
 	}
 }
