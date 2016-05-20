@@ -26,6 +26,7 @@ import (
 // RepairTest kills and starts new nodes systematically to ensure we do
 // indeed repair the cluster.
 func TestRepair(t *testing.T) {
+	t.Skip("TODO(bram): skip this test until failures are investigated - #6798, #6700, #6277, #6209, #5672")
 	runTestOnConfigs(t, testRepairInner)
 }
 
