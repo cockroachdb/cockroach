@@ -326,6 +326,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	gcArgs.Key = desc.StartKey.AsRawKey()
 	gcArgs.EndKey = desc.EndKey.AsRawKey()
 	gcArgs.Keys = gcKeys
+	gcArgs.Expiration = info.Expiration
 
 	// Technically not needed since we're talking directly to the Range.
 	ba.RangeID = desc.RangeID
@@ -368,6 +369,8 @@ type GCInfo struct {
 	ResolveTotal int
 	// ResolveErrors is the number of successful intent resolutions.
 	ResolveSuccess int
+	// Expiration is the computed expiration timestamp in ns.
+	Expiration int64
 }
 
 type lockableGCInfo struct {
@@ -413,6 +416,7 @@ func RunGC(ctx context.Context, desc *roachpb.RangeDescriptor, snap engine.Engin
 	}
 
 	gc := engine.MakeGarbageCollector(now, policy)
+	infoMu.Expiration = gc.Expiration.WallTime
 
 	var gcKeys []roachpb.GCRequest_GCKey
 

@@ -222,6 +222,9 @@ type Replica struct {
 		truncatedState *roachpb.RaftTruncatedState
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
+		// WallTime in ns at which last GC occurred. Reads and writes should not
+		// happen <= this time.
+		lastGC int64
 		// Slice of channels to send on after leader lease acquisition.
 		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -295,6 +298,10 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 	r.mu.frozen, err = loadFrozenStatus(r.store.Engine(), desc.RangeID)
+	if err != nil {
+		return err
+	}
+	r.mu.lastGC, err = loadLastGC(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
@@ -482,6 +489,25 @@ func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.leaderLease, len(r.mu.llChans) > 0
+}
+
+func setLastGC(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, last int64) error {
+	var val roachpb.Value
+	val.SetInt(last)
+	return engine.MVCCPut(context.Background(), eng, ms,
+		keys.RangeLastGCKey(rangeID), roachpb.ZeroTimestamp, val, nil)
+}
+
+func loadLastGC(eng engine.Engine, rangeID roachpb.RangeID) (int64, error) {
+	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeLastGCKey(rangeID),
+		roachpb.ZeroTimestamp, true, nil)
+	if err != nil {
+		return 0, err
+	}
+	if val == nil {
+		return 0, nil
+	}
+	return val.GetInt()
 }
 
 // newNotLeaderError returns a NotLeaderError initialized with the
