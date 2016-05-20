@@ -19,7 +19,6 @@ package kv
 
 import (
 	"fmt"
-	"math/rand"
 	"time"
 
 	"golang.org/x/net/context"
@@ -37,25 +36,11 @@ import (
 // sending an RPC.
 var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
 
-// orderingPolicy is an enum for ordering strategies when there
-// are multiple endpoints available.
-type orderingPolicy int
-
-const (
-	// orderStable uses endpoints in the order provided.
-	orderStable orderingPolicy = iota
-	// orderRandom randomly orders available endpoints.
-	orderRandom
-)
-
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
 	context.Context // must not be nil
-	// Ordering indicates how the available endpoints are ordered when
-	// deciding which to send to (if there are more than one).
-	Ordering orderingPolicy
 	// SendNextTimeout is the duration after which RPCs are sent to
 	// other replicas in a set.
 	SendNextTimeout time.Duration
@@ -145,31 +130,15 @@ func grpcTransportFactory(
 	}
 
 	// Put known-unhealthy clients last.
-	nHealthy, err := splitHealthy(clients)
+	_, err := splitHealthy(clients)
 	if err != nil {
 		return nil, err
 	}
 
-	var orderedClients []batchClient
-	switch opts.Ordering {
-	case orderStable:
-		orderedClients = clients
-	case orderRandom:
-		// Randomly permute order, but keep known-unhealthy clients last.
-		shuffleClients(clients[:nHealthy])
-		shuffleClients(clients[nHealthy:])
-
-		orderedClients = clients
-	}
-	// TODO(spencer): going to need to also sort by affinity; closest
-	// ping time should win. Makes sense to have the rpc client/server
-	// heartbeat measure ping times. With a bit of seasoning, each
-	// node will be able to order the healthy replicas based on latency.
-
 	return &grpcTransport{
 		opts:           opts,
 		rpcContext:     rpcContext,
-		orderedClients: orderedClients,
+		orderedClients: clients,
 	}, nil
 }
 
@@ -229,13 +198,6 @@ func (*grpcTransport) Close() {
 	// TODO(bdarnell): Save the cancel functions of all pending RPCs and
 	// call them here. (it's fine to ignore them for now since they'll
 	// time out anyway)
-}
-
-func shuffleClients(clients []batchClient) {
-	for i, n := 0, len(clients); i < n-1; i++ {
-		j := rand.Intn(n-i) + i
-		clients[i], clients[j] = clients[j], clients[i]
-	}
 }
 
 // splitHealthy splits the provided client slice into healthy clients and

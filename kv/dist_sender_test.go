@@ -201,13 +201,8 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// Gets filled below to identify the replica by its address.
-	makeVerifier := func(expOrder orderingPolicy,
-		expAddrs []roachpb.NodeID) func(SendOptions, ReplicaSlice) error {
+	makeVerifier := func(expAddrs []roachpb.NodeID) func(SendOptions, ReplicaSlice) error {
 		return func(o SendOptions, replicas ReplicaSlice) error {
-			if o.Ordering != expOrder {
-				return util.Errorf("unexpected ordering, wanted %v, got %v",
-					expOrder, o.Ordering)
-			}
 			var actualAddrs []roachpb.NodeID
 			for i, r := range replicas {
 				if len(expAddrs) <= i {
@@ -229,7 +224,6 @@ func TestSendRPCOrder(t *testing.T) {
 	testCases := []struct {
 		args       roachpb.Request
 		attrs      []string
-		order      orderingPolicy
 		expReplica []roachpb.NodeID
 		leader     int32 // 0 for not caching a leader.
 		// Naming is somewhat off, as eventually consistent reads usually
@@ -243,7 +237,6 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:       &roachpb.ScanRequest{},
 			attrs:      []string{},
-			order:      orderRandom,
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
 		// Inconsistent Scan with matching attributes.
@@ -252,7 +245,6 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:  &roachpb.ScanRequest{},
 			attrs: nodeAttrs[5],
-			order: orderStable,
 			// Compare only the first two resulting addresses.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
@@ -262,7 +254,6 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:       &roachpb.ScanRequest{},
 			attrs:      []string{},
-			order:      orderRandom,
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 			consistent: true,
 		},
@@ -271,17 +262,14 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:       &roachpb.PutRequest{},
 			attrs:      []string{"nomatch"},
-			order:      orderRandom,
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
 		// Put with matching attributes but no leader.
-		// Should move the two nodes matching the attributes to the front and
-		// go stable.
+		// Should move the two nodes matching the attributes to the front.
 		{
 			args:  &roachpb.PutRequest{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first two resulting addresses.
-			order:      orderStable,
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
 		// Put with matching attributes that finds the leader (node 3).
@@ -292,7 +280,6 @@ func TestSendRPCOrder(t *testing.T) {
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first resulting addresses as we have a leader
 			// and that means we're only trying to send there.
-			order:      orderStable,
 			expReplica: []roachpb.NodeID{2, 5, 4, 0, 0},
 			leader:     2,
 		},
@@ -301,7 +288,6 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:       &roachpb.GetRequest{},
 			attrs:      []string{},
-			order:      orderRandom,
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 			leader:     2,
 		},
@@ -335,7 +321,7 @@ func TestSendRPCOrder(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 
 	for n, tc := range testCases {
-		verifyCall = makeVerifier(tc.order, tc.expReplica)
+		verifyCall = makeVerifier(tc.expReplica)
 		descriptor.Replicas = nil // could do this once above, but more convenient here
 		for i := int32(1); i <= 5; i++ {
 			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d:1", i))
