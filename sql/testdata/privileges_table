@@ -213,3 +213,37 @@ UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
 TRUNCATE t
+
+statement ok
+DROP TABLE t
+
+# Grant INSERT privilege.
+user root
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT INSERT ON t TO testuser
+
+user testuser
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have UPDATE privilege on table t
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+# Grant UPDATE privilege (in addition to INSERT).
+user root
+
+statement ok
+GRANT UPDATE ON t TO testuser
+
+user testuser
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
