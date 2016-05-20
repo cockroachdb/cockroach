@@ -445,17 +445,10 @@ func initFlags(ctx *Context) {
 	simpleCmds := []*cobra.Command{quitCmd, freezeClusterCmd}
 	simpleCmds = append(simpleCmds, kvCmds...)
 	simpleCmds = append(simpleCmds, rangeCmds...)
+	simpleCmds = append(simpleCmds, nodeCmds...)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
 		f.StringVarP(&connPort, cliflags.PortName, "p", envutil.EnvOrDefaultString(cliflags.PortName, base.DefaultPort), usageEnv(forClient(cliflags.PortName)))
-	}
-
-	// Commands that need an http port.
-	var httpCmds []*cobra.Command
-	httpCmds = append(httpCmds, nodeCmds...)
-	for _, cmd := range httpCmds {
-		f := cmd.PersistentFlags()
-		f.StringVar(&httpPort, cliflags.HTTPPortName, envutil.EnvOrDefaultString(cliflags.HTTPPortName, base.DefaultHTTPPort), usageEnv(forClient(cliflags.HTTPPortName)))
 	}
 
 	// Commands that establish a SQL connection.

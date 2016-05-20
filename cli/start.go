@@ -30,13 +30,14 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
@@ -68,16 +69,6 @@ func panicGuard(cmdFn func(*cobra.Command, []string)) func(*cobra.Command, []str
 // stack trace doesn't matter then.
 func panicf(format string, args ...interface{}) {
 	panic(fmt.Sprintf(format, args...))
-}
-
-// getJSON is a convenience wrapper around util.GetJSON that uses our Context to populate
-// parts of the request.
-func getJSON(hostport, path string, v interface{}) error {
-	httpClient, err := cliContext.GetHTTPClient()
-	if err != nil {
-		return err
-	}
-	return util.GetJSON(httpClient, cliContext.HTTPRequestScheme(), hostport, path, v)
 }
 
 // startCmd starts a node by initializing the stores and joining
@@ -284,11 +275,19 @@ func rerunBackground() error {
 	return sdnotify.Exec(cmd)
 }
 
-func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
+func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&cliContext.Context.Context, hlc.NewClock(hlc.UnixNano),
 		stopper)
 	conn, err := rpcContext.GRPCDial(cliContext.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, stopper, nil
+}
+
+func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
+	conn, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
