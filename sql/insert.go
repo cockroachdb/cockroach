@@ -61,8 +61,10 @@ func (p *planner) Insert(
 		return nil, err
 	}
 	if n.OnConflict != nil {
-		if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
-			return nil, err
+		if !n.OnConflict.DoNothing {
+			if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
+				return nil, err
+			}
 		}
 		// TODO(dan): Support RETURNING in UPSERTs.
 		if n.Returning != nil {
