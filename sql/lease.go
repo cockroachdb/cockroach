@@ -49,10 +49,12 @@ var (
 	// LeaseDuration is the mean duration a lease will be acquired for. The
 	// actual duration is jittered in the range
 	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
-	LeaseDuration = 5 * time.Minute
+	// LeaseDuration = 5 * time.Minute
+	LeaseDuration = 500 * time.Millisecond
 	// MinLeaseDuration is the minimum duration a lease will have remaining upon
 	// acquisition. Exported for testing purposes only.
-	MinLeaseDuration = time.Minute
+	//	MinLeaseDuration = time.Minute
+	MinLeaseDuration = 100 * time.Millisecond
 )
 
 // LeaseState holds the state for a lease. Exported only for testing.

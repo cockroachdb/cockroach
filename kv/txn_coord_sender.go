@@ -769,6 +769,8 @@ func (tc *TxnCoordSender) updateState(
 			pErr = roachpb.NewError(util.Errorf("no observed timestamp for node %d found on uncertainty restart", pErr.OriginNode))
 		} else {
 			newTxn.Timestamp.Forward(restartTS)
+			// HACK!!
+			newTxn.Timestamp.WallTime += 200 * 1000 * 1000
 			newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
 		}
 	case *roachpb.TransactionAbortedError:

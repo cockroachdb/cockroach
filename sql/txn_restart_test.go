@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	_ "github.com/cockroachdb/pq"
 )
@@ -195,6 +197,54 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 	if t.Failed() {
 		t.Fatalf("checking error injection failed")
 	}
+}
+
+func TestTxnDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	sqlDB.SetMaxOpenConns(1)
+
+	i := 0
+
+	cleanupFilter := cmdFilters.AppendFilter(
+		func(args storagebase.FilterArgs) *roachpb.Error {
+			switch req := args.Req.(type) {
+			case *roachpb.ScanRequest:
+				if bytes.Contains(req.Key, []byte("test_key")) {
+					err := roachpb.NewReadWithinUncertaintyIntervalError(
+						roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)
+					i += 1
+					if i < 10 {
+						time.Sleep(1 * time.Second)
+						return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+					}
+				}				
+
+			}
+			return nil
+		}, false)
+
+
+	defer cleanupFilter()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+`); err != nil {
+	          t.Fatal(err)
+}
+	
+	// Acquire the lease and enable the auto-retry.
+	if _, err := sqlDB.Exec(`	
+SELECT * from t.test WHERE k = 'tesqqt_key';
+SELECT * from t.test WHERE k = 'test_key';
+`); err != nil {
+	         t.Fatal(err)
+}
 }
 
 // TestTxnRestart tests the logic in the sql executor for automatically retrying
