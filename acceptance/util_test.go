@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/protoutil"
 	_ "github.com/cockroachdb/pq"
 )
 
@@ -269,7 +268,7 @@ func postJSON(c *http.Client, url, rel string, reqBody interface{}, v interface{
 	if resp.StatusCode != http.StatusOK {
 		return util.Errorf("%d: %s", resp.StatusCode, b)
 	}
-	if err := new(protoutil.JSONPb).Unmarshal(b, v); err != nil {
+	if err := new(util.JSONPb).Unmarshal(b, v); err != nil {
 		return fmt.Errorf("cannot unmarshal %s: %s", b, err)
 	}
 
