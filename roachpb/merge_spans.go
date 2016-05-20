@@ -39,10 +39,11 @@ func (s sortedSpans) Len() int {
 	return len(s)
 }
 
-// MergeSpans sorts the incoming spans and merges overlapping spans.
-func MergeSpans(spans *[]Span) {
+// MergeSpans sorts the incoming spans and merges overlapping spans. Returns
+// true iff all of the spans are distinct.
+func MergeSpans(spans *[]Span) bool {
 	if len(*spans) == 0 {
-		return
+		return true
 	}
 
 	sort.Sort(sortedSpans(*spans))
@@ -51,6 +52,8 @@ func MergeSpans(spans *[]Span) {
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "spans".
 	r := (*spans)[:1]
+	distinct := true
+
 	for _, cur := range (*spans)[1:] {
 		prev := &r[len(r)-1]
 		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
@@ -59,6 +62,7 @@ func MergeSpans(spans *[]Span) {
 				r = append(r, cur)
 			} else {
 				// [a, nil] merge [a, nil]
+				distinct = false
 			}
 			continue
 		}
@@ -66,6 +70,7 @@ func MergeSpans(spans *[]Span) {
 			if cur.Key.Compare(prev.Key) == 0 {
 				// [a, nil] merge [a, b]
 				prev.EndKey = cur.EndKey
+				distinct = false
 			} else {
 				// [a, nil] merge [b, c]
 				r = append(r, cur)
@@ -77,18 +82,24 @@ func MergeSpans(spans *[]Span) {
 				if prev.EndKey.Compare(cur.EndKey) < 0 {
 					// [a, c] merge [b, d]
 					prev.EndKey = cur.EndKey
+					if c > 0 {
+						distinct = false
+					}
 				} else {
 					// [a, c] merge [b, c]
+					distinct = false
 				}
 			} else if c == 0 {
 				// [a, b] merge [b, nil]
 				prev.EndKey = cur.Key.Next()
 			} else {
 				// [a, c] merge [b, nil]
+				distinct = false
 			}
 			continue
 		}
 		r = append(r, cur)
 	}
 	*spans = r
+	return distinct
 }
