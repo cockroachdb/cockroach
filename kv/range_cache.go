@@ -78,7 +78,11 @@ type RangeDescriptorDB interface {
 	// returned. The first of these slices holds descriptors which contain
 	// the given key (possibly from intents), and the second being prefetched
 	// adjacent descriptors.
-	RangeLookup(roachpb.RKey, *roachpb.RangeDescriptor, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
+	// TODO(andrei): Should this return error instead of pErr?
+	RangeLookup(
+		key roachpb.RKey, desc *roachpb.RangeDescriptor,
+		considerIntents bool, useReverseScan bool,
+	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all \x00\x00meta1 entries.
 	FirstRange() (*roachpb.RangeDescriptor, error)
@@ -119,7 +123,7 @@ type lookupRequest struct {
 type lookupResult struct {
 	desc       *roachpb.RangeDescriptor
 	evictToken *evictionToken
-	pErr       *roachpb.Error
+	err        error
 }
 
 type lookupRequestKey struct {
@@ -274,7 +278,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 	evictToken *evictionToken,
 	considerIntents bool,
 	useReverseScan bool,
-) (*roachpb.RangeDescriptor, *evictionToken, *roachpb.Error) {
+) (*roachpb.RangeDescriptor, *evictionToken, error) {
 	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, considerIntents, useReverseScan, nil)
 }
 
@@ -290,7 +294,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 	considerIntents bool,
 	useReverseScan bool,
 	wg *sync.WaitGroup,
-) (*roachpb.RangeDescriptor, *evictionToken, *roachpb.Error) {
+) (*roachpb.RangeDescriptor, *evictionToken, error) {
 	rdc.rangeCache.RLock()
 	doneWg := func() {
 		if wg != nil {
@@ -302,7 +306,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 
 	if _, desc, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCache.RUnlock()
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, err
 	} else if desc != nil {
 		rdc.rangeCache.RUnlock()
 		returnToken := rdc.makeEvictionToken(desc, func() error {
@@ -337,13 +341,13 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		rdc.rangeCache.RUnlock()
 		doneWg()
 
-		rs, preRs, pErr := rdc.performRangeLookup(ctx, key, considerIntents, useReverseScan)
-		if pErr != nil {
-			res = lookupResult{pErr: pErr}
+		rs, preRs, err := rdc.performRangeLookup(ctx, key, considerIntents, useReverseScan)
+		if err != nil {
+			res = lookupResult{err: err}
 		} else {
 			switch len(rs) {
 			case 0:
-				res = lookupResult{pErr: roachpb.NewErrorf("no range descriptors returned for %s", key)}
+				res = lookupResult{err: fmt.Errorf("no range descriptors returned for %s", key)}
 			case 1:
 				desc := &rs[0]
 				res = lookupResult{
@@ -374,7 +378,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		// cache hit. This requires atomicity across cache population and
 		// notification, hence this exclusive lock.
 		rdc.rangeCache.Lock()
-		if res.pErr == nil {
+		if res.err == nil {
 			// These need to be separate because we need to preserve the pointer to rs[0]
 			// so that the seenDesc logic works correctly in EvictCachedRangeDescriptor. An
 			// append could cause a copy, which would change the address of rs[0]. We insert
@@ -383,7 +387,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 				log.Warningf("range cache inserting prefetched descriptors failed: %v", err)
 			}
 			if err := rdc.insertRangeDescriptorsLocked(rs...); err != nil {
-				res = lookupResult{pErr: roachpb.NewError(err)}
+				res = lookupResult{err: err}
 			}
 		}
 
@@ -404,53 +408,56 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 	// a retryable lookupMismatchError with an unmodified eviction token.
 	if res.desc != nil {
 		if (!useReverseScan && !res.desc.ContainsKey(key)) || (useReverseScan && !res.desc.ContainsExclusiveEndKey(key)) {
-			return nil, evictToken, roachpb.NewError(lookupMismatchError{
+			return nil, evictToken, lookupMismatchError{
 				desiredKey:     key,
 				mismatchedDesc: res.desc,
-			})
+			}
 		}
 	}
-	return res.desc, res.evictToken, res.pErr
+	return res.desc, res.evictToken, res.err
 }
 
 // performRangeLookup handles delegating the range lookup to the cache's
 // RangeDescriptorDB.
 func (rdc *rangeDescriptorCache) performRangeLookup(
 	ctx context.Context, key roachpb.RKey, considerIntents, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// metadataKey is sent to RangeLookup to find the RangeDescriptor
 	// which contains key.
 	metadataKey, err := meta(key)
 	if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, err
 	}
 
 	// desc is the RangeDescriptor for the range which contains metadataKey.
 	var desc *roachpb.RangeDescriptor
-	var pErr *roachpb.Error
 	switch {
 	case bytes.Equal(metadataKey, roachpb.RKeyMin):
 		// In this case, the requested key is stored in the cluster's first
 		// range. Return the first range, which is always gossiped and not
 		// queried from the datastore.
+		var err error
 		if desc, err = rdc.db.FirstRange(); err != nil {
-			return nil, nil, roachpb.NewError(err)
+			return nil, nil, err
 		}
 		return []roachpb.RangeDescriptor{*desc}, nil, nil
 	case bytes.HasPrefix(metadataKey, keys.Meta1Prefix):
 		// In this case, desc is the cluster's first range.
+		var err error
 		if desc, err = rdc.db.FirstRange(); err != nil {
-			return nil, nil, roachpb.NewError(err)
+			return nil, nil, err
 		}
 	default:
 		// Look up desc from the cache, which will recursively call into
 		// this function if it is not cached.
-		if desc, _, pErr = rdc.LookupRangeDescriptor(ctx, metadataKey, nil, considerIntents,
-			useReverseScan); pErr != nil {
-			return nil, nil, pErr
+		var err error
+		if desc, _, err = rdc.LookupRangeDescriptor(ctx, metadataKey, nil, considerIntents,
+			useReverseScan); err != nil {
+			return nil, nil, err
 		}
 	}
-	return rdc.db.RangeLookup(metadataKey, desc, considerIntents, useReverseScan)
+	descs, prefetched, pErr := rdc.db.RangeLookup(metadataKey, desc, considerIntents, useReverseScan)
+	return descs, prefetched, pErr.GoError()
 }
 
 // EvictCachedRangeDescriptor will evict any cached range descriptors

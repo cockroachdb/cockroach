@@ -498,9 +498,9 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 		if err != nil {
 			return nil, s.serverError(err)
 		}
-		rangeCount, pErr := s.server.distSender.CountRanges(tableRSpan)
-		if pErr != nil {
-			return nil, s.serverError(pErr.GoError())
+		rangeCount, err := s.server.distSender.CountRanges(tableRSpan)
+		if err != nil {
+			return nil, s.serverError(err)
 		}
 		resp.RangeCount = rangeCount
 	}

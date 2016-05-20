@@ -349,13 +349,13 @@ func (ds *DistSender) sendRPC(
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
-func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
+func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(
+		desc, needAnother, _, err := ds.getDescriptors(
 			context.Background(), rs, nil, false /*useReverseScan*/)
-		if pErr != nil {
-			return -1, pErr
+		if err != nil {
+			return -1, err
 		}
 		count++
 		if !needAnother {
@@ -382,7 +382,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // descriptor.
 func (ds *DistSender) getDescriptors(
 	ctx context.Context, rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, bool, *evictionToken, *roachpb.Error) {
+) (*roachpb.RangeDescriptor, bool, *evictionToken, error) {
 	var descKey roachpb.RKey
 	if !useReverseScan {
 		descKey = rs.Key
@@ -405,10 +405,10 @@ func (ds *DistSender) getDescriptors(
 	// this will disable prefetching.
 	considerIntents := evictToken != nil
 
-	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(
+	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptor(
 		ctx, descKey, evictToken, considerIntents, useReverseScan)
-	if pErr != nil {
-		return nil, false, returnToken, pErr
+	if err != nil {
+		return nil, false, returnToken, err
 	}
 
 	// Checks whether need to get next range descriptor.
@@ -641,18 +641,20 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			log.Trace(ctx, "meta descriptor lookup")
-			desc, needAnother, evictToken, pErr = ds.getDescriptors(ctx, rs, evictToken, isReverse)
+			var err error
+			desc, needAnother, evictToken, err = ds.getDescriptors(ctx, rs, evictToken, isReverse)
 
 			// getDescriptors may fail retryably if, for example, the first
 			// range isn't available via Gossip. Assume that all errors at
 			// this level are retryable. Non-retryable errors would be for
 			// things like malformed requests which we should have checked
 			// for before reaching this point.
-			if pErr != nil {
-				log.Trace(ctx, "range descriptor lookup failed: "+pErr.String())
+			if err != nil {
+				log.Trace(ctx, "range descriptor lookup failed: "+err.Error())
 				if log.V(1) {
-					log.Warning(pErr)
+					log.Warning(err)
 				}
+				pErr = roachpb.NewError(err)
 				continue
 			}
 
