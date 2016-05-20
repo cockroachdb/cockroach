@@ -22,6 +22,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/inf.v0"
@@ -93,6 +94,18 @@ func MakeDBool(d DBool) *DBool {
 		return DBoolTrue
 	}
 	return DBoolFalse
+}
+
+// ParseDBool parses and returns the *DBool Datum value represented by the provided
+// string, or an error if parsing is unsuccessful.
+func ParseDBool(s string) (*DBool, error) {
+	// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
+	// spec. Is that ok?
+	b, err := strconv.ParseBool(s)
+	if err != nil {
+		return nil, err
+	}
+	return MakeDBool(DBool(b)), nil
 }
 
 // GetBool gets DBool or an error (also treats NULL as false, not an error).
@@ -184,6 +197,16 @@ func NewDInt(d DInt) *DInt {
 	return &d
 }
 
+// ParseDInt parses and returns the *DInt Datum value represented by the provided
+// string, or an error if parsing is unsuccessful.
+func ParseDInt(s string) (*DInt, error) {
+	i, err := strconv.ParseInt(s, 0, 64)
+	if err != nil {
+		return nil, err
+	}
+	return NewDInt(DInt(i)), nil
+}
+
 // ReturnType implements the TypedExpr interface.
 func (*DInt) ReturnType() Datum {
 	return TypeInt
@@ -265,6 +288,16 @@ type DFloat float64
 // argument.
 func NewDFloat(d DFloat) *DFloat {
 	return &d
+}
+
+// ParseDFloat parses and returns the *DFloat Datum value represented by the provided
+// string, or an error if parsing is unsuccessful.
+func ParseDFloat(s string) (*DFloat, error) {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return nil, err
+	}
+	return NewDFloat(DFloat(f)), nil
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -352,6 +385,16 @@ func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
 // DDecimal is the decimal Datum.
 type DDecimal struct {
 	inf.Dec
+}
+
+// ParseDDecimal parses and returns the *DDecimal Datum value represented by the
+// provided string, or an error if parsing is unsuccessful.
+func ParseDDecimal(s string) (*DDecimal, error) {
+	dd := &DDecimal{}
+	if _, ok := dd.SetString(s); !ok {
+		return nil, fmt.Errorf("could not parse string %q as decimal", s)
+	}
+	return dd, nil
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -592,6 +635,35 @@ func NewDDate(d DDate) *DDate {
 	return &d
 }
 
+// NewDDateFromTime constructs a *DDate from a time.Time in the provided time zone.
+func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
+	year, month, day := t.In(loc).Date()
+	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
+	return NewDDate(DDate(secs / secondsInDay))
+}
+
+// time.Time formats.
+const (
+	dateFormat = "2006-01-02"
+)
+
+var dateFormats = []string{
+	dateFormat,
+	time.RFC3339Nano,
+}
+
+// ParseDDate parses and returns the *DDate Datum value represented by the provided
+// string in the provided location, or an error if parsing is unsuccessful.
+func ParseDDate(s string, loc *time.Location) (*DDate, error) {
+	// No need to ParseInLocation here because we're only parsing dates.
+	for _, format := range dateFormats {
+		if t, err := time.Parse(format, string(s)); err == nil {
+			return NewDDateFromTime(t, loc), nil
+		}
+	}
+	return nil, fmt.Errorf("could not parse '%s' in any supported date format", s)
+}
+
 // ReturnType implements the TypedExpr interface.
 func (*DDate) ReturnType() Datum {
 	return TypeDate
@@ -670,6 +742,45 @@ type DTimestamp struct {
 // MakeDTimestamp creates a DTimestamp with specified precision.
 func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 	return &DTimestamp{Time: t.Round(precision)}
+}
+
+// time.Time formats.
+const (
+	timestampFormat                       = "2006-01-02 15:04:05"
+	timestampWithOffsetZoneFormat         = timestampFormat + "-07:00"
+	timestampWithNamedZoneFormat          = timestampFormat + " MST"
+	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
+
+	timestampNodeFormat = timestampFormat + ".999999-07:00"
+	timestampFormatNS   = timestampFormat + ".999999999"
+)
+
+var timeFormats = []string{
+	dateFormat,
+	time.RFC3339Nano,
+	timestampWithOffsetZoneFormat,
+	timestampFormat,
+	timestampWithNamedZoneFormat,
+	timestampRFC3339NanoWithoutZoneFormat,
+}
+
+func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
+	for _, format := range timeFormats {
+		if t, err := time.ParseInLocation(format, s, loc); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("could not parse '%s' in any supported timestamp format", s)
+}
+
+// ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
+// the provided string in the provided location, or an error if parsing is unsuccessful.
+func ParseDTimestamp(s string, loc *time.Location, precision time.Duration) (*DTimestamp, error) {
+	t, err := parseTimestampInLocation(s, loc)
+	if err != nil {
+		return nil, err
+	}
+	return MakeDTimestamp(t, precision), nil
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -754,6 +865,18 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 	return &DTimestampTZ{Time: t.Round(precision)}
 }
 
+// ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
+// the provided string in the provided location, or an error if parsing is unsuccessful.
+func ParseDTimestampTZ(
+	s string, loc *time.Location, precision time.Duration,
+) (*DTimestampTZ, error) {
+	t, err := parseTimestampInLocation(s, loc)
+	if err != nil {
+		return nil, err
+	}
+	return MakeDTimestampTZ(t, precision), nil
+}
+
 // ReturnType implements the TypedExpr interface.
 func (*DTimestampTZ) ReturnType() Datum {
 	return TypeTimestampTZ
@@ -829,6 +952,37 @@ func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
 // DInterval is the interval Datum.
 type DInterval struct {
 	duration.Duration
+}
+
+// ParseDInterval parses and returns the *DInterval Datum value represented by the provided
+// string, or an error if parsing is unsuccessful.
+func ParseDInterval(s string) (*DInterval, error) {
+	// At this time the only supported interval formats are:
+	// - Postgres compatible.
+	// - iso8601 format (with designators only), see interval.go for
+	//   sources of documentation.
+	// - Golang time.parseDuration compatible.
+
+	// If it's a blank string, exit early.
+	if len(s) == 0 {
+		return nil, fmt.Errorf("could not parse string %s as an interval", s)
+	}
+
+	if s[0] == 'P' {
+		// If it has a leading P we're most likely working with an iso8601
+		// interval.
+		dur, err := iso8601ToDuration(s)
+		return &DInterval{Duration: dur}, err
+	} else if strings.ContainsRune(s, ' ') {
+		// If it has a space, then we're most likely a postgres string,
+		// as neither iso8601 nor golang permit spaces.
+		dur, err := postgresToDuration(s)
+		return &DInterval{Duration: dur}, err
+	} else {
+		// Fallback to golang durations.
+		dur, err := time.ParseDuration(s)
+		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, err
+	}
 }
 
 // ReturnType implements the TypedExpr interface.
