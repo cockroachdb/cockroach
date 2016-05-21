@@ -83,7 +83,7 @@ func newOutbox(stream outboxStream) *outbox {
 }
 
 // PushRow is part of the rowReceiver interface.
-func (m *outbox) PushRow(row row) bool {
+func (m *outbox) PushRow(row sqlbase.EncDatumRow) bool {
 	if atomic.LoadUint32(&m.noMoreRows) == 1 {
 		return false
 	}
