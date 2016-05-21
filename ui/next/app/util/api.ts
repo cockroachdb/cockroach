@@ -1,5 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */

@@ -1,5 +1,3 @@
-/// <reference path="../typings/main.d.ts" />
-
 /**
  * UI/NEXT TODO LIST
  *

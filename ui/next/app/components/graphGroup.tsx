@@ -1,9 +1,8 @@
-/// <reference path="../../typings/main.d.ts" />
 import * as React from "react";
 
 import { MetricsDataProvider } from "../containers/metricsDataProvider";
 
-/** 
+/**
  * GraphGroup is a stateless react component that wraps a group of graphs (the
  * children of this component) in a MetricsDataProvider and some additional tags
  * relevant to the layout of our graphs pages.

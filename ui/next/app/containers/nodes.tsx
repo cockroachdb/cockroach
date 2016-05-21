@@ -1,4 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
 import * as React from "react";
 
 import { ListLink } from "../components/listLink.tsx";
