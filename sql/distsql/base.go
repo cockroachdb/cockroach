@@ -18,15 +18,13 @@ package distsql
 
 import "github.com/cockroachdb/cockroach/sql/sqlbase"
 
-type row []sqlbase.EncDatum
-
 // rowReceiver is any component of a flow that receives rows from another
 // component. It can be an input synchronizer, a router, or a mailbox.
 type rowReceiver interface {
 	// PushRow sends a row to this receiver. May block.
 	// Returns true if the row was sent, or false if the receiver does not need
 	// any more rows. In all cases, Close() still needs to be called.
-	PushRow(row row) bool
+	PushRow(row sqlbase.EncDatumRow) bool
 	// Close is called when we have no more rows; it causes the rowReceiver to
 	// process all rows and clean up. If err is not null, the error is sent to
 	// the receiver (and the function may block).
@@ -37,6 +35,6 @@ type rowReceiver interface {
 // local physical streams.
 type streamMsg struct {
 	// Only one of these fields will be set.
-	row row
+	row sqlbase.EncDatumRow
 	err error
 }
