@@ -13,7 +13,6 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
-//
 
 package sqlbase
 
@@ -21,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestEncDatum(t *testing.T) {
@@ -85,5 +85,50 @@ func TestEncDatum(t *testing.T) {
 	}
 	if cmp := y.Datum.Compare(x.Datum); cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	}
+}
+
+func TestEncDatumFromBuffer(t *testing.T) {
+	var alloc DatumAlloc
+	rng, _ := randutil.NewPseudoRand()
+	for test := 0; test < 20; test++ {
+		var err error
+		// Generate a set of random datums.
+		ed := make([]EncDatum, 1+rng.Intn(10))
+		for i := range ed {
+			ed[i] = RandEncDatum(rng)
+		}
+		// Encode them in a single buffer.
+		var buf []byte
+		enc := make([]DatumEncoding, len(ed))
+		for i := range ed {
+			enc[i] = DatumEncoding(rng.Intn(len(DatumEncoding_value)))
+			buf, err = ed[i].Encode(&alloc, enc[i], buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Decode the buffer.
+		b := buf
+		for i := range ed {
+			if len(b) == 0 {
+				t.Fatal("buffer ended early")
+			}
+			var decoded EncDatum
+			b, err = decoded.SetFromBuffer(ed[i].Type, enc[i], b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = decoded.Decode(&alloc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decoded.Datum.Compare(ed[i].Datum) != 0 {
+				t.Errorf("decoded datum %s doesn't equal original %s", decoded.Datum, ed[i].Datum)
+			}
+		}
+		if len(b) != 0 {
+			t.Errorf("%d leftover bytes", len(b))
+		}
 	}
 }
