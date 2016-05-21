@@ -173,7 +173,7 @@ func (p *planner) resetForBatch(e *Executor) {
 		NodeID:   e.nodeID,
 		ReCache:  e.reCache,
 		TmpDec:   new(inf.Dec),
-		Location: p.session.Location,
+		Location: &p.session.Location,
 	}
 	p.session.TxnState.schemaChangers.curGroupNum++
 }

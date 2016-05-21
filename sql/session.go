@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -64,8 +63,6 @@ func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
 	s.User = args.User
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
-		// evalCtx is set in the Executor, for each Prepare or Execute.
-		evalCtx:       parser.EvalContext{Location: s.Location},
 		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
 		databaseCache: cache,

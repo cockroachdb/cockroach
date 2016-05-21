@@ -1157,7 +1157,7 @@ type EvalContext struct {
 
 	ReCache  *RegexpCache
 	TmpDec   *inf.Dec
-	Location *time.Location
+	Location **time.Location
 	Args     MapArgs
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
@@ -1228,14 +1228,14 @@ func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
 	ctx.clusterTimestamp = ts
 }
 
-var defaultContext = EvalContext{Location: time.UTC}
+var defaultContext = EvalContext{}
 
 // GetLocation returns the session timezone.
 func (ctx EvalContext) GetLocation() *time.Location {
-	if ctx.Location == nil {
+	if ctx.Location == nil || *ctx.Location == nil {
 		return time.UTC
 	}
-	return ctx.Location
+	return *ctx.Location
 }
 
 // makeDDate constructs a DDate from a time.Time in the session time zone.
