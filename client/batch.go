@@ -271,12 +271,28 @@ func (b *Batch) fillResults() error {
 	return nil
 }
 
-func (b *Batch) appendReqs(args ...roachpb.Request) {
-	rus := make([]roachpb.RequestUnion, len(args))
-	for i := range args {
-		rus[i].MustSetInner(args[i])
+func (b *Batch) growReqs(n int) {
+	if len(b.reqs)+n > cap(b.reqs) {
+		newSize := 2 * cap(b.reqs)
+		if newSize == 0 {
+			newSize = 8
+		}
+		for newSize < len(b.reqs)+n {
+			newSize *= 2
+		}
+		newReqs := make([]roachpb.RequestUnion, len(b.reqs), newSize)
+		copy(newReqs, b.reqs)
+		b.reqs = newReqs
 	}
-	b.reqs = append(b.reqs, rus...)
+	b.reqs = b.reqs[:len(b.reqs)+n]
+}
+
+func (b *Batch) appendReqs(args ...roachpb.Request) {
+	n := len(b.reqs)
+	b.growReqs(len(args))
+	for i := range args {
+		b.reqs[n+i].MustSetInner(args[i])
+	}
 }
 
 // AddRawRequest adds the specified requests to the batch. No responses will
