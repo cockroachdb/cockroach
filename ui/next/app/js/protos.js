@@ -647,6 +647,108 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
+                    "name": "JSONResponse",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "bytes",
+                            "name": "data",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "LogsRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "node_id",
+                            "id": 1
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "level",
+                            "id": 2
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "start_time",
+                            "id": 3
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "end_time",
+                            "id": 4
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "max",
+                            "id": 5
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "pattern",
+                            "id": 6
+                        }
+                    ]
+                },
+                {
+                    "name": "LogFilesListRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "LogFileRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "node_id",
+                            "id": 1
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "file",
+                            "id": 2
+                        }
+                    ]
+                },
+                {
+                    "name": "StacksRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "MetricsRequest",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
                     "name": "status",
                     "fields": [],
                     "options": {
@@ -875,6 +977,31 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "options": {
                                 "(google.api.http).get": "/_status/gossip/{node_id}"
                             }
+                        },
+                        "Stacks": {
+                            "request": "StacksRequest",
+                            "response": "JSONResponse",
+                            "options": {}
+                        },
+                        "Metrics": {
+                            "request": "MetricsRequest",
+                            "response": "JSONResponse",
+                            "options": {}
+                        },
+                        "Logs": {
+                            "request": "LogsRequest",
+                            "response": "JSONResponse",
+                            "options": {}
+                        },
+                        "LogFilesList": {
+                            "request": "LogFilesListRequest",
+                            "response": "JSONResponse",
+                            "options": {}
+                        },
+                        "LogFile": {
+                            "request": "LogFileRequest",
+                            "response": "JSONResponse",
+                            "options": {}
                         }
                     }
                 }
