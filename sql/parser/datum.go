@@ -96,6 +96,16 @@ func MakeDBool(d DBool) *DBool {
 	return DBoolFalse
 }
 
+// makeParseError returns a parse error using the provided string and type name.
+// An optional error can be provided, which will be appended to the end of the error string.
+func makeParseError(s, typ string, err error) error {
+	var suffix string
+	if err != nil {
+		suffix = fmt.Sprintf(": %v", err)
+	}
+	return fmt.Errorf("could not parse '%s' as type %s%s", s, typ, suffix)
+}
+
 // ParseDBool parses and returns the *DBool Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
 func ParseDBool(s string) (*DBool, error) {
@@ -103,7 +113,7 @@ func ParseDBool(s string) (*DBool, error) {
 	// spec. Is that ok?
 	b, err := strconv.ParseBool(s)
 	if err != nil {
-		return nil, err
+		return nil, makeParseError(s, TypeBool.Type(), err)
 	}
 	return MakeDBool(DBool(b)), nil
 }
@@ -116,7 +126,7 @@ func GetBool(d Datum) (DBool, error) {
 	if d == DNull {
 		return DBool(false), nil
 	}
-	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
+	return false, fmt.Errorf("cannot convert %s to type %s", d.Type(), TypeBool.Type())
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -202,7 +212,7 @@ func NewDInt(d DInt) *DInt {
 func ParseDInt(s string) (*DInt, error) {
 	i, err := strconv.ParseInt(s, 0, 64)
 	if err != nil {
-		return nil, err
+		return nil, makeParseError(s, TypeInt.Type(), err)
 	}
 	return NewDInt(DInt(i)), nil
 }
@@ -295,7 +305,7 @@ func NewDFloat(d DFloat) *DFloat {
 func ParseDFloat(s string) (*DFloat, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return nil, err
+		return nil, makeParseError(s, TypeFloat.Type(), err)
 	}
 	return NewDFloat(DFloat(f)), nil
 }
@@ -392,7 +402,7 @@ type DDecimal struct {
 func ParseDDecimal(s string) (*DDecimal, error) {
 	dd := &DDecimal{}
 	if _, ok := dd.SetString(s); !ok {
-		return nil, fmt.Errorf("could not parse string %q as decimal", s)
+		return nil, makeParseError(s, TypeDecimal.Type(), nil)
 	}
 	return dd, nil
 }
@@ -661,7 +671,7 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 			return NewDDateFromTime(t, loc), nil
 		}
 	}
-	return nil, fmt.Errorf("could not parse '%s' in any supported date format", s)
+	return nil, makeParseError(s, TypeDate.Type(), nil)
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -770,7 +780,7 @@ func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
 			return t, nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("could not parse '%s' in any supported timestamp format", s)
+	return time.Time{}, makeParseError(s, TypeTimestamp.Type(), nil)
 }
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
@@ -965,23 +975,32 @@ func ParseDInterval(s string) (*DInterval, error) {
 
 	// If it's a blank string, exit early.
 	if len(s) == 0 {
-		return nil, fmt.Errorf("could not parse string %s as an interval", s)
+		return nil, makeParseError(s, TypeInterval.Type(), nil)
 	}
 
 	if s[0] == 'P' {
 		// If it has a leading P we're most likely working with an iso8601
 		// interval.
 		dur, err := iso8601ToDuration(s)
-		return &DInterval{Duration: dur}, err
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval.Type(), err)
+		}
+		return &DInterval{Duration: dur}, nil
 	} else if strings.ContainsRune(s, ' ') {
 		// If it has a space, then we're most likely a postgres string,
 		// as neither iso8601 nor golang permit spaces.
 		dur, err := postgresToDuration(s)
-		return &DInterval{Duration: dur}, err
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval.Type(), err)
+		}
+		return &DInterval{Duration: dur}, nil
 	} else {
 		// Fallback to golang durations.
 		dur, err := time.ParseDuration(s)
-		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, err
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval.Type(), err)
+		}
+		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 	}
 }
 
