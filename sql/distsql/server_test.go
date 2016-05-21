@@ -17,7 +17,6 @@
 package distsql
 
 import (
-	"fmt"
 	"io"
 	"testing"
 
@@ -76,6 +75,8 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var decoder StreamDecoder
+	var rows sqlbase.EncDatumRows
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -84,7 +85,20 @@ func TestServer(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		// TODO(radu): verify stream data
-		fmt.Printf("%s\n", msg)
+		err = decoder.AddMessage(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows = testGetDecodedRows(t, &decoder, rows)
+	}
+	if done, err := decoder.IsDone(); !done {
+		t.Fatalf("stream not done")
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	str := rows.String()
+	expected := "[[1 10] [3 30]]"
+	if str != expected {
+		t.Errorf("invalid results: %s, expected %s'", str, expected)
 	}
 }
