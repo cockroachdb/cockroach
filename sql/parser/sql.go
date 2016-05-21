@@ -5010,7 +5010,7 @@ sqldefault:
 		{
 			d, err := ParseDInterval(sqlDollar[2].str)
 			if err != nil {
-				sqllex.Error("cannot evaluate to an interval type: " + err.Error())
+				sqllex.Error(err.Error())
 				return 1
 			}
 			sqlVAL.union.val = d

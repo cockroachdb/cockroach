@@ -1219,7 +1219,7 @@ zone_value:
   {
     d, err := ParseDInterval($2)
     if err != nil {
-      sqllex.Error("cannot evaluate to an interval type: " + err.Error())
+      sqllex.Error(err.Error())
       return 1
     }
     $$.val = d
