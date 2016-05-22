@@ -17,7 +17,9 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -59,6 +61,61 @@ type orderingInfo struct {
 
 	// true if we know that all the value tuples for the columns in `ordering` are distinct.
 	unique bool
+}
+
+// Format pretty-prints the orderingInfo to a stream.
+// If columns is not nil, column names are printed instead of column indexes.
+func (ord orderingInfo) Format(buf *bytes.Buffer, columns []ResultColumn) {
+	sep := ""
+
+	// Print the exact match columns. We sort them to ensure
+	// a deterministic output order.
+	cols := make([]int, 0, len(ord.exactMatchCols))
+	for i := range ord.exactMatchCols {
+		cols = append(cols, i)
+	}
+	sort.Ints(cols)
+
+	for _, i := range cols {
+		buf.WriteString(sep)
+		sep = ","
+
+		buf.WriteByte('=')
+		if columns == nil || i >= len(columns) {
+			fmt.Fprintf(buf, "%d", i)
+		} else {
+			buf.WriteString(columns[i].Name)
+		}
+	}
+
+	// Print the ordering columns and for each their sort order.
+	for _, o := range ord.ordering {
+		buf.WriteString(sep)
+		sep = ","
+
+		prefix := byte('+')
+		if o.direction == encoding.Descending {
+			prefix = '-'
+		}
+		buf.WriteByte(prefix)
+		if columns == nil || o.colIdx >= len(columns) {
+			fmt.Fprintf(buf, "%d", o.colIdx)
+		} else {
+			buf.WriteString(columns[o.colIdx].Name)
+		}
+	}
+
+	if ord.unique {
+		buf.WriteString(sep)
+		buf.WriteString("unique")
+	}
+}
+
+// AsString pretty-prints the orderingInfo to a string.
+func (ord orderingInfo) AsString(columns []ResultColumn) string {
+	var buf bytes.Buffer
+	ord.Format(&buf, columns)
+	return buf.String()
 }
 
 func (ord orderingInfo) isEmpty() bool {
