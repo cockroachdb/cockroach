@@ -346,9 +346,9 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 			value    string
 			flagName string
 		}{
-			{"sslcert", ctx.SSLCert, cliflags.CertName},
-			{"sslkey", ctx.SSLCertKey, cliflags.KeyName},
-			{"sslrootcert", ctx.SSLCA, cliflags.CACertName},
+			{"sslcert", ctx.SSLCert, cliflags.Cert},
+			{"sslkey", ctx.SSLCertKey, cliflags.Key},
+			{"sslrootcert", ctx.SSLCA, cliflags.CACert},
 		}
 		for _, c := range requiredFlags {
 			if c.value == "" {
