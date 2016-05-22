@@ -20,12 +20,12 @@ EXPLAIN SELECT * FROM t
 Level  Type  Description
 0      scan  t@primary
 
-query ITT colnames
+query ITTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-Level  Type   Description
-0      select (k, v)@t 
-1      scan   t@primary
+Level  Type   Description Ordering
+0      select (k, v)@t    +k,unique
+1      scan   t@primary   +k,unique
 
 query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3

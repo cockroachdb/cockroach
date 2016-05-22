@@ -107,13 +107,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		node := &explainPlanNode{
 			verbose: verbose,
 			plan:    plan,
-			results: &valuesNode{
-				columns: []ResultColumn{
-					{Name: "Level", Typ: parser.TypeInt},
-					{Name: "Type", Typ: parser.TypeString},
-					{Name: "Description", Typ: parser.TypeString},
-				},
-			},
 		}
 		return node, nil
 
@@ -213,7 +206,19 @@ func (e *explainPlanNode) DebugValues() debugValues             { return e.resul
 func (e *explainPlanNode) Err() error                           { return e.results.Err() }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainPlanNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
-func (e *explainPlanNode) expandPlan() error                    { return e.plan.expandPlan() }
+func (e *explainPlanNode) expandPlan() error {
+	columns := []ResultColumn{
+		{Name: "Level", Typ: parser.TypeInt},
+		{Name: "Type", Typ: parser.TypeString},
+		{Name: "Description", Typ: parser.TypeString},
+	}
+	if e.verbose {
+		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
+	}
+	e.results = &valuesNode{columns: columns}
+
+	return e.plan.expandPlan()
+}
 func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return e.plan.ExplainPlan(v)
 }
@@ -230,6 +235,9 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) {
 		parser.NewDInt(parser.DInt(level)),
 		parser.NewDString(name),
 		parser.NewDString(description),
+	}
+	if verbose {
+		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
 	}
 	v.rows = append(v.rows, row)
 
