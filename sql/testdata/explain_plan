@@ -24,8 +24,9 @@ query ITTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
 Level  Type   Description Ordering
-0      select (k, v)@t    +k,unique
-1      scan   t@primary   +k,unique
+0      select                    +k,unique
+1      render/filter (k, v)@t    +k,unique
+2      scan          t@primary   +k,unique
 
 query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -73,9 +74,10 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTT colnames
 EXPLAIN(VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-Level Type         Description   Ordering
-0     sort         +b            +b
-1     select       (a, b)@tc     =a
-2     index-join                 =a,+rowid,unique
-3     scan         tc@c /10-/11  =a,+rowid,unique
-3     scan         tc@primary    +rowid,unique
+Level Type          Description   Ordering
+0     select                      +b
+1     sort          +b            +b
+2     render/filter (a, b)@tc     =a
+3     index-join                  =a,+rowid,unique
+4     scan          tc@c /10-/11  =a,+rowid,unique
+4     scan          tc@primary    +rowid,unique

@@ -41,6 +41,12 @@ import (
 //   // Handle err.
 type tableWriter interface {
 
+	// expand the tableWriter's sub-plans, if any.
+	expand() error
+
+	// start the tableWriter's sub-plans, if any.
+	start() error
+
 	// init provides the tableWriter with a Txn to write to and returns an error
 	// if it was misconfigured.
 	init(*client.Txn) error
@@ -68,6 +74,14 @@ type tableInserter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+}
+
+func (ti *tableInserter) expand() error {
+	return nil
+}
+
+func (ti *tableInserter) start() error {
+	return nil
 }
 
 func (ti *tableInserter) init(txn *client.Txn) error {
@@ -107,6 +121,14 @@ type tableUpdater struct {
 	b   *client.Batch
 }
 
+func (tu *tableUpdater) expand() error {
+	return nil
+}
+
+func (tu *tableUpdater) start() error {
+	return nil
+}
+
 func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
 	tu.b = txn.NewBatch()
@@ -142,6 +164,12 @@ type tableUpsertEvaler interface {
 	// Unfortunately, it was a misguided effort. tableUpserter's responsibilities
 	// should really be defined as those needed in distributed sql leaf nodes,
 	// which will necessarily include expr evaluation.
+
+	// expand the evaler's sub-plans, if any.
+	expand() error
+
+	// start the tableWriter's sub-plans, if any.
+	start() error
 
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
@@ -192,6 +220,20 @@ type tableUpserter struct {
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
+}
+
+func (tu *tableUpserter) expand() error {
+	if tu.evaler != nil {
+		return tu.evaler.expand()
+	}
+	return nil
+}
+
+func (tu *tableUpserter) start() error {
+	if tu.evaler != nil {
+		return tu.evaler.start()
+	}
+	return nil
 }
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
@@ -436,6 +478,14 @@ type tableDeleter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+}
+
+func (td *tableDeleter) expand() error {
+	return nil
+}
+
+func (td *tableDeleter) start() error {
+	return nil
 }
 
 func (td *tableDeleter) init(txn *client.Txn) error {

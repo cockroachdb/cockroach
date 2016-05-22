@@ -25,42 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
-// distinct constructs a distinctNode.
-func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
-	if !n.Distinct {
-		return p
-	}
-	d := &distinctNode{
-		plan:       p,
-		suffixSeen: make(map[string]struct{}),
-	}
-	ordering := p.Ordering()
-	if !ordering.isEmpty() {
-		d.columnsInOrder = make([]bool, len(p.Columns()))
-		for colIdx := range ordering.exactMatchCols {
-			if colIdx >= len(d.columnsInOrder) {
-				// If the exact-match column is not part of the output, we can safely ignore it.
-				continue
-			}
-			d.columnsInOrder[colIdx] = true
-		}
-		for _, c := range ordering.ordering {
-			if c.colIdx >= len(d.columnsInOrder) {
-				// Cannot use sort order. This happens when the
-				// columns used for sorting are not part of the output.
-				// e.g. SELECT a FROM t ORDER BY c.
-				d.columnsInOrder = nil
-				break
-			}
-			d.columnsInOrder[c.colIdx] = true
-		}
-	}
-	return d
-}
-
 // distinctNode de-duplicates row returned by a wrapped planNode.
+// This assume the rows are already sorted somehow.
+// FIXME: explain how if there is no ORDER BY and no index!
 type distinctNode struct {
 	plan planNode
+	top  *selectTopNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
@@ -74,11 +44,73 @@ type distinctNode struct {
 	debugVals  debugValues
 }
 
-func (n *distinctNode) expandPlan() error       { return n.plan.expandPlan() }
-func (n *distinctNode) Start() error            { return n.plan.Start() }
-func (n *distinctNode) Columns() []ResultColumn { return n.plan.Columns() }
-func (n *distinctNode) Values() parser.DTuple   { return n.plan.Values() }
-func (n *distinctNode) Ordering() orderingInfo  { return n.plan.Ordering() }
+// distinct constructs a distinctNode.
+func (*planner) Distinct(n *parser.SelectClause) *distinctNode {
+	if !n.Distinct {
+		return nil
+	}
+	return &distinctNode{}
+}
+
+// wrap connects the distinctNode to its source planNode.
+// invoked by selectTopNode.expandPlan() prior
+// to invoking distinctNode.expandPlan() below.
+func wrapDistinct(n **distinctNode, plan planNode) planNode {
+	if *n == nil {
+		return plan
+	}
+	(*n).plan = plan
+	return *n
+}
+
+func (n *distinctNode) expandPlan() error {
+	// At this point the selectTopNode has already expanded the plans
+	// before distinctNode.
+	ordering := n.plan.Ordering()
+	if !ordering.isEmpty() {
+		n.columnsInOrder = make([]bool, len(n.plan.Columns()))
+		for colIdx := range ordering.exactMatchCols {
+			if colIdx >= len(n.columnsInOrder) {
+				// If the exact-match column is not part of the output, we can safely ignore it.
+				continue
+			}
+			n.columnsInOrder[colIdx] = true
+		}
+		for _, c := range ordering.ordering {
+			if c.colIdx >= len(n.columnsInOrder) {
+				// Cannot use sort order. This happens when the
+				// columns used for sorting are not part of the output.
+				// e.g. SELECT a FROM t ORDER BY c.
+				n.columnsInOrder = nil
+				break
+			}
+			n.columnsInOrder[c.colIdx] = true
+		}
+	}
+	return nil
+}
+
+func (n *distinctNode) Start() error {
+	n.suffixSeen = make(map[string]struct{})
+	return n.plan.Start()
+}
+
+func (n *distinctNode) setTop(top *selectTopNode) {
+	if n != nil {
+		n.top = top
+	}
+}
+
+func (n *distinctNode) Columns() []ResultColumn {
+	if n.plan != nil {
+		return n.plan.Columns()
+	}
+	// Pre-prepare: not connected yet. Ask the top select node.
+	return n.top.Columns()
+}
+
+func (n *distinctNode) Values() parser.DTuple  { return n.plan.Values() }
+func (n *distinctNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
 func (n *distinctNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
