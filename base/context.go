@@ -148,7 +148,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 			}
 		} else {
 			ctx.serverTLSConfig.err = util.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
-				cliflags.InsecureName, cliflags.CertName)
+				cliflags.Insecure, cliflags.Cert)
 		}
 	})
 
