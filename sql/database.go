@@ -71,7 +71,7 @@ func (s *databaseCache) setID(name string, id sqlbase.ID) {
 
 func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
 	return sqlbase.DatabaseDescriptor{
-		Name:       p.Name.String(),
+		Name:       string(p.Name),
 		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
 	}
 }
