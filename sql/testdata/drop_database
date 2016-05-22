@@ -1,0 +1,37 @@
+statement ok
+CREATE DATABASE "foo-bar"
+
+query T
+SHOW DATABASES
+----
+foo-bar
+system
+test
+
+statement ok
+DROP DATABASE "foo-bar"
+
+query T
+SHOW DATABASES
+----
+system
+test
+
+statement ok
+CREATE DATABASE "foo bar"
+
+query T
+SHOW DATABASES
+----
+foo bar
+system
+test
+
+statement ok
+DROP DATABASE "foo bar"
+
+query T
+SHOW DATABASES
+----
+system
+test

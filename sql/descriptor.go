@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -108,6 +109,10 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 	b := client.Batch{}
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
+	if log.V(2) {
+		log.Infof("CPut %s -> %d", idKey, descID)
+		log.Infof("CPut %s -> %s", descKey, descDesc)
+	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
