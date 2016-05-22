@@ -76,6 +76,10 @@ func (v *varConvertVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pa
 		if _, isValArg := expr.(parser.ValArg); isValArg {
 			return false, expr
 		}
+		// Ignore sub-queries
+		if _, isSubquery := expr.(*subquery); isSubquery {
+			return false, expr
+		}
 
 		ok, converted := v.conv(varExpr)
 		if !ok {

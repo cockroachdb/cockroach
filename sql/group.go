@@ -62,7 +62,12 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range groupBy {
-		resolved, err := s.resolveQNames(groupBy[i])
+		expr, err := p.replaceSubqueries(groupBy[i], 1)
+		if err != nil {
+			return nil, err
+		}
+
+		resolved, err := s.resolveQNames(expr)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +100,12 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// Normalize and check the HAVING expression too if it exists.
 	var typedHaving parser.TypedExpr
 	if n.Having != nil {
-		having, err := s.resolveQNames(n.Having.Expr)
+		having, err := p.replaceSubqueries(n.Having.Expr, 1)
+		if err != nil {
+			return nil, err
+		}
+
+		having, err = s.resolveQNames(having)
 		if err != nil {
 			return nil, err
 		}
@@ -252,12 +262,38 @@ func (n *groupNode) DebugValues() debugValues {
 }
 
 func (n *groupNode) expandPlan() error {
-	// TODO(knz) Some code from groupBy() above really belongs here.
-	return n.plan.expandPlan()
+	if n.having != nil {
+		if err := n.planner.expandSubqueryPlans(n.having); err != nil {
+			return err
+		}
+	}
+	for _, e := range n.render {
+		if err := n.planner.expandSubqueryPlans(e); err != nil {
+			return err
+		}
+	}
+
+	// We do not need to recurse into the child node here; selectTopNode
+	// does this for us.
+	return nil
 }
 
 func (n *groupNode) Start() error {
-	return n.plan.Start()
+	if err := n.plan.Start(); err != nil {
+		return err
+	}
+
+	if n.having != nil {
+		if err := n.planner.startSubqueryPlans(n.having); err != nil {
+			return err
+		}
+	}
+	for _, e := range n.render {
+		if err := n.planner.startSubqueryPlans(e); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (n *groupNode) Next() bool {
@@ -370,7 +406,17 @@ func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []pl
 		}
 		f.Format(&buf, parser.FmtSimple)
 	}
-	return name, buf.String(), []planNode{n.plan}
+
+	subplans := []planNode{n.plan}
+	for _, e := range n.render {
+		subplans = n.planner.collectSubqueryPlans(e, subplans)
+	}
+	if n.having != nil {
+		buf.WriteString(" HAVING ")
+		n.having.Format(&buf, parser.FmtSimple)
+		subplans = n.planner.collectSubqueryPlans(n.having, subplans)
+	}
+	return name, buf.String(), subplans
 }
 
 func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
@@ -386,12 +432,12 @@ func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
 
 // wrap the supplied planNode with the groupNode if grouping/aggregation is required.
-func (n *groupNode) wrap(plan planNode) planNode {
-	if n == nil {
+func wrapGroup(n **groupNode, plan planNode) planNode {
+	if *n == nil {
 		return plan
 	}
-	n.plan = plan
-	return n
+	(*n).plan = plan
+	return *n
 }
 
 // isNotNullFilter adds as a "col IS NOT NULL" constraint to the expression if

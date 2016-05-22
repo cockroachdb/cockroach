@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -102,18 +103,31 @@ func (n *scanNode) DebugValues() debugValues {
 }
 
 func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
-	n.limitHint = numRows
-	if soft || n.filter != nil {
-		// Read a multiple of the limit if the limit is "soft".
-		n.limitHint *= 2
+	if numRows != math.MaxInt64 {
+		n.limitHint = numRows
+		if soft || n.filter != nil {
+			// Read a multiple of the limit if the limit is "soft".
+			n.limitHint *= 2
+		}
 	}
 }
 
 func (n *scanNode) expandPlan() error {
+	if n.filter != nil {
+		if err := n.p.expandSubqueryPlans(n.filter); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (n *scanNode) Start() error {
+	if n.filter != nil {
+		if err := n.p.startSubqueryPlans(n.filter); err != nil {
+			return err
+		}
+	}
+
 	if err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse,
 		n.isSecondaryIndex, n.valNeededForCol); err != nil {
 		return err
@@ -213,7 +227,13 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 		name = "scan"
 	}
 	description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, sqlbase.PrettySpans(n.spans, 2))
-	return name, description, nil
+
+	var subplans []planNode
+	if n.filter != nil {
+		subplans = n.p.collectSubqueryPlans(n.filter, []planNode{})
+	}
+
+	return name, description, subplans
 }
 
 func (n *scanNode) ExplainTypes(regTypes func(string, string)) {

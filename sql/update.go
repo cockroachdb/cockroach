@@ -72,23 +72,36 @@ type editNodeRun struct {
 	done      bool
 }
 
-func (r *editNodeRun) buildEditNodePlan(en *editNodeBase, rows planNode, tw tableWriter) {
+func (r *editNodeRun) initEditNode(rows planNode) {
+	r.rows = rows
+}
+
+func (r *editNodeRun) expandEditNodePlan(en *editNodeBase, tw tableWriter) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}
 
-	r.rows = rows
+	if err := tw.expand(); err != nil {
+		return err
+	}
+
 	r.tw = tw
+	return r.rows.expandPlan()
+}
+
+func (r *editNodeRun) startEditNode() error {
+	if err := r.tw.start(); err != nil {
+		return err
+	}
+
+	return r.rows.Start()
 }
 
 type updateNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
-	defaultExprs []parser.TypedExpr
-	n            *parser.Update
-	desiredTypes []parser.Datum
-
+	n             *parser.Update
 	updateCols    []sqlbase.ColumnDescriptor
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	tw            tableUpdater
@@ -113,13 +126,18 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	exprs := make([]parser.UpdateExpr, len(n.Exprs))
+	exprs := make([]*parser.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
-		exprs[i] = *expr
+		// Replace the sub-query nodes.
+		newExpr, err := p.replaceSubqueries(expr.Expr, len(expr.Names))
+		if err != nil {
+			return nil, err
+		}
+		exprs[i] = &parser.UpdateExpr{Tuple: expr.Tuple, Expr: newExpr, Names: expr.Names}
 	}
 
 	// Determine which columns we're inserting into.
-	names, err := p.namesForExprs(n.Exprs)
+	names, err := p.namesForExprs(exprs)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +178,10 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
 	desiredTypesFromSelect := make([]parser.Datum, len(targets), len(targets)+len(exprs))
-	for _, expr := range n.Exprs {
+	for _, expr := range exprs {
 		if expr.Tuple {
-			if t, ok := expr.Expr.(*parser.Tuple); ok {
+			switch t := expr.Expr.(type) {
+			case (*parser.Tuple):
 				for _, e := range t.Exprs {
 					typ := updateCols[i].Type.ToDatumType()
 					e := fillDefault(e, typ, i, defaultExprs)
@@ -170,6 +189,8 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 					i++
 				}
+			default:
+				return nil, fmt.Errorf("cannot use this expression to assign multiple columns: %s", expr.Expr)
 			}
 		} else {
 			typ := updateCols[i].Type.ToDatumType()
@@ -180,11 +201,6 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		}
 	}
 
-	// TODO(knz): Until we split the creation of the node from Start()
-	// for the SelectClause too, we cannot cache this. This is because
-	// this node's initSelect() method both does type checking and also
-	// performs index selection. We cannot perform index selection
-	// properly until the placeholder values are known.
 	rows, err := p.SelectClause(&parser.SelectClause{
 		Exprs: targets,
 		From:  []parser.TableExpr{n.Table},
@@ -199,11 +215,13 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
-	for i, target := range rows.(*selectNode).render[exprTargetIdx:] {
+	sel := rows.(*selectTopNode).source.(*selectNode)
+	for i, target := range sel.render[exprTargetIdx:] {
 		// DefaultVal doesn't implement TypeCheck
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
+		// TODO(nvanbenschoten) isn't this TypeCheck redundant with the call to SelectClause?
 		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.ToDatumType())
 		if err != nil {
 			return nil, err
@@ -226,8 +244,6 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	un := &updateNode{
 		n:             n,
 		editNodeBase:  en,
-		desiredTypes:  desiredTypesFromSelect,
-		defaultExprs:  defaultExprs,
 		updateCols:    ru.updateCols,
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
@@ -235,69 +251,23 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	if err := un.checkHelper.init(p, en.tableDesc); err != nil {
 		return nil, err
 	}
+	un.run.initEditNode(rows)
 	return un, nil
 }
 
 func (u *updateNode) expandPlan() error {
-	exprs := make([]parser.UpdateExpr, len(u.n.Exprs))
-	for i, expr := range u.n.Exprs {
-		exprs[i] = *expr
-	}
-
-	// Expand the sub-queries and construct the real list of targets.
-	for i, expr := range exprs {
-		newExpr, eErr := u.p.expandSubqueries(expr.Expr, len(expr.Names))
-		if eErr != nil {
-			return eErr
-		}
-		exprs[i].Expr = newExpr
-	}
-
-	targets := sqlbase.ColumnsSelectors(u.tw.ru.fetchCols)
-	i := 0
-	for _, expr := range exprs {
-		if expr.Tuple {
-			switch t := expr.Expr.(type) {
-			case *parser.Tuple:
-				for _, e := range t.Exprs {
-					e = fillDefault(e, u.desiredTypes[i], i, u.defaultExprs)
-					targets = append(targets, parser.SelectExpr{Expr: e})
-					i++
-				}
-			case *parser.DTuple:
-				for _, e := range *t {
-					targets = append(targets, parser.SelectExpr{Expr: e})
-					i++
-				}
-			}
-		} else {
-			e := fillDefault(expr.Expr, u.desiredTypes[i], i, u.defaultExprs)
-			targets = append(targets, parser.SelectExpr{Expr: e})
-			i++
-		}
-	}
-
-	// Create the workhorse select clause for rows that need updating.
-	// TODO(knz): See comment above in Update().
-	rows, err := u.p.SelectClause(&parser.SelectClause{
-		Exprs: targets,
-		From:  []parser.TableExpr{u.n.Table},
-		Where: u.n.Where,
-	}, nil, nil, u.desiredTypes)
-	if err != nil {
+	if err := u.rh.expandPlans(); err != nil {
 		return err
 	}
-
-	if err := rows.expandPlan(); err != nil {
-		return err
-	}
-
-	u.run.buildEditNodePlan(&u.editNodeBase, rows, &u.tw)
-	return nil
+	return u.run.expandEditNodePlan(&u.editNodeBase, &u.tw)
 }
 
 func (u *updateNode) Start() error {
-	if err := u.run.rows.Start(); err != nil {
+	if err := u.rh.startPlans(); err != nil {
+		return err
+	}
+
+	if err := u.run.startEditNode(); err != nil {
 		return err
 	}
 
@@ -335,14 +305,14 @@ func (u *updateNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := sqlbase.CheckValueWidth(u.updateCols[i], updateValues[i]); err != nil {
+		if err := sqlbase.CheckValueWidth(u.tw.ru.updateCols[i], updateValues[i]); err != nil {
 			u.run.err = err
 			return false
 		}
 	}
 
 	// Update the row values.
-	for i, col := range u.updateCols {
+	for i, col := range u.tw.ru.updateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
 			u.run.err = newNonNullViolationError(col.Name)
@@ -370,16 +340,13 @@ func (u *updateNode) Next() bool {
 func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.QualifiedNames, error) {
 	var names parser.QualifiedNames
 	for _, expr := range exprs {
-		// TODO(knz): We need to (attempt to) expand subqueries here already
-		// so that it retrieves the column names. But then we need to do
-		// it again when the placeholder values are known below.
-		newExpr, eErr := p.expandSubqueries(expr.Expr, len(expr.Names))
-		if eErr != nil {
-			return nil, eErr
-		}
+		newExpr := expr.Expr
 
 		if expr.Tuple {
 			n := 0
+			if s, ok := newExpr.(*subquery); ok {
+				newExpr = s.typ
+			}
 			switch t := newExpr.(type) {
 			case *parser.Tuple:
 				n = len(t.Exprs)
@@ -436,7 +403,7 @@ func (u *updateNode) ExplainPlan(v bool) (name, description string, children []p
 	var buf bytes.Buffer
 	if v {
 		fmt.Fprintf(&buf, "set %s (", u.tableDesc.Name)
-		for i, col := range u.updateCols {
+		for i, col := range u.tw.ru.updateCols {
 			if i > 0 {
 				fmt.Fprintf(&buf, ", ")
 			}
@@ -451,16 +418,19 @@ func (u *updateNode) ExplainPlan(v bool) (name, description string, children []p
 		}
 		fmt.Fprintf(&buf, ")")
 	}
-	return "update", buf.String(), []planNode{u.run.rows}
+
+	subplans := []planNode{u.run.rows}
+	for _, e := range u.rh.exprs {
+		subplans = u.p.collectSubqueryPlans(e, subplans)
+	}
+
+	return "update", buf.String(), subplans
 }
 
 func (u *updateNode) ExplainTypes(regTypes func(string, string)) {
 	cols := u.rh.columns
 	for i, rexpr := range u.rh.exprs {
 		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
-	}
-	for i, dexpr := range u.defaultExprs {
-		regTypes(fmt.Sprintf("default %d", i), parser.AsStringWithFlags(dexpr, parser.FmtShowTypes))
 	}
 }
 
