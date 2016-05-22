@@ -17,10 +17,10 @@
 package sql
 
 import (
+	"bytes"
 	"container/heap"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -225,23 +225,17 @@ func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []pla
 		name = "nosort"
 	}
 
+	var buf bytes.Buffer
 	columns := n.plan.Columns()
-	strs := make([]string, len(n.ordering))
-	for i, o := range n.ordering {
-		prefix := '+'
-		if o.direction == encoding.Descending {
-			prefix = '-'
-		}
-		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o.colIdx].Name)
-	}
-	description = strings.Join(strs, ",")
+	n.Ordering().Format(&buf, columns)
 
 	switch ss := n.sortStrategy.(type) {
 	case *iterativeSortStrategy:
-		description = fmt.Sprintf("%s (iterative)", description)
+		buf.WriteString(" (iterative)")
 	case *sortTopKStrategy:
-		description = fmt.Sprintf("%s (top %d)", description, ss.topK)
+		fmt.Fprintf(&buf, " (top %d)", ss.topK)
 	}
+	description = buf.String()
 
 	return name, description, []planNode{n.plan}
 }

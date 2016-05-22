@@ -4,17 +4,17 @@ EXPLAIN (PLAN) SELECT 1
 Level  Type  Description
 0      empty -
 
-query ITT colnames
+query ITTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1
 ----
-Level  Type    Description
+Level  Type    Description Ordering
 0      select  (1)@
 1      empty   -
 
-query ITT colnames
+query ITTT colnames
 EXPLAIN (VERBOSE, PLAN) SELECT 1
 ----
-Level  Type  Description
+Level  Type  Description Ordering
 0      select  (1)@
 1      empty   -
 
