@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type dropDatabaseNode struct {
@@ -103,6 +104,11 @@ func (n *dropDatabaseNode) Start() error {
 	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 
 	b := &client.Batch{}
+	if log.V(2) {
+		log.Infof("Del %s", descKey)
+		log.Infof("Del %s", nameKey)
+		log.Infof("Del %s", zoneKey)
+	}
 	b.Del(descKey)
 	b.Del(nameKey)
 	// Delete the zone config entry for this database.
