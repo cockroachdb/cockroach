@@ -44,7 +44,11 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 		if err != nil {
 			return err
 		}
-		resolved, err := resolveQNames(raw, []*tableInfo{&table}, c.qvals, &p.qnameVisitor)
+		replaced, err := p.replaceSubqueries(raw, 1)
+		if err != nil {
+			return nil
+		}
+		resolved, err := resolveQNames(replaced, []*tableInfo{&table}, c.qvals, &p.qnameVisitor)
 		if err != nil {
 			return err
 		}

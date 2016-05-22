@@ -225,7 +225,7 @@ func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
 	if s.planner != nil {
 		v = &s.planner.qnameVisitor
 	}
-	return resolveQNames(expr, []*tableInfo{&s.table}, s.qvals, v)
+	return resolveQNames(expr, []*tableInfo{&s.source.info}, s.qvals, v)
 }
 
 // resolveQNames walks the provided expression and resolves all qualified

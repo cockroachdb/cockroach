@@ -148,7 +148,6 @@ func (n *indexJoinNode) DebugValues() debugValues {
 }
 
 func (n *indexJoinNode) expandPlan() error {
-	// TODO(knz): Some code from makeIndexJoin() above really belongs here.
 	if err := n.table.expandPlan(); err != nil {
 		return err
 	}
