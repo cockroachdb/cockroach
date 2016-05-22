@@ -1217,20 +1217,10 @@ zone_value:
   }
 | const_interval SCONST opt_interval
   {
-    expr := &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
-    typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
+    d, err := ParseDInterval($2)
     if err != nil {
-      sqllex.Error("cannot type check interval type: " + err.Error())
+      sqllex.Error(err.Error())
       return 1
-    }
-    var ctx EvalContext
-    d, err := typedExpr.Eval(ctx)
-    if err != nil {
-      sqllex.Error("cannot evaluate to an interval type: " + err.Error())
-      return 1
-    }
-    if _, ok := d.(*DInterval); !ok {
-      panic("not an interval type")
     }
     $$.val = d
   }
