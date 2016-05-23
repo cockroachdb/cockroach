@@ -84,6 +84,7 @@ var _ json.Marshaler = &Registry{}
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
+var _ PrometheusExportable = &Histogram{}
 
 type periodic interface {
 	nextTick() time.Time
@@ -188,6 +189,28 @@ type Histograms map[TimeScale]*Histogram
 func (hs Histograms) RecordValue(v int64) {
 	for _, h := range hs {
 		h.RecordValue(v)
+	}
+}
+
+// FillPrometheusMetric fills the appropriate metric fields.
+func (h *Histogram) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
+	hist := &prometheusgo.Histogram{}
+
+	h.mu.Lock()
+	maybeTick(h)
+	merged := h.windowed.Merge()
+	for _, b := range merged.Distribution() {
+		hist.Bucket = append(hist.Bucket, &prometheusgo.Bucket{
+			CumulativeCount: proto.Uint64(uint64(b.Count)),
+			UpperBound:      proto.Float64(float64(b.To)),
+		})
+	}
+	hist.SampleCount = proto.Uint64(uint64(merged.TotalCount()))
+	h.mu.Unlock()
+
+	promMetric.Type = prometheusgo.MetricType_HISTOGRAM.Enum()
+	promMetric.Metric = []*prometheusgo.Metric{
+		&prometheusgo.Metric{Histogram: hist},
 	}
 }
 
