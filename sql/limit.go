@@ -17,52 +17,159 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"math"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-// evalLimit evaluates the Count and Offset fields. If Count is missing, the
-// value is MaxInt64. If Offset is missing, the value is 0
-func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error) {
-	count = math.MaxInt64
-	offset = 0
+// limitNode represents a node that limits the number of rows
+// returned or only return them past a given number (offset).
+type limitNode struct {
+	p          *planner
+	top        *selectTopNode
+	plan       planNode
+	countExpr  parser.TypedExpr
+	offsetExpr parser.TypedExpr
+	count      int64
+	offset     int64
+	rowIndex   int64
+	explain    explainMode
+	debugVals  debugValues
+}
 
-	if limit == nil {
-		return count, offset, nil
+// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
+func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
+	if n == nil || (n.Count == nil && n.Offset == nil) {
+		// No LIMIT nor OFFSET; there is nothing special to do.
+		return nil, nil
 	}
+
+	res := limitNode{p: p}
 
 	data := []struct {
 		name string
 		src  parser.Expr
-		dst  *int64
+		dst  *parser.TypedExpr
 	}{
-		{"LIMIT", limit.Count, &count},
-		{"OFFSET", limit.Offset, &offset},
+		{"LIMIT", n.Count, &res.countExpr},
+		{"OFFSET", n.Offset, &res.offsetExpr},
 	}
 
 	for _, datum := range data {
 		if datum.src != nil {
-			typedSrc, err := parser.TypeCheckAndRequire(datum.src, p.evalCtx.Args,
+			replaced, err := p.replaceSubqueries(datum.src, 1)
+			if err != nil {
+				return nil, err
+			}
+			typedExpr, err := parser.TypeCheckAndRequire(replaced, p.evalCtx.Args,
 				parser.TypeInt, datum.name)
 			if err != nil {
-				return 0, 0, err
+				return nil, err
 			}
-
-			normalized, err := p.parser.NormalizeExpr(p.evalCtx, typedSrc)
+			normalized, err := p.parser.NormalizeExpr(p.evalCtx, typedExpr)
 			if err != nil {
-				return 0, 0, err
+				return nil, err
+			}
+			*datum.dst = normalized
+		}
+	}
+	return &res, nil
+}
+
+func (n *limitNode) wrap(plan planNode) planNode {
+	if n == nil {
+		return plan
+	}
+	n.plan = plan
+	return n
+}
+
+func (n *limitNode) expandPlan() error {
+	// We do not need to recurse into the child node here; selectTopNode
+	// does this for us.
+
+	if err := n.p.expandSubqueryPlans(n.countExpr); err != nil {
+		return err
+	}
+	return n.p.expandSubqueryPlans(n.offsetExpr)
+}
+
+func (n *limitNode) Start() error {
+	if err := n.plan.Start(); err != nil {
+		return err
+	}
+
+	if err := n.evalLimit(); err != nil {
+		return err
+	}
+
+	// limitNode.SetLimitHint() automatically uses n.count and n.offset
+	// as real limit to propagate to the sub-node when the special
+	// value math.MaxInt64 is provided.
+	n.SetLimitHint(math.MaxInt64, false /* hard */)
+
+	return nil
+}
+
+// estimateLimit returns the Count and Offset fields if they are constants,
+// otherwise MaxInt64, 0. Used by index selection.
+// This must be called after type checking and constant folding.
+func (n *limitNode) estimateLimit() (count, offset int64) {
+	if n == nil {
+		return math.MaxInt64, 0
+	}
+
+	n.count = math.MaxInt64
+	n.offset = 0
+
+	data := []struct {
+		src parser.TypedExpr
+		dst *int64
+	}{
+		{n.countExpr, &n.count},
+		{n.offsetExpr, &n.offset},
+	}
+	for _, datum := range data {
+		if datum.src != nil {
+			if d, ok := datum.src.(*parser.DInt); ok {
+				*datum.dst = int64(*d)
+			}
+		}
+	}
+	return n.count, n.offset
+}
+
+// evalLimit evaluates the Count and Offset fields. If Count is missing, the
+// value is MaxInt64. If Offset is missing, the value is 0
+func (n *limitNode) evalLimit() error {
+	n.count = math.MaxInt64
+	n.offset = 0
+
+	data := []struct {
+		name string
+		src  parser.TypedExpr
+		dst  *int64
+	}{
+		{"LIMIT", n.countExpr, &n.count},
+		{"OFFSET", n.offsetExpr, &n.offset},
+	}
+
+	for _, datum := range data {
+		if datum.src != nil {
+			if err := n.p.startSubqueryPlans(datum.src); err != nil {
+				return err
 			}
 
-			if p.evalCtx.PrepareOnly {
-				continue
-			}
-
-			dstDatum, err := normalized.Eval(p.evalCtx)
+			normalized, err := n.p.parser.NormalizeExpr(n.p.evalCtx, datum.src)
 			if err != nil {
-				return 0, 0, err
+				return err
+			}
+
+			dstDatum, err := normalized.Eval(n.p.evalCtx)
+			if err != nil {
+				return err
 			}
 
 			if dstDatum == parser.DNull {
@@ -73,43 +180,44 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 			dstDInt := *dstDatum.(*parser.DInt)
 			val := int64(dstDInt)
 			if val < 0 {
-				return 0, 0, fmt.Errorf("negative value for %s", datum.name)
+				return fmt.Errorf("negative value for %s", datum.name)
 			}
 			*datum.dst = val
 		}
 	}
-	return count, offset, nil
+	return nil
 }
 
-// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) limit(count, offset int64, plan planNode) planNode {
-	if count == math.MaxInt64 && offset == 0 {
-		return plan
+func (n *limitNode) ExplainTypes(regTypes func(string, string)) {
+	if n.countExpr != nil {
+		regTypes("count", parser.AsStringWithFlags(n.countExpr, parser.FmtShowTypes))
 	}
-
-	if count != math.MaxInt64 {
-		plan.SetLimitHint(offset+count, false /* hard */)
+	if n.offsetExpr != nil {
+		regTypes("offset", parser.AsStringWithFlags(n.offsetExpr, parser.FmtShowTypes))
 	}
-
-	return &limitNode{plan: plan, count: count, offset: offset}
 }
 
-type limitNode struct {
-	plan      planNode
-	count     int64
-	offset    int64
-	rowIndex  int64
-	explain   explainMode
-	debugVals debugValues
+// setTop connects the limitNode back to the selectTopNode that caused
+// its existence. This is needed because the limitNode needs to refer
+// to other nodes in the selectTopNode before its expandPlan() method
+// has ran and its child plan is known and connected.
+func (n *limitNode) setTop(top *selectTopNode) {
+	if n != nil {
+		n.top = top
+	}
 }
 
-func (n *limitNode) ExplainTypes(f func(string, string)) { n.plan.ExplainTypes(f) }
-func (n *limitNode) expandPlan() error                   { return n.plan.expandPlan() }
-func (n *limitNode) Err() error                          { return n.plan.Err() }
-func (n *limitNode) Start() error                        { return n.plan.Start() }
-func (n *limitNode) Columns() []ResultColumn             { return n.plan.Columns() }
-func (n *limitNode) Values() parser.DTuple               { return n.plan.Values() }
-func (n *limitNode) Ordering() orderingInfo              { return n.plan.Ordering() }
+func (n *limitNode) Columns() []ResultColumn {
+	if n.plan != nil {
+		return n.plan.Columns()
+	}
+	// Pre-prepare: not connected yet. Ask the top select node.
+	return n.top.Columns()
+}
+
+func (n *limitNode) Err() error             { return n.plan.Err() }
+func (n *limitNode) Values() parser.DTuple  { return n.plan.Values() }
+func (n *limitNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
@@ -162,14 +270,38 @@ func (n *limitNode) Next() bool {
 }
 
 func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {
-	var count string
-	if n.count == math.MaxInt64 {
-		count = "ALL"
-	} else {
-		count = strconv.FormatInt(n.count, 10)
+	var buf bytes.Buffer
+	subplans := []planNode{n.plan}
+	prefix := ""
+	if n.countExpr != nil {
+		buf.WriteString("count: ")
+		n.countExpr.Format(&buf, parser.FmtSimple)
+		subplans = n.p.collectSubqueryPlans(n.countExpr, subplans)
+		prefix = ", "
 	}
-
-	return "limit", fmt.Sprintf("count: %s, offset: %d", count, n.offset), []planNode{n.plan}
+	if n.offsetExpr != nil {
+		buf.WriteString(prefix)
+		buf.WriteString("offset: ")
+		n.offsetExpr.Format(&buf, parser.FmtSimple)
+		subplans = n.p.collectSubqueryPlans(n.offsetExpr, subplans)
+	}
+	return "limit", buf.String(), subplans
 }
 
-func (*limitNode) SetLimitHint(_ int64, _ bool) {}
+func (n *limitNode) SetLimitHint(count int64, soft bool) {
+	// A higher-level limitNode or EXPLAIN is pushing a limit down onto
+	// this node. Accept it unless the local limit is definitely
+	// smaller, in which case we propagate that as a hard limit instead.
+	hintCount := count
+	if hintCount > n.count {
+		hintCount = n.count
+		soft = false
+	}
+	if hintCount != math.MaxInt64 {
+		if n.offset > math.MaxInt64-hintCount {
+			hintCount = math.MaxInt64 - n.offset
+		}
+		hintCount = hintCount + n.offset
+	}
+	n.plan.SetLimitHint(hintCount, soft)
+}

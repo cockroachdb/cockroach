@@ -78,14 +78,21 @@ type planNode interface {
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.
 	//
+	// The special value math.MaxInt64 indicates "no limit".
+	//
 	// If soft is true, this is a "soft" limit and is only a hint; the node must
 	// still be able to produce all results if requested.
 	//
 	// If soft is false, this is a "hard" limit and is a promise that Next will
 	// never be called more than numRows times.
 	//
+	// The action of calling this method triggers limit-based query plan
+	// optimizations, e.g. in selectNode.expandPlan(). The primary user
+	// is limitNode.Start() after it has fully evaluated the limit and
+	// offset expressions. EXPLAIN also does this, see
+	// explainTypesNode.expandPlan() and explainPlanNode.expandPlan().
+	//
 	// Available during/after newPlan().
-	// TODO(knz) This should only be used during expandPlan().
 	SetLimitHint(numRows int64, soft bool)
 
 	// expandPlan finalizes type checking of placeholders and expands
@@ -181,6 +188,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &selectTopNode{}
 var _ planNode = &selectNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &emptyNode{}

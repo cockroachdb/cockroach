@@ -150,9 +150,6 @@ INSERT INTO abc VALUES (1, 2, 3)
 statement error number of columns \(2\) does not match number of values \(1\)
 UPDATE abc SET (b, c) = (4)
 
-statement error subquery must return 2 columns, found 1
-UPDATE abc SET (b, c) = (SELECT 4)
-
 statement ok
 UPDATE abc SET (b, c) = (4, 5)
 
@@ -161,58 +158,50 @@ SELECT * FROM abc
 ----
 1 4 5
 
-statement ok
-UPDATE abc SET (b, c) = (SELECT 6, 7)
-
-query III
-SELECT * FROM abc
-----
-1 6 7
-
 query III colnames
-UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING abc.b, c, 4
+UPDATE abc SET (b, c) = (8, 9) RETURNING abc.b, c, 4
 ----
 b c 4
 8 9 4
 
 query III colnames
-UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING b as col1, c as col2, 4 as col3
+UPDATE abc SET (b, c) = (8, 9) RETURNING b as col1, c as col2, 4 as col3
 ----
 col1 col2 col3
 8    9    4
 
 query I colnames
-UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING a
+UPDATE abc SET (b, c) = (8, 9) RETURNING a
 ----
 a
 1
 
 query IIII colnames
-UPDATE abc SET (b, c) = (VALUES (5, 6)) RETURNING a, b, c, 4
+UPDATE abc SET (b, c) = (5, 6) RETURNING a, b, c, 4
 ----
 a b c 4
 1 5 6 4
 
 query III colnames
-UPDATE abc SET (b, c) = (VALUES (7, 8)) RETURNING *
+UPDATE abc SET (b, c) = (7, 8) RETURNING *
 ----
 a b c
 1 7 8
 
 query IIII colnames
-UPDATE abc SET (b, c) = (VALUES (7, 8)) RETURNING *, 4
+UPDATE abc SET (b, c) = (7, 8) RETURNING *, 4
 ----
 a b c 4
 1 7 8 4
 
 query III colnames
-UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING abc.*
+UPDATE abc SET (b, c) = (8, 9) RETURNING abc.*
 ----
 a b c
 1 8 9
 
 statement error pq: "abc.*" cannot be aliased
-UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING abc.* as x
+UPDATE abc SET (b, c) = (8, 9) RETURNING abc.* as x
 
 query III
 SELECT * FROM abc
