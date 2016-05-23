@@ -73,11 +73,16 @@ func (p *planner) makeReturningHelper(
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		expr, err := resolveQNames(target.Expr, []*tableInfo{rh.table}, rh.qvals, &p.qnameVisitor)
+		replaced, err := p.replaceSubqueries(target.Expr, 1)
 		if err != nil {
 			return returningHelper{}, err
 		}
-		rh.untypedExprs = append(rh.untypedExprs, expr)
+
+		resolved, err := resolveQNames(replaced, []*tableInfo{rh.table}, rh.qvals, &p.qnameVisitor)
+		if err != nil {
+			return returningHelper{}, err
+		}
+		rh.untypedExprs = append(rh.untypedExprs, resolved)
 		rh.columns = append(rh.columns, ResultColumn{Name: outputName})
 	}
 	rh.exprs = make([]parser.TypedExpr, len(rh.untypedExprs))
@@ -103,19 +108,38 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 	return resRow, nil
 }
 
+func (rh *returningHelper) expandPlans() error {
+	for _, expr := range rh.exprs {
+		if err := rh.p.expandSubqueryPlans(expr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (rh *returningHelper) startPlans() error {
+	for _, expr := range rh.exprs {
+		if err := rh.p.startSubqueryPlans(expr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // TypeCheck ensures that the expressions mentioned in the
 // returningHelper have the right type.
-// TODO(knz): this both annotates the type of placeholders
-// (a task for prepare) and controls that provided values
-// for placeholders match their context (a task for exec). This
-// ought to be split into two phases.
 func (rh *returningHelper) TypeCheck() error {
 	for i, expr := range rh.untypedExprs {
+		baseExpr, bErr := rh.p.replaceSubqueries(expr, 1)
+		if bErr != nil {
+			return bErr
+		}
+
 		desired := parser.NoTypePreference
 		if len(rh.desiredTypes) > i {
 			desired = rh.desiredTypes[i]
 		}
-		typedExpr, err := parser.TypeCheck(expr, rh.p.evalCtx.Args, desired)
+		typedExpr, err := parser.TypeCheck(baseExpr, rh.p.evalCtx.Args, desired)
 		if err != nil {
 			return err
 		}
