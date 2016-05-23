@@ -19,3 +19,4 @@
 package ui
 
 //go:generate make
+//go:generate make next

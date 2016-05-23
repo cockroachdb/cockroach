@@ -81,6 +81,12 @@ export interface serverBuilder {
 	RangesRequest: server.RangesRequestBuilder;
 	RangesResponse: server.RangesResponseBuilder;
 	GossipRequest: server.GossipRequestBuilder;
+	JSONResponse: server.JSONResponseBuilder;
+	LogsRequest: server.LogsRequestBuilder;
+	LogFilesListRequest: server.LogFilesListRequestBuilder;
+	LogFileRequest: server.LogFileRequestBuilder;
+	StacksRequest: server.StacksRequestBuilder;
+	MetricsRequest: server.MetricsRequestBuilder;
 	status: server.statusBuilder;
 	DrainMode: server.DrainMode;
 	
@@ -1729,6 +1735,276 @@ export interface GossipRequestBuilder {
 	decode(buffer: ArrayBuffer) : GossipRequestMessage;
 	decode(buffer: ByteBuffer) : GossipRequestMessage;
 	decode64(buffer: string) : GossipRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface JSONResponse {
+	
+		
+
+data?: ByteBuffer;
+		
+
+getData?() : ByteBuffer;
+		setData?(data : ByteBuffer): void;
+		
+
+
+
+}
+	
+	export interface JSONResponseMessage extends JSONResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface JSONResponseBuilder {
+	new(data?: JSONResponse): JSONResponseMessage;
+	decode(buffer: ArrayBuffer) : JSONResponseMessage;
+	decode(buffer: ByteBuffer) : JSONResponseMessage;
+	decode64(buffer: string) : JSONResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface LogsRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+level?: string;
+		
+
+getLevel?() : string;
+		setLevel?(level : string): void;
+		
+
+
+
+start_time?: string;
+		
+
+getStartTime?() : string;
+		setStartTime?(startTime : string): void;
+		
+
+
+
+end_time?: string;
+		
+
+getEndTime?() : string;
+		setEndTime?(endTime : string): void;
+		
+
+
+
+max?: string;
+		
+
+getMax?() : string;
+		setMax?(max : string): void;
+		
+
+
+
+pattern?: string;
+		
+
+getPattern?() : string;
+		setPattern?(pattern : string): void;
+		
+
+
+
+}
+	
+	export interface LogsRequestMessage extends LogsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogsRequestBuilder {
+	new(data?: LogsRequest): LogsRequestMessage;
+	decode(buffer: ArrayBuffer) : LogsRequestMessage;
+	decode(buffer: ByteBuffer) : LogsRequestMessage;
+	decode64(buffer: string) : LogsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface LogFilesListRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface LogFilesListRequestMessage extends LogFilesListRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogFilesListRequestBuilder {
+	new(data?: LogFilesListRequest): LogFilesListRequestMessage;
+	decode(buffer: ArrayBuffer) : LogFilesListRequestMessage;
+	decode(buffer: ByteBuffer) : LogFilesListRequestMessage;
+	decode64(buffer: string) : LogFilesListRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface LogFileRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+file?: string;
+		
+
+getFile?() : string;
+		setFile?(file : string): void;
+		
+
+
+
+}
+	
+	export interface LogFileRequestMessage extends LogFileRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogFileRequestBuilder {
+	new(data?: LogFileRequest): LogFileRequestMessage;
+	decode(buffer: ArrayBuffer) : LogFileRequestMessage;
+	decode(buffer: ByteBuffer) : LogFileRequestMessage;
+	decode64(buffer: string) : LogFileRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface StacksRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface StacksRequestMessage extends StacksRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface StacksRequestBuilder {
+	new(data?: StacksRequest): StacksRequestMessage;
+	decode(buffer: ArrayBuffer) : StacksRequestMessage;
+	decode(buffer: ByteBuffer) : StacksRequestMessage;
+	decode64(buffer: string) : StacksRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface MetricsRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface MetricsRequestMessage extends MetricsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface MetricsRequestBuilder {
+	new(data?: MetricsRequest): MetricsRequestMessage;
+	decode(buffer: ArrayBuffer) : MetricsRequestMessage;
+	decode(buffer: ByteBuffer) : MetricsRequestMessage;
+	decode64(buffer: string) : MetricsRequestMessage;
 	
 }
 	
