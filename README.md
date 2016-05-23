@@ -65,7 +65,7 @@ For guidance on installation, development, deployment, and administration, see o
     root@:26257> CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL);
     CREATE TABLE
 
-    root@26257> INSERT INTO accounts VALUES (1234, DECIMAL '10000.50');
+    root@26257> INSERT INTO accounts VALUES (1234, 10000.50);
     INSERT 1
 
     root@26257> SELECT * FROM accounts;
