@@ -362,6 +362,10 @@ func initFlags(ctx *Context) {
 	// If no value is specified for --alsologtostderr output everything.
 	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
 
+	// Security flags.
+	ctx.Insecure = true
+	insecure = newInsecureValue(&ctx.Insecure)
+
 	{
 		f := startCmd.Flags()
 
@@ -381,12 +385,10 @@ func initFlags(ctx *Context) {
 		f.StringVar(&ctx.SocketFile, cliflags.Socket, "", usageEnv(cliflags.Socket))
 		_ = f.MarkHidden(cliflags.Socket)
 
-		// Security flags.
-		ctx.Insecure = true
-		insecure = newInsecureValue(&ctx.Insecure)
-		insecureF := f.VarPF(insecure, cliflags.Insecure, "", usageNoEnv(cliflags.Insecure))
-		insecureF.NoOptDefVal = "true"
-		// Certificates.
+		insecureF := f.VarPF(insecure, cliflags.Insecure, "", usageEnv(cliflags.Insecure))
+		insecureF.NoOptDefVal = envutil.EnvOrDefaultString(cliflags.Insecure, "true")
+
+		// Certificate flags.
 		f.StringVar(&ctx.SSLCA, cliflags.CACert, ctx.SSLCA, usageNoEnv(cliflags.CACert))
 		f.StringVar(&ctx.SSLCert, cliflags.Cert, ctx.SSLCert, usageNoEnv(cliflags.Cert))
 		f.StringVar(&ctx.SSLCertKey, cliflags.Key, ctx.SSLCertKey, usageNoEnv(cliflags.Key))
@@ -422,9 +424,10 @@ func initFlags(ctx *Context) {
 	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
+		f.StringVar(&connHost, cliflags.Host, envutil.EnvOrDefaultString(cliflags.Host, ""), usageEnv(forClient(cliflags.Host)))
+
 		insecureF := f.VarPF(insecure, cliflags.Insecure, "", usageEnv(cliflags.Insecure))
 		insecureF.NoOptDefVal = envutil.EnvOrDefaultString(cliflags.Insecure, "true")
-		f.StringVar(&connHost, cliflags.Host, envutil.EnvOrDefaultString(cliflags.Host, ""), usageEnv(forClient(cliflags.Host)))
 
 		// Certificate flags.
 		f.StringVar(&ctx.SSLCA, cliflags.CACert, envutil.EnvOrDefaultString(cliflags.CACert, ctx.SSLCA), usageEnv(cliflags.CACert))
