@@ -28,6 +28,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -42,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/coreos/etcd/raft"
 )
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
@@ -2508,23 +2509,45 @@ func (r *Replica) ChangeReplicas(
 		}
 	}
 
+	rangeID := desc.RangeID
+
 	switch changeType {
 	case roachpb.ADD_REPLICA:
 		// If the replica exists on the remote node, no matter in which store,
 		// abort the replica add.
 		if nodeUsed {
-			return util.Errorf("adding replica %v which is already present in range %d",
-				replica, desc.RangeID)
+			return util.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
+		}
 		}
 		replica.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+
+		snap, err := r.GetSnapshot()
+		if err != nil {
+			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
+		}
+
+		fromReplica := *r.GetReplica()
+
+		if err := r.store.ctx.Transport.Send(&RaftMessageRequest{
+			GroupID:     r.RangeID,
+			FromReplica: fromReplica,
+			ToReplica:   replica,
+			Message: raftpb.Message{
+				Type:     raftpb.MsgSnap,
+				To:       uint64(replica.ReplicaID),
+				From:     uint64(fromReplica.ReplicaID),
+				Snapshot: snap,
+			},
+		}); err != nil {
+			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
+		}
 	case roachpb.REMOVE_REPLICA:
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if found == -1 {
-			return util.Errorf("removing replica %v which is not present in range %d",
-				replica, desc.RangeID)
+			return util.Errorf("removing replica %v which is not present in range %d", replica, rangeID)
 		}
 		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -2571,7 +2594,7 @@ func (r *Replica) ChangeReplicas(
 		})
 		return txn.Run(b)
 	}); pErr != nil {
-		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, pErr)
+		return util.Errorf("change replicas of %d failed: %s", rangeID, pErr)
 	}
 	return nil
 }

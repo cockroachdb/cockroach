@@ -1572,7 +1572,6 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 
 	// Add the range and its current stats into metrics.
 	s.metrics.replicaCount.Inc(1)
-	s.metrics.addMVCCStats(rng.stats.GetMVCC())
 
 	if s.mu.replicasByKey.Has(rng) {
 		return rangeAlreadyExists{rng}
