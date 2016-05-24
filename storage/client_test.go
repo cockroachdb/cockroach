@@ -693,12 +693,12 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 			m.t.Fatal(err)
 		}
 
-		err = rep.ChangeReplicas(roachpb.ADD_REPLICA,
+		if err := rep.ChangeReplicas(roachpb.ADD_REPLICA,
 			roachpb.ReplicaDescriptor{
 				NodeID:  m.stores[dest].Ident.NodeID,
 				StoreID: m.stores[dest].Ident.StoreID,
-			}, &desc)
-		if err != nil {
+			}, &desc,
+		); err != nil {
 			m.t.Fatal(err)
 		}
 	}
@@ -708,8 +708,8 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
-			if m.stores[dest].LookupReplica(startKey, nil) == nil {
-				return util.Errorf("range not found on store %d", dest)
+			if store := m.stores[dest]; store.LookupReplica(startKey, nil) == nil {
+				return util.Errorf("range %d not found on store %+v", rangeID, store.Ident)
 			}
 		}
 		return nil
@@ -733,12 +733,12 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 		m.t.Fatal(err)
 	}
 
-	err = rep.ChangeReplicas(roachpb.REMOVE_REPLICA,
+	if err := rep.ChangeReplicas(roachpb.REMOVE_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  m.idents[dest].NodeID,
 			StoreID: m.idents[dest].StoreID,
-		}, &desc)
-	if err != nil {
+		}, &desc,
+	); err != nil {
 		m.t.Fatal(err)
 	}
 }

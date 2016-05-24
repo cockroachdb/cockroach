@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -389,7 +388,6 @@ func TestFailedReplicaChange(t *testing.T) {
 				if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
 					return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
 				}
-				return nil
 			}
 			return nil
 		}
@@ -401,13 +399,13 @@ func TestFailedReplicaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = rng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, rng.Desc())
-	if err == nil || !strings.Contains(err.Error(), "boom") {
-		t.Fatalf("did not get expected error: %s", err)
+		}, rng.Desc(),
+	); !testutils.IsError(err, "boom") {
+		t.Fatalf("did not get expected error: %v", err)
 	}
 
 	// After the aborted transaction, r.Desc was not updated.
@@ -424,12 +422,12 @@ func TestFailedReplicaChange(t *testing.T) {
 	// are pushable by making the transaction abandoned.
 	mtc.manualClock.Increment(10 * base.DefaultHeartbeatInterval.Nanoseconds())
 
-	err = rng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, rng.Desc())
-	if err != nil {
+		}, rng.Desc(),
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -511,9 +509,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
-		t.Fatalf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
-	}
+
+	util.SucceedsSoon(t, func() error {
+		if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
+			return util.Errorf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
+		}
+		return nil
+	})
 
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
@@ -712,7 +714,8 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 				NodeID:  mtc.stores[storeNum].Ident.NodeID,
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
 			},
-			desc)
+			desc,
+		)
 	}
 
 	// Retain the descriptor for the range at this point.
