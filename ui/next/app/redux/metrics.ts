@@ -30,6 +30,14 @@ interface WithID<T> {
   data: T;
 }
 
+/** 
+ * A request/response pair.
+ */
+interface requestWithResponse {
+  request: TSRequestMessage;
+  response: TSResponseMessage;
+}
+
 /**
  * MetricsQuery maintains the cached data for a single component.
  */
@@ -38,14 +46,17 @@ export class MetricsQuery {
   id: string;
   // The currently cached response data for this component.
   data: TSResponseMessage;
-  // The current request used to retrieve data from the server for this
-  // component. This may represent a currently in-flight query, and thus is not
-  // necessarily the request used to retrieve the current value of "data".
-  request: TSRequestMessage;
   // If the immediately previous request attempt returned an error, rather than
   // a response, it is maintained here. Null if the previous request was
   // successful.
   error: Error;
+  // The previous request, which will have resulted in either "data" or "error"
+  // being populated.
+  request: TSRequestMessage;
+  // A possibly outstanding request used to retrieve data from the server for this
+  // component. This may represent a currently in-flight query, and thus is not
+  // necessarily the request used to retrieve the current value of "data".
+  nextRequest: TSRequestMessage;
 
   constructor(id: string) {
     this.id = id;
@@ -62,14 +73,15 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
     case REQUEST:
       let { payload: request } = action as PayloadAction<WithID<TSRequestMessage>>;
       state = _.clone(state);
-      state.request = request.data;
+      state.nextRequest = request.data;
       return state;
 
     // Results for a previous request have been received from the server.
     case RECEIVE:
-      let { payload: response } = action as PayloadAction<WithID<TSResponseMessage>>;
+      let { payload: response } = action as PayloadAction<WithID<requestWithResponse>>;
       state = _.clone(state);
-      state.data = response.data;
+      state.data = response.data.response;
+      state.request = response.data.request;
       state.error = undefined;
       return state;
 
@@ -166,16 +178,21 @@ export function requestMetrics(id: string, request: TSRequestMessage): PayloadAc
   };
 }
 
+
 /**
  * receiveMetrics indicates that a previous request from this component has been
  * fulfilled by the server.
  */
-export function receiveMetrics(id: string, response: TSResponseMessage): PayloadAction<WithID<TSResponseMessage>> {
+export function receiveMetrics(id: string, request: TSRequestMessage, 
+                               response: TSResponseMessage): PayloadAction<WithID<requestWithResponse>> {
   return {
     type: RECEIVE,
     payload: {
       id: id,
-      data: response,
+      data: {
+        request: request,
+        response: response,
+      },
     },
   };
 }
@@ -299,7 +316,8 @@ export function queryMetrics(id: string, query: TSRequestMessage) {
             // query. Each request may have sent multiple queries in the batch.
             _.each(batch, (request) => {
               let numQueries = request.data.queries.length;
-              dispatch(receiveMetrics(request.id, new protos.cockroach.ts.TimeSeriesQueryResponse({
+              dispatch(receiveMetrics(request.id, request.data,
+                                      new protos.cockroach.ts.TimeSeriesQueryResponse({
                 results: results.splice(0, numQueries),
               })));
             });

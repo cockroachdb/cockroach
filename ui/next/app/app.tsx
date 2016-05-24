@@ -76,6 +76,9 @@ import Nodes from "./containers/nodes";
 import NodesOverview from "./containers/nodesOverview";
 import NodesGraphs from "./containers/nodesGraphs";
 import Node from "./containers/node";
+import NodeOverview from "./containers/nodeOverview";
+import NodeGraphs from "./containers/nodeGraphs";
+import NodeLogs from "./containers/nodeLogs";
 
 // TODO(mrtracy): Redux now provides official typings, and their Store
 // definition is generic. That would let us enforce that the store actually has
@@ -120,7 +123,11 @@ ReactDOM.render(
           // This path has to match the "nodes" route for the purpose of
           // highlighting links, but the page does not render as a child of the
           // Nodes component.
-          <Route path=":node_id" component={ Node } />
+          <Route path=":node_id" component={ Node }>
+            <IndexRoute component={ NodeOverview } />
+            <Route path="graphs" component={ NodeGraphs } />
+            <Route path="logs" component={ NodeLogs } />
+          </Route>
         </Route>
         <Route path="databases" component={ Databases } />
         <Route path="help-us/reporting" component={ HelpUs } />
