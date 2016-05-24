@@ -5,6 +5,18 @@
  */
 
 import "isomorphic-fetch";
+import * as protos from "../js/protos";
+
+let server = protos.cockroach.server;
+
+type DatabasesRequest = cockroach.server.DatabasesRequest;
+type DatabasesResponse = cockroach.server.DatabasesResponse;
+
+type DatabaseDetailsRequest = cockroach.server.DatabaseDetailsRequest;
+type DatabaseDetailsResponse = cockroach.server.DatabaseDetailsResponse;
+
+type TableDetailsRequest = cockroach.server.TableDetailsRequest;
+type TableDetailsResponse = cockroach.server.TableDetailsResponse;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
@@ -13,7 +25,9 @@ export function setFetchTimeout(v: number) {
   TIMEOUT = v;
 };
 
-type DatabasesResponse = cockroach.server.DatabasesResponse;
+/**
+ * HELPER FUNCTIONS
+ */
 
 // Inspired by https://github.com/github/fetch/issues/175
 // wraps a promise in a timeout
@@ -24,22 +38,14 @@ function timeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
-/**
- * generateGetEndpoint generates a new get endpoint
- * @param endpoint is the API endpoing to hit
- * @param toUrl is a function that takes a request and transforms it into a string which will be appended to the URL
- * @return returns a function that runs fetch and returns a promise
- */
-function generateGetEndpoint<TResponse>(endpoint: string) {
-  return function () {
-    return timeout(fetch(`${API_PREFIX}/${endpoint}`, {
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-      },
-    }))
-      .then((r) => r.json<TResponse>());
-  };
+// makeFetch generates a new fetch request to the given url
+function makeFetch(url: string) {
+  return timeout(fetch(url, {
+    headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    },
+  }));
 }
 
 /**
@@ -47,4 +53,22 @@ function generateGetEndpoint<TResponse>(endpoint: string) {
  */
 
 // getDatabaseList returns DatabasesResponse containing a list of all database names as strings
-export let getDatabaseList = generateGetEndpoint<cockroach.server.DatabasesResponse>("databases");
+export function getDatabaseList() {
+  return makeFetch(`${API_PREFIX}/databases`)
+    .then((res) => res.json<DatabasesResponse>())
+    .then((res) => new server.DatabasesResponse(res));
+}
+
+// getDatabaseDetails gets details for a specific database
+export function getDatabaseDetails(req: DatabaseDetailsRequest) {
+  return makeFetch(`${API_PREFIX}/databases/${req.database}`)
+    .then((res) => res.json<DatabaseDetailsResponse>())
+    .then((res) => new server.DatabaseDetailsResponse(res));
+}
+
+// getTableDetails gets details for a specific table
+export function getTableDetails(req: TableDetailsRequest) {
+  return makeFetch(`${API_PREFIX}/databases/${req.database}/tables/${req.table}`)
+    .then((res) => res.json<TableDetailsResponse>())
+    .then((res) => new server.TableDetailsResponse(res));
+}
