@@ -25,6 +25,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -656,6 +658,7 @@ func (r *rocksDBBatch) GetStats() (*Stats, error) {
 
 type rocksDBIterator struct {
 	engine Engine
+	rdb    *C.DBEngine
 	iter   *C.DBIterator
 	valid  bool
 	key    C.DBKey
@@ -685,6 +688,7 @@ func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Engine) Iterator {
 }
 
 func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Engine) {
+	r.rdb = rdb
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
 	r.engine = engine
 }
@@ -777,9 +781,17 @@ func (r *rocksDBIterator) Value() []byte {
 }
 
 func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
-	if r.value.len <= 0 {
-		return nil
+	if meta, ok := msg.(*MVCCMetadata); ok {
+		if key := r.unsafeKey(); strings.HasSuffix(key.Key.String(), "RaftHardState") {
+			defer func() {
+				if len(r.unsafeValue()) == 0 {
+					log.Infof("%p RETURNING EMPTY %s: %+v", r.rdb, key.Key, meta)
+					debug.PrintStack()
+				}
+			}()
+		}
 	}
+
 	return proto.Unmarshal(r.unsafeValue(), msg)
 }
 
@@ -950,6 +962,14 @@ func dbPut(rdb *C.DBEngine, key MVCCKey, value []byte) error {
 		return emptyKeyError()
 	}
 
+	if strings.HasSuffix(key.Key.String(), "RaftHardState") {
+		var meta MVCCMetadata
+		if err := meta.Unmarshal(value); err == nil {
+			log.Infof("%p WRITING %s: %+v", rdb, key.Key, meta)
+			debug.PrintStack()
+		}
+	}
+
 	// *Put, *Get, and *Delete call memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices
 	// being reclaimed by the GC.
@@ -1016,6 +1036,12 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
+
+	if strings.HasSuffix(key.Key.String(), "RaftHardState") {
+		log.Infof("%p CLEARING %s", rdb, key.Key)
+		debug.PrintStack()
+	}
+
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
 }
 
