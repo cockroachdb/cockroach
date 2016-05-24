@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -105,6 +106,45 @@ func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, pr
 	dbCtx := client.DefaultDBContext()
 	dbCtx.UserPriority = priority
 	return client.NewDBWithContext(sender, dbCtx), sender
+}
+
+func errInfo() string {
+	_, file1, line1, _ := runtime.Caller(3)
+	_, file2, line2, _ := runtime.Caller(2)
+	return fmt.Sprintf("%s:%d %s:%d", filepath.Base(file1), line1, filepath.Base(file2), line2)
+}
+
+// checkKVs verifies that a KeyValue slice contains the expected keys and values.  The values can be
+// either integers or strings; the expected results are passed as alternating keys and values, e.g:
+//    checkScanResult(t, result, key1, val1, key2, val2)
+func checkKVs(t util.Tester, kvs []client.KeyValue, expected ...interface{}) {
+	expLen := len(expected) / 2
+	if expLen != len(kvs) {
+		t.Errorf("%s: expected %d scan results, got %d", errInfo(), expLen, len(kvs))
+		return
+	}
+	for i := 0; i < expLen; i++ {
+		expKey := expected[2*i].(roachpb.Key)
+		if key := kvs[i].Key; !key.Equal(expKey) {
+			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
+		}
+		switch expValue := expected[2*i+1].(type) {
+		case int:
+			if value, err := kvs[i].Value.GetInt(); err != nil {
+				t.Errorf("%s: non-integer scan value %d: %q", errInfo(), i, kvs[i].Value)
+			} else if value != int64(expValue) {
+				t.Errorf("%s: expected scan value %d to be %d; got %d",
+					errInfo(), i, expValue, value)
+			}
+		case string:
+			if value := kvs[i].Value.String(); value != expValue {
+				t.Errorf("%s: expected scan value %d to be %s; got %s",
+					errInfo(), i, expValue, value)
+			}
+		default:
+			panic(fmt.Sprintf("unsupported type %T", expValue))
+		}
+	}
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -442,8 +482,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
-		client.CheckKVs(t, b.Results[1].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
+		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
+		checkKVs(t, b.Results[1].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
 	}
 
 	// Try a limited batch of 2 scans.
@@ -455,8 +495,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
-		client.CheckKVs(t, b.Results[1].Rows, keys[5], 5, keys[6], 6)
+		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
+		checkKVs(t, b.Results[1].Rows, keys[5], 5, keys[6], 6)
 	}
 
 	// Try a limited batch of 2 scans.
@@ -468,8 +508,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
-		client.CheckKVs(t, b.Results[1].Rows, keys[0], 0, keys[1], 1)
+		checkKVs(t, b.Results[0].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
+		checkKVs(t, b.Results[1].Rows, keys[0], 0, keys[1], 1)
 	}
 
 	// Try a limited batch of 2 scans.
@@ -481,8 +521,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2)
-		client.CheckKVs(t, b.Results[1].Rows)
+		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2)
+		checkKVs(t, b.Results[1].Rows)
 	}
 
 	// Try 2 reverse scans.
@@ -493,8 +533,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
-		client.CheckKVs(t, b.Results[1].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
+		checkKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		checkKVs(t, b.Results[1].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
 	}
 
 	// Try a limited batch of 2 reverse scans.
@@ -506,8 +546,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
-		client.CheckKVs(t, b.Results[1].Rows, keys[9], 9, keys[8], 8)
+		checkKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		checkKVs(t, b.Results[1].Rows, keys[9], 9, keys[8], 8)
 	}
 
 	// Try a limited batch of 2 reverse scans.
@@ -519,8 +559,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
-		client.CheckKVs(t, b.Results[1].Rows, keys[4], 4, keys[3], 3)
+		checkKVs(t, b.Results[0].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
+		checkKVs(t, b.Results[1].Rows, keys[4], 4, keys[3], 3)
 	}
 
 	// Try a limited batch of 2 reverse scans.
@@ -532,8 +572,8 @@ func TestClientBatch(t *testing.T) {
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
-		client.CheckKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2)
-		client.CheckKVs(t, b.Results[1].Rows)
+		checkKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		checkKVs(t, b.Results[1].Rows)
 	}
 
 	// Induce a non-transactional failure.
@@ -829,7 +869,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			client.CheckKVs(t, rows,
+			checkKVs(t, rows,
 				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
 				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		}
@@ -840,7 +880,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			client.CheckKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		}
 
 		// Try limit maximum rows.
@@ -849,7 +889,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			client.CheckKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
 		}
 
 		// Try reverse scan with the same start and end key.
