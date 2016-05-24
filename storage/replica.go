@@ -843,19 +843,19 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	if ba.IsAdmin() {
 		log.Trace(ctx, "admin path")
 		br, pErr = r.addAdminCmd(ctx, ba)
-	} else if ba.IsReadOnly() {
-		log.Trace(ctx, "read-only path")
-		br, pErr = r.addReadOnlyCmd(ctx, ba)
 	} else if ba.IsWrite() {
 		log.Trace(ctx, "read-write path")
 		br, pErr = r.addWriteCmd(ctx, ba, nil)
-	} else if len(ba.Requests) == 0 {
+	} else if len(ba.Requests) > 0 {
+		// Read-only batches are non-admin/non-write requests that contain at least
+		// 1 request.
+		log.Trace(ctx, "read-only path")
+		br, pErr = r.addReadOnlyCmd(ctx, ba)
+	} else {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
 		panic("empty batch")
-	} else {
-		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
 	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
