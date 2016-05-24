@@ -606,12 +606,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 		return 0, err
 	}
 
-	log.Infof("received snapshot for range %s at index %d. encoded size=%d, %d KV pairs, %d log entries",
-		r.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
-	defer func(start time.Time) {
-		log.Infof("applied snapshot for range %s in %s", r.RangeID, timeutil.Since(start))
-	}(timeutil.Now())
-
 	rangeID := r.RangeID
 
 	// First, save the HardState. The HardState must not be changed
@@ -629,6 +623,17 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
+
+	replicaID := desc.NextReplicaID
+	if replicaDesc := r.GetReplica(); replicaDesc != nil {
+		replicaID = replicaDesc.ReplicaID
+	}
+
+	log.Infof("replica %s received snapshot for range %s at index %d. encoded size=%d, %d KV pairs, %d log entries",
+		replicaID, rangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
+	defer func(start time.Time) {
+		log.Infof("replica %s applied snapshot for range %s in %s", replicaID, rangeID, timeutil.Since(start))
+	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
