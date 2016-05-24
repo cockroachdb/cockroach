@@ -3,6 +3,11 @@ variable "benchmarks_sha" {
   default = ""
 }
 
+# Type of benchmarks to run. eg: "static-tests.jemalloc".
+variable "benchmarks_package" {
+  default = "static-tests"
+}
+
 # Port used by supervisord.
 variable "supervisor_port" {
   default = "9001"
