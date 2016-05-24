@@ -15,6 +15,8 @@ type Index = cockroach.server.TableDetailsResponse.Index;
 type Grant = cockroach.server.DatabaseDetailsResponse.Grant;
 type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
 
+// TEST
+
 // Constants used to store sort settings in the redux UI store.
 
 // TODO: should this be a per database/table setting? Currently it's a per page setting.
