@@ -178,7 +178,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 				return nil, err
 			}
 			if descriptor == nil {
-				return nil, newUndefinedDatabaseError(database)
+				return nil, sqlbase.NewUndefinedDatabaseError(database)
 			}
 			descs = append(descs, descriptor)
 		}
@@ -200,7 +200,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 				return nil, err
 			}
 			if descriptor == nil {
-				return nil, newUndefinedTableError(table.String())
+				return nil, sqlbase.NewUndefinedTableError(table.String())
 			}
 			descs = append(descs, descriptor)
 		}

@@ -664,12 +664,12 @@ func (e *Executor) execStmtInAbortedTxn(
 			// TODO(andrei/cdo): add a counter for user-directed retries.
 			return Result{}, nil
 		}
-		err := newTransactionAbortedError(fmt.Sprintf(
+		err := sqlbase.NewTransactionAbortedError(fmt.Sprintf(
 			"SAVEPOINT %s has not been used or a non-retriable error was encountered.",
 			parser.RestartSavepointName))
 		return Result{Err: err}, err
 	default:
-		err := newTransactionAbortedError("")
+		err := sqlbase.NewTransactionAbortedError("")
 		return Result{Err: err}, err
 	}
 }
@@ -691,7 +691,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 		txnState.resetStateAndTxn(NoTxn)
 		return result, nil
 	default:
-		err := newTransactionCommittedError()
+		err := sqlbase.NewTransactionCommittedError()
 		return Result{Err: err}, err
 	}
 }

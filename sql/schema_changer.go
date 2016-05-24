@@ -167,7 +167,7 @@ func isSchemaChangeRetryError(err error) bool {
 	case errDescriptorNotFound:
 		return false
 	default:
-		return !isIntegrityConstraintError(err)
+		return !sqlbase.IsIntegrityConstraintError(err)
 	}
 }
 
@@ -286,7 +286,7 @@ func (sc SchemaChanger) exec(
 	// Purge the mutations if the application of the mutations failed due to
 	// an integrity constraint violation. All other errors are transient
 	// errors that are resolved by retrying the backfill.
-	if isIntegrityConstraintError(err) {
+	if sqlbase.IsIntegrityConstraintError(err) {
 		log.Warningf("reversing schema change due to irrecoverable error: %s", err)
 		if errReverse := sc.reverseMutations(); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation

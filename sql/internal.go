@@ -89,7 +89,7 @@ func getTableID(p *planner, qname *parser.QualifiedName) (sqlbase.ID, error) {
 		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, newUndefinedTableError(qname.String())
+		return 0, sqlbase.NewUndefinedTableError(qname.String())
 	}
 	return sqlbase.ID(gr.ValueInt()), nil
 }

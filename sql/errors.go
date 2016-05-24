@@ -19,242 +19,13 @@ package sql
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
-
-// Cockroach error extensions:
-const (
-	// CodeRetriableError signals to the user that the SQL txn entered the
-	// RESTART_WAIT state and that a RESTART statement should be issued.
-	CodeRetriableError string = "CR000"
-	// CodeTransactionCommittedError signals that the SQL txn is in the
-	// COMMIT_WAIT state and a COMMIT statement should be issued.
-	CodeTransactionCommittedError string = "CR001"
-)
-
-// SrcCtx contains contextual information about the source of an error.
-type SrcCtx struct {
-	File     string
-	Line     int
-	Function string
-}
-
-func makeSrcCtx(depth int) SrcCtx {
-	f, l, fun := caller.Lookup(depth + 1)
-	return SrcCtx{File: f, Line: l, Function: fun}
-}
-
-// ErrorWithPGCode represents errors that carries an error code to the user.
-// pgwire recognizes this interfaces and extracts the code.
-type ErrorWithPGCode interface {
-	error
-	Code() string
-	SrcContext() SrcCtx
-}
-
-var _ ErrorWithPGCode = &errNonNullViolation{}
-var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
-var _ ErrorWithPGCode = &errTransactionAborted{}
-var _ ErrorWithPGCode = &errTransactionCommitted{}
-var _ ErrorWithPGCode = &errUndefinedDatabase{}
-var _ ErrorWithPGCode = &errUndefinedTable{}
-var _ ErrorWithPGCode = &errRetry{}
-
-const (
-	txnAbortedMsg = "current transaction is aborted, commands ignored " +
-		"until end of transaction block"
-	txnCommittedMsg = "current transaction is committed, commands ignored " +
-		"until end of transaction block"
-	txnRetryMsgPrefix = "restart transaction:"
-)
-
-func newRetryError(msg string) error {
-	return &errRetry{ctx: makeSrcCtx(1), msg: msg}
-}
-
-// errRetry means that the transaction can be retried.
-type errRetry struct {
-	ctx SrcCtx
-	msg string
-}
-
-func (e *errRetry) Error() string {
-	return e.msg
-}
-
-func (*errRetry) Code() string {
-	return CodeRetriableError
-}
-
-func (e *errRetry) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func newTransactionAbortedError(customMsg string) error {
-	return &errTransactionAborted{ctx: makeSrcCtx(1), CustomMsg: customMsg}
-}
-
-type errTransactionAborted struct {
-	ctx       SrcCtx
-	CustomMsg string
-}
-
-func (e *errTransactionAborted) Error() string {
-	msg := txnAbortedMsg
-	if e.CustomMsg != "" {
-		msg += "; " + e.CustomMsg
-	}
-	return msg
-}
-
-func (*errTransactionAborted) Code() string {
-	return pgerror.CodeInFailedSQLTransactionError
-}
-
-func (e *errTransactionAborted) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func newTransactionCommittedError() error {
-	return &errTransactionCommitted{ctx: makeSrcCtx(1)}
-}
-
-type errTransactionCommitted struct {
-	ctx SrcCtx
-}
-
-func (*errTransactionCommitted) Error() string {
-	return txnCommittedMsg
-}
-
-func (*errTransactionCommitted) Code() string {
-	return CodeTransactionCommittedError
-}
-
-func (e *errTransactionCommitted) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func newNonNullViolationError(columnName string) error {
-	return &errNonNullViolation{ctx: makeSrcCtx(1), columnName: columnName}
-}
-
-type errNonNullViolation struct {
-	ctx        SrcCtx
-	columnName string
-}
-
-func (e *errNonNullViolation) Error() string {
-	return fmt.Sprintf("null value in column %q violates not-null constraint", e.columnName)
-}
-
-func (*errNonNullViolation) Code() string {
-	return pgerror.CodeNotNullViolationError
-}
-
-func (e *errNonNullViolation) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func newUniquenessConstraintViolationError(
-	index *sqlbase.IndexDescriptor, vals []parser.Datum,
-) error {
-	return &errUniquenessConstraintViolation{
-		ctx:   makeSrcCtx(1),
-		index: index,
-		vals:  vals,
-	}
-}
-
-type errUniquenessConstraintViolation struct {
-	ctx   SrcCtx
-	index *sqlbase.IndexDescriptor
-	vals  []parser.Datum
-}
-
-func (*errUniquenessConstraintViolation) Code() string {
-	return pgerror.CodeUniqueViolationError
-}
-
-func (e *errUniquenessConstraintViolation) Error() string {
-	valStrs := make([]string, 0, len(e.vals))
-	for _, val := range e.vals {
-		valStrs = append(valStrs, val.String())
-	}
-
-	return fmt.Sprintf("duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(e.index.ColumnNames, ","),
-		strings.Join(valStrs, ","),
-		e.index.Name)
-}
-
-func (e *errUniquenessConstraintViolation) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func newUndefinedTableError(name string) error {
-	return &errUndefinedTable{ctx: makeSrcCtx(1), name: name}
-}
-
-type errUndefinedTable struct {
-	ctx  SrcCtx
-	name string
-}
-
-func (e *errUndefinedTable) Error() string {
-	return fmt.Sprintf("table %q does not exist", e.name)
-}
-
-func (*errUndefinedTable) Code() string {
-	return pgerror.CodeUndefinedTableError
-}
-
-func (e *errUndefinedTable) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func newUndefinedDatabaseError(name string) error {
-	return &errUndefinedDatabase{ctx: makeSrcCtx(1), name: name}
-}
-
-type errUndefinedDatabase struct {
-	ctx  SrcCtx
-	name string
-}
-
-func (e *errUndefinedDatabase) Error() string {
-	return fmt.Sprintf("database %q does not exist", e.name)
-}
-
-func (*errUndefinedDatabase) Code() string {
-	// Postgres will return an UndefinedTable error on queries that go to a "relation"
-	// that does not exist (a query to a non-existent table or database), but will
-	// return an InvalidCatalogName error when connecting to a database that does
-	// not exist. We've chosen to return this code for all cases where the error cause
-	// is a missing database.
-	return pgerror.CodeInvalidCatalogNameError
-}
-
-func (e *errUndefinedDatabase) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-func isIntegrityConstraintError(err error) bool {
-	switch err.(type) {
-	case *errNonNullViolation, *errUniquenessConstraintViolation:
-		return true
-	default:
-		return false
-	}
-}
 
 func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
 	origPErr := b.MustPErr()
@@ -294,7 +65,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) erro
 				return err
 			}
 
-			return newUniquenessConstraintViolationError(index, vals)
+			return sqlbase.NewUniquenessConstraintViolationError(index, vals)
 		}
 	}
 	return origPErr.GoError()
@@ -313,7 +84,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	if _, ok := err.(*roachpb.RetryableTxnError); ok {
-		return newRetryError(fmt.Sprintf("%s %v", txnRetryMsgPrefix, err))
+		return sqlbase.NewRetryError(err)
 	}
 	return err
 }

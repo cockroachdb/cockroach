@@ -304,7 +304,7 @@ func (n *insertNode) Next() bool {
 	for _, col := range n.tableDesc.Columns {
 		if !col.Nullable {
 			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-				n.run.err = newNonNullViolationError(col.Name)
+				n.run.err = sqlbase.NewNonNullViolationError(col.Name)
 				return false
 			}
 		}

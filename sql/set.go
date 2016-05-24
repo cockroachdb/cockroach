@@ -56,7 +56,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 				return nil, err
 			}
 			if dbDesc == nil {
-				return nil, newUndefinedDatabaseError(dbName)
+				return nil, sqlbase.NewUndefinedDatabaseError(dbName)
 			}
 		}
 		p.session.Database = dbName
