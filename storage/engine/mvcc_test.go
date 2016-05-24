@@ -1472,6 +1472,30 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	}
 }
 
+func TestMVCCDeleteRangeSkipTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
+	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil)
+
+	txn := *txn1
+	txn.Sequence++
+	_, err = MVCCDeleteRange(context.Background(), engine, nil, testKey1, testKey4, 0, makeTS(2, 0), &txn, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txn.Sequence++
+	txn.Epoch = 2
+	kvs, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, 0, makeTS(3, 0), true, &txn)
+	if len(kvs) == 0 {
+		t.Fatal("no data in the table")
+	}
+}
+
 func TestMVCCConditionalPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

@@ -794,6 +794,7 @@ func mvccGetInternal(
 					"failed to read with epoch %d due to a write intent with epoch %d",
 					txn.Epoch, meta.Txn.Epoch)
 			}
+			log.Infof("skip key: %s", metaKey)
 			seekKey = seekKey.Next()
 		}
 	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
