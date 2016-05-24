@@ -26,7 +26,7 @@ import (
 // policy allows either the union or intersection of maximum # of
 // versions and maximum age.
 type GarbageCollector struct {
-	expiration roachpb.Timestamp
+	Expiration roachpb.Timestamp
 	policy     config.GCPolicy
 }
 
@@ -35,7 +35,7 @@ type GarbageCollector struct {
 func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1E9
 	return GarbageCollector{
-		expiration: roachpb.Timestamp{WallTime: now.WallTime - ttlNanos},
+		Expiration: roachpb.Timestamp{WallTime: now.WallTime - ttlNanos},
 		policy:     policy,
 	}
 }
@@ -73,7 +73,7 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Times
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return roachpb.ZeroTimestamp
 		}
-		if gc.expiration.Less(key.Timestamp) {
+		if gc.Expiration.Less(key.Timestamp) {
 			continue
 		}
 		// Now key.Timestamp is <= gc.expiration, but the key-value pair is still

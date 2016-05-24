@@ -1023,7 +1023,23 @@ func (r *Replica) GC(
 	var reply roachpb.GCResponse
 	// Garbage collect the specified keys by expiration timestamps.
 	err := engine.MVCCGarbageCollect(ctx, batch, ms, keys, h.Timestamp)
-	return reply, err
+	if err != nil {
+		return reply, err
+	}
+
+	r.mu.Lock()
+	updateLast := args.Expiration > r.mu.lastGC
+	r.mu.Unlock()
+	if !updateLast {
+		return reply, nil
+	}
+
+	batch.Defer(func() {
+		r.mu.Lock()
+		r.mu.lastGC = args.Expiration
+		r.mu.Unlock()
+	})
+	return reply, setLastGC(batch, ms, r.Desc().RangeID, args.Expiration)
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
