@@ -301,12 +301,12 @@ func (b *bytesValue) String() string {
 }
 
 type insecureValue struct {
-	val   *bool
+	ctx   *Context
 	isSet bool
 }
 
-func newInsecureValue(val *bool) *insecureValue {
-	return &insecureValue{val: val}
+func newInsecureValue(ctx *Context) *insecureValue {
+	return &insecureValue{ctx: ctx}
 }
 
 func (b *insecureValue) IsBoolFlag() bool {
@@ -319,15 +319,15 @@ func (b *insecureValue) Set(s string) error {
 		return err
 	}
 	b.isSet = true
-	*b.val = v
-	if *b.val {
+	b.ctx.Insecure = v
+	if b.ctx.Insecure {
 		// If --insecure is specified, clear any of the existing security flags if
 		// they were set. This allows composition of command lines where a later
 		// specification of --insecure clears an earlier security specification.
-		cliContext.SSLCA = ""
-		cliContext.SSLCAKey = ""
-		cliContext.SSLCert = ""
-		cliContext.SSLCertKey = ""
+		b.ctx.SSLCA = ""
+		b.ctx.SSLCAKey = ""
+		b.ctx.SSLCert = ""
+		b.ctx.SSLCertKey = ""
 	}
 	return nil
 }
@@ -337,7 +337,7 @@ func (b *insecureValue) Type() string {
 }
 
 func (b *insecureValue) String() string {
-	return fmt.Sprint(*b.val)
+	return fmt.Sprint(b.ctx.Insecure)
 }
 
 // initFlags sets the cli.Context values to flag values.
@@ -364,7 +364,7 @@ func initFlags(ctx *Context) {
 
 	// Security flags.
 	ctx.Insecure = true
-	insecure = newInsecureValue(&ctx.Insecure)
+	insecure = newInsecureValue(ctx)
 
 	{
 		f := startCmd.Flags()
@@ -476,10 +476,10 @@ func initFlags(ctx *Context) {
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		f.StringVar(&cliContext.debug.startKey, cliflags.From, "", usageNoEnv(cliflags.From))
-		f.StringVar(&cliContext.debug.endKey, cliflags.To, "", usageNoEnv(cliflags.To))
-		f.BoolVar(&cliContext.debug.raw, cliflags.Raw, false, usageNoEnv(cliflags.Raw))
-		f.BoolVar(&cliContext.debug.values, cliflags.Values, false, usageNoEnv(cliflags.Values))
+		f.StringVar(&ctx.debug.startKey, cliflags.From, "", usageNoEnv(cliflags.From))
+		f.StringVar(&ctx.debug.endKey, cliflags.To, "", usageNoEnv(cliflags.To))
+		f.BoolVar(&ctx.debug.raw, cliflags.Raw, false, usageNoEnv(cliflags.Raw))
+		f.BoolVar(&ctx.debug.values, cliflags.Values, false, usageNoEnv(cliflags.Values))
 	}
 
 	{
