@@ -29,28 +29,28 @@ function makeDataProvider(id: string,
   </MetricsDataProvider>);
 }
 
-function makeMetricsRequest(timeSpan: Long[]) {
+function makeMetricsRequest(timeSpan: Long[], sources?: string[]) {
   return new protos.cockroach.ts.TimeSeriesQueryRequest({
     start_nanos: timeSpan[0],
     end_nanos: timeSpan[1],
     queries: [
       {
         name: "test.metric.1",
-        sources: undefined,
+        sources: sources,
         downsampler: cockroach.ts.TimeSeriesQueryAggregator.AVG,
         source_aggregator: cockroach.ts.TimeSeriesQueryAggregator.SUM,
         derivative: cockroach.ts.TimeSeriesQueryDerivative.NONE,
       },
       {
         name: "test.metric.2",
-        sources: undefined,
+        sources: sources,
         downsampler: cockroach.ts.TimeSeriesQueryAggregator.AVG,
         source_aggregator: cockroach.ts.TimeSeriesQueryAggregator.SUM,
         derivative: cockroach.ts.TimeSeriesQueryDerivative.NONE,
       },
       {
         name: "test.metric.3",
-        sources: undefined,
+        sources: sources,
         downsampler: cockroach.ts.TimeSeriesQueryAggregator.AVG,
         source_aggregator: cockroach.ts.TimeSeriesQueryAggregator.SUM,
         derivative: cockroach.ts.TimeSeriesQueryDerivative.NONE,
@@ -59,8 +59,8 @@ function makeMetricsRequest(timeSpan: Long[]) {
   });
 }
 
-function makeMetricsQuery(id: string, timeSpan: Long[]): MetricsQuery {
-  let request = makeMetricsRequest(timeSpan);
+function makeMetricsQuery(id: string, timeSpan: Long[], sources?: string[]): MetricsQuery {
+  let request = makeMetricsRequest(timeSpan, sources);
   let data = new protos.cockroach.ts.TimeSeriesQueryResponse({
     results: _(request.queries).map((q) => {
       return {
@@ -73,6 +73,7 @@ function makeMetricsQuery(id: string, timeSpan: Long[]): MetricsQuery {
     id,
     request,
     data,
+    nextRequest: request,
     error: undefined,
   };
 }
@@ -99,6 +100,14 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.notCalled);
     });
 
+    it("does nothing when mounted if current request is in flight.", function () {
+      let query = makeMetricsQuery(graphid, timespan1);
+      query.request = null;
+      query.data = null;
+      makeDataProvider(graphid, query, timespan1, spy);
+      assert.isTrue(spy.notCalled);
+    });
+
     it("refreshes query data when receiving props.", function () {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
@@ -119,6 +128,17 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan2)));
     });
 
+    it("refreshes if query changes.", function () {
+      let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
+      assert.isTrue(spy.notCalled);
+      // Modify "sources" parameter.
+      provider.setProps({
+        metrics: makeMetricsQuery(graphid, timespan1, ["1"]),
+      });
+      assert.isTrue(spy.called);
+      assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
+    });
+
   });
 
   describe("attach", function() {
@@ -127,6 +147,19 @@ describe("<MetricsDataProvider>", function() {
       let props: any = provider.first().props();
       assert.isDefined(props.data);
       assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
+    });
+
+    it("attaches metrics data if timespan doesn't match", function() {
+      let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan2, spy);
+      let props: any = provider.first().props();
+      assert.isDefined(props.data);
+      assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
+    });
+
+    it("does not attach metrics data if query doesn't match", function() {
+      let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1, ["1"]), timespan1, spy);
+      let props: any = provider.first().props();
+      assert.isUndefined(props.data);
     });
 
     it("throws error if it contains multiple graph components", function() {
