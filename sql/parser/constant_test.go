@@ -65,7 +65,7 @@ func TestNumericConstantAvailableTypes(t *testing.T) {
 		}
 
 		// Check available types.
-		c := &NumVal{Value: val}
+		c := &NumVal{Value: val, OrigString: test.str}
 		avail := c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
 			t.Errorf("%d: expected the available type set %v for %v, found %v",
