@@ -17,6 +17,7 @@
 package sqlbase
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -39,6 +40,23 @@ type EncDatum struct {
 
 	// Decoded datum.
 	Datum parser.Datum
+}
+
+func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
+	if ed.Datum == nil {
+		if a == nil {
+			a = &DatumAlloc{}
+		}
+		err := ed.Decode(a)
+		if err != nil {
+			return fmt.Sprintf("<error: %v>", err)
+		}
+	}
+	return ed.Datum.String()
+}
+
+func (ed *EncDatum) String() string {
+	return ed.stringWithAlloc(nil)
 }
 
 // SetEncoded initializes the EncDatum with the given encoded value. The encoded
@@ -147,4 +165,41 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 	default:
 		panic(fmt.Sprintf("unknown encoding requested %s", enc))
 	}
+}
+
+// EncDatumRow is a row of EncDatums.
+type EncDatumRow []EncDatum
+
+func (r EncDatumRow) stringToBuf(a *DatumAlloc, b *bytes.Buffer) {
+	b.WriteString("[")
+	for i := range r {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(r[i].stringWithAlloc(a))
+	}
+	b.WriteString("]")
+}
+
+func (r EncDatumRow) String() string {
+	var b bytes.Buffer
+	r.stringToBuf(&DatumAlloc{}, &b)
+	return b.String()
+}
+
+// EncDatumRows is a slice of EncDatumRows.
+type EncDatumRows []EncDatumRow
+
+func (r EncDatumRows) String() string {
+	var a DatumAlloc
+	var b bytes.Buffer
+	b.WriteString("[")
+	for i, r := range r {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		r.stringToBuf(&a, &b)
+	}
+	b.WriteString("]")
+	return b.String()
 }

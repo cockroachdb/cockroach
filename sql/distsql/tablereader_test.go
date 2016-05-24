@@ -34,34 +34,21 @@ import (
 // testingReceiver is an implementation of rowReceiver that accumulates
 // results which we can later verify.
 type testingReceiver struct {
-	rows       [][]parser.Datum
-	datumAlloc sqlbase.DatumAlloc
-	closed     bool
-	err        error
+	rows   sqlbase.EncDatumRows
+	closed bool
+	err    error
 }
 
 var _ rowReceiver = &testingReceiver{}
 
-func (tr *testingReceiver) PushRow(row row) bool {
-	if tr.err != nil {
-		return false
-	}
-	decodedRow := make([]parser.Datum, len(row))
-	for i := range row {
-		tr.err = row[i].Decode(&tr.datumAlloc)
-		if tr.err != nil {
-			return false
-		}
-		decodedRow[i] = row[i].Datum
-	}
-	tr.rows = append(tr.rows, decodedRow)
+func (tr *testingReceiver) PushRow(row sqlbase.EncDatumRow) bool {
+	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
+	tr.rows = append(tr.rows, rowCopy)
 	return true
 }
 
 func (tr *testingReceiver) Close(err error) {
-	if tr.err != nil {
-		tr.err = err
-	}
+	tr.err = err
 	tr.closed = true
 }
 

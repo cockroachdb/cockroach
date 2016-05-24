@@ -102,7 +102,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]DatumEncoding, len(ed))
 		for i := range ed {
-			enc[i] = DatumEncoding(rng.Intn(len(DatumEncoding_value)))
+			enc[i] = RandDatumEncoding(rng)
 			buf, err = ed[i].Encode(&alloc, enc[i], buf)
 			if err != nil {
 				t.Fatal(err)
