@@ -2495,48 +2495,42 @@ func (r *Replica) ChangeReplicas(
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
-	err := func() error {
-		r.mu.Lock()
-		defer r.mu.Unlock()
 
-		found := -1       // tracks NodeID && StoreID
-		nodeUsed := false // tracks NodeID only
-		for i, existingRep := range desc.Replicas {
-			nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
-			if existingRep.NodeID == replica.NodeID &&
-				existingRep.StoreID == replica.StoreID {
-				found = i
-				replica.ReplicaID = existingRep.ReplicaID
-				break
-			}
+	found := -1       // tracks NodeID && StoreID
+	nodeUsed := false // tracks NodeID only
+	for i, existingRep := range desc.Replicas {
+		nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
+
+		if existingRep.NodeID == replica.NodeID && existingRep.StoreID == replica.StoreID {
+			found = i
+			replica.ReplicaID = existingRep.ReplicaID
+			break
 		}
-		if changeType == roachpb.ADD_REPLICA {
-			// If the replica exists on the remote node, no matter in which store,
-			// abort the replica add.
-			if nodeUsed {
-				return util.Errorf("adding replica %v which is already present in range %d",
-					replica, desc.RangeID)
-			}
-			replica.ReplicaID = updatedDesc.NextReplicaID
-			updatedDesc.NextReplicaID++
-			updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
-		} else if changeType == roachpb.REMOVE_REPLICA {
-			// If that exact node-store combination does not have the replica,
-			// abort the removal.
-			if found == -1 {
-				return util.Errorf("removing replica %v which is not present in range %d",
-					replica, desc.RangeID)
-			}
-			updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
-			updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
-		}
-		return nil
-	}()
-	if err != nil {
-		return err
 	}
 
-	pErr := r.store.DB().Txn(func(txn *client.Txn) error {
+	switch changeType {
+	case roachpb.ADD_REPLICA:
+		// If the replica exists on the remote node, no matter in which store,
+		// abort the replica add.
+		if nodeUsed {
+			return util.Errorf("adding replica %v which is already present in range %d",
+				replica, desc.RangeID)
+		}
+		replica.ReplicaID = updatedDesc.NextReplicaID
+		updatedDesc.NextReplicaID++
+		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+	case roachpb.REMOVE_REPLICA:
+		// If that exact node-store combination does not have the replica,
+		// abort the removal.
+		if found == -1 {
+			return util.Errorf("removing replica %v which is not present in range %d",
+				replica, desc.RangeID)
+		}
+		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
+		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
+	}
+
+	if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}
@@ -2576,8 +2570,7 @@ func (r *Replica) ChangeReplicas(
 			},
 		})
 		return txn.Run(b)
-	})
-	if pErr != nil {
+	}); pErr != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, pErr)
 	}
 	return nil
