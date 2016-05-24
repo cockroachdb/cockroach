@@ -510,9 +510,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
-		t.Fatalf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
-	}
+
+	util.SucceedsSoon(t, func() error {
+		if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
+			return util.Errorf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
+		}
+		return nil
+	})
 
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
