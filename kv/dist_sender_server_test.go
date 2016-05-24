@@ -266,14 +266,14 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			t.Fatal(err)
 		}
 		ts[i] = s.Clock().Now()
-		log.Infof("%d: %d", i, ts[i])
+		log.Infof("%d: %s %d", i, key, ts[i])
 		if i == 0 {
 			util.SucceedsSoon(t, func() error {
 				// Enforce that when we write the second key, it's written
 				// with a strictly higher timestamp. We're dropping logical
 				// ticks and the clock may just have been pushed into the
 				// future, so that's necessary. See #3122.
-				if !ts[0].Less(s.Clock().Now()) {
+				if ts[0].WallTime >= s.Clock().Now().WallTime {
 					return errors.New("time stands still")
 				}
 				return nil
@@ -285,7 +285,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// it does the read at its local clock and doesn't receive an
 	// OpRequiresTxnError. We set the local clock to the timestamp of
 	// just above the first key to verify it's used to read only key "a".
-	for _, request := range []roachpb.Request{
+	for i, request := range []roachpb.Request{
 		roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0),
 		roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0),
 	} {
@@ -311,7 +311,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		}
 
 		if l := len(rows); l != 1 {
-			t.Fatalf("expected 1 row; got %d", l)
+			t.Fatalf("%d: expected 1 row; got %d\n%s", i, l, rows)
 		}
 		if key := string(rows[0].Key); keys[0] != key {
 			t.Errorf("expected key %q; got %q", keys[0], key)
