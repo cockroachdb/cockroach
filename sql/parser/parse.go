@@ -94,7 +94,7 @@ var NoTypePreference = Datum(nil)
 // be used to hint the desired type for the root of the resulting typed expression
 // tree.
 func TypeCheck(expr Expr, args MapArgs, desired Datum) (TypedExpr, error) {
-	expr, err := foldNumericConstants(expr)
+	expr, err := foldConstantLiterals(expr)
 	if err != nil {
 		return nil, err
 	}
