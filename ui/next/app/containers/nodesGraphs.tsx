@@ -12,6 +12,8 @@ import { NanoToMilli } from "../util/convert";
  * Renders the graphs tab of the nodes page.
  */
 export default class extends React.Component<{}, {}> {
+  static displayTimeScale = true;
+
   render() {
     return <div className="section nodes">
       <div className="charts">
