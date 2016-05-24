@@ -161,6 +161,5 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	if offset != 0 {
 		p.session.Location = time.FixedZone("", int(offset))
 	}
-	p.evalCtx.Location = p.session.Location
 	return &emptyNode{}, nil
 }
