@@ -316,11 +316,42 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	}
 }
 
+type constantLiteralFoldingTestCase struct {
+	expr     string
+	expected string
+}
+
+func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingTestCase) {
+	for _, d := range testData {
+		expr, err := ParseExprTraditional(d.expr)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		rOrig := expr.String()
+		r, err := foldConstantLiterals(expr)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		if s := r.String(); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		// Folding again should be a no-op.
+		r2, err := foldConstantLiterals(r)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		if s := r2.String(); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		// The original expression should be unchanged.
+		if rStr := expr.String(); rOrig != rStr {
+			t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
+		}
+	}
+}
+
 func TestFoldNumericConstants(t *testing.T) {
-	testData := []struct {
-		expr     string
-		expected string
-	}{
+	testConstantLiteralFolding(t, []constantLiteralFoldingTestCase{
 		// Unary ops.
 		{`+1`, `1`},
 		{`+1.2`, `1.2`},
@@ -412,31 +443,47 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`a * b + 5 / 2`, `(a * b) + 2.5`},
 		{`a - b * 5 - 3`, `(a - (b * 5)) - 3`},
 		{`a - b + 5 * 3`, `(a - b) + 15`},
-	}
-	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		rOrig := expr.String()
-		r, err := foldNumericConstants(expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if s := r.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		// Folding again should be a no-op.
-		r2, err := foldNumericConstants(r)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if s := r2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		// The original expression should be unchanged.
-		if rStr := expr.String(); rOrig != rStr {
-			t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
-		}
-	}
+	})
+}
+
+func TestFoldStringConstants(t *testing.T) {
+	testConstantLiteralFolding(t, []constantLiteralFoldingTestCase{
+		// Binary ops.
+		{`'string' || 'string'`, `'stringstring'`},
+		{`'string' || b'bytes'`, `b'stringbytes'`},
+		{`b'bytes' || b'bytes'`, `b'bytesbytes'`},
+		{`'a' || 'b' || 'c'`, `'abc'`},
+		{`'\' || (b'0a' || b'\x0a')`, `b'\\0a\n'`},
+		// Comparison ops.
+		{`'string' = 'string'`, `true`},
+		{`'string' = b'bytes'`, `false`},
+		{`'value' = b'value'`, `true`},
+		{`b'bytes' = b'bytes'`, `true`},
+		{`'string' != 'string'`, `false`},
+		{`'string' != b'bytes'`, `true`},
+		{`'value' != b'value'`, `false`},
+		{`b'bytes' != b'bytes'`, `false`},
+		{`'string' < 'string'`, `false`},
+		{`'string' < b'bytes'`, `false`},
+		{`'value' < b'value'`, `false`},
+		{`b'bytes' < b'bytes'`, `false`},
+		{`'string' <= 'string'`, `true`},
+		{`'string' <= b'bytes'`, `false`},
+		{`'value' <= b'value'`, `true`},
+		{`b'bytes' <= b'bytes'`, `true`},
+		{`'string' > 'string'`, `false`},
+		{`'string' > b'bytes'`, `true`},
+		{`'value' > b'value'`, `false`},
+		{`b'bytes' > b'bytes'`, `false`},
+		{`'string' >= 'string'`, `true`},
+		{`'string' >= b'bytes'`, `true`},
+		{`'value' >= b'value'`, `true`},
+		{`b'bytes' >= b'bytes'`, `true`},
+		// With parentheses.
+		{`('string') || (b'bytes')`, `b'stringbytes'`},
+		{`('a') || (('b') || ('c'))`, `'abc'`},
+		// With non-constants.
+		{`a > 'str' || b`, `a > ('str' || b)`},
+		{`a > 'str' || 'ing'`, `a > 'string'`},
+	})
 }
