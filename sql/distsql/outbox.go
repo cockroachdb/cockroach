@@ -21,9 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 const outboxBufRows = 16
@@ -58,22 +56,12 @@ type outbox struct {
 	noMoreRows  uint32
 	flushTicker *time.Ticker
 
-	// infos is initialized when the first row is received
-	infos []DatumInfo
-
-	rowBuf []byte
-	// numRows is the number of rows that have been accumulated in rowBuf.
-	numRows          int
-	sentFirstMessage bool
+	encoder StreamEncoder
+	// numRows is the number of rows that have been accumulated in the encoder.
+	numRows int
 
 	err error
 	wg  *sync.WaitGroup
-
-	alloc sqlbase.DatumAlloc
-	// Placeholders to avoid allocations
-	msg    StreamMessage
-	msgHdr StreamHeader
-	msgTrl StreamTrailer
 }
 
 var _ rowReceiver = &outbox{}
@@ -83,7 +71,7 @@ func newOutbox(stream outboxStream) *outbox {
 }
 
 // PushRow is part of the rowReceiver interface.
-func (m *outbox) PushRow(row row) bool {
+func (m *outbox) PushRow(row sqlbase.EncDatumRow) bool {
 	if atomic.LoadUint32(&m.noMoreRows) == 1 {
 		return false
 	}
@@ -92,7 +80,7 @@ func (m *outbox) PushRow(row row) bool {
 	return true
 }
 
-// close is part of the rowReceiver interface.
+// Close is part of the rowReceiver interface.
 func (m *outbox) Close(err error) {
 	if err != nil {
 		m.dataChan <- streamMsg{row: nil, err: err}
@@ -102,28 +90,10 @@ func (m *outbox) Close(err error) {
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated
 // calls flush().
-func (m *outbox) addRow(row []sqlbase.EncDatum) error {
-	if m.infos == nil {
-		// First row. Initialize encodings.
-		m.infos = make([]DatumInfo, len(row))
-		for i := range row {
-			enc, ok := row[i].Encoding()
-			if !ok {
-				enc = preferredEncoding
-			}
-			m.infos[i].Encoding = enc
-		}
-	}
-	if len(m.infos) != len(row) {
-		return util.Errorf("inconsistent row length: had %d, now %d",
-			len(m.infos), len(row))
-	}
-	for i := range row {
-		var err error
-		m.rowBuf, err = row[i].Encode(&m.alloc, m.infos[i].Encoding, m.rowBuf)
-		if err != nil {
-			return err
-		}
+func (m *outbox) addRow(row sqlbase.EncDatumRow) error {
+	err := m.encoder.AddRow(row)
+	if err != nil {
+		return err
 	}
 	m.numRows++
 	if m.numRows >= outboxBufRows {
@@ -134,18 +104,10 @@ func (m *outbox) addRow(row []sqlbase.EncDatum) error {
 
 // flush sends the rows accumulated so far in a StreamMessage.
 func (m *outbox) flush(last bool, err error) error {
-	msg := &m.msg
-	msg.Header = nil
-	msg.Data.RawBytes = m.rowBuf
-	msg.Trailer = nil
-	if !m.sentFirstMessage {
-		msg.Header = &m.msgHdr
-		msg.Header.Info = m.infos
+	if !last && m.numRows == 0 {
+		return nil
 	}
-	if last {
-		msg.Trailer = &m.msgTrl
-		msg.Trailer.Error = roachpb.NewError(err)
-	}
+	msg := m.encoder.FormMessage(last, err)
 
 	sendErr := m.outStream.Send(msg)
 	if sendErr != nil {
@@ -153,8 +115,6 @@ func (m *outbox) flush(last bool, err error) error {
 	}
 
 	m.numRows = 0
-	m.rowBuf = m.rowBuf[:0]
-	m.sentFirstMessage = true
 	return nil
 }
 

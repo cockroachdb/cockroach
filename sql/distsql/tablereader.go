@@ -44,7 +44,7 @@ type tableReader struct {
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
-	row   row
+	row   sqlbase.EncDatumRow
 	alloc sqlbase.DatumAlloc
 }
 
@@ -140,7 +140,7 @@ func newTableReader(
 
 // nextRow processes table rows until it finds a row that passes the filter.
 // Returns a nil row when there are no more rows.
-func (tr *tableReader) nextRow() (row, error) {
+func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 	for {
 		fetcherRow, err := tr.fetcher.NextRow()
 		if err != nil || fetcherRow == nil {
@@ -167,7 +167,7 @@ func (tr *tableReader) nextRow() (row, error) {
 	// same slice because it is being read asynchronously on the other side
 	// of the channel. Perhaps streamMsg can store a few preallocated
 	// elements to avoid allocation in most cases.
-	outRow := make(row, len(tr.outputCols))
+	outRow := make(sqlbase.EncDatumRow, len(tr.outputCols))
 	for i, col := range tr.outputCols {
 		outRow[i] = tr.row[col]
 	}
@@ -183,7 +183,7 @@ func (tr *tableReader) run() {
 		tr.output.Close(err)
 		return
 	}
-	tr.row = make(row, len(tr.desc.Columns))
+	tr.row = make(sqlbase.EncDatumRow, len(tr.desc.Columns))
 	for {
 		outRow, err := tr.nextRow()
 		if err != nil || outRow == nil {
