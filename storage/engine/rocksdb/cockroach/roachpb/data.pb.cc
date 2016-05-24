@@ -529,12 +529,13 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "WN\020\000\022\010\n\004NULL\020\007\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BY"
     "TES\020\003\022\023\n\017DELIMITED_BYTES\020\010\022\010\n\004TIME\020\004\022\013\n\007"
     "DECIMAL\020\005\022\025\n\021DELIMITED_DECIMAL\020\t\022\014\n\010DURA"
-    "TION\020\006\022\t\n\005TUPLE\020\n\022\016\n\nTIMESERIES\020d*>\n\021Rep"
+    "TION\020\006\022\t\n\005TUPLE\020\n\022\016\n\nTIMESERIES\020d*W\n\021Rep"
     "licaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOV"
-    "E_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SE"
-    "RIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Tran"
-    "sactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020"
-    "\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3473);
+    "E_REPLICA\020\001\022\027\n\023ALLOCATE_REPLICA_ID\020\002\032\004\210\243"
+    "\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n"
+    "\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013"
+    "\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032"
+    "\004\210\243\036\000B\tZ\007roachpbX\001", 3498);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -608,6 +609,7 @@ bool ReplicaChangeType_IsValid(int value) {
   switch(value) {
     case 0:
     case 1:
+    case 2:
       return true;
     default:
       return false;
