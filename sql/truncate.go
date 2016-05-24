@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -39,6 +41,24 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 
 		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
 			return nil, err
+		}
+
+		// Check if any FKs hit reference table, and, if so, have matches.
+		var spans []sqlbase.Span
+		for _, idx := range tableDesc.Indexes {
+			for _, ref := range idx.ReferencedBy {
+				start := roachpb.Key(ref.IndexKeyPrefix())
+				spans = append(spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
+			}
+		}
+		if nonempty, what, err := sqlbase.NonEmpty(p.txn, spans); err != nil {
+			return nil, err
+		} else if nonempty {
+			// TODO(dt): include table/value that caused the violation in error msg.
+			if n.DropBehavior == parser.DropCascade {
+				return nil, fmt.Errorf("TODO(dt): CASCADE is not yet suppported but a referenceing table is non-empty")
+			}
+			return nil, fmt.Errorf("cannot trucate because a non-empty table somewhere has an FK: %v", what)
 		}
 
 		if err := truncateTable(&tableDesc, p.txn); err != nil {

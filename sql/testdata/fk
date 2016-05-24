@@ -2,11 +2,17 @@ statement ok
 CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE);
 
 statement ok
+INSERT INTO customers VALUES (1, 'a@'), (2, 'b@');
+
+statement ok
 CREATE TABLE products (
   sku STRING PRIMARY KEY,
   upc STRING UNIQUE,
   vendor STRING
 );
+
+statement ok
+INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot');
 
 statement error referenced table "productz" not found
 CREATE TABLE orders (
@@ -62,3 +68,18 @@ CREATE TABLE orders (
   INDEX (product),
   INDEX (customer)
 );
+
+statement ok
+TRUNCATE TABLE products
+
+statement ok
+INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
+
+statement ok
+INSERT INTO orders VALUES (1, '780', 1)
+
+statement error cannot trucate because a non-empty table somewhere has an FK
+TRUNCATE TABLE products
+
+statement ok
+TRUNCATE TABLE orders, products
