@@ -90,6 +90,8 @@ var (
 	LocalAbortCacheSuffix = []byte("abc-")
 	// localRangeFrozenStatusSuffix is the suffix for a frozen status.
 	localRangeFrozenStatusSuffix = []byte("fzn-")
+	// localRangeLastGCSuffix is the suffix for the last GC.
+	localRangeLastGCSuffix = []byte("lgc-")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
 	localRaftTombstoneSuffix = []byte("rftb")
 	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.

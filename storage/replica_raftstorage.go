@@ -688,6 +688,11 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		return 0, err
 	}
 
+	lastGC, err := loadGCThreshold(batch, desc.RangeID)
+	if err != nil {
+		return 0, err
+	}
+
 	// Load updated range stats. The local newStats variable will be assigned
 	// to r.stats after the batch commits.
 	newStats, err := newRangeStats(desc.RangeID, batch)
@@ -717,6 +722,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		r.mu.appliedIndex = snap.Metadata.Index
 		r.mu.leaderLease = lease
 		r.mu.frozen = frozen
+		r.mu.gcThreshold = lastGC
 		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.

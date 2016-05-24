@@ -77,8 +77,8 @@ func TestGarbageCollectorFilter(t *testing.T) {
 		{gcB, makeTS(5E9, 0), bKeys, [][]byte{d, n}, makeTS(2E9, 0)},
 	}
 	for i, test := range testData {
-		test.gc.expiration = test.time
-		test.gc.expiration.WallTime -= int64(test.gc.policy.TTLSeconds) * 1E9
+		test.gc.Threshold = test.time
+		test.gc.Threshold.WallTime -= int64(test.gc.policy.TTLSeconds) * 1E9
 		delTS := test.gc.Filter(test.keys, test.values)
 		if !delTS.Equal(test.expDelTS) {
 			t.Errorf("%d: expected deletion timestamp %s; got %s", i, test.expDelTS, delTS)

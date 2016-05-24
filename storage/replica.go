@@ -222,6 +222,9 @@ type Replica struct {
 		truncatedState *roachpb.RaftTruncatedState
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
+		// gcThreshold is the GC threshold of the replica. Reads and writes should
+		// not happen <= this time.
+		gcThreshold roachpb.Timestamp
 		// Slice of channels to send on after leader lease acquisition.
 		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -295,6 +298,10 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 	r.mu.frozen, err = loadFrozenStatus(r.store.Engine(), desc.RangeID)
+	if err != nil {
+		return err
+	}
+	r.mu.gcThreshold, err = loadGCThreshold(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
@@ -482,6 +489,27 @@ func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.leaderLease, len(r.mu.llChans) > 0
+}
+
+func setGCThreshold(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp) error {
+	var val roachpb.Value
+	val.SetProto(threshold)
+	return engine.MVCCPut(context.Background(), eng, ms,
+		keys.RangeLastGCKey(rangeID), roachpb.ZeroTimestamp, val, nil)
+}
+
+func loadGCThreshold(eng engine.Engine, rangeID roachpb.RangeID) (roachpb.Timestamp, error) {
+	var t roachpb.Timestamp
+	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeLastGCKey(rangeID),
+		roachpb.ZeroTimestamp, true, nil)
+	if err != nil {
+		return t, err
+	}
+	if val == nil {
+		return t, nil
+	}
+	err = val.GetProto(&t)
+	return t, err
 }
 
 // newNotLeaderError returns a NotLeaderError initialized with the
