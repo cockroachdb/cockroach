@@ -17,8 +17,6 @@
  * - Cluster Page
  *    - Events page
  * - Node Page
- *    - Overview page with table
- *    - Graphs page
  *    ! Logs Page
  * ! HelpUs Page
  *    - Forms

@@ -164,7 +164,7 @@ let clusterMainConnected = connect(
     };
   },
   {
-      refreshNodes: refreshNodes,
+      refreshNodes,
   }
 )(ClusterMain);
 
