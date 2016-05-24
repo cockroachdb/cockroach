@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
@@ -2519,6 +2520,27 @@ func (r *Replica) ChangeReplicas(
 		replica.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+
+		snap, err := r.GetSnapshot()
+		if err != nil {
+			return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
+		}
+
+		fromReplica := *r.GetReplica()
+
+		if err := r.store.ctx.Transport.Send(&RaftMessageRequest{
+			GroupID:     r.RangeID,
+			FromReplica: fromReplica,
+			ToReplica:   replica,
+			Message: raftpb.Message{
+				Type:     raftpb.MsgSnap,
+				To:       uint64(replica.ReplicaID),
+				From:     uint64(fromReplica.ReplicaID),
+				Snapshot: snap,
+			},
+		}); err != nil {
+			return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
+		}
 	case roachpb.REMOVE_REPLICA:
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
