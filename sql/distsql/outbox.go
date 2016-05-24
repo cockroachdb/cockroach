@@ -112,6 +112,7 @@ func (m *outbox) addRow(row []sqlbase.EncDatum) error {
 				enc = preferredEncoding
 			}
 			m.infos[i].Encoding = enc
+			m.infos[i].Type = row[i].Type
 		}
 	}
 	if len(m.infos) != len(row) {
