@@ -607,19 +607,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 
 	rangeID := r.RangeID
 
-	// First, save the HardState. The HardState must not be changed
-	// because it may record a previous vote cast by this node. This is
-	// usually unnecessary because a snapshot is nearly always
-	// accompanied by a new HardState which incorporates both our former
-	// state and new information from the leader, but in the event that
-	// the HardState has not changed, we want to use our own previous
-	// HardState and not one that was transmitted via the snapshot.
-	hardStateKey := keys.RaftHardStateKey(rangeID)
-	hardState, _, err := engine.MVCCGet(context.Background(), batch, hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
-	if err != nil {
-		return 0, err
-	}
-
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
 
@@ -673,19 +660,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 	// Write the snapshot's Raft log into the range.
 	if _, err := r.append(batch, 0, logEntries); err != nil {
 		return 0, err
-	}
-
-	// Restore the saved HardState.
-	if hardState == nil {
-		err := engine.MVCCDelete(context.Background(), batch, nil, hardStateKey, roachpb.ZeroTimestamp, nil)
-		if err != nil {
-			return 0, err
-		}
-	} else {
-		err := engine.MVCCPut(context.Background(), batch, nil, hardStateKey, roachpb.ZeroTimestamp, *hardState, nil)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	// Read the leader lease.
