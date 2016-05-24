@@ -859,7 +859,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	}
 
 	err := db.Txn(func(txn *client.Txn) error {
-		// Try reverse scans for all keys
+		// Try reverse scans for all keys.
 		{
 			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/10", 100)
 			if err != nil {
@@ -870,7 +870,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		}
 
-		// Try reverse scans for a half of the keys
+		// Try reverse scans for half of the keys.
 		{
 			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/05", 100)
 			if err != nil {
@@ -879,7 +879,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			client.CheckKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		}
 
-		// Try limit maximum rows
+		// Try limit maximum rows.
 		{
 			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/05", 3)
 			if err != nil {
@@ -888,7 +888,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			client.CheckKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
 		}
 
-		// Try reverse scan with the same start and end key
+		// Try reverse scan with the same start and end key.
 		{
 			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/00", 100)
 			if len(rows) > 0 {
@@ -899,7 +899,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			}
 		}
 
-		// Try reverse scan with non-exist key
+		// Try reverse scan with non-existent key.
 		{
 			rows, err := txn.ReverseScan(testUser+"/key/aa", testUser+"/key/bb", 100)
 			if err != nil {
@@ -916,5 +916,4 @@ func TestTxn_ReverseScan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 }
