@@ -676,8 +676,11 @@ func MVCCGetAsTxn(
 // If the supplied iterator is nil, no seek operation is performed. This is
 // used by the Blind{Put,ConditionalPut} operations to avoid seeking when the
 // metadata is known not to exist.
-func mvccGetMetadata(iter Iterator, metaKey MVCCKey,
-	meta *MVCCMetadata) (ok bool, keyBytes, valBytes int64, err error) {
+func mvccGetMetadata(
+	iter Iterator,
+	metaKey MVCCKey,
+	meta *MVCCMetadata,
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
 		return false, 0, 0, nil
 	}
