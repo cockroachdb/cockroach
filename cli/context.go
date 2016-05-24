@@ -17,27 +17,9 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util"
 )
-
-// statementsValue is an implementation of pflag.Value that appends any
-// argument to a slice.
-type statementsValue []string
-
-func (s *statementsValue) String() string {
-	return strings.Join(*s, ";")
-}
-
-func (s *statementsValue) Type() string {
-	return "statementsValue"
-}
-
-func (s *statementsValue) Set(value string) error {
-	*s = append(*s, value)
-	return nil
-}
 
 type debugContext struct {
 	startKey, endKey string
@@ -51,7 +33,7 @@ type Context struct {
 	server.Context
 
 	// execStmts is a list of statements to execute.
-	execStmts statementsValue
+	execStmts util.StringSliceFlag
 	// debugContext holds values used by debug cli commands.
 	debug debugContext
 }
