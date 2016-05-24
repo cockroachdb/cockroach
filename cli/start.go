@@ -102,22 +102,29 @@ func setDefaultCacheSize(ctx *server.Context) {
 
 func initInsecure() error {
 	if !cliContext.Insecure || insecure.isSet {
+		if len(cliContext.Hostnames) == 0 {
+			// The empty hostname listens on all interfaces.
+			cliContext.Hostnames = append(cliContext.Hostnames, "")
+		}
 		return nil
 	}
+
 	// The --insecure flag was not specified on the command line, verify that the
 	// host refers to a loopback address.
-	if connHost != "" {
-		addr, err := net.ResolveIPAddr("ip", connHost)
+	for _, hostname := range cliContext.Hostnames {
+		addr, err := net.ResolveIPAddr("ip", hostname)
 		if err != nil {
 			return err
 		}
 		if !addr.IP.IsLoopback() {
-			return fmt.Errorf("specify --insecure to listen on external address %s", connHost)
+			return fmt.Errorf("specify --insecure to listen on external address %s", hostname)
 		}
-	} else {
-		cliContext.Addr = net.JoinHostPort("localhost", connPort)
-		cliContext.HTTPAddr = net.JoinHostPort("localhost", httpPort)
 	}
+
+	if len(cliContext.Hostnames) == 0 {
+		cliContext.Hostnames = append(cliContext.Hostnames, "localhost")
+	}
+
 	return nil
 }
 

@@ -26,6 +26,7 @@ const (
 	Execute           = "execute"
 	Join              = "join"
 	Host              = "host"
+	PublicAddr        = "public-address"
 	Insecure          = "insecure"
 	KeySize           = "key-size"
 	MaxResults        = "max-results"

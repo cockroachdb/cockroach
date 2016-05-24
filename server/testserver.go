@@ -127,8 +127,9 @@ func NewTestContext() *Context {
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).
-	ctx.Addr = "127.0.0.1:0"
-	ctx.HTTPAddr = "127.0.0.1:0"
+	ctx.Hostnames = []string{"127.0.0.1"}
+	ctx.Port = "0"
+	ctx.HTTPPort = "0"
 	// Set standard user for intra-cluster traffic.
 	ctx.User = security.NodeUser
 

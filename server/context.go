@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -45,8 +46,6 @@ import (
 // Context defaults.
 const (
 	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr          = ":" + base.DefaultPort
-	defaultHTTPAddr      = ":" + base.DefaultHTTPPort
 	defaultMaxOffset     = 250 * time.Millisecond
 	defaultCacheSize     = 512 << 20 // 512 MB
 	// defaultMemtableBudget controls how much memory can be used for memory
@@ -70,13 +69,30 @@ type Context struct {
 	// Embed the base context.
 	base.Context
 
-	// Addr is the host:port to bind.
+	// Addr is this node's public address (host:port).
 	Addr string
 
-	// HTTPAddr is the host:port to bind for HTTP requests. This is temporary,
-	// and will be removed when grpc.(*Server).ServeHTTP performance problems are
-	// addressed upstream. See https://github.com/grpc/grpc-go/issues/586.
+	// HTTPAddr is this node's public HTTP address (host:port).
+	//
+	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
+	// performance problems are addressed upstream.
+	//
+	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
+
+	// Hostnames is the hostnames to listen on.
+	Hostnames util.StringSliceFlag
+
+	// Port is the RPC port to listen on.
+	Port string
+
+	// HTTPPort is HTTP port to listen on.
+	//
+	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
+	// performance problems are addressed upstream.
+	//
+	// See https://github.com/grpc/grpc-go/issues/586.
+	HTTPPort string
 
 	// Unix socket: for postgres only.
 	SocketFile string
@@ -227,8 +243,8 @@ func NewContext() *Context {
 // if you don't call any other functions at all.
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
-	ctx.Addr = defaultAddr
-	ctx.HTTPAddr = defaultHTTPAddr
+	ctx.Port = base.DefaultPort
+	ctx.HTTPPort = base.DefaultHTTPPort
 	ctx.MaxOffset = defaultMaxOffset
 	ctx.CacheSize = defaultCacheSize
 	ctx.MemtableBudget = defaultMemtableBudget

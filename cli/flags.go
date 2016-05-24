@@ -38,7 +38,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connPort, httpPort, connDBName string
+var connUser, connHost, connDBName string
 var startBackground bool
 var undoFreezeCluster bool
 
@@ -108,9 +108,25 @@ is one of:`) + `
              http(s)://<address>/_status/details/local
 `,
 
-	forServer(cliflags.Host): wrapText(`
-The address to listen on. The node will also advertise itself using this
-hostname; it must resolve from other nodes in the cluster.`),
+	forServer(cliflags.Host): `
+The address to listen on. The flag may be specified zero or more times:
+
+	- When not specified, behaviour depends on security settings: when in secure
+		mode or explicitly in insecure mode, the node will listen on all
+		interfaces. Otherwise, the node will only listen on loopback. The node
+		will attempt to resolve its own address, and that address will be
+		advertised to	other nodes.
+	- When specified one or more times, the node will listen on all specified
+		hostnames, and the first address will be used to advertise the node to
+		other nodes.
+
+In all cases, the advertised address is overriden by the public address flag,
+if specified.
+`,
+
+	forServer(cliflags.PublicAddr): wrapText(`
+The address to advertise to the cluster, if specified. This address must
+resolve from other nodes in the cluster.`),
 
 	forServer(cliflags.Port): wrapText(`
 The port to bind to.`),
@@ -370,9 +386,10 @@ func initFlags(ctx *Context) {
 		f := startCmd.Flags()
 
 		// Server flags.
-		f.StringVar(&connHost, cliflags.Host, "", usageNoEnv(forServer(cliflags.Host)))
-		f.StringVarP(&connPort, cliflags.Port, "p", base.DefaultPort, usageNoEnv(forServer(cliflags.Port)))
-		f.StringVar(&httpPort, cliflags.HTTPPort, base.DefaultHTTPPort, usageNoEnv(forServer(cliflags.HTTPPort)))
+		f.StringVar(&connHost, cliflags.PublicAddr, "", usageNoEnv(forServer(cliflags.PublicAddr)))
+		f.Var(&ctx.Hostnames, cliflags.Host, usageNoEnv(forServer(cliflags.Host)))
+		f.StringVarP(&ctx.Port, cliflags.Port, "p", base.DefaultPort, usageNoEnv(forServer(cliflags.Port)))
+		f.StringVar(&ctx.HTTPPort, cliflags.HTTPPort, base.DefaultHTTPPort, usageNoEnv(forServer(cliflags.HTTPPort)))
 		f.StringVar(&ctx.Attrs, cliflags.Attrs, ctx.Attrs, usageNoEnv(cliflags.Attrs))
 		f.VarP(&ctx.Stores, cliflags.Store, "s", usageNoEnv(cliflags.Store))
 		f.DurationVar(&ctx.RaftTickInterval, cliflags.RaftTickInterval, base.DefaultRaftTickInterval, usageNoEnv(cliflags.RaftTickInterval))
@@ -451,7 +468,7 @@ func initFlags(ctx *Context) {
 	simpleCmds = append(simpleCmds, nodeCmds...)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVarP(&connPort, cliflags.Port, "p", envutil.EnvOrDefaultString(cliflags.Port, base.DefaultPort), usageEnv(forClient(cliflags.Port)))
+		f.StringVarP(&ctx.Port, cliflags.Port, "p", envutil.EnvOrDefaultString(cliflags.Port, base.DefaultPort), usageEnv(forClient(cliflags.Port)))
 	}
 
 	// Commands that establish a SQL connection.
@@ -463,7 +480,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&connURL, cliflags.URL, envutil.EnvOrDefaultString(cliflags.URL, ""), usageEnv(cliflags.URL))
 
 		f.StringVarP(&connUser, cliflags.User, "u", envutil.EnvOrDefaultString(cliflags.User, security.RootUser), usageEnv(cliflags.User))
-		f.StringVarP(&connPort, cliflags.Port, "p", envutil.EnvOrDefaultString(cliflags.Port, base.DefaultPort), usageEnv(forClient(cliflags.Port)))
+		f.StringVarP(&ctx.Port, cliflags.Port, "p", envutil.EnvOrDefaultString(cliflags.Port, base.DefaultPort), usageEnv(forClient(cliflags.Port)))
 		f.StringVarP(&connDBName, cliflags.Database, "d", envutil.EnvOrDefaultString(cliflags.Database, ""), usageEnv(cliflags.Database))
 	}
 
@@ -500,7 +517,9 @@ func init() {
 			cliContext.Insecure = false
 		}
 
-		cliContext.Addr = net.JoinHostPort(connHost, connPort)
-		cliContext.HTTPAddr = net.JoinHostPort(connHost, httpPort)
+		if len(connHost) != 0 {
+			cliContext.Addr = net.JoinHostPort(connHost, cliContext.Port)
+			cliContext.HTTPAddr = net.JoinHostPort(connHost, cliContext.HTTPPort)
+		}
 	})
 }
