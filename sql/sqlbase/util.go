@@ -71,9 +71,19 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 	}
 }
 
+// RandColumnType returns a random ColumnType_Kind value.
+func RandColumnType(rng *rand.Rand) ColumnType_Kind {
+	return ColumnType_Kind(rng.Intn(len(ColumnType_Kind_value)))
+}
+
+// RandDatumEncoding returns a random DatumEncoding value.
+func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
+	return DatumEncoding(rng.Intn(len(DatumEncoding_value)))
+}
+
 // RandEncDatum generates a random EncDatum (of a random type).
 func RandEncDatum(rng *rand.Rand) EncDatum {
-	typ := ColumnType_Kind(rng.Intn(len(ColumnType_Kind_value)))
+	typ := RandColumnType(rng)
 	datum := RandDatum(rng, typ, true)
 	var ed EncDatum
 	ed.SetDatum(typ, datum)
