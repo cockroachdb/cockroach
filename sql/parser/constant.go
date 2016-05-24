@@ -234,7 +234,7 @@ func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 			// TODO(nvanbenschoten) Handling e will not be necessary once the TODO about the
 			// OrigString workaround from above is addressed.
 			eScale := inf.Scale(0)
-			if eIdx := strings.IndexRune(s, 'e'); eIdx != -1 {
+			if eIdx := strings.IndexAny(s, "eE"); eIdx != -1 {
 				eInt, err := strconv.ParseInt(s[eIdx+1:], 10, 32)
 				if err != nil {
 					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
