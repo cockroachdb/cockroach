@@ -475,18 +475,18 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Issue a second command post-truncation.
-	incArgs = incrementArgs([]byte("a"), 11)
-	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
-		t.Fatal(err)
-	}
-
 	// Now add the second replica.
 	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		}, rng.Desc()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Issue a second command post-truncation.
+	incArgs = incrementArgs([]byte("a"), 11)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
