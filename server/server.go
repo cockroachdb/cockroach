@@ -261,8 +261,7 @@ type grpcGatewayServer interface {
 	) error
 }
 
-// Start starts the server on the specified port, starts gossip and
-// initializes the node using the engines from the server's context.
+// Start the Server.
 func (s *Server) Start() error {
 	s.initHTTP()
 
@@ -298,76 +297,101 @@ func (s *Server) Start() error {
 	// in util.ListenAndServe for an explanation of how h2c is implemented there
 	// and here.
 
-	ln, err := net.Listen("tcp", s.ctx.Addr)
-	if err != nil {
-		return err
+	if len(s.ctx.Hostnames) == 0 {
+		return util.Errorf("starting a server requires at least one hostname: %v", s.ctx)
 	}
-	unresolvedAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
-	if err != nil {
-		return err
-	}
-	s.ctx.Addr = unresolvedAddr.String()
-	s.rpcContext.SetLocalInternalServer(s.node, s.ctx.Addr)
 
-	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldDrain()
-		if err := ln.Close(); err != nil {
-			log.Fatal(err)
+	var unresolvedAddr, unresolvedHTTPAddr *util.UnresolvedAddr
+	for _, hostname := range s.ctx.Hostnames {
+		addr := net.JoinHostPort(hostname, s.ctx.Port)
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return err
 		}
-	})
+		log.Infof("grpc/postgres server listening at %s", addr)
 
-	m := cmux.New(ln)
-	pgL := m.Match(pgwire.Match)
-	anyL := m.Match(cmux.Any())
-
-	httpLn, err := net.Listen("tcp", s.ctx.HTTPAddr)
-	if err != nil {
-		return err
-	}
-	unresolvedHTTPAddr, err := officialAddr(s.ctx.HTTPAddr, httpLn.Addr())
-	if err != nil {
-		return err
-	}
-	s.ctx.HTTPAddr = unresolvedHTTPAddr.String()
-
-	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldDrain()
-		if err := httpLn.Close(); err != nil {
-			log.Fatal(err)
-		}
-	})
-
-	if tlsConfig != nil {
-		httpMux := cmux.New(httpLn)
-		clearL := httpMux.Match(cmux.HTTP1Fast())
-		tlsL := httpMux.Match(cmux.Any())
-
-		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(httpMux.Serve())
-		})
-
-		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
-		})
-
-		httpLn = tls.NewListener(tlsL, tlsConfig)
-	}
-
-	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(httpServer.Serve(httpLn))
-	})
-
-	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(s.grpc.Serve(anyL))
-	})
-
-	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(httpServer.ServeWith(pgL, func(conn net.Conn) {
-			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
-				log.Error(err)
+		if unresolvedAddr == nil {
+			unresolvedAddr, err = officialAddr(addr, ln.Addr())
+			if err != nil {
+				return err
 			}
-		}))
-	})
+			if len(s.ctx.Addr) == 0 {
+				s.ctx.Addr = unresolvedAddr.String()
+				s.rpcContext.SetLocalInternalServer(s.node, s.ctx.Addr)
+			}
+		}
+
+		s.stopper.RunWorker(func() {
+			<-s.stopper.ShouldDrain()
+			if err := ln.Close(); err != nil {
+				log.Fatal(err)
+			}
+		})
+
+		m := cmux.New(ln)
+		pgL := m.Match(pgwire.Match)
+		anyL := m.Match(cmux.Any())
+
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(httpServer.ServeWith(pgL, func(conn net.Conn) {
+				if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
+					log.Error(err)
+				}
+			}))
+		})
+
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(s.grpc.Serve(anyL))
+		})
+
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(m.Serve())
+		})
+
+		httpAddr := net.JoinHostPort(hostname, s.ctx.HTTPPort)
+		httpLn, err := net.Listen("tcp", httpAddr)
+		if err != nil {
+			return err
+		}
+		log.Infof("%s server listening at %s", s.ctx.HTTPRequestScheme(), httpAddr)
+
+		if unresolvedHTTPAddr == nil {
+			unresolvedHTTPAddr, err = officialAddr(httpAddr, httpLn.Addr())
+			if err != nil {
+				return err
+			}
+			if len(s.ctx.HTTPAddr) == 0 {
+				s.ctx.HTTPAddr = unresolvedHTTPAddr.String()
+			}
+		}
+
+		s.stopper.RunWorker(func() {
+			<-s.stopper.ShouldDrain()
+			if err := httpLn.Close(); err != nil {
+				log.Fatal(err)
+			}
+		})
+
+		if tlsConfig != nil {
+			httpMux := cmux.New(httpLn)
+			clearL := httpMux.Match(cmux.HTTP1Fast())
+			tlsL := httpMux.Match(cmux.Any())
+
+			s.stopper.RunWorker(func() {
+				util.FatalIfUnexpected(httpMux.Serve())
+			})
+
+			s.stopper.RunWorker(func() {
+				util.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
+			})
+
+			httpLn = tls.NewListener(tlsL, tlsConfig)
+		}
+
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(httpServer.Serve(httpLn))
+		})
+	}
 
 	if len(s.ctx.SocketFile) != 0 {
 		// Unix socket enabled: postgres protocol only.
@@ -375,6 +399,7 @@ func (s *Server) Start() error {
 		if err != nil {
 			return err
 		}
+		log.Infof("postgres server listening at unix: %s", s.ctx.SocketFile)
 
 		s.stopper.RunWorker(func() {
 			<-s.stopper.ShouldDrain()
@@ -419,16 +444,6 @@ func (s *Server) Start() error {
 	s.schemaChangeManager.Start(s.stopper)
 
 	s.periodicallyCheckForUpdates()
-
-	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
-	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)
-	if len(s.ctx.SocketFile) != 0 {
-		log.Infof("starting postgres server at unix:%s", s.ctx.SocketFile)
-	}
-
-	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(m.Serve())
-	})
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := new(util.JSONPb)

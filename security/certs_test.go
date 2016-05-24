@@ -143,8 +143,9 @@ func TestUseCerts(t *testing.T) {
 	testCtx.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
 	testCtx.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
 	testCtx.User = security.NodeUser
-	testCtx.Addr = "127.0.0.1:0"
-	testCtx.HTTPAddr = "127.0.0.1:0"
+	testCtx.Hostnames = []string{"127.0.0.1"}
+	testCtx.Port = "0"
+	testCtx.HTTPPort = "0"
 	s := &server.TestServer{Ctx: testCtx}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
