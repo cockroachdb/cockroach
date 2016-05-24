@@ -709,7 +709,7 @@ func mvccGetMetadata(
 	meta.ValBytes = int64(len(iter.unsafeValue()))
 	meta.Deleted = len(iter.unsafeValue()) == 0
 	meta.Timestamp = unsafeKey.Timestamp
-	return err == nil, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, err
+	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
 type valueSafety int
