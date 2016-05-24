@@ -290,10 +290,10 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	var err error
 	if id == 0 {
 		id, err = allocateNodeID(n.ctx.DB)
-		log.Infof("new node allocated ID %d", id)
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Infof("new node allocated ID %d", id)
 		if id == 0 {
 			log.Fatal("new node allocated illegal ID 0")
 		}
