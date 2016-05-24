@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -432,6 +433,41 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		}
 	}
 	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+}
+
+// GetSnapshot wraps Snapshot() but does not require the replica lock
+// to be held and it will block instead of returning
+// ErrSnapshotTemporaryUnavailable.
+func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
+	retryOptions := retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     50 * time.Millisecond,
+		Multiplier:     2,
+	}
+	for retry := retry.Start(retryOptions); retry.Next(); {
+		r.mu.Lock()
+		snap, err := r.Snapshot()
+		snapshotChan := r.mu.snapshotChan
+		r.mu.Unlock()
+		if err == raft.ErrSnapshotTemporarilyUnavailable {
+			if snapshotChan == nil {
+				// The call to Snapshot() didn't start an async process due to
+				// rate limiting. Try again later.
+				continue
+			}
+			var ok bool
+			snap, ok = <-snapshotChan
+			if ok {
+				return snap, nil
+			}
+			// Each snapshot worker's output can only be consumed once.
+			// We could be racing with raft itself, so if we get a closed
+			// channel loop back and try again.
+		} else {
+			return snap, err
+		}
+	}
+	panic("unreachable") // due to infinite retries
 }
 
 func snapshot(
