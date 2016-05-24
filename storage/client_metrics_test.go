@@ -150,6 +150,11 @@ func TestStoreMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Write some data.
+	if _, err := mtc.dbs[0].Inc(roachpb.Key("a"), 5); err != nil {
+		t.Fatal(err)
+	}
+
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, roachpb.Key("m"))
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {

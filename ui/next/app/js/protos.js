@@ -1991,6 +1991,10 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "name": "REMOVE_REPLICA",
                             "id": 1
+                        },
+                        {
+                            "name": "RESERVE_REPLICA",
+                            "id": 2
                         }
                     ],
                     "options": {

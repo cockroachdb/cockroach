@@ -3682,6 +3682,7 @@ declare module cockroach.roachpb {
 	export const enum ReplicaChangeType {
 		ADD_REPLICA = 0,
 		REMOVE_REPLICA = 1,
+		RESERVE_REPLICA = 2,
 		
 }
 }

@@ -1379,7 +1379,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		if !ok {
 			continue
 		}
-		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil && crt.ChangeType != roachpb.RESERVE_REPLICA {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 			// needs to understand it; it cannot simply be an opaque command.
 			log.Infof("raft: proposing %s %v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
@@ -1394,12 +1394,11 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				return err
 			}
 
-			return r.mu.raftGroup.ProposeConfChange(
-				raftpb.ConfChange{
-					Type:    changeTypeInternalToRaft[crt.ChangeType],
-					NodeID:  uint64(crt.Replica.ReplicaID),
-					Context: encodedCtx,
-				})
+			return r.mu.raftGroup.ProposeConfChange(raftpb.ConfChange{
+				Type:    changeTypeInternalToRaft[crt.ChangeType],
+				NodeID:  uint64(crt.Replica.ReplicaID),
+				Context: encodedCtx,
+			})
 		}
 	}
 	return r.mu.raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))

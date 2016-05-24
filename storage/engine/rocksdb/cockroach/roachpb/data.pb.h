@@ -89,11 +89,12 @@ inline bool ValueType_Parse(
 }
 enum ReplicaChangeType {
   ADD_REPLICA = 0,
-  REMOVE_REPLICA = 1
+  REMOVE_REPLICA = 1,
+  RESERVE_REPLICA = 2
 };
 bool ReplicaChangeType_IsValid(int value);
 const ReplicaChangeType ReplicaChangeType_MIN = ADD_REPLICA;
-const ReplicaChangeType ReplicaChangeType_MAX = REMOVE_REPLICA;
+const ReplicaChangeType ReplicaChangeType_MAX = RESERVE_REPLICA;
 const int ReplicaChangeType_ARRAYSIZE = ReplicaChangeType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor();
