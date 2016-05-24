@@ -18,5 +18,6 @@
 // stylesheets.
 package ui
 
+// TEST COMMENT
 //go:generate make
 //go:generate make next
