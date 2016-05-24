@@ -54,42 +54,45 @@ func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server,
 	return ln, nil
 }
 
-// ServeHandler serves the handler on the listener and returns a function that
-// serves an additional listener using a function that takes a connection. The
-// returned function can be called multiple times.
-func ServeHandler(
-	stopper *stop.Stopper, handler http.Handler, ln net.Listener, tlsConfig *tls.Config,
-) func(net.Listener, func(net.Conn)) error {
+var httpLogger = log.NewStdLogger(log.ErrorLog)
+
+// Server is a thin wrapper around http.Server. See MakeServer for more detail.
+type Server struct {
+	http.Server
+}
+
+// MakeServer constructs a Server that tracks active connections, closing them
+// when signalled by stopper.
+func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
 	var mu sync.Mutex
 	activeConns := make(map[net.Conn]struct{})
-
-	logger := log.NewStdLogger(log.ErrorLog)
-	httpServer := http.Server{
-		Handler:   handler,
-		TLSConfig: tlsConfig,
-		ConnState: func(conn net.Conn, state http.ConnState) {
-			mu.Lock()
-			switch state {
-			case http.StateNew:
-				activeConns[conn] = struct{}{}
-			case http.StateClosed:
-				delete(activeConns, conn)
-			}
-			mu.Unlock()
+	server := Server{
+		Server: http.Server{
+			Handler:   handler,
+			TLSConfig: tlsConfig,
+			ConnState: func(conn net.Conn, state http.ConnState) {
+				mu.Lock()
+				switch state {
+				case http.StateNew:
+					activeConns[conn] = struct{}{}
+				case http.StateClosed:
+					delete(activeConns, conn)
+				}
+				mu.Unlock()
+			},
+			ErrorLog: httpLogger,
 		},
-		ErrorLog: logger,
 	}
 
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
-	if err := http2.ConfigureServer(&httpServer, nil); err != nil {
+	if err := http2.ConfigureServer(&server.Server, nil); err != nil {
 		log.Fatal(err)
 	}
 
 	stopper.RunWorker(func() {
-		FatalIfUnexpected(httpServer.Serve(ln))
-
 		<-stopper.ShouldStop()
+
 		mu.Lock()
 		for conn := range activeConns {
 			conn.Close()
@@ -97,35 +100,37 @@ func ServeHandler(
 		mu.Unlock()
 	})
 
-	logFn := logger.Printf
-	return func(l net.Listener, serveConn func(net.Conn)) error {
-		// Inspired by net/http.(*Server).Serve
-		var tempDelay time.Duration // how long to sleep on accept failure
-		for {
-			rw, e := l.Accept()
-			if e != nil {
-				if ne, ok := e.(net.Error); ok && ne.Temporary() {
-					if tempDelay == 0 {
-						tempDelay = 5 * time.Millisecond
-					} else {
-						tempDelay *= 2
-					}
-					if max := 1 * time.Second; tempDelay > max {
-						tempDelay = max
-					}
-					logFn("http: Accept error: %v; retrying in %v", e, tempDelay)
-					time.Sleep(tempDelay)
-					continue
+	return server
+}
+
+// ServeWith accepts connections on ln and serves them using serveConn.
+func (s *Server) ServeWith(l net.Listener, serveConn func(net.Conn)) error {
+	// Inspired by net/http.(*Server).Serve
+	var tempDelay time.Duration // how long to sleep on accept failure
+	for {
+		rw, e := l.Accept()
+		if e != nil {
+			if ne, ok := e.(net.Error); ok && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
 				}
-				return e
+				if max := 1 * time.Second; tempDelay > max {
+					tempDelay = max
+				}
+				httpLogger.Printf("http: Accept error: %v; retrying in %v", e, tempDelay)
+				time.Sleep(tempDelay)
+				continue
 			}
-			tempDelay = 0
-			go func() {
-				httpServer.ConnState(rw, http.StateNew) // before Serve can return
-				serveConn(rw)
-				httpServer.ConnState(rw, http.StateClosed)
-			}()
+			return e
 		}
+		tempDelay = 0
+		go func() {
+			s.Server.ConnState(rw, http.StateNew) // before Serve can return
+			serveConn(rw)
+			s.Server.ConnState(rw, http.StateClosed)
+		}()
 	}
 }
 
