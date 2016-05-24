@@ -1472,6 +1472,50 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	}
 }
 
+// TestMVCCUncommittedDeleteRangeVisible tests that the keys in an uncommitted
+// DeleteRange are visible.
+func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	if err := MVCCPut(
+		context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(
+		context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(
+		context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MVCCDelete(
+		context.Background(), engine, nil, testKey2, makeTS(2, 1), nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	txn := txn1.Clone()
+	if _, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey1, testKey4, 0, makeTS(2, 0), &txn, false,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	txn.Epoch++
+	kvs, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, 0, makeTS(3, 0), true, &txn)
+	if e := 2; len(kvs) != e {
+		t.Fatalf("e = %d, got %d", e, len(kvs))
+	}
+}
+
 func TestMVCCConditionalPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
