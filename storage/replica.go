@@ -840,15 +840,15 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 
 	// Differentiate between admin, read-only and write.
 	var pErr *roachpb.Error
-	if ba.IsAdmin() {
-		log.Trace(ctx, "admin path")
-		br, pErr = r.addAdminCmd(ctx, ba)
+	if ba.IsWrite() {
+		log.Trace(ctx, "read-write path")
+		br, pErr = r.addWriteCmd(ctx, ba, nil)
 	} else if ba.IsReadOnly() {
 		log.Trace(ctx, "read-only path")
 		br, pErr = r.addReadOnlyCmd(ctx, ba)
-	} else if ba.IsWrite() {
-		log.Trace(ctx, "read-write path")
-		br, pErr = r.addWriteCmd(ctx, ba, nil)
+	} else if ba.IsAdmin() {
+		log.Trace(ctx, "admin path")
+		br, pErr = r.addAdminCmd(ctx, ba)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range

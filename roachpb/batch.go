@@ -45,34 +45,44 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() Timestamp) error {
 
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
-	return ba.flags()&isAdmin != 0
+	return ba.hasFlag(isAdmin)
 }
 
 // IsWrite returns true iff the BatchRequest contains a write.
 func (ba *BatchRequest) IsWrite() bool {
-	return (ba.flags() & isWrite) != 0
+	return ba.hasFlag(isWrite)
 }
 
 // IsReadOnly returns true if all requests within are read-only.
 func (ba *BatchRequest) IsReadOnly() bool {
-	flags := ba.flags()
-	return (flags&isRead) != 0 && (flags&isWrite) == 0
+	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
 }
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
 func (ba *BatchRequest) IsReverse() bool {
-	return (ba.flags() & isReverse) != 0
+	return ba.hasFlag(isReverse)
 }
 
 // IsPossibleTransaction returns true iff the BatchRequest contains
 // requests that can be part of a transaction.
 func (ba *BatchRequest) IsPossibleTransaction() bool {
-	return (ba.flags() & isTxn) != 0
+	return ba.hasFlag(isTxn)
 }
 
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
-	return (ba.flags() & isTxnWrite) != 0
+	return ba.hasFlag(isTxnWrite)
+}
+
+// hasFlag returns true iff one of the requests within the batch contains the
+// specified flag.
+func (ba *BatchRequest) hasFlag(flag int) bool {
+	for _, union := range ba.Requests {
+		if (union.GetInner().flags() & flag) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // GetArg returns a request of the given type if one is contained in the
@@ -445,14 +455,6 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		br.Responses[i].MustSetInner(reply)
 	}
 	return br
-}
-
-func (ba *BatchRequest) flags() int {
-	var flags int
-	for _, union := range ba.Requests {
-		flags |= union.GetInner().flags()
-	}
-	return flags
 }
 
 // Split separates the requests contained in a batch so that each subset of
