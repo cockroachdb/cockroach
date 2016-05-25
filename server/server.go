@@ -431,7 +431,7 @@ func (s *Server) Start() error {
 	})
 
 	// Initialize grpc-gateway mux and context.
-	jsonpb := new(util.JSONPb)
+	jsonpb := &util.JSONPb{Indent: "  "}
 	protopb := new(util.ProtoPb)
 	gwMux := gwruntime.NewServeMux(
 		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
