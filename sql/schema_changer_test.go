@@ -136,7 +136,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
@@ -319,7 +319,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 		},
 	}
 
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -566,7 +566,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -757,7 +757,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -845,7 +845,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`

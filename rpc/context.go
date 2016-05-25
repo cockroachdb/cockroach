@@ -78,7 +78,6 @@ type Context struct {
 	HeartbeatCB       func()
 
 	localInternalServer roachpb.InternalServer
-	localAddr           string
 
 	conns struct {
 		sync.Mutex
@@ -117,7 +116,7 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 // GetLocalInternalServerForAddr returns the context's internal batch server
 // for addr, if it exists.
 func (ctx *Context) GetLocalInternalServerForAddr(addr string) roachpb.InternalServer {
-	if addr == ctx.localAddr {
+	if addr == ctx.Addr {
 		return ctx.localInternalServer
 	}
 	return nil
@@ -126,7 +125,6 @@ func (ctx *Context) GetLocalInternalServerForAddr(addr string) roachpb.InternalS
 // SetLocalInternalServer sets the context's local internal batch server.
 func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer, addr string) {
 	ctx.localInternalServer = internalServer
-	ctx.localAddr = addr
 }
 
 func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
@@ -182,7 +180,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 }
 
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
-	request := PingRequest{Addr: ctx.localAddr}
+	request := PingRequest{Addr: ctx.Addr}
 	heartbeatClient := NewHeartbeatClient(cc)
 
 	var heartbeatTimer timeutil.Timer

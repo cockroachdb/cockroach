@@ -30,7 +30,7 @@ import (
 
 func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := NewContext()
+	ctx := MakeContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
@@ -51,7 +51,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := NewContext()
+	ctx := MakeContext()
 	ctx.JoinUsing = "localhost:12345,,localhost:23456"
 	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
@@ -62,11 +62,11 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	if err := ctx.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
-	r1, err := resolver.NewResolver(&ctx.Context, "localhost:12345")
+	r1, err := resolver.NewResolver(ctx.Context, "localhost:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := resolver.NewResolver(&ctx.Context, "localhost:23456")
+	r2, err := resolver.NewResolver(ctx.Context, "localhost:23456")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,8 +114,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	defer resetEnvVar()
 
 	// Makes sure no values are set when no environment variables are set.
-	ctx := NewContext()
-	ctxExpected := NewContext()
+	ctx := MakeContext()
+	ctxExpected := MakeContext()
 
 	resetEnvVar()
 	ctx.readEnvironmentVariables()
@@ -170,8 +170,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	// Set all the environment variables to invalid values and test that the
 	// defaults are still set.
-	ctx = NewContext()
-	ctxExpected = NewContext()
+	ctx = MakeContext()
+	ctxExpected = MakeContext()
 
 	if err := os.Setenv("COCKROACH_LINEARIZABLE", "abcd"); err != nil {
 		t.Fatal(err)

@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -29,20 +31,18 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/stop"
-
-	"github.com/spf13/cobra"
 )
 
 func makeDBClient() (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	context := &base.Context{
 		User:       security.NodeUser,
-		SSLCA:      cliContext.SSLCA,
-		SSLCert:    cliContext.SSLCert,
-		SSLCertKey: cliContext.SSLCertKey,
-		Insecure:   cliContext.Insecure,
+		SSLCA:      baseCtx.SSLCA,
+		SSLCert:    baseCtx.SSLCert,
+		SSLCertKey: baseCtx.SSLCertKey,
+		Insecure:   baseCtx.Insecure,
 	}
-	sender, err := client.NewSender(rpc.NewContext(context, nil, stopper), cliContext.Addr)
+	sender, err := client.NewSender(rpc.NewContext(context, nil, stopper), baseCtx.Addr)
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)

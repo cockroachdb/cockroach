@@ -43,11 +43,11 @@ Generates CA certificate and key, writing them to --ca-cert and --ca-key.
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) error {
-	if len(cliContext.SSLCA) == 0 || len(cliContext.SSLCAKey) == 0 {
+	if len(baseCtx.SSLCA) == 0 || len(baseCtx.SSLCAKey) == 0 {
 		mustUsage(cmd)
 		return errMissingParams
 	}
-	if err := security.RunCreateCACert(cliContext.SSLCA, cliContext.SSLCAKey, keySize); err != nil {
+	if err := security.RunCreateCACert(baseCtx.SSLCA, baseCtx.SSLCAKey, keySize); err != nil {
 		return fmt.Errorf("failed to generate CA certificate: %s", err)
 	}
 	return nil
@@ -70,13 +70,13 @@ At least one host should be passed in (either IP address or dns name).
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
-	if len(cliContext.SSLCA) == 0 || len(cliContext.SSLCAKey) == 0 ||
-		len(cliContext.SSLCert) == 0 || len(cliContext.SSLCertKey) == 0 {
+	if len(baseCtx.SSLCA) == 0 || len(baseCtx.SSLCAKey) == 0 ||
+		len(baseCtx.SSLCert) == 0 || len(baseCtx.SSLCertKey) == 0 {
 		mustUsage(cmd)
 		return errMissingParams
 	}
-	if err := security.RunCreateNodeCert(cliContext.SSLCA, cliContext.SSLCAKey,
-		cliContext.SSLCert, cliContext.SSLCertKey, keySize, args); err != nil {
+	if err := security.RunCreateNodeCert(baseCtx.SSLCA, baseCtx.SSLCAKey,
+		baseCtx.SSLCert, baseCtx.SSLCertKey, keySize, args); err != nil {
 		return fmt.Errorf("failed to generate node certificate: %s", err)
 	}
 	return nil
@@ -103,14 +103,14 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 		mustUsage(cmd)
 		return errMissingParams
 	}
-	if len(cliContext.SSLCA) == 0 || len(cliContext.SSLCAKey) == 0 ||
-		len(cliContext.SSLCert) == 0 || len(cliContext.SSLCertKey) == 0 {
+	if len(baseCtx.SSLCA) == 0 || len(baseCtx.SSLCAKey) == 0 ||
+		len(baseCtx.SSLCert) == 0 || len(baseCtx.SSLCertKey) == 0 {
 		mustUsage(cmd)
 		return errMissingParams
 	}
 
-	if err := security.RunCreateClientCert(cliContext.SSLCA, cliContext.SSLCAKey,
-		cliContext.SSLCert, cliContext.SSLCertKey, keySize, args[0]); err != nil {
+	if err := security.RunCreateClientCert(baseCtx.SSLCA, baseCtx.SSLCAKey,
+		baseCtx.SSLCert, baseCtx.SSLCertKey, keySize, args[0]); err != nil {
 		return fmt.Errorf("failed to generate clent certificate: %s", err)
 	}
 	return nil

@@ -71,7 +71,7 @@ var (
 // Server is the cockroach server node.
 type Server struct {
 	Tracer              opentracing.Tracer
-	ctx                 *Context
+	ctx                 Context
 	mux                 *http.ServeMux
 	clock               *hlc.Clock
 	rpcContext          *rpc.Context
@@ -100,11 +100,7 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Context.
-func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
-	if ctx == nil {
-		return nil, util.Errorf("ctx must not be null")
-	}
-
+func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	if _, err := net.ResolveTCPAddr("tcp", ctx.Addr); err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", ctx.Addr, err)
 	}
@@ -129,7 +125,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
+	s.rpcContext = rpc.NewContext(ctx.Context, s.clock, stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(err)
@@ -166,7 +162,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.grpc = rpc.NewServer(s.rpcContext)
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
+	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
@@ -193,7 +189,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	sqlRegistry := metric.NewRegistry()
 	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, sqlRegistry)
 
-	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor, sqlRegistry)
+	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, sqlRegistry)
 
 	distSQLCtx := distsql.ServerContext{
 		DB: s.db,
@@ -241,7 +237,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.tsServer = ts.NewServer(s.tsDB)
 
 	s.admin = newAdminServer(s)
-	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.rpcContext, s.node.stores)
+	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx.Context, s.rpcContext, s.node.stores)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status} {
 		gw.RegisterService(s.grpc)
 	}

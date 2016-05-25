@@ -249,13 +249,13 @@ func (t *logicTest) run(path string) {
 func (t *logicTest) setup() {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
-	ctx := server.NewTestContext()
+	ctx := server.MakeTestContext()
 	ctx.MaxOffset = logicMaxOffset
 	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		WaitForGossipUpdate:   true,
 		CheckStmtStringChange: true,
 	}
-	t.srv = setupTestServerWithContext(t.T, ctx)
+	t.srv = setupTestServerWithContext(t.T, &ctx)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().

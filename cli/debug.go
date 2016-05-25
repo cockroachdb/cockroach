@@ -61,10 +61,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 }
 
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (engine.Engine, error) {
-	setDefaultCacheSize(&cliContext.Context)
-
-	db := engine.NewRocksDB(roachpb.Attributes{}, dir,
-		cliContext.CacheSize, cliContext.MemtableBudget, 0, stopper)
+	db := engine.NewRocksDB(roachpb.Attributes{}, dir, debugCtx.CacheSize, debugCtx.MemtableBudget, 0, stopper)
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
@@ -109,27 +106,25 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	d := cliContext.debug
-
 	from := engine.NilKey
 	to := engine.MVCCKeyMax
-	if d.raw {
-		if len(d.startKey) > 0 {
-			from = engine.MakeMVCCMetadataKey(roachpb.Key(d.startKey))
+	if debugCtx.raw {
+		if len(debugCtx.startKey) > 0 {
+			from = engine.MakeMVCCMetadataKey(roachpb.Key(debugCtx.startKey))
 		}
-		if len(d.endKey) > 0 {
-			to = engine.MakeMVCCMetadataKey(roachpb.Key(d.endKey))
+		if len(debugCtx.endKey) > 0 {
+			to = engine.MakeMVCCMetadataKey(roachpb.Key(debugCtx.endKey))
 		}
 	} else {
-		if len(d.startKey) > 0 {
-			startKey, err := keys.UglyPrint(d.startKey)
+		if len(debugCtx.startKey) > 0 {
+			startKey, err := keys.UglyPrint(debugCtx.startKey)
 			if err != nil {
 				return err
 			}
 			from = engine.MakeMVCCMetadataKey(startKey)
 		}
-		if len(d.endKey) > 0 {
-			endKey, err := keys.UglyPrint(d.endKey)
+		if len(debugCtx.endKey) > 0 {
+			endKey, err := keys.UglyPrint(debugCtx.endKey)
 			if err != nil {
 				return err
 			}
@@ -138,7 +133,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	printer := printKey
-	if d.values {
+	if debugCtx.values {
 		printer = printKeyValue
 	}
 

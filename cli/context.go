@@ -19,6 +19,7 @@ package cli
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/server"
 )
 
@@ -39,31 +40,19 @@ func (s *statementsValue) Set(value string) error {
 	return nil
 }
 
-type debugContext struct {
-	startKey, endKey string
-	raw              bool
-	values           bool
-}
-
-// Context contains global settings for the command-line client.
-type Context struct {
-	// Embed the server context.
-	server.Context
+type sqlContext struct {
+	// Embed the base context.
+	*base.Context
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
-	// debugContext holds values used by debug cli commands.
-	debug debugContext
 }
 
-// NewContext returns a Context with default values.
-func NewContext() *Context {
-	ctx := &Context{}
-	ctx.InitDefaults()
-	return ctx
-}
+type debugContext struct {
+	// Embed the server context.
+	server.Context
 
-// InitDefaults sets up the default values for a Context.
-func (ctx *Context) InitDefaults() {
-	ctx.Context.InitDefaults()
+	startKey, endKey string
+	raw              bool
+	values           bool
 }

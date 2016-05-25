@@ -61,15 +61,13 @@ type CommandFilters struct {
 // runFilters executes the registered filters, stopping at the first one
 // that returns an error.
 func (c *CommandFilters) runFilters(args storagebase.FilterArgs) *roachpb.Error {
-
 	c.RLock()
 	defer c.RUnlock()
 
 	if c.replayProtection != nil {
 		return c.replayProtection(args)
-	} else {
-		return c.runFiltersInternal(args)
 	}
+	return c.runFiltersInternal(args)
 }
 
 func (c *CommandFilters) runFiltersInternal(args storagebase.FilterArgs) *roachpb.Error {
@@ -184,8 +182,8 @@ type testServer struct {
 	cleanupFns []func()
 }
 
-func createTestServerContext() (*server.Context, *CommandFilters) {
-	ctx := server.NewTestContext()
+func createTestServerContext() (server.Context, *CommandFilters) {
+	ctx := server.MakeTestContext()
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 	ctx.TestingKnobs.Store = &storage.StoreTestingKnobs{
@@ -204,7 +202,8 @@ func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
 }
 
 func setup(t *testing.T) (*testServer, *gosql.DB, *client.DB) {
-	return setupWithContext(t, server.NewTestContext())
+	ctx := server.MakeTestContext()
+	return setupWithContext(t, &ctx)
 }
 
 func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *gosql.DB, *client.DB) {

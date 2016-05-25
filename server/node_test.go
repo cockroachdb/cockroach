@@ -69,7 +69,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	serverCtx := NewTestContext()
+	serverCtx := MakeTestContext()
 	g := gossip.New(nodeRPCContext, serverCtx.GossipBootstrapResolvers, stopper)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
@@ -317,7 +317,7 @@ func TestCorruptedClusterID(t *testing.T) {
 // the bytes and counts for Live, Key and Val are at least the expected value.
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
-func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
+func compareNodeStatus(t *testing.T, ts TestServer, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
 	// ========================================
 	// Read NodeStatus from server and validate top-level fields.
 	// ========================================
@@ -437,9 +437,11 @@ func TestStatusSummaries(t *testing.T) {
 	// ========================================
 	// Start test server and wait for full initialization.
 	// ========================================
-	ts := &TestServer{}
-	ts.Ctx = NewTestContext()
-	ts.StoresPerNode = 3
+	ctx := MakeTestContext()
+	ts := TestServer{
+		Ctx:           &ctx,
+		StoresPerNode: 3,
+	}
 	if err := ts.Start(); err != nil {
 		t.Fatal(err)
 	}

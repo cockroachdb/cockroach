@@ -18,8 +18,12 @@ package base
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -42,6 +46,10 @@ const (
 
 	// The default port for HTTP-for-humans.
 	DefaultHTTPPort = "8080"
+
+	// NB: net.JoinHostPort is not a constant.
+	defaultAddr     = ":" + DefaultPort
+	defaultHTTPAddr = ":" + DefaultHTTPPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -79,8 +87,16 @@ type Context struct {
 	// the server is running or the user passed in client calls.
 	User string
 
-	// RaftTickInterval is the resolution of the Raft timer.
-	RaftTickInterval time.Duration
+	// Addr is the server's public address.
+	Addr string
+
+	// HTTPAddr is server's public HTTP address.
+	//
+	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
+	// performance problems are addressed upstream.
+	//
+	// See https://github.com/grpc/grpc-go/issues/586.
+	HTTPAddr string
 
 	// clientTLSConfig is the loaded client TLS config. It is initialized lazily.
 	clientTLSConfig lazyTLSConfig
@@ -96,6 +112,8 @@ type Context struct {
 func (ctx *Context) InitDefaults() {
 	ctx.Insecure = defaultInsecure
 	ctx.User = defaultUser
+	ctx.Addr = defaultAddr
+	ctx.HTTPAddr = defaultHTTPAddr
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
@@ -104,6 +122,56 @@ func (ctx *Context) HTTPRequestScheme() string {
 		return httpScheme
 	}
 	return httpsScheme
+}
+
+// AdminURL returns the URL for the admin UI.
+func (ctx *Context) AdminURL() string {
+	return fmt.Sprintf("%s://%s", ctx.HTTPRequestScheme(), ctx.HTTPAddr)
+}
+
+// PGURL returns the URL for the postgres endpoint.
+func (ctx *Context) PGURL(user string) (*url.URL, error) {
+	// Try to convert path to an absolute path. Failing to do so return path
+	// unchanged.
+	absPath := func(path string) string {
+		r, err := filepath.Abs(path)
+		if err != nil {
+			return path
+		}
+		return r
+	}
+
+	options := url.Values{}
+	if ctx.Insecure {
+		options.Add("sslmode", "disable")
+	} else {
+		options.Add("sslmode", "verify-full")
+		requiredFlags := []struct {
+			name     string
+			value    string
+			flagName string
+		}{
+			{"sslcert", ctx.SSLCert, cliflags.CertName},
+			{"sslkey", ctx.SSLCertKey, cliflags.KeyName},
+			{"sslrootcert", ctx.SSLCA, cliflags.CACertName},
+		}
+		for _, c := range requiredFlags {
+			if c.value == "" {
+				return nil, fmt.Errorf("missing --%s flag", c.flagName)
+			}
+			path := absPath(c.value)
+			if _, err := os.Stat(path); err != nil {
+				return nil, fmt.Errorf("file for --%s flag gave error: %v", c.flagName, err)
+			}
+			options.Add(c.name, path)
+		}
+	}
+	return &url.URL{
+		Scheme:   "postgresql",
+		User:     url.User(user),
+		Host:     ctx.Addr,
+		RawQuery: options.Encode(),
+	}, nil
 }
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.

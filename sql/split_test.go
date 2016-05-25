@@ -30,8 +30,8 @@ import (
 )
 
 // getFastScanContext returns a test context with fast scan.
-func getFastScanContext() *server.Context {
-	c := server.NewTestContext()
+func getFastScanContext() server.Context {
+	c := server.MakeTestContext()
 	c.ScanInterval = time.Millisecond
 	c.ScanMaxIdleTime = time.Millisecond
 	return c
@@ -74,7 +74,8 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 // as new tables get created.
 func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB := setupWithContext(t, getFastScanContext())
+	ctx := getFastScanContext()
+	s, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(s, sqlDB)
 
 	expectedInitialRanges := server.ExpectedInitialRangeCount()

@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func setup() (*server.TestServer, *client.DB) {
+func setup() (server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
 	return s, s.DB()
 }
@@ -282,9 +282,11 @@ func ExampleTxn_Commit() {
 }
 
 func ExampleDB_Put_insecure() {
-	s := &server.TestServer{}
-	s.Ctx = server.NewTestContext()
-	s.Ctx.Insecure = true
+	ctx := server.MakeTestContext()
+	ctx.Insecure = true
+	s := server.TestServer{
+		Ctx: &ctx,
+	}
 	if err := s.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}

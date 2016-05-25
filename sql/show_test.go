@@ -27,7 +27,7 @@ func TestShowCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, _ := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
