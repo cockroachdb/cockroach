@@ -310,9 +310,12 @@ func (u *updateNode) Next() bool {
 	}
 
 	if !u.run.rows.Next() {
+		if u.run.err = u.run.rows.Err(); u.run.err != nil {
+			u.run.done = true
+			return false
+		}
 		// We're done. Finish the batch.
-		err := u.tw.finalize()
-		u.run.err = err
+		u.run.err = u.tw.finalize()
 		u.run.done = true
 		return false
 	}

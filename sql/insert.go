@@ -276,6 +276,10 @@ func (n *insertNode) Next() bool {
 	}
 
 	if !n.run.rows.Next() {
+		if n.run.err = n.run.rows.Err(); n.run.err != nil {
+			n.run.done = true
+			return false
+		}
 		// We're done. Finish the batch.
 		n.run.err = n.tw.finalize()
 		n.run.done = true
