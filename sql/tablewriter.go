@@ -27,6 +27,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// expressionCarrier handles expanding and starting sub-query plans
+// contained in Expr objects.
+type expressionCarrier interface {
+	// expand the sub-plans contained by expressions
+	// held by this object, if any.
+	expand() error
+
+	// start the sub-plans contained by expressions
+	// held by this object, if any.
+	start() error
+}
+
 // tableWriter handles writing kvs and forming table rows.
 //
 // Usage:
@@ -40,6 +52,7 @@ import (
 //   err := tw.finalize()
 //   // Handle err.
 type tableWriter interface {
+	expressionCarrier
 
 	// init provides the tableWriter with a Txn to write to and returns an error
 	// if it was misconfigured.
@@ -68,6 +81,14 @@ type tableInserter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+}
+
+func (ti *tableInserter) expand() error {
+	return nil
+}
+
+func (ti *tableInserter) start() error {
+	return nil
 }
 
 func (ti *tableInserter) init(txn *client.Txn) error {
@@ -107,6 +128,14 @@ type tableUpdater struct {
 	b   *client.Batch
 }
 
+func (tu *tableUpdater) expand() error {
+	return nil
+}
+
+func (tu *tableUpdater) start() error {
+	return nil
+}
+
 func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
 	tu.b = txn.NewBatch()
@@ -137,6 +166,8 @@ func (tu *tableUpdater) finalize() error {
 }
 
 type tableUpsertEvaler interface {
+	expressionCarrier
+
 	// TODO(dan): The tableUpsertEvaler interface separation was an attempt to
 	// keep sql logic out of the mapping between table rows and kv operations.
 	// Unfortunately, it was a misguided effort. tableUpserter's responsibilities
@@ -192,6 +223,20 @@ type tableUpserter struct {
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
+}
+
+func (tu *tableUpserter) expand() error {
+	if tu.evaler != nil {
+		return tu.evaler.expand()
+	}
+	return nil
+}
+
+func (tu *tableUpserter) start() error {
+	if tu.evaler != nil {
+		return tu.evaler.start()
+	}
+	return nil
 }
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
@@ -436,6 +481,14 @@ type tableDeleter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+}
+
+func (td *tableDeleter) expand() error {
+	return nil
+}
+
+func (td *tableDeleter) start() error {
+	return nil
 }
 
 func (td *tableDeleter) init(txn *client.Txn) error {
