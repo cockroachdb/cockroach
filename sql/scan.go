@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 
@@ -70,6 +71,7 @@ type scanNode struct {
 	fetcher         sqlbase.RowFetcher
 
 	limitHint int64
+	limitSoft bool
 }
 
 func (p *planner) Scan() *scanNode {
@@ -107,10 +109,7 @@ func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
 	// node. The special value math.MaxInt64 means "no limit".
 	if numRows != math.MaxInt64 {
 		n.limitHint = numRows
-		if soft || n.filter != nil {
-			// Read a multiple of the limit if the limit is "soft".
-			n.limitHint *= 2
-		}
+		n.limitSoft = soft || n.filter != nil
 	}
 }
 
@@ -139,7 +138,12 @@ func (n *scanNode) initScan() (success bool) {
 		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 
-	n.err = n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint)
+	limitHint := n.limitHint
+	if limitHint != 0 && n.limitSoft {
+		// Read a multiple of the limit if the limit is "soft".
+		limitHint *= 2
+	}
+	n.err = n.fetcher.StartScan(n.p.txn, n.spans, limitHint)
 	if n.err != nil {
 		return false
 	}
@@ -217,11 +221,23 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	} else {
 		name = "scan"
 	}
-	description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, sqlbase.PrettySpans(n.spans, 2))
+	var desc bytes.Buffer
+	fmt.Fprintf(&desc, "%s@%s", n.desc.Name, n.index.Name)
+	spans := sqlbase.PrettySpans(n.spans, 2)
+	if spans != "" {
+		fmt.Fprintf(&desc, " %s", spans)
+	}
+	if n.limitHint > 0 && !n.limitSoft {
+		if n.limitHint == 1 {
+			desc.WriteString(" (max 1 row)")
+		} else {
+			fmt.Fprintf(&desc, " (max %d rows)", n.limitHint)
+		}
+	}
 
 	subplans := n.p.collectSubqueryPlans(n.filter, nil)
 
-	return name, description, subplans
+	return name, desc.String(), subplans
 }
 
 func (n *scanNode) ExplainTypes(regTypes func(string, string)) {

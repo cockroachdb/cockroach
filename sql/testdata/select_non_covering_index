@@ -99,7 +99,7 @@ EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5
 ----
 0 limit      count: 5
 1 index-join
-2 scan       t@c -
+2 scan       t@c - (max 5 rows)
 2 scan       t@primary
 
 query ITT
@@ -114,7 +114,7 @@ EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
 ----
 0 limit      count: 5, offset: 5
 1 index-join
-2 scan       t@c -
+2 scan       t@c - (max 10 rows)
 2 scan       t@primary
 
 query ITT
