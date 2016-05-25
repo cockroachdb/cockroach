@@ -141,6 +141,11 @@ func (d *deleteNode) Next() bool {
 	}
 
 	if !d.run.rows.Next() {
+		if d.run.rows.Err() != nil {
+			d.run.err = d.run.rows.Err()
+			d.run.done = true
+			return false
+		}
 		// We're done. Finish the batch.
 		d.run.err = d.tw.finalize()
 		d.run.done = true
