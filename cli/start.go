@@ -101,7 +101,7 @@ func setDefaultCacheSize(ctx *server.Context) {
 }
 
 func initInsecure() error {
-	if !cliContext.Insecure || insecure.isSet {
+	if !serverCtx.Insecure || insecure.isSet {
 		return nil
 	}
 	// The --insecure flag was not specified on the command line, verify that the
@@ -115,8 +115,8 @@ func initInsecure() error {
 			return fmt.Errorf("specify --insecure to listen on external address %s", connHost)
 		}
 	} else {
-		cliContext.Addr = net.JoinHostPort("localhost", connPort)
-		cliContext.HTTPAddr = net.JoinHostPort("localhost", httpPort)
+		serverCtx.Addr = net.JoinHostPort("localhost", connPort)
+		serverCtx.HTTPAddr = net.JoinHostPort("localhost", httpPort)
 	}
 	return nil
 }
@@ -142,7 +142,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// will be created in $TMPDIR instead of their expected location.
 	f := flag.Lookup("log-dir")
 	if !log.DirSet() {
-		for _, spec := range cliContext.Stores.Specs {
+		for _, spec := range serverCtx.Stores.Specs {
 			if spec.InMemory {
 				continue
 			}
@@ -164,19 +164,19 @@ func runStart(_ *cobra.Command, _ []string) error {
 	log.Infof(info.Short())
 
 	// Default user for servers.
-	cliContext.User = security.NodeUser
+	serverCtx.User = security.NodeUser
 
 	stopper := stop.NewStopper()
-	if err := cliContext.InitStores(stopper); err != nil {
+	if err := serverCtx.InitStores(stopper); err != nil {
 		return fmt.Errorf("failed to initialize stores: %s", err)
 	}
 
-	if err := cliContext.InitNode(); err != nil {
+	if err := serverCtx.InitNode(); err != nil {
 		return fmt.Errorf("failed to initialize node: %s", err)
 	}
 
 	log.Info("starting cockroach node")
-	s, err := server.NewServer(&cliContext.Context, stopper)
+	s, err := server.NewServer(serverCtx, stopper)
 	if err != nil {
 		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
@@ -190,20 +190,20 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("cockroach server exited with error: %s", err)
 	}
 
-	pgURL, err := cliContext.PGURL(connUser)
+	pgURL, err := serverCtx.PGURL(connUser)
 	if err != nil {
 		return err
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
-	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
+	fmt.Fprintf(tw, "admin:\t%s\n", serverCtx.AdminURL())
 	fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
-	if len(cliContext.SocketFile) != 0 {
-		fmt.Fprintf(tw, "socket:\t%s\n", cliContext.SocketFile)
+	if len(serverCtx.SocketFile) != 0 {
+		fmt.Fprintf(tw, "socket:\t%s\n", serverCtx.SocketFile)
 	}
 	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-	for i, spec := range cliContext.Stores.Specs {
+	for i, spec := range serverCtx.Stores.Specs {
 		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 	}
 	if err := tw.Flush(); err != nil {
@@ -277,9 +277,9 @@ func rerunBackground() error {
 
 func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(&cliContext.Context.Context, hlc.NewClock(hlc.UnixNano),
+	rpcContext := rpc.NewContext(serverCtx.Context, hlc.NewClock(hlc.UnixNano),
 		stopper)
-	conn, err := rpcContext.GRPCDial(cliContext.Addr)
+	conn, err := rpcContext.GRPCDial(serverCtx.Addr)
 	if err != nil {
 		return nil, nil, err
 	}

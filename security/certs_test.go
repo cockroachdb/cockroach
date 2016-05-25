@@ -137,15 +137,15 @@ func TestUseCerts(t *testing.T) {
 
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
-	testCtx := server.NewContext()
-	testCtx.Insecure = false
-	testCtx.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)
-	testCtx.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
-	testCtx.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
-	testCtx.User = security.NodeUser
-	testCtx.Addr = "127.0.0.1:0"
-	testCtx.HTTPAddr = "127.0.0.1:0"
-	s := &server.TestServer{Ctx: testCtx}
+	ctx := server.MakeContext()
+	ctx.Insecure = false
+	ctx.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)
+	ctx.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
+	ctx.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
+	ctx.User = security.NodeUser
+	ctx.Addr = "127.0.0.1:0"
+	ctx.HTTPAddr = "127.0.0.1:0"
+	s := server.TestServer{Ctx: &ctx}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", testCtx.AdminURL()+"/_admin/v1/health", nil)
+	req, err := http.NewRequest("GET", s.Ctx.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestUseCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Endpoint that does not enforce client auth (see: server/authentication_test.go)
-	req, err = http.NewRequest("GET", testCtx.AdminURL()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", s.Ctx.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", testCtx.AdminURL()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", s.Ctx.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}

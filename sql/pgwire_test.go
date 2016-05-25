@@ -79,18 +79,18 @@ func TestPGWire(t *testing.T) {
 	for _, insecure := range [...]bool{true, false} {
 		ctx, _ := createTestServerContext()
 		ctx.Insecure = insecure
-		s := setupTestServerWithContext(t, ctx)
+		s := setupTestServerWithContext(t, &ctx)
 
 		host, port, err := net.SplitHostPort(s.ServingAddr())
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		basePgUrl := url.URL{
+		pgBaseURL := url.URL{
 			Scheme: "postgres",
 			Host:   net.JoinHostPort(host, port),
 		}
-		if err := trivialQuery(basePgUrl); err != nil {
+		if err := trivialQuery(pgBaseURL); err != nil {
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
 					t.Error(err)
@@ -103,9 +103,9 @@ func TestPGWire(t *testing.T) {
 		}
 
 		{
-			disablePgUrl := basePgUrl
-			disablePgUrl.RawQuery = "sslmode=disable"
-			err := trivialQuery(disablePgUrl)
+			pgDisableURL := pgBaseURL
+			pgDisableURL.RawQuery = "sslmode=disable"
+			err := trivialQuery(pgDisableURL)
 			if insecure {
 				if err != nil {
 					t.Error(err)
@@ -118,9 +118,9 @@ func TestPGWire(t *testing.T) {
 		}
 
 		{
-			requirePgUrlNoCert := basePgUrl
-			requirePgUrlNoCert.RawQuery = "sslmode=require"
-			err := trivialQuery(requirePgUrlNoCert)
+			pgNoCertRequireURL := pgBaseURL
+			pgNoCertRequireURL.RawQuery = "sslmode=require"
+			err := trivialQuery(pgNoCertRequireURL)
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
 					t.Error(err)
@@ -134,13 +134,13 @@ func TestPGWire(t *testing.T) {
 
 		{
 			for _, optUser := range []string{server.TestUser, security.RootUser} {
-				requirePgUrlWithCert := basePgUrl
-				requirePgUrlWithCert.User = url.User(optUser)
-				requirePgUrlWithCert.RawQuery = fmt.Sprintf("sslmode=require&sslcert=%s&sslkey=%s",
+				pgWithCertRequireURL := pgBaseURL
+				pgWithCertRequireURL.User = url.User(optUser)
+				pgWithCertRequireURL.RawQuery = fmt.Sprintf("sslmode=require&sslcert=%s&sslkey=%s",
 					url.QueryEscape(tempCertPath),
 					url.QueryEscape(tempKeyPath),
 				)
-				err := trivialQuery(requirePgUrlWithCert)
+				err := trivialQuery(pgWithCertRequireURL)
 				if insecure {
 					if err != pq.ErrSSLNotSupported {
 						t.Error(err)
@@ -170,7 +170,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	ctx, _ := createTestServerContext()
 	ctx.Insecure = true
 
-	s := setupTestServerWithContext(t, ctx)
+	s := setupTestServerWithContext(t, &ctx)
 	defer cleanupTestServer(s)
 
 	host, port, err := net.SplitHostPort(s.ServingAddr())
@@ -178,7 +178,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	basePgUrl := url.URL{
+	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
 		RawQuery: "sslmode=disable",
@@ -191,13 +191,13 @@ func TestPGWireDrainClient(t *testing.T) {
 	} else if !reflect.DeepEqual(on, now) {
 		t.Fatalf("expected drain modes %v, got %v", on, now)
 	}
-	if err := trivialQuery(basePgUrl); !testutils.IsError(err, pgwire.ErrDraining) {
+	if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
 		t.Fatal(err)
 	}
 	if now := s.Undrain([]server.DrainMode{server.DrainMode_CLIENT}); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
-	if err := trivialQuery(basePgUrl); err != nil {
+	if err := trivialQuery(pgBaseURL); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1001,7 +1001,7 @@ func TestPGCommandTags(t *testing.T) {
 
 // checkSQLNetworkMetrics returns the server's pgwire bytesIn/bytesOut and an
 // error if the bytesIn/bytesOut don't satisfy the given minimums and maximums.
-func checkSQLNetworkMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
+func checkSQLNetworkMetrics(s server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
 	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err
 	}
@@ -1148,7 +1148,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	ctx, _ := createTestServerContext()
 	ctx.Insecure = true
 	ctx.SocketFile = socketFile
-	s := setupTestServerWithContext(t, ctx)
+	s := setupTestServerWithContext(t, &ctx)
 	defer s.Stop()
 
 	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.

@@ -64,10 +64,9 @@ func TestCacheFlagValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := cliContext
 	const expectedCacheSize = 100 * 1000 * 1000
-	if expectedCacheSize != ctx.CacheSize {
-		t.Errorf("expected %d, but got %d", expectedCacheSize, ctx.CacheSize)
+	if expectedCacheSize != serverCtx.CacheSize {
+		t.Errorf("expected %d, but got %d", expectedCacheSize, serverCtx.CacheSize)
 	}
 }
 
@@ -82,13 +81,13 @@ func TestRaftTickIntervalFlagValue(t *testing.T) {
 		{nil, base.DefaultRaftTickInterval},
 		{[]string{"--raft-tick-interval", "200ms"}, 200 * time.Millisecond},
 	}
-	ctx := cliContext
+
 	for i, td := range testData {
 		if err := f.Parse(td.args); err != nil {
 			t.Fatal(err)
 		}
-		if td.expected != ctx.RaftTickInterval {
-			t.Errorf("%d. RaftTickInterval expected %d, but got %d", i, td.expected, ctx.RaftTickInterval)
+		if td.expected != serverCtx.RaftTickInterval {
+			t.Errorf("%d. RaftTickInterval expected %d, but got %d", i, td.expected, serverCtx.RaftTickInterval)
 		}
 	}
 }

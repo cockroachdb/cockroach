@@ -20,9 +20,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"net/url"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -32,7 +29,6 @@ import (
 	"github.com/elastic/gosigar"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -45,8 +41,6 @@ import (
 // Context defaults.
 const (
 	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr          = ":" + base.DefaultPort
-	defaultHTTPAddr      = ":" + base.DefaultHTTPPort
 	defaultMaxOffset     = 250 * time.Millisecond
 	defaultCacheSize     = 512 << 20 // 512 MB
 	// defaultMemtableBudget controls how much memory can be used for memory
@@ -61,22 +55,13 @@ const (
 	defaultScanMaxIdleTime          = 5 * time.Second
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
+	defaultStorePath                = "cockroach-data"
 )
 
 // Context holds parameters needed to setup a server.
-// Calling "cli".initFlags(ctx *Context) will initialize Context using
-// command flags. Keep in sync with "cli/flags.go".
 type Context struct {
 	// Embed the base context.
-	base.Context
-
-	// Addr is the host:port to bind.
-	Addr string
-
-	// HTTPAddr is the host:port to bind for HTTP requests. This is temporary,
-	// and will be removed when grpc.(*Server).ServeHTTP performance problems are
-	// addressed upstream. See https://github.com/grpc/grpc-go/issues/586.
-	HTTPAddr string
+	*base.Context
 
 	// Unix socket: for postgres only.
 	SocketFile string
@@ -126,6 +111,9 @@ type Context struct {
 	// Maximum clock offset for the cluster.
 	// Environment Variable: COCKROACH_MAX_OFFSET
 	MaxOffset time.Duration
+
+	// RaftTickInterval is the resolution of the Raft timer.
+	RaftTickInterval time.Duration
 
 	// MetricsSamplePeriod determines the time between records of
 	// server internal metrics.
@@ -211,33 +199,24 @@ func GetTotalMemory() (int64, error) {
 	return totalMem, nil
 }
 
-// NewContext returns a Context with default values.
-func NewContext() *Context {
-	ctx := &Context{}
-	ctx.InitDefaults()
-	return ctx
-}
-
-// InitDefaults sets up the default values for a Context.
-//
-// Note: This method should only perform simple initialization of fields
-// because it is called very early in the lifetime of a cockroach process at
-// which point we do not know if we are initializing a server or using the
-// cli. Do not call any functions which could log or error. In fact, it is best
-// if you don't call any other functions at all.
-func (ctx *Context) InitDefaults() {
+// MakeContext returns a Context with default values.
+func MakeContext() Context {
+	ctx := Context{
+		Context:                  new(base.Context),
+		MaxOffset:                defaultMaxOffset,
+		CacheSize:                defaultCacheSize,
+		MemtableBudget:           defaultMemtableBudget,
+		ScanInterval:             defaultScanInterval,
+		ScanMaxIdleTime:          defaultScanMaxIdleTime,
+		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
+		MetricsSampleInterval:    defaultMetricsSampleInterval,
+		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
+		Stores: StoreSpecList{
+			Specs: []StoreSpec{{Path: defaultStorePath}},
+		},
+	}
 	ctx.Context.InitDefaults()
-	ctx.Addr = defaultAddr
-	ctx.HTTPAddr = defaultHTTPAddr
-	ctx.MaxOffset = defaultMaxOffset
-	ctx.CacheSize = defaultCacheSize
-	ctx.MemtableBudget = defaultMemtableBudget
-	ctx.ScanInterval = defaultScanInterval
-	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
-	ctx.ConsistencyCheckInterval = defaultConsistencyCheckInterval
-	ctx.MetricsSampleInterval = defaultMetricsSampleInterval
-	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
-	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})
+	return ctx
 }
 
 // InitStores initializes ctx.Engines based on ctx.Stores.
@@ -319,56 +298,6 @@ func (ctx *Context) readEnvironmentVariables() {
 	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("consistency_check_interval", ctx.ConsistencyCheckInterval)
 }
 
-// AdminURL returns the URL for the admin UI.
-func (ctx *Context) AdminURL() string {
-	return fmt.Sprintf("%s://%s", ctx.HTTPRequestScheme(), ctx.HTTPAddr)
-}
-
-// PGURL returns the URL for the postgres endpoint.
-func (ctx *Context) PGURL(user string) (*url.URL, error) {
-	// Try to convert path to an absolute path. Failing to do so return path
-	// unchanged.
-	absPath := func(path string) string {
-		r, err := filepath.Abs(path)
-		if err != nil {
-			return path
-		}
-		return r
-	}
-
-	options := url.Values{}
-	if ctx.Insecure {
-		options.Add("sslmode", "disable")
-	} else {
-		options.Add("sslmode", "verify-full")
-		requiredFlags := []struct {
-			name     string
-			value    string
-			flagName string
-		}{
-			{"sslcert", ctx.SSLCert, cliflags.CertName},
-			{"sslkey", ctx.SSLCertKey, cliflags.KeyName},
-			{"sslrootcert", ctx.SSLCA, cliflags.CACertName},
-		}
-		for _, c := range requiredFlags {
-			if c.value == "" {
-				return nil, fmt.Errorf("missing --%s flag", c.flagName)
-			}
-			path := absPath(c.value)
-			if _, err := os.Stat(path); err != nil {
-				return nil, fmt.Errorf("file for --%s flag gave error: %v", c.flagName, err)
-			}
-			options.Add(c.name, path)
-		}
-	}
-	return &url.URL{
-		Scheme:   "postgresql",
-		User:     url.User(user),
-		Host:     ctx.Addr,
-		RawQuery: options.Encode(),
-	}, nil
-}
-
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
 func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
@@ -378,7 +307,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 		if len(address) == 0 {
 			continue
 		}
-		resolver, err := resolver.NewResolver(&ctx.Context, address)
+		resolver, err := resolver.NewResolver(ctx.Context, address)
 		if err != nil {
 			return nil, err
 		}

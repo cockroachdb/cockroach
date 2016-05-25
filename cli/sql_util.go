@@ -145,7 +145,7 @@ func makeSQLConn(url string) *sqlConn {
 func makeSQLClient() (*sqlConn, error) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		u, err := cliContext.PGURL(connUser)
+		u, err := sqlCtx.PGURL(connUser)
 		if err != nil {
 			return nil, err
 		}

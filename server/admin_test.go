@@ -74,7 +74,7 @@ func getJSON(url string) (interface{}, error) {
 }
 
 // debugURL returns the root debug URL.
-func debugURL(s *TestServer) string {
+func debugURL(s TestServer) string {
 	return s.Ctx.AdminURL() + debugEndpoint
 }
 
@@ -203,7 +203,7 @@ func TestAdminDebugRedirect(t *testing.T) {
 
 // apiGet issues a GET to the provided server using the given API path and marshals the result
 // into the v parameter.
-func apiGet(s *TestServer, path string, v interface{}) error {
+func apiGet(s TestServer, path string, v interface{}) error {
 	apiPath := apiEndpoint + path
 	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {
@@ -214,7 +214,7 @@ func apiGet(s *TestServer, path string, v interface{}) error {
 
 // apiPost issues a POST to the provided server using the given API path and
 // request body, marshalling the result into the v parameter.
-func apiPost(s *TestServer, path, body string, v interface{}) error {
+func apiPost(s TestServer, path, body string, v interface{}) error {
 	apiPath := apiEndpoint + path
 	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {

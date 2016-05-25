@@ -54,8 +54,8 @@ const (
 
 // StartTestServerWithContext starts an in-memory test server.
 // ctx can be nil, in which case a default context will be created.
-func StartTestServerWithContext(t util.Tester, ctx *Context) *TestServer {
-	s := &TestServer{Ctx: ctx}
+func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
+	s := TestServer{Ctx: ctx}
 	if err := s.Start(); err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
@@ -67,14 +67,15 @@ func StartTestServerWithContext(t util.Tester, ctx *Context) *TestServer {
 }
 
 // StartTestServer starts an in-memory test server.
-func StartTestServer(t util.Tester) *TestServer {
+func StartTestServer(t util.Tester) TestServer {
 	return StartTestServerWithContext(t, nil)
 }
 
 // StartTestServerJoining starts an in-memory test server that attempts to join `other`.
-func StartTestServerJoining(t util.Tester, other *TestServer) *TestServer {
-	s := &TestServer{Ctx: NewTestContext()}
-	s.Ctx.JoinUsing = other.ServingAddr()
+func StartTestServerJoining(t util.Tester, other TestServer) TestServer {
+	ctx := MakeTestContext()
+	ctx.JoinUsing = other.ServingAddr()
+	s := TestServer{Ctx: &ctx}
 	if err := s.Start(); err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
@@ -87,9 +88,10 @@ func StartTestServerJoining(t util.Tester, other *TestServer) *TestServer {
 }
 
 // StartInsecureTestServer starts an insecure in-memory test server.
-func StartInsecureTestServer(t util.Tester) *TestServer {
-	s := &TestServer{Ctx: NewTestContext()}
-	s.Ctx.Insecure = true
+func StartInsecureTestServer(t util.Tester) TestServer {
+	ctx := MakeTestContext()
+	ctx.Insecure = true
+	s := TestServer{Ctx: &ctx}
 
 	if err := s.Start(); err != nil {
 		if t != nil {
@@ -101,11 +103,11 @@ func StartInsecureTestServer(t util.Tester) *TestServer {
 	return s
 }
 
-// NewTestContext returns a context for testing. It overrides the
+// MakeTestContext returns a context for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
-func NewTestContext() *Context {
-	ctx := NewContext()
+func MakeTestContext() Context {
+	ctx := MakeContext()
 
 	// MaxOffset is the maximum offset for clocks in the cluster.
 	// This is mostly irrelevant except when testing reads within
@@ -207,7 +209,8 @@ func (ts *TestServer) Start() error {
 // explicitly.
 func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	if ts.Ctx == nil {
-		ts.Ctx = NewTestContext()
+		ctx := MakeTestContext()
+		ts.Ctx = &ctx
 	}
 
 	if stopper == nil {
@@ -226,20 +229,23 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 		return err
 	}
 
-	var err error
-	ts.Server, err = NewServer(ts.Ctx, stopper)
-	if err != nil {
-		return err
-	}
-
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
 	if ts.StoresPerNode < 1 {
 		ts.StoresPerNode = 1
 	}
 	for i := len(ts.Ctx.Engines); i < ts.StoresPerNode; i++ {
-		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, ts.Server.stopper))
+		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, stopper))
 	}
+
+	var err error
+	ts.Server, err = NewServer(*ts.Ctx, stopper)
+	if err != nil {
+		return err
+	}
+	// Our context must be shared with our server.
+	ts.Ctx = &ts.Server.ctx
+
 	if err := ts.Server.Start(); err != nil {
 		return err
 	}
@@ -391,8 +397,8 @@ var TestServerFactory testingshim.TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerInterface.
 func (testServerFactoryImpl) New(params testingshim.TestServerParams) testingshim.TestServerInterface {
-	ctx := NewTestContext()
+	ctx := MakeTestContext()
 	ctx.TestingKnobs = params.Knobs
 	ctx.JoinUsing = params.JoinAddr
-	return &TestServer{Ctx: ctx}
+	return &TestServer{Ctx: &ctx}
 }

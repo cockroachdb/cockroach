@@ -149,7 +149,7 @@ var retryOptions = retry.Options{
 // getRequestReader returns the io.ReadCloser from a get request to the test
 // server with the given path. The returned closer should be closed by the
 // caller.
-func getRequestReader(t *testing.T, ts *TestServer, path string) io.ReadCloser {
+func getRequestReader(t *testing.T, ts TestServer, path string) io.ReadCloser {
 	httpClient, err := ts.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +190,7 @@ func getRequestReader(t *testing.T, ts *TestServer, path string) io.ReadCloser {
 
 // getRequest returns the results of a get request to the test server with
 // the given path. It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts *TestServer, path string) []byte {
+func getRequest(t *testing.T, ts TestServer, path string) []byte {
 	respBody := getRequestReader(t, ts, path)
 	defer respBody.Close()
 	body, err := ioutil.ReadAll(respBody)
@@ -203,7 +203,7 @@ func getRequest(t *testing.T, ts *TestServer, path string) []byte {
 
 // getRequestProto unmarshals the result of a get request to the test server
 // with the given path.
-func getRequestProto(t *testing.T, ts *TestServer, path string, v proto.Message) error {
+func getRequestProto(t *testing.T, ts TestServer, path string, v proto.Message) error {
 	respBody := getRequestReader(t, ts, path)
 	defer respBody.Close()
 	return jsonpb.Unmarshal(respBody, v)
@@ -212,9 +212,10 @@ func getRequestProto(t *testing.T, ts *TestServer, path string, v proto.Message)
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-func startServer(t *testing.T) *TestServer {
-	ts := &TestServer{
-		Ctx:           NewTestContext(),
+func startServer(t *testing.T) TestServer {
+	ctx := MakeTestContext()
+	ts := TestServer{
+		Ctx:           &ctx,
 		StoresPerNode: 3,
 	}
 	if err := ts.Start(); err != nil {
@@ -446,9 +447,11 @@ func TestNodeStatusResponse(t *testing.T) {
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsrv := TestServer{}
-	tsrv.Ctx = NewTestContext()
-	tsrv.Ctx.MetricsSampleInterval = 5 * time.Millisecond
+	ctx := MakeTestContext()
+	ctx.MetricsSampleInterval = 5 * time.Millisecond
+	tsrv := TestServer{
+		Ctx: &ctx,
+	}
 	if err := tsrv.Start(); err != nil {
 		t.Fatal(err)
 	}

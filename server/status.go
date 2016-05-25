@@ -114,9 +114,8 @@ type statusServer struct {
 	gossip       *gossip.Gossip
 	metricSource json.Marshaler
 	router       *httprouter.Router
-	ctx          *Context
 	rpcCtx       *rpc.Context
-	proxyClient  *http.Client
+	proxyClient  http.Client
 	stores       *storage.Stores
 }
 
@@ -125,19 +124,15 @@ func newStatusServer(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource json.Marshaler,
-	ctx *Context,
+	ctx *base.Context,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
 	// Create an http client with a timeout
-	tlsConfig, err := ctx.GetClientTLSConfig()
+	httpClient, err := ctx.GetHTTPClient()
 	if err != nil {
 		log.Error(err)
 		return nil
-	}
-	httpClient := &http.Client{
-		Transport: &http.Transport{TLSClientConfig: tlsConfig},
-		Timeout:   base.NetworkTimeout,
 	}
 
 	server := &statusServer{
@@ -145,7 +140,6 @@ func newStatusServer(
 		gossip:       gossip,
 		metricSource: metricSource,
 		router:       httprouter.New(),
-		ctx:          ctx,
 		rpcCtx:       rpcCtx,
 		proxyClient:  httpClient,
 		stores:       stores,

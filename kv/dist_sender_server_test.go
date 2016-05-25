@@ -80,7 +80,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // key range at the given keys. Returns the test server and client.
 // The caller is responsible for stopping the server and
 // closing the client.
-func setupMultipleRanges(t *testing.T, ts *server.TestServer, splitAt ...string) *client.DB {
+func setupMultipleRanges(t *testing.T, ts server.TestServer, splitAt ...string) *client.DB {
 	db := createTestClient(t, ts.Stopper(), ts.ServingAddr())
 
 	// Split the keyspace at the given keys.
@@ -319,7 +319,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 }
 
-func initReverseScanTestEnv(s *server.TestServer, t *testing.T) *client.DB {
+func initReverseScanTestEnv(s server.TestServer, t *testing.T) *client.DB {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Set up multiple ranges:
@@ -521,9 +521,9 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 			return nil
 		}
-	ctx := server.NewTestContext()
+	ctx := server.MakeTestContext()
 	ctx.TestingKnobs.Store = &storeKnobs
-	s := server.StartTestServerWithContext(t, ctx)
+	s := server.StartTestServerWithContext(t, &ctx)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")
 
@@ -586,10 +586,8 @@ func assertTransactionPushErrorWithTxnIDSet(t *testing.T, e error) *uuid.UUID {
 				t.Fatalf("txn ID is not set unexpectedly: %s", retErr)
 			}
 			return retErr.TxnID
-		} else {
-			t.Fatalf("expected a TransactionPushError, but got %s (%T)",
-				retErr.Cause, retErr.Cause)
 		}
+		t.Fatalf("expected a TransactionPushError, but got %s (%T)", retErr.Cause, retErr.Cause)
 	} else {
 		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
 	}

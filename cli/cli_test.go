@@ -42,7 +42,7 @@ import (
 )
 
 type cliTest struct {
-	*server.TestServer
+	server.TestServer
 	certsDir    string
 	cleanupFunc func()
 }
@@ -57,11 +57,11 @@ func newCLITest() cliTest {
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
-	cliContext.InitDefaults()
+	baseCtx.InitDefaults()
 
 	osStderr = os.Stdout
 
-	s := &server.TestServer{}
+	var s server.TestServer
 	if err := s.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
@@ -152,7 +152,7 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 }
 
 func (c cliTest) RunWithArgs(a []string) {
-	cliContext.execStmts = nil
+	sqlCtx.execStmts = nil
 
 	var args []string
 	args = append(args, a[0])
@@ -288,9 +288,9 @@ func Example_quoted() {
 
 func Example_insecure() {
 	c := cliTest{cleanupFunc: func() {}}
-	c.TestServer = &server.TestServer{}
-	c.Ctx = server.NewTestContext()
-	c.Ctx.Insecure = true
+	ctx := server.MakeTestContext()
+	ctx.Insecure = true
+	c.TestServer.Ctx = &ctx
 	if err := c.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}

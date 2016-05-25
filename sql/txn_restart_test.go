@@ -205,7 +205,7 @@ func TestTxnRestart(t *testing.T) {
 	ctx, cmdFilters := createTestServerContext()
 	// Disable one phase commits because they cannot be restarted.
 	ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	// Make sure all the commands we send in this test are sent over the same connection.
@@ -372,13 +372,12 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 		if err == nil {
 			t.Fatal("expected RELEASE to fail")
 		}
-		return true
 	} else {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return false
 	}
+	return retriesNeeded
 }
 
 // abortTxn writes to a key (with retries) and as a side effect aborts a txn
@@ -413,7 +412,7 @@ func TestTxnUserRestart(t *testing.T) {
 
 	ctx, cmdFilters := createTestServerContext()
 	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -528,9 +527,9 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := server.NewTestContext()
+	ctx := server.MakeTestContext()
 	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
@@ -653,7 +652,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cmdFilters := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`

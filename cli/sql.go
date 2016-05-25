@@ -357,9 +357,9 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	if len(cliContext.execStmts) > 0 {
+	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, cliContext.execStmts)
+		return runStatements(conn, sqlCtx.execStmts)
 	}
 	return runInteractive(conn)
 }
