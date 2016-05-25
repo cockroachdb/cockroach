@@ -68,7 +68,7 @@ func (ds *ServerImpl) setupTxn(
 func (ds *ServerImpl) SetupSimpleFlow(
 	ctx context.Context, req *SetupFlowsRequest, output rowReceiver,
 ) (*Flow, error) {
-	f := &Flow{evalCtx: ds.evalCtx}
+	f := &Flow{evalCtx: &ds.evalCtx}
 	f.txn = ds.setupTxn(ctx, &req.Txn)
 	f.simpleFlowConsumer = output
 

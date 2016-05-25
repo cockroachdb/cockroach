@@ -192,12 +192,12 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
 ) error {
-	evalCtx := parser.EvalContext{}
 	// Set the eval context timestamps.
 	pTime := timeutil.Now()
-	evalCtx.SetTxnTimestamp(pTime)
-	evalCtx.SetStmtTimestamp(pTime)
-	defaultExprs, err := makeDefaultExprs(added, &parser.Parser{}, evalCtx)
+	sc.evalCtx = parser.EvalContext{}
+	sc.evalCtx.SetTxnTimestamp(pTime)
+	sc.evalCtx.SetStmtTimestamp(pTime)
+	defaultExprs, err := makeDefaultExprs(added, &parser.Parser{}, &sc.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 
 			// Add and delete columns for a chunk of the key space.
 			sp.Start, done, err = sc.truncateAndBackfillColumnsChunk(
-				added, dropped, nonNullableColumn, defaultExprs, evalCtx, sp,
+				added, dropped, nonNullableColumn, defaultExprs, &sc.evalCtx, sp,
 			)
 			if err != nil {
 				return err
@@ -244,7 +244,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	dropped []sqlbase.ColumnDescriptor,
 	nonNullableColumn string,
 	defaultExprs []parser.TypedExpr,
-	evalCtx parser.EvalContext,
+	evalCtx *parser.EvalContext,
 	sp sqlbase.Span,
 ) (roachpb.Key, bool, error) {
 	var curSentinel roachpb.Key

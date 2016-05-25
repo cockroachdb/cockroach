@@ -93,7 +93,7 @@ func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parse
 
 func (s *subquery) ReturnType() parser.Datum { return s.typ }
 
-func (s *subquery) Eval(_ parser.EvalContext) (parser.Datum, error) {
+func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

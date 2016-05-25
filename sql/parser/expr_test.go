@@ -209,11 +209,12 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		normalized, err := defaultEvalContext.NormalizeExpr(typedExpr)
+		ctx := &EvalContext{}
+		normalized, err := ctx.NormalizeExpr(typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		normalized2, err := defaultEvalContext.NormalizeExpr(typedExpr2)
+		normalized2, err := ctx.NormalizeExpr(typedExpr2)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}

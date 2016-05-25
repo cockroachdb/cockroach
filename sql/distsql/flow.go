@@ -26,7 +26,7 @@ import (
 
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
-	evalCtx            parser.EvalContext
+	evalCtx            *parser.EvalContext
 	txn                *client.Txn
 	simpleFlowConsumer rowReceiver
 	waitGroup          sync.WaitGroup

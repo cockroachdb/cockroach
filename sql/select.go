@@ -164,7 +164,7 @@ func (s *selectNode) Next() (bool, error) {
 		}
 		row := s.source.plan.Values()
 		s.qvals.populateQVals(&s.source.info, row)
-		passesFilter, err := sqlbase.RunFilter(s.filter, s.planner.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(s.filter, &s.planner.evalCtx)
 		if err != nil {
 			return false, err
 		}
@@ -554,7 +554,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 
 	// Normalize the expression (this will also evaluate any branches that are
 	// constant).
-	s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
+	s.filter, err = s.planner.parser.NormalizeExpr(&s.planner.evalCtx, s.filter)
 	if err != nil {
 		return err
 	}
@@ -653,7 +653,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 		return err
 	}
 
-	normalized, err := s.planner.parser.NormalizeExpr(s.planner.evalCtx, typedResolved)
+	normalized, err := s.planner.parser.NormalizeExpr(&s.planner.evalCtx, typedResolved)
 	if err != nil {
 		return err
 	}
@@ -679,7 +679,7 @@ func (s *selectNode) renderRow() error {
 	}
 	for i, e := range s.render {
 		var err error
-		s.row[i], err = e.Eval(s.planner.evalCtx)
+		s.row[i], err = e.Eval(&s.planner.evalCtx)
 		if err != nil {
 			return err
 		}

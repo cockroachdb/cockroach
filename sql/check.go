@@ -56,7 +56,7 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 		if err != nil {
 			return err
 		}
-		if typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr); err != nil {
+		if typedExpr, err = p.parser.NormalizeExpr(&p.evalCtx, typedExpr); err != nil {
 			return err
 		}
 		c.exprs[i] = typedExpr
@@ -83,7 +83,7 @@ func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.DTuple
 	}
 }
 
-func (c *checkHelper) check(ctx parser.EvalContext) error {
+func (c *checkHelper) check(ctx *parser.EvalContext) error {
 	for _, expr := range c.exprs {
 		if d, err := expr.Eval(ctx); err != nil {
 			return err

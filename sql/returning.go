@@ -99,7 +99,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 	rh.qvals.populateQVals(rh.table, rowVals)
 	resRow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
-		d, err := e.Eval(rh.p.evalCtx)
+		d, err := e.Eval(&rh.p.evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +143,7 @@ func (rh *returningHelper) TypeCheck() error {
 		if err != nil {
 			return err
 		}
-		typedExpr, err = rh.p.parser.NormalizeExpr(rh.p.evalCtx, typedExpr)
+		typedExpr, err = rh.p.parser.NormalizeExpr(&rh.p.evalCtx, typedExpr)
 		if err != nil {
 			return err
 		}

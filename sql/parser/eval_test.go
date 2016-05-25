@@ -427,10 +427,11 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if typedExpr, err = defaultEvalContext.NormalizeExpr(typedExpr); err != nil {
+		ctx := &EvalContext{}
+		if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		r, err := typedExpr.Eval(defaultEvalContext)
+		r, err := typedExpr.Eval(ctx)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -477,7 +478,7 @@ func TestEvalError(t *testing.T) {
 		}
 		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err == nil {
-			_, err = typedExpr.Eval(defaultEvalContext)
+			_, err = typedExpr.Eval(&EvalContext{})
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -507,7 +508,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}
-		ctx := defaultEvalContext
+		ctx := &EvalContext{}
 		ctx.ReCache = NewRegexpCache(8)
 		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err != nil {
@@ -561,7 +562,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
-	ctx := defaultEvalContext
+	ctx := &EvalContext{}
 	ctx.PrepareOnly = true
 	for _, d := range testData {
 		ts := roachpb.Timestamp{WallTime: d.walltime, Logical: d.logical}
@@ -586,7 +587,7 @@ var benchmarkLikePatterns = []string{
 	`also\%`,
 }
 
-func benchmarkLike(b *testing.B, ctx EvalContext) {
+func benchmarkLike(b *testing.B, ctx *EvalContext) {
 	likeFn, _ := CmpOps[Like].lookupImpl(TypeString, TypeString)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
@@ -604,9 +605,9 @@ func benchmarkLike(b *testing.B, ctx EvalContext) {
 }
 
 func BenchmarkLikeWithCache(b *testing.B) {
-	benchmarkLike(b, EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))})
+	benchmarkLike(b, &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))})
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
-	benchmarkLike(b, EvalContext{})
+	benchmarkLike(b, &EvalContext{})
 }

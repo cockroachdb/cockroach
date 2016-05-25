@@ -23,7 +23,7 @@ import (
 
 type testVarContainer []Datum
 
-func (d testVarContainer) IndexedVarEval(idx int, ctx EvalContext) (Datum, error) {
+func (d testVarContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, error) {
 	return d[idx].Eval(ctx)
 }
 
@@ -74,7 +74,7 @@ func TestIndexedVars(t *testing.T) {
 	if !d.TypeEqual(TypeInt) {
 		t.Errorf("invalid expression type %s", d.Type())
 	}
-	d, err = typedExpr.Eval(defaultEvalContext)
+	d, err = typedExpr.Eval(&EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
