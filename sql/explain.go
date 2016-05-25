@@ -19,10 +19,10 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -45,6 +45,7 @@ const (
 func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) {
 	mode := explainNone
 	verbose := false
+	expanded := true
 	for _, opt := range n.Options {
 		newMode := explainNone
 		if strings.EqualFold(opt, "DEBUG") {
@@ -57,6 +58,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			newMode = explainTypes
 		} else if strings.EqualFold(opt, "VERBOSE") {
 			verbose = true
+		} else if strings.EqualFold(opt, "NOEXPAND") {
+			expanded = false
 		} else {
 			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
@@ -91,7 +94,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 
 	case explainTypes:
 		node := &explainTypesNode{
-			plan: plan,
+			plan:     plan,
+			expanded: expanded,
 			results: &valuesNode{
 				columns: []ResultColumn{
 					{Name: "Level", Typ: parser.TypeInt},
@@ -111,10 +115,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return node, nil
 
 	case explainTrace:
-		return (&sortNode{
-			ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
-			columns:  traceColumns,
-		}).wrap(&explainTraceNode{plan: plan, txn: p.txn}), nil
+		return &explainTraceNode{plan: plan, txn: p.txn}, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
@@ -122,8 +123,9 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 }
 
 type explainTypesNode struct {
-	plan    planNode
-	results *valuesNode
+	plan     planNode
+	expanded bool
+	results  *valuesNode
 }
 
 func (e *explainTypesNode) ExplainTypes(fn func(string, string)) {}
@@ -140,9 +142,17 @@ func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 func (e *explainTypesNode) expandPlan() error {
-	// TODO(knz) This will not need to call expandPlan() any more once all
-	// the type checking occurs earlier.
-	return e.plan.expandPlan()
+	if e.expanded {
+		if err := e.plan.expandPlan(); err != nil {
+			return err
+		}
+		// Trigger limit hint propagation, which would otherwise only
+		// occur during the plan's Start() phase. This may trigger
+		// additional optimizations (eg. in sortNode) which the user of
+		// EXPLAIN will be interested in.
+		e.plan.SetLimitHint(math.MaxInt64, true)
+	}
+	return nil
 }
 
 func (e *explainTypesNode) Start() error {
@@ -217,7 +227,15 @@ func (e *explainPlanNode) expandPlan() error {
 	}
 	e.results = &valuesNode{columns: columns}
 
-	return e.plan.expandPlan()
+	if err := e.plan.expandPlan(); err != nil {
+		return err
+	}
+	// Trigger limit hint propagation, which would otherwise only occur
+	// during the plan's Start() phase. This may trigger additional
+	// optimizations (eg. in sortNode) which the user of EXPLAIN will be
+	// interested in.
+	e.plan.SetLimitHint(math.MaxInt64, true)
+	return nil
 }
 func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return e.plan.ExplainPlan(v)

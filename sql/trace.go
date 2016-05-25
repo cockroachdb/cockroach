@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 )
@@ -54,6 +55,12 @@ func (n *explainTraceNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
 		return err
 	}
+
+	sort := &sortNode{
+		ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
+		columns:  traceColumns,
+	}
+	_, n.plan = sort.wrap(n.plan)
 	n.plan.MarkDebug(explainDebug)
 	return nil
 }

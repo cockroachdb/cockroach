@@ -34,8 +34,6 @@ type insertNode struct {
 	insertRows   parser.SelectStatement
 	checkHelper  checkHelper
 
-	desiredTypes []parser.Datum // This will go away when we only type check once.
-
 	insertCols            []sqlbase.ColumnDescriptor
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 	tw                    tableWriter
@@ -209,29 +207,20 @@ func (p *planner) Insert(
 		insertRows:            insertRows,
 		insertCols:            ri.insertCols,
 		insertColIDtoRowIndex: ri.insertColIDtoRowIndex,
-		desiredTypes:          desiredTypesFromSelect,
-		tw:                    tw,
+		tw: tw,
 	}
+
 	if err := in.checkHelper.init(p, en.tableDesc); err != nil {
 		return nil, err
 	}
+
+	in.run.initEditNode(rows)
+
 	return in, nil
 }
 
 func (n *insertNode) expandPlan() error {
-	// TODO(knz): We need to re-run makePlan here again
-	// because that's when we can expand sub-queries.
-	// This goes away when sub-query expansion is moved
-	// to the Start() method of the insertRows object.
-
-	// Transform the values into a rows object. This expands SELECT statements or
-	// generates rows from the values contained within the query.
-	rows, err := n.p.newPlan(n.insertRows, n.desiredTypes, false)
-	if err != nil {
-		return err
-	}
-
-	if err := rows.expandPlan(); err != nil {
+	if err := n.rh.expandPlans(); err != nil {
 		return err
 	}
 
@@ -258,12 +247,15 @@ func (n *insertNode) expandPlan() error {
 		}
 	}
 
-	n.run.buildEditNodePlan(&n.editNodeBase, rows, n.tw)
-	return nil
+	return n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
 }
 
 func (n *insertNode) Start() error {
-	if err := n.run.rows.Start(); err != nil {
+	if err := n.rh.startPlans(); err != nil {
+		return err
+	}
+
+	if err := n.run.startEditNode(); err != nil {
 		return err
 	}
 
@@ -512,7 +504,18 @@ func (n *insertNode) ExplainPlan(v bool) (name, description string, children []p
 		}
 		fmt.Fprintf(&buf, ")")
 	}
-	return "insert", buf.String(), []planNode{n.run.rows}
+
+	subplans := []planNode{n.run.rows}
+	for _, e := range n.defaultExprs {
+		subplans = n.p.collectSubqueryPlans(e, subplans)
+	}
+	for _, e := range n.checkHelper.exprs {
+		subplans = n.p.collectSubqueryPlans(e, subplans)
+	}
+	for _, e := range n.rh.exprs {
+		subplans = n.p.collectSubqueryPlans(e, subplans)
+	}
+	return "insert", buf.String(), subplans
 }
 
 func (n *insertNode) ExplainTypes(regTypes func(string, string)) {

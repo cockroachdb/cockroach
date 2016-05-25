@@ -97,6 +97,9 @@ SELECT * FROM xyz
 7 8 9
 
 statement ok
+INSERT INTO xyz (x, y, z) VALUES (10, 11, 12)
+
+statement ok
 UPDATE xyz SET z = (SELECT 10) WHERE x = 7
 
 query III
@@ -105,6 +108,7 @@ SELECT * FROM xyz
 1 2 3
 4 5 6
 7 8 10
+10 11 12
 
 statement error value type tuple doesn't match type INT of column "z"
 UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
@@ -112,15 +116,17 @@ UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
 statement error subquery must return 2 columns, found 1
 UPDATE xyz SET (y, z) = (SELECT (11, 12)) WHERE x = 7
 
-statement ok
-UPDATE xyz SET (y, z) = (SELECT 11, 12) WHERE x = 7
-
-query III
-SELECT * FROM xyz
-----
-1 2  3
-4 5  6
-7 11 12
+#regression, see #6852
+#statement ok
+#UPDATE xyz SET (y, z) = (SELECT 11, 12) WHERE x = 7
+#
+#query III
+#SELECT * FROM xyz
+#----
+#1 2  3
+#4 5  6
+#7 11 12
+#10 11 12
 
 query B
 SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
@@ -135,7 +141,7 @@ SELECT * FROM xyz WHERE x = (SELECT MIN(x) FROM xyz)
 query III
 SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz)
 ----
-7 11 12
+10 11 12
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
@@ -200,42 +206,37 @@ foo1 foo2 column3
 4    5    6
 
 query III colnames
-SELECT * FROM (SELECT * FROM xyz) AS foo
+SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
 ----
 x y  z
 1 2  3
 4 5  6
-7 11 12
 
 query III colnames
-SELECT * FROM (SELECT * FROM xyz) AS foo (foo1)
+SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
 ----
 foo1 y  z
 1    2  3
 4    5  6
-7    11 12
 
 query III colnames
-SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1)
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE foo1 < 7
 ----
 foo1 moo2 moo3
 1    2    3
 4    5    6
-7    11   12
 
 query III colnames
-SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1)
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
 ----
 foo1 moo2 moo3
 1    2    3
 4    5    6
-7    11   12
 
 query III colnames
-SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) ORDER BY moo2 DESC
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7 ORDER BY moo2 DESC
 ----
 foo1 moo2 moo3
-7    11   12
 4    5    6
 1    2    3
 
@@ -282,3 +283,25 @@ a a column2 column2
 1 1 one     one
 2 2 two     two
 3 3 three   three
+
+query I
+SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz WHERE x = 7)
+----
+7
+
+query I
+SELECT x FROM xyz WHERE x = 7 LIMIT (SELECT x FROM xyz WHERE x = 1)
+----
+7
+
+query I
+SELECT x FROM xyz OFFSET (SELECT x FROM xyz WHERE x = 1)
+----
+4
+7
+10
+
+query B
+INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz))
+----
+true
