@@ -406,39 +406,6 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	// If this table had foreign key relationships to other tables, remove the
-	// back-references from those tables.
-	for _, idx := range tableDesc.Indexes {
-		if idx.ForeignKey != nil {
-			t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
-			if err != nil {
-				return util.Errorf("error resolving referenced table ID %d: %v",
-					idx.ForeignKey.Table, err)
-			}
-			for i := range t.Indexes {
-				if t.Indexes[i].ID == idx.ForeignKey.Index {
-					for k, ref := range t.Indexes[i].ReferencedBy {
-						if ref.Table == tableDesc.ID {
-							t.Indexes[i].ReferencedBy = append(t.Indexes[i].ReferencedBy[:k],
-								t.Indexes[i].ReferencedBy[k+1:]...)
-						}
-					}
-
-				}
-			}
-			if err := t.SetUpVersion(); err != nil {
-				return err
-			}
-			if err := t.Validate(); err != nil {
-				return err
-			}
-			if err := p.writeTableDesc(t); err != nil {
-				return err
-			}
-			p.notifySchemaChange(t.ID, sqlbase.InvalidMutationID)
-		}
-	}
-
 	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID sqlbase.ID) error {
 		desc, err := GetTableDesc(systemConfig, tableID)
 		if err != nil {

@@ -201,7 +201,7 @@ func (sc SchemaChanger) exec(
 		return err
 	}
 
-	if desc.GetTable().Deleted() {
+	if tableDesc := desc.GetTable(); tableDesc.Deleted() {
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
 			return err
@@ -213,8 +213,52 @@ func (sc SchemaChanger) exec(
 			return err
 		}
 
+		// Now that everyone agrees this table is deleted, if this table had foreign
+		// key relationships to other tables, remove those back-references.
+		var wait []sqlbase.ID
+		for _, idx := range tableDesc.Indexes {
+			if idx.ForeignKey != nil {
+				if err := sc.db.Txn(func(txn *client.Txn) error {
+					t, err := getTableDescFromID(txn, idx.ForeignKey.Table)
+					if err != nil {
+						return util.Errorf("error resolving referenced table ID %d: %v",
+							idx.ForeignKey.Table, err)
+					}
+					for i := range t.Indexes {
+						if t.Indexes[i].ID == idx.ForeignKey.Index {
+							for k, ref := range t.Indexes[i].ReferencedBy {
+								if ref.Table == tableDesc.ID {
+									t.Indexes[i].ReferencedBy = append(t.Indexes[i].ReferencedBy[:k],
+										t.Indexes[i].ReferencedBy[k+1:]...)
+								}
+							}
+						}
+					}
+
+					if err := t.SetUpVersion(); err != nil {
+						return err
+					}
+					if err := t.Validate(); err != nil {
+						return err
+					}
+					if err := txn.Put(sqlbase.MakeDescMetadataKey(t.GetID()), sqlbase.WrapDescriptor(t)); err != nil {
+						return err
+					}
+					wait = append(wait, t.GetID())
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		for _, id := range wait {
+			if err := sc.waitToUpdateLeasesForID(id); err != nil {
+				return err
+			}
+		}
+
 		// Truncate the table and delete the descriptor.
-		if err := sc.truncateAndDropTable(&lease, desc.GetTable()); err != nil {
+		if err := sc.truncateAndDropTable(&lease, tableDesc); err != nil {
 			return err
 		}
 		needRelease = false
@@ -382,8 +426,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 }
 
 // Wait until the entire cluster has been updated to the latest version
-// of the table descriptor.
-func (sc *SchemaChanger) waitToUpdateLeases() error {
+// of the given ID.
+func (sc *SchemaChanger) waitToUpdateLeasesForID(id sqlbase.ID) error {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -392,13 +436,19 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 		Multiplier:     2,
 	}
 	if log.V(2) {
-		log.Infof("waiting for a single version of table %d...", sc.tableID)
+		log.Infof("waiting for a single version of table %d...", id)
 	}
-	_, err := sc.leaseMgr.waitForOneVersion(sc.tableID, retryOpts)
+	_, err := sc.leaseMgr.waitForOneVersion(id, retryOpts)
 	if log.V(2) {
-		log.Infof("waiting for a single version of table %d... done", sc.tableID)
+		log.Infof("waiting for a single version of table %d... done", id)
 	}
 	return err
+}
+
+// Wait until the entire cluster has been updated to the latest version
+// of the table descriptor.
+func (sc *SchemaChanger) waitToUpdateLeases() error {
+	return sc.waitToUpdateLeasesForID(sc.tableID)
 }
 
 // done finalizes the mutations (adds new cols/indexes to the table).
