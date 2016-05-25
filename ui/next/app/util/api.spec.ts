@@ -1,10 +1,102 @@
 import { assert } from "chai";
 import _ = require("lodash");
 import * as fetchMock from "fetch-mock";
+import * as protos from "../js/protos";
+import Long = require("long");
 
-import {getDatabaseList, getDatabaseDetails, getTableDetails, API_PREFIX, setFetchTimeout} from "./api";
+import * as api from "./api";
 
 describe("rest api", function() {
+
+  afterEach(function () {
+    api.setFetchTimeout(10000);
+  });
+
+  describe("propsToQueryString", function () {
+    interface PropBag {
+      [k: string]: string;
+    }
+
+    // helper decoding function used to doublecheck querystring generation
+    function decodeQueryString(qs: string): PropBag {
+      return _.reduce<string, PropBag>(
+        qs.split("&"),
+        (memo: PropBag, v: string) => {
+          let [key, value] = v.split("=");
+          memo[decodeURIComponent(key)] = decodeURIComponent(value);
+          return memo;
+        },
+        {}
+      );
+    }
+
+    it("creates an appropriate querystring", function () {
+      let testValues: any = {
+        a: "testa",
+        b: "testb",
+      };
+
+      let querystring = api.propsToQueryString(testValues);
+
+      assert((/a=testa/).test(querystring));
+      assert((/b=testb/).test(querystring));
+      assert.lengthOf(querystring.match(/=/g), 2);
+      assert.lengthOf(querystring.match(/&/g), 1);
+      assert.deepEqual(testValues, decodeQueryString(querystring));
+    });
+
+    it("handles falsy values correctly", function () {
+      let testValues: any = {
+        // null and undefined should be ignored
+        undefined: undefined,
+        null: null,
+        // other values should be added
+        false: false,
+        "": "",
+        0: 0,
+      };
+
+      let querystring = api.propsToQueryString(testValues);
+
+      assert((/false=false/).test(querystring));
+      assert((/0=0/).test(querystring));
+      assert((/([^A-Za-z]|^)=([^A-Za-z]|$)/).test(querystring));
+      assert.lengthOf(querystring.match(/=/g), 3);
+      assert.lengthOf(querystring.match(/&/g), 2);
+      assert.notOk((/undefined/).test(querystring));
+      assert.notOk((/null/).test(querystring));
+      assert.deepEqual({ false: "false", "": "", 0: "0" }, decodeQueryString(querystring));
+    });
+
+    it("handles special characters", function () {
+      let key = "!@#$%^&*()=+-_\\|\"`'?/<>";
+      let value = key.split("").reverse().join(""); // key reversed
+      let testValues: any = {
+        [key] : value,
+      };
+
+      let querystring = api.propsToQueryString(testValues);
+
+      assert(querystring.match(/%/g).length > (key + value).match(/%/g).length);
+      assert.deepEqual(testValues, decodeQueryString(querystring));
+    });
+
+    it("handles non-string values", function () {
+      let testValues: any = {
+        boolean: true,
+        number: 1,
+        emptyObject: {},
+        emptyArray: [],
+        objectWithProps: { a: 1, b: 2 },
+        arrayWithElts: [1, 2, 3],
+        long: new Long(1),
+      };
+
+      let querystring = api.propsToQueryString(testValues);
+      assert.deepEqual(_.mapValues(testValues, _.toString), decodeQueryString(querystring));
+    });
+  });
+
   describe("databases request", function () {
     afterEach(function () {
       fetchMock.restore();
@@ -13,15 +105,15 @@ describe("rest api", function() {
     it("correctly requests info about all databases", function () {
       this.timeout(1000);
       // Mock out the fetch query to /databases
-      fetchMock.mock(API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
 
         assert.isUndefined(requestObj.body);
 
         return { databases: ["system", "test"] };
       });
 
-      return getDatabaseList().then((result) => {
-        assert.lengthOf(fetchMock.calls(API_PREFIX + "/databases"), 1);
+      return api.getDatabaseList().then((result) => {
+        assert.lengthOf(fetchMock.calls(api.API_PREFIX + "/databases"), 1);
         assert.lengthOf(result.databases, 2);
       });
     });
@@ -29,12 +121,12 @@ describe("rest api", function() {
     it("correctly handles an error", function (done) {
       this.timeout(1000);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { status: 500 };
       });
 
-      getDatabaseList().then((result) => {
+      api.getDatabaseList().then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -44,14 +136,14 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      setFetchTimeout(0);
+      api.setFetchTimeout(0);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
 
-      getDatabaseList().then((result) => {
+      api.getDatabaseList().then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -72,13 +164,13 @@ describe("rest api", function() {
     it("correctly requests info about a specific database", function () {
       this.timeout(1000);
       // Mock out the fetch query
-      fetchMock.mock(`${API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { table_names: ["table1", "table2"], grants: [{ user: "root", privileges: ["ALL"] }, { user: "other", privileges: [] }] };
       });
 
-      return getDatabaseDetails({ database: dbName }).then((result) => {
-        assert.lengthOf(fetchMock.calls(`${API_PREFIX}/databases/${dbName}`), 1);
+      return api.getDatabaseDetails({ database: dbName }).then((result) => {
+        assert.lengthOf(fetchMock.calls(`${api.API_PREFIX}/databases/${dbName}`), 1);
         assert.lengthOf(result.table_names, 2);
         assert.lengthOf(result.grants, 2);
       });
@@ -87,12 +179,12 @@ describe("rest api", function() {
     it("correctly handles an error", function (done) {
       this.timeout(1000);
       // Mock out the fetch query, but return a 500 status code
-      fetchMock.mock(`${API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { status: 500 };
       });
 
-      getDatabaseDetails({ database: dbName }).then((result) => {
+      api.getDatabaseDetails({ database: dbName }).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -102,14 +194,14 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      setFetchTimeout(0);
+      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(`${API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
 
-      getDatabaseDetails({ database: dbName }).then((result) => {
+      api.getDatabaseDetails({ database: dbName }).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -131,13 +223,13 @@ describe("rest api", function() {
     it("correctly requests info about a specific table", function () {
       this.timeout(1000);
       // Mock out the fetch query
-      fetchMock.mock(`${API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { columns: [], grants: [], indexes: [] };
       });
 
-      return getTableDetails({ database: dbName, table: tableName }).then((result) => {
-        assert.lengthOf(fetchMock.calls(`${API_PREFIX}/databases/${dbName}/tables/${tableName}`), 1);
+      return api.getTableDetails({ database: dbName, table: tableName }).then((result) => {
+        assert.lengthOf(fetchMock.calls(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`), 1);
         assert.lengthOf(result.columns, 0);
         assert.lengthOf(result.indexes, 0);
         assert.lengthOf(result.grants, 0);
@@ -147,12 +239,12 @@ describe("rest api", function() {
     it("correctly handles an error", function (done) {
       this.timeout(1000);
       // Mock out the fetch query, but return a 500 status code
-      fetchMock.mock(`${API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { status: 500 };
       });
 
-      getTableDetails({ database: dbName, table: tableName }).then((result) => {
+      api.getTableDetails({ database: dbName, table: tableName }).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -162,14 +254,14 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      setFetchTimeout(0);
+      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(`${API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
 
-      getTableDetails({ database: dbName, table: tableName }).then((result) => {
+      api.getTableDetails({ database: dbName, table: tableName }).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -177,5 +269,120 @@ describe("rest api", function() {
       });
     });
 
+  });
+
+  describe("events request", function () {
+    let eventsUrl = `^${api.API_PREFIX}/events?`;
+
+    afterEach(function () {
+      fetchMock.restore();
+    });
+
+    it("correctly requests events", function () {
+      this.timeout(1000);
+      // Mock out the fetch query
+      fetchMock.mock(api.API_PREFIX + "/events?", "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return {
+          events: [{
+            event_type: "test",
+          }],
+        };
+      });
+
+      return api.getEvents().then((result) => {
+        assert.lengthOf(fetchMock.calls(api.API_PREFIX + "/events?"), 1);
+        assert.lengthOf(result.events, 1);
+      });
+    });
+
+    it("correctly requests filtered events", function () {
+      this.timeout(1000);
+
+      let req = new protos.cockroach.server.EventsRequest({
+        target_id: new Long(1),
+        type: "test type",
+      });
+
+      // Mock out the fetch query
+      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+        let params = url.split("?")[1].split("&");
+        assert.lengthOf(params, 2);
+        _.each(params, (param) => {
+          let [k, v] = param.split("=");
+          assert.equal(String((req as any)[decodeURIComponent(k)]), decodeURIComponent(v));
+        });
+        assert.isUndefined(requestObj.body);
+        return {
+          events: [{
+            event_type: "test",
+          }],
+        };
+      });
+
+      return api.getEvents(req).then((result) => {
+        assert.lengthOf(fetchMock.calls(eventsUrl), 1);
+        assert.lengthOf(result.events, 1);
+      });
+    });
+
+    it("ignores unknown parameters", function () {
+      this.timeout(1000);
+
+      let req = {
+        fake: 1,
+        blah: 2,
+        type: "here",
+      };
+
+      // Mock out the fetch query
+      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+        let params = url.split("?")[1].split("&");
+        assert.lengthOf(params, 1);
+        assert(params[0].split("=")[0] === "type");
+        assert(params[0].split("=")[1] === "here");
+        assert.isUndefined(requestObj.body);
+        return {};
+      });
+
+      return api.getEvents(req).then((result) => {
+        assert.lengthOf(fetchMock.calls(eventsUrl), 1);
+        assert.lengthOf(result.events, 0);
+      });
+    });
+
+    it("correctly handles an error", function (done) {
+      this.timeout(1000);
+
+      // Mock out the fetch query, but return a 500 status code
+      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return { status: 500 };
+      });
+
+      api.getEvents({}).then((result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.isError(e));
+        done();
+      });
+    });
+
+    it("correctly times out", function (done) {
+      this.timeout(1000);
+      api.setFetchTimeout(0);
+      // Mock out the fetch query, but return a promise that's never resolved to test the timeout
+      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return new Promise<any>(() => { });
+      });
+
+      api.getEvents().then((result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
+        done();
+      });
+    });
   });
 });
