@@ -17,16 +17,18 @@
 package ts_test
 
 import (
-	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestHttpQuery(t *testing.T) {
+func TestQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tsrv server.TestServer
 	if err := tsrv.Start(); err != nil {
@@ -98,7 +100,7 @@ func TestHttpQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedResult := ts.TimeSeriesQueryResponse{
+	expectedResult := &ts.TimeSeriesQueryResponse{
 		Results: []ts.TimeSeriesQueryResponse_Result{
 			{
 				Query: ts.Query{
@@ -168,9 +170,11 @@ func TestHttpQuery(t *testing.T) {
 		},
 	}
 
-	var response ts.TimeSeriesQueryResponse
-	session := makeTestHTTPSession(t, tsrv.Ctx)
-	if err := session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Ctx.Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.NewTimeSeriesClient(conn).Query(context.Background(), &ts.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
 		Queries: []ts.Query{
@@ -187,13 +191,14 @@ func TestHttpQuery(t *testing.T) {
 				Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
 			},
 		},
-	}, &response); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range response.Results {
 		sort.Strings(r.Sources)
 	}
-	if !reflect.DeepEqual(response, expectedResult) {
+	if !proto.Equal(response, expectedResult) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}
