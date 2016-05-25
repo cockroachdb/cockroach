@@ -669,3 +669,47 @@ query BB
 SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 false false
+
+# Tests for the single-row optimization.
+statement OK
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement OK
+INSERT INTO ab VALUES
+  (1, 10),
+  (2, 20),
+  (3, 30),
+  (4, 40),
+  (5, 50)
+
+query ITT
+EXPLAIN SELECT MIN(a) FROM abc
+----
+0 group MIN(a)
+1 scan  abc@primary -
+
+# Verify we only buffer one row.
+query ITTT
+EXPLAIN (DEBUG) SELECT MIN(a) FROM ab
+----
+0 /ab/primary/1   NULL PARTIAL
+0 /ab/primary/1/b 10   BUFFERED
+0 0               (1)  ROW
+
+query ITT
+EXPLAIN SELECT MAX(a) FROM abc
+----
+0 group   MAX(a)
+1 revscan abc@primary -
+
+# Verify we only buffer one row.
+query ITTT
+EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
+----
+0 /ab/primary/5/b 50   PARTIAL
+0 /ab/primary/5   NULL BUFFERED
+0 0               (5)  ROW
+
