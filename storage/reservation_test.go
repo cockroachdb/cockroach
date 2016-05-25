@@ -31,19 +31,32 @@ func createTestBookie(reservationTimeout time.Duration) (*stop.Stopper, *hlc.Man
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	b := newBookie(clock, reservationTimeout, stopper)
+	b := newBookie(clock, reservationTimeout, stopper, newStoreMetrics())
 	return stopper, mc, b
 }
 
 // verifyBookie ensures that the correct number of reservations, reserved bytes,
-// and that the expirationQueue's length are correct.
+// and that the expirationQueue's length are correct. This also tests that
+// AdjustCapacity functions correctly.
 func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedBytes int64) {
-	if e, a := reservedBytes, b.ReservedBytes(); e != a {
+	cap := b.AdjustCapacity(roachpb.StoreCapacity{
+		RangeCount: 100000,
+		Available:  100000,
+	})
+	if e, a := reservedBytes, b.metrics.reserved.Count(); e != a {
 		t.Error(util.ErrorfSkipFrames(1, "expected total bytes reserved to be %d, got %d", e, a))
 	}
-	if e, a := reservations, b.Outstanding(); e != a {
+	if e, a := 100000-reservedBytes, cap.Available; e != a {
+		t.Error(util.ErrorfSkipFrames(1, "expected adjusted available bytes to be %d, got %d", e, a))
+	}
+
+	if e, a := reservations, int(b.metrics.reservedReplicaCount.Count()); e != a {
 		t.Error(util.ErrorfSkipFrames(1, "expected total reservations to be %d, got %d", e, a))
 	}
+	if e, a := 100000+reservations, int(cap.RangeCount); e != a {
+		t.Error(util.ErrorfSkipFrames(1, "expected adjusted range count to be %d, got %d", e, a))
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if e, a := queueLen, len(b.mu.queue); e != a {
