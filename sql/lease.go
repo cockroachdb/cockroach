@@ -97,6 +97,8 @@ type LeaseStore struct {
 	db     client.DB
 	clock  *hlc.Clock
 	nodeID uint32
+
+	testingKnobs LeaseStoreTestingKnobs
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
@@ -192,6 +194,9 @@ func (s LeaseStore) Acquire(
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
 	err := s.db.Txn(func(txn *client.Txn) error {
+		if log.V(2) {
+			log.Infof("LeaseStore releasing lease %s", lease)
+		}
 		p := makePlanner()
 		p.txn = txn
 		p.session.User = security.RootUser
@@ -203,10 +208,14 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 			return err
 		}
 		if count != 1 {
-			return util.Errorf("%s: expected 1 result, found %d", deleteLease, count)
+			return util.Errorf("unexpected results while deleting lease %s: "+
+				"expected 1 result, found %d", lease, count)
 		}
 		return nil
 	})
+	if s.testingKnobs.LeaseReleasedEvent != nil {
+		s.testingKnobs.LeaseReleasedEvent(lease, err)
+	}
 	return err
 }
 
@@ -396,7 +405,7 @@ func (l *leaseSet) insert(s *LeaseState) {
 func (l *leaseSet) remove(s *LeaseState) {
 	i, match := l.findIndex(s.Version, s.expiration)
 	if !match {
-		return
+		panic(fmt.Sprintf("can't find lease to remove: %s", s))
 	}
 	l.data = append(l.data[:i], l.data[i+1:]...)
 }
@@ -582,24 +591,16 @@ func (t *tableState) acquireFromStoreLocked(
 // t.mu must be locked.
 // leases must be a not overlap t.active.data, since t.active.data will
 // be changed by this function.
-func (t *tableState) releaseLeasesIfNotActive(
-	leases []*LeaseState, store LeaseStore,
-) error {
-	for _, s := range leases {
-		err := func() error {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if s.refcount != 0 {
-				return nil
+func (t *tableState) releaseLeasesIfNotActive(leases []*LeaseState, store LeaseStore) {
+	for _, lease := range leases {
+		func() {
+			lease.mu.Lock()
+			defer lease.mu.Unlock()
+			if lease.refcount == 0 {
+				t.removeLease(lease, store)
 			}
-			t.active.remove(s)
-			return t.releaseNodeLease(s, store)
 		}()
-		if err != nil {
-			return err
-		}
 	}
-	return nil
 }
 
 func (t *tableState) acquireWait() {
@@ -657,8 +658,8 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	}
 	if s.refcount == 0 {
 		if t.deleted {
-			t.active.remove(s)
-			return t.releaseNodeLease(s, store)
+			t.removeLease(s, store)
+			return nil
 		}
 		n := t.active.findNewest(0)
 		if s != n {
@@ -669,8 +670,8 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 				// release the lease immediately the transaction will necessarily abort
 				// on the next operation due to not being able to get the lease.
 			}
-			t.active.remove(s)
-			return t.releaseNodeLease(s, store)
+			t.removeLease(s, store)
+			return nil
 		}
 	}
 	return nil
@@ -678,14 +679,16 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 
 // t.mu needs to be locked.
 // lease.mu needs to be locked.
-func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error {
-	// We're called with mu locked, but need to unlock it while releasing the
-	// lease.
-	t.mu.Unlock()
-	defer t.mu.Lock()
+func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
 	lease.released = true
+	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
-	return store.Release(lease)
+	// Release to the store asynchronously, without the tableState lock.
+	go func() {
+		if err := store.Release(lease); err != nil {
+			log.Warningf("Error releasing lease %q: %s", lease, err)
+		}
+	}()
 }
 
 // purgeOldLeases refreshes the leases on a table. Unused leases older than
@@ -723,15 +726,10 @@ func (t *tableState) purgeOldLeases(
 			var toRelease []*LeaseState
 			if deleted {
 				t.deleted = true
-				// If the table has been deleted, all leases are stale.
-				toRelease = append([]*LeaseState(nil), t.active.data...)
-			} else {
-				// Otherwise, all but the lease we just took are stale.
-				toRelease = append([]*LeaseState(nil), t.active.data[:len(t.active.data)-1]...)
 			}
-			if err := t.releaseLeasesIfNotActive(toRelease, store); err != nil {
-				return err
-			}
+			toRelease = append([]*LeaseState(nil), t.active.data...)
+
+			t.releaseLeasesIfNotActive(toRelease, store)
 			return nil
 		}
 		return err
@@ -745,10 +743,23 @@ func (t *tableState) purgeOldLeases(
 	return t.release(lease, store)
 }
 
-// LeaseManagerTestingKnobs contains test affordances.
+// LeaseStoreTestingKnobs contains testing knobs.
+type LeaseStoreTestingKnobs struct {
+	// Called after a lease is removed from the store, with any operation error.
+	LeaseReleasedEvent func(lease *LeaseState, err error)
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*LeaseStoreTestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = &LeaseStoreTestingKnobs{}
+
+// LeaseManagerTestingKnobs contains test knobs.
 type LeaseManagerTestingKnobs struct {
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
+
+	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
 }
 
 var _ base.ModuleTestingKnobs = &LeaseManagerTestingKnobs{}
@@ -878,9 +889,10 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			db:     db,
-			clock:  clock,
-			nodeID: nodeID,
+			db:           db,
+			clock:        clock,
+			nodeID:       nodeID,
+			testingKnobs: testingKnobs.LeaseStoreTestingKnobs,
 		},
 		tables:       make(map[sqlbase.ID]*tableState),
 		testingKnobs: testingKnobs,
