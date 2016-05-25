@@ -169,7 +169,7 @@ func TestHttpQuery(t *testing.T) {
 	}
 
 	var response ts.TimeSeriesQueryResponse
-	session := makeTestHTTPSession(t, &tsrv.Ctx.Context, tsrv.HTTPAddr())
+	session := makeTestHTTPSession(t, tsrv.Ctx)
 	if err := session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,

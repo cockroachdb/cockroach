@@ -75,7 +75,7 @@ func getJSON(url string) (interface{}, error) {
 
 // debugURL returns the root debug URL.
 func debugURL(s *TestServer) string {
-	return s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint
+	return s.Ctx.AdminURL() + debugEndpoint
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
@@ -209,7 +209,7 @@ func apiGet(s *TestServer, path string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return util.GetJSON(client, s.Ctx.HTTPRequestScheme(), s.HTTPAddr(), apiPath, v)
+	return util.GetJSON(client, s.Ctx.AdminURL()+apiPath, v)
 }
 
 // apiPost issues a POST to the provided server using the given API path and
@@ -220,7 +220,7 @@ func apiPost(s *TestServer, path, body string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return util.PostJSON(client, s.Ctx.HTTPRequestScheme(), s.HTTPAddr(), apiPath, body, v)
+	return util.PostJSON(client, s.Ctx.AdminURL()+apiPath, body, v)
 }
 
 func TestAdminAPIDatabases(t *testing.T) {

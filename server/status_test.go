@@ -56,13 +56,13 @@ func TestStatusLocalStacks(t *testing.T) {
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
 
-	if body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + "/_status/stacks/local"); err != nil {
+	if body, err := getText(s.Ctx.AdminURL() + "/_status/stacks/local"); err != nil {
 		t.Fatal(err)
 	} else if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
 	}
 
-	if body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + "/_status/stacks/1"); err != nil {
+	if body, err := getText(s.Ctx.AdminURL() + "/_status/stacks/1"); err != nil {
 		t.Fatal(err)
 	} else if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
@@ -155,7 +155,7 @@ func getRequestReader(t *testing.T, ts *TestServer, path string) io.ReadCloser {
 		t.Fatal(err)
 	}
 
-	url := ts.Ctx.HTTPRequestScheme() + "://" + ts.HTTPAddr() + path
+	url := ts.Ctx.AdminURL() + path
 	for r := retry.Start(retryOptions); r.Next(); {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
