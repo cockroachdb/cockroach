@@ -80,7 +80,8 @@ deployment:
     branch: jemalloc
     commands:
       - aws configure set region us-east-1
-      - build/builder.sh build/build-jemalloc-binaries.sh
+      - build/builder.sh build/build-jemalloc-binaries.sh:
+          timeout: 1200
       - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.jemalloc
       - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" static-tests.jemalloc.tar.gz
   beta:
