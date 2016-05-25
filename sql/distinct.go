@@ -130,22 +130,29 @@ func (n *distinctNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *distinctNode) Next() bool {
+func (n *distinctNode) Next() (bool, error) {
 	if n.err != nil {
-		return false
+		return false, n.err
 	}
-	for n.plan.Next() {
+	for {
+		next, err := n.plan.Next()
+		if err != nil {
+			n.err = err
+		}
+		if !next {
+			break
+		}
 		if n.explain == explainDebug {
 			n.debugVals = n.plan.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Let the non-row debug values pass through.
-				return true
+				return true, nil
 			}
 		}
 		// Detect duplicates
 		prefix, suffix := n.encodeValues(n.Values())
 		if n.err != nil {
-			return false
+			return false, n.err
 		}
 
 		if !bytes.Equal(prefix, n.prefixSeen) {
@@ -158,7 +165,7 @@ func (n *distinctNode) Next() bool {
 			if suffix != nil {
 				n.suffixSeen[string(suffix)] = struct{}{}
 			}
-			return true
+			return true, nil
 		}
 
 		// The prefix of the row is the same as the last row; check
@@ -167,7 +174,7 @@ func (n *distinctNode) Next() bool {
 			sKey := string(suffix)
 			if _, ok := n.suffixSeen[sKey]; !ok {
 				n.suffixSeen[sKey] = struct{}{}
-				return true
+				return true, nil
 			}
 		}
 
@@ -175,15 +182,10 @@ func (n *distinctNode) Next() bool {
 		if n.explain == explainDebug {
 			// Return as a filtered row.
 			n.debugVals.output = debugValueFiltered
-			return true
+			return true, nil
 		}
 	}
-	n.err = n.plan.Err()
-	return false
-}
-
-func (n *distinctNode) Err() error {
-	return n.err
+	return false, n.err
 }
 
 func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {

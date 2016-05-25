@@ -30,7 +30,6 @@ type emptyNode struct {
 func (*emptyNode) Columns() []ResultColumn             { return nil }
 func (*emptyNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (*emptyNode) Values() parser.DTuple               { return nil }
-func (*emptyNode) Err() error                          { return nil }
 func (*emptyNode) ExplainTypes(_ func(string, string)) {}
 func (*emptyNode) Start() error                        { return nil }
 func (*emptyNode) SetLimitHint(_ int64, _ bool)        {}
@@ -50,8 +49,8 @@ func (e *emptyNode) DebugValues() debugValues {
 	}
 }
 
-func (e *emptyNode) Next() bool {
+func (e *emptyNode) Next() (bool, error) {
 	r := e.results
 	e.results = false
-	return r
+	return r, nil
 }

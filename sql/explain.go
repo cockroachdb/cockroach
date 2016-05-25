@@ -129,12 +129,11 @@ type explainTypesNode struct {
 }
 
 func (e *explainTypesNode) ExplainTypes(fn func(string, string)) {}
-func (e *explainTypesNode) Next() bool                           { return e.results.Next() }
+func (e *explainTypesNode) Next() (bool, error)                  { return e.results.Next() }
 func (e *explainTypesNode) Columns() []ResultColumn              { return e.results.Columns() }
 func (e *explainTypesNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
-func (e *explainTypesNode) Err() error                           { return e.results.Err() }
 func (e *explainTypesNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainTypesNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
 func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -208,12 +207,11 @@ type explainPlanNode struct {
 }
 
 func (e *explainPlanNode) ExplainTypes(fn func(string, string)) {}
-func (e *explainPlanNode) Next() bool                           { return e.results.Next() }
+func (e *explainPlanNode) Next() (bool, error)                  { return e.results.Next() }
 func (e *explainPlanNode) Columns() []ResultColumn              { return e.results.Columns() }
 func (e *explainPlanNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues             { return e.results.DebugValues() }
-func (e *explainPlanNode) Err() error                           { return e.results.Err() }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainPlanNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
 func (e *explainPlanNode) expandPlan() error {
@@ -351,7 +349,6 @@ var debugColumns = []ResultColumn{
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
 
-func (n *explainDebugNode) Err() error { return n.plan.Err() }
 func (n *explainDebugNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
 		return err
@@ -362,7 +359,7 @@ func (n *explainDebugNode) expandPlan() error {
 
 func (n *explainDebugNode) Start() error { return n.plan.Start() }
 
-func (n *explainDebugNode) Next() bool { return n.plan.Next() }
+func (n *explainDebugNode) Next() (bool, error) { return n.plan.Next() }
 
 func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	return n.plan.ExplainPlan(v)

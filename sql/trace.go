@@ -50,7 +50,6 @@ var traceColumns = append([]ResultColumn{
 func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
 func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
 
-func (n *explainTraceNode) Err() error { return nil }
 func (n *explainTraceNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
 		return err
@@ -66,18 +65,19 @@ func (n *explainTraceNode) expandPlan() error {
 }
 func (n *explainTraceNode) Start() error { return n.plan.Start() }
 
-func (n *explainTraceNode) Next() bool {
+func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil
 	if first {
 		n.rows = []parser.DTuple{}
 	}
 	for !n.exhausted && len(n.rows) <= 1 {
 		var vals debugValues
-		if !n.plan.Next() {
+		if next, err := n.plan.Next(); !next {
 			n.exhausted = true
 			sp := opentracing.SpanFromContext(n.txn.Context)
-			if err := n.Err(); err != nil {
+			if err != nil {
 				sp.LogEvent(err.Error())
+				return false, err
 			}
 			sp.LogEvent("tracing completed")
 			sp.Finish()
@@ -131,13 +131,13 @@ func (n *explainTraceNode) Next() bool {
 	}
 
 	if first {
-		return len(n.rows) > 0
+		return len(n.rows) > 0, nil
 	}
 	if len(n.rows) <= 1 {
-		return false
+		return false, nil
 	}
 	n.rows = n.rows[1:]
-	return true
+	return true, nil
 }
 
 func (n *explainTraceNode) ExplainPlan(v bool) (name, description string, children []planNode) {

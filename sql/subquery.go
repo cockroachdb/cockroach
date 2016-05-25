@@ -109,7 +109,11 @@ func (s *subquery) doEval() (parser.Datum, error) {
 	case execModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
-		if s.plan.Next() {
+		next, err := s.plan.Next()
+		if s.err = err; err != nil {
+			return result, err
+		}
+		if next {
 			result = parser.MakeDBool(true)
 		}
 		if result == nil {
@@ -118,7 +122,8 @@ func (s *subquery) doEval() (parser.Datum, error) {
 
 	case execModeAllRows:
 		var rows parser.DTuple
-		for s.plan.Next() {
+		next, err := s.plan.Next()
+		for ; next; next, err = s.plan.Next() {
 			values := s.plan.Values()
 			switch len(values) {
 			case 1:
@@ -135,6 +140,9 @@ func (s *subquery) doEval() (parser.Datum, error) {
 				rows = append(rows, &valuesCopy)
 			}
 		}
+		if s.err = err; err != nil {
+			return result, err
+		}
 		if s.wantNormalized {
 			rows.Normalize()
 		}
@@ -142,7 +150,11 @@ func (s *subquery) doEval() (parser.Datum, error) {
 
 	case execModeOneRow:
 		result = parser.DNull
-		for s.plan.Next() {
+		next, err := s.plan.Next()
+		if s.err = err; err != nil {
+			return result, err
+		}
+		if next {
 			values := s.plan.Values()
 			switch len(values) {
 			case 1:
@@ -152,15 +164,17 @@ func (s *subquery) doEval() (parser.Datum, error) {
 				copy(valuesCopy, values)
 				result = &valuesCopy
 			}
-			if s.plan.Next() {
-				return nil, fmt.Errorf("more than one row returned by a subquery used as an expression")
+			another, err := s.plan.Next()
+			if s.err = err; err != nil {
+				return result, err
+			}
+			if another {
+				s.err = fmt.Errorf("more than one row returned by a subquery used as an expression")
+				return result, s.err
 			}
 		}
 	}
 
-	if err := s.plan.Err(); err != nil {
-		return nil, err
-	}
 	return result, nil
 }
 

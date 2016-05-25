@@ -179,16 +179,12 @@ func (n *valuesNode) DebugValues() debugValues {
 	}
 }
 
-func (n *valuesNode) Next() bool {
+func (n *valuesNode) Next() (bool, error) {
 	if n.nextRow >= len(n.rows) {
-		return false
+		return false, nil
 	}
 	n.nextRow++
-	return true
-}
-
-func (*valuesNode) Err() error {
-	return nil
+	return true, nil
 }
 
 func (n *valuesNode) Len() int {

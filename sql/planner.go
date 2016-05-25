@@ -208,18 +208,19 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	if err := plan.Start(); err != nil {
 		return nil, err
 	}
-	if !plan.Next() {
-		if err := plan.Err(); err != nil {
+	if next, err := plan.Next(); !next {
+		if err != nil {
 			return nil, err
 		}
 		return nil, nil
 	}
 	values := plan.Values()
-	if plan.Next() {
-		return nil, util.Errorf("%s: unexpected multiple results", sql)
-	}
-	if err := plan.Err(); err != nil {
+	next, err := plan.Next()
+	if err != nil {
 		return nil, err
+	}
+	if next {
+		return nil, util.Errorf("%s: unexpected multiple results", sql)
 	}
 	return values, nil
 }
@@ -233,7 +234,7 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 	if err := plan.Start(); err != nil {
 		return 0, err
 	}
-	return countRowsAffected(plan), plan.Err()
+	return countRowsAffected(plan)
 }
 
 // setTestingVerifyMetadata implements the queryRunner interface.

@@ -152,8 +152,9 @@ type planNode interface {
 	// of results each time that Next() returns true.
 	// See executor.go: countRowsAffected() and execStmt() for an example.
 	//
-	// Available after Start().
-	Next() bool
+	// Available after Start(). It is illegal to call Next() after it returns
+	// false.
+	Next() (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
@@ -170,11 +171,6 @@ type planNode interface {
 	// Available after Next() and MarkDebug(explainDebug), see
 	// explain.go.
 	DebugValues() debugValues
-
-	// Err returns the error, if any, encountered during iteration.
-	//
-	// Available after Next().
-	Err() error
 }
 
 // planNodeFastPath is implemented by nodes that can perform all their
