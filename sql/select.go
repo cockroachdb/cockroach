@@ -118,6 +118,7 @@ func (s *selectNode) Start() error {
 func (s *selectNode) Next() bool {
 	for {
 		if !s.table.node.Next() {
+			s.err = s.table.node.Err()
 			return false
 		}
 
