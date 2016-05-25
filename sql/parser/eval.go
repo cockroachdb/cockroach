@@ -1197,7 +1197,7 @@ type EvalContext struct {
 	Location **time.Location
 
 	ReCache *RegexpCache
-	TmpDec  *inf.Dec
+	tmpDec  inf.Dec
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -1276,10 +1276,7 @@ func (ctx *EvalContext) GetLocation() *time.Location {
 }
 
 func (ctx *EvalContext) getTmpDec() *inf.Dec {
-	if ctx.TmpDec != nil {
-		return ctx.TmpDec
-	}
-	return new(inf.Dec)
+	return &ctx.tmpDec
 }
 
 // Eval implements the Expr interface.
