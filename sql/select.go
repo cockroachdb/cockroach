@@ -151,11 +151,11 @@ func (s *selectNode) Start() error {
 	return s.planner.startSubqueryPlans(s.filter)
 }
 
-func (s *selectNode) Next() bool {
+func (s *selectNode) Next() (bool, error) {
 	for {
-		if !s.source.plan.Next() {
-			s.err = s.source.plan.Err()
-			return false
+		if next, err := s.source.plan.Next(); !next {
+			s.err = err
+			return false, s.err
 		}
 
 		if s.explain == explainDebug {
@@ -163,7 +163,7 @@ func (s *selectNode) Next() bool {
 
 			if s.debugVals.output != debugValueRow {
 				// Let the debug values pass through.
-				return true
+				return true, nil
 			}
 		}
 		row := s.source.plan.Values()
@@ -171,23 +171,19 @@ func (s *selectNode) Next() bool {
 		passesFilter, err := sqlbase.RunFilter(s.filter, s.planner.evalCtx)
 		if err != nil {
 			s.err = err
-			return false
+			return false, s.err
 		}
 
 		if passesFilter {
 			s.err = s.renderRow()
-			return s.err == nil
+			return s.err == nil, s.err
 		} else if s.explain == explainDebug {
 			// Mark the row as filtered out.
 			s.debugVals.output = debugValueFiltered
-			return true
+			return true, nil
 		}
 		// Row was filtered out; grab the next row.
 	}
-}
-
-func (s *selectNode) Err() error {
-	return s.err
 }
 
 func (s *selectNode) ExplainTypes(regTypes func(string, string)) {

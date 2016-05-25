@@ -128,8 +128,13 @@ func TestValues(t *testing.T) {
 				continue
 			}
 			var rows []parser.DTuple
-			for plan.Next() {
+			next, err := plan.Next()
+			for ; next; next, err = plan.Next() {
 				rows = append(rows, plan.Values())
+			}
+			if err != nil {
+				t.Error(err)
+				continue
 			}
 			if !reflect.DeepEqual(rows, tc.rows) {
 				t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)

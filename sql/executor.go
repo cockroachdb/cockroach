@@ -495,17 +495,18 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(p planNode) int {
+func countRowsAffected(p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
-			return count
+			return count, nil
 		}
 	}
 	count := 0
-	for p.Next() {
+	next, err := p.Next()
+	for ; next; next, err = p.Next() {
 		count++
 	}
-	return count
+	return count, err
 }
 
 // runTxnAttempt is used in the closure we pass to txn.Exec(). It
@@ -931,7 +932,11 @@ func (e *Executor) execStmt(
 
 	switch result.Type {
 	case parser.RowsAffected:
-		result.RowsAffected += countRowsAffected(plan)
+		count, err := countRowsAffected(plan)
+		if err != nil {
+			return result, err
+		}
+		result.RowsAffected += count
 
 	case parser.Rows:
 		result.Columns = plan.Columns()
@@ -947,7 +952,8 @@ func (e *Executor) execStmt(
 		const maxChunkSize = 64 // Arbitrary, could use tuning.
 		chunkSize := 4          // Arbitrary as well.
 
-		for plan.Next() {
+		next, err := plan.Next()
+		for ; next; next, err = plan.Next() {
 			// The plan.Values DTuple needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -969,8 +975,11 @@ func (e *Executor) execStmt(
 			}
 			result.Rows = append(result.Rows, row)
 		}
+		if err != nil {
+			return result, err
+		}
 	}
-	return result, plan.Err()
+	return result, nil
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL

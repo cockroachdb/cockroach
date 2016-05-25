@@ -128,38 +128,38 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return 0, false
 }
 
-func (d *deleteNode) Next() bool {
+func (d *deleteNode) Next() (bool, error) {
 	if d.run.done || d.run.err != nil {
-		return false
+		return false, d.run.err
 	}
 
-	if !d.run.rows.Next() {
-		if d.run.err = d.run.rows.Err(); d.run.err != nil {
-			d.run.done = true
-			return false
+	next, err := d.run.rows.Next()
+	if !next {
+		if err != nil {
+			d.run.err = err
+		} else {
+			// We're done. Finish the batch.
+			d.run.err = d.tw.finalize()
 		}
-		// We're done. Finish the batch.
-		d.run.err = d.tw.finalize()
 		d.run.done = true
-		return false
+		return false, d.run.err
 	}
 
 	rowVals := d.run.rows.Values()
 
-	_, err := d.tw.row(rowVals)
-	d.run.err = err
-	if d.run.err != nil {
-		return false
+	_, err = d.tw.row(rowVals)
+	if d.run.err = err; err != nil {
+		return false, err
 	}
 
 	resultRow, err := d.rh.cookResultRow(rowVals)
 	if err != nil {
 		d.run.err = err
-		return false
+		return false, d.run.err
 	}
 	d.run.resultRow = resultRow
 
-	return true
+	return true, nil
 }
 
 // Determine if the deletion of `rows` can be done without actually scanning them,
@@ -221,10 +221,6 @@ func (d *deleteNode) DebugValues() debugValues {
 
 func (d *deleteNode) Ordering() orderingInfo {
 	return d.run.rows.Ordering()
-}
-
-func (d *deleteNode) Err() error {
-	return d.run.err
 }
 
 func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []planNode) {

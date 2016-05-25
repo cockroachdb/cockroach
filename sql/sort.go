@@ -217,10 +217,6 @@ func (n *sortNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *sortNode) Err() error {
-	return n.err
-}
-
 func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	if n.needSort {
 		name = "sort"
@@ -308,9 +304,9 @@ func (n *sortNode) Start() error {
 	return n.plan.Start()
 }
 
-func (n *sortNode) Next() bool {
+func (n *sortNode) Next() (bool, error) {
 	if n.err != nil {
-		return false
+		return false, n.err
 	}
 
 	for n.needSort {
@@ -329,10 +325,11 @@ func (n *sortNode) Next() bool {
 		// TODO(andrei): If we're scanning an index with a prefix matching an
 		// ordering prefix, we should only accumulate values for equal fields
 		// in this prefix, then sort the accumulated chunk and output.
-		if !n.plan.Next() {
-			n.err = n.plan.Err()
+		next, err := n.plan.Next()
+		if !next {
+			n.err = err
 			if n.err != nil {
-				return false
+				return false, n.err
 			}
 
 			n.sortStrategy.Finish()
@@ -345,7 +342,7 @@ func (n *sortNode) Next() bool {
 			n.debugVals = n.plan.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Pass through non-row debug values.
-				return true
+				return true, nil
 			}
 		}
 
@@ -355,30 +352,29 @@ func (n *sortNode) Next() bool {
 		if n.explain == explainDebug {
 			// Emit a "buffered" row.
 			n.debugVals.output = debugValueBuffered
-			return true
+			return true, nil
 		}
 	}
 
 	if n.valueIter == nil {
 		n.valueIter = n.plan
 	}
-	if !n.valueIter.Next() {
-		if n.valueIter == n.plan {
-			n.err = n.plan.Err()
-		}
-		return false
+	next, err := n.valueIter.Next()
+	if !next {
+		n.err = err
+		return false, n.err
 	}
 	if n.explain == explainDebug {
 		n.debugVals = n.valueIter.DebugValues()
 	}
-	return true
+	return true, nil
 }
 
 // valueIterator provides iterative access to a value source's values and
 // debug values. It is a subset of the planNode interface, so all methods
 // should conform to the comments expressed in the planNode definition.
 type valueIterator interface {
-	Next() bool
+	Next() (bool, error)
 	Values() parser.DTuple
 	DebugValues() debugValues
 }
@@ -421,7 +417,7 @@ func (ss *sortAllStrategy) Finish() {
 	ss.vNode.SortAll()
 }
 
-func (ss *sortAllStrategy) Next() bool {
+func (ss *sortAllStrategy) Next() (bool, error) {
 	return ss.vNode.Next()
 }
 
@@ -465,13 +461,13 @@ func (ss *iterativeSortStrategy) Finish() {
 	ss.vNode.InitMinHeap()
 }
 
-func (ss *iterativeSortStrategy) Next() bool {
+func (ss *iterativeSortStrategy) Next() (bool, error) {
 	if ss.vNode.Len() == 0 {
-		return false
+		return false, nil
 	}
 	ss.lastVal = ss.vNode.PopValues()
 	ss.nextRowIdx++
-	return true
+	return true, nil
 }
 
 func (ss *iterativeSortStrategy) Values() parser.DTuple {
@@ -548,7 +544,7 @@ func (ss *sortTopKStrategy) Finish() {
 	ss.vNode.rows = ss.vNode.rows[:origLen]
 }
 
-func (ss *sortTopKStrategy) Next() bool {
+func (ss *sortTopKStrategy) Next() (bool, error) {
 	return ss.vNode.Next()
 }
 

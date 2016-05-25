@@ -148,19 +148,19 @@ func (n *scanNode) initScan() (success bool) {
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
-func (n *scanNode) debugNext() bool {
+func (n *scanNode) debugNext() (bool, error) {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
 	n.debugVals.key, n.debugVals.value, n.row, n.err = n.fetcher.NextKeyDebug()
 	if n.err != nil || n.debugVals.key == "" {
-		return false
+		return false, n.err
 	}
 
 	if n.row != nil {
 		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
 			n.err = err
-			return false
+			return false, n.err
 		}
 		if passesFilter {
 			n.debugVals.output = debugValueRow
@@ -171,19 +171,19 @@ func (n *scanNode) debugNext() bool {
 	} else {
 		n.debugVals.output = debugValuePartial
 	}
-	return true
+	return true, nil
 }
 
-func (n *scanNode) Next() bool {
+func (n *scanNode) Next() (bool, error) {
 	tracing.AnnotateTrace()
 
 	if n.err != nil {
-		return false
+		return false, n.err
 	}
 
 	if !n.scanInitialized && !n.initScan() {
 		// Hit error during initScan
-		return false
+		return false, nil
 	}
 
 	if n.explain == explainDebug {
@@ -194,21 +194,17 @@ func (n *scanNode) Next() bool {
 	for {
 		n.row, n.err = n.fetcher.NextRow()
 		if n.err != nil || n.row == nil {
-			return false
+			return false, n.err
 		}
 		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
 			n.err = err
-			return false
+			return false, n.err
 		}
 		if passesFilter {
-			return true
+			return true, nil
 		}
 	}
-}
-
-func (n *scanNode) Err() error {
-	return n.err
 }
 
 func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []planNode) {

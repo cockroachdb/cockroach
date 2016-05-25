@@ -228,6 +228,7 @@ type groupNode struct {
 	needOnlyOneRow  bool
 	gotOneRow       bool
 
+	// TODO(vivek): remove
 	err error
 
 	explain explainMode
@@ -307,26 +308,29 @@ func (n *groupNode) Start() error {
 	return n.planner.startSubqueryPlans(n.having)
 }
 
-func (n *groupNode) Next() bool {
+func (n *groupNode) Next() (bool, error) {
 	var scratch []byte
 
 	if n.err != nil {
-		return false
+		return false, n.err
 	}
 
 	for !n.populated {
-		if (n.needOnlyOneRow && n.gotOneRow) || !n.plan.Next() {
-			n.err = n.plan.Err()
+		next := false
+		if !(n.needOnlyOneRow && n.gotOneRow) {
+			next, n.err = n.plan.Next()
 			if n.err != nil {
-				return false
+				return false, n.err
 			}
+		}
+		if !next {
 			n.computeAggregates()
 			n.populated = true
 			break
 		}
 		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
 			// Pass through non-row debug values.
-			return true
+			return true, nil
 		}
 
 		// Add row to bucket.
@@ -339,7 +343,7 @@ func (n *groupNode) Next() bool {
 		encoded, err := sqlbase.EncodeDTuple(scratch, groupedValues)
 		if err != nil {
 			n.err = err
-			return false
+			return false, n.err
 		}
 
 		n.buckets[string(encoded)] = struct{}{}
@@ -348,7 +352,7 @@ func (n *groupNode) Next() bool {
 		for i, value := range aggregatedValues {
 			if err := n.funcs[i].add(encoded, value); err != nil {
 				n.err = err
-				return false
+				return false, n.err
 			}
 		}
 		scratch = encoded[:0]
@@ -357,7 +361,7 @@ func (n *groupNode) Next() bool {
 
 		if n.explain == explainDebug {
 			// Emit a "buffered" row.
-			return true
+			return true, nil
 		}
 	}
 
@@ -404,10 +408,6 @@ func (n *groupNode) computeAggregates() {
 		n.values.rows = append(n.values.rows, row)
 	}
 
-}
-
-func (n *groupNode) Err() error {
-	return n.err
 }
 
 func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []planNode) {

@@ -262,20 +262,20 @@ func (n *insertNode) Start() error {
 	return n.run.tw.init(n.p.txn)
 }
 
-func (n *insertNode) Next() bool {
+func (n *insertNode) Next() (bool, error) {
 	if n.run.done || n.run.err != nil {
-		return false
+		return false, n.run.err
 	}
 
-	if !n.run.rows.Next() {
-		if n.run.err = n.run.rows.Err(); n.run.err != nil {
-			n.run.done = true
-			return false
+	if next, err := n.run.rows.Next(); !next {
+		if err != nil {
+			n.run.err = err
+		} else {
+			// We're done. Finish the batch.
+			n.run.err = n.tw.finalize()
 		}
-		// We're done. Finish the batch.
-		n.run.err = n.tw.finalize()
 		n.run.done = true
-		return false
+		return false, n.run.err
 	}
 
 	rowVals := n.run.rows.Values()
@@ -291,7 +291,7 @@ func (n *insertNode) Next() bool {
 		d, err := n.defaultExprs[i].Eval(n.p.evalCtx)
 		if err != nil {
 			n.run.err = err
-			return false
+			return false, err
 		}
 		rowVals = append(rowVals, d)
 	}
@@ -301,7 +301,7 @@ func (n *insertNode) Next() bool {
 		if !col.Nullable {
 			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
 				n.run.err = sqlbase.NewNonNullViolationError(col.Name)
-				return false
+				return false, n.run.err
 			}
 		}
 	}
@@ -310,20 +310,20 @@ func (n *insertNode) Next() bool {
 	for i := range rowVals {
 		if err := sqlbase.CheckValueWidth(n.insertCols[i], rowVals[i]); err != nil {
 			n.run.err = err
-			return false
+			return false, err
 		}
 	}
 
 	n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false)
 	if err := n.checkHelper.check(n.p.evalCtx); err != nil {
 		n.run.err = err
-		return false
+		return false, err
 	}
 
 	_, err := n.tw.row(rowVals)
 	if err != nil {
 		n.run.err = err
-		return false
+		return false, err
 	}
 
 	for i, val := range rowVals {
@@ -335,11 +335,11 @@ func (n *insertNode) Next() bool {
 	resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
 	if err != nil {
 		n.run.err = err
-		return false
+		return false, err
 	}
 	n.run.resultRow = resultRow
 
-	return true
+	return true, nil
 }
 
 func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
@@ -479,10 +479,6 @@ func (n *insertNode) DebugValues() debugValues {
 
 func (n *insertNode) Ordering() orderingInfo {
 	return n.run.rows.Ordering()
-}
-
-func (n *insertNode) Err() error {
-	return n.run.err
 }
 
 func (n *insertNode) ExplainPlan(v bool) (name, description string, children []planNode) {

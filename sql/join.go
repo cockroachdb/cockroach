@@ -164,7 +164,7 @@ func (n *indexJoinNode) Start() error {
 	return n.index.Start()
 }
 
-func (n *indexJoinNode) Next() bool {
+func (n *indexJoinNode) Next() (bool, error) {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from
 	// the index we perform another iteration of the loop looking for rows in the
@@ -172,14 +172,17 @@ func (n *indexJoinNode) Next() bool {
 	// might all be filtered when the resulting rows are read from the table.
 	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
 		// First, try to pull a row from the table.
-		if tableLookup && n.table.Next() {
-			if n.explain == explainDebug {
-				n.debugVals = n.table.DebugValues()
+		if tableLookup {
+			next, err := n.table.Next()
+			if n.err = err; n.err != nil {
+				return false, n.err
 			}
-			return true
-		}
-		if n.err = n.table.Err(); n.err != nil {
-			return false
+			if next {
+				if n.explain == explainDebug {
+					n.debugVals = n.table.DebugValues()
+				}
+				return true, nil
+			}
 		}
 
 		// The table is out of rows. Pull primary keys from the index.
@@ -187,14 +190,14 @@ func (n *indexJoinNode) Next() bool {
 		n.table.spans = n.table.spans[:0]
 
 		for len(n.table.spans) < joinBatchSize {
-			if !n.index.Next() {
+			if next, err := n.index.Next(); !next {
 				// The index is out of rows or an error occurred.
-				if n.err = n.index.Err(); n.err != nil {
-					return false
+				if n.err = err; n.err != nil {
+					return false, n.err
 				}
 				if len(n.table.spans) == 0 {
 					// The index is out of rows.
-					return false
+					return false, nil
 				}
 				break
 			}
@@ -202,7 +205,7 @@ func (n *indexJoinNode) Next() bool {
 			if n.explain == explainDebug {
 				n.debugVals = n.index.DebugValues()
 				if n.debugVals.output != debugValueRow {
-					return true
+					return true, nil
 				}
 			}
 
@@ -211,7 +214,7 @@ func (n *indexJoinNode) Next() bool {
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
 			n.err = err
 			if n.err != nil {
-				return false
+				return false, n.err
 			}
 			key := roachpb.Key(primaryIndexKey)
 			n.table.spans = append(n.table.spans, sqlbase.Span{
@@ -222,7 +225,7 @@ func (n *indexJoinNode) Next() bool {
 			if n.explain == explainDebug {
 				// In debug mode, return the index information as a "partial" row.
 				n.debugVals.output = debugValuePartial
-				return true
+				return true, nil
 			}
 		}
 
@@ -230,11 +233,7 @@ func (n *indexJoinNode) Next() bool {
 			log.Infof("table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
 		}
 	}
-	return false
-}
-
-func (n *indexJoinNode) Err() error {
-	return n.err
+	return false, nil
 }
 
 func (n *indexJoinNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
