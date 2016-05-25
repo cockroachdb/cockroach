@@ -23,6 +23,7 @@ resource "google_compute_instance" "benchmark" {
   count = 1
 
   name = "benchmarks-${var.benchmarks_package}-${count.index}"
+  name = "benchmark-${replace(var.benchmarks_package,".","-")}-${count.index}"
   machine_type = "${var.gce_machine_type}"
   zone = "${var.gce_zone}"
   tags = ["benchmark"]
@@ -82,7 +83,7 @@ resource "google_compute_instance" "benchmark" {
 }
 
 resource "google_compute_firewall" "default" {
-  name = "cockroach-benchmark-firewall"
+  name = "cockroach-benchmark-${replace(var.benchmarks_package,".","-")}-firewall"
   network = "default"
 
   allow {
