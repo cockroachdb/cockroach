@@ -347,7 +347,7 @@ func (r *RocksDB) NewSnapshot() Engine {
 }
 
 // NewBatch returns a new batch wrapping this rocksdb engine.
-func (r *RocksDB) NewBatch() Engine {
+func (r *RocksDB) NewBatch() Batch {
 	return newRocksDBBatch(r)
 }
 
@@ -475,7 +475,7 @@ func (r *rocksDBSnapshot) NewSnapshot() Engine {
 }
 
 // NewBatch is illegal for snapshot.
-func (r *rocksDBSnapshot) NewBatch() Engine {
+func (r *rocksDBSnapshot) NewBatch() Batch {
 	panic("cannot create a NewBatch from a snapshot")
 }
 
@@ -497,6 +497,81 @@ func (r *rocksDBSnapshot) Defer(func()) {
 // GetStats is not implemented for rocksDBSnapshot.
 func (r *rocksDBSnapshot) GetStats() (*Stats, error) {
 	return nil, util.Errorf("GetStats is not implemented for %T", r)
+}
+
+// distinctIterator wraps rocksDBIterator and allows reuse of an iterator
+// for the lifetime of a batch.
+type distinctIterator struct {
+	rocksDBIterator
+	batch *distinctBatch
+}
+
+func (r *distinctIterator) Close() {
+	// distinctIterator.Close() is a no-op. The iterator is left open until
+	// the associated batch is closed.
+	if r.batch == nil {
+		panic("closing idle iterator")
+	}
+	r.batch = nil
+}
+
+func (r *distinctIterator) Seek(key MVCCKey) {
+	r.rocksDBIterator.Seek(key)
+}
+
+func (r *distinctIterator) SeekReverse(key MVCCKey) {
+	r.rocksDBIterator.SeekReverse(key)
+}
+
+func (r *distinctIterator) Next() {
+	r.rocksDBIterator.Next()
+}
+
+func (r *distinctIterator) Prev() {
+	r.rocksDBIterator.Prev()
+}
+
+func (r *distinctIterator) NextKey() {
+	r.rocksDBIterator.NextKey()
+}
+
+func (r *distinctIterator) PrevKey() {
+	r.rocksDBIterator.PrevKey()
+}
+
+type distinctBatch struct {
+	*rocksDBBatch
+	prefixIter distinctIterator
+	normalIter distinctIterator
+}
+
+// NewIterator returns an iterator over the batch and underlying engine. Note
+// that the returned iterator is cached and re-used for the lifetime of the
+// batch. A panic will be thrown if multiple prefix or normal (non-prefix)
+// iterators are used simultaneously on the same batch.
+func (r *distinctBatch) NewIterator(prefix bool) Iterator {
+	// Used the cached iterator, creating it on first access.
+	iter := &r.normalIter
+	if prefix {
+		iter = &r.prefixIter
+	}
+	if iter.rocksDBIterator.iter == nil {
+		iter.rocksDBIterator.init(r.batch, prefix, r)
+	}
+	if iter.batch != nil {
+		panic("iterator already in use")
+	}
+	iter.batch = r
+	return iter
+}
+
+func (r *distinctBatch) close() {
+	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
+		i.destroy()
+	}
+	if i := &r.normalIter.rocksDBIterator; i.iter != nil {
+		i.destroy()
+	}
 }
 
 // rocksDBBatchIterator wraps rocksDBIterator and allows reuse of an iterator
@@ -546,14 +621,14 @@ func (r *rocksDBBatchIterator) PrevKey() {
 }
 
 type rocksDBBatch struct {
-	parent        *RocksDB
-	batch         *C.DBEngine
-	defers        []func()
-	flushes       int
-	flushesFrozen bool
-	prefixIter    rocksDBBatchIterator
-	normalIter    rocksDBBatchIterator
-	builder       rocksDBBatchBuilder
+	parent     *RocksDB
+	batch      *C.DBEngine
+	defers     []func()
+	flushes    int
+	prefixIter rocksDBBatchIterator
+	normalIter rocksDBBatchIterator
+	builder    rocksDBBatchBuilder
+	distinct   distinctBatch
 }
 
 func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
@@ -568,6 +643,7 @@ func (r *rocksDBBatch) Open() error {
 }
 
 func (r *rocksDBBatch) Close() {
+	r.distinct.close()
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
 		i.destroy()
 	}
@@ -657,7 +733,7 @@ func (r *rocksDBBatch) NewSnapshot() Engine {
 	panic("cannot create a NewSnapshot from a batch")
 }
 
-func (r *rocksDBBatch) NewBatch() Engine {
+func (r *rocksDBBatch) NewBatch() Batch {
 	return newRocksDBBatch(r.parent)
 }
 
@@ -667,7 +743,6 @@ func (r *rocksDBBatch) Commit() error {
 	}
 
 	if r.flushes > 0 {
-		r.flushesFrozen = false
 		r.flushMutations()
 		if err := statusToError(C.DBCommitBatch(r.batch)); err != nil {
 			return err
@@ -704,12 +779,13 @@ func (r *rocksDBBatch) GetStats() (*Stats, error) {
 	return nil, util.Errorf("GetStats is not implemented for %T", r)
 }
 
-func (r *rocksDBBatch) FreezeFlushes() {
-	r.flushesFrozen = true
+func (r *rocksDBBatch) Distinct() Engine {
+	r.distinct.rocksDBBatch = r
+	return &r.distinct
 }
 
 func (r *rocksDBBatch) flushMutations() {
-	if r.flushesFrozen || r.builder.count == 0 {
+	if r.builder.count == 0 {
 		return
 	}
 	r.flushes++

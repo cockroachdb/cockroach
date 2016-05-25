@@ -150,7 +150,7 @@ type Engine interface {
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
-	NewBatch() Engine
+	NewBatch() Batch
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
@@ -182,7 +182,7 @@ type Engine interface {
 // TODO(peter): Move various methods of Engine to Batch, such as Commit() and Repr().
 type Batch interface {
 	Engine
-	FreezeFlushes()
+	Distinct() Engine
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB
