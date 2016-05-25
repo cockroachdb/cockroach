@@ -403,21 +403,11 @@ func (s *selectNode) expandPlan() error {
 		}
 
 		var analyzeOrdering analyzeOrderingFn
-		if grouping && len(ordering) == 1 && s.filter == nil {
-			// If grouping has a desired single-column order and the index
-			// matches that order, we can limit the scan to a single key.
-			analyzeOrdering =
-				func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool) {
-					selOrder := s.computeOrdering(indexOrdering)
-					matchingCols = computeOrderingMatch(ordering, selOrder, false)
-					return matchingCols, 1, matchingCols == 1
-				}
-		} else if ordering != nil {
-			analyzeOrdering =
-				func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool) {
-					selOrder := s.computeOrdering(indexOrdering)
-					return computeOrderingMatch(ordering, selOrder, false), len(ordering), false
-				}
+		if ordering != nil {
+			analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
+				selOrder := s.computeOrdering(indexOrdering)
+				return computeOrderingMatch(ordering, selOrder, false), len(ordering)
+			}
 		}
 
 		// If we have a reasonable limit, prefer an order matching index even if
