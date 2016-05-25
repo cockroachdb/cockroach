@@ -117,7 +117,7 @@ endif
 	  NAME=$$(basename "$$p"); \
 	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
 	  OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
-	  $(GO) test -v $(GOFLAGS) -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
 	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi; \
 	  if [ $${NAME} = "sql" ]; then \
 	     cp -r sql/testdata sql/partestdata "$(DIR)/$${PKGDIR}/" || exit 1; \
