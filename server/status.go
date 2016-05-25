@@ -90,6 +90,8 @@ const (
 	statusMetricsPrefix = statusPrefix + "metrics/"
 	// statusMetricsPattern exposes transient stats for a node.
 	statusMetricsPattern = statusPrefix + "metrics/:node_id"
+	// statusVars exposes plain-text metrics for monitoring consumption.
+	statusVars = statusPrefix + "vars"
 
 	// statusRangesPrefix exposes range information.
 	statusRangesPrefix = statusPrefix + "ranges/"
@@ -108,11 +110,16 @@ func inconsistentBatch() *client.Batch {
 	return b
 }
 
+type metricMarshaler interface {
+	json.Marshaler
+	PrintAsText(io.Writer)
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	db           *client.DB
 	gossip       *gossip.Gossip
-	metricSource json.Marshaler
+	metricSource metricMarshaler
 	router       *httprouter.Router
 	ctx          *Context
 	rpcCtx       *rpc.Context
@@ -124,7 +131,7 @@ type statusServer struct {
 func newStatusServer(
 	db *client.DB,
 	gossip *gossip.Gossip,
-	metricSource json.Marshaler,
+	metricSource metricMarshaler,
 	ctx *Context,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
@@ -158,6 +165,7 @@ func newStatusServer(
 	// except that this one allows querying by NodeID.
 	server.router.GET(statusStacksPattern, server.handleStacks)
 	server.router.GET(statusMetricsPattern, server.handleMetrics)
+	server.router.GET(statusVars, server.handleVars)
 
 	return server
 }
@@ -555,6 +563,11 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	writeJSONResponse(w, resp)
+}
+
+func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
+	s.metricSource.PrintAsText(w)
 }
 
 // Ranges returns range info for the server specified
