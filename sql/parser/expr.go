@@ -35,10 +35,10 @@ type Expr interface {
 	// sub-expressions will be guaranteed to be well-typed, meaning that the method effectively
 	// maps the Expr tree into a TypedExpr tree.
 	//
-	// The args parameter maps ValArg names to types inferred while type-checking.
+	// The ctx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr.
-	TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
+	TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error)
 }
 
 // TypedExpr represents a well-typed expression.

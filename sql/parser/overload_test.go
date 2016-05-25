@@ -139,7 +139,8 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, TypeDate, []Expr{decConst("1.0"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
 	}
 	for i, d := range testData {
-		_, fn, err := typeCheckOverloadedExprs(d.args, d.desired, d.overloads, d.exprs...)
+		ctx := SemaContext{Args: d.args}
+		_, fn, err := typeCheckOverloadedExprs(&ctx, d.desired, d.overloads, d.exprs...)
 		if d.expectedOverload != nil {
 			if err != nil {
 				t.Errorf("%d: unexpected error returned from typeCheckOverloadedExprs: %v", i, err)

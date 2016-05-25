@@ -108,7 +108,7 @@ func (p *planner) makeUpsertHelper(
 			return nil, err
 		}
 
-		typedExpr, err := parser.TypeCheck(resolvedExpr, p.evalCtx.Args, parser.NoTypePreference)
+		typedExpr, err := parser.TypeCheck(resolvedExpr, &p.semaCtx, parser.NoTypePreference)
 		if err != nil {
 			return nil, err
 		}

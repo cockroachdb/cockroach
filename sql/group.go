@@ -69,7 +69,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 
 		// We could potentially skip this, since it will be checked in addRender,
 		// but checking now allows early err return.
-		typedExpr, err := parser.TypeCheck(resolved, p.evalCtx.Args, parser.NoTypePreference)
+		typedExpr, err := parser.TypeCheck(resolved, &p.semaCtx, parser.NoTypePreference)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, err
 		}
 
-		typedHaving, err = parser.TypeCheckAndRequire(having, p.evalCtx.Args,
+		typedHaving, err = parser.TypeCheckAndRequire(having, &p.semaCtx,
 			parser.TypeBool, "HAVING")
 		if err != nil {
 			return nil, err
@@ -656,7 +656,7 @@ func (a *aggregateFunc) String() string { return parser.AsString(a) }
 
 func (a *aggregateFunc) Walk(v parser.Visitor) parser.Expr { return a }
 
-func (a *aggregateFunc) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
+func (a *aggregateFunc) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
 	return a, nil
 }
 

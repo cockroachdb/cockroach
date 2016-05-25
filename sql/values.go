@@ -73,7 +73,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			typedExpr, err := parser.TypeCheck(expr, p.evalCtx.Args, desired)
+			typedExpr, err := parser.TypeCheck(expr, &p.semaCtx, desired)
 			if err != nil {
 				return nil, err
 			}
@@ -125,7 +125,7 @@ func (n *valuesNode) expandPlan() error {
 			if len(n.desiredTypes) > i {
 				desired = n.desiredTypes[i]
 			}
-			typedExpr, err := parser.TypeCheck(expr, n.p.evalCtx.Args, desired)
+			typedExpr, err := parser.TypeCheck(expr, &n.p.semaCtx, desired)
 			if err != nil {
 				return err
 			}

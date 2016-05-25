@@ -204,11 +204,11 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.ToDatumType())
+		typedTarget, err := parser.TypeCheck(target, &p.semaCtx, updateCols[i].Type.ToDatumType())
 		if err != nil {
 			return nil, err
 		}
-		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ReturnType(), p.evalCtx.Args)
+		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ReturnType(), p.semaCtx.Args)
 		if err != nil {
 			return nil, err
 		}

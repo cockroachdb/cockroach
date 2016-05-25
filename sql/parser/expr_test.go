@@ -188,7 +188,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, nil)
+		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -198,7 +198,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := TypeCheck(expr2, nil, nil)
+		typedExpr2, err := TypeCheck(expr2, nil, NoTypePreference)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}
@@ -209,11 +209,11 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		normalized, err := defaultContext.NormalizeExpr(typedExpr)
+		normalized, err := defaultEvalContext.NormalizeExpr(typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		normalized2, err := defaultContext.NormalizeExpr(typedExpr2)
+		normalized2, err := defaultEvalContext.NormalizeExpr(typedExpr2)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}

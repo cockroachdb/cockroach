@@ -297,7 +297,7 @@ func (e *Executor) Prepare(ctx context.Context, query string, session *Session, 
 	}
 
 	session.planner.resetForBatch(e)
-	session.planner.evalCtx.Args = args
+	session.planner.semaCtx.Args = args
 	session.planner.evalCtx.PrepareOnly = true
 
 	// Prepare needs a transaction because it needs to retrieve db/table
