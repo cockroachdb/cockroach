@@ -34,7 +34,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-func doHTTPReq(t *testing.T, client *http.Client, method, url string, body proto.Message) (*http.Response, error) {
+func doHTTPReq(t *testing.T, client http.Client, method, url string, body proto.Message) (*http.Response, error) {
 	var b io.Reader
 	if body != nil {
 		buf, err := protoutil.Marshal(body)
@@ -129,7 +129,7 @@ func TestSSLEnforcement(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}
-		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.HTTPAddr(), tc.path)
+		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.Ctx.HTTPAddr, tc.path)
 		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
 		if (err == nil) != tc.success {
 			t.Errorf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)

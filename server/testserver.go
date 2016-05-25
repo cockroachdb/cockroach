@@ -298,11 +298,6 @@ func (ts *TestServer) ServingAddr() string {
 	return ts.ctx.Addr
 }
 
-// HTTPAddr returns the server's HTTP address. Should be used by humans.
-func (ts *TestServer) HTTPAddr() string {
-	return ts.ctx.HTTPAddr
-}
-
 // ServingHost returns the host portion of the rpc server's address.
 func (ts *TestServer) ServingHost() (string, error) {
 	h, _, err := net.SplitHostPort(ts.ServingAddr())

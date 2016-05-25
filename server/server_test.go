@@ -59,7 +59,7 @@ func TestHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
-	u := s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
+	u := s.Ctx.AdminURL() + healthPath
 	httpClient, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestPlainHTTPServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	httpURL := "http://" + s.HTTPAddr() + healthPath
+	httpURL := "http://" + s.Ctx.HTTPAddr + healthPath
 	if resp, err := httpClient.Get(httpURL); err != nil {
 		t.Fatalf("error requesting health at %s: %s", httpURL, err)
 	} else {
@@ -106,7 +106,7 @@ func TestPlainHTTPServer(t *testing.T) {
 		}
 	}
 
-	httpsURL := "https://" + s.HTTPAddr() + healthPath
+	httpsURL := "https://" + s.Ctx.HTTPAddr + healthPath
 	if _, err := httpClient.Get(httpsURL); err == nil {
 		t.Fatalf("unexpected success fetching %s", httpsURL)
 	}
@@ -122,8 +122,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	origURL := "http://" + s.HTTPAddr()
-	expURL := url.URL{Scheme: "https", Host: s.HTTPAddr(), Path: "/"}
+	origURL := "http://" + s.Ctx.HTTPAddr
+	expURL := url.URL{Scheme: "https", Host: s.Ctx.HTTPAddr, Path: "/"}
 
 	if resp, err := httpClient.Get(origURL); err != nil {
 		t.Fatal(err)
@@ -188,7 +188,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+healthPath, nil)
+		req, err := http.NewRequest("GET", s.Ctx.AdminURL()+healthPath, nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}

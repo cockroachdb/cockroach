@@ -271,6 +271,12 @@ func (s *Server) Start() error {
 		return err
 	}
 
+	httpServer := util.MakeServer(s.stopper, tlsConfig, s)
+	plainRedirectServer := util.MakeServer(s.stopper, tlsConfig, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		http.Redirect(w, r, "https://"+r.Host+r.RequestURI, 308)
+	}))
+
 	// The following code is a specialization of util/net.go's ListenAndServe
 	// which adds pgwire support. A single port is used to serve all protocols
 	// (pg, http, h2) via the following construction:
@@ -340,22 +346,23 @@ func (s *Server) Start() error {
 			util.FatalIfUnexpected(httpMux.Serve())
 		})
 
-		util.ServeHandler(s.stopper, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-			http.Redirect(w, r, "https://"+r.Host+r.RequestURI, 308)
-		}), clearL, tlsConfig)
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
+		})
 
 		httpLn = tls.NewListener(tlsL, tlsConfig)
 	}
 
-	serveConn := util.ServeHandler(s.stopper, s, httpLn, tlsConfig)
+	s.stopper.RunWorker(func() {
+		util.FatalIfUnexpected(httpServer.Serve(httpLn))
+	})
 
 	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
 	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
+		util.FatalIfUnexpected(httpServer.ServeWith(pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
 				log.Error(err)
 			}
@@ -377,7 +384,7 @@ func (s *Server) Start() error {
 		})
 
 		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(serveConn(unixLn, func(conn net.Conn) {
+			util.FatalIfUnexpected(httpServer.ServeWith(unixLn, func(conn net.Conn) {
 				if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
 					log.Error(err)
 				}

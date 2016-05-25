@@ -158,7 +158,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", testCtx.HTTPRequestScheme()+"://"+s.HTTPAddr()+"/_admin/v1/health", nil)
+	req, err := http.NewRequest("GET", testCtx.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestUseCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Endpoint that does not enforce client auth (see: server/authentication_test.go)
-	req, err = http.NewRequest("GET", testCtx.HTTPRequestScheme()+"://"+s.HTTPAddr()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", testCtx.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", testCtx.HTTPRequestScheme()+"://"+s.HTTPAddr()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", testCtx.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}

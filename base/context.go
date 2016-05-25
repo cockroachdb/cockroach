@@ -56,6 +56,12 @@ type lazyTLSConfig struct {
 	err       error
 }
 
+type lazyHTTPClient struct {
+	once       sync.Once
+	httpClient http.Client
+	err        error
+}
+
 // Context is embedded by server.Context. A base context is not meant to be
 // used directly, but embedding contexts should call ctx.InitDefaults().
 type Context struct {
@@ -76,18 +82,14 @@ type Context struct {
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
 
-	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
+	// clientTLSConfig is the loaded client TLS config. It is initialized lazily.
 	clientTLSConfig lazyTLSConfig
 
-	// serverTLSConfig is the loaded server tlsConfig. It is initialized lazily.
+	// serverTLSConfig is the loaded server TLS config. It is initialized lazily.
 	serverTLSConfig lazyTLSConfig
 
-	// httpClient is a lazily-initialized http client.
-	// It should be accessed through Context.GetHTTPClient() which will
-	// initialize if needed.
-	httpClient *http.Client
-	// Protects httpClient.
-	httpClientMu sync.Mutex
+	// httpClient uses the client TLS config. It is initialized lazily.
+	httpClient lazyHTTPClient
 }
 
 // InitDefaults sets up the default values for a context.
@@ -144,7 +146,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 			ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err = security.LoadServerTLSConfig(
 				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 			if ctx.serverTLSConfig.err != nil {
-				ctx.serverTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.serverTLSConfig.err)
+				ctx.serverTLSConfig.err = util.Errorf("error setting up server TLS config: %s", ctx.serverTLSConfig.err)
 			}
 		} else {
 			ctx.serverTLSConfig.err = util.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
@@ -157,26 +159,15 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 
 // GetHTTPClient returns the context http client, initializing it
 // if needed. It uses the context client TLS config.
-func (ctx *Context) GetHTTPClient() (*http.Client, error) {
-	ctx.httpClientMu.Lock()
-	defer ctx.httpClientMu.Unlock()
+func (ctx *Context) GetHTTPClient() (http.Client, error) {
+	ctx.httpClient.once.Do(func() {
+		ctx.httpClient.httpClient.Timeout = NetworkTimeout
+		var transport http.Transport
+		ctx.httpClient.httpClient.Transport = &transport
+		transport.TLSClientConfig, ctx.httpClient.err = ctx.GetClientTLSConfig()
+	})
 
-	if ctx.httpClient != nil {
-		return ctx.httpClient, nil
-	}
-
-	tlsConfig, err := ctx.GetClientTLSConfig()
-	if err != nil {
-		return nil, err
-	}
-	ctx.httpClient = &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-		Timeout: NetworkTimeout,
-	}
-
-	return ctx.httpClient, nil
+	return ctx.httpClient.httpClient, ctx.httpClient.err
 }
 
 // DefaultRetryOptions should be used for retrying most
