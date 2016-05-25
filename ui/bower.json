@@ -6,7 +6,8 @@
     "nvd3": "1.8.2",
     "protobuf": "https://github.com/cockroachdb/protobuf.js.git#~5.0.0",
     "moment": "2.10.6",
-    "moment-timezone": "0.4.1"
+    "moment-timezone": "0.4.1",
+    "long": "^3.1.0"
   },
   "devDependencies": {
     "chai": "~3.4.0",

@@ -17,14 +17,16 @@
 package acceptance
 
 import (
-	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -39,13 +41,13 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	}
 
 	// Get the ids for each node.
-	idMap := make(map[int]roachpb.NodeID)
+	nodeIDs := make([]roachpb.NodeID, c.NumNodes())
 	for i := 0; i < c.NumNodes(); i++ {
-		var detail server.DetailsResponse
-		if err := getJSON(c.URL(i), "/_status/details/local", &detail); err != nil {
+		var details server.DetailsResponse
+		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
-		idMap[i] = detail.NodeID
+		nodeIDs[i] = details.NodeID
 	}
 
 	// Leave only the first node alive.
@@ -56,14 +58,14 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	}
 
 	// Retrieve node statuses.
-	var nodeStatuses interface{}
-	if err := getJSON(c.URL(0), "/_status/nodes/", &nodeStatuses); err != nil {
+	var nodes server.NodesResponse
+	if err := util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes", &nodes); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < c.NumNodes(); i++ {
-		var nodeStatus interface{}
-		url := fmt.Sprintf("/_status/nodes/%d", idMap[i])
-		if err := getJSON(c.URL(0), url, &nodeStatus); err != nil {
+
+	for _, nodeID := range nodeIDs {
+		var nodeStatus status.NodeStatus
+		if err := util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes/"+strconv.Itoa(int(nodeID)), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -78,7 +80,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 		},
 	}
 	var queryResponse ts.TimeSeriesQueryResponse
-	if err := postJSON(cluster.HTTPClient(), c.URL(0), "/ts/query",
+	if err := util.PostJSON(cluster.HTTPClient, c.URL(0)+"/ts/query",
 		&queryRequest, &queryResponse); err != nil {
 		t.Fatal(err)
 	}

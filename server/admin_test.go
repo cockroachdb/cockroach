@@ -18,7 +18,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -201,26 +201,26 @@ func TestAdminDebugRedirect(t *testing.T) {
 	}
 }
 
-// apiGet issues a GET to the provided server using the given API path and marshals the result
-// into the v parameter.
-func apiGet(s TestServer, path string, v interface{}) error {
+// apiGet issues a GET to the provided server using the given API path and
+// marshals the result into response.
+func apiGet(s TestServer, path string, response proto.Message) error {
 	apiPath := apiEndpoint + path
 	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		return err
 	}
-	return util.GetJSON(client, s.Ctx.AdminURL()+apiPath, v)
+	return util.GetJSON(client, s.Ctx.AdminURL()+apiPath, response)
 }
 
 // apiPost issues a POST to the provided server using the given API path and
-// request body, marshalling the result into the v parameter.
-func apiPost(s TestServer, path, body string, v interface{}) error {
+// request, marshalling the result into response.
+func apiPost(s TestServer, path string, request, response proto.Message) error {
 	apiPath := apiEndpoint + path
 	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		return err
 	}
-	return util.PostJSON(client, s.Ctx.AdminURL()+apiPath, body, v)
+	return util.PostJSON(client, s.Ctx.AdminURL()+apiPath, request, response)
 }
 
 func TestAdminAPIDatabases(t *testing.T) {
@@ -566,20 +566,9 @@ func TestAdminAPIUIData(t *testing.T) {
 	start := timeutil.Now()
 
 	mustSetUIData := func(keyValues map[string][]byte) {
-		var resp struct{}
-		b64KeyValues := make(map[string]string)
-		for k, v := range keyValues {
-			b64KeyValues[k] = base64.StdEncoding.EncodeToString(v)
-		}
-		reqBody := map[string]map[string]string{
-			"key_values": b64KeyValues,
-		}
-		reqBodyBytes, err := json.Marshal(reqBody)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := apiPost(s, "uidata", string(reqBodyBytes), &resp); err != nil {
+		if err := apiPost(s, "uidata", &SetUIDataRequest{
+			KeyValues: keyValues,
+		}, &SetUIDataResponse{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -697,22 +686,19 @@ func TestClusterFreeze(t *testing.T) {
 	defer s.Stop()
 
 	for _, freeze := range []bool{true, false} {
-		reqBodyBytes, err := json.Marshal(map[string]bool{
-			"freeze": freeze,
-		})
-		if err != nil {
-			t.Fatal(err)
+		req := ClusterFreezeRequest{
+			Freeze: freeze,
 		}
 
 		var resp ClusterFreezeResponse
-		if err := apiPost(s, "cluster/freeze", string(reqBodyBytes), &resp); err != nil {
+		if err := apiPost(s, "cluster/freeze", &req, &resp); err != nil {
 			t.Fatal(err)
 		}
 		if aff := resp.RangesAffected; aff == 0 {
 			t.Fatalf("expected affected ranges: %+v", resp)
 		}
 
-		if err := apiPost(s, "cluster/freeze", string(reqBodyBytes), &resp); err != nil {
+		if err := apiPost(s, "cluster/freeze", &req, &resp); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -17,7 +17,6 @@
 package acceptance
 
 import (
-	"errors"
 	"math/rand"
 	"strings"
 	"testing"
@@ -34,13 +33,12 @@ import (
 const longWaitTime = 2 * time.Minute
 const shortWaitTime = 20 * time.Second
 
-type checkGossipFunc func(map[string]interface{}) error
+type checkGossipFunc func(map[string]gossip.Info) error
 
 // checkGossip fetches the gossip infoStore from each node and invokes the given
 // function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
-	f checkGossipFunc) {
+func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration, f checkGossipFunc) {
 	err := util.RetryForDuration(d, func() error {
 		select {
 		case <-stopper:
@@ -49,16 +47,12 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
 		case <-time.After(1 * time.Second):
 		}
 
+		var infoStatus gossip.InfoStatus
 		for i := 0; i < c.NumNodes(); i++ {
-			var m map[string]interface{}
-			if err := getJSON(c.URL(i), "/_status/gossip/local", &m); err != nil {
+			if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/gossip/local", &infoStatus); err != nil {
 				return err
 			}
-			infos, ok := m["infos"].(map[string]interface{})
-			if !ok {
-				return errors.New("no infos yet")
-			}
-			if err := f(infos); err != nil {
+			if err := f(infoStatus.Infos); err != nil {
 				return util.Errorf("node %d: %s", i, err)
 			}
 		}
@@ -73,7 +67,7 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
 // hasPeers returns a checkGossipFunc that passes when the given
 // number of peers are connected via gossip.
 func hasPeers(expected int) checkGossipFunc {
-	return func(infos map[string]interface{}) error {
+	return func(infos map[string]gossip.Info) error {
 		count := 0
 		for k := range infos {
 			if strings.HasPrefix(k, "node:") {
@@ -88,7 +82,7 @@ func hasPeers(expected int) checkGossipFunc {
 }
 
 // hasSentinel is a checkGossipFunc that passes when the sentinel gossip is present.
-func hasSentinel(infos map[string]interface{}) error {
+func hasSentinel(infos map[string]gossip.Info) error {
 	if _, ok := infos[gossip.KeySentinel]; !ok {
 		return util.Errorf("sentinel not found")
 	}
@@ -96,7 +90,7 @@ func hasSentinel(infos map[string]interface{}) error {
 }
 
 // hasClusterID is a checkGossipFunc that passes when the cluster ID gossip is present.
-func hasClusterID(infos map[string]interface{}) error {
+func hasClusterID(infos map[string]gossip.Info) error {
 	if _, ok := infos[gossip.KeyClusterID]; !ok {
 		return util.Errorf("cluster ID not found")
 	}

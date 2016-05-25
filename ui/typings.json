@@ -4,6 +4,7 @@
     "chai": "github:DefinitelyTyped/DefinitelyTyped/chai/chai.d.ts#3b7f250dcf631f1c3c545e28d9ff25920c60b5f7",
     "d3": "github:DefinitelyTyped/DefinitelyTyped/d3/d3.d.ts#3d2f9971a107e2eee2de3ec5318f5c54071e16ed",
     "lodash": "github:DefinitelyTyped/DefinitelyTyped/lodash/lodash.d.ts#f1a7ab74eaf7c46be0b2570b58508e8887691790",
+    "long": "file:next/local_typings/long/long.d.ts",
     "mocha": "github:DefinitelyTyped/DefinitelyTyped/mocha/mocha.d.ts#3b7f250dcf631f1c3c545e28d9ff25920c60b5f7",
     "moment": "github:DefinitelyTyped/DefinitelyTyped/moment/moment.d.ts#e5a27ea95e47b95333784f1f0d590127b4e39a89",
     "moment-node": "github:DefinitelyTyped/DefinitelyTyped/moment/moment-node.d.ts#e5a27ea95e47b95333784f1f0d590127b4e39a89",
