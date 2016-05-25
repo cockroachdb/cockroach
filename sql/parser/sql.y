@@ -2880,6 +2880,10 @@ const_datetime:
   {
     $$.val = timestampColTypeTimestamp
   }
+| TIMESTAMP WITHOUT TIME ZONE
+  {
+    $$.val = timestampColTypeTimestamp
+  }
 | TIMESTAMPTZ
   {
     $$.val = timestampTzColTypeTimestampWithTZ
