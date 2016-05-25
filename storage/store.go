@@ -285,6 +285,7 @@ type Store struct {
 	nodeDesc                *roachpb.NodeDescriptor
 	initComplete            sync.WaitGroup // Signaled by async init tasks
 	raftRequestChan         chan *RaftMessageRequest
+	bookie                  *bookie
 
 	// This is 1 if there is an active raft snapshot. This field must be checked
 	// and set atomically.
@@ -439,7 +440,8 @@ type storeMetrics struct {
 	registry *metric.Registry
 
 	// Range data metrics.
-	replicaCount         *metric.Counter
+	replicaCount         *metric.Counter // Does not include reserved replicas.
+	reservedReplicaCount *metric.Counter
 	leaderRangeCount     *metric.Gauge
 	replicatedRangeCount *metric.Gauge
 	availableRangeCount  *metric.Gauge
@@ -462,6 +464,7 @@ type storeMetrics struct {
 	lastUpdateNanos *metric.Gauge
 	capacity        *metric.Gauge
 	available       *metric.Gauge
+	reserved        *metric.Counter
 	sysBytes        *metric.Gauge
 	sysCount        *metric.Gauge
 
@@ -498,6 +501,7 @@ func newStoreMetrics() *storeMetrics {
 	return &storeMetrics{
 		registry:                 storeRegistry,
 		replicaCount:             storeRegistry.Counter("replicas"),
+		reservedReplicaCount:     storeRegistry.Counter("replicas.reserved"),
 		leaderRangeCount:         storeRegistry.Gauge("ranges.leader"),
 		replicatedRangeCount:     storeRegistry.Gauge("ranges.replicated"),
 		availableRangeCount:      storeRegistry.Gauge("ranges.available"),
@@ -516,6 +520,7 @@ func newStoreMetrics() *storeMetrics {
 		lastUpdateNanos:          storeRegistry.Gauge("lastupdatenanos"),
 		capacity:                 storeRegistry.Gauge("capacity"),
 		available:                storeRegistry.Gauge("capacity.available"),
+		reserved:                 storeRegistry.Counter("capacity.reserved"),
 		sysBytes:                 storeRegistry.Gauge("sysbytes"),
 		sysCount:                 storeRegistry.Gauge("syscount"),
 
@@ -798,6 +803,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		s.raftLogQueue.Close()
 		s.replicaConsistencyQueue.Close()
 	}))
+
+	// Add the bookie to the store.
+	s.bookie = newBookie(s.ctx.Clock, ttlStoreGossip, s.stopper, s.metrics)
 
 	if s.Ident.NodeID == 0 {
 		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
@@ -1626,7 +1634,8 @@ func (s *Store) Attrs() roachpb.Attributes {
 	return s.engine.Attrs()
 }
 
-// Capacity returns the capacity of the underlying storage engine.
+// Capacity returns the capacity of the underlying storage engine. Note that
+// this does not include reservations.
 func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	return s.engine.Capacity()
 }

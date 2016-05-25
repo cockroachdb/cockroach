@@ -76,6 +76,7 @@ func (pq *bookingQ) dequeue() *booking {
 type bookie struct {
 	clock              *hlc.Clock
 	reservationTimeout time.Duration // How long each reservation is held.
+	metrics            *storeMetrics
 	mu                 struct {
 		sync.Mutex                                // Protects all values within the mu struct.
 		queue        bookingQ                     // Queue used to handle expiring of reservations.
@@ -85,28 +86,19 @@ type bookie struct {
 }
 
 // newBookie creates a reservations system and starts its timeout queue.
-func newBookie(clock *hlc.Clock, reservationTimeout time.Duration, stopper *stop.Stopper) *bookie {
+func newBookie(
+	clock *hlc.Clock,
+	reservationTimeout time.Duration,
+	stopper *stop.Stopper,
+	metrics *storeMetrics) *bookie {
 	b := &bookie{
 		clock:              clock,
 		reservationTimeout: reservationTimeout,
+		metrics:            metrics,
 	}
 	b.mu.resByRangeID = make(map[roachpb.RangeID]*booking)
 	b.start(stopper)
 	return b
-}
-
-// Outstanding returns the total number of outstanding reservations.
-func (b *bookie) Outstanding() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return len(b.mu.resByRangeID)
-}
-
-// ReservedBytes returns the total bytes currently reserved.
-func (b *bookie) ReservedBytes() int64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.mu.size
 }
 
 // Reserve a new replica. Returns true on a successful reservation.
@@ -141,6 +133,10 @@ func (b *bookie) Reserve(res reservation) bool {
 	b.mu.resByRangeID[res.rangeID] = newBooking
 	b.mu.queue.enqueue(newBooking)
 	b.mu.size += res.size
+
+	// Update the store metrics.
+	b.metrics.reservedReplicaCount.Inc(1)
+	b.metrics.reserved.Inc(res.size)
 	return true
 }
 
@@ -166,13 +162,16 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 // fillBookingLocked fills a booking. It requires that the reservation lock is
 // held. This should only be called internally.
 func (b *bookie) fillBookingLocked(res *booking) {
-
 	// Remove it from resByRangeID. Note that we don't remove it from the queue
 	// since it will expire and remove itself.
 	delete(b.mu.resByRangeID, res.rangeID)
 
 	// Adjust the total reserved size.
 	b.mu.size -= res.size
+
+	// Update the store metrics.
+	b.metrics.reservedReplicaCount.Dec(1)
+	b.metrics.reserved.Dec(res.size)
 }
 
 // start will run continuously and expire old reservations.

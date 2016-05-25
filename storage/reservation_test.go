@@ -31,17 +31,17 @@ func createTestBookie(reservationTimeout time.Duration) (*stop.Stopper, *hlc.Man
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	b := newBookie(clock, reservationTimeout, stopper)
+	b := newBookie(clock, reservationTimeout, stopper, newStoreMetrics())
 	return stopper, mc, b
 }
 
 // verifyBookie ensures that the correct number of reservations, reserved bytes,
 // and that the expirationQueue's length are correct.
 func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedBytes int64) {
-	if e, a := reservedBytes, b.ReservedBytes(); e != a {
+	if e, a := reservedBytes, b.metrics.reserved.Count(); e != a {
 		t.Error(util.ErrorfSkipFrames(1, "expected total bytes reserved to be %d, got %d", e, a))
 	}
-	if e, a := reservations, b.Outstanding(); e != a {
+	if e, a := reservations, int(b.metrics.reservedReplicaCount.Count()); e != a {
 		t.Error(util.ErrorfSkipFrames(1, "expected total reservations to be %d, got %d", e, a))
 	}
 	b.mu.Lock()
