@@ -27,16 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 )
 
-// Cockroach error extensions:
-const (
-	// CodeRetriableError signals to the user that the SQL txn entered the
-	// RESTART_WAIT state and that a RESTART statement should be issued.
-	CodeRetriableError string = "CR000"
-	// CodeTransactionCommittedError signals that the SQL txn is in the
-	// COMMIT_WAIT state and a COMMIT statement should be issued.
-	CodeTransactionCommittedError string = "CR001"
-)
-
 // SrcCtx contains contextual information about the source of an error.
 type SrcCtx struct {
 	File     string
@@ -78,7 +68,9 @@ func NewRetryError(cause error) error {
 	return &ErrRetry{ctx: makeSrcCtx(1), msg: fmt.Sprintf("%s %v", txnRetryMsgPrefix, cause)}
 }
 
-// ErrRetry means that the transaction can be retried.
+// ErrRetry means that the transaction can be retried. It signals to the user
+// that the SQL txn entered the RESTART_WAIT state after a serialization error,
+// and that a ROLLBACK TO SAVEPOINT COCKROACH_RESTART statement should be issued.
 type ErrRetry struct {
 	ctx SrcCtx
 	msg string
@@ -90,7 +82,7 @@ func (e *ErrRetry) Error() string {
 
 // Code implements the ErrorWithPGCode interface.
 func (*ErrRetry) Code() string {
-	return CodeRetriableError
+	return pgerror.CodeSerializationFailureError
 }
 
 // SrcContext implements the ErrorWithPGCode interface.
@@ -133,8 +125,8 @@ func NewTransactionCommittedError() error {
 	return &ErrTransactionCommitted{ctx: makeSrcCtx(1)}
 }
 
-// ErrTransactionCommitted represents an error for trying to run a command in the
-// context of transaction that's already committed.
+// ErrTransactionCommitted signals that the SQL txn is in the COMMIT_WAIT state
+// and that only a COMMIT statement will be accepted.
 type ErrTransactionCommitted struct {
 	ctx SrcCtx
 }
@@ -145,7 +137,7 @@ func (*ErrTransactionCommitted) Error() string {
 
 // Code implements the ErrorWithPGCode interface.
 func (*ErrTransactionCommitted) Code() string {
-	return CodeTransactionCommittedError
+	return pgerror.CodeInvalidTransactionStateError
 }
 
 // SrcContext implements the ErrorWithPGCode interface.
