@@ -33,7 +33,7 @@ import (
 // HTTP requests against the same server, especially where no errors are
 // expected in the HTTP layer.
 type testHTTPSession struct {
-	client  *http.Client
+	client  http.Client
 	baseURL string
 }
 

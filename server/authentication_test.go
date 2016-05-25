@@ -34,7 +34,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-func doHTTPReq(t *testing.T, client *http.Client, method, url string, body proto.Message) (*http.Response, error) {
+func doHTTPReq(t *testing.T, client http.Client, method, url string, body proto.Message) (*http.Response, error) {
 	var b io.Reader
 	if body != nil {
 		buf, err := protoutil.Marshal(body)
