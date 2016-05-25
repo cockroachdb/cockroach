@@ -327,8 +327,13 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			// Populate et.IntentSpans, taking into account both any existing
 			// and new writes, and taking care to perform proper deduplication.
 			txnMeta := tc.txns[*ba.Txn.ID]
+			distinctSpans := true
 			if txnMeta != nil {
 				et.IntentSpans = txnMeta.keys
+				// Defensively set distinctSpans to false if we had any previous
+				// requests in this transaction. This effectively limits the distinct
+				// spans optimization to 1pc transactions.
+				distinctSpans = len(txnMeta.keys) == 0
 			}
 			ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
 				et.IntentSpans = append(et.IntentSpans, roachpb.Span{
@@ -336,7 +341,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 					EndKey: endKey,
 				})
 			})
-			roachpb.MergeSpans(&et.IntentSpans)
+			// TODO(peter): Populate DistinctSpans on all batches, not just batches
+			// which contain an EndTransactionRequest.
+			ba.Header.DistinctSpans = roachpb.MergeSpans(&et.IntentSpans) && distinctSpans
 			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state
