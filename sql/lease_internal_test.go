@@ -76,7 +76,6 @@ func TestLeaseSet(t *testing.T) {
 		{newest{2}, "2:4"},
 		{newest{3}, "3:1"},
 		{newest{4}, "<nil>"},
-		{remove{0, 0}, "1:1 2:1 2:2 2:3 2:4 3:1"},
 		{remove{2, 4}, "1:1 2:1 2:2 2:3 3:1"},
 		{remove{3, 1}, "1:1 2:1 2:2 2:3"},
 		{remove{1, 1}, "2:1 2:2 2:3"},

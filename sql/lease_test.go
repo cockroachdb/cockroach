@@ -41,21 +41,27 @@ import (
 
 type leaseTest struct {
 	*testing.T
-	server *testServer
-	db     *gosql.DB
-	kvDB   *client.DB
-	nodes  map[uint32]*csql.LeaseManager
+	server                   *testServer
+	db                       *gosql.DB
+	kvDB                     *client.DB
+	nodes                    map[uint32]*csql.LeaseManager
+	leaseManagerTestingKnobs csql.LeaseManagerTestingKnobs
 }
 
 func newLeaseTest(t *testing.T, ctx *server.Context) *leaseTest {
 	s, db, kvDB := setupWithContext(t, ctx)
-	return &leaseTest{
+	leaseTest := &leaseTest{
 		T:      t,
 		server: s,
 		db:     db,
 		kvDB:   kvDB,
 		nodes:  map[uint32]*csql.LeaseManager{},
 	}
+	if ctx.TestingKnobs.SQLLeaseManager != nil {
+		leaseTest.leaseManagerTestingKnobs =
+			*ctx.TestingKnobs.SQLLeaseManager.(*csql.LeaseManagerTestingKnobs)
+	}
+	return leaseTest
 }
 
 func (t *leaseTest) cleanup() {
@@ -118,9 +124,25 @@ func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
 	return t.node(nodeID).Release(lease)
 }
 
-func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
+// If leaseReleaseWaiter is not nil, it will be used to block until the lease is
+// released from the store. If the lease is not supposed to be released from the
+// store (i.e. it's not expired and it's not for an old descriptor version),
+// this shouldn't be set.
+func (t *leaseTest) mustRelease(
+	nodeID uint32,
+	lease *csql.LeaseState,
+	leaseReleaseWaiter *leaseReleaseWaiter,
+) {
+	if leaseReleaseWaiter != nil {
+		leaseReleaseWaiter.PrepareToWait(lease)
+	}
 	if err := t.release(nodeID, lease); err != nil {
 		t.Fatal(err)
+	}
+	if leaseReleaseWaiter != nil {
+		if err := leaseReleaseWaiter.Wait(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -142,15 +164,58 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 	mgr := t.nodes[nodeID]
 	if mgr == nil {
 		mgr = csql.NewLeaseManager(
-			nodeID, *t.server.DB(), t.server.Clock(), csql.LeaseManagerTestingKnobs{})
+			nodeID, *t.server.DB(),
+			t.server.Clock(),
+			t.leaseManagerTestingKnobs,
+		)
 		t.nodes[nodeID] = mgr
 	}
 	return mgr
 }
 
+// leaseReleaseWaiter can be used to wait for a lease to be removed from the
+// store (leases are removed from the store async w.r.t. LeaseManager
+// operations).
+// To use it, its LeaseReleasedNotification method must be hooked up to
+// LeaseStoreTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
+// for a lease, call PrepareToWait() before calling LeaseManager.Release(), and
+// then call Wait() for the actual blocking.
+type leaseReleaseWaiter struct {
+	waitingFor *csql.LeaseState
+	doneSem    chan error
+}
+
+func (w *leaseReleaseWaiter) PrepareToWait(lease *csql.LeaseState) {
+	w.waitingFor = lease
+	w.doneSem = make(chan error, 1)
+}
+
+func (w *leaseReleaseWaiter) Wait() error {
+	if w.waitingFor == nil {
+		panic("wasn't told what to wait for")
+	}
+	return <-w.doneSem
+}
+
+func (w *leaseReleaseWaiter) LeaseReleasedNotification(
+	lease *csql.LeaseState, err error,
+) {
+	if lease == w.waitingFor {
+		w.doneSem <- err
+	}
+}
+
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
+	var releaseWaiter leaseReleaseWaiter
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: releaseWaiter.LeaseReleasedNotification,
+			},
+		},
+	}
 	t := newLeaseTest(testingT, &ctx)
 	defer t.cleanup()
 
@@ -168,7 +233,7 @@ func TestLeaseManager(testingT *testing.T) {
 	if err := t.release(2, l1); err == nil {
 		t.Fatalf("expected error, but found none")
 	}
-	t.mustRelease(1, l1)
+	t.mustRelease(1, l1, nil)
 	t.expectLeases(descID, "/1/1")
 
 	// It is an error to acquire a lease for a specific version that doesn't
@@ -186,18 +251,18 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// When the last local reference on the new version is released we don't
 	// release the node lease.
-	t.mustRelease(1, l3)
+	t.mustRelease(1, l3, nil)
 	t.expectLeases(descID, "/1/1 /2/1")
 
 	// We can still acquire a local reference on the old version since it hasn't
 	// expired.
 	l4 := t.mustAcquire(1, descID, 1)
-	t.mustRelease(1, l4)
+	t.mustRelease(1, l4, nil)
 	t.expectLeases(descID, "/1/1 /2/1")
 
 	// When the last local reference on the old version is released the node
 	// lease is also released.
-	t.mustRelease(1, l2)
+	t.mustRelease(1, l2, &releaseWaiter)
 	t.expectLeases(descID, "/2/1")
 
 	// It is an error to acquire a lease for an old version once a new version
@@ -227,24 +292,32 @@ func TestLeaseManager(testingT *testing.T) {
 	l8 := t.mustAcquire(2, descID, 3)
 	t.expectLeases(descID, "/2/1 /2/2 /3/1 /3/2")
 
-	t.mustRelease(1, l5)
+	t.mustRelease(1, l5, &releaseWaiter)
 	t.expectLeases(descID, "/2/2 /3/1 /3/2")
-	t.mustRelease(2, l6)
+	t.mustRelease(2, l6, &releaseWaiter)
 	t.expectLeases(descID, "/3/1 /3/2")
 
 	// Wait for version 4 to be published.
 	wg.Wait()
 	l9 := t.mustAcquire(1, descID, 4)
-	t.mustRelease(1, l7)
-	t.mustRelease(2, l8)
+	t.mustRelease(1, l7, &releaseWaiter)
+	t.mustRelease(2, l8, nil)
 	t.expectLeases(descID, "/3/2 /4/1")
-	t.mustRelease(1, l9)
+	t.mustRelease(1, l9, nil)
 	t.expectLeases(descID, "/3/2 /4/1")
 }
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
+	var releaseWaiter leaseReleaseWaiter
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: releaseWaiter.LeaseReleasedNotification,
+			},
+		},
+	}
 	t := newLeaseTest(testingT, &ctx)
 	defer t.cleanup()
 
@@ -285,9 +358,9 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	}
 	t.expectLeases(descID, "/1/1 /1/1")
 
-	t.mustRelease(1, l1)
-	t.mustRelease(1, l2)
-	t.mustRelease(1, l3)
+	t.mustRelease(1, l1, nil)
+	t.mustRelease(1, l2, &releaseWaiter)
+	t.mustRelease(1, l3, nil)
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
