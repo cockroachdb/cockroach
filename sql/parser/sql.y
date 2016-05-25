@@ -280,196 +280,196 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
   union          sqlSymUnion
 }
 
-%type <[]Statement> stmt_block
-%type <[]Statement> stmt_list
-%type <Statement> stmt
+%type <union> /* <[]Statement> */ stmt_block
+%type <union> /* <[]Statement> */ stmt_list
+%type <union> /* <Statement> */ stmt
 
-%type <Statement> alter_table_stmt
-%type <Statement> create_stmt
-%type <Statement> create_database_stmt
-%type <Statement> create_index_stmt
-%type <Statement> create_table_stmt
-%type <Statement> delete_stmt
-%type <Statement> drop_stmt
-%type <Statement> explain_stmt
-%type <Statement> explainable_stmt
-%type <Statement> grant_stmt
-%type <Statement> insert_stmt
-%type <Statement> preparable_stmt
-%type <Statement> release_stmt
-%type <Statement> rename_stmt
-%type <Statement> revoke_stmt
-%type <*Select> select_stmt
-%type <Statement> savepoint_stmt
-%type <Statement> set_stmt
-%type <Statement> show_stmt
-%type <Statement> transaction_stmt
-%type <Statement> truncate_stmt
-%type <Statement> update_stmt
+%type <union> /* <Statement> */ alter_table_stmt
+%type <union> /* <Statement> */ create_stmt
+%type <union> /* <Statement> */ create_database_stmt
+%type <union> /* <Statement> */ create_index_stmt
+%type <union> /* <Statement> */ create_table_stmt
+%type <union> /* <Statement> */ delete_stmt
+%type <union> /* <Statement> */ drop_stmt
+%type <union> /* <Statement> */ explain_stmt
+%type <union> /* <Statement> */ explainable_stmt
+%type <union> /* <Statement> */ grant_stmt
+%type <union> /* <Statement> */ insert_stmt
+%type <union> /* <Statement> */ preparable_stmt
+%type <union> /* <Statement> */ release_stmt
+%type <union> /* <Statement> */ rename_stmt
+%type <union> /* <Statement> */ revoke_stmt
+%type <union> /* <*Select> */ select_stmt
+%type <union> /* <Statement> */ savepoint_stmt
+%type <union> /* <Statement> */ set_stmt
+%type <union> /* <Statement> */ show_stmt
+%type <union> /* <Statement> */ transaction_stmt
+%type <union> /* <Statement> */ truncate_stmt
+%type <union> /* <Statement> */ update_stmt
 
-%type <*Select> select_no_parens
-%type <SelectStatement> select_clause select_with_parens simple_select values_clause
+%type <union> /* <*Select> */ select_no_parens
+%type <union> /* <SelectStatement> */ select_clause select_with_parens simple_select values_clause
 
 %type <empty> alter_using
-%type <Expr> alter_column_default
-%type <Direction> opt_asc_desc
+%type <union> /* <Expr> */ alter_column_default
+%type <union> /* <Direction> */ opt_asc_desc
 
-%type <AlterTableCmd> alter_table_cmd
-%type <AlterTableCmds> alter_table_cmds
+%type <union> /* <AlterTableCmd> */ alter_table_cmd
+%type <union> /* <AlterTableCmds> */ alter_table_cmds
 
 %type <empty> opt_collate_clause
 
-%type <DropBehavior> opt_drop_behavior
+%type <union> /* <DropBehavior> */ opt_drop_behavior
 
-%type <*StrVal> opt_encoding_clause
+%type <union> /* <*StrVal> */ opt_encoding_clause
 
-%type <IsolationLevel> transaction_iso_level
-%type <UserPriority>  transaction_user_priority
+%type <union> /* <IsolationLevel> */ transaction_iso_level
+%type <union> /* <UserPriority> */  transaction_user_priority
 
 %type <str>   name opt_name opt_name_parens opt_to_savepoint
 %type <str>   savepoint_name
 
 // %type <empty> subquery_op
-%type <*QualifiedName> func_name
+%type <union> /* <*QualifiedName> */ func_name
 %type <empty> opt_collate
 
-%type <*QualifiedName> qualified_name
-%type <*QualifiedName> indirect_name_or_glob
-%type <TableExpr> insert_target
+%type <union> /* <*QualifiedName> */ qualified_name
+%type <union> /* <*QualifiedName> */ indirect_name_or_glob
+%type <union> /* <TableExpr> */ insert_target
 
-%type <*TableNameWithIndex> table_name_with_index
-%type <TableNameWithIndexList> table_name_with_index_list
+%type <union> /* <*TableNameWithIndex> */ table_name_with_index
+%type <union> /* <TableNameWithIndexList> */ table_name_with_index_list
 
 // %type <empty> math_op
 
-%type <IsolationLevel> iso_level
-%type <UserPriority> user_priority
+%type <union> /* <IsolationLevel> */ iso_level
+%type <union> /* <UserPriority> */ user_priority
 %type <empty> opt_encoding
 
-%type <TableDefs> opt_table_elem_list table_elem_list
+%type <union> /* <TableDefs> */ opt_table_elem_list table_elem_list
 %type <empty> opt_all_clause
-%type <bool> distinct_clause
-%type <[]string> opt_column_list
-%type <OrderBy> sort_clause opt_sort_clause
-%type <[]*Order> sortby_list
-%type <IndexElemList> index_params
-%type <[]string> name_list opt_name_list
+%type <union> /* <bool> */ distinct_clause
+%type <union> /* <[]string> */ opt_column_list
+%type <union> /* <OrderBy> */ sort_clause opt_sort_clause
+%type <union> /* <[]*Order> */ sortby_list
+%type <union> /* <IndexElemList> */ index_params
+%type <union> /* <[]string> */ name_list opt_name_list
 %type <empty> opt_array_bounds
-%type <TableExprs> from_clause from_list
-%type <QualifiedNames> qualified_name_list
-%type <QualifiedNames> indirect_name_or_glob_list
-%type <*QualifiedName> any_name
-%type <QualifiedNames> any_name_list
-%type <Exprs> expr_list
-%type <Indirection> attrs
-%type <SelectExprs> target_list
-%type <UpdateExprs> set_clause_list
-%type <*UpdateExpr> set_clause multiple_set_clause
-%type <Indirection> indirection
-%type <Exprs> ctext_expr_list ctext_row
-%type <GroupBy> group_clause
-%type <*Limit> select_limit
-%type <QualifiedNames> relation_expr_list
-%type <ReturningExprs> returning_clause
+%type <union> /* <TableExprs> */ from_clause from_list
+%type <union> /* <QualifiedNames> */ qualified_name_list
+%type <union> /* <QualifiedNames> */ indirect_name_or_glob_list
+%type <union> /* <*QualifiedName> */ any_name
+%type <union> /* <QualifiedNames> */ any_name_list
+%type <union> /* <Exprs> */ expr_list
+%type <union> /* <Indirection> */ attrs
+%type <union> /* <SelectExprs> */ target_list
+%type <union> /* <UpdateExprs> */ set_clause_list
+%type <union> /* <*UpdateExpr> */ set_clause multiple_set_clause
+%type <union> /* <Indirection> */ indirection
+%type <union> /* <Exprs> */ ctext_expr_list ctext_row
+%type <union> /* <GroupBy> */ group_clause
+%type <union> /* <*Limit> */ select_limit
+%type <union> /* <QualifiedNames> */ relation_expr_list
+%type <union> /* <ReturningExprs> */ returning_clause
 
-%type <bool> all_or_distinct
+%type <union> /* <bool> */ all_or_distinct
 %type <empty> join_outer
-%type <JoinCond> join_qual
+%type <union> /* <JoinCond> */ join_qual
 %type <str> join_type
 
-%type <Exprs> extract_list
-%type <Exprs> overlay_list
-%type <Exprs> position_list
-%type <Exprs> substr_list
-%type <Exprs> trim_list
+%type <union> /* <Exprs> */ extract_list
+%type <union> /* <Exprs> */ overlay_list
+%type <union> /* <Exprs> */ position_list
+%type <union> /* <Exprs> */ substr_list
+%type <union> /* <Exprs> */ trim_list
 %type <empty> opt_interval interval_second
-%type <Expr> overlay_placing
+%type <union> /* <Expr> */ overlay_placing
 
-%type <bool> opt_unique opt_column
+%type <union> /* <bool> */ opt_unique opt_column
 
 %type <empty> opt_set_data
 
-%type <*Limit> limit_clause offset_clause
-%type <Expr>  select_limit_value
+%type <union> /* <*Limit> */ limit_clause offset_clause
+%type <union> /* <Expr> */  select_limit_value
 // %type <empty> opt_select_fetch_first_value
 %type <empty> row_or_rows
 // %type <empty> first_or_next
 
-%type <Statement>  insert_rest
-%type <[]string> opt_conf_expr
-%type <*OnConflict> on_conflict
+%type <union> /* <Statement> */  insert_rest
+%type <union> /* <[]string> */ opt_conf_expr
+%type <union> /* <*OnConflict> */ on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
+%type <union> /* <Statement> */  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
 
-%type <[]string> opt_storing
-%type <*ColumnTableDef> column_def
-%type <TableDef> table_elem
-%type <Expr>  where_clause
-%type <IndirectionElem> glob_indirection
-%type <IndirectionElem> name_indirection
-%type <IndirectionElem> indirection_elem
-%type <*IndexHints> opt_index_hints
-%type <*IndexHints> index_hints_param
-%type <*IndexHints> index_hints_param_list
-%type <Expr>  a_expr b_expr c_expr a_expr_const
-%type <Expr>  substr_from substr_for
-%type <Expr>  in_expr
-%type <Expr>  having_clause
-%type <Expr>  array_expr
-%type <[]ColumnType> type_list
-%type <Exprs> array_expr_list
-%type <Expr>  row explicit_row implicit_row
-%type <Expr>  case_expr case_arg case_default
-%type <*When>  when_clause
-%type <[]*When> when_clause_list
+%type <union> /* <[]string> */ opt_storing
+%type <union> /* <*ColumnTableDef> */ column_def
+%type <union> /* <TableDef> */ table_elem
+%type <union> /* <Expr> */  where_clause
+%type <union> /* <IndirectionElem> */ glob_indirection
+%type <union> /* <IndirectionElem> */ name_indirection
+%type <union> /* <IndirectionElem> */ indirection_elem
+%type <union> /* <*IndexHints> */ opt_index_hints
+%type <union> /* <*IndexHints> */ index_hints_param
+%type <union> /* <*IndexHints> */ index_hints_param_list
+%type <union> /* <Expr> */  a_expr b_expr c_expr a_expr_const
+%type <union> /* <Expr> */  substr_from substr_for
+%type <union> /* <Expr> */  in_expr
+%type <union> /* <Expr> */  having_clause
+%type <union> /* <Expr> */  array_expr
+%type <union> /* <[]ColumnType> */ type_list
+%type <union> /* <Exprs> */ array_expr_list
+%type <union> /* <Expr> */  row explicit_row implicit_row
+%type <union> /* <Expr> */  case_expr case_arg case_default
+%type <union> /* <*When> */  when_clause
+%type <union> /* <[]*When> */ when_clause_list
 // %type <empty> sub_type
-%type <Expr> ctext_expr
-%type <Expr> numeric_only
-%type <AliasClause> alias_clause opt_alias_clause
-%type <*Order> sortby
-%type <IndexElem> index_elem
-%type <TableExpr> table_ref
-%type <TableExpr> joined_table
-%type <*QualifiedName> relation_expr
-%type <TableExpr> relation_expr_opt_alias
-%type <SelectExpr> target_elem
-%type <*UpdateExpr> single_set_clause
+%type <union> /* <Expr> */ ctext_expr
+%type <union> /* <Expr> */ numeric_only
+%type <union> /* <AliasClause> */ alias_clause opt_alias_clause
+%type <union> /* <*Order> */ sortby
+%type <union> /* <IndexElem> */ index_elem
+%type <union> /* <TableExpr> */ table_ref
+%type <union> /* <TableExpr> */ joined_table
+%type <union> /* <*QualifiedName> */ relation_expr
+%type <union> /* <TableExpr> */ relation_expr_opt_alias
+%type <union> /* <SelectExpr> */ target_elem
+%type <union> /* <*UpdateExpr> */ single_set_clause
 
 %type <str> explain_option_name
-%type <[]string> explain_option_list
+%type <union> /* <[]string> */ explain_option_list
 
-%type <ColumnType> typename simple_typename const_typename
-%type <ColumnType> numeric opt_numeric_modifiers
-%type <*NumVal> opt_float
-%type <ColumnType> character const_character
-%type <ColumnType> character_with_length character_without_length
-%type <ColumnType> const_datetime const_interval
-%type <ColumnType> bit const_bit bit_with_length bit_without_length
-%type <ColumnType> character_base
+%type <union> /* <ColumnType> */ typename simple_typename const_typename
+%type <union> /* <ColumnType> */ numeric opt_numeric_modifiers
+%type <union> /* <*NumVal> */ opt_float
+%type <union> /* <ColumnType> */ character const_character
+%type <union> /* <ColumnType> */ character_with_length character_without_length
+%type <union> /* <ColumnType> */ const_datetime const_interval
+%type <union> /* <ColumnType> */ bit const_bit bit_with_length bit_without_length
+%type <union> /* <ColumnType> */ character_base
 %type <str> extract_arg
 %type <empty> opt_varying
 
-%type <*NumVal>  signed_iconst
-%type <Expr>  opt_boolean_or_string
-%type <Exprs> var_list
-%type <*QualifiedName> opt_from_var_name_clause var_name
+%type <union> /* <*NumVal> */  signed_iconst
+%type <union> /* <Expr> */  opt_boolean_or_string
+%type <union> /* <Exprs> */ var_list
+%type <union> /* <*QualifiedName> */ opt_from_var_name_clause var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
-%type <Expr>  non_reserved_word_or_sconst
-%type <Expr>  var_value
-%type <Expr>  zone_value
+%type <union> /* <Expr> */  non_reserved_word_or_sconst
+%type <union> /* <Expr> */  var_value
+%type <union> /* <Expr> */  zone_value
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
 
-%type <ConstraintTableDef> table_constraint constraint_elem
-%type <TableDef> index_def
-%type <[]ColumnQualification> col_qual_list
-%type <ColumnQualification> col_qualification col_qualification_elem
+%type <union> /* <ConstraintTableDef> */ table_constraint constraint_elem
+%type <union> /* <TableDef> */ index_def
+%type <union> /* <[]ColumnQualification> */ col_qual_list
+%type <union> /* <ColumnQualification> */ col_qualification col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 
-%type <Expr>  func_application func_expr_common_subexpr
-%type <Expr>  func_expr func_expr_windowless
+%type <union> /* <Expr> */  func_application func_expr_common_subexpr
+%type <union> /* <Expr> */  func_expr func_expr_windowless
 %type <empty> common_table_expr
 %type <empty> with_clause opt_with_clause
 %type <empty> cte_list
@@ -481,11 +481,11 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <empty> opt_frame_clause frame_extent frame_bound
 %type <empty> opt_existing_window_name
 
-%type <TargetList>    privilege_target
-%type <*TargetList> on_privilege_target_clause
-%type <[]string>          grantee_list for_grantee_clause
-%type <privilege.List> privileges privilege_list
-%type <privilege.Kind> privilege
+%type <union> /* <TargetList> */    privilege_target
+%type <union> /* <*TargetList> */ on_privilege_target_clause
+%type <union> /* <[]string> */          grantee_list for_grantee_clause
+%type <union> /* <privilege.List> */ privileges privilege_list
+%type <union> /* <privilege.Kind> */ privilege
 
 // Non-keyword token types. These are hard-wired into the "flex" lexer. They
 // must be listed first so that their numeric codes do not depend on the set of
@@ -495,7 +495,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT SCONST BCONST
-%token <*NumVal> ICONST FCONST
+%token <union> /* <*NumVal> */ ICONST FCONST
 %token <str>   PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS

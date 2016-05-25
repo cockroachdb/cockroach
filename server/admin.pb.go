@@ -8,6 +8,7 @@
 	It is generated from these files:
 		cockroach/server/admin.proto
 		cockroach/server/status.proto
+		cockroach/server/timeseries.proto
 
 	It has these top-level messages:
 		DatabasesRequest
