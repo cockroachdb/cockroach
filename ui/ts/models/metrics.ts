@@ -386,7 +386,7 @@ module Models {
       selectors: Utils.ChainProperty<Select.Selector[], Query> = Utils.ChainProp(this, []);
 
       private static dispatch_query(q: Proto.QueryRequestSet): promise<QueryResultSet> {
-          // HACK: Convert end_nanos numbers to strings.
+          // HACK: Convert long to string.
           let anyq: any = q;
           anyq.end_nanos = q.end_nanos.toString();
           anyq.start_nanos = q.start_nanos.toString();
@@ -401,9 +401,10 @@ module Models {
                   d.results.forEach((r: Proto.Result) => {
                       result.add({
                         name: r.query.name,
-                        downsampler: r.query.downsampler,
-                        source_aggregator: r.query.source_aggregator,
-                        derivative: r.query.derivative,
+                        // HACK: convert enum string to constant number.
+                        downsampler: Proto.QueryAggregator[r.query.downsampler] as any,
+                        source_aggregator: Proto.QueryAggregator[r.query.source_aggregator] as any,
+                        derivative: Proto.QueryDerivative[r.query.derivative] as any,
                         datapoints: r.datapoints || [],
                       });
                   });
@@ -418,8 +419,8 @@ module Models {
       execute: () => promise<QueryResultSet> = (): promise<QueryResultSet> => {
         let ts: number[] = this.timespan().timespan();
         let req: Proto.QueryRequestSet = {
-          start_nanos: Utils.Convert.MilliToNano(ts[0]),
-          end_nanos: Utils.Convert.MilliToNano(ts[1]),
+          start_nanos: Long.fromNumber(Utils.Convert.MilliToNano(ts[0])),
+          end_nanos: Long.fromNumber(Utils.Convert.MilliToNano(ts[1])),
           queries: [],
         };
 

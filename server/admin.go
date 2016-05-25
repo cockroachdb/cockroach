@@ -190,7 +190,7 @@ func (s *adminServer) RegisterService(g *grpc.Server) {
 	RegisterAdminServer(g, s)
 }
 
-// Register starts the gateway (i.e. reverse proxy) that proxies HTTP requests
+// RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
 // to the appropriate gRPC endpoints.
 func (s *adminServer) RegisterGateway(
 	ctx context.Context,

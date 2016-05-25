@@ -19,6 +19,7 @@ package util
 import (
 	"bytes"
 	"io"
+	"reflect"
 
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/jsonpb"
@@ -26,6 +27,8 @@ import (
 )
 
 var _ gwruntime.Marshaler = (*JSONPb)(nil)
+
+var typeProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
 
 // JSONPb is a gwruntime.Marshaler that uses github.com/gogo/protobuf/jsonpb.
 type JSONPb jsonpb.Marshaler
