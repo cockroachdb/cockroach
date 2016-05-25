@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -602,10 +603,35 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 	return &output, nil
 }
 
+// jsonWrapper provides a wrapper on any slice data type being
+// marshaled to JSON. This prevents a security vulnerability
+// where a phishing attack can trick a user's browser into
+// requesting a document from Cockroach as an executable script,
+// allowing the contents of the fetched document to be treated
+// as executable javascript. More details here:
+// http://haacked.com/archive/2009/06/25/json-hijacking.aspx/
+type jsonWrapper struct {
+	Data interface{} `json:"d"`
+}
+
+// marshalToJSON marshals the given value into nicely indented JSON. If the
+// value is an array or slice it is wrapped in jsonWrapper and then marshalled.
+func marshalToJSON(value interface{}) ([]byte, error) {
+	switch reflect.ValueOf(value).Kind() {
+	case reflect.Array, reflect.Slice:
+		value = jsonWrapper{Data: value}
+	}
+	body, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return nil, util.Errorf("unable to marshal %+v to json: %s", value, err)
+	}
+	return body, nil
+}
+
 // marshalJSONResponse converts an arbitrary value into a JSONResponse protobuf
 // that can be sent via grpc.
 func marshalJSONResponse(value interface{}) (*JSONResponse, error) {
-	data, err := util.MarshalToJSON(value)
+	data, err := marshalToJSON(value)
 	if err != nil {
 		return nil, err
 	}

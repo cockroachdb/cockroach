@@ -32,6 +32,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -202,25 +204,43 @@ func TestAdminDebugRedirect(t *testing.T) {
 }
 
 // apiGet issues a GET to the provided server using the given API path and marshals the result
-// into the v parameter.
-func apiGet(s *TestServer, path string, v interface{}) error {
+// into pb.
+func apiGet(s *TestServer, path string, pb proto.Message) error {
 	apiPath := apiEndpoint + path
 	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		return err
 	}
-	return util.GetJSON(client, s.Ctx.AdminURL()+apiPath, v)
+	resp, err := client.Get(s.Ctx.AdminURL() + apiPath)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		return util.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+	}
+	return jsonpb.Unmarshal(resp.Body, pb)
 }
 
 // apiPost issues a POST to the provided server using the given API path and
-// request body, marshalling the result into the v parameter.
-func apiPost(s *TestServer, path, body string, v interface{}) error {
+// request body, marshalling the result into pb.
+func apiPost(s *TestServer, path, body string, pb proto.Message) error {
 	apiPath := apiEndpoint + path
 	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		return err
 	}
-	return util.PostJSON(client, s.Ctx.AdminURL()+apiPath, body, v)
+	resp, err := client.Post(s.Ctx.AdminURL()+apiPath, util.JSONContentType, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		return util.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+	}
+	return jsonpb.Unmarshal(resp.Body, pb)
 }
 
 func TestAdminAPIDatabases(t *testing.T) {
@@ -566,7 +586,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	start := timeutil.Now()
 
 	mustSetUIData := func(keyValues map[string][]byte) {
-		var resp struct{}
+		var resp SetUIDataResponse
 		b64KeyValues := make(map[string]string)
 		for k, v := range keyValues {
 			b64KeyValues[k] = base64.StdEncoding.EncodeToString(v)
