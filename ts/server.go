@@ -17,58 +17,51 @@
 package ts
 
 import (
-	"net/http"
-
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/julienschmidt/httprouter"
+	gwruntime "github.com/gengo/grpc-gateway/runtime"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 const (
 	// URLPrefix is the prefix for all time series endpoints hosted by the
 	// server.
 	URLPrefix = "/ts/"
-	// URLQuery is the relative URL which should accept query requests.
-	URLQuery = URLPrefix + "query"
 )
 
 // Server handles incoming external requests related to time series data.
 type Server struct {
-	db     *DB
-	router *httprouter.Router
+	db *DB
 }
 
-// NewServer instantiates a new Server which services requests with data from
+// MakeServer instantiates a new Server which services requests with data from
 // the supplied DB.
-func NewServer(db *DB) *Server {
-	server := &Server{
-		db:     db,
-		router: httprouter.New(),
+func MakeServer(db *DB) Server {
+	return Server{
+		db: db,
 	}
-
-	server.router.POST(URLQuery, server.handleQuery)
-	return server
 }
 
-// ServeHTTP implements the http.Handler interface.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
+// RegisterService registers the GRPC service.
+func (s *Server) RegisterService(g *grpc.Server) {
+	RegisterTimeSeriesServer(g, s)
 }
 
-// handleQuery handles an incoming HTTP query request. Each query requests data
-// for one or more metrics over a specific time span. Query requests have a
-// significant body and thus are POST requests.
-func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	var request TimeSeriesQueryRequest
+// RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
+// to the appropriate gRPC endpoints.
+func (s *Server) RegisterGateway(
+	ctx context.Context,
+	mux *gwruntime.ServeMux,
+	conn *grpc.ClientConn,
+) error {
+	return RegisterTimeSeriesHandler(ctx, mux, conn)
+}
 
-	// Unmarshal query request.
-	if err := util.UnmarshalRequest(r, &request, util.AllEncodings); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
+// Query is an endpoint that returns data for one or more metrics over a
+// specific time span.
+func (s *Server) Query(ctx context.Context, request *TimeSeriesQueryRequest) (*TimeSeriesQueryResponse, error) {
 	if len(request.Queries) == 0 {
-		http.Error(w, "time series query requests must specify at least one query.", http.StatusBadRequest)
-		return
+		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
 	}
 
 	response := TimeSeriesQueryResponse{
@@ -77,8 +70,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 	for _, q := range request.Queries {
 		datapoints, sources, err := s.db.Query(q, Resolution10s, request.StartNanos, request.EndNanos)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 		result := TimeSeriesQueryResponse_Result{
 			Query:      q,
@@ -95,15 +87,5 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 		response.Results = append(response.Results, result)
 	}
 
-	// Marshal and return response.
-	b, contentType, err := util.MarshalResponse(r, &response, util.AllEncodings)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	if _, err := w.Write(b); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	return &response, nil
 }

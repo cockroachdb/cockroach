@@ -27,12 +27,11 @@ import (
 // run with "InsecureSkipVerify" (at least on Docker) due to the fact that we
 // cannot use a fixed hostname to reach the cluster. This in turn means that we
 // do not have a verified server name in the certs.
-func HTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: base.NetworkTimeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}}
+var HTTPClient = http.Client{
+	Timeout: base.NetworkTimeout,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	},
 }

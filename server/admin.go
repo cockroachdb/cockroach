@@ -190,21 +190,17 @@ func (s *adminServer) RegisterService(g *grpc.Server) {
 	RegisterAdminServer(g, s)
 }
 
-// Register starts the gateway (i.e. reverse proxy) that proxies HTTP requests
+// RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
 // to the appropriate gRPC endpoints.
 func (s *adminServer) RegisterGateway(
 	ctx context.Context,
 	mux *gwruntime.ServeMux,
-	addr string,
-	opts []grpc.DialOption,
+	conn *grpc.ClientConn,
 ) error {
-	if err := RegisterAdminHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
-		return util.Errorf("error constructing grpc-gateway: %s. are your certificates valid?", err)
-	}
-
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
 	s.ServeMux.Handle(apiEndpoint, mux)
-	return nil
+
+	return RegisterAdminHandler(ctx, mux, conn)
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default

@@ -197,7 +197,7 @@ module Models {
      * Source message = "TimeSeriesDatapoint"
      */
     export interface Datapoint {
-      timestamp_nanos: number;
+      timestamp_nanos: Long;
       value: number;
     }
 
@@ -253,8 +253,8 @@ module Models {
      * Source message = "TimeSeriesQueryRequest"
      */
     export interface QueryRequestSet {
-      start_nanos: number;
-      end_nanos: number;
+      start_nanos: Long;
+      end_nanos: Long;
       queries: QueryRequest[];
     }
 
