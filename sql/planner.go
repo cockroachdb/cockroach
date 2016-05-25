@@ -39,6 +39,7 @@ type planner struct {
 	// TODO(andrei): see if the circular dependency between planner and Session
 	// can be broken if we move the User and Database here from the Session.
 	session  *Session
+	semaCtx  parser.SemaContext
 	evalCtx  parser.EvalContext
 	leases   []*LeaseState
 	leaseMgr *LeaseManager
@@ -171,6 +172,9 @@ func (p *planner) resetForBatch(e *Executor) {
 	// The parser cannot be reused between batches.
 	p.parser = parser.Parser{}
 
+	p.semaCtx = parser.SemaContext{
+		Location: &p.session.Location,
+	}
 	p.evalCtx = parser.EvalContext{
 		NodeID:   e.nodeID,
 		ReCache:  e.reCache,

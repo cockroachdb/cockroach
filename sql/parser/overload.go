@@ -161,7 +161,7 @@ func (s SingleType) getAt(i int) Datum {
 // parameters after being type checked, along with the chosen overloadImpl. If an overloaded
 // function implementation could not be determined, the overloadImpl return value will be nil.
 func typeCheckOverloadedExprs(
-	args MapArgs, desired Datum, overloads []overloadImpl, exprs ...Expr,
+	ctx *SemaContext, desired Datum, overloads []overloadImpl, exprs ...Expr,
 ) ([]TypedExpr, overloadImpl, error) {
 	// Special-case the AnyType overload. We determine its return type by checking that
 	// all parameters have the same type.
@@ -171,7 +171,7 @@ func typeCheckOverloadedExprs(
 			if len(overloads) > 1 {
 				return nil, nil, fmt.Errorf("only one overload can have parameters with AnyType")
 			}
-			typedExprs, _, err := typeCheckSameTypedExprs(args, desired, exprs...)
+			typedExprs, _, err := typeCheckSameTypedExprs(ctx, desired, exprs...)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -188,7 +188,7 @@ func typeCheckOverloadedExprs(
 		switch {
 		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
-		case args.IsUnresolvedArgument(expr):
+		case ctx.isUnresolvedArgument(expr):
 			valExprs = append(valExprs, idxExpr)
 		default:
 			resolvableExprs = append(resolvableExprs, idxExpr)
@@ -199,7 +199,7 @@ func typeCheckOverloadedExprs(
 	// and adds them to the type checked slice.
 	defaultTypeCheck := func(errorOnArgs bool) error {
 		for _, expr := range constExprs {
-			typ, err := expr.e.TypeCheck(args, nil)
+			typ, err := expr.e.TypeCheck(ctx, nil)
 			if err != nil {
 				return fmt.Errorf("error type checking constant value: %v", err)
 			}
@@ -207,7 +207,7 @@ func typeCheckOverloadedExprs(
 		}
 		for _, expr := range valExprs {
 			if errorOnArgs {
-				_, err := expr.e.(ValArg).TypeCheck(args, nil)
+				_, err := expr.e.(ValArg).TypeCheck(ctx, nil)
 				return err
 			}
 			// If we dont want to error on args, avoid type checking them without a desired type.
@@ -219,7 +219,7 @@ func typeCheckOverloadedExprs(
 	// If no overloads are provided, just type check parameters and return.
 	if len(overloads) == 0 {
 		for _, expr := range resolvableExprs {
-			typ, err := expr.e.TypeCheck(args, nil)
+			typ, err := expr.e.TypeCheck(ctx, nil)
 			if err != nil {
 				return nil, nil, fmt.Errorf("error type checking resolved expression: %v", err)
 			}
@@ -268,7 +268,7 @@ func typeCheckOverloadedExprs(
 			// parameter types for the corresponding argument expressions.
 			paramDesired = overloads[0].params().getAt(expr.i)
 		}
-		typ, err := expr.e.TypeCheck(args, paramDesired)
+		typ, err := expr.e.TypeCheck(ctx, paramDesired)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -293,7 +293,7 @@ func typeCheckOverloadedExprs(
 			p := o.params()
 			for _, expr := range constExprs {
 				des := p.getAt(expr.i)
-				typ, err := expr.e.TypeCheck(args, des)
+				typ, err := expr.e.TypeCheck(ctx, des)
 				if err != nil {
 					return true, nil, fmt.Errorf("error type checking constant value: %v", err)
 				} else if des != nil && !typ.ReturnType().TypeEqual(des) {
@@ -305,7 +305,7 @@ func typeCheckOverloadedExprs(
 
 			for _, expr := range valExprs {
 				des := p.getAt(expr.i)
-				typ, err := expr.e.TypeCheck(args, des)
+				typ, err := expr.e.TypeCheck(ctx, des)
 				if err != nil {
 					return true, nil, err
 				}

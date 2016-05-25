@@ -139,7 +139,7 @@ func (rh *returningHelper) TypeCheck() error {
 		if len(rh.desiredTypes) > i {
 			desired = rh.desiredTypes[i]
 		}
-		typedExpr, err := parser.TypeCheck(baseExpr, rh.p.evalCtx.Args, desired)
+		typedExpr, err := parser.TypeCheck(baseExpr, &rh.p.semaCtx, desired)
 		if err != nil {
 			return err
 		}

@@ -79,7 +79,7 @@ func (s *subquery) Walk(v parser.Visitor) parser.Expr {
 
 func (s *subquery) Variable() {}
 
-func (s *subquery) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
+func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
 	// TODO(knz): if/when type checking can be extracted from the
 	// newPlan recursion, we can propagate the desired type to the
 	// sub-query. For now, the type is simply derived during the subquery node

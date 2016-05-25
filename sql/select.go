@@ -565,7 +565,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 		return err
 	}
 
-	s.filter, err = parser.TypeCheckAndRequire(untypedFilter, s.planner.evalCtx.Args,
+	s.filter, err = parser.TypeCheckAndRequire(untypedFilter, &s.planner.semaCtx,
 		parser.TypeBool, "WHERE")
 	if err != nil {
 		return err
@@ -667,7 +667,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	if err != nil {
 		return err
 	}
-	typedResolved, err := parser.TypeCheck(resolved, s.planner.evalCtx.Args, desiredType)
+	typedResolved, err := parser.TypeCheck(resolved, &s.planner.semaCtx, desiredType)
 	if err != nil {
 		return err
 	}
