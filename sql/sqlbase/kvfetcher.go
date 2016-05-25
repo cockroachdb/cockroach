@@ -151,6 +151,15 @@ func (f *kvFetcher) getBatchSize() int64 {
 	}
 }
 
+// NonEmpty checks if spans are non-empty and returns first match if not.
+func NonEmpty(txn *client.Txn, spans Spans) (bool, client.KeyValue, error) {
+	if len(spans) == 0 {
+		return false, client.KeyValue{}, nil
+	}
+	fetcher := makeKVFetcher(txn, spans, false, 1)
+	return fetcher.nextKV()
+}
+
 // makeKVFetcher initializes a kvFetcher for the given spans. If non-zero, firstBatchLimit limits
 // the size of the first batch (subsequent batches use the default size).
 func makeKVFetcher(txn *client.Txn, spans Spans, reverse bool, firstBatchLimit int64) kvFetcher {
