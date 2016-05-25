@@ -58,7 +58,7 @@ SELECT a FROM t ORDER BY 1 DESC
 query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-0 limit count: 2, offset: 0
+0 limit count: 2
 1 sort  +b (top 2)
 2 scan  t@primary -
 
@@ -71,7 +71,7 @@ SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 query ITT
 EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
 ----
-0 limit    count: 2, offset: 0
+0 limit    count: 2
 1 distinct
 2 sort     +b (iterative)
 3 scan     t@primary -
