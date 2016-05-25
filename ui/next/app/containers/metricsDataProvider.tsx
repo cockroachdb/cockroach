@@ -14,6 +14,7 @@ import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
 
 type TSQueryMessage = cockroach.ts.QueryMessage;
+type TSQuery = cockroach.ts.Query;
 type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
 type TSResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
 
@@ -65,33 +66,34 @@ const enum TimeSeriesQueryDerivative {
  * queryFromProps is a helper method which generates a TimeSeries Query data
  * structure based on a MetricProps object.
  */
-function queryFromProps(props: MetricProps): TSQueryMessage {
+function queryFromProps(metricProps: MetricProps,
+                        graphProps: MetricsDataComponentProps): TSQueryMessage {
     let derivative = TimeSeriesQueryDerivative.NONE;
     let sourceAggregator = TimeSeriesQueryAggregator.SUM;
     let downsampler = TimeSeriesQueryAggregator.AVG;
 
     // Compute derivative function.
-    if (props.rate) {
+    if (metricProps.rate) {
       derivative = TimeSeriesQueryDerivative.DERIVATIVE;
-    } else if (props.nonNegativeRate) {
+    } else if (metricProps.nonNegativeRate) {
       derivative = TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE;
     }
     // Compute downsample function.
-    if (props.downsampleMax) {
+    if (metricProps.downsampleMax) {
       downsampler = TimeSeriesQueryAggregator.MAX;
-    } else if (props.downsampleMin) {
+    } else if (metricProps.downsampleMin) {
       downsampler = TimeSeriesQueryAggregator.MIN;
     }
     // Compute aggregation function.
-    if (props.aggregateMax) {
+    if (metricProps.aggregateMax) {
       sourceAggregator = TimeSeriesQueryAggregator.MAX;
-    } else if (props.aggregateMin) {
+    } else if (metricProps.aggregateMin) {
       sourceAggregator = TimeSeriesQueryAggregator.MIN;
     }
 
     return new protos.cockroach.ts.Query({
-      name: props.name,
-      sources: props.sources || undefined,
+      name: metricProps.name,
+      sources: metricProps.sources || graphProps.sources || undefined,
 
       /**
        * HACK: This casting is related to the problem outlined in the comment on
@@ -154,12 +156,29 @@ type MetricsDataProviderProps = MetricsDataProviderConnectProps & MetricsDataPro
  */
 class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> {
   private queriesSelector = createSelector(
-    (props: {children?: any}) => props.children,
+    (props: MetricsDataProviderProps & {children?: any}) => props.children,
     (children) => {
+      // MetricsDataProvider should contain only one direct child.
+      let child = React.Children.only(this.props.children) as
+        React.ReactElement<MetricsDataComponentProps>;
       // Perform a simple DFS to find all children which are Metric objects.
       let selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(children, Metric);
       // Construct a query for each found selector child.
-      return _(selectors).map((s) => queryFromProps(s.props)).value();
+      return _(selectors).map((s) => queryFromProps(s.props, child.props)).value();
+    });
+
+  private requestMessage = createSelector(
+    (props: MetricsDataProviderProps) => props.timeSpan,
+    this.queriesSelector,
+    (timeSpan, queries) => {
+      if (!timeSpan) {
+        return undefined;
+      }
+      return new protos.cockroach.ts.TimeSeriesQueryRequest({
+        start_nanos: timeSpan[0],
+        end_nanos: timeSpan[1],
+        queries,
+      });
     });
 
   /**
@@ -167,17 +186,12 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
    * trigger a new request if the previous query is no longer valid.
    */
   refreshMetricsIfStale(props: MetricsDataProviderProps) {
-    let { metrics, timeSpan, queryMetrics, id } = props;
-    if (!timeSpan) {
+    let request = this.requestMessage(props);
+    if (!request) {
       return;
     }
-    if (!metrics || !metrics.request ||
-        !timeSpanMatch(metrics.request, timeSpan)) {
-      let request = new protos.cockroach.ts.TimeSeriesQueryRequest({
-        start_nanos: timeSpan[0],
-        end_nanos: timeSpan[1],
-        queries: this.queriesSelector(props),
-      });
+    let { metrics, queryMetrics, id } = props;
+    if (!metrics || !metrics.nextRequest || !_.isEqual(metrics.nextRequest, request)) {
       queryMetrics(id, request);
     }
   }
@@ -193,10 +207,23 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     this.refreshMetricsIfStale(props);
   }
 
+  getData(props: MetricsDataProviderProps) {
+    if (this.props.metrics) {
+      let { data, request } = this.props.metrics;
+      // Do not attach data if queries are not equivalent.
+      if (data && _.isEqual(request.queries, this.requestMessage(props).queries)) {
+        return data;
+      }
+    }
+    return undefined;
+  }
+
   render() {
     // MetricsDataProvider should contain only one direct child.
     let child = React.Children.only(this.props.children);
-    let dataProps: MetricsDataComponentProps = { data: this.props.metrics && this.props.metrics.data };
+    let dataProps: MetricsDataComponentProps = {
+      data: this.getData(this.props),
+    };
     return React.cloneElement(child as React.ReactElement<MetricsDataComponentProps>, dataProps);
   }
 }
@@ -234,8 +261,3 @@ export {
   MetricsDataProvider as MetricsDataProviderUnconnected,
   metricsDataProviderConnected as MetricsDataProvider
 };
-
-// Utility function to help determine that the requested time span has changed.
-function timeSpanMatch(request: TSRequestMessage, timeSpan: Long[]): boolean {
-  return request.start_nanos.equals(timeSpan[0]) && request.end_nanos.equals(timeSpan[1]);
-}

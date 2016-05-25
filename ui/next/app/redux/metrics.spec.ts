@@ -18,7 +18,7 @@ describe("metrics reducer", function() {
     });
 
     it("receiveMetrics() creates the correct action type.", function() {
-      assert.equal(metrics.receiveMetrics("id", null).type, metrics.RECEIVE);
+      assert.equal(metrics.receiveMetrics("id", null, null).type, metrics.RECEIVE);
     });
 
     it("errorMetrics() creates the correct action type.", function() {
@@ -67,7 +67,7 @@ describe("metrics reducer", function() {
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
       assert.lengthOf(_.keys(state.queries), 1);
-      assert.equal(state.queries[componentID].request, request);
+      assert.equal(state.queries[componentID].nextRequest, request);
       assert.isUndefined(state.queries[componentID].data);
       assert.isUndefined(state.queries[componentID].error);
     });
@@ -80,12 +80,22 @@ describe("metrics reducer", function() {
           },
         ],
       });
-      state = reducer(state, metrics.receiveMetrics(componentID, response));
+      let request = new protos.cockroach.ts.TimeSeriesQueryRequest({
+        start_nanos: Long.fromInt(0),
+        end_nanos: Long.fromInt(10),
+        queries: [
+          {
+            name: "test.metric.1",
+          },
+        ],
+      });
+      state = reducer(state, metrics.receiveMetrics(componentID, request, response));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
       assert.lengthOf(_.keys(state.queries), 1);
       assert.equal(state.queries[componentID].data, response);
-      assert.isUndefined(state.queries[componentID].request);
+      assert.equal(state.queries[componentID].request, request);
+      assert.isUndefined(state.queries[componentID].nextRequest);
       assert.isUndefined(state.queries[componentID].error);
     });
 
@@ -179,8 +189,9 @@ describe("metrics reducer", function() {
       // Queries should already be present, but unfulfilled.
       assert.lengthOf(_.keys(mockMetricsState.queries), 5);
       _.each(mockMetricsState.queries, (q) => {
-        assert.isDefined(q.request);
+        assert.isDefined(q.nextRequest);
         assert.isUndefined(q.data);
+        assert.isUndefined(q.request);
       });
 
       // Dispatch an additional query for the short timespan, but in a
@@ -243,7 +254,7 @@ describe("metrics reducer", function() {
       // Queries should already be present, but unfulfilled.
       assert.lengthOf(_.keys(mockMetricsState.queries), 2);
       _.each(mockMetricsState.queries, (q) => {
-        assert.isDefined(q.request);
+        assert.isDefined(q.nextRequest);
         assert.isUndefined(q.data);
       });
 

@@ -138,6 +138,10 @@ export function ProcessDataPoints(metrics: React.ReactElement<MetricProps>[],
 // MetricsDataProvider to pass query data to its contained component.
 export interface MetricsDataComponentProps {
   data?: TSResponseMessage;
+  // Allow graphs to declare a single source for all metrics. This is a
+  // convenient syntax for a common use case where all metrics on a graph are
+  // are from the same source set.
+  sources?: string[];
 }
 
 // TextGraph is a proof-of-concept component used to demonstrate that
