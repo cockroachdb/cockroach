@@ -1139,6 +1139,8 @@ func makeEvalTupleIn(d Datum) CmpOp {
 	}
 }
 
+var defaultEvalContext = EvalContext{}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
@@ -1153,11 +1155,11 @@ type EvalContext struct {
 	// The cluster timestamp. Needs to be stable for the lifetime of the
 	// transaction. Used for cluster_logical_timestamp().
 	clusterTimestamp roachpb.Timestamp
-
-	ReCache  *RegexpCache
-	TmpDec   *inf.Dec
+	// Location references the *Location on the current Session.
 	Location **time.Location
-	Args     MapArgs
+
+	ReCache *RegexpCache
+	TmpDec  *inf.Dec
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -1226,8 +1228,6 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
 	ctx.clusterTimestamp = ts
 }
-
-var defaultContext = EvalContext{}
 
 // GetLocation returns the session timezone.
 func (ctx EvalContext) GetLocation() *time.Location {

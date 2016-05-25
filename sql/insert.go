@@ -146,11 +146,11 @@ func (p *planner) Insert(
 				if _, ok := val.(parser.DefaultVal); ok {
 					continue
 				}
-				typedExpr, err := parser.TypeCheck(val, p.evalCtx.Args, desiredTypesFromSelect[eIdx])
+				typedExpr, err := parser.TypeCheck(val, &p.semaCtx, desiredTypesFromSelect[eIdx])
 				if err != nil {
 					return nil, err
 				}
-				err = sqlbase.CheckColumnType(cols[eIdx], typedExpr.ReturnType(), p.evalCtx.Args)
+				err = sqlbase.CheckColumnType(cols[eIdx], typedExpr.ReturnType(), p.semaCtx.Args)
 				if err != nil {
 					return nil, err
 				}

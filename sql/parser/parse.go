@@ -90,23 +90,23 @@ var NoTypePreference = Datum(nil)
 // introspection globally and on each sub-tree.
 //
 // While doing so, it will fold numeric constants and bind var argument names to
-// their inferred types in the args parameter. The optional desired parameter can
+// their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
 // tree.
-func TypeCheck(expr Expr, args MapArgs, desired Datum) (TypedExpr, error) {
+func TypeCheck(expr Expr, ctx *SemaContext, desired Datum) (TypedExpr, error) {
 	expr, err := foldNumericConstants(expr)
 	if err != nil {
 		return nil, err
 	}
-	return expr.TypeCheck(args, desired)
+	return expr.TypeCheck(ctx, desired)
 }
 
 // TypeCheckAndRequire performs type checking on the provided expression tree in
 // an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
 // has the provided return type, returning both the typed expression and an error
 // if it does not.
-func TypeCheckAndRequire(expr Expr, args MapArgs, required Datum, op string) (TypedExpr, error) {
-	typedExpr, err := TypeCheck(expr, args, required)
+func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Datum, op string) (TypedExpr, error) {
+	typedExpr, err := TypeCheck(expr, ctx, required)
 	if err != nil {
 		return nil, err
 	}

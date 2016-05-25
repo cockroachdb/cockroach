@@ -225,16 +225,16 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 		test.expectedArgs = make(MapArgs)
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
-		args := cloneMapArgs(test.args)
-		_, typ, err := typeCheckSameTypedExprs(args, test.desired, buildExprs(exprs)...)
+		ctx := SemaContext{Args: cloneMapArgs(test.args)}
+		_, typ, err := typeCheckSameTypedExprs(&ctx, test.desired, buildExprs(exprs)...)
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
 		} else {
 			if !typ.TypeEqual(test.expectedType) {
 				t.Errorf("%d: expected type %s:%s when type checking %s:%s, found %s", idx, test.expectedType, test.expectedType.Type(), buildExprs(exprs), typ, typ.Type())
 			}
-			if !reflect.DeepEqual(args, test.expectedArgs) {
-				t.Errorf("%d: expected args %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedArgs, buildExprs(exprs), args)
+			if !reflect.DeepEqual(ctx.Args, test.expectedArgs) {
+				t.Errorf("%d: expected args %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedArgs, buildExprs(exprs), ctx.Args)
 			}
 		}
 	})
@@ -360,8 +360,9 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		{nil, nil, exprs(valArg("b"), valArg("a")), paramErr},
 	}
 	for i, d := range testData {
+		ctx := SemaContext{Args: d.args}
 		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
-			if _, _, err := typeCheckSameTypedExprs(d.args, d.desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
+			if _, _, err := typeCheckSameTypedExprs(&ctx, d.desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 			}
 		})

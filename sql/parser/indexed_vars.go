@@ -49,7 +49,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
+func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
 	return v, nil
 }
 

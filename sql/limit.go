@@ -63,7 +63,7 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			typedExpr, err := parser.TypeCheckAndRequire(replaced, p.evalCtx.Args,
+			typedExpr, err := parser.TypeCheckAndRequire(replaced, &p.semaCtx,
 				parser.TypeInt, datum.name)
 			if err != nil {
 				return nil, err

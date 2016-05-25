@@ -419,10 +419,10 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if typedExpr, err = defaultContext.NormalizeExpr(typedExpr); err != nil {
+		if typedExpr, err = defaultEvalContext.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		r, err := typedExpr.Eval(defaultContext)
+		r, err := typedExpr.Eval(defaultEvalContext)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -468,7 +468,7 @@ func TestEvalError(t *testing.T) {
 		}
 		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err == nil {
-			_, err = typedExpr.Eval(defaultContext)
+			_, err = typedExpr.Eval(defaultEvalContext)
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -498,7 +498,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}
-		ctx := defaultContext
+		ctx := defaultEvalContext
 		ctx.ReCache = NewRegexpCache(8)
 		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err != nil {
@@ -552,7 +552,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
-	ctx := defaultContext
+	ctx := defaultEvalContext
 	ctx.PrepareOnly = true
 	for _, d := range testData {
 		ts := roachpb.Timestamp{WallTime: d.walltime, Logical: d.logical}
