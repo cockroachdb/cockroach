@@ -835,7 +835,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
 		_, err := txn.Get("k")
 		return err
-	}); !testutils.IsError(err, "txn aborted") {
+	}); err != nil {
 		t.Fatal(err)
 	}
 }

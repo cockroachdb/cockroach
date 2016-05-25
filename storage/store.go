@@ -410,6 +410,8 @@ type StoreTestingKnobs struct {
 	BadChecksumPanic func([]ReplicaSnapshotDiff)
 	// Disables the use of one phase commits.
 	DisableOnePhaseCommits bool
+	// Overrides an error returned from a replica.
+	PErrOverride func(*roachpb.Error) *roachpb.Error
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -1709,6 +1711,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 				}
 				txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 				pErr.SetTxn(txn)
+
+				if s.ctx.TestingKnobs.PErrOverride != nil {
+					pErr = s.ctx.TestingKnobs.PErrOverride(pErr)
+				}
 			} else {
 				if br.Txn == nil {
 					br.Txn = ba.Txn

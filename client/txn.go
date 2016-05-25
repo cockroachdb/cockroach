@@ -651,13 +651,16 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 
 	br, pErr := txn.db.send(ba)
 	if elideEndTxn && pErr == nil {
-		// Check that read only transactions do not violate their deadline. This can happen
+		// Check that read-only transactions do not violate their deadline. This can happen
 		// when the transaction timestamp is updated by ReadWithinUncertaintyIntervalError
 		// (see TestTxnDeadlineExceededError).
 		if endTxnRequest.Deadline != nil {
 			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
+				// Roll back the transaction. We cannot simply return TransactionAbortedError here as it will
+				// cause an infinite retry.
+				txn.Proto.Status = roachpb.ABORTED
 				txn.finalized = true
-				return nil, roachpb.NewError(roachpb.NewTransactionAbortedError())
+				return br, nil
 			}
 		}
 		// This normally happens on the server and sent back in response

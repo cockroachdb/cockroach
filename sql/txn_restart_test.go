@@ -21,9 +21,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
@@ -697,7 +695,8 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 }
 
 // Verifies that a read-only transaction that triggers a deadline-exceeded error finishes
-// without causing an Executor error.
+// without causing an Executor error. In particular, this test case creates a read-only txn
+// that elides EndTransactionRequest and makes sure a deadline-exceeded error causes a retryable error.
 //
 // This test triggers the above scenario by shortening the lease durations and making
 // ReadWithinUncertaintyIntervalError advance the clock, so that the transaction timestamp
@@ -705,53 +704,69 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 func TestTxnDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Make the lease durations short.
-	origLeaseDuration, origMinLeaseDuration := sql.LeaseDuration, sql.MinLeaseDuration
-	sql.LeaseDuration = 100 * time.Millisecond
-	sql.MinLeaseDuration = 100 * time.Millisecond
-	resetLeaseDurations := func() {
-		sql.LeaseDuration = origLeaseDuration
-		sql.MinLeaseDuration = origMinLeaseDuration
+	var cmdFilters CommandFilters
+	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
+	testingKnobs := &storage.StoreTestingKnobs{
+		TestingCommandFilter: cmdFilters.runFilters,
+		PErrOverride: func(pErr *roachpb.Error) *roachpb.Error {
+			if rErr, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+				// Hack to advance the transaction timestamp on a transaction restart. Wait for a
+				// longer period than the lease duration so that the transaction timestamp
+				// exceeds the deadline of the EndTransactionRequest, which is set from th
+				txn := pErr.GetTxn()
+				now := rErr.ReadTimestamp
+				now.WallTime += int64(5 * sql.LeaseDuration)
+				txn.ResetObservedTimestamps()
+				txn.UpdateObservedTimestamp(pErr.OriginNode, now)
+			}
+			return pErr
+		},
 	}
-	defer resetLeaseDurations()
+	defer func() {
+		testingKnobs.PErrOverride = nil
+	}()
 
-	ctx, cmdFilters := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, ctx)
+	ctx := server.MakeTestContext()
+	ctx.TestingKnobs.Store = testingKnobs
+	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
-	sqlDB.SetMaxOpenConns(1)
 
-	var numRetries int32
+	restartDone := false
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
-				if bytes.Contains(req.Key, []byte("test_key")) && atomic.AddInt32(&numRetries, 1) < 2 {
-					// Hack to advance the transaction timestamp on a transaction restart. Wait for a
-					// longer period than the lease duration so that the transaction timestamp exceeds the deadline of
-					// the EndTransactionRequest, which is set from the lease duration.
-					time.Sleep(10 * sql.LeaseDuration)
-					txn := args.Hdr.Txn
-					txn.ResetObservedTimestamps()
-					txn.UpdateObservedTimestamp(server.Gossip().GetNodeID(), server.Clock().Now())
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(
-						roachpb.ZeroTimestamp, roachpb.ZeroTimestamp), txn)
+				if bytes.Contains(req.Key, []byte("test_key")) && !restartDone {
+					restartDone = true
+					now := server.Clock().Now()
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), args.Hdr.Txn)
 				}
 			}
 			return nil
 		}, false)
 	defer cleanupFilter()
 
+	// Use a large max offset to avoid rejecting a transaction whose timestanp is in
+	// future (as we will advance the transaction timestamp with ReadWithinUncertaintyIntervalError).
+	server.Clock().SetMaxOffset(sql.LeaseDuration * 10)
+
+	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 `); err != nil {
 		t.Fatal(err)
 	}
 	// Acquire the lease and enable the auto-retry. The first read attempt will trigger ReadWithinUncertaintyIntervalError
 	// and advance the transaction timestmap. The second read attempt will succeed, but the (elided) EndTransactionRequest
 	// hits a deadline-exceeded error.
-	if _, err := sqlDB.Exec(`	
+	if _, err := sqlDB.Exec(`
 SELECT * from t.test WHERE k = 'test_key';
 `); err != nil {
 		t.Fatal(err)
+	}
+
+	if !restartDone {
+		t.Errorf("expected restart, but it didn't happen")
 	}
 }
