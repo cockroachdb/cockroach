@@ -79,7 +79,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, err
 		}
 
-		norm, err := p.parser.NormalizeExpr(p.evalCtx, typedExpr)
+		norm, err := p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +116,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, err
 		}
 
-		typedHaving, err = p.parser.NormalizeExpr(p.evalCtx, typedHaving)
+		typedHaving, err = p.parser.NormalizeExpr(&p.evalCtx, typedHaving)
 		if err != nil {
 			return nil, err
 		}
@@ -382,7 +382,7 @@ func (n *groupNode) computeAggregates() {
 		n.currentBucket = k
 
 		if n.having != nil {
-			res, err := n.having.Eval(n.planner.evalCtx)
+			res, err := n.having.Eval(&n.planner.evalCtx)
 			if err != nil {
 				n.err = err
 				return
@@ -397,7 +397,7 @@ func (n *groupNode) computeAggregates() {
 
 		row := make(parser.DTuple, 0, len(n.render))
 		for _, r := range n.render {
-			res, err := r.Eval(n.planner.evalCtx)
+			res, err := r.Eval(&n.planner.evalCtx)
 			if err != nil {
 				n.err = err
 				return
@@ -719,7 +719,7 @@ func (a *aggregateFunc) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (
 	return a, nil
 }
 
-func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+func (a *aggregateFunc) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 	// During init of the group buckets, grouped expressions (i.e. wrapped
 	// qvalues) are Eval()'ed to determine the bucket for a row, so pass these
 	// calls through to the underlying `arg` expr Eval until init is done.

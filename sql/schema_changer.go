@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -41,6 +42,7 @@ type SchemaChanger struct {
 	nodeID     roachpb.NodeID
 	db         client.DB
 	leaseMgr   *LeaseManager
+	evalCtx    parser.EvalContext
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter time.Time

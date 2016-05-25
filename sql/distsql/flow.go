@@ -25,7 +25,7 @@ import (
 )
 
 type flow struct {
-	evalCtx           parser.EvalContext
+	evalCtx           *parser.EvalContext
 	txn               *client.Txn
 	simpleFlowMailbox *outbox
 	waitGroup         sync.WaitGroup

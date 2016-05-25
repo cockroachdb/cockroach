@@ -40,7 +40,7 @@ type tableReader struct {
 	// values in the row tuple.
 	filterVars parser.IndexedVarHelper
 
-	evalCtx parser.EvalContext
+	evalCtx *parser.EvalContext
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
@@ -57,7 +57,7 @@ func (tr *tableReader) IndexedVarReturnType(idx int) parser.Datum {
 }
 
 // IndexedVarEval is part of the parser.IndexedVarContainer interface.
-func (tr *tableReader) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
+func (tr *tableReader) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
 	err := tr.row[idx].Decode(&tr.alloc)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (tr *tableReader) IndexedVarString(idx int) string {
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx parser.EvalContext,
+	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx *parser.EvalContext,
 ) (*tableReader, error) {
 	tr := &tableReader{
 		desc:    spec.Table,

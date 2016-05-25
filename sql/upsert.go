@@ -47,7 +47,7 @@ func (p *planner) makeUpsertHelper(
 	updateExprs parser.UpdateExprs,
 	upsertConflictIndex *sqlbase.IndexDescriptor,
 ) (*upsertHelper, error) {
-	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, p.evalCtx)
+	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (p *planner) makeUpsertHelper(
 			return nil, err
 		}
 
-		normExpr, err := p.parser.NormalizeExpr(p.evalCtx, typedExpr)
+		normExpr, err := p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +160,7 @@ func (uh *upsertHelper) eval(
 	var err error
 	ret := make([]parser.Datum, len(uh.evalExprs))
 	for i, evalExpr := range uh.evalExprs {
-		ret[i], err = evalExpr.Eval(uh.p.evalCtx)
+		ret[i], err = evalExpr.Eval(&uh.p.evalCtx)
 		if err != nil {
 			return nil, err
 		}

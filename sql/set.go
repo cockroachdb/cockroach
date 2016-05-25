@@ -88,7 +88,7 @@ func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, 
 	if len(values) != 1 {
 		return "", fmt.Errorf("%s: requires a single string value", name)
 	}
-	val, err := values[0].Eval(p.evalCtx)
+	val, err := values[0].Eval(&p.evalCtx)
 	if err != nil {
 		return "", err
 	}
@@ -117,7 +117,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, err := typedValue.Eval(p.evalCtx)
+	d, err := typedValue.Eval(&p.evalCtx)
 	if err != nil {
 		return nil, err
 	}

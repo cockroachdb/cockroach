@@ -50,7 +50,7 @@ const secondsInDay = 24 * 60 * 60
 type UnaryOp struct {
 	Typ        Datum
 	ReturnType Datum
-	fn         func(EvalContext, Datum) (Datum, error)
+	fn         func(*EvalContext, Datum) (Datum, error)
 	types      typeList
 }
 
@@ -80,21 +80,21 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
 		UnaryOp{
 			Typ:        TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
 		UnaryOp{
 			Typ:        TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
@@ -104,21 +104,21 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(-*d.(*DInt)), nil
 			},
 		},
 		UnaryOp{
 			Typ:        TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDFloat(-*d.(*DFloat)), nil
 			},
 		},
 		UnaryOp{
 			Typ:        TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				dec := &d.(*DDecimal).Dec
 				dd := &DDecimal{}
 				dd.Neg(dec)
@@ -131,7 +131,7 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, d Datum) (Datum, error) {
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(^*d.(*DInt)), nil
 			},
 		},
@@ -143,7 +143,7 @@ type BinOp struct {
 	LeftType   Datum
 	RightType  Datum
 	ReturnType Datum
-	fn         func(EvalContext, Datum, Datum) (Datum, error)
+	fn         func(*EvalContext, Datum, Datum) (Datum, error)
 	types      typeList
 }
 
@@ -187,7 +187,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) & *right.(*DInt)), nil
 			},
 		},
@@ -198,7 +198,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) | *right.(*DInt)), nil
 			},
 		},
@@ -209,7 +209,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) ^ *right.(*DInt)), nil
 			},
 		},
@@ -222,7 +222,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) + *right.(*DInt)), nil
 			},
 		},
@@ -230,7 +230,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeFloat,
 			RightType:  TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) + *right.(*DFloat)), nil
 			},
 		},
@@ -238,7 +238,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDecimal,
 			RightType:  TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				dd := &DDecimal{}
@@ -250,7 +250,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDate,
 			RightType:  TypeInt,
 			ReturnType: TypeDate,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDDate(*left.(*DDate) + DDate(*right.(*DInt))), nil
 			},
 		},
@@ -258,7 +258,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeDate,
 			ReturnType: TypeDate,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDDate(DDate(*left.(*DInt)) + *right.(*DDate)), nil
 			},
 		},
@@ -266,7 +266,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeTimestamp,
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestamp,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond), nil
 			},
 		},
@@ -274,7 +274,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInterval,
 			RightType:  TypeTimestamp,
 			ReturnType: TypeTimestamp,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond), nil
 			},
 		},
@@ -282,7 +282,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeTimestampTZ,
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestampTZ,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
@@ -291,7 +291,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInterval,
 			RightType:  TypeTimestampTZ,
 			ReturnType: TypeTimestampTZ,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(right.(*DTimestampTZ).Time, left.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
@@ -300,7 +300,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInterval,
 			RightType:  TypeInterval,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Add(right.(*DInterval).Duration)}, nil
 			},
 		},
@@ -311,7 +311,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) - *right.(*DInt)), nil
 			},
 		},
@@ -319,7 +319,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeFloat,
 			RightType:  TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) - *right.(*DFloat)), nil
 			},
 		},
@@ -327,7 +327,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDecimal,
 			RightType:  TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				dd := &DDecimal{}
@@ -339,7 +339,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDate,
 			RightType:  TypeInt,
 			ReturnType: TypeDate,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDDate(*left.(*DDate) - DDate(*right.(*DInt))), nil
 			},
 		},
@@ -347,7 +347,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDate,
 			RightType:  TypeDate,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(DInt(*left.(*DDate) - *right.(*DDate))), nil
 			},
 		},
@@ -355,7 +355,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeTimestamp,
 			RightType:  TypeTimestamp,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
@@ -364,7 +364,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeTimestampTZ,
 			RightType:  TypeTimestampTZ,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
@@ -373,7 +373,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeTimestamp,
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestamp,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond), nil
 			},
 		},
@@ -381,7 +381,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeTimestampTZ,
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestampTZ,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
@@ -390,7 +390,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInterval,
 			RightType:  TypeInterval,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Sub(right.(*DInterval).Duration)}, nil
 			},
 		},
@@ -401,7 +401,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) * *right.(*DInt)), nil
 			},
 		},
@@ -409,7 +409,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeFloat,
 			RightType:  TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
 		},
@@ -419,7 +419,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDecimal,
 			RightType:  TypeInt,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Dec
 				r := *right.(*DInt)
 				dd := &DDecimal{}
@@ -432,7 +432,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := *left.(*DInt)
 				r := &right.(*DDecimal).Dec
 				dd := &DDecimal{}
@@ -445,7 +445,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDecimal,
 			RightType:  TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				dd := &DDecimal{}
@@ -457,7 +457,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInterval,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: right.(*DInterval).Duration.Mul(int64(*left.(*DInt)))}, nil
 			},
 		},
@@ -465,7 +465,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInterval,
 			RightType:  TypeInt,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Mul(int64(*right.(*DInt)))}, nil
 			},
 		},
@@ -476,7 +476,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := *right.(*DInt)
 				if rInt == 0 {
 					return nil, errDivByZero
@@ -492,7 +492,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeFloat,
 			RightType:  TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) / *right.(*DFloat)), nil
 			},
 		},
@@ -500,7 +500,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDecimal,
 			RightType:  TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				if r.Sign() == 0 {
@@ -515,7 +515,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInterval,
 			RightType:  TypeInt,
 			ReturnType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := *right.(*DInt)
 				if rInt == 0 {
 					return nil, errDivByZero
@@ -530,7 +530,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := *right.(*DInt)
 				if r == 0 {
 					return nil, errZeroModulus
@@ -542,7 +542,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeFloat,
 			RightType:  TypeFloat,
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(DFloat(math.Mod(float64(*left.(*DFloat)), float64(*right.(*DFloat))))), nil
 			},
 		},
@@ -550,7 +550,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeDecimal,
 			RightType:  TypeDecimal,
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				if r.Sign() == 0 {
@@ -568,7 +568,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeString,
 			RightType:  TypeString,
 			ReturnType: TypeString,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(*left.(*DString) + *right.(*DString))), nil
 			},
 		},
@@ -576,7 +576,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeBytes,
 			RightType:  TypeBytes,
 			ReturnType: TypeBytes,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
 		},
@@ -588,7 +588,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) << uint(*right.(*DInt))), nil
 			},
 		},
@@ -599,7 +599,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(*left.(*DInt) >> uint(*right.(*DInt))), nil
 			},
 		},
@@ -616,7 +616,7 @@ func init() {
 type CmpOp struct {
 	LeftType  Datum
 	RightType Datum
-	fn        func(EvalContext, Datum, Datum) (DBool, error)
+	fn        func(*EvalContext, Datum, Datum) (DBool, error)
 	types     typeList
 }
 
@@ -659,7 +659,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DString) == *right.(*DString)), nil
 			},
 		},
@@ -667,35 +667,35 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
 
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DBytes) == *right.(*DBytes)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DBool) == *right.(*DBool)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DInt) == *right.(*DInt)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DFloat) == *right.(*DFloat)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) == 0), nil
@@ -704,21 +704,21 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DFloat) == DFloat(*right.(*DInt))), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(DFloat(*left.(*DInt)) == *right.(*DFloat)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := ctx.getTmpDec().SetUnscaled(int64(*right.(*DInt))).SetScale(0)
 				return DBool(l.Cmp(r) == 0), nil
@@ -727,7 +727,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := ctx.getTmpDec().SetUnscaled(int64(*left.(*DInt))).SetScale(0)
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) == 0), nil
@@ -736,7 +736,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := decimal.SetFromFloat(ctx.getTmpDec(), float64(*right.(*DFloat)))
 				return DBool(l.Cmp(r) == 0), nil
@@ -745,7 +745,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := decimal.SetFromFloat(ctx.getTmpDec(), float64(*left.(*DFloat)))
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) == 0), nil
@@ -754,35 +754,35 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DDate) == right.(*DDate)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestamp,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DTimestamp).Equal(right.(*DTimestamp).Time)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestampTZ,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DTimestampTZ).Equal(right.(*DTimestampTZ).Time)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DInterval) == *right.(*DInterval)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				c, err := cmpTuple(left, right)
 				return DBool(c == 0), err
 			},
@@ -793,42 +793,42 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DString) < *right.(*DString)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DBytes) < *right.(*DBytes)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(!*left.(*DBool) && *right.(*DBool)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DInt) < *right.(*DInt)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DFloat) < *right.(*DFloat)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) < 0), nil
@@ -837,21 +837,21 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DFloat) < DFloat(*right.(*DInt))), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(DFloat(*left.(*DInt)) < *right.(*DFloat)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := ctx.getTmpDec().SetUnscaled(int64(*right.(*DInt))).SetScale(0)
 				return DBool(l.Cmp(r) < 0), nil
@@ -860,7 +860,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := ctx.getTmpDec().SetUnscaled(int64(*left.(*DInt))).SetScale(0)
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) < 0), nil
@@ -869,7 +869,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := decimal.SetFromFloat(ctx.getTmpDec(), float64(*right.(*DFloat)))
 				return DBool(l.Cmp(r) < 0), nil
@@ -878,7 +878,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := decimal.SetFromFloat(ctx.getTmpDec(), float64(*left.(*DFloat)))
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) < 0), nil
@@ -887,35 +887,35 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DDate) < *right.(*DDate)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestamp,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DTimestamp).Before(right.(*DTimestamp).Time)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestampTZ,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DTimestampTZ).Before(right.(*DTimestampTZ).Time)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DInterval).Duration.Compare(right.(*DInterval).Duration) < 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				c, err := cmpTuple(left, right)
 				return DBool(c < 0), err
 			},
@@ -926,42 +926,42 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DString) <= *right.(*DString)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DBytes) <= *right.(*DBytes)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(!*left.(*DBool) || *right.(*DBool)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DInt) <= *right.(*DInt)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DFloat) <= *right.(*DFloat)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeDecimal,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) <= 0), nil
@@ -970,21 +970,21 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeInt,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DFloat) <= DFloat(*right.(*DInt))), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeFloat,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(DFloat(*left.(*DInt)) <= *right.(*DFloat)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := ctx.getTmpDec().SetUnscaled(int64(*right.(*DInt))).SetScale(0)
 				return DBool(l.Cmp(r) <= 0), nil
@@ -993,7 +993,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := ctx.getTmpDec().SetUnscaled(int64(*left.(*DInt))).SetScale(0)
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) <= 0), nil
@@ -1002,7 +1002,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := &left.(*DDecimal).Dec
 				r := decimal.SetFromFloat(ctx.getTmpDec(), float64(*right.(*DFloat)))
 				return DBool(l.Cmp(r) <= 0), nil
@@ -1011,7 +1011,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				l := decimal.SetFromFloat(ctx.getTmpDec(), float64(*left.(*DFloat)))
 				r := &right.(*DDecimal).Dec
 				return DBool(l.Cmp(r) <= 0), nil
@@ -1020,35 +1020,35 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DDate) <= *right.(*DDate)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestamp,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return !DBool(right.(*DTimestamp).Before(left.(*DTimestamp).Time)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestampTZ,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestampTZ).Time)), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(left.(*DInterval).Duration.Compare(right.(*DInterval).Duration) <= 0), nil
 			},
 		},
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				c, err := cmpTuple(left, right)
 				return DBool(c <= 0), err
 			},
@@ -1072,7 +1072,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				pattern := string(*right.(*DString))
 				like := optimizedLikeFunc(pattern)
 				if like == nil {
@@ -1092,7 +1092,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				key := similarToKey(*right.(*DString))
 				re, err := ctx.ReCache.GetRegexp(key)
 				if err != nil {
@@ -1126,7 +1126,7 @@ func makeEvalTupleIn(d Datum) CmpOp {
 	return CmpOp{
 		LeftType:  d,
 		RightType: TypeTuple,
-		fn: func(_ EvalContext, arg, values Datum) (DBool, error) {
+		fn: func(_ *EvalContext, arg, values Datum) (DBool, error) {
 			if arg == DNull {
 				return DBool(false), nil
 			}
@@ -1138,8 +1138,6 @@ func makeEvalTupleIn(d Datum) CmpOp {
 		},
 	}
 }
-
-var defaultEvalContext = EvalContext{}
 
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
@@ -1230,14 +1228,14 @@ func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
 }
 
 // GetLocation returns the session timezone.
-func (ctx EvalContext) GetLocation() *time.Location {
+func (ctx *EvalContext) GetLocation() *time.Location {
 	if ctx.Location == nil || *ctx.Location == nil {
 		return time.UTC
 	}
 	return *ctx.Location
 }
 
-func (ctx EvalContext) getTmpDec() *inf.Dec {
+func (ctx *EvalContext) getTmpDec() *inf.Dec {
 	if ctx.TmpDec != nil {
 		return ctx.TmpDec
 	}
@@ -1245,7 +1243,7 @@ func (ctx EvalContext) getTmpDec() *inf.Dec {
 }
 
 // Eval implements the Expr interface.
-func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *AndExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1273,7 +1271,7 @@ func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
@@ -1292,7 +1290,7 @@ func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
 		//
@@ -1339,7 +1337,7 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
@@ -1517,7 +1515,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *CoalesceExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 	for _, e := range expr.Exprs {
 		d, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
@@ -1531,7 +1529,7 @@ func (expr *CoalesceExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1569,13 +1567,13 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t *ExistsExpr) Eval(ctx EvalContext) (Datum, error) {
+func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
 	// Exists expressions are handled during subquery expansion.
 	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
-func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 	args := make(DTuple, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
@@ -1602,12 +1600,12 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *OverlayExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *OverlayExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
-func (expr *IfExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1619,7 +1617,7 @@ func (expr *IfExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *IsOfTypeExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1706,7 +1704,7 @@ func (expr *IsOfTypeExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *NotExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1722,7 +1720,7 @@ func (expr *NotExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *NullIfExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	expr1, err := expr.Expr1.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1742,7 +1740,7 @@ func (expr *NullIfExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *OrExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
@@ -1773,25 +1771,25 @@ func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr *ParenExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr.Expr.(TypedExpr).Eval(ctx)
 }
 
 // Eval implements the Expr interface.
-func (expr *RangeCond) Eval(_ EvalContext) (Datum, error) {
+func (expr *RangeCond) Eval(_ *EvalContext) (Datum, error) {
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
-func (expr *Subquery) Eval(_ EvalContext) (Datum, error) {
+func (expr *Subquery) Eval(_ *EvalContext) (Datum, error) {
 	// Subquery expressions are handled during subquery expansion.
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
-func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
+func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
@@ -1803,19 +1801,19 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (expr DefaultVal) Eval(_ EvalContext) (Datum, error) {
+func (expr DefaultVal) Eval(_ *EvalContext) (Datum, error) {
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
-func (expr *QualifiedName) Eval(ctx EvalContext) (Datum, error) {
+func (expr *QualifiedName) Eval(ctx *EvalContext) (Datum, error) {
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
-func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
+func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	tuple := make(DTuple, 0, len(t.Exprs))
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
@@ -1828,71 +1826,71 @@ func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t *DBool) Eval(_ EvalContext) (Datum, error) {
+func (t *DBool) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DBytes) Eval(_ EvalContext) (Datum, error) {
+func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DDate) Eval(_ EvalContext) (Datum, error) {
+func (t *DDate) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DFloat) Eval(_ EvalContext) (Datum, error) {
+func (t *DFloat) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DDecimal) Eval(_ EvalContext) (Datum, error) {
+func (t *DDecimal) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DInt) Eval(_ EvalContext) (Datum, error) {
+func (t *DInt) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DInterval) Eval(_ EvalContext) (Datum, error) {
+func (t *DInterval) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t dNull) Eval(_ EvalContext) (Datum, error) {
+func (t dNull) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DString) Eval(_ EvalContext) (Datum, error) {
+func (t *DString) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DTimestamp) Eval(_ EvalContext) (Datum, error) {
+func (t *DTimestamp) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DTimestampTZ) Eval(_ EvalContext) (Datum, error) {
+func (t *DTimestampTZ) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DTuple) Eval(_ EvalContext) (Datum, error) {
+func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
 // Eval implements the Expr interface.
-func (t *DValArg) Eval(_ EvalContext) (Datum, error) {
+func (t *DValArg) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-func evalComparison(ctx EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
+func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil
 	}

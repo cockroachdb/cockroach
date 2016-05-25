@@ -147,7 +147,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, p.evalCtx)
+	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (u *updateNode) Next() (bool, error) {
 
 	u.checkHelper.loadRow(u.tw.ru.fetchColIDtoRowIndex, oldValues, false)
 	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
-	if err := u.checkHelper.check(u.p.evalCtx); err != nil {
+	if err := u.checkHelper.check(&u.p.evalCtx); err != nil {
 		u.run.err = err
 		return false, err
 	}

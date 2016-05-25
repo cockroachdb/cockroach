@@ -120,7 +120,7 @@ func (q *qvalue) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.
 }
 
 // Eval implements the TypedExpr interface.
-func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+func (q *qvalue) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 	return q.datum.Eval(ctx)
 }
 
@@ -292,7 +292,7 @@ func (s *starDatum) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (pars
 }
 
 // Eval implements the TypedExpr interface.
-func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+func (*starDatum) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 	return parser.TypeInt.Eval(ctx)
 }
 

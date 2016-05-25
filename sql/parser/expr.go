@@ -52,7 +52,7 @@ type TypedExpr interface {
 	// should be replaced prior to expression evaluation by an appropriate
 	// WalkExpr. For example, ValArg should be replace by the argument passed from
 	// the client.
-	Eval(EvalContext) (Datum, error)
+	Eval(*EvalContext) (Datum, error)
 	// ReturnType provides the type of the TypedExpr, which is the type of Datum that
 	// the TypedExpr will return when evaluated.
 	ReturnType() Datum

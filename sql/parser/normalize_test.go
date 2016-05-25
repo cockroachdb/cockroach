@@ -93,7 +93,8 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := typedExpr.String()
-		r, err := defaultEvalContext.NormalizeExpr(typedExpr)
+		ctx := &EvalContext{}
+		r, err := ctx.NormalizeExpr(typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -101,7 +102,7 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 		// Normalizing again should be a no-op.
-		r2, err := defaultEvalContext.NormalizeExpr(r)
+		r2, err := ctx.NormalizeExpr(r)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

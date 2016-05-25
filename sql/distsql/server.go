@@ -71,7 +71,7 @@ func (ds *ServerImpl) RunSimpleFlow(
 		return util.Errorf("expected exactly one flow, got %d", len(req.Flows))
 	}
 
-	f := &flow{evalCtx: ds.evalCtx}
+	f := &flow{evalCtx: &ds.evalCtx}
 	f.txn = ds.setupTxn(stream.Context(), &req.Txn)
 
 	// Set up the outgoing mailbox for the stream.
