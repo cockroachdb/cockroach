@@ -921,7 +921,7 @@ func (r *Replica) RangeLookup(
 		// observed intents could be returned when MaxRanges is set to 1 and
 		// the ConsiderIntents flag is set.
 		for _, intent := range intents {
-			val, _, err := engine.MVCCGetAsTxn(ctx, batch, intent.Key, intent.Txn.Timestamp, true, intent.Txn)
+			val, _, err := engine.MVCCGetAsTxn(ctx, batch, intent.Key, intent.Txn.Timestamp, intent.Txn)
 			if err != nil {
 				return reply, nil, err
 			}

@@ -649,7 +649,6 @@ func MVCCGetAsTxn(
 	engine Engine,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
-	consistent bool,
 	txnMeta roachpb.TxnMeta,
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
@@ -659,7 +658,7 @@ func MVCCGetAsTxn(
 		OrigTimestamp: txnMeta.Timestamp,
 		MaxTimestamp:  txnMeta.Timestamp,
 	}
-	return MVCCGet(ctx, engine, key, timestamp, consistent, txn)
+	return MVCCGet(ctx, engine, key, timestamp, true /* consistent */, txn)
 }
 
 // mvccGetMetadata returns or reconstructs the meta key for the given key.
