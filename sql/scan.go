@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -102,15 +103,19 @@ func (n *scanNode) DebugValues() debugValues {
 }
 
 func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
-	n.limitHint = numRows
-	if soft || n.filter != nil {
-		// Read a multiple of the limit if the limit is "soft".
-		n.limitHint *= 2
+	// Either a limitNode or EXPLAIN is pushing a limit down onto this
+	// node. The special value math.MaxInt64 means "no limit".
+	if numRows != math.MaxInt64 {
+		n.limitHint = numRows
+		if soft || n.filter != nil {
+			// Read a multiple of the limit if the limit is "soft".
+			n.limitHint *= 2
+		}
 	}
 }
 
 func (n *scanNode) expandPlan() error {
-	return nil
+	return n.p.expandSubqueryPlans(n.filter)
 }
 
 func (n *scanNode) Start() error {
@@ -119,7 +124,7 @@ func (n *scanNode) Start() error {
 		return err
 	}
 
-	return nil
+	return n.p.startSubqueryPlans(n.filter)
 }
 
 // initScan sets up the rowFetcher and starts a scan. On error, sets n.err and
@@ -213,7 +218,10 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 		name = "scan"
 	}
 	description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, sqlbase.PrettySpans(n.spans, 2))
-	return name, description, nil
+
+	subplans := n.p.collectSubqueryPlans(n.filter, nil)
+
+	return name, description, subplans
 }
 
 func (n *scanNode) ExplainTypes(regTypes func(string, string)) {

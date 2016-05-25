@@ -148,7 +148,9 @@ func (n *indexJoinNode) DebugValues() debugValues {
 }
 
 func (n *indexJoinNode) expandPlan() error {
-	// TODO(knz): Some code from makeIndexJoin() above really belongs here.
+	// If we arrive here, selectNode's expandPlan has run already and
+	// created the indexJoinNode by means of makeIndexJoin() above.
+	// We thus now need to expand the sub-nodes.
 	if err := n.table.expandPlan(); err != nil {
 		return err
 	}
