@@ -18,7 +18,6 @@ package util
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -267,8 +266,7 @@ func MarshalToJSON(value interface{}) ([]byte, error) {
 // unmarshals the result into the supplied interface.
 //
 // TODO(cdo): Refactor the *JSON methods to handle more encodings.
-func GetJSON(httpClient http.Client, scheme, hostport, path string, v interface{}) error {
-	url := fmt.Sprintf("%s://%s%s", scheme, hostport, path)
+func GetJSON(httpClient http.Client, url string, v interface{}) error {
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return err
@@ -284,8 +282,7 @@ func GetJSON(httpClient http.Client, scheme, hostport, path string, v interface{
 // PostJSON uses the supplied client to perform a POST to the URL specified
 // by the parameters and unmarshals the result into the supplied interface.
 // This function assumes that the body is also JSON.
-func PostJSON(httpClient http.Client, scheme, hostport, path, body string, v interface{}) error {
-	url := fmt.Sprintf("%s://%s%s", scheme, hostport, path)
+func PostJSON(httpClient http.Client, url, body string, v interface{}) error {
 	resp, err := httpClient.Post(url, JSONContentType, strings.NewReader(body))
 	if err != nil {
 		return err

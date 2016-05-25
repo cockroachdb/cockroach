@@ -25,7 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -38,22 +38,22 @@ type testHTTPSession struct {
 }
 
 // makeTestHTTPSession constructs a new testHTTPSession. The session will
-// instantiate a client using the based base context. All HTTP requests from the
-// session will be sent to the given baseUrl.
+// instantiate a client using the context. All HTTP requests from the session
+// will be sent to the given baseUrl.
 //
 // baseUrl should be specified *without* a request scheme (i.e. "http://"); the
 // request scheme will be used from the context.
 //
-// If an error occurs in HTTP layer during any session operation, a Fatal method
-// will be called on the supplied t.Tester.
-func makeTestHTTPSession(t *testing.T, ctx *base.Context, baseURL string) testHTTPSession {
+// If an error occurs in HTTP layer during any session operation, a Fatal
+// method will be called on the supplied t.Tester.
+func makeTestHTTPSession(t *testing.T, ctx *server.Context) testHTTPSession {
 	client, err := ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("error creating client: %s", err)
 	}
 	return testHTTPSession{
 		client:  client,
-		baseURL: ctx.HTTPRequestScheme() + "://" + baseURL,
+		baseURL: ctx.AdminURL(),
 	}
 }
 
