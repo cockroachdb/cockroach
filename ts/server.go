@@ -26,9 +26,9 @@ import (
 const (
 	// URLPrefix is the prefix for all time series endpoints hosted by the
 	// server.
-	URLPrefix = "/ts/"
+	URLPrefix = "/ts"
 	// URLQuery is the relative URL which should accept query requests.
-	URLQuery = URLPrefix + "query"
+	URLQuery = URLPrefix + "/query"
 )
 
 // Server handles incoming external requests related to time series data.
