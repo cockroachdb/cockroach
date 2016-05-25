@@ -22,7 +22,8 @@ output "instance" {
 resource "google_compute_instance" "benchmark" {
   count = 1
 
-  name = "benchmarks-${count.index}"
+  name = "benchmarks-${var.benchmarks_package}-${count.index}"
+  name = "benchmark-${replace(var.benchmarks_package,".","-")}-${count.index}"
   machine_type = "${var.gce_machine_type}"
   zone = "${var.gce_zone}"
   tags = ["benchmark"]
@@ -72,8 +73,8 @@ resource "google_compute_instance" "benchmark" {
       "sudo apt-get -y install supervisor",
       "sudo service supervisor stop",
       "chmod 755 benchmarks.sh",
-      "bash download_binary.sh cockroach/static-tests.tar.gz ${var.benchmarks_sha}",
-      "tar xfz static-tests.tar.gz",
+      "bash download_binary.sh cockroach/${var.benchmarks_package}.tar.gz ${var.benchmarks_sha}",
+      "tar xfz ${var.benchmarks_package}.tar.gz",
       "mkdir -p logs",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start benchmarks",
@@ -82,7 +83,7 @@ resource "google_compute_instance" "benchmark" {
 }
 
 resource "google_compute_firewall" "default" {
-  name = "cockroach-benchmark-firewall"
+  name = "cockroach-benchmark-${replace(var.benchmarks_package,".","-")}-firewall"
   network = "default"
 
   allow {
