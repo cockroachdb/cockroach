@@ -89,7 +89,7 @@ type Server struct {
 	admin               *adminServer
 	status              *statusServer
 	tsDB                *ts.DB
-	tsServer            *ts.Server
+	tsServer            ts.Server
 	raftTransport       *storage.RaftTransport
 	stopper             *stop.Stopper
 	sqlExecutor         *sql.Executor
@@ -238,7 +238,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.NewServer(s.tsDB)
+	s.tsServer = ts.MakeServer(s.tsDB)
+
+	RegisterTimeSeriesServer(s.grpc, &s.tsServer)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.rpcContext, s.node.stores)
@@ -467,6 +469,12 @@ func (s *Server) Start() error {
 		}
 	}
 
+	if err := RegisterTimeSeriesHandlerFromEndpoint(gwCtx, gwMux, s.ctx.Addr, opts); err != nil {
+		return util.Errorf("error constructing grpc-gateway: %s. are your certificates valid?", err)
+	}
+
+	s.mux.Handle(ts.URLPrefix, gwMux)
+
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
 	}
@@ -552,7 +560,6 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(healthEndpoint, s.status)
-	s.mux.Handle(ts.URLPrefix, s.tsServer)
 }
 
 // Stop stops the server.

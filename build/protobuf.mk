@@ -47,7 +47,7 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACK
 # generated Go code.
 GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api
 
-GW_PROTOS := $(REPO_ROOT)/server/admin.proto $(REPO_ROOT)/server/status.proto
+GW_PROTOS := $(REPO_ROOT)/server/admin.proto $(REPO_ROOT)/server/status.proto $(REPO_ROOT)/server/timeseries.proto
 GW_GO_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
@@ -79,7 +79,7 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 
 $(GW_GO_SOURCES) : $(GW_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true,import_prefix=$(IMPORT_PREFIX):. $(GW_PROTOS)
 	sed -i~ -E 's!golang/protobuf/proto!gogo/protobuf/proto!' $(GW_GO_SOURCES)
 
 
