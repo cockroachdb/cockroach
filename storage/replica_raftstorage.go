@@ -558,7 +558,6 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries 
 		}
 	}
 
-	// Commit the batch and update the last index.
 	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
 		return 0, err
 	}
