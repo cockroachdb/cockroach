@@ -2452,6 +2452,22 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         }
                     ]
                 }
+            ],
+            "services": [
+                {
+                    "name": "TimeSeries",
+                    "options": {},
+                    "rpc": {
+                        "Query": {
+                            "request": "TimeSeriesQueryRequest",
+                            "response": "TimeSeriesQueryResponse",
+                            "options": {
+                                "(google.api.http).post": "/ts/query",
+                                "(google.api.http).body": "*"
+                            }
+                        }
+                    }
+                }
             ]
         }
     ]

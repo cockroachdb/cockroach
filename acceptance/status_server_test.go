@@ -42,7 +42,7 @@ func get(t *testing.T, base, rel string) []byte {
 	// TODO(bram) #2059: Remove retry logic.
 	url := base + rel
 	for r := retry.Start(retryOptions); r.Next(); {
-		resp, err := cluster.HTTPClient().Get(url)
+		resp, err := cluster.HTTPClient.Get(url)
 		if err != nil {
 			log.Infof("could not GET %s - %s", url, err)
 			continue
@@ -76,7 +76,7 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 	}
 	var details server.DetailsResponse
 	for _, urlID := range urlIDs {
-		if err := getJSON(c.URL(i), fmt.Sprintf("/_status/details/%s", urlID), &details); err != nil {
+		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/"+urlID, &details); err != nil {
 			t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
 		}
 		if details.NodeID != expectedNodeID {
@@ -102,7 +102,7 @@ func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConf
 	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
 		var details server.DetailsResponse
-		if err := getJSON(c.URL(i), "/_status/details/local", &details); err != nil {
+		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
 		idMap[i] = details.NodeID
