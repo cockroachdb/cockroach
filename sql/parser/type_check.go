@@ -209,10 +209,27 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
 	returnDatum, validTypes := expr.castTypeAndValidArgTypes()
 
-	desired = nil
-	if ctx.isUnresolvedArgument(expr.Expr) {
-		desired = TypeString
+	// The desired type provided to a CastExpr is ignored. Instead, NoTypePreference
+	// is passed to the child of the cast. There are two exceptions, described below.
+	desired = NoTypePreference
+	switch t := expr.Expr.(type) {
+	case Constant:
+		if canConstantBecome(t, returnDatum) {
+			// If a Constant is subject to a cast which it can naturally become (which
+			// is in its resolvable type set), we desire the cast's type for the Constant,
+			// which will result in the CastExpr becoming an identity cast.
+			desired = returnDatum
+		}
+	case ValArg:
+		if ctx.isUnresolvedArgument(t) {
+			// This case will be triggered if ProcessPlaceholderAnnotations found
+			// the same placeholder in another location where it was either not
+			// the child of a cast, or was the child of a cast to a different type.
+			// In this case, we default to inferring a STRING for the placeholder.
+			desired = TypeString
+		}
 	}
+
 	typedSubExpr, err := expr.Expr.TypeCheck(ctx, desired)
 	if err != nil {
 		return nil, err
