@@ -51,24 +51,26 @@ GOBINDATA_FONTS         := ./fonts/*
 GOBINDATA_ASSETS        := ./assets/*
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
 GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
-GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
-                           $(NODE_MODULES)/lodash/lodash.min.js \
+GOBINDATA_SOURCES       := $(NODE_MODULES)/lodash/lodash.min.js \
+                           $(BOWER_COMPONENTS)/d3/d3.min.js \
+                           $(BOWER_COMPONENTS)/long/src/long.js \
                            $(BOWER_COMPONENTS)/mithriljs/mithril.js \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.css \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.js \
                            $(BOWER_COMPONENTS)/moment/min/moment.min.js \
                            $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.min.js \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.js \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.css \
                            $(GOBINDATA_FONTS) \
                            $(GOBINDATA_ASSETS) \
                            favicon.ico \
                            apple-touch-icon.png
-GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
-                           $(NODE_MODULES)/lodash/lodash.js \
+GOBINDATA_DEBUG_SOURCES := $(NODE_MODULES)/lodash/lodash.js \
+                           $(BOWER_COMPONENTS)/d3/d3.js \
+                           $(BOWER_COMPONENTS)/long/src/long.js \
                            $(BOWER_COMPONENTS)/mithriljs/mithril.js \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.css \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.js \
                            $(BOWER_COMPONENTS)/moment/moment.js \
                            $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.js \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.js \
+                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.css \
                            $(GOBINDATA_FONTS) \
                            $(GOBINDATA_ASSETS) \
                            favicon.ico \
