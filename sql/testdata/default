@@ -58,7 +58,7 @@ SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
 2 true true
 
 statement ok
-UPDATE t SET (b, c) = ('2015-09-18 00:00:00'::timestamp, -1.0)
+UPDATE t SET (b, c) = ('2015-09-18 00:00:00', -1.0)
 
 statement ok
 UPDATE t SET b = DEFAULT WHERE a = 1
