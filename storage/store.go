@@ -502,6 +502,10 @@ type StoreTestingKnobs struct {
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
+	// DisableSplitQueue disables the split queue.
+	DisableSplitQueue bool
+	// DisableReplicateQueue disables the replication queue.
+	DisableReplicateQueue bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -787,6 +791,13 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
+	}
+
+	if ctx.TestingKnobs.DisableSplitQueue {
+		s.SetSplitQueueActive(false)
+	}
+	if ctx.TestingKnobs.DisableReplicateQueue {
+		s.SetReplicateQueueActive(false)
 	}
 
 	return s
@@ -2572,7 +2583,12 @@ func (s *Store) SetRaftLogQueueActive(active bool) {
 	s.raftLogQueue.SetDisabled(!active)
 }
 
-// SetSplitQueueActive enables or disables the replica split queue.
+// SetReplicateQueueActive enables or disabled the replication queue.
+func (s *Store) SetReplicateQueueActive(active bool) {
+	s.replicateQueue.SetDisabled(!active)
+}
+
+// SetSplitQueueActive enables or disables the split queue.
 func (s *Store) SetSplitQueueActive(active bool) {
 	s.splitQueue.SetDisabled(!active)
 }
