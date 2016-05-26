@@ -3635,11 +3635,14 @@ export interface AbortCacheEntryBuilder {
 declare module cockroach.roachpb {
 	export const enum ValueType {
 		UNKNOWN = 0,
+		NULL = 7,
 		INT = 1,
 		FLOAT = 2,
 		BYTES = 3,
+		DELIMITED_BYTES = 8,
 		TIME = 4,
 		DECIMAL = 5,
+		DELIMITED_DECIMAL = 9,
 		DURATION = 6,
 		TIMESERIES = 100,
 		

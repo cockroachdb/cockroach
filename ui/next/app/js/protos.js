@@ -1930,6 +1930,10 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "id": 0
                         },
                         {
+                            "name": "NULL",
+                            "id": 7
+                        },
+                        {
                             "name": "INT",
                             "id": 1
                         },
@@ -1942,12 +1946,20 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "id": 3
                         },
                         {
+                            "name": "DELIMITED_BYTES",
+                            "id": 8
+                        },
+                        {
                             "name": "TIME",
                             "id": 4
                         },
                         {
                             "name": "DECIMAL",
                             "id": 5
+                        },
+                        {
+                            "name": "DELIMITED_DECIMAL",
+                            "id": 9
                         },
                         {
                             "name": "DURATION",
