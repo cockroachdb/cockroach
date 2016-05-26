@@ -7,12 +7,11 @@ CREATE TABLE t (
   UNIQUE (c)
 )
 
-# TODO(vivek) replace timestamp/date/interval type casting in this file.
 statement ok
 INSERT INTO t VALUES
-  ('2015-08-30 03:34:45.34567'::timestamp, '2015-08-30'::date, '34h2s'::interval),
-  ('2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
-  ('2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
+  ('2015-08-30 03:34:45.34567', '2015-08-30', '34h2s'),
+  ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
+  ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
 query TTT
 SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
@@ -40,7 +39,7 @@ EXPLAIN (DEBUG) SELECT c FROM t WHERE c < '234h45m2s234ms'::interval
 # insert duplicate value with different time zone offset
 statement error duplicate key value \(a\)=\(2015-08-30 03:34:45\.34567\+00:00\) violates unique constraint "primary"
 INSERT INTO t VALUES
-  ('2015-08-29 20:34:45.34567-07:00'::timestamp, '2015-08-31'::date, '35h2s'::interval)
+  ('2015-08-29 20:34:45.34567-07:00', '2015-08-31', '35h2s')
 
 # Check that time/date/interval representations outside of the index are okay.
 statement ok
@@ -51,12 +50,11 @@ CREATE TABLE u (
   d INTERVAL
 )
 
-# TODO(vivek) replace type casting in this file.
 statement ok
 INSERT INTO u VALUES
-  (123, '2015-08-30 03:34:45.34567'::timestamp, '2015-08-30'::date, '34h2s'::interval),
-  (234, '2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
-  (456, '2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
+  (123, '2015-08-30 03:34:45.34567', '2015-08-30', '34h2s'),
+  (234, '2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
+  (456, '2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
 query ITTT
 SELECT * FROM u WHERE a = 234
@@ -378,7 +376,7 @@ SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 
 # verify that nanosecond uniqueness is not preserved
 statement error pq: duplicate key value
-INSERT INTO t (a) VALUES ('2001-04-10 12:04:59.000000001'::timestamp), ('2001-04-10 12:04:59.000000002'::timestamp)
+INSERT INTO t (a) VALUES ('2001-04-10 12:04:59.000000001'), ('2001-04-10 12:04:59.000000002')
 
 # nanosecond uniqueness is preserved with parse_timestamp_ns
 statement ok
