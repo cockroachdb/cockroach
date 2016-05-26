@@ -266,6 +266,12 @@ func (u *sqlSymUnion) idxElem() IndexElem {
 func (u *sqlSymUnion) idxElems() IndexElemList {
     return u.val.(IndexElemList)
 }
+func (u *sqlSymUnion) famElem() FamilyElem {
+    return u.val.(FamilyElem)
+}
+func (u *sqlSymUnion) famElems() FamilyElemList {
+    return u.val.(FamilyElemList)
+}
 func (u *sqlSymUnion) dropBehavior() DropBehavior {
     return u.val.(DropBehavior)
 }
@@ -353,6 +359,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <OrderBy> sort_clause opt_sort_clause
 %type <[]*Order> sortby_list
 %type <IndexElemList> index_params
+%type <FamilyElemList> family_params
 %type <[]string> name_list opt_name_list
 %type <empty> opt_array_bounds
 %type <TableExprs> from_clause from_list
@@ -428,6 +435,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <AliasClause> alias_clause opt_alias_clause
 %type <*Order> sortby
 %type <IndexElem> index_elem
+%type <FamilyElem> family_elem
 %type <TableExpr> table_ref
 %type <TableExpr> joined_table
 %type <*QualifiedName> relation_expr
@@ -464,6 +472,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %type <ConstraintTableDef> table_constraint constraint_elem
 %type <TableDef> index_def
+%type <TableDef> family_def
 %type <[]ColumnQualification> col_qual_list
 %type <ColumnQualification> col_qualification col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
@@ -530,7 +539,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
 %token <str>   EXISTS EXPLAIN EXTRACT
 
-%token <str>   FALSE FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
+%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
@@ -1372,6 +1381,7 @@ table_elem:
     $$.val = $1.colDef()
   }
 | index_def
+| family_def
 | table_constraint
   {
     $$.val = $1.constraintDef()
@@ -1467,6 +1477,15 @@ index_def:
         Columns: $5.idxElems(),
         Storing: $7.strs(),
       },
+    }
+  }
+
+family_def:
+  FAMILY opt_name '(' family_params ')'
+  {
+    $$.val = &FamilyTableDef{
+      Name: Name($2),
+      Columns: $4.famElems(),
     }
   }
 
@@ -1650,6 +1669,22 @@ index_elem:
   }
 | func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
 | '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
+
+family_params:
+  family_elem
+  {
+    $$.val = FamilyElemList{$1.famElem()}
+  }
+| family_params ',' family_elem
+  {
+    $$.val = append($1.famElems(), $3.famElem())
+  }
+
+family_elem:
+  name
+  {
+    $$.val = FamilyElem{Column: Name($1)}
+  }
 
 opt_collate:
   COLLATE any_name { unimplemented() }
@@ -4168,6 +4203,7 @@ unreserved_keyword:
 | DROP
 | ENCODING
 | EXPLAIN
+| FAMILY
 | FILTER
 | FIRST
 | FOLLOWING

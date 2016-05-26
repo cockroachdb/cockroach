@@ -91,6 +91,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT, c INT REFERENCES foo (bar))`},
 		{`CREATE TABLE a (b INT, INDEX (b) STORING (c))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b ASC, c DESC) STORING (c))`},
+		{`CREATE TABLE a (b INT, FAMILY (b))`},
+		{`CREATE TABLE a (b INT, c STRING, FAMILY foo (b), FAMILY (c))`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
