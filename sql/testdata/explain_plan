@@ -51,7 +51,7 @@ EXPLAIN SELECT * FROM t LIMIT 1 OFFSET 1
 ----
 Level  Type    Description
 0      limit   count: 1, offset:  1
-1      scan    t@primary
+1      scan    t@primary (max 2 rows)
 
 query ITT colnames
 EXPLAIN SELECT DISTINCT * FROM t

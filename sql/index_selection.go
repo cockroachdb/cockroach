@@ -39,9 +39,6 @@ const nonCoveringIndexPenalty = 10
 // Both the number of matching columns and the total columns in the desired
 // ordering are returned.
 //
-// In addition, singleKey indicates if the ordering is such that we only need to
-// retrieve one key (cases like `SELECT MIN(x) ..` and we have an index on x).
-//
 // For example, consider the table t {
 //    a INT,
 //    b INT,
@@ -65,7 +62,7 @@ const nonCoveringIndexPenalty = 10
 //    matchingCols is 1.
 //  - the bac index, along with the fact that b is constrained to a single
 //    value, matches the desired ordering; matchingCols is 2.
-type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool)
+type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols int)
 
 // selectIndex analyzes the scanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
@@ -207,7 +204,6 @@ func selectIndex(
 		return &emptyNode{}, nil
 	}
 	s.filter = applyIndexConstraints(s.filter, c.constraints)
-	noFilter := (s.filter == nil)
 	s.reverse = c.reverse
 
 	var plan planNode
@@ -219,18 +215,6 @@ func selectIndex(
 		// node. The filter in that node may be different from the
 		// original table filter.
 		plan, s = s.p.makeIndexJoin(s, c.exactPrefix)
-	}
-
-	// If we have no filter, we can request a single key in some cases.
-	if noFilter && analyzeOrdering != nil && s.isSecondaryIndex {
-		_, _, singleKey := analyzeOrdering(plan.Ordering())
-		if singleKey {
-			// We only need to retrieve one key, but some spans might contain no
-			// keys so we need to keep all of them.
-			for i := range s.spans {
-				s.spans[i].Count = 1
-			}
-		}
 	}
 
 	if log.V(3) {
@@ -395,8 +379,8 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	// Analyze the ordering provided by the index (either forward or reverse).
 	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
 	revIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, true)
-	fwdMatch, orderCols, _ := analyzeOrdering(fwdIndexOrdering)
-	revMatch, orderCols, _ := analyzeOrdering(revIndexOrdering)
+	fwdMatch, orderCols := analyzeOrdering(fwdIndexOrdering)
+	revMatch, orderCols := analyzeOrdering(revIndexOrdering)
 
 	// Weigh the cost by how much of the ordering matched.
 	//
