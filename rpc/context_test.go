@@ -260,7 +260,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			clock:              clock,
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 		})
-		nodeCtxs[i].ctx.localAddr = ln.Addr().String()
+		nodeCtxs[i].ctx.Addr = ln.Addr().String()
 	}
 
 	// Fully connect the nodes.
@@ -269,7 +269,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if i == j {
 				continue
 			}
-			if _, err := clientNodeContext.ctx.GRPCDial(serverNodeContext.ctx.localAddr); err != nil {
+			if _, err := clientNodeContext.ctx.GRPCDial(serverNodeContext.ctx.Addr); err != nil {
 				t.Fatal(err)
 			}
 		}

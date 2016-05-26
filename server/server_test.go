@@ -80,11 +80,11 @@ func TestHealth(t *testing.T) {
 func TestPlainHTTPServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Create a custom context. The default one uses embedded certs.
-	ctx := NewContext()
+	ctx := MakeContext()
 	ctx.Addr = "127.0.0.1:0"
 	ctx.HTTPAddr = "127.0.0.1:0"
 	ctx.Insecure = true
-	s := TestServer{Ctx: ctx}
+	s := TestServer{Ctx: &ctx}
 	if err := s.Start(); err != nil {
 		t.Fatalf("could not start plain http server: %v", err)
 	}

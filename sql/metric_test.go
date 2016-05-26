@@ -93,7 +93,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cmdFilters := createTestServerContext()
-	s, sqlDB, _ := setupWithContext(t, ctx)
+	s, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(s, sqlDB)
 
 	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {

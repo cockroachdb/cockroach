@@ -91,9 +91,11 @@ func TestReportUsage(t *testing.T) {
 		}
 	}))
 
-	var s TestServer
-	s.Ctx = NewTestContext()
-	s.StoresPerNode = 2
+	ctx := MakeTestContext()
+	s := TestServer{
+		Ctx:           &ctx,
+		StoresPerNode: 2,
+	}
 	if err := s.Start(); err != nil {
 		t.Fatalf("failed to start test server: %s", err)
 	}

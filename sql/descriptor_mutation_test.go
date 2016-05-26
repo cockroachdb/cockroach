@@ -195,7 +195,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -386,7 +386,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -522,7 +522,7 @@ func TestOperationsWithUniqueColumnMutation(t *testing.T) {
 	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	// Create a table with column i and an index on v and i.
@@ -661,7 +661,7 @@ func TestCommandsWithPendingMutations(t *testing.T) {
 	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`

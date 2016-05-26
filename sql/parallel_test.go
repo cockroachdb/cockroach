@@ -154,13 +154,13 @@ func (t *parallelTest) run(dir string) {
 }
 
 func (t *parallelTest) setup() {
-	ctx := server.NewTestContext()
+	ctx := server.MakeTestContext()
 	ctx.MaxOffset = logicMaxOffset
 	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		WaitForGossipUpdate:   true,
 		CheckStmtStringChange: true,
 	}
-	t.srv = setupTestServerWithContext(t.T, ctx)
+	t.srv = setupTestServerWithContext(t.T, &ctx)
 }
 
 func TestParallel(t *testing.T) {

@@ -150,7 +150,8 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	t := newLeaseTest(testingT, server.NewTestContext())
+	ctx := server.MakeTestContext()
+	t := newLeaseTest(testingT, &ctx)
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -243,7 +244,8 @@ func TestLeaseManager(testingT *testing.T) {
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	t := newLeaseTest(testingT, server.NewTestContext())
+	ctx := server.MakeTestContext()
+	t := newLeaseTest(testingT, &ctx)
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -290,7 +292,8 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	t := newLeaseTest(testingT, server.NewTestContext())
+	ctx := server.MakeTestContext()
+	t := newLeaseTest(testingT, &ctx)
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -373,7 +376,7 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 		},
 	}
 
-	t := newLeaseTest(testingT, ctx)
+	t := newLeaseTest(testingT, &ctx)
 	defer t.cleanup()
 
 	sql := `
@@ -470,7 +473,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	s, db, kvDB := setupWithContext(t, ctx)
+	s, db, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(s, db)
 
 	sql := `
