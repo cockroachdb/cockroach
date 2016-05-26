@@ -28,10 +28,6 @@ import (
 const (
 	// AcceptHeader is the canonical header name for accept.
 	AcceptHeader = "Accept"
-	// AcceptEncodingHeader is the canonical header name for accept encoding.
-	AcceptEncodingHeader = "Accept-Encoding"
-	// ContentEncodingHeader is the canonical header name for content type.
-	ContentEncodingHeader = "Content-Encoding"
 	// ContentTypeHeader is the canonical header name for content type.
 	ContentTypeHeader = "Content-Type"
 	// JSONContentType is the JSON content type.
@@ -44,8 +40,6 @@ const (
 	AltProtoContentType = "application/x-google-protobuf"
 	// PlaintextContentType is the plaintext content type.
 	PlaintextContentType = "text/plain"
-	// GzipEncoding is the gzip encoding.
-	GzipEncoding = "gzip"
 )
 
 // GetJSON uses the supplied client to GET the URL specified by the parameters

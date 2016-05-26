@@ -65,10 +65,6 @@ func init() {
 			http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
 		}
 
-		// The explicit header is necessary or (at least Chrome) will try to
-		// download a gzipped file (Content-type comes back application/x-gzip).
-		w.Header().Add("Content-type", "text/html")
-
 		fmt.Fprint(w, `
 <html>
 <head>
