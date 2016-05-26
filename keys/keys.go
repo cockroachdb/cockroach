@@ -187,6 +187,11 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, localRangeStatsSuffix, nil)
 }
 
+// RangeLastGCKey returns a system-local key for the last GC.
+func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRangeLastGCSuffix, nil)
+}
+
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
