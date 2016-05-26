@@ -54,6 +54,7 @@ github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
 github.com/kr/pretty add1dbc86daf0f983cd4a48ceb39deb95c729b67
 github.com/kr/text 7cafcd837844e784b526369c9bce262804aebc60
 github.com/lib/pq ee1442bda7bd1b6a84e913bdb421cb1874ec629d
+github.com/lightstep/lightstep-tracer-go cab3c65c9d6ca0bda20c2ced3942aded1b6f9b17
 github.com/mattn/go-isatty 56b76bdf51f7708750eac80fa38b952bb9f32639
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
