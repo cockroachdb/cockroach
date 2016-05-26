@@ -61,6 +61,8 @@ import (
 )
 
 var (
+	uiFileSystem http.FileSystem
+
 	// Allocation pool for gzip writers.
 	gzipWriterPool sync.Pool
 
@@ -260,8 +262,6 @@ type grpcGatewayServer interface {
 // Start starts the server on the specified port, starts gossip and
 // initializes the node using the engines from the server's context.
 func (s *Server) Start() error {
-	s.initHTTP()
-
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -474,8 +474,15 @@ func (s *Server) Start() error {
 		}
 	}
 
+	s.mux.Handle("/", http.FileServer(uiFileSystem))
+
+	// TODO(marc): when cookie-based authentication exists,
+	// apply it for all web endpoints.
+	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 	s.mux.Handle(adminEndpoint, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
+	s.mux.Handle(statusPrefix, s.status)
+	s.mux.Handle(healthEndpoint, s.status)
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
@@ -547,20 +554,6 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 			}
 		}
 	})
-}
-
-var uiFileSystem http.FileSystem
-
-// initHTTP registers http prefixes.
-func (s *Server) initHTTP() {
-	s.mux.Handle("/", http.FileServer(uiFileSystem))
-
-	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
-
-	// TODO(marc): when cookie-based authentication exists,
-	// apply it for all web endpoints.
-	s.mux.Handle(statusPrefix, s.status)
-	s.mux.Handle(healthEndpoint, s.status)
 }
 
 // Stop stops the server.
