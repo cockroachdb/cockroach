@@ -22,23 +22,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-	// Register the net/trace endpoint with http.DefaultServeMux.
-	"golang.org/x/net/trace"
-	// This is imported for its side-effect of registering pprof
-	// endpoints with the http.DefaultServeMux.
-	_ "net/http/pprof"
-
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/proto"
-	"github.com/rcrowley/go-metrics"
-	"github.com/rcrowley/go-metrics/exp"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
@@ -59,10 +50,6 @@ import (
 )
 
 const (
-	// debugEndpoint is the prefix of golang's standard debug functionality
-	// for access to exported vars and pprof tools.
-	debugEndpoint = "/debug/"
-
 	// adminEndpoint is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
 	adminEndpoint = "/_admin/"
@@ -80,110 +67,22 @@ const (
 	serverUIDataKeyPrefix = "server."
 )
 
-var (
-	// We use the default http mux for the debug endpoint (as pprof and net/trace
-	// register to that via import, and go-metrics registers to that via exp.Exp())
-	debugServeMux = http.DefaultServeMux
-
-	// apiServerMessage is the standard body for all HTTP 500 responses.
-	errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error has occurred. Please "+
-		"check your CockroachDB logs for more details.")
-)
-
-func init() {
-	// Tweak the authentication logic for the tracing endpoint. By default it's
-	// open for localhost only, but with Docker we want to get there from
-	// anywhere. We maintain the default behavior of only allowing access to
-	// sensitive logs from localhost.
-	//
-	// TODO(mberhault): properly secure this once we require client certs.
-	origAuthRequest := trace.AuthRequest
-	trace.AuthRequest = func(req *http.Request) (bool, bool) {
-		_, sensitive := origAuthRequest(req)
-		return true, sensitive
-	}
-
-	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != debugEndpoint {
-			http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
-		}
-
-		// The explicit header is necessary or (at least Chrome) will try to
-		// download a gzipped file (Content-type comes back application/x-gzip).
-		w.Header().Add("Content-type", "text/html")
-
-		fmt.Fprint(w, `
-<html>
-<head>
-<style>
-table tr td {
-  vertical-align: top;
-}
-</style>
-<title>Debug endpoints</title>
-</head>
-<body>
-<h1>Debug endpoints</h1>
-<table>
-<tr>
-<td>trace (local node only)</td>
-<td><a href="./requests">requests</a>, <a href="./events">events</a></td>
-</tr>
-<tr>
-<td>stopper</td>
-<td><a href="./stopper">active tasks</a></td>
-</tr>
-<tr>
-<td>metrics</td>
-<td><a href="./metrics">variables</a></td>
-</tr>
-<tr>
-<td>node status</td>
-<td>
-<a href="/_status/gossip/local">gossip</a><br />
-<a href="/_status/ranges/local">ranges</a><br />
-</td>
-</tr>
-<tr>
-<td>pprof</td>
-<td>
-<!-- cribbed from the /debug/pprof endpoint -->
-<a href="./pprof/block?debug=1">block</a><br />
-<a href="./pprof/goroutine?debug=1">goroutine</a> (<a href="./pprof/goroutine?debug=2">all</a>)<br />
-<a href="./pprof/heap?debug=1">heap</a><br />
-<a href="./pprof/threadcreate?debug=1">threadcreate</a><br />
-</td>
-</tr>
-</table>
-</body></html>
-`)
-	})
-
-	// This registers a superset of the variables exposed through the /debug/vars endpoint
-	// onto the /debug/metrics endpoint. It includes all expvars registered globally and
-	// all metrics registered on the DefaultRegistry.
-	exp.Exp(metrics.DefaultRegistry)
-}
+// apiServerMessage is the standard body for all HTTP 500 responses.
+var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
+	"has occurred. Please check your CockroachDB logs for more details.")
 
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	*http.ServeMux
-
 	server *Server
 }
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
 func newAdminServer(s *Server) *adminServer {
-	server := &adminServer{
-		ServeMux: http.NewServeMux(),
-		server:   s,
+	return &adminServer{
+		server: s,
 	}
-
-	// Register HTTP handlers.
-	server.ServeMux.HandleFunc(debugEndpoint, server.handleDebug)
-	return server
 }
 
 // RegisterService registers the GRPC service.
@@ -198,18 +97,7 @@ func (s *adminServer) RegisterGateway(
 	mux *gwruntime.ServeMux,
 	conn *grpc.ClientConn,
 ) error {
-	// Pass all requests for gRPC-based API endpoints to the gateway mux.
-	s.ServeMux.Handle(apiEndpoint, mux)
-
 	return serverpb.RegisterAdminHandler(ctx, mux, conn)
-}
-
-// handleDebug passes requests with the debugPathPrefix onto the default
-// serve mux, which is preconfigured (by import of net/http/pprof and registration
-// of go-metrics) to serve endpoints which access exported variables and pprof tools.
-func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
-	handler, _ := debugServeMux.Handler(r)
-	handler.ServeHTTP(w, r)
 }
 
 // getUserProto will return the authenticated user. For now, this is just a stub until we
