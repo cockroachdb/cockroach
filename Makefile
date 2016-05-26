@@ -189,8 +189,10 @@ dupl:
 	       -not -name 'sql.go'      \
 	| dupl -files $(DUPLFLAGS)
 
+# check depends on build because go vet sometimes reports incorrect errors if
+# the build artifacts are stale.
 .PHONY: check
-check:
+check: build
 	@build/check-style.sh
 
 .PHONY: clean
