@@ -42,7 +42,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	}
 
 	if n.Encoding != nil {
-		encoding, err := n.Encoding.ResolveAsType(parser.TypeString)
+		encoding, err := n.Encoding.ResolveAsType(&p.semaCtx, parser.TypeString)
 		if err != nil {
 			return nil, err
 		}
