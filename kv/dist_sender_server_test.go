@@ -94,12 +94,28 @@ func setupMultipleRanges(t *testing.T, ts server.TestServer, splitAt ...string) 
 	return db
 }
 
+var errInfo = testutils.MakeCaller(3, 2)
+
+// checkKeysInKVs verifies that a KeyValue slice contains the given keys.
+func checkKeysInKVs(t util.Tester, kvs []client.KeyValue, keys ...string) {
+	if len(keys) != len(kvs) {
+		t.Errorf("%s: expected %d scan results, got %d", errInfo(), len(keys), len(kvs))
+		return
+	}
+	for i, kv := range kvs {
+		expKey := keys[i]
+		if key := string(kv.Key); key != keys[i] {
+			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
+		}
+	}
+}
+
 func checkScanResults(t *testing.T, results []client.Result, expResults [][]string) {
 	if len(expResults) != len(results) {
 		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
 	}
 	for i, res := range results {
-		client.CheckKeysInKVs(t, res.Rows, expResults[i]...)
+		checkKeysInKVs(t, res.Rows, expResults[i]...)
 	}
 }
 
