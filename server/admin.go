@@ -77,10 +77,10 @@ type adminServer struct {
 	server *Server
 }
 
-// newAdminServer allocates and returns a new REST server for
+// makeAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(s *Server) *adminServer {
-	return &adminServer{
+func makeAdminServer(s *Server) adminServer {
+	return adminServer{
 		server: s,
 	}
 }

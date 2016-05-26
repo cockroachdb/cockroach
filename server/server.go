@@ -87,7 +87,7 @@ type Server struct {
 	node                *Node
 	recorder            *status.MetricsRecorder
 	runtime             status.RuntimeStatSampler
-	admin               *adminServer
+	admin               adminServer
 	status              *statusServer
 	tsDB                *ts.DB
 	tsServer            ts.Server
@@ -237,9 +237,9 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.tsDB)
 
-	s.admin = newAdminServer(s)
+	s.admin = makeAdminServer(s)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx.Context, s.rpcContext, s.node.stores)
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -468,7 +468,7 @@ func (s *Server) Start() error {
 		return util.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
