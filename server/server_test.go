@@ -18,10 +18,7 @@ package server
 
 import (
 	"bytes"
-	"compress/gzip"
-	"io"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"reflect"
@@ -153,61 +150,6 @@ func TestSecureHTTPRedirect(t *testing.T) {
 			t.Error(err)
 		} else if a, e := redirectURL.String(), expURL.String(); a != e {
 			t.Errorf("expected location %s; got %s", e, a)
-		}
-	}
-}
-
-// TestAcceptEncoding hits the health endpoint while explicitly
-// disabling decompression on a custom client's Transport and setting
-// it conditionally via the request's Accept-Encoding headers.
-func TestAcceptEncoding(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
-	client, err := s.Ctx.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	testData := []struct {
-		acceptEncoding string
-		newReader      func(io.Reader) io.Reader
-	}{
-		{"",
-			func(b io.Reader) io.Reader {
-				return b
-			},
-		},
-		{util.GzipEncoding,
-			func(b io.Reader) io.Reader {
-				r, err := gzip.NewReader(b)
-				if err != nil {
-					t.Fatalf("could not create new gzip reader: %s", err)
-				}
-				return r
-			},
-		},
-	}
-	for _, d := range testData {
-		req, err := http.NewRequest("GET", s.Ctx.AdminURL()+healthPath, nil)
-		if err != nil {
-			t.Fatalf("could not create request: %s", err)
-		}
-		if d.acceptEncoding != "" {
-			req.Header.Set(util.AcceptEncodingHeader, d.acceptEncoding)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("could not make request to %s: %s", req.URL, err)
-		}
-		defer resp.Body.Close()
-		if ce := resp.Header.Get(util.ContentEncodingHeader); ce != d.acceptEncoding {
-			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
-		}
-		r := d.newReader(resp.Body)
-		var data serverpb.HealthResponse
-		if err := jsonpb.Unmarshal(r, &data); err != nil {
-			t.Error(err)
 		}
 	}
 }

@@ -18,22 +18,17 @@
 package server
 
 import (
-	"compress/gzip"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
-	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -62,9 +57,6 @@ import (
 
 var (
 	uiFileSystem http.FileSystem
-
-	// Allocation pool for gzip writers.
-	gzipWriterPool sync.Pool
 
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
@@ -564,46 +556,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This is our base handler, so catch all panics and make sure they stick.
 	defer log.FatalOnPanic()
 
-	// Disable caching of responses.
-	w.Header().Set("Cache-control", "no-cache")
-
-	ae := r.Header.Get(util.AcceptEncodingHeader)
-	switch {
-	case strings.Contains(ae, util.GzipEncoding):
-		w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
-		gzw := newGzipResponseWriter(w)
-		defer gzw.Close()
-		w = gzw
-	}
 	s.mux.ServeHTTP(w, r)
-}
-
-type gzipResponseWriter struct {
-	io.WriteCloser
-	http.ResponseWriter
-}
-
-func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	var gz *gzip.Writer
-	if gzI := gzipWriterPool.Get(); gzI == nil {
-		gz = gzip.NewWriter(w)
-	} else {
-		gz = gzI.(*gzip.Writer)
-		gz.Reset(w)
-	}
-	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
-}
-
-func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.WriteCloser.Write(b)
-}
-
-func (w *gzipResponseWriter) Close() {
-	if w.WriteCloser != nil {
-		w.WriteCloser.Close()
-		gzipWriterPool.Put(w.WriteCloser)
-		w.WriteCloser = nil
-	}
 }
 
 func officialAddr(unresolvedAddr string, resolvedAddr net.Addr) (*util.UnresolvedAddr, error) {
