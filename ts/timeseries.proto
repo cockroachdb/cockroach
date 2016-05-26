@@ -19,6 +19,7 @@ package cockroach.ts;
 option go_package = "ts";
 
 import weak "gogoproto/gogo.proto";
+import weak "google/api/annotations.proto";
 
 // TimeSeriesDatapoint is a single point of time series data; a value associated
 // with a timestamp.
@@ -124,4 +125,16 @@ message TimeSeriesQueryResponse {
   // TimeSeriesQueryRequest, in the same order. A Result will be present for
   // each Query even if there are zero datapoints to return.
   repeated Result results = 1 [(gogoproto.nullable) = false];
+}
+
+// TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
+// we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
+service TimeSeries {
+  // URL: /ts/query
+  rpc Query(TimeSeriesQueryRequest) returns (TimeSeriesQueryResponse) {
+    option (google.api.http) = {
+      post: "/ts/query"
+      body: "*"
+    };
+  }
 }

@@ -89,7 +89,7 @@ type Server struct {
 	admin               *adminServer
 	status              *statusServer
 	tsDB                *ts.DB
-	tsServer            *ts.Server
+	tsServer            ts.Server
 	raftTransport       *storage.RaftTransport
 	stopper             *stop.Stopper
 	sqlExecutor         *sql.Executor
@@ -234,11 +234,11 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.NewServer(s.tsDB)
+	s.tsServer = ts.MakeServer(s.tsDB)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx.Context, s.rpcContext, s.node.stores)
-	for _, gw := range []grpcGatewayServer{s.admin, s.status} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -252,8 +252,7 @@ type grpcGatewayServer interface {
 	RegisterGateway(
 		ctx context.Context,
 		mux *gwruntime.ServeMux,
-		addr string,
-		opts []grpc.DialOption,
+		conn *grpc.ClientConn,
 	) error
 }
 
@@ -431,6 +430,8 @@ func (s *Server) Start() error {
 	protopb := new(util.ProtoPb)
 	gwMux := gwruntime.NewServeMux(
 		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(util.JSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(util.AltJSONContentType, jsonpb),
 		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
 	)
@@ -457,11 +458,18 @@ func (s *Server) Start() error {
 		)
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status} {
-		if err := gw.RegisterGateway(gwCtx, gwMux, s.ctx.Addr, opts); err != nil {
+	conn, err := s.rpcContext.GRPCDial(s.ctx.Addr, opts...)
+	if err != nil {
+		return util.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
+	}
+
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
 	}
+
+	s.mux.Handle(ts.URLPrefix, gwMux)
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
@@ -548,7 +556,6 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(healthEndpoint, s.status)
-	s.mux.Handle(ts.URLPrefix, s.tsServer)
 }
 
 // Stop stops the server.
