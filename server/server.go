@@ -73,33 +73,32 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	Tracer              opentracing.Tracer
-	ctx                 Context
-	mux                 *http.ServeMux
-	clock               *hlc.Clock
-	rpcContext          *rpc.Context
-	grpc                *grpc.Server
-	gossip              *gossip.Gossip
-	storePool           *storage.StorePool
-	distSender          *kv.DistSender
-	db                  *client.DB
-	kvDB                *kv.DBServer
-	pgServer            *pgwire.Server
-	distSQLServer       *distsql.ServerImpl
-	node                *Node
-	recorder            *status.MetricsRecorder
-	runtime             status.RuntimeStatSampler
-	admin               adminServer
-	status              *statusServer
-	tsDB                *ts.DB
-	tsServer            ts.Server
-	raftTransport       *storage.RaftTransport
-	stopper             *stop.Stopper
-	sqlExecutor         *sql.Executor
-	leaseMgr            *sql.LeaseManager
-	schemaChangeManager *sql.SchemaChangeManager
-	parsedUpdatesURL    *url.URL
-	parsedReportingURL  *url.URL
+	Tracer             opentracing.Tracer
+	ctx                Context
+	mux                *http.ServeMux
+	clock              *hlc.Clock
+	rpcContext         *rpc.Context
+	grpc               *grpc.Server
+	gossip             *gossip.Gossip
+	storePool          *storage.StorePool
+	distSender         *kv.DistSender
+	db                 *client.DB
+	kvDB               *kv.DBServer
+	pgServer           *pgwire.Server
+	distSQLServer      *distsql.ServerImpl
+	node               *Node
+	recorder           *status.MetricsRecorder
+	runtime            status.RuntimeStatSampler
+	admin              adminServer
+	status             *statusServer
+	tsDB               *ts.DB
+	tsServer           ts.Server
+	raftTransport      *storage.RaftTransport
+	stopper            *stop.Stopper
+	sqlExecutor        *sql.Executor
+	leaseMgr           *sql.LeaseManager
+	parsedUpdatesURL   *url.URL
+	parsedReportingURL *url.URL
 }
 
 // NewServer creates a Server from a server.Context.
@@ -404,15 +403,14 @@ func (s *Server) Start() error {
 	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
+
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
-	testingKnobs := &sql.SchemaChangeManagerTestingKnobs{}
+	testingKnobs := new(sql.SchemaChangeManagerTestingKnobs)
 	if s.ctx.TestingKnobs.SQLSchemaChangeManager != nil {
-		testingKnobs =
-			s.ctx.TestingKnobs.SQLSchemaChangeManager.(*sql.SchemaChangeManagerTestingKnobs)
+		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChangeManager.(*sql.SchemaChangeManagerTestingKnobs)
 	}
-	s.schemaChangeManager = sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr)
-	s.schemaChangeManager.Start(s.stopper)
+	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
 	s.periodicallyCheckForUpdates()
 
