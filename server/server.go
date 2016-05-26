@@ -474,6 +474,7 @@ func (s *Server) Start() error {
 		}
 	}
 
+	s.mux.Handle(adminEndpoint, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
 
 	if err := sdnotify.Ready(); err != nil {
@@ -554,11 +555,10 @@ var uiFileSystem http.FileSystem
 func (s *Server) initHTTP() {
 	s.mux.Handle("/", http.FileServer(uiFileSystem))
 
-	// The admin server handles both /debug/ and /_admin/
+	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
+
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
-	s.mux.Handle(adminEndpoint, s.admin)
-	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(healthEndpoint, s.status)
 }
