@@ -1228,9 +1228,8 @@ func (r *Replica) addWriteCmd(
 		if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
 			return nil, pErr
 		}
-		// Only continue if the batch appears freezing-related (more focused
-		// checks happen downstream).
-		if _, ok := ba.GetArg(roachpb.ChangeFrozen); !ok {
+		// Only continue if the batch appears freezing-related.
+		if !ba.IsFreeze() {
 			return nil, pErr
 		}
 		pErr = nil
@@ -1649,9 +1648,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 
 	if !mayApply {
 		// If it's a freezing-related request and alone in its batch, proceed.
-		if _, ok := ba.GetArg(roachpb.ChangeFrozen); ok && len(ba.Requests) == 1 {
-			mayApply = true
-		}
+		mayApply = ba.IsFreeze()
 	}
 	if mayApply {
 		batch, ms, br, intents, rErr = r.applyRaftCommandInBatch(ctx, idKey,
@@ -1725,32 +1722,26 @@ func (r *Replica) applyRaftCommandInBatch(
 		}
 	}
 
-	for _, union := range ba.Requests {
-		method := union.GetInner().Method()
+	if lease, _ := r.getLeaderLease(); (!lease.OwnedBy(originReplica.StoreID) ||
+		!lease.Covers(ba.Timestamp)) && !ba.IsLease() && !ba.IsFreeze() {
 
-		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
-		// we haven't cleaned up the timestamp handling fully.
-		lease, _ := r.getLeaderLease()
-		if (!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) &&
-			method != roachpb.LeaderLease && method != roachpb.ChangeFrozen {
-			// Verify the leader lease is held, unless this command is trying to
-			// obtain it or is a freeze change (which can be proposed by any Replica).
-			// Any other Raft command has had the leader lease held by the
-			// replica at proposal time, but this may no longer be the case.
-			// Corruption aside, the most likely reason is a leadership change
-			// (the most recent leader assumes responsibility for all past
-			// timestamps as well). In that case, it's not valid to go ahead
-			// with the execution: Writes must be aware of the last time the
-			// mutated key was read, and since reads are served locally by the
-			// lease holder without going through Raft, a read which was not
-			// taken into account may have been served. Hence, we must retry at
-			// the current leader.
-			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil,
-				roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
-		}
+		// Verify the leader lease is held, unless this command is trying to
+		// obtain it or is a freeze change (which can be proposed by any Replica).
+		// Any other Raft command has had the leader lease held by the
+		// replica at proposal time, but this may no longer be the case.
+		// Corruption aside, the most likely reason is a leadership change
+		// (the most recent leader assumes responsibility for all past
+		// timestamps as well). In that case, it's not valid to go ahead
+		// with the execution: Writes must be aware of the last time the
+		// mutated key was read, and since reads are served locally by the
+		// lease holder without going through Raft, a read which was not
+		// taken into account may have been served. Hence, we must retry at
+		// the current leader.
+		return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil,
+			roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 	}
 
-	// Keep track of original txn Writing state to santitize txn
+	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
 

@@ -43,6 +43,24 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() Timestamp) error {
 	return nil
 }
 
+// IsFreeze returns whether the batch consists of a single ChangeFrozen request.
+func (ba *BatchRequest) IsFreeze() bool {
+	if len(ba.Requests) != 1 {
+		return false
+	}
+	_, ok := ba.GetArg(ChangeFrozen)
+	return ok
+}
+
+// IsLease returns whether the batch consists of a single LeaderLease request.
+func (ba *BatchRequest) IsLease() bool {
+	if len(ba.Requests) != 1 {
+		return false
+	}
+	_, ok := ba.GetArg(LeaderLease)
+	return ok
+}
+
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
 	return ba.hasFlag(isAdmin)
