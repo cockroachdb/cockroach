@@ -21,6 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
@@ -57,10 +60,18 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 		}
 	}
 
-	// Retrieve node statuses.
-	var nodes server.NodesResponse
-	if err := util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes", &nodes); err != nil {
+	conn, err := grpc.Dial(c.URL(0), grpc.WithInsecure())
+	if err != nil {
 		t.Fatal(err)
+	}
+	statusClient := server.NewStatusClient(conn)
+
+	// Retrieve node statuses.
+	{
+		ctx, _ := context.WithTimeout(context.Background(), time.Minute)
+		if _, err := statusClient.Nodes(ctx, &server.NodesRequest{}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for _, nodeID := range nodeIDs {
@@ -69,6 +80,8 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 			t.Fatal(err)
 		}
 	}
+
+	tsClient := ts.NewTimeSeriesClient(conn)
 
 	// Retrieve time-series data.
 	nowNanos := timeutil.Now().UnixNano()
@@ -79,10 +92,11 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 			{Name: "doesnt_matter", Sources: []string{}},
 		},
 	}
-	var queryResponse ts.TimeSeriesQueryResponse
-	if err := util.PostJSON(cluster.HTTPClient, c.URL(0)+"/ts/query",
-		&queryRequest, &queryResponse); err != nil {
-		t.Fatal(err)
+	{
+		ctx, _ := context.WithTimeout(context.Background(), time.Minute)
+		if _, err := tsClient.Query(ctx, &queryRequest); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// TODO(cdo): When we're able to issue SQL queries without a quorum, test all
