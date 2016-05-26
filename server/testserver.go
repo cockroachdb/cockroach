@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
@@ -187,6 +188,16 @@ func (ts *TestServer) DB() *client.DB {
 	return nil
 }
 
+// GetNode exposes the Server's Node.
+func (ts *TestServer) GetNode() *Node {
+	return ts.node
+}
+
+// GetDistSender exposes the Server's DistSender.
+func (ts *TestServer) GetDistSender() *kv.DistSender {
+	return ts.distSender
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -291,6 +302,21 @@ func WaitForInitialSplits(db *client.DB) error {
 // Stores returns the collection of stores from this TestServer's node.
 func (ts *TestServer) Stores() *storage.Stores {
 	return ts.node.stores
+}
+
+// GetFirstStoreID is a utility function returning the StoreID of the first
+// store on this node.
+func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
+	firstStoreID := roachpb.StoreID(-1)
+	if err := ts.Stores().VisitStores(func(s *storage.Store) error {
+		if firstStoreID == -1 {
+			firstStoreID = s.Ident.StoreID
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	return firstStoreID
 }
 
 // ServingAddr returns the server's address. Should be used by clients.

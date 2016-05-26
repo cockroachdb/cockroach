@@ -58,6 +58,7 @@ var (
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
+// A key can be transformed to an RKey by keys.Addr().
 type RKey Key
 
 // AsRawKey returns the RKey as a Key. This is to be used only in select

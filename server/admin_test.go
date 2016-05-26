@@ -686,7 +686,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	expectValueEquals("bin", buf.Bytes())
 }
 
-func TestCluster(t *testing.T) {
+func TestClusterApi(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
