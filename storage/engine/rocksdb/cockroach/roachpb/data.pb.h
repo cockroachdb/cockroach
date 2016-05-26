@@ -2022,6 +2022,7 @@ inline ::std::string* Span::mutable_key() {
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Span::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Span.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -2075,6 +2076,7 @@ inline ::std::string* Span::mutable_end_key() {
   return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Span::release_end_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Span.end_key)
   clear_has_end_key();
   return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -2184,6 +2186,7 @@ inline ::std::string* Value::mutable_raw_bytes() {
   return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Value::release_raw_bytes() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Value.raw_bytes)
   clear_has_raw_bytes();
   return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -2224,6 +2227,7 @@ inline ::cockroach::roachpb::Timestamp* Value::mutable_timestamp() {
   return timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* Value::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Value.timestamp)
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
@@ -2284,6 +2288,7 @@ inline ::std::string* KeyValue::mutable_key() {
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* KeyValue::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KeyValue.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -2324,6 +2329,7 @@ inline ::cockroach::roachpb::Value* KeyValue::mutable_value() {
   return value_;
 }
 inline ::cockroach::roachpb::Value* KeyValue::release_value() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KeyValue.value)
   clear_has_value();
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
@@ -2384,6 +2390,7 @@ inline ::std::string* StoreIdent::mutable_cluster_id() {
   return cluster_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* StoreIdent::release_cluster_id() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreIdent.cluster_id)
   clear_has_cluster_id();
   return cluster_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -2476,6 +2483,7 @@ inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_updated_desc
   return updated_desc_;
 }
 inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_updated_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.updated_desc)
   clear_has_updated_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = updated_desc_;
   updated_desc_ = NULL;
@@ -2519,6 +2527,7 @@ inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_new_desc() {
   return new_desc_;
 }
 inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_new_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.new_desc)
   clear_has_new_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = new_desc_;
   new_desc_ = NULL;
@@ -2590,6 +2599,7 @@ inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_updated_desc
   return updated_desc_;
 }
 inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_updated_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.updated_desc)
   clear_has_updated_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = updated_desc_;
   updated_desc_ = NULL;
@@ -2633,6 +2643,7 @@ inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_subsumed_des
   return subsumed_desc_;
 }
 inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_subsumed_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.subsumed_desc)
   clear_has_subsumed_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = subsumed_desc_;
   subsumed_desc_ = NULL;
@@ -2705,6 +2716,7 @@ inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_r
   return replica_;
 }
 inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ChangeReplicasTrigger.replica)
   clear_has_replica();
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
@@ -2834,6 +2846,7 @@ inline ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::mutable_split_
   return split_trigger_;
 }
 inline ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::release_split_trigger() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.split_trigger)
   clear_has_split_trigger();
   ::cockroach::roachpb::SplitTrigger* temp = split_trigger_;
   split_trigger_ = NULL;
@@ -2877,6 +2890,7 @@ inline ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::mutable_merge_
   return merge_trigger_;
 }
 inline ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::release_merge_trigger() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.merge_trigger)
   clear_has_merge_trigger();
   ::cockroach::roachpb::MergeTrigger* temp = merge_trigger_;
   merge_trigger_ = NULL;
@@ -2920,6 +2934,7 @@ inline ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::mutab
   return change_replicas_trigger_;
 }
 inline ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::release_change_replicas_trigger() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.change_replicas_trigger)
   clear_has_change_replicas_trigger();
   ::cockroach::roachpb::ChangeReplicasTrigger* temp = change_replicas_trigger_;
   change_replicas_trigger_ = NULL;
@@ -2963,6 +2978,7 @@ inline ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::mutable
   return modified_span_trigger_;
 }
 inline ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::release_modified_span_trigger() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.modified_span_trigger)
   clear_has_modified_span_trigger();
   ::cockroach::roachpb::ModifiedSpanTrigger* temp = modified_span_trigger_;
   modified_span_trigger_ = NULL;
@@ -3023,6 +3039,7 @@ inline ::std::string* TxnMeta::mutable_id() {
   return id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* TxnMeta::release_id() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TxnMeta.id)
   clear_has_id();
   return id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -3101,6 +3118,7 @@ inline ::std::string* TxnMeta::mutable_key() {
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* TxnMeta::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TxnMeta.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -3165,6 +3183,7 @@ inline ::cockroach::roachpb::Timestamp* TxnMeta::mutable_timestamp() {
   return timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* TxnMeta::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TxnMeta.timestamp)
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
@@ -3284,6 +3303,7 @@ inline ::cockroach::roachpb::TxnMeta* Transaction::mutable_meta() {
   return meta_;
 }
 inline ::cockroach::roachpb::TxnMeta* Transaction::release_meta() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.meta)
   clear_has_meta();
   ::cockroach::roachpb::TxnMeta* temp = meta_;
   meta_ = NULL;
@@ -3340,6 +3360,7 @@ inline ::std::string* Transaction::mutable_name() {
   return name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Transaction::release_name() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.name)
   clear_has_name();
   return name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -3405,6 +3426,7 @@ inline ::cockroach::roachpb::Timestamp* Transaction::mutable_last_heartbeat() {
   return last_heartbeat_;
 }
 inline ::cockroach::roachpb::Timestamp* Transaction::release_last_heartbeat() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.last_heartbeat)
   clear_has_last_heartbeat();
   ::cockroach::roachpb::Timestamp* temp = last_heartbeat_;
   last_heartbeat_ = NULL;
@@ -3448,6 +3470,7 @@ inline ::cockroach::roachpb::Timestamp* Transaction::mutable_orig_timestamp() {
   return orig_timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* Transaction::release_orig_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.orig_timestamp)
   clear_has_orig_timestamp();
   ::cockroach::roachpb::Timestamp* temp = orig_timestamp_;
   orig_timestamp_ = NULL;
@@ -3491,6 +3514,7 @@ inline ::cockroach::roachpb::Timestamp* Transaction::mutable_max_timestamp() {
   return max_timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* Transaction::release_max_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.max_timestamp)
   clear_has_max_timestamp();
   ::cockroach::roachpb::Timestamp* temp = max_timestamp_;
   max_timestamp_ = NULL;
@@ -3658,6 +3682,7 @@ inline ::cockroach::roachpb::Span* Intent::mutable_span() {
   return span_;
 }
 inline ::cockroach::roachpb::Span* Intent::release_span() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.span)
   clear_has_span();
   ::cockroach::roachpb::Span* temp = span_;
   span_ = NULL;
@@ -3701,6 +3726,7 @@ inline ::cockroach::roachpb::TxnMeta* Intent::mutable_txn() {
   return txn_;
 }
 inline ::cockroach::roachpb::TxnMeta* Intent::release_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.txn)
   clear_has_txn();
   ::cockroach::roachpb::TxnMeta* temp = txn_;
   txn_ = NULL;
@@ -3773,6 +3799,7 @@ inline ::cockroach::roachpb::Timestamp* Lease::mutable_start() {
   return start_;
 }
 inline ::cockroach::roachpb::Timestamp* Lease::release_start() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.start)
   clear_has_start();
   ::cockroach::roachpb::Timestamp* temp = start_;
   start_ = NULL;
@@ -3816,6 +3843,7 @@ inline ::cockroach::roachpb::Timestamp* Lease::mutable_start_stasis() {
   return start_stasis_;
 }
 inline ::cockroach::roachpb::Timestamp* Lease::release_start_stasis() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.start_stasis)
   clear_has_start_stasis();
   ::cockroach::roachpb::Timestamp* temp = start_stasis_;
   start_stasis_ = NULL;
@@ -3859,6 +3887,7 @@ inline ::cockroach::roachpb::Timestamp* Lease::mutable_expiration() {
   return expiration_;
 }
 inline ::cockroach::roachpb::Timestamp* Lease::release_expiration() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.expiration)
   clear_has_expiration();
   ::cockroach::roachpb::Timestamp* temp = expiration_;
   expiration_ = NULL;
@@ -3902,6 +3931,7 @@ inline ::cockroach::roachpb::ReplicaDescriptor* Lease::mutable_replica() {
   return replica_;
 }
 inline ::cockroach::roachpb::ReplicaDescriptor* Lease::release_replica() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.replica)
   clear_has_replica();
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
@@ -3962,6 +3992,7 @@ inline ::std::string* AbortCacheEntry::mutable_key() {
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* AbortCacheEntry::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortCacheEntry.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -4002,6 +4033,7 @@ inline ::cockroach::roachpb::Timestamp* AbortCacheEntry::mutable_timestamp() {
   return timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* AbortCacheEntry::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortCacheEntry.timestamp)
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;

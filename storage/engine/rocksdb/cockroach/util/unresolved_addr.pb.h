@@ -197,6 +197,7 @@ inline ::std::string* UnresolvedAddr::mutable_network_field() {
   return network_field_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* UnresolvedAddr::release_network_field() {
+  // @@protoc_insertion_point(field_release:cockroach.util.UnresolvedAddr.network_field)
   clear_has_network_field();
   return network_field_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -250,6 +251,7 @@ inline ::std::string* UnresolvedAddr::mutable_address_field() {
   return address_field_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* UnresolvedAddr::release_address_field() {
+  // @@protoc_insertion_point(field_release:cockroach.util.UnresolvedAddr.address_field)
   clear_has_address_field();
   return address_field_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }

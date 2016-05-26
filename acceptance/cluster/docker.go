@@ -192,7 +192,7 @@ func (c *Container) Kill() error {
 //
 // TODO(pmattis): Generalize the setting of parameters here.
 func (c *Container) Start() error {
-	return c.cluster.client.ContainerStart(context.Background(), c.id)
+	return c.cluster.client.ContainerStart(context.Background(), c.id, "")
 }
 
 // Pause pauses a running container.
@@ -444,10 +444,10 @@ func (cli retryingDockerClient) ContainerCreate(
 	return ret, err
 }
 
-func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID string) error {
+func (cli retryingDockerClient) ContainerStart(ctx context.Context, container string, checkpointID string) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
-			return cli.resilientDockerClient.ContainerStart(timeoutCtx, containerID)
+			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, checkpointID)
 		})
 }
 
@@ -458,20 +458,20 @@ func (cli retryingDockerClient) ContainerRemove(ctx context.Context, container s
 		})
 }
 
-func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
+func (cli retryingDockerClient) ContainerKill(ctx context.Context, container, signal string) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerKill",
 		"Container .* is not running",
 		func(timeoutCtx context.Context) error {
-			return cli.resilientDockerClient.ContainerKill(timeoutCtx, containerID, signal)
+			return cli.resilientDockerClient.ContainerKill(timeoutCtx, container, signal)
 		})
 }
 
-func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID string) (int, error) {
+func (cli retryingDockerClient) ContainerWait(ctx context.Context, container string) (int, error) {
 	var ret int
 	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
-			ret, err = cli.resilientDockerClient.ContainerWait(timeoutCtx, containerID)
+			ret, err = cli.resilientDockerClient.ContainerWait(timeoutCtx, container)
 			_ = ret // silence incorrect unused warning
 			return err
 		})

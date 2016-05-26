@@ -777,6 +777,7 @@ inline void Attributes::set_attrs(int index, const char* value, size_t size) {
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Attributes.attrs)
 }
 inline ::std::string* Attributes::add_attrs() {
+  // @@protoc_insertion_point(field_add_mutable:cockroach.roachpb.Attributes.attrs)
   return attrs_.Add();
 }
 inline void Attributes::add_attrs(const ::std::string& value) {
@@ -946,6 +947,7 @@ inline ::std::string* RangeDescriptor::mutable_start_key() {
   return start_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* RangeDescriptor::release_start_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeDescriptor.start_key)
   clear_has_start_key();
   return start_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -999,6 +1001,7 @@ inline ::std::string* RangeDescriptor::mutable_end_key() {
   return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* RangeDescriptor::release_end_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeDescriptor.end_key)
   clear_has_end_key();
   return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -1197,6 +1200,7 @@ inline ::cockroach::util::UnresolvedAddr* NodeDescriptor::mutable_address() {
   return address_;
 }
 inline ::cockroach::util::UnresolvedAddr* NodeDescriptor::release_address() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.address)
   clear_has_address();
   ::cockroach::util::UnresolvedAddr* temp = address_;
   address_ = NULL;
@@ -1240,6 +1244,7 @@ inline ::cockroach::roachpb::Attributes* NodeDescriptor::mutable_attrs() {
   return attrs_;
 }
 inline ::cockroach::roachpb::Attributes* NodeDescriptor::release_attrs() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.attrs)
   clear_has_attrs();
   ::cockroach::roachpb::Attributes* temp = attrs_;
   attrs_ = NULL;
@@ -1311,6 +1316,7 @@ inline ::cockroach::roachpb::Attributes* StoreDescriptor::mutable_attrs() {
   return attrs_;
 }
 inline ::cockroach::roachpb::Attributes* StoreDescriptor::release_attrs() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreDescriptor.attrs)
   clear_has_attrs();
   ::cockroach::roachpb::Attributes* temp = attrs_;
   attrs_ = NULL;
@@ -1354,6 +1360,7 @@ inline ::cockroach::roachpb::NodeDescriptor* StoreDescriptor::mutable_node() {
   return node_;
 }
 inline ::cockroach::roachpb::NodeDescriptor* StoreDescriptor::release_node() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreDescriptor.node)
   clear_has_node();
   ::cockroach::roachpb::NodeDescriptor* temp = node_;
   node_ = NULL;
@@ -1397,6 +1404,7 @@ inline ::cockroach::roachpb::StoreCapacity* StoreDescriptor::mutable_capacity() 
   return capacity_;
 }
 inline ::cockroach::roachpb::StoreCapacity* StoreDescriptor::release_capacity() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreDescriptor.capacity)
   clear_has_capacity();
   ::cockroach::roachpb::StoreCapacity* temp = capacity_;
   capacity_ = NULL;
