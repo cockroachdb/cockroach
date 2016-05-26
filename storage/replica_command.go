@@ -2148,7 +2148,8 @@ func (r *Replica) AdminSplit(
 
 		foundSplitKey, err := keys.MakeSplitKey(foundSplitKey)
 		if err != nil {
-			return reply, roachpb.NewErrorf("cannot split range at key %s: %v", splitKey, err)
+			return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
+				foundSplitKey, err)
 		}
 
 		splitKey, err = keys.Addr(foundSplitKey)
