@@ -354,7 +354,12 @@ func init() {
 	// top-level cockroach command.
 	pf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
-		pf.AddFlag(pflag.PFlagFromGoFlag(f))
+		flag := pflag.PFlagFromGoFlag(f)
+		// TODO(peter): Decide if we want to make the lightstep flags visible.
+		if strings.HasPrefix(flag.Name, "lightstep_") {
+			flag.Hidden = true
+		}
+		pf.AddFlag(flag)
 	})
 
 	// The --log-dir default changes depending on the command. Avoid confusion by
