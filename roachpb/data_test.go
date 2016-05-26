@@ -18,6 +18,7 @@ package roachpb
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"math/rand"
@@ -864,6 +865,14 @@ func TestLeaseCovers(t *testing.T) {
 				t.Errorf("%d: must not contain %s", i, ts)
 			}
 		}
+	}
+}
+
+func BenchmarkEncodeGoVarint(b *testing.B) {
+	bytes := make([]byte, b.N*binary.MaxVarintLen64)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bytes = encodeGoVarint(bytes, int64(i))
 	}
 }
 
