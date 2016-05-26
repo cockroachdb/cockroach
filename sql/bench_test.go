@@ -1008,3 +1008,97 @@ func BenchmarkInsertDistinct10_Cockroach(b *testing.B) {
 func BenchmarkInsertDistinct100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
 }
+
+// runBenchmarkWideTable measures performance on a table with a large number of
+// columns (20).
+func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.widetable`); err != nil {
+		b.Fatal(err)
+	}
+	const schema = `CREATE TABLE bench.widetable (
+      f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
+      f11 INT, f12 INT, f13 INT, f14 INT, f15 INT, f16 INT, f17 INT, f18 INT, f19 INT, f20 INT,
+    PRIMARY KEY (f1, f2, f3)
+  )`
+	if _, err := db.Exec(schema); err != nil {
+		b.Fatal(err)
+	}
+
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE bench.widetable`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	s := rand.New(rand.NewSource(5432))
+
+	var buf bytes.Buffer
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+
+		fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES`)
+		for j := 0; j < count; j++ {
+			if j != 0 {
+				buf.WriteString(`,`)
+			}
+			buf.WriteString(`(`)
+			for k := 0; k < 20; k++ {
+				if k != 0 {
+					buf.WriteString(`,`)
+				}
+				fmt.Fprintf(&buf, "%d", i*count+j)
+			}
+			buf.WriteString(`)`)
+		}
+		buf.WriteString(`;`)
+
+		// These UPSERTS are all updates, but it's done with UPSERT for convenience.
+		fmt.Fprintf(&buf, `UPSERT INTO bench.widetable (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10) VALUES`)
+		for j := 0; j < count; j++ {
+			if j != 0 {
+				buf.WriteString(`,`)
+			}
+			fmt.Fprintf(&buf, `(%d,%d,%d,`, i*count+j, i*count+j, i*count+j)
+			for k := 0; k < 7; k++ {
+				if k != 0 {
+					buf.WriteString(`,`)
+				}
+				fmt.Fprintf(&buf, "%d", s.Intn(j+1))
+			}
+			buf.WriteString(`)`)
+		}
+		buf.WriteString(`;`)
+
+		fmt.Fprintf(&buf, `DELETE FROM bench.widetable WHERE f1 in (`)
+		for j := 0; j < count; j++ {
+			if j != 0 {
+				buf.WriteString(`,`)
+			}
+			fmt.Fprintf(&buf, "%d", j)
+		}
+		buf.WriteString(`);`)
+
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkWideTable1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1) })
+}
+
+func BenchmarkWideTable10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 10) })
+}
+
+func BenchmarkWideTable100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 100) })
+}
+
+func BenchmarkWideTable1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1000) })
+}
