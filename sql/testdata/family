@@ -1,0 +1,7 @@
+statement error unsupported table def
+CREATE TABLE abc(
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  FAMILY pri (a, b)
+)

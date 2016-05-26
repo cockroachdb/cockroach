@@ -121,6 +121,7 @@ type TableDef interface {
 
 func (*ColumnTableDef) tableDef() {}
 func (*IndexTableDef) tableDef()  {}
+func (*FamilyTableDef) tableDef() {}
 
 // TableDefs represents a list of table definitions.
 type TableDefs []TableDef
@@ -373,6 +374,53 @@ func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	fmt.Fprintf(buf, "CHECK (")
 	FormatNode(buf, f, node.Expr)
+	buf.WriteByte(')')
+}
+
+// FamilyElem represents a column in a FAMILY contraint.
+type FamilyElem struct {
+	Column Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node FamilyElem) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Column)
+}
+
+// FamilyElemList is list of FamilyElem.
+type FamilyElemList []FamilyElem
+
+// Format pretty-prints the contained names separated by commas.
+// Format implements the NodeFormatter interface.
+func (l FamilyElemList) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, FamilyElem := range l {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, FamilyElem)
+	}
+}
+
+// FamilyTableDef represents a family definition within a CREATE TABLE
+// statement.
+type FamilyTableDef struct {
+	Name    Name
+	Columns FamilyElemList
+}
+
+func (node *FamilyTableDef) setName(name Name) {
+	node.Name = name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("FAMILY ")
+	if node.Name != "" {
+		FormatNode(buf, f, node.Name)
+		buf.WriteByte(' ')
+	}
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
 }
 

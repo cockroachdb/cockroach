@@ -78,6 +78,7 @@ var keywords = map[string]int{
 	"EXPLAIN":           EXPLAIN,
 	"EXTRACT":           EXTRACT,
 	"FALSE":             FALSE,
+	"FAMILY":            FAMILY,
 	"FETCH":             FETCH,
 	"FILTER":            FILTER,
 	"FIRST":             FIRST,
