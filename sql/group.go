@@ -221,8 +221,14 @@ type groupNode struct {
 	// During rendering, aggregateFuncs compute their result for group.currentBucket.
 	currentBucket string
 
+	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
+	// function and we can compute the final result using a single row, assuming
+	// a specific ordering of the underlying plan.
 	desiredOrdering columnOrdering
-	err             error
+	needOnlyOneRow  bool
+	gotOneRow       bool
+
+	err error
 
 	explain explainMode
 }
@@ -271,7 +277,20 @@ func (n *groupNode) expandPlan() error {
 		}
 	}
 
-	return n.planner.expandSubqueryPlans(n.having)
+	if err := n.planner.expandSubqueryPlans(n.having); err != nil {
+		return err
+	}
+
+	if len(n.desiredOrdering) > 0 {
+		match := computeOrderingMatch(n.desiredOrdering, n.plan.Ordering(), false)
+		if match == len(n.desiredOrdering) {
+			// We have a single MIN/MAX function and the underlying plan's
+			// ordering matches the function. We only need to retrieve one row.
+			n.plan.SetLimitHint(1, false /* !soft */)
+			n.needOnlyOneRow = true
+		}
+	}
+	return nil
 }
 
 func (n *groupNode) Start() error {
@@ -296,7 +315,7 @@ func (n *groupNode) Next() bool {
 	}
 
 	for !n.populated {
-		if !n.plan.Next() {
+		if (n.needOnlyOneRow && n.gotOneRow) || !n.plan.Next() {
 			n.err = n.plan.Err()
 			if n.err != nil {
 				return false
@@ -333,6 +352,8 @@ func (n *groupNode) Next() bool {
 			}
 		}
 		scratch = encoded[:0]
+
+		n.gotOneRow = true
 
 		if n.explain == explainDebug {
 			// Emit a "buffered" row.
