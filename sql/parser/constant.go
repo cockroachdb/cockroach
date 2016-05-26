@@ -24,6 +24,7 @@ import (
 	"go/token"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/util/decimal"
@@ -41,7 +42,7 @@ type Constant interface {
 	// error if the Constant could not be resolved as that type. The method should only
 	// be passed a type returned from AvailableTypes and should never be called more than
 	// once for a given Constant.
-	ResolveAsType(Datum) (Datum, error)
+	ResolveAsType(*SemaContext, Datum) (Datum, error)
 }
 
 var _ Constant = &NumVal{}
@@ -52,18 +53,18 @@ func isNumericConstant(expr Expr) bool {
 	return ok
 }
 
-func typeCheckConstant(c Constant, desired Datum) (TypedExpr, error) {
+func typeCheckConstant(c Constant, ctx *SemaContext, desired Datum) (TypedExpr, error) {
 	avail := c.AvailableTypes()
 	if desired != nil {
 		for _, typ := range avail {
 			if desired.TypeEqual(typ) {
-				return c.ResolveAsType(desired)
+				return c.ResolveAsType(ctx, desired)
 			}
 		}
 	}
 
 	natural := avail[0]
-	return c.ResolveAsType(natural)
+	return c.ResolveAsType(ctx, natural)
 }
 
 func naturalConstantType(c Constant) Datum {
@@ -193,7 +194,7 @@ func (expr *NumVal) AvailableTypes() []Datum {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
+func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Datum) (Datum, error) {
 	switch {
 	case typ.TypeEqual(TypeInt):
 		// We may have already set expr.resInt in asInt64.
@@ -290,14 +291,21 @@ func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-var strValAvailStringBytes = []Datum{TypeString, TypeBytes}
+var strValAvailAllParsable = []Datum{
+	TypeString,
+	TypeBytes,
+	TypeDate,
+	TypeTimestamp,
+	TypeTimestampTZ,
+	TypeInterval,
+}
 var strValAvailBytesString = []Datum{TypeBytes, TypeString}
 var strValAvailBytes = []Datum{TypeBytes}
 
 // AvailableTypes implements the Constant interface.
 func (expr *StrVal) AvailableTypes() []Datum {
 	if !expr.bytesEsc {
-		return strValAvailStringBytes
+		return strValAvailAllParsable
 	}
 	if utf8.ValidString(expr.s) {
 		return strValAvailBytesString
@@ -306,7 +314,7 @@ func (expr *StrVal) AvailableTypes() []Datum {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *StrVal) ResolveAsType(typ Datum) (Datum, error) {
+func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Datum) (Datum, error) {
 	switch typ {
 	case TypeString:
 		expr.resString = DString(expr.s)
@@ -314,6 +322,14 @@ func (expr *StrVal) ResolveAsType(typ Datum) (Datum, error) {
 	case TypeBytes:
 		expr.resBytes = DBytes(expr.s)
 		return &expr.resBytes, nil
+	case TypeDate:
+		return ParseDDate(expr.s, ctx.getLocation())
+	case TypeTimestamp:
+		return ParseDTimestamp(expr.s, ctx.getLocation(), time.Microsecond)
+	case TypeTimestampTZ:
+		return ParseDTimestampTZ(expr.s, ctx.getLocation(), time.Microsecond)
+	case TypeInterval:
+		return ParseDInterval(expr.s)
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}

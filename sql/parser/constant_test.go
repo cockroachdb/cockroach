@@ -24,13 +24,17 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util/decimal"
 
 	"gopkg.in/inf.v0"
 )
 
-func TestNumericConstantAvailableTypes(t *testing.T) {
+// TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
+// all return expected available type sets, and that attempting to resolve the NumVals
+// as each of these types will all succeed with an expected Datum result.
+func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 	wantInt := numValAvailIntFloatDec
 	wantDecButCanBeInt := numValAvailDecFloatInt
 	wantDec := numValAvailDecFloat
@@ -74,12 +78,13 @@ func TestNumericConstantAvailableTypes(t *testing.T) {
 
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
-			if res, err := c.ResolveAsType(availType); err != nil {
+			if res, err := c.ResolveAsType(&SemaContext{}, availType); err != nil {
 				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
 					i, c.Value.ExactString(), availType.Type(), err)
 			} else {
 				resErr := func(parsed, resolved interface{}) {
-					t.Errorf("%d: expected resolving %v as available type %s would produce a Datum with the value %v, found %v",
+					t.Errorf("%d: expected resolving %v as available type %s would produce a Datum"+
+						" with the value %v, found %v",
 						i, c, availType.Type(), parsed, resolved)
 				}
 				switch typ := res.(type) {
@@ -130,8 +135,11 @@ func TestNumericConstantAvailableTypes(t *testing.T) {
 	}
 }
 
-func TestStringConstantAvailableTypes(t *testing.T) {
-	wantStringButCanBeBytes := strValAvailStringBytes
+// TestStringConstantVerifyAvailableTypes verifies that test StrVals will all
+// return expected available type sets, and that attempting to resolve the StrVals
+// as each of these types will either succeed or return a parse error.
+func TestStringConstantVerifyAvailableTypes(t *testing.T) {
+	wantStringButCanBeAll := strValAvailAllParsable
 	wantBytesButCanBeString := strValAvailBytesString
 	wantBytes := strValAvailBytes
 
@@ -139,39 +147,171 @@ func TestStringConstantAvailableTypes(t *testing.T) {
 		c     *StrVal
 		avail []Datum
 	}{
-		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeBytes},
+		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeAll},
+		{&StrVal{s: "2010-09-28", bytesEsc: false}, wantStringButCanBeAll},
+		{&StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false}, wantStringButCanBeAll},
+		{&StrVal{s: "PT12H2M", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "abc 世界", bytesEsc: true}, wantBytesButCanBeString},
+		{&StrVal{s: "2010-09-28", bytesEsc: true}, wantBytesButCanBeString},
+		{&StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true}, wantBytesButCanBeString},
+		{&StrVal{s: "PT12H2M", bytesEsc: true}, wantBytesButCanBeString},
 		{&StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true}, wantBytes},
 	}
 
 	for i, test := range testCases {
-		// Check available types.
+		// Check that the expected available types are returned.
 		avail := test.c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
 			t.Errorf("%d: expected the available type set %v for %+v, found %v",
 				i, test.avail, test.c, avail)
 		}
 
-		// Make sure it can be resolved as each of those types.
+		// Make sure it can be resolved as each of those types or throws a parsing error.
 		for _, availType := range avail {
-			if res, err := test.c.ResolveAsType(availType); err != nil {
-				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
-					i, test.c, availType.Type(), err)
-			} else {
-				var resString string
-				switch typ := res.(type) {
-				case *DString:
-					resString = string(*typ)
-				case *DBytes:
-					resString = string(*typ)
-				default:
-					panic("unreachable")
-				}
-				if resString != test.c.s {
-					t.Errorf("%d: expected resolving %v as available type %s would produce a Datum with the same value, found %s",
-						i, test.c, availType.Type(), resString)
+			if _, err := test.c.ResolveAsType(&SemaContext{}, availType); err != nil {
+				if !strings.Contains(err.Error(), "could not parse") {
+					// Parsing errors are permitted for this test, as proper StrVal parsing
+					// is tested in TestStringConstantTypeResolution. Any other error should
+					// throw a failure.
+					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
+						" or throw a parsing error, found %v",
+						i, test.c, availType.Type(), err)
 				}
 			}
+		}
+	}
+}
+
+func mustParseDDate(s string) *DDate {
+	d, err := ParseDDate(s, time.UTC)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+func mustParseDTimestamp(s string) *DTimestamp {
+	d, err := ParseDTimestamp(s, time.UTC, time.Millisecond)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+func mustParseDTimestampTZ(s string) *DTimestampTZ {
+	d, err := ParseDTimestampTZ(s, time.UTC, time.Millisecond)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+func mustParseDInterval(s string) *DInterval {
+	d, err := ParseDInterval(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+var parseFuncs = map[string]func(string) Datum{
+	"string":      func(s string) Datum { return NewDString(s) },
+	"bytes":       func(s string) Datum { return NewDBytes(DBytes(s)) },
+	"date":        func(s string) Datum { return mustParseDDate(s) },
+	"timestamp":   func(s string) Datum { return mustParseDTimestamp(s) },
+	"timestamptz": func(s string) Datum { return mustParseDTimestampTZ(s) },
+	"interval":    func(s string) Datum { return mustParseDInterval(s) },
+}
+
+func strSet(ss ...string) map[string]struct{} {
+	set := make(map[string]struct{}, len(ss))
+	for _, s := range ss {
+		set[s] = struct{}{}
+	}
+	return set
+}
+
+// TestStringConstantResolveAvailableTypes verifies that test StrVals can all be
+// resolved successfully into an expected set of Datum types. The test will make sure
+// the correct set of Datum types are resolvable, and that the resolved Datum match
+// the expected results which come from running the string literal through a
+// corresponding parseFunc (above).
+func TestStringConstantResolveAvailableTypes(t *testing.T) {
+	testCases := []struct {
+		c            *StrVal
+		parseOptions map[string]struct{}
+	}{
+		{
+			c:            &StrVal{s: "abc 世界", bytesEsc: false},
+			parseOptions: strSet("string", "bytes"),
+		},
+		{
+			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
+			parseOptions: strSet("string", "bytes", "date", "timestamp", "timestamptz"),
+		},
+		{
+			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false},
+			parseOptions: strSet("string", "bytes", "timestamp", "timestamptz"),
+		},
+		{
+			c:            &StrVal{s: "PT12H2M", bytesEsc: false},
+			parseOptions: strSet("string", "bytes", "interval"),
+		},
+		{
+			c:            &StrVal{s: "abc 世界", bytesEsc: true},
+			parseOptions: strSet("string", "bytes"),
+		},
+		{
+			c:            &StrVal{s: "2010-09-28", bytesEsc: true},
+			parseOptions: strSet("string", "bytes"),
+		},
+		{
+			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true},
+			parseOptions: strSet("string", "bytes"),
+		},
+		{
+			c:            &StrVal{s: "PT12H2M", bytesEsc: true},
+			parseOptions: strSet("string", "bytes"),
+		},
+		{
+			c:            &StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true},
+			parseOptions: strSet("bytes"),
+		},
+	}
+
+	for i, test := range testCases {
+		parseableCount := 0
+
+		// Make sure it can be resolved as each of those types or throws a parsing error.
+		for _, availType := range test.c.AvailableTypes() {
+			typeName := availType.Type()
+			res, err := test.c.ResolveAsType(&SemaContext{}, availType)
+			if err != nil {
+				if !strings.Contains(err.Error(), "could not parse") {
+					// Parsing errors are permitted for this test, but the number of correctly
+					// parseable types will be verified. Any other error should throw a failure.
+					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
+						" or throw a parsing error, found %v",
+						i, test.c, availType.Type(), err)
+				}
+				continue
+			}
+			parseableCount++
+
+			if _, isExpected := test.parseOptions[typeName]; !isExpected {
+				t.Errorf("%d: type %s not expected to be resolvable from the StrVal %v, found %v",
+					i, typeName, test.c, res)
+			} else {
+				expectedDatum := parseFuncs[typeName](test.c.s)
+				if res.Compare(expectedDatum) != 0 {
+					t.Errorf("%d: type %s expected to be resolved from the StrVal %v to Datum %v"+
+						", found %v",
+						i, typeName, test.c, expectedDatum, res)
+				}
+			}
+		}
+
+		// Make sure the expected number of types can be resolved from the StrVal.
+		if expCount := len(test.parseOptions); parseableCount != expCount {
+			t.Errorf("%d: expected %d successfully resolvable types for the StrVal %v, found %d",
+				i, expCount, test.c, parseableCount)
 		}
 	}
 }

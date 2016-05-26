@@ -73,6 +73,14 @@ func (sc *SemaContext) isUnresolvedArgument(expr Expr) bool {
 	return sc.args().IsUnresolvedArgument(expr)
 }
 
+// GetLocation returns the session timezone.
+func (sc *SemaContext) getLocation() *time.Location {
+	if sc == nil || sc.Location == nil || *sc.Location == nil {
+		return time.UTC
+	}
+	return *sc.Location
+}
+
 type parameterTypeAmbiguityError struct {
 	v ValArg
 }
@@ -474,13 +482,13 @@ func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, erro
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *NumVal) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
-	return typeCheckConstant(expr, desired)
+func (expr *NumVal) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
+	return typeCheckConstant(expr, ctx, desired)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *StrVal) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
-	return typeCheckConstant(expr, desired)
+func (expr *StrVal) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
+	return typeCheckConstant(expr, ctx, desired)
 }
 
 // TypeCheck implements the Expr interface.
