@@ -55,7 +55,6 @@ type scanNode struct {
 	isSecondaryIndex bool
 	reverse          bool
 	ordering         orderingInfo
-	err              error
 
 	explain   explainMode
 	rowIndex  int // the index of the current row
@@ -127,9 +126,8 @@ func (n *scanNode) Start() error {
 	return n.p.startSubqueryPlans(n.filter)
 }
 
-// initScan sets up the rowFetcher and starts a scan. On error, sets n.err and
-// returns false.
-func (n *scanNode) initScan() (success bool) {
+// initScan sets up the rowFetcher and starts a scan.
+func (n *scanNode) initScan() (err error) {
 
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
@@ -139,28 +137,27 @@ func (n *scanNode) initScan() (success bool) {
 		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 
-	n.err = n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint)
-	if n.err != nil {
-		return false
+	if err := n.fetcher.StartScan(n.p.txn, n.spans, n.limitHint); err != nil {
+		return err
 	}
 	n.scanInitialized = true
-	return true
+	return nil
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
 func (n *scanNode) debugNext() (bool, error) {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
-	n.debugVals.key, n.debugVals.value, n.row, n.err = n.fetcher.NextKeyDebug()
-	if n.err != nil || n.debugVals.key == "" {
-		return false, n.err
+	var err error
+	n.debugVals.key, n.debugVals.value, n.row, err = n.fetcher.NextKeyDebug()
+	if err != nil || n.debugVals.key == "" {
+		return false, err
 	}
 
 	if n.row != nil {
 		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
-			n.err = err
-			return false, n.err
+			return false, err
 		}
 		if passesFilter {
 			n.debugVals.output = debugValueRow
@@ -176,14 +173,10 @@ func (n *scanNode) debugNext() (bool, error) {
 
 func (n *scanNode) Next() (bool, error) {
 	tracing.AnnotateTrace()
-
-	if n.err != nil {
-		return false, n.err
-	}
-
-	if !n.scanInitialized && !n.initScan() {
-		// Hit error during initScan
-		return false, nil
+	if !n.scanInitialized {
+		if err := n.initScan(); err != nil {
+			return false, nil
+		}
 	}
 
 	if n.explain == explainDebug {
@@ -192,14 +185,14 @@ func (n *scanNode) Next() (bool, error) {
 
 	// We fetch one row at a time until we find one that passes the filter.
 	for {
-		n.row, n.err = n.fetcher.NextRow()
-		if n.err != nil || n.row == nil {
-			return false, n.err
+		var err error
+		n.row, err = n.fetcher.NextRow()
+		if err != nil || n.row == nil {
+			return false, err
 		}
 		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
 		if err != nil {
-			n.err = err
-			return false, n.err
+			return false, err
 		}
 		if passesFilter {
 			return true, nil
@@ -234,8 +227,7 @@ func (n *scanNode) initTable(
 	var err error
 	n.desc, err = p.getTableLease(tableName)
 	if err != nil {
-		n.err = err
-		return "", n.err
+		return "", err
 	}
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
@@ -256,8 +248,7 @@ func (n *scanNode) initTable(
 				}
 			}
 			if n.specifiedIndex == nil {
-				n.err = fmt.Errorf("index \"%s\" not found", indexName)
-				return "", n.err
+				return "", fmt.Errorf("index \"%s\" not found", indexName)
 			}
 		}
 	}

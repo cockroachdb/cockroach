@@ -109,9 +109,8 @@ func (d *deleteNode) Start() error {
 	sel := d.run.rows.(*selectTopNode).source.(*selectNode)
 	if scan, ok := sel.source.plan.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 		d.run.fastPath = true
-		d.run.err = d.fastDelete(scan)
-		d.run.done = true
-		return d.run.err
+		err := d.fastDelete(scan)
+		return err
 	}
 
 	if err := d.rh.startPlans(); err != nil {
@@ -129,33 +128,25 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 }
 
 func (d *deleteNode) Next() (bool, error) {
-	if d.run.done || d.run.err != nil {
-		return false, d.run.err
-	}
-
 	next, err := d.run.rows.Next()
 	if !next {
-		if err != nil {
-			d.run.err = err
-		} else {
+		if err == nil {
 			// We're done. Finish the batch.
-			d.run.err = d.tw.finalize()
+			err = d.tw.finalize()
 		}
-		d.run.done = true
-		return false, d.run.err
+		return false, err
 	}
 
 	rowVals := d.run.rows.Values()
 
 	_, err = d.tw.row(rowVals)
-	if d.run.err = err; err != nil {
+	if err != nil {
 		return false, err
 	}
 
 	resultRow, err := d.rh.cookResultRow(rowVals)
 	if err != nil {
-		d.run.err = err
-		return false, d.run.err
+		return false, err
 	}
 	d.run.resultRow = resultRow
 
@@ -188,8 +179,8 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bo
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
 func (d *deleteNode) fastDelete(scan *scanNode) error {
-	if !scan.initScan() {
-		return scan.err
+	if err := scan.initScan(); err != nil {
+		return err
 	}
 
 	if err := d.tw.init(d.p.txn); err != nil {

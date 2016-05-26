@@ -37,7 +37,6 @@ type distinctNode struct {
 	// Encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
 	suffixSeen map[string]struct{}
-	err        error
 	explain    explainMode
 	debugVals  debugValues
 }
@@ -131,14 +130,10 @@ func (n *distinctNode) DebugValues() debugValues {
 }
 
 func (n *distinctNode) Next() (bool, error) {
-	if n.err != nil {
-		return false, n.err
-	}
 	for {
 		next, err := n.plan.Next()
 		if !next {
-			n.err = err
-			return false, n.err
+			return false, err
 		}
 		if n.explain == explainDebug {
 			n.debugVals = n.plan.DebugValues()
@@ -148,9 +143,9 @@ func (n *distinctNode) Next() (bool, error) {
 			}
 		}
 		// Detect duplicates
-		prefix, suffix := n.encodeValues(n.Values())
-		if n.err != nil {
-			return false, n.err
+		prefix, suffix, err := n.encodeValues(n.Values())
+		if err != nil {
+			return false, err
 		}
 
 		if !bytes.Equal(prefix, n.prefixSeen) {
@@ -185,25 +180,26 @@ func (n *distinctNode) Next() (bool, error) {
 	}
 }
 
-func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
+func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte, error) {
 	var prefix, suffix []byte
+	var err error
 	for i, val := range values {
 		if n.columnsInOrder != nil && n.columnsInOrder[i] {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)
 			}
-			prefix, n.err = sqlbase.EncodeDatum(prefix, val)
+			prefix, err = sqlbase.EncodeDatum(prefix, val)
 		} else {
 			if suffix == nil {
 				suffix = make([]byte, 0, 100)
 			}
-			suffix, n.err = sqlbase.EncodeDatum(suffix, val)
+			suffix, err = sqlbase.EncodeDatum(suffix, val)
 		}
-		if n.err != nil {
+		if err != nil {
 			break
 		}
 	}
-	return prefix, suffix
+	return prefix, suffix, err
 }
 
 func (n *distinctNode) ExplainPlan(_ bool) (string, string, []planNode) {

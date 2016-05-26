@@ -103,9 +103,6 @@ type selectNode struct {
 	// The rendered row, with one value for each render expression.
 	// populated by Next().
 	row parser.DTuple
-
-	// Last error encountered during Next().
-	err error
 }
 
 func (s *selectNode) Columns() []ResultColumn {
@@ -154,8 +151,7 @@ func (s *selectNode) Start() error {
 func (s *selectNode) Next() (bool, error) {
 	for {
 		if next, err := s.source.plan.Next(); !next {
-			s.err = err
-			return false, s.err
+			return false, err
 		}
 
 		if s.explain == explainDebug {
@@ -170,13 +166,12 @@ func (s *selectNode) Next() (bool, error) {
 		s.qvals.populateQVals(&s.source.info, row)
 		passesFilter, err := sqlbase.RunFilter(s.filter, s.planner.evalCtx)
 		if err != nil {
-			s.err = err
-			return false, s.err
+			return false, err
 		}
 
 		if passesFilter {
-			s.err = s.renderRow()
-			return s.err == nil, s.err
+			err := s.renderRow()
+			return err == nil, err
 		} else if s.explain == explainDebug {
 			// Mark the row as filtered out.
 			s.debugVals.output = debugValueFiltered

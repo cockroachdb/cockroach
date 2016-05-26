@@ -36,7 +36,6 @@ type sortNode struct {
 	plan     planNode
 	columns  []ResultColumn
 	ordering columnOrdering
-	err      error
 
 	needSort     bool
 	sortStrategy sortingStrategy
@@ -305,10 +304,6 @@ func (n *sortNode) Start() error {
 }
 
 func (n *sortNode) Next() (bool, error) {
-	if n.err != nil {
-		return false, n.err
-	}
-
 	for n.needSort {
 		if v, ok := n.plan.(*valuesNode); ok {
 			// The plan we wrap is already a values node. Just sort it.
@@ -326,12 +321,10 @@ func (n *sortNode) Next() (bool, error) {
 		// ordering prefix, we should only accumulate values for equal fields
 		// in this prefix, then sort the accumulated chunk and output.
 		next, err := n.plan.Next()
+		if err != nil {
+			return false, err
+		}
 		if !next {
-			n.err = err
-			if n.err != nil {
-				return false, n.err
-			}
-
 			n.sortStrategy.Finish()
 			n.valueIter = n.sortStrategy
 			n.needSort = false
@@ -361,8 +354,7 @@ func (n *sortNode) Next() (bool, error) {
 	}
 	next, err := n.valueIter.Next()
 	if !next {
-		n.err = err
-		return false, n.err
+		return false, err
 	}
 	if n.explain == explainDebug {
 		n.debugVals = n.valueIter.DebugValues()
