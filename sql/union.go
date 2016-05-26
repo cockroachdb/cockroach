@@ -80,7 +80,6 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 	}
 
 	node := &unionNode{
-		err:       nil,
 		right:     right,
 		left:      left,
 		rightDone: false,
@@ -127,7 +126,6 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 //    decrement the entry. Otherwise, the row was on the right, but we've
 //    already emitted as many as were on the right, don't emit.
 type unionNode struct {
-	err         error
 	right, left planNode
 	rightDone   bool
 	leftDone    bool
@@ -190,8 +188,8 @@ func (n *unionNode) readRight() (bool, error) {
 			return true, nil
 		}
 		n.scratch = n.scratch[:0]
-		if n.scratch, n.err = sqlbase.EncodeDTuple(n.scratch, n.right.Values()); n.err != nil {
-			return false, n.err
+		if n.scratch, err = sqlbase.EncodeDTuple(n.scratch, n.right.Values()); err != nil {
+			return false, err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
 		// use a lot of memory for big rows or big resultsets. Consider using a hash
@@ -205,7 +203,7 @@ func (n *unionNode) readRight() (bool, error) {
 			return true, nil
 		}
 	}
-	if n.err = err; err != nil {
+	if err != nil {
 		return false, err
 	}
 
@@ -228,8 +226,8 @@ func (n *unionNode) readLeft() (bool, error) {
 			return true, nil
 		}
 		n.scratch = n.scratch[:0]
-		if n.scratch, n.err = sqlbase.EncodeDTuple(n.scratch, n.left.Values()); n.err != nil {
-			return false, n.err
+		if n.scratch, err = sqlbase.EncodeDTuple(n.scratch, n.left.Values()); err != nil {
+			return false, err
 		}
 		if n.emit.emitLeft(n.scratch) {
 			return true, nil
@@ -240,7 +238,7 @@ func (n *unionNode) readLeft() (bool, error) {
 			return true, nil
 		}
 	}
-	if n.err = err; err != nil {
+	if err != nil {
 		return false, err
 	}
 	n.leftDone = true

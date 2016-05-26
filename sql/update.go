@@ -66,10 +66,8 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desi
 // row-modifying statements.
 type editNodeRun struct {
 	rows      planNode
-	err       error
 	tw        tableWriter
 	resultRow parser.DTuple
-	done      bool
 }
 
 func (r *editNodeRun) initEditNode(rows planNode) {
@@ -275,20 +273,13 @@ func (u *updateNode) Start() error {
 }
 
 func (u *updateNode) Next() (bool, error) {
-	if u.run.done || u.run.err != nil {
-		return false, u.run.err
-	}
-
 	next, err := u.run.rows.Next()
 	if !next {
-		if err != nil {
-			u.run.err = err
-		} else {
+		if err == nil {
 			// We're done. Finish the batch.
-			u.run.err = u.tw.finalize()
+			err = u.tw.finalize()
 		}
-		u.run.done = true
-		return false, u.run.err
+		return false, err
 	}
 
 	tracing.AnnotateTrace()
@@ -303,14 +294,12 @@ func (u *updateNode) Next() (bool, error) {
 	u.checkHelper.loadRow(u.tw.ru.fetchColIDtoRowIndex, oldValues, false)
 	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
 	if err := u.checkHelper.check(u.p.evalCtx); err != nil {
-		u.run.err = err
 		return false, err
 	}
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
 		if err := sqlbase.CheckValueWidth(u.tw.ru.updateCols[i], updateValues[i]); err != nil {
-			u.run.err = err
 			return false, err
 		}
 	}
@@ -319,20 +308,17 @@ func (u *updateNode) Next() (bool, error) {
 	for i, col := range u.tw.ru.updateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
-			u.run.err = sqlbase.NewNonNullViolationError(col.Name)
-			return false, u.run.err
+			return false, sqlbase.NewNonNullViolationError(col.Name)
 		}
 	}
 
 	newValues, err := u.tw.row(append(oldValues, updateValues...))
 	if err != nil {
-		u.run.err = err
 		return false, err
 	}
 
 	resultRow, err := u.rh.cookResultRow(newValues)
 	if err != nil {
-		u.run.err = err
 		return false, err
 	}
 	u.run.resultRow = resultRow
