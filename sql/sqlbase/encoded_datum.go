@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -83,6 +84,8 @@ func (ed *EncDatum) SetFromBuffer(
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
 		encLen, err = encoding.PeekLength(buf)
+	case DatumEncoding_VALUE:
+		encLen, err = roachpb.PeekValueLength(buf)
 	default:
 		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
@@ -128,6 +131,8 @@ func (ed *EncDatum) Decode(a *DatumAlloc) error {
 		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
 	case DatumEncoding_DESCENDING_KEY:
 		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
+	case DatumEncoding_VALUE:
+		ed.Datum, rem, err = DecodeTableValue(a, datType, ed.encoded)
 	default:
 		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
@@ -162,6 +167,8 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Ascending)
 	case DatumEncoding_DESCENDING_KEY:
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
+	case DatumEncoding_VALUE:
+		return EncodeTableValue(appendTo, ed.Datum)
 	default:
 		panic(fmt.Sprintf("unknown encoding requested %s", enc))
 	}

@@ -243,7 +243,7 @@ func getVarintLen(b []byte) (int, error) {
 	return length, nil
 }
 
-// DecodeVarintAscending decodes a value encode by EncodeVaringAscending.
+// DecodeVarintAscending decodes a value encoded by EncodeVaringAscending.
 func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode uvarint value")
@@ -877,9 +877,9 @@ func PeekType(b []byte) Type {
 	return Unknown
 }
 
-// getMultiVarintLen find the length of <num> encoded varints that follow a
+// GetMultiVarintLen find the length of <num> encoded varints that follow a
 // 1-byte tag.
-func getMultiVarintLen(b []byte, num int) (int, error) {
+func GetMultiVarintLen(b []byte, num int) (int, error) {
 	p := 1
 	for i := 0; i < num && p < len(b); i++ {
 		len, err := getVarintLen(b[p:])
@@ -908,9 +908,9 @@ func PeekLength(b []byte) (int, error) {
 	case bytesDescMarker:
 		return getBytesLength(b, descendingEscapes)
 	case timeMarker:
-		return getMultiVarintLen(b, 2)
+		return GetMultiVarintLen(b, 2)
 	case durationBigNegMarker, durationMarker, durationBigPosMarker:
-		return getMultiVarintLen(b, 3)
+		return GetMultiVarintLen(b, 3)
 	case floatNeg, floatPos:
 		// the marker is followed by 8 bytes
 		if len(b) < 9 {
