@@ -23,6 +23,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
 	"github.com/opentracing/basictracer-go/events"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -84,6 +86,12 @@ func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
+	token := envutil.EnvOrDefaultString("lightstep_token", "")
+	if token != "" {
+		return lightstep.NewTracer(lightstep.Options{
+			AccessToken: token,
+		})
+	}
 	return basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
 }
 
