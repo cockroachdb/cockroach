@@ -346,9 +346,15 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`0 / 0`, `0 / 0`}, // Will be caught during evaluation.
 		{`1 / 0`, `1 / 0`}, // Will be caught during evaluation.
 		// Binary ops (int only).
+		{`9 // 2`, `4`},
+		{`-5 // 3`, `-1`},
+		{`100 // 17`, `5`},
+		{`100.43 // 17.82`, `100.43 // 17.82`}, // Constant folding won't fold numeric modulo.
+		{`0 // 0`, `0 // 0`},                   // Will be caught during evaluation.
+		{`1 // 0`, `1 // 0`},                   // Will be caught during evaluation.
 		{`9 % 2`, `1`},
 		{`100 % 17`, `15`},
-		{`100.43 % 17.82`, `100.43 % 17.82`}, // Constant folding won't fold float modulo.
+		{`100.43 % 17.82`, `100.43 % 17.82`}, // Constant folding won't fold numeric modulo.
 		{`1 & 3`, `1`},
 		{`1.3 & 3.2`, `1.3 & 3.2`}, // Will be caught during type checking.
 		{`1 | 2`, `3`},

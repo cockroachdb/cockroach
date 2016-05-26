@@ -354,13 +354,14 @@ var binaryOpToToken = map[BinaryOperator]token.Token{
 	Plus:  token.ADD,
 	Minus: token.SUB,
 	Mult:  token.MUL,
-	Div:   token.QUO, // token.QUO_ASSIGN to force integer division.
+	Div:   token.QUO,
 }
 var binaryOpToTokenIntOnly = map[BinaryOperator]token.Token{
-	Mod:    token.REM,
-	Bitand: token.AND,
-	Bitor:  token.OR,
-	Bitxor: token.XOR,
+	FloorDiv: token.QUO_ASSIGN,
+	Mod:      token.REM,
+	Bitand:   token.AND,
+	Bitor:    token.OR,
+	Bitxor:   token.XOR,
 }
 var binaryShiftOpToToken = map[BinaryOperator]token.Token{
 	LShift: token.SHL,
