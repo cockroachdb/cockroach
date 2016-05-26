@@ -218,7 +218,6 @@ func (n *limitNode) Columns() []ResultColumn {
 	return n.top.Columns()
 }
 
-func (n *limitNode) Err() error             { return n.plan.Err() }
 func (n *limitNode) Values() parser.DTuple  { return n.plan.Values() }
 func (n *limitNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
@@ -237,39 +236,40 @@ func (n *limitNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *limitNode) Next() bool {
+func (n *limitNode) Next() (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
 	if n.rowIndex-n.offset >= n.count {
-		return false
+		return false, nil
 	}
 
 	for {
-		if !n.plan.Next() {
-			return false
+		if next, err := n.plan.Next(); !next {
+			return false, err
 		}
 
 		if n.explain == explainDebug {
 			n.debugVals = n.plan.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Let the non-row debug values pass through.
-				return true
+				break
 			}
 		}
 
 		n.rowIndex++
 		if n.rowIndex > n.offset {
 			// Row within limits, return it.
-			return true
+			break
 		}
 
 		if n.explain == explainDebug {
 			// Return as a filtered row.
 			n.debugVals.output = debugValueFiltered
-			return true
+			break
 		}
 		// Fetch the next row.
 	}
+	return true, nil
 }
 
 func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {

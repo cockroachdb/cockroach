@@ -480,7 +480,13 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		}
 		b := &client.Batch{}
 		numRows := 0
-		for ; numRows < IndexBackfillChunkSize && rows.Next(); numRows++ {
+		for ; numRows < IndexBackfillChunkSize; numRows++ {
+			if next, err := rows.Next(); !next {
+				if err != nil {
+					return err
+				}
+				break
+			}
 			rowVals := rows.Values()
 
 			for _, desc := range added {
@@ -497,9 +503,6 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 					b.InitPut(secondaryIndexEntry.Key, secondaryIndexEntry.Value)
 				}
 			}
-		}
-		if rows.Err() != nil {
-			return rows.Err()
 		}
 		// Write the new index values.
 		if err := txn.Run(b); err != nil {

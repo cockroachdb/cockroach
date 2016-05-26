@@ -159,7 +159,6 @@ func (n *selectTopNode) Ordering() orderingInfo {
 
 func (n *selectTopNode) MarkDebug(mode explainMode) { n.plan.MarkDebug(mode) }
 func (n *selectTopNode) Start() error               { return n.plan.Start() }
-func (n *selectTopNode) Next() bool                 { return n.plan.Next() }
+func (n *selectTopNode) Next() (bool, error)        { return n.plan.Next() }
 func (n *selectTopNode) Values() parser.DTuple      { return n.plan.Values() }
 func (n *selectTopNode) DebugValues() debugValues   { return n.plan.DebugValues() }
-func (n *selectTopNode) Err() error                 { return n.plan.Err() }

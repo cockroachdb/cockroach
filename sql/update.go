@@ -274,20 +274,21 @@ func (u *updateNode) Start() error {
 	return u.run.tw.init(u.p.txn)
 }
 
-func (u *updateNode) Next() bool {
+func (u *updateNode) Next() (bool, error) {
 	if u.run.done || u.run.err != nil {
-		return false
+		return false, u.run.err
 	}
 
-	if !u.run.rows.Next() {
-		if u.run.err = u.run.rows.Err(); u.run.err != nil {
-			u.run.done = true
-			return false
+	next, err := u.run.rows.Next()
+	if !next {
+		if err != nil {
+			u.run.err = err
+		} else {
+			// We're done. Finish the batch.
+			u.run.err = u.tw.finalize()
 		}
-		// We're done. Finish the batch.
-		u.run.err = u.tw.finalize()
 		u.run.done = true
-		return false
+		return false, u.run.err
 	}
 
 	tracing.AnnotateTrace()
@@ -303,14 +304,14 @@ func (u *updateNode) Next() bool {
 	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
 	if err := u.checkHelper.check(u.p.evalCtx); err != nil {
 		u.run.err = err
-		return false
+		return false, err
 	}
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
 		if err := sqlbase.CheckValueWidth(u.tw.ru.updateCols[i], updateValues[i]); err != nil {
 			u.run.err = err
-			return false
+			return false, err
 		}
 	}
 
@@ -319,24 +320,24 @@ func (u *updateNode) Next() bool {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
 			u.run.err = sqlbase.NewNonNullViolationError(col.Name)
-			return false
+			return false, u.run.err
 		}
 	}
 
 	newValues, err := u.tw.row(append(oldValues, updateValues...))
 	if err != nil {
 		u.run.err = err
-		return false
+		return false, err
 	}
 
 	resultRow, err := u.rh.cookResultRow(newValues)
 	if err != nil {
 		u.run.err = err
-		return false
+		return false, err
 	}
 	u.run.resultRow = resultRow
 
-	return true
+	return true, nil
 }
 
 // namesForExprs expands names in the tuples and subqueries in exprs.
@@ -396,10 +397,6 @@ func (u *updateNode) DebugValues() debugValues {
 
 func (u *updateNode) Ordering() orderingInfo {
 	return u.run.rows.Ordering()
-}
-
-func (u *updateNode) Err() error {
-	return u.run.err
 }
 
 func (u *updateNode) ExplainPlan(v bool) (name, description string, children []planNode) {

@@ -144,13 +144,12 @@ func (n *dropDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *dropDatabaseNode) Next() bool                          { return false }
+func (n *dropDatabaseNode) Next() (bool, error)                 { return false, nil }
 func (n *dropDatabaseNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
 func (n *dropDatabaseNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *dropDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropDatabaseNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropDatabaseNode) ExplainTypes(_ func(string, string)) {}
-func (n *dropDatabaseNode) Err() error                          { return nil }
 func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *dropDatabaseNode) MarkDebug(mode explainMode)          {}
 func (n *dropDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -257,13 +256,12 @@ func (n *dropIndexNode) Start() error {
 	return nil
 }
 
-func (n *dropIndexNode) Next() bool                          { return false }
+func (n *dropIndexNode) Next() (bool, error)                 { return false, nil }
 func (n *dropIndexNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
 func (n *dropIndexNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *dropIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropIndexNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropIndexNode) ExplainTypes(_ func(string, string)) {}
-func (n *dropIndexNode) Err() error                          { return nil }
 func (n *dropIndexNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *dropIndexNode) MarkDebug(mode explainMode)          {}
 func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -355,13 +353,12 @@ func (n *dropTableNode) Start() error {
 	return nil
 }
 
-func (n *dropTableNode) Next() bool                          { return false }
+func (n *dropTableNode) Next() (bool, error)                 { return false, nil }
 func (n *dropTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
 func (n *dropTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *dropTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *dropTableNode) DebugValues() debugValues            { return debugValues{} }
-func (n *dropTableNode) Err() error                          { return nil }
 func (n *dropTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *dropTableNode) MarkDebug(mode explainMode)          {}
 func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {

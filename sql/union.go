@@ -140,15 +140,7 @@ type unionNode struct {
 
 func (n *unionNode) Columns() []ResultColumn { return n.left.Columns() }
 func (n *unionNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (n *unionNode) Err() error {
-	if n.err != nil {
-		return n.err
-	} else if err := n.right.Err(); err != nil {
-		return err
-	} else {
-		return n.left.Err()
-	}
-}
+
 func (n *unionNode) Values() parser.DTuple {
 	switch {
 	case !n.rightDone:
@@ -183,68 +175,76 @@ func (n *unionNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *unionNode) readRight() bool {
-	for n.right.Next() {
+func (n *unionNode) readRight() (bool, error) {
+	next, err := n.right.Next()
+	for ; next; next, err = n.right.Next() {
 		if n.explain == explainDebug {
 			n.debugVals = n.right.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Pass through any non-row debug info.
-				return true
+				return true, nil
 			}
 		}
 
 		if n.emitAll {
-			return true
+			return true, nil
 		}
 		n.scratch = n.scratch[:0]
 		if n.scratch, n.err = sqlbase.EncodeDTuple(n.scratch, n.right.Values()); n.err != nil {
-			return false
+			return false, n.err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
 		// use a lot of memory for big rows or big resultsets. Consider using a hash
 		// of the bytes instead.
 		if n.emit.emitRight(n.scratch) {
-			return true
+			return true, nil
 		}
 		if n.explain == explainDebug {
 			// Mark the row as filtered out.
 			n.debugVals.output = debugValueFiltered
-			return true
+			return true, nil
 		}
+	}
+	if n.err = err; err != nil {
+		return false, err
 	}
 
 	n.rightDone = true
 	return n.readLeft()
 }
 
-func (n *unionNode) readLeft() bool {
-	for n.left.Next() {
+func (n *unionNode) readLeft() (bool, error) {
+	next, err := n.left.Next()
+	for ; next; next, err = n.left.Next() {
 		if n.explain == explainDebug {
 			n.debugVals = n.left.DebugValues()
 			if n.debugVals.output != debugValueRow {
 				// Pass through any non-row debug info.
-				return true
+				return true, nil
 			}
 		}
 
 		if n.emitAll {
-			return true
+			return true, nil
 		}
 		n.scratch = n.scratch[:0]
 		if n.scratch, n.err = sqlbase.EncodeDTuple(n.scratch, n.left.Values()); n.err != nil {
-			return false
+			return false, n.err
 		}
 		if n.emit.emitLeft(n.scratch) {
-			return true
+			return true, nil
 		}
 		if n.explain == explainDebug {
 			// Mark the row as filtered out.
 			n.debugVals.output = debugValueFiltered
-			return true
+			return true, nil
 		}
 	}
+	if n.err = err; err != nil {
+		return false, err
+	}
 	n.leftDone = true
-	return false
+	return false, nil
 }
 
 func (n *unionNode) expandPlan() error {
@@ -261,14 +261,14 @@ func (n *unionNode) Start() error {
 	return n.left.Start()
 }
 
-func (n *unionNode) Next() bool {
+func (n *unionNode) Next() (bool, error) {
 	switch {
 	case !n.rightDone:
 		return n.readRight()
 	case !n.leftDone:
 		return n.readLeft()
 	default:
-		return false
+		return false, nil
 	}
 }
 
