@@ -447,6 +447,7 @@ inline ::cockroach::roachpb::TxnMeta* MVCCMetadata::mutable_txn() {
   return txn_;
 }
 inline ::cockroach::roachpb::TxnMeta* MVCCMetadata::release_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.MVCCMetadata.txn)
   clear_has_txn();
   ::cockroach::roachpb::TxnMeta* temp = txn_;
   txn_ = NULL;
@@ -490,6 +491,7 @@ inline ::cockroach::roachpb::Timestamp* MVCCMetadata::mutable_timestamp() {
   return timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* MVCCMetadata::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.MVCCMetadata.timestamp)
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
@@ -618,6 +620,7 @@ inline ::std::string* MVCCMetadata::mutable_raw_bytes() {
   return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* MVCCMetadata::release_raw_bytes() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.MVCCMetadata.raw_bytes)
   clear_has_raw_bytes();
   return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -658,6 +661,7 @@ inline ::cockroach::roachpb::Timestamp* MVCCMetadata::mutable_merge_timestamp() 
   return merge_timestamp_;
 }
 inline ::cockroach::roachpb::Timestamp* MVCCMetadata::release_merge_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.MVCCMetadata.merge_timestamp)
   clear_has_merge_timestamp();
   ::cockroach::roachpb::Timestamp* temp = merge_timestamp_;
   merge_timestamp_ = NULL;

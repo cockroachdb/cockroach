@@ -213,8 +213,17 @@ InternalTimeSeriesData* InternalTimeSeriesData::New(::google::protobuf::Arena* a
 }
 
 void InternalTimeSeriesData::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.InternalTimeSeriesData)
+#if defined(__clang__)
+#define ZR_HELPER_(f) \
+  _Pragma("clang diagnostic push") \
+  _Pragma("clang diagnostic ignored \"-Winvalid-offsetof\"") \
+  __builtin_offsetof(InternalTimeSeriesData, f) \
+  _Pragma("clang diagnostic pop")
+#else
 #define ZR_HELPER_(f) reinterpret_cast<char*>(\
   &reinterpret_cast<InternalTimeSeriesData*>(16)->f)
+#endif
 
 #define ZR_(first, last) do {\
   ::memset(&first, 0,\
@@ -235,7 +244,7 @@ void InternalTimeSeriesData::Clear() {
 
 bool InternalTimeSeriesData::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.InternalTimeSeriesData)
   for (;;) {
@@ -366,6 +375,7 @@ void InternalTimeSeriesData::SerializeWithCachedSizes(
 }
 
 int InternalTimeSeriesData::ByteSize() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.InternalTimeSeriesData)
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3u) {
@@ -404,18 +414,22 @@ int InternalTimeSeriesData::ByteSize() const {
 }
 
 void InternalTimeSeriesData::MergeFrom(const ::google::protobuf::Message& from) {
+// @@protoc_insertion_point(generalized_merge_from_start:cockroach.roachpb.InternalTimeSeriesData)
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   const InternalTimeSeriesData* source = 
       ::google::protobuf::internal::DynamicCastToGenerated<const InternalTimeSeriesData>(
           &from);
   if (source == NULL) {
+  // @@protoc_insertion_point(generalized_merge_from_cast_fail:cockroach.roachpb.InternalTimeSeriesData)
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
   } else {
+  // @@protoc_insertion_point(generalized_merge_from_cast_success:cockroach.roachpb.InternalTimeSeriesData)
     MergeFrom(*source);
   }
 }
 
 void InternalTimeSeriesData::MergeFrom(const InternalTimeSeriesData& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalTimeSeriesData)
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   samples_.MergeFrom(from.samples_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
@@ -432,12 +446,14 @@ void InternalTimeSeriesData::MergeFrom(const InternalTimeSeriesData& from) {
 }
 
 void InternalTimeSeriesData::CopyFrom(const ::google::protobuf::Message& from) {
+// @@protoc_insertion_point(generalized_copy_from_start:cockroach.roachpb.InternalTimeSeriesData)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
 void InternalTimeSeriesData::CopyFrom(const InternalTimeSeriesData& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.InternalTimeSeriesData)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
@@ -625,8 +641,17 @@ InternalTimeSeriesSample* InternalTimeSeriesSample::New(::google::protobuf::Aren
 }
 
 void InternalTimeSeriesSample::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.InternalTimeSeriesSample)
+#if defined(__clang__)
+#define ZR_HELPER_(f) \
+  _Pragma("clang diagnostic push") \
+  _Pragma("clang diagnostic ignored \"-Winvalid-offsetof\"") \
+  __builtin_offsetof(InternalTimeSeriesSample, f) \
+  _Pragma("clang diagnostic pop")
+#else
 #define ZR_HELPER_(f) reinterpret_cast<char*>(\
   &reinterpret_cast<InternalTimeSeriesSample*>(16)->f)
+#endif
 
 #define ZR_(first, last) do {\
   ::memset(&first, 0,\
@@ -648,7 +673,7 @@ void InternalTimeSeriesSample::Clear() {
 
 bool InternalTimeSeriesSample::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.InternalTimeSeriesSample)
   for (;;) {
@@ -824,6 +849,7 @@ void InternalTimeSeriesSample::SerializeWithCachedSizes(
 }
 
 int InternalTimeSeriesSample::ByteSize() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.InternalTimeSeriesSample)
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 31u) {
@@ -869,18 +895,22 @@ int InternalTimeSeriesSample::ByteSize() const {
 }
 
 void InternalTimeSeriesSample::MergeFrom(const ::google::protobuf::Message& from) {
+// @@protoc_insertion_point(generalized_merge_from_start:cockroach.roachpb.InternalTimeSeriesSample)
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   const InternalTimeSeriesSample* source = 
       ::google::protobuf::internal::DynamicCastToGenerated<const InternalTimeSeriesSample>(
           &from);
   if (source == NULL) {
+  // @@protoc_insertion_point(generalized_merge_from_cast_fail:cockroach.roachpb.InternalTimeSeriesSample)
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
   } else {
+  // @@protoc_insertion_point(generalized_merge_from_cast_success:cockroach.roachpb.InternalTimeSeriesSample)
     MergeFrom(*source);
   }
 }
 
 void InternalTimeSeriesSample::MergeFrom(const InternalTimeSeriesSample& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalTimeSeriesSample)
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_offset()) {
@@ -905,12 +935,14 @@ void InternalTimeSeriesSample::MergeFrom(const InternalTimeSeriesSample& from) {
 }
 
 void InternalTimeSeriesSample::CopyFrom(const ::google::protobuf::Message& from) {
+// @@protoc_insertion_point(generalized_copy_from_start:cockroach.roachpb.InternalTimeSeriesSample)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
 void InternalTimeSeriesSample::CopyFrom(const InternalTimeSeriesSample& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.InternalTimeSeriesSample)
   if (&from == this) return;
   Clear();
   MergeFrom(from);

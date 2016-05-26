@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util/caller"
 	basictracer "github.com/opentracing/basictracer-go"
+	"github.com/opentracing/basictracer-go/events"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 )
@@ -76,7 +77,7 @@ func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts.ShouldSample = func(traceID uint64) bool { return false }
 	opts.TrimUnsampledSpans = true
 	opts.Recorder = CallbackRecorder(recorder)
-	opts.NewSpanEventListener = basictracer.NetTraceIntegrator
+	opts.NewSpanEventListener = events.NetTraceIntegrator
 	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
 	return opts
 }
