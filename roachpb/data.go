@@ -707,6 +707,43 @@ func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 	return ts, v.GetProto(&ts)
 }
 
+// PeekValueLength returns the length of the encoded value at the start of b.
+// Note: If this function succeeds, it's not a guarantee that decoding the value
+// will succeed.
+func PeekValueLength(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, util.Errorf("empty slice")
+	}
+	tag := ValueType(b[0])
+	switch tag {
+	case ValueType_NULL:
+		return 1, nil
+	case ValueType_INT:
+		n, _, err := getVarintLen(b[1:])
+		return 1 + n, err
+	case ValueType_FLOAT:
+		return 9, nil
+	case ValueType_DELIMITED_BYTES, ValueType_DELIMITED_DECIMAL:
+		n, i, err := getVarintLen(b[1:])
+		return 1 + n + i, err
+	case ValueType_TIME:
+		n, err := encoding.GetMultiVarintLen(b[1:], 2)
+		return 1 + n, err
+	case ValueType_DURATION:
+		n, err := encoding.GetMultiVarintLen(b[1:], 3)
+		return 1 + n, err
+	}
+	return 0, util.Errorf("unknown tag %q", tag)
+}
+
+func getVarintLen(b []byte) (int, int, error) {
+	i, n := binary.Varint(b)
+	if n <= 0 {
+		return 0, 0, util.Errorf("invalid varint")
+	}
+	return n, int(i), nil
+}
+
 var crc32Pool = sync.Pool{
 	New: func() interface{} {
 		return crc32.NewIEEE()

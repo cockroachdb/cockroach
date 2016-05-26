@@ -31,5 +31,6 @@ enum DatumEncoding {
     // Indicates that the datum is encoded using the order-preserving encoding
     // used for keys (descending order).
     DESCENDING_KEY = 1;
-    // TODO(radu): value encoding
+    // Indicates that the datum is encoded using the encoding used for values.
+    VALUE = 2;
 }

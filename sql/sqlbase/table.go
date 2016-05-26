@@ -411,6 +411,44 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 	return nil, util.Errorf("unable to encode table key: %T", val)
 }
 
+// EncodeTableValue encodes `val` into `appendTo` using DatumEncoding_VALUE and
+// returns the new buffer.
+func EncodeTableValue(appendTo []byte, val parser.Datum) ([]byte, error) {
+	// TODO(dan): Merge this and EncodeTableKey.
+	if val == parser.DNull {
+		return append(appendTo, byte(roachpb.ValueType_NULL)), nil
+	}
+	switch t := val.(type) {
+	case *parser.DBool:
+		var x int64
+		if *t {
+			x = 1
+		} else {
+			x = 0
+		}
+		return roachpb.EncodeIntValue(appendTo, x), nil
+	case *parser.DInt:
+		return roachpb.EncodeIntValue(appendTo, int64(*t)), nil
+	case *parser.DFloat:
+		return roachpb.EncodeFloatValue(appendTo, float64(*t)), nil
+	case *parser.DDecimal:
+		return roachpb.EncodeDecimalValue(appendTo, &t.Dec, true), nil
+	case *parser.DString:
+		return roachpb.EncodeBytesValue(appendTo, []byte(*t), true), nil
+	case *parser.DBytes:
+		return roachpb.EncodeBytesValue(appendTo, []byte(*t), true), nil
+	case *parser.DDate:
+		return roachpb.EncodeIntValue(appendTo, int64(*t)), nil
+	case *parser.DTimestamp:
+		return roachpb.EncodeTimeValue(appendTo, t.Time), nil
+	case *parser.DTimestampTZ:
+		return roachpb.EncodeTimeValue(appendTo, t.Time), nil
+	case *parser.DInterval:
+		return roachpb.EncodeDurationValue(appendTo, t.Duration)
+	}
+	return nil, util.Errorf("unable to encode table value: %T", val)
+}
+
 // MakeKeyVals returns a slice of Datums with the correct types for the given
 // columns.
 func MakeKeyVals(
@@ -808,6 +846,66 @@ func DecodeTableKey(
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
+	}
+}
+
+// DecodeTableValue decodes a value encoded by EncodeTableValue.
+func DecodeTableValue(a *DatumAlloc, valType parser.Datum, b []byte) (parser.Datum, []byte, error) {
+	// TODO(dan): Merge this and DecodeTableKey.
+	if len(b) == 0 {
+		return nil, nil, util.Errorf("empty slice")
+	}
+	if roachpb.ValueType(b[0]) == roachpb.ValueType_NULL {
+		return parser.DNull, b[1:], nil
+	}
+	var err error
+	switch valType.(type) {
+	case *parser.DBool:
+		var i int64
+		b, i, err = roachpb.DecodeIntValue(b)
+		// No need to chunk allocate DBool as MakeDBool returns either
+		// parser.DBoolTrue or parser.DBoolFalse.
+		return parser.MakeDBool(parser.DBool(i != 0)), b, err
+	case *parser.DInt:
+		var i int64
+		b, i, err = roachpb.DecodeIntValue(b)
+		return a.NewDInt(parser.DInt(i)), b, err
+	case *parser.DFloat:
+		var f float64
+		b, f, err = roachpb.DecodeFloatValue(b)
+		return a.NewDFloat(parser.DFloat(f)), b, err
+	case *parser.DDecimal:
+		var d *inf.Dec
+		b, d, err = roachpb.DecodeDecimalValue(b)
+		dd := a.NewDDecimal(parser.DDecimal{})
+		dd.Set(d)
+		return dd, b, err
+	case *parser.DString:
+		var data []byte
+		b, data, err = roachpb.DecodeBytesValue(b)
+		return a.NewDString(parser.DString(data)), b, err
+	case *parser.DBytes:
+		var data []byte
+		b, data, err = roachpb.DecodeBytesValue(b)
+		return a.NewDBytes(parser.DBytes(data)), b, err
+	case *parser.DDate:
+		var i int64
+		b, i, err = roachpb.DecodeIntValue(b)
+		return a.NewDDate(parser.DDate(i)), b, err
+	case *parser.DTimestamp:
+		var t time.Time
+		b, t, err = roachpb.DecodeTimeValue(b)
+		return a.NewDTimestamp(parser.DTimestamp{Time: t}), b, err
+	case *parser.DTimestampTZ:
+		var t time.Time
+		b, t, err = roachpb.DecodeTimeValue(b)
+		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), b, err
+	case *parser.DInterval:
+		var d duration.Duration
+		b, d, err = roachpb.DecodeDurationValue(b)
+		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
+	default:
+		return nil, nil, util.Errorf("TODO(pmattis): decoded index value: %s", valType.Type())
 	}
 }
 
