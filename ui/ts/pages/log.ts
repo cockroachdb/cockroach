@@ -72,15 +72,15 @@ module AdminViews {
           clearInterval(this._interval);
         }
 
-        private _Refresh(): void {
-          entries.refresh();
-        }
-
         constructor() {
           // TODO: keep values on refresh, allow sharing via url
           entries = new Models.Log.Entries();
           this._Refresh();
           this._interval = window.setInterval(() => this._Refresh(), Controller._queryEveryMS);
+        }
+
+        private _Refresh(): void {
+          entries.refresh();
         }
       }
 
