@@ -228,9 +228,6 @@ type groupNode struct {
 	needOnlyOneRow  bool
 	gotOneRow       bool
 
-	// TODO(vivek): remove
-	err error
-
 	explain explainMode
 }
 
@@ -310,21 +307,19 @@ func (n *groupNode) Start() error {
 
 func (n *groupNode) Next() (bool, error) {
 	var scratch []byte
-
-	if n.err != nil {
-		return false, n.err
-	}
-
 	for !n.populated {
 		next := false
 		if !(n.needOnlyOneRow && n.gotOneRow) {
-			next, n.err = n.plan.Next()
-			if n.err != nil {
-				return false, n.err
+			var err error
+			next, err = n.plan.Next()
+			if err != nil {
+				return false, err
 			}
 		}
 		if !next {
-			n.computeAggregates()
+			if err := n.computeAggregates(); err != nil {
+				return false, err
+			}
 			n.populated = true
 			break
 		}
@@ -342,8 +337,7 @@ func (n *groupNode) Next() (bool, error) {
 
 		encoded, err := sqlbase.EncodeDTuple(scratch, groupedValues)
 		if err != nil {
-			n.err = err
-			return false, n.err
+			return false, err
 		}
 
 		n.buckets[string(encoded)] = struct{}{}
@@ -351,8 +345,7 @@ func (n *groupNode) Next() (bool, error) {
 		// Feed the aggregateFuncs for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
 			if err := n.funcs[i].add(encoded, value); err != nil {
-				n.err = err
-				return false, n.err
+				return false, err
 			}
 		}
 		scratch = encoded[:0]
@@ -368,7 +361,7 @@ func (n *groupNode) Next() (bool, error) {
 	return n.values.Next()
 }
 
-func (n *groupNode) computeAggregates() {
+func (n *groupNode) computeAggregates() error {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}
@@ -384,12 +377,10 @@ func (n *groupNode) computeAggregates() {
 		if n.having != nil {
 			res, err := n.having.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.err = err
-				return
+				return err
 			}
 			if val, err := parser.GetBool(res); err != nil {
-				n.err = err
-				return
+				return err
 			} else if !val {
 				continue
 			}
@@ -399,15 +390,14 @@ func (n *groupNode) computeAggregates() {
 		for _, r := range n.render {
 			res, err := r.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.err = err
-				return
+				return err
 			}
 			row = append(row, res)
 		}
 
 		n.values.rows = append(n.values.rows, row)
 	}
-
+	return nil
 }
 
 func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
