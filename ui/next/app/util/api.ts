@@ -11,16 +11,16 @@ import * as _ from "lodash";
 let server = protos.cockroach.server;
 
 type DatabasesRequest = cockroach.server.DatabasesRequest;
-type DatabasesResponse = cockroach.server.DatabasesResponse;
+type DatabasesResponseMessage = cockroach.server.DatabasesResponseMessage;
 
 type DatabaseDetailsRequest = cockroach.server.DatabaseDetailsRequest;
-type DatabaseDetailsResponse = cockroach.server.DatabaseDetailsResponse;
+type DatabaseDetailsResponseMessage = cockroach.server.DatabaseDetailsResponseMessage;
 
 type TableDetailsRequest = cockroach.server.TableDetailsRequest;
-type TableDetailsResponse = cockroach.server.TableDetailsResponse;
+type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
 
 type EventsRequest = cockroach.server.EventsRequest;
-type EventsResponse = cockroach.server.EventsResponse;
+type EventsResponseMessage = cockroach.server.EventsResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
@@ -43,14 +43,23 @@ function timeout<T>(promise: Promise<T>): Promise<T> {
 }
 
 // makeFetch generates a new fetch request to the given url
-function makeFetch(url: string, method = "GET") {
+function makeFetch<TResponse, TResponseMessage>(
+  builder: {
+    new (json: TResponse): TResponseMessage
+    decode(buffer: ArrayBuffer): TResponseMessage
+    decode(buffer: ByteBuffer): TResponseMessage
+    decode64(buffer: string): TResponseMessage
+  },
+  url: string,
+  method = "GET"
+): Promise<TResponseMessage> {
   return timeout(fetch(url, {
     headers: {
       "Accept": "application/json",
       "Content-Type": "application/json",
     },
     method,
-  }));
+  })).then((res) => res.json<TResponse>()).then((json) => new builder(json));
 }
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
@@ -63,31 +72,23 @@ export function propsToQueryString(props: any) {
  * ENDPOINTS
  */
 
-// getDatabaseList returns DatabasesResponse containing a list of all database names as strings
-export function getDatabaseList() {
-  return makeFetch(`${API_PREFIX}/databases`)
-    .then((res) => res.json<DatabasesResponse>())
-    .then((res) => new server.DatabasesResponse(res));
+// getDatabaseList gets a list of all database names
+export function getDatabaseList(): Promise<DatabasesResponseMessage> {
+  return makeFetch(server.DatabasesResponse, `${API_PREFIX}/databases`);
 }
 
 // getDatabaseDetails gets details for a specific database
-export function getDatabaseDetails(req: DatabaseDetailsRequest) {
-  return makeFetch(`${API_PREFIX}/databases/${req.database}`)
-    .then((res) => res.json<DatabaseDetailsResponse>())
-    .then((res) => new server.DatabaseDetailsResponse(res));
+export function getDatabaseDetails(req: DatabaseDetailsRequest): Promise<DatabaseDetailsResponseMessage> {
+  return makeFetch(server.DatabaseDetailsResponse, `${API_PREFIX}/databases/${req.database}`);
 }
 
 // getTableDetails gets details for a specific table
-export function getTableDetails(req: TableDetailsRequest) {
-  return makeFetch(`${API_PREFIX}/databases/${req.database}/tables/${req.table}`)
-    .then((res) => res.json<TableDetailsResponse>())
-    .then((res) => new server.TableDetailsResponse(res));
+export function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsResponseMessage> {
+  return makeFetch(server.TableDetailsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}`);
 }
 
 // getEvents gets event data
-export function getEvents(req: EventsRequest = {}) {
+export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessage> {
   let queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
-  return makeFetch(`${API_PREFIX}/events?${queryString}`)
-    .then((res) => res.json<EventsResponse>())
-    .then((res) => new server.EventsResponse(res));
+  return makeFetch(server.EventsResponse, `${API_PREFIX}/events?${queryString}`);
 }
