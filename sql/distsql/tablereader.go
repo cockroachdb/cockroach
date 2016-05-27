@@ -17,6 +17,8 @@
 package distsql
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -47,6 +49,8 @@ type tableReader struct {
 	row   sqlbase.EncDatumRow
 	alloc sqlbase.DatumAlloc
 }
+
+var _ processor = &tableReader{}
 
 // tableReader implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &tableReader{}
@@ -174,8 +178,11 @@ func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 	return outRow, nil
 }
 
-// run is the "main loop".
-func (tr *tableReader) run() {
+// Run is the "main loop".
+func (tr *tableReader) Run(wg *sync.WaitGroup) {
+	if wg != nil {
+		defer wg.Done()
+	}
 	if log.V(1) {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}

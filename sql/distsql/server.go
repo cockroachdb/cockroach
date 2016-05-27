@@ -63,6 +63,28 @@ func (ds *ServerImpl) setupTxn(
 	return txn
 }
 
+// SetupSimpleFlow sets up a simple flow, connecting the simple response output
+// stream to the given rowReceiver. The flow is not started.
+func (ds *ServerImpl) SetupSimpleFlow(
+	ctx context.Context, req *SetupFlowsRequest, output rowReceiver,
+) (*Flow, error) {
+	f := &Flow{evalCtx: ds.evalCtx}
+	f.txn = ds.setupTxn(ctx, &req.Txn)
+	f.simpleFlowOutput = output
+
+	flow := req.Flows[0]
+
+	// TODO(radu): for now we expect exactly one processor (a table reader).
+	if len(flow.Processors) != 1 {
+		return nil, util.Errorf("only single-processor flows supported")
+	}
+	_, err := f.setupProcessor(&flow.Processors[0])
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 // RunSimpleFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) RunSimpleFlow(
 	req *SetupFlowsRequest, stream DistSQL_RunSimpleFlowServer,
@@ -70,32 +92,18 @@ func (ds *ServerImpl) RunSimpleFlow(
 	if len(req.Flows) != 1 {
 		return util.Errorf("expected exactly one flow, got %d", len(req.Flows))
 	}
-
-	f := &flow{evalCtx: ds.evalCtx}
-	f.txn = ds.setupTxn(stream.Context(), &req.Txn)
-
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutbox(stream)
-	f.simpleFlowMailbox = mbox
 
-	flow := req.Flows[0]
-
-	// TODO(radu): for now we expect exactly one processor (a table reader).
-	if len(flow.Processors) != 1 {
-		return util.Errorf("only single-processor flows supported")
-	}
-	reader, err := f.setupProcessor(&flow.Processors[0])
+	f, err := ds.SetupSimpleFlow(stream.Context(), req, mbox)
 	if err != nil {
 		return err
 	}
 
 	// TODO(radu): this stuff should probably be run through a stopper.
-	f.waitGroup.Add(1)
 	mbox.start(&f.waitGroup)
-	// The reader will run in its own goroutine once we support
-	// less trivial flows.
-	reader.run()
-	f.waitGroup.Wait()
+	f.Start()
+	f.Wait()
 	return mbox.err
 }
 

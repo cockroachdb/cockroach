@@ -137,6 +137,7 @@ loop:
 }
 
 func (m *outbox) start(wg *sync.WaitGroup) {
+	wg.Add(1)
 	m.wg = wg
 	m.RowChannel.init()
 	m.flushTicker = time.NewTicker(outboxFlushPeriod)
