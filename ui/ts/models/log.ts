@@ -96,16 +96,16 @@ module Models {
         return params;
       }
 
+      constructor() {
+        this.level(Utils.Format.Severity(2));
+        this.allEntries = this._data.result;
+      }
+
       /**
        * _url return the url used for queries to the status server.
        */
       private _url(): string {
         return "/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
-      }
-
-      constructor() {
-        this.level(Utils.Format.Severity(2));
-        this.allEntries = this._data.result;
       }
     }
 

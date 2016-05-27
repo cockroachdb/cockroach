@@ -171,13 +171,16 @@ module Components {
                       m("input[type=checkbox][name=optin][required=true]", {id: "optin", checked: true}),
                       m("label", {for: "optin"}, "Share data with Cockroach Labs"),
                     ]),
-                    m(".optin-text", [`By enabling this feature, you are agreeing to send us anonymous,
-                      aggregate information about your running CockroachDB cluster,
-                      which may include capacity and usage, server and storage device metadata, basic network topology,
-                      and other information that helps us improve our products and services. We never collect any of
-                      the actual data that you store in your CockroachDB cluster.
-                      Except as set out above, our `, m("a", {href: "/assets/privacyPolicy.html", target: "_blank"}, "Privacy Policy"), ` governs our collection
-                      and use of information from users of our products and services.`, ]),
+                    m(".optin-text", [
+                      `By enabling this feature, you are agreeing to send us anonymous, aggregate
+                      information about your running CockroachDB cluster, which may include
+                      capacity and usage, server and storage device metadata, basic network
+                      topology, and other information that helps us improve our products and
+                      services. We never collect any of the actual data that you store in your
+                      CockroachDB cluster. Except as set out above, our `,
+                      m("a", {href: "/assets/privacyPolicy.html", target: "_blank"}, "Privacy Policy"),
+                      ` governs our collection and use of information from users of our products and services.`,
+                    ]),
                     m("", [
                       m("input[type=checkbox][name=updates]", {id: "updates"}),
                       m("label", {for: "updates"}, "Send me product and feature updates"),

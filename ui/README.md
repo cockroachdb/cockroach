@@ -28,18 +28,6 @@ Before committing, be sure to run `make` to generate a non-debug version of
 `embedded.go`. This is enforced by our build system, but forgetting to do this
 will result in wasted time waiting for the build.
 
-## Watch/Livereload
-If you want to automatically recompile/copy the typescript/stylus/index files,
-you can use `make watch`. This runs [Gulp](http://gulpjs.com/) under the hood.
-
-The website can also automatically pick up your changes with [LiveReload]
-(http://livereload.com/) while `make watch` is running. The [Chrome LiveReload Plugin]
-(https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei?hl=en)
-is an easy way to take advantage of this.
-
-Note that if you add a new file, you'll need to restart `make watch` and run
-`make build` in the project root again.
-
 ## Dependencies
 Our admin UI is compiled using a collection of tools that depends on
 [nodejs](https://nodejs.org/), so you'll want to have that installed.
