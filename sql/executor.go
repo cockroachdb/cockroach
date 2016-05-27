@@ -283,21 +283,23 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 	return cfg, cache
 }
 
-// Prepare returns the result types of the given statement. Args may be a
-// partially populated val args map. Prepare will populate the missing val
-// args. The column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(ctx context.Context, query string, session *Session, args parser.MapArgs) (
+// Prepare returns the result types of the given statement. ptypes may
+// be a partially populated map of placeholder names to placeholder
+// types. Prepare will populate the missing types in the map. The
+// column result types are returned (or nil if there are no results).
+func (e *Executor) Prepare(ctx context.Context,
+	query string, session *Session, ptypes parser.MapPlaceholderTypes) (
 	[]ResultColumn, error) {
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
 	}
-	if err = parser.ProcessPlaceholderAnnotations(stmt, args); err != nil {
+	if err = parser.ProcessPlaceholderAnnotations(stmt, ptypes); err != nil {
 		return nil, err
 	}
 
 	session.planner.resetForBatch(e)
-	session.planner.semaCtx.Args = args
+	session.planner.semaCtx.PlaceholderTypes = ptypes
 	session.planner.evalCtx.PrepareOnly = true
 
 	// Prepare needs a transaction because it needs to retrieve db/table
@@ -326,10 +328,10 @@ func (e *Executor) Prepare(ctx context.Context, query string, session *Session, 
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
 	ctx context.Context, session *Session, stmts string,
-	params []parser.Datum) StatementResults {
+	qargs []parser.Datum) StatementResults {
 
 	session.planner.resetForBatch(e)
-	session.planner.params = parameters(params)
+	session.planner.qargs = queryArguments(qargs)
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
@@ -812,7 +814,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
-	stmt, err := parser.FillArgs(stmt, &planMaker.params)
+	stmt, err := parser.FillQueryArgs(stmt, &planMaker.qargs)
 	if err != nil {
 		txnState.updateStateAndCleanupOnErr(err, e)
 		return Result{Err: err}, err
@@ -1016,33 +1018,33 @@ func (e *Executor) Registry() *metric.Registry {
 	return e.registry
 }
 
-var _ parser.Args = parameters{}
+var _ parser.Args = queryArguments{}
 
-type parameters []parser.Datum
+type queryArguments []parser.Datum
 
 var errNamedArgument = errors.New("named arguments are not supported")
 
-// processPositionalArgument is a helper function that processes a positional
-// integer argument passed to an implementation of parser.Args. Currently, only
-// positional arguments (non-negative integers) are supported, but named arguments may
+// getArgumentIndexForPlaceholder is a helper function that translates a numeric
+// placeholder name passed to an implementation of parser.Args. Currently, only
+// numeric placeholders (non-negative integers) are supported, but named placeholders may
 // be supported in the future.
-func processPositionalArgument(name string) (int64, error) {
+func getArgumentIndexForPlaceholder(name string) (int64, error) {
 	if len(name) == 0 {
-		// This shouldn't happen unless the parser let through an invalid parameter
+		// This shouldn't happen unless the parser let through an invalid placeholder
 		// specification.
-		panic(fmt.Sprintf("invalid empty parameter name"))
+		panic(fmt.Sprintf("invalid empty placeholder name"))
 	}
 	if ch := name[0]; ch < '0' || ch > '9' {
-		// TODO(pmattis): Add support for named parameters (vs the numbered
-		// parameter support below).
+		// TODO(pmattis): Add support for named placeholder (vs the
+		// numbered placeholder support below).
 		return 0, errNamedArgument
 	}
 	return strconv.ParseInt(name, 10, 0)
 }
 
 // Arg implements the parser.Args interface.
-func (p parameters) Arg(name string) (parser.Datum, bool) {
-	i, err := processPositionalArgument(name)
+func (p queryArguments) Arg(name string) (parser.Datum, bool) {
+	i, err := getArgumentIndexForPlaceholder(name)
 	if err != nil {
 		return nil, false
 	}
@@ -1052,16 +1054,16 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	return p[i-1], true
 }
 
-var _ parser.Args = golangParameters{}
+var _ parser.Args = golangQueryArguments{}
 
-type golangParameters []interface{}
+type golangQueryArguments []interface{}
 
 // Arg implements the parser.Args interface.
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
-	i, err := processPositionalArgument(name)
+func (gp golangQueryArguments) Arg(name string) (parser.Datum, bool) {
+	i, err := getArgumentIndexForPlaceholder(name)
 	if err != nil {
 		return nil, false
 	}

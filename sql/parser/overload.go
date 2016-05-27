@@ -195,7 +195,7 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	// defaultTypeCheck type checks the constant and valArg expressions without a preference
+	// defaultTypeCheck type checks the constant and placeholder expressions without a preference
 	// and adds them to the type checked slice.
 	defaultTypeCheck := func(errorOnArgs bool) error {
 		for _, expr := range constExprs {
