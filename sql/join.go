@@ -37,7 +37,6 @@ type indexJoinNode struct {
 	table            *scanNode
 	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[sqlbase.ColumnID]int
-	err              error
 	explain          explainMode
 	debugVals        debugValues
 }
@@ -174,8 +173,8 @@ func (n *indexJoinNode) Next() (bool, error) {
 		// First, try to pull a row from the table.
 		if tableLookup {
 			next, err := n.table.Next()
-			if n.err = err; n.err != nil {
-				return false, n.err
+			if err != nil {
+				return false, err
 			}
 			if next {
 				if n.explain == explainDebug {
@@ -192,8 +191,8 @@ func (n *indexJoinNode) Next() (bool, error) {
 		for len(n.table.spans) < joinBatchSize {
 			if next, err := n.index.Next(); !next {
 				// The index is out of rows or an error occurred.
-				if n.err = err; n.err != nil {
-					return false, n.err
+				if err != nil {
+					return false, err
 				}
 				if len(n.table.spans) == 0 {
 					// The index is out of rows.
@@ -212,9 +211,8 @@ func (n *indexJoinNode) Next() (bool, error) {
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
-			n.err = err
-			if n.err != nil {
-				return false, n.err
+			if err != nil {
+				return false, err
 			}
 			key := roachpb.Key(primaryIndexKey)
 			n.table.spans = append(n.table.spans, sqlbase.Span{

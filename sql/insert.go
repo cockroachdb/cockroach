@@ -263,19 +263,12 @@ func (n *insertNode) Start() error {
 }
 
 func (n *insertNode) Next() (bool, error) {
-	if n.run.done || n.run.err != nil {
-		return false, n.run.err
-	}
-
 	if next, err := n.run.rows.Next(); !next {
-		if err != nil {
-			n.run.err = err
-		} else {
+		if err == nil {
 			// We're done. Finish the batch.
-			n.run.err = n.tw.finalize()
+			err = n.tw.finalize()
 		}
-		n.run.done = true
-		return false, n.run.err
+		return false, err
 	}
 
 	rowVals := n.run.rows.Values()
@@ -290,7 +283,6 @@ func (n *insertNode) Next() (bool, error) {
 		}
 		d, err := n.defaultExprs[i].Eval(n.p.evalCtx)
 		if err != nil {
-			n.run.err = err
 			return false, err
 		}
 		rowVals = append(rowVals, d)
@@ -300,8 +292,7 @@ func (n *insertNode) Next() (bool, error) {
 	for _, col := range n.tableDesc.Columns {
 		if !col.Nullable {
 			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-				n.run.err = sqlbase.NewNonNullViolationError(col.Name)
-				return false, n.run.err
+				return false, sqlbase.NewNonNullViolationError(col.Name)
 			}
 		}
 	}
@@ -309,20 +300,17 @@ func (n *insertNode) Next() (bool, error) {
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
 		if err := sqlbase.CheckValueWidth(n.insertCols[i], rowVals[i]); err != nil {
-			n.run.err = err
 			return false, err
 		}
 	}
 
 	n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false)
 	if err := n.checkHelper.check(n.p.evalCtx); err != nil {
-		n.run.err = err
 		return false, err
 	}
 
 	_, err := n.tw.row(rowVals)
 	if err != nil {
-		n.run.err = err
 		return false, err
 	}
 
@@ -334,7 +322,6 @@ func (n *insertNode) Next() (bool, error) {
 
 	resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
 	if err != nil {
-		n.run.err = err
 		return false, err
 	}
 	n.run.resultRow = resultRow
