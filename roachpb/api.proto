@@ -410,6 +410,8 @@ message GCRequest {
     optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
+  // Threshold is the expiration timestamp.
+  optional Timestamp threshold = 4 [(gogoproto.nullable) = false];
 }
 
 // A GCResponse is the return value from the GC() method.
