@@ -31,6 +31,7 @@ type rowReceiver interface {
 	// PushRow sends a row to this receiver. May block.
 	// Returns true if the row was sent, or false if the receiver does not need
 	// any more rows. In all cases, Close() still needs to be called.
+	// The sender must not use the row anymore after calling this function.
 	PushRow(row sqlbase.EncDatumRow) bool
 	// Close is called when we have no more rows; it causes the rowReceiver to
 	// process all rows and clean up. If err is not null, the error is sent to
@@ -54,7 +55,8 @@ type StreamMsg struct {
 	err error
 }
 
-// RowChannel is a thin layer over a StreamMsg channel
+// RowChannel is a thin layer over a StreamMsg channel, which can be used to
+// transfer rows between goroutines.
 type RowChannel struct {
 	// The channel on which rows are delivered.
 	C <-chan StreamMsg

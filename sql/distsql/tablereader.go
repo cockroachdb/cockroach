@@ -46,8 +46,9 @@ type tableReader struct {
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
-	row   sqlbase.EncDatumRow
-	alloc sqlbase.DatumAlloc
+	row        sqlbase.EncDatumRow
+	datumAlloc sqlbase.DatumAlloc
+	rowAlloc   sqlbase.EncDatumRowAlloc
 }
 
 var _ processor = &tableReader{}
@@ -62,7 +63,7 @@ func (tr *tableReader) IndexedVarReturnType(idx int) parser.Datum {
 
 // IndexedVarEval is part of the parser.IndexedVarContainer interface.
 func (tr *tableReader) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
-	err := tr.row[idx].Decode(&tr.alloc)
+	err := tr.row[idx].Decode(&tr.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
@@ -167,11 +168,7 @@ func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 			break
 		}
 	}
-	// TODO(radu): investigate removing this allocation. We can't reuse the
-	// same slice because it is being read asynchronously on the other side
-	// of the channel. Perhaps StreamMsg can store a few preallocated
-	// elements to avoid allocation in most cases.
-	outRow := make(sqlbase.EncDatumRow, len(tr.outputCols))
+	outRow := tr.rowAlloc.AllocRow(len(tr.outputCols))
 	for i, col := range tr.outputCols {
 		outRow[i] = tr.row[col]
 	}

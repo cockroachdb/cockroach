@@ -210,3 +210,42 @@ func (r EncDatumRows) String() string {
 	b.WriteString("]")
 	return b.String()
 }
+
+// EncDatumRowAlloc is a helper that speeds up allocation of EncDatumRows
+// (preferably of the same length).
+type EncDatumRowAlloc struct {
+	buf []EncDatum
+	// Preallocate a small initial batch (helps cases where
+	// we only allocate a few small rows).
+	prealloc [16]EncDatum
+}
+
+// AllocRow allocates an EncDatumRow with the given number of columns.
+func (a *EncDatumRowAlloc) AllocRow(cols int) EncDatumRow {
+	if a.buf == nil {
+		// First call.
+		a.buf = a.prealloc[:]
+	}
+	if len(a.buf) < cols {
+		// If the rows are small, allocate storage for a bunch of rows at once.
+		bufLen := cols
+		if cols <= 16 {
+			bufLen *= 16
+		} else if cols <= 64 {
+			bufLen *= 4
+		}
+		a.buf = make([]EncDatum, bufLen)
+	}
+	// Chop off a row from buf, and limit its capacity to avoid corrupting the
+	// following row in the unlikely case that the caller appends to the slice.
+	result := EncDatumRow(a.buf[:cols:cols])
+	a.buf = a.buf[cols:]
+	return result
+}
+
+// CopyRow allocates an EncDatumRow and copies the given row to it.
+func (a *EncDatumRowAlloc) CopyRow(row EncDatumRow) EncDatumRow {
+	rowCopy := a.AllocRow(len(row))
+	copy(rowCopy, row)
+	return rowCopy
+}
