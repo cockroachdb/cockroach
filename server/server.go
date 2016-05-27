@@ -427,6 +427,7 @@ func (s *Server) Start() error {
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &util.JSONPb{
+		EnumsAsInts:  true,
 		EmitDefaults: true,
 		Indent:       "  ",
 	}

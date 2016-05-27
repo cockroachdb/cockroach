@@ -401,10 +401,9 @@ module Models {
                   d.results.forEach((r: Proto.Result) => {
                       result.add({
                         name: r.query.name,
-                        // HACK: convert enum string to constant number.
-                        downsampler: Proto.QueryAggregator[r.query.downsampler] as any,
-                        source_aggregator: Proto.QueryAggregator[r.query.source_aggregator] as any,
-                        derivative: Proto.QueryDerivative[r.query.derivative] as any,
+                        downsampler: r.query.downsampler,
+                        source_aggregator: r.query.source_aggregator,
+                        derivative: r.query.derivative,
                         datapoints: _.map(r.datapoints || [], (datapoint) => {
                           // HACK: Convert string to long
                           datapoint.timestamp_nanos = Long.fromString(datapoint.timestamp_nanos as any);
