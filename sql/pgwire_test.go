@@ -253,19 +253,19 @@ func TestPGPrepareFail(t *testing.T) {
 	defer db.Close()
 
 	testFailures := map[string]string{
-		"SELECT $1 = $1":                            "pq: could not determine data type of parameter $1",
-		"SELECT $1":                                 "pq: could not determine data type of parameter $1",
-		"SELECT $1 + $1":                            "pq: could not determine data type of parameter $1",
-		"SELECT CASE WHEN TRUE THEN $1 END":         "pq: could not determine data type of parameter $1",
-		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: could not determine data type of parameter $1",
+		"SELECT $1 = $1":                            "pq: could not determine data type of placeholder $1",
+		"SELECT $1":                                 "pq: could not determine data type of placeholder $1",
+		"SELECT $1 + $1":                            "pq: could not determine data type of placeholder $1",
+		"SELECT CASE WHEN TRUE THEN $1 END":         "pq: could not determine data type of placeholder $1",
+		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: could not determine data type of placeholder $1",
 		"SELECT $1 > 0 AND NOT $1":                  "pq: incompatible NOT argument type: int",
 		"CREATE TABLE $1 (id INT)":                  "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
-		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <parameter> (desired <string>)",
-		"SELECT $0 > 0":                             "pq: there is no parameter $0",
-		"SELECT $2 > 0":                             "pq: could not determine data type of parameter $1",
-		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of parameter $1",
-		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of parameter $1",
-		"SELECT $1 + $2, $2::FLOAT":                 "pq: could not determine data type of parameter $1",
+		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <placeholder> (desired <string>)",
+		"SELECT $0 > 0":                             "pq: invalid placeholder name $0",
+		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
+		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
+		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of placeholder $1",
+		"SELECT $1 + $2, $2::FLOAT":                 "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + 2) + ($1 + 2.5)":              "pq: unsupported binary operator: <int> + <decimal>",
 	}
 
@@ -286,14 +286,14 @@ func TestPGPrepareFail(t *testing.T) {
 }
 
 type preparedQueryTest struct {
-	params  []interface{}
+	qargs   []interface{}
 	results [][]interface{}
 	others  int
 	error   string
 }
 
-func (p preparedQueryTest) Params(v ...interface{}) preparedQueryTest {
-	p.params = v
+func (p preparedQueryTest) SetArgs(v ...interface{}) preparedQueryTest {
+	p.qargs = v
 	return p
 }
 
@@ -318,71 +318,71 @@ func TestPGPreparedQuery(t *testing.T) {
 
 	queryTests := map[string][]preparedQueryTest{
 		"SELECT $1 > 0": {
-			base.Params(1).Results(true),
-			base.Params("1").Results(true),
-			base.Params(1.1).Error(`pq: param $1: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
-			base.Params("1.0").Error(`pq: param $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
-			base.Params(true).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
+			base.SetArgs(1).Results(true),
+			base.SetArgs("1").Results(true),
+			base.SetArgs(1.1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
+			base.SetArgs("1.0").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
+			base.SetArgs(true).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
 		"SELECT TRUE AND $1": {
-			base.Params(true).Results(true),
-			base.Params(false).Results(false),
-			base.Params(1).Results(true),
-			base.Params("").Error(`pq: param $1: strconv.ParseBool: parsing "": invalid syntax`),
+			base.SetArgs(true).Results(true),
+			base.SetArgs(false).Results(false),
+			base.SetArgs(1).Results(true),
+			base.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
 			// Make sure we can run another after a failure.
-			base.Params(true).Results(true),
+			base.SetArgs(true).Results(true),
 		},
 		"SELECT $1::bool": {
-			base.Params(true).Results(true),
-			base.Params("true").Results(true),
-			base.Params("false").Results(false),
-			base.Params("1").Results(true),
-			base.Params(2).Error(`pq: param $1: strconv.ParseBool: parsing "2": invalid syntax`),
-			base.Params(3.1).Error(`pq: param $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
-			base.Params("").Error(`pq: param $1: strconv.ParseBool: parsing "": invalid syntax`),
+			base.SetArgs(true).Results(true),
+			base.SetArgs("true").Results(true),
+			base.SetArgs("false").Results(false),
+			base.SetArgs("1").Results(true),
+			base.SetArgs(2).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "2": invalid syntax`),
+			base.SetArgs(3.1).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
+			base.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
 		},
 		"SELECT $1::int > $2::float": {
-			base.Params(2, 1).Results(true),
-			base.Params("2", 1).Results(true),
-			base.Params(1, "2").Results(false),
-			base.Params("2", "1.0").Results(true),
-			base.Params("2.0", "1").Error(`pq: param $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
-			base.Params(2.1, 1).Error(`pq: param $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			base.SetArgs(2, 1).Results(true),
+			base.SetArgs("2", 1).Results(true),
+			base.SetArgs(1, "2").Results(false),
+			base.SetArgs("2", "1.0").Results(true),
+			base.SetArgs("2.0", "1").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
+			base.SetArgs(2.1, 1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		},
 		"SELECT GREATEST($1, 0, $2), $2": {
-			base.Params(1, -1).Results(1, -1),
-			base.Params(-1, 10).Results(10, 10),
-			base.Params("-2", "-1").Results(0, -1),
-			base.Params(1, 2.1).Error(`pq: param $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			base.SetArgs(1, -1).Results(1, -1),
+			base.SetArgs(-1, 10).Results(10, 10),
+			base.SetArgs("-2", "-1").Results(0, -1),
+			base.SetArgs(1, 2.1).Error(`pq: error in argument for $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		},
 		"SELECT $1::int, $1::float": {
-			base.Params(1).Results(1, 1.0),
-			base.Params("1").Results(1, 1.0),
+			base.SetArgs(1).Results(1, 1.0),
+			base.SetArgs("1").Results(1, 1.0),
 		},
 		"SELECT 3 + $1, $1 + $2": {
-			base.Params("1", "2").Results(4, 3),
-			base.Params(3, "4").Results(6, 7),
-			base.Params(0, "a").Error(`pq: param $2: strconv.ParseInt: parsing "a": invalid syntax`),
+			base.SetArgs("1", "2").Results(4, 3),
+			base.SetArgs(3, "4").Results(6, 7),
+			base.SetArgs(0, "a").Error(`pq: error in argument for $2: strconv.ParseInt: parsing "a": invalid syntax`),
 		},
 		// Check for QualifiedName resolution.
 		"SELECT COUNT(*)": {
 			base.Results(1),
 		},
 		"SELECT CASE WHEN $1 THEN 1-$3 WHEN $2 THEN 1+$3 END": {
-			base.Params(true, false, 2).Results(-1),
-			base.Params(false, true, 3).Results(4),
-			base.Params(false, false, 2).Results(gosql.NullBool{}),
+			base.SetArgs(true, false, 2).Results(-1),
+			base.SetArgs(false, true, 3).Results(4),
+			base.SetArgs(false, false, 2).Results(gosql.NullBool{}),
 		},
 		"SELECT CASE 1 WHEN $1 THEN $2 ELSE 2 END": {
-			base.Params(1, 3).Results(3),
-			base.Params(2, 3).Results(2),
-			base.Params(true, 0).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
+			base.SetArgs(1, 3).Results(3),
+			base.SetArgs(2, 3).Results(2),
+			base.SetArgs(true, 0).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
 		"SHOW database": {
 			base.Results(""),
 		},
 		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
-			base.Params([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
+			base.SetArgs([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
 		},
 		"SHOW COLUMNS FROM system.users": {
 			base.
@@ -405,27 +405,27 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Results("UTC"),
 		},
 		"SELECT (SELECT 1+$1)": {
-			base.Params(1).Results(2),
+			base.SetArgs(1).Results(2),
 		},
 		"SELECT CASE WHEN $1 THEN $2 ELSE 3 END": {
-			base.Params(true, 2).Results(2),
-			base.Params(false, 2).Results(3),
+			base.SetArgs(true, 2).Results(2),
+			base.SetArgs(false, 2).Results(3),
 		},
 		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END": {
-			base.Params(2).Results(1),
+			base.SetArgs(2).Results(1),
 		},
 		"SELECT CASE $1 WHEN 1 THEN 1 END": {
-			base.Params(1).Results(1),
-			base.Params(2).Results(gosql.NullInt64{}),
+			base.SetArgs(1).Results(1),
+			base.SetArgs(2).Results(gosql.NullInt64{}),
 		},
 		"SELECT $1::timestamp, $2::date": {
-			base.Params("2001-01-02 03:04:05", "2006-07-08").Results(
+			base.SetArgs("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
 		"SELECT $1::date, $2::timestamp": {
-			base.Params(
+			base.SetArgs(
 				time.Date(2006, 7, 8, 0, 0, 0, 9, time.FixedZone("", 0)),
 				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			).Results(
@@ -434,92 +434,92 @@ func TestPGPreparedQuery(t *testing.T) {
 			),
 		},
 		"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
-			base.Params("hello").Results("one").Results("hello"),
+			base.SetArgs("hello").Results("one").Results("hello"),
 		},
 		"INSERT INTO d.ts VALUES($1, $2) RETURNING *": {
-			base.Params("2001-01-02 03:04:05", "2006-07-08").Results(
+			base.SetArgs("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.ts VALUES(CURRENT_TIMESTAMP(), $1) RETURNING b": {
-			base.Params("2006-07-08").Results(
+			base.SetArgs("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.ts VALUES(STATEMENT_TIMESTAMP(), $1) RETURNING b": {
-			base.Params("2006-07-08").Results(
+			base.SetArgs("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.ts (a) VALUES ($1) RETURNING a": {
-			base.Params(
+			base.SetArgs(
 				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			).Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
-			base.Params(1).Results(1),
-			base.Params(nil).Results(1),
+			base.SetArgs(1).Results(1),
+			base.SetArgs(nil).Results(1),
 		},
 		"INSERT INTO d.T VALUES ($1::INT) RETURNING 1": {
-			base.Params(1).Results(1),
+			base.SetArgs(1).Results(1),
 		},
 		"INSERT INTO d.T VALUES ($1) RETURNING $1": {
-			base.Params(1).Results(1),
-			base.Params(3).Results(3),
+			base.SetArgs(1).Results(1),
+			base.SetArgs(3).Results(3),
 		},
 		"INSERT INTO d.T VALUES ($1) RETURNING $1, 1 + $1": {
-			base.Params(1).Results(1, 2),
-			base.Params(3).Results(3, 4),
+			base.SetArgs(1).Results(1, 2),
+			base.SetArgs(3).Results(3, 4),
 		},
 		"INSERT INTO d.T VALUES (GREATEST(42, $1)) RETURNING a": {
-			base.Params(40).Results(42),
-			base.Params(45).Results(45),
+			base.SetArgs(40).Results(42),
+			base.SetArgs(45).Results(45),
 		},
 		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
-			base.Params(10, 5).Results(10),
+			base.SetArgs(10, 5).Results(10),
 		},
 		"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) LIMIT $1 OFFSET $2": {
-			base.Params(1, 0).Results(1),
-			base.Params(1, 1).Results(2),
-			base.Params(1, 2).Results(3),
+			base.SetArgs(1, 0).Results(1),
+			base.SetArgs(1, 1).Results(2),
+			base.SetArgs(1, 2).Results(3),
 		},
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 ELSE 42 END": {
-			base.Params(12).Results(15),
-			base.Params(-12).Results(-9),
+			base.SetArgs(12).Results(15),
+			base.SetArgs(-12).Results(-9),
 		},
 		"SELECT DATE '2001-01-02' + ($1 + $1)": {
-			base.Params(12).Results("2001-01-26T00:00:00Z"),
+			base.SetArgs(12).Results("2001-01-26T00:00:00Z"),
 		},
 		"SELECT TO_HEX(~(~$1))": {
-			base.Params(12).Results("c"),
+			base.SetArgs(12).Results("c"),
 		},
 		"SELECT $1::INT": {
-			base.Params(12).Results(12),
+			base.SetArgs(12).Results(12),
 		},
 		"INSERT INTO d.T VALUES ($1 + 1) RETURNING a": {
-			base.Params(1).Results(2),
-			base.Params(11).Results(12),
+			base.SetArgs(1).Results(2),
+			base.SetArgs(11).Results(12),
 		},
 		"INSERT INTO d.T VALUES (-$1) RETURNING a": {
-			base.Params(1).Results(-1),
-			base.Params(-999).Results(999),
+			base.SetArgs(1).Results(-1),
+			base.SetArgs(-999).Results(999),
 		},
 		"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b": {
-			base.Params(5, 6).Results(-6, 11),
+			base.SetArgs(5, 6).Results(-6, 11),
 		},
 		"INSERT INTO d.str (s) VALUES (LEFT($1, 3)) RETURNING s": {
-			base.Params("abcdef").Results("abc"),
-			base.Params("123456").Results("123"),
+			base.SetArgs("abcdef").Results("abc"),
+			base.SetArgs("123456").Results("123"),
 		},
 		"INSERT INTO d.str (b) VALUES (COALESCE($1, 'strLit')) RETURNING b": {
-			base.Params(nil).Results("strLit"),
-			base.Params("123456").Results("123456"),
+			base.SetArgs(nil).Results("strLit"),
+			base.SetArgs("123456").Results("123456"),
 		},
 		"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *": {
-			base.Params(123).Results(123, "hello 123"),
+			base.SetArgs(123).Results(123, "hello 123"),
 		},
 	}
 
@@ -540,25 +540,25 @@ func TestPGPreparedQuery(t *testing.T) {
 			if testing.Verbose() || log.V(1) {
 				log.Infof("query: %s", query)
 			}
-			rows, err := queryFunc(test.params...)
+			rows, err := queryFunc(test.qargs...)
 			if err != nil {
 				if test.error == "" {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
+					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
 				} else if err.Error() != test.error {
-					t.Errorf("%s: %v: expected error: %s, got %s", query, test.params, test.error, err)
+					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
 				}
 				continue
 			}
 			defer rows.Close()
 
 			if test.error != "" {
-				t.Errorf("expected error: %s: %v", query, test.params)
+				t.Errorf("expected error: %s: %v", query, test.qargs)
 				continue
 			}
 
 			for _, expected := range test.results {
 				if !rows.Next() {
-					t.Errorf("expected row: %s: %v", query, test.params)
+					t.Errorf("expected row: %s: %v", query, test.qargs)
 					continue
 				}
 				dst := make([]interface{}, len(expected))
@@ -572,7 +572,7 @@ func TestPGPreparedQuery(t *testing.T) {
 					dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
 				}
 				if !reflect.DeepEqual(dst, expected) {
-					t.Errorf("%s: %v: expected %v, got %v", query, test.params, expected, dst)
+					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, expected, dst)
 				}
 			}
 			for rows.Next() {
@@ -640,13 +640,13 @@ CREATE TABLE d.str (s STRING, b BYTES);`
 }
 
 type preparedExecTest struct {
-	params       []interface{}
+	qargs        []interface{}
 	rowsAffected int64
 	error        string
 }
 
-func (p preparedExecTest) Params(v ...interface{}) preparedExecTest {
-	p.params = v
+func (p preparedExecTest) SetArgs(v ...interface{}) preparedExecTest {
+	p.qargs = v
 	return p
 }
 
@@ -683,62 +683,62 @@ func TestPGPreparedExec(t *testing.T) {
 		{
 			"INSERT INTO d.t VALUES ($1, $2, $3)",
 			[]preparedExecTest{
-				base.Params(1, "one", 2).RowsAffected(1),
-				base.Params("two", 2, 2).Error(`pq: param $1: strconv.ParseInt: parsing "two": invalid syntax`),
+				base.SetArgs(1, "one", 2).RowsAffected(1),
+				base.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "two": invalid syntax`),
 			},
 		},
 		{
 			"UPDATE d.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4",
 			[]preparedExecTest{
-				base.Params(4, 3, 2, 1).RowsAffected(1),
+				base.SetArgs(4, 3, 2, 1).RowsAffected(1),
 			},
 		},
 		{
 			"UPDATE d.t SET i = $1 WHERE (i, s) = ($2, $3)",
 			[]preparedExecTest{
-				base.Params(8, 4, "4").RowsAffected(1),
+				base.SetArgs(8, 4, "4").RowsAffected(1),
 			},
 		},
 		{
 			"DELETE FROM d.t WHERE s = $1 and i = $2 and d = 2 + $3",
 			[]preparedExecTest{
-				base.Params(1, 2, 3).RowsAffected(0),
+				base.SetArgs(1, 2, 3).RowsAffected(0),
 			},
 		},
 		{
 			"INSERT INTO d.t VALUES ($1), ($2)",
 			[]preparedExecTest{
-				base.Params(1, 2).RowsAffected(2),
+				base.SetArgs(1, 2).RowsAffected(2),
 			},
 		},
 		{
 			"INSERT INTO d.t VALUES ($1), ($2) RETURNING $3 + 1",
 			[]preparedExecTest{
-				base.Params(3, 4, 5).RowsAffected(2),
+				base.SetArgs(3, 4, 5).RowsAffected(2),
 			},
 		},
 		{
 			"UPDATE d.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
-				base.Params(true, true, 3).RowsAffected(5),
+				base.SetArgs(true, true, 3).RowsAffected(5),
 			},
 		},
 		{
 			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
-				base.Params(1, 2, 3).RowsAffected(5),
+				base.SetArgs(1, 2, 3).RowsAffected(5),
 			},
 		},
 		{
 			"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END",
 			[]preparedExecTest{
-				base.Params(2).RowsAffected(5),
+				base.SetArgs(2).RowsAffected(5),
 			},
 		},
 		{
 			"DELETE FROM d.t RETURNING $1+1",
 			[]preparedExecTest{
-				base.Params(1).RowsAffected(5),
+				base.SetArgs(1).RowsAffected(5),
 			},
 		},
 		{
@@ -773,17 +773,17 @@ func TestPGPreparedExec(t *testing.T) {
 			if testing.Verbose() || log.V(1) {
 				log.Infof("exec: %s", query)
 			}
-			if result, err := execFunc(test.params...); err != nil {
+			if result, err := execFunc(test.qargs...); err != nil {
 				if test.error == "" {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
+					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
 				} else if err.Error() != test.error {
-					t.Errorf("%s: %v: expected error: %s, got %s", query, test.params, test.error, err)
+					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
 				}
 			} else {
 				if rowsAffected, err := result.RowsAffected(); err != nil {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
+					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
 				} else if rowsAffected != test.rowsAffected {
-					t.Errorf("%s: %v: expected %v, got %v", query, test.params, test.rowsAffected, rowsAffected)
+					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
 				}
 			}
 		}

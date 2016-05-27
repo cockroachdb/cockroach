@@ -1319,16 +1319,16 @@ func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("NULL")
 }
 
-var _ VariableExpr = &DValArg{}
+var _ VariableExpr = &DPlaceholder{}
 
-// DValArg is the named bind var argument Datum.
-type DValArg struct {
+// DPlaceholder is the named bind var argument Datum.
+type DPlaceholder struct {
 	name string
 	typeAnnotation
 }
 
 // ReturnType implements the TypedExpr interface.
-func (d *DValArg) ReturnType() Datum {
+func (d *DPlaceholder) ReturnType() Datum {
 	if d.typeAnnotation.typ != nil {
 		return d.typeAnnotation.typ
 	}
@@ -1336,56 +1336,56 @@ func (d *DValArg) ReturnType() Datum {
 }
 
 // Variable implements the VariableExpr interface.
-func (*DValArg) Variable() {}
+func (*DPlaceholder) Variable() {}
 
 // Type implements the Datum interface.
-func (*DValArg) Type() string {
-	return "parameter"
+func (*DPlaceholder) Type() string {
+	return "placeholder"
 }
 
 // TypeEqual implements the Datum interface.
-func (d *DValArg) TypeEqual(other Datum) bool {
-	_, ok := other.(*DValArg)
+func (d *DPlaceholder) TypeEqual(other Datum) bool {
+	_, ok := other.(*DPlaceholder)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d *DValArg) Compare(other Datum) int {
+func (d *DPlaceholder) Compare(other Datum) int {
 	panic(d.Type() + ".Compare not supported")
 }
 
 // HasPrev implements the Datum interface.
-func (*DValArg) HasPrev() bool {
+func (*DPlaceholder) HasPrev() bool {
 	return false
 }
 
 // Prev implements the Datum interface.
-func (d *DValArg) Prev() Datum {
+func (d *DPlaceholder) Prev() Datum {
 	panic(d.Type() + ".Prev not supported")
 }
 
 // HasNext implements the Datum interface.
-func (*DValArg) HasNext() bool {
+func (*DPlaceholder) HasNext() bool {
 	return false
 }
 
 // Next implements the Datum interface.
-func (d *DValArg) Next() Datum {
+func (d *DPlaceholder) Next() Datum {
 	panic(d.Type() + ".Next not supported")
 }
 
 // IsMax implements the Datum interface.
-func (*DValArg) IsMax() bool {
+func (*DPlaceholder) IsMax() bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (*DValArg) IsMin() bool {
+func (*DPlaceholder) IsMin() bool {
 	return true
 }
 
 // Format implements the NodeFormatter interface.
-func (d *DValArg) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DPlaceholder) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('$')
 	buf.WriteString(d.name)
 }

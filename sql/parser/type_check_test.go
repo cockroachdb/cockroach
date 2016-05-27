@@ -130,11 +130,11 @@ func TestTypeCheckError(t *testing.T) {
 }
 
 var (
-	mapArgsInt               = MapArgs{"a": TypeInt}
-	mapArgsDecimal           = MapArgs{"a": TypeDecimal}
-	mapArgsIntAndInt         = MapArgs{"a": TypeInt, "b": TypeInt}
-	mapArgsIntAndDecimal     = MapArgs{"a": TypeInt, "b": TypeDecimal}
-	mapArgsDecimalAndDecimal = MapArgs{"a": TypeDecimal, "b": TypeDecimal}
+	mapPTypesInt               = MapPlaceholderTypes{"a": TypeInt}
+	mapPTypesDecimal           = MapPlaceholderTypes{"a": TypeDecimal}
+	mapPTypesIntAndInt         = MapPlaceholderTypes{"a": TypeInt, "b": TypeInt}
+	mapPTypesIntAndDecimal     = MapPlaceholderTypes{"a": TypeInt, "b": TypeDecimal}
+	mapPTypesDecimalAndDecimal = MapPlaceholderTypes{"a": TypeDecimal, "b": TypeDecimal}
 )
 
 // copyableExpr can provide each test permutation with a deep copy of the expression tree.
@@ -177,9 +177,9 @@ func ddecimal(f float64) copyableExpr {
 		return dd
 	}
 }
-func valArg(name string) copyableExpr {
+func placeholder(name string) copyableExpr {
 	return func() Expr {
-		return ValArg{name}
+		return Placeholder{name}
 	}
 }
 func tuple(exprs ...copyableExpr) copyableExpr {
@@ -203,8 +203,8 @@ func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
 	}
 }
 
-func cloneMapArgs(args MapArgs) MapArgs {
-	clone := make(MapArgs)
+func cloneMapPlaceholderTypes(args MapPlaceholderTypes) MapPlaceholderTypes {
+	clone := make(MapPlaceholderTypes)
 	for k, v := range args {
 		clone[k] = v
 	}
@@ -212,20 +212,20 @@ func cloneMapArgs(args MapArgs) MapArgs {
 }
 
 type sameTypedExprsTestCase struct {
-	args    MapArgs
+	ptypes  MapPlaceholderTypes
 	desired Datum
 	exprs   []copyableExpr
 
-	expectedType Datum
-	expectedArgs MapArgs
+	expectedType   Datum
+	expectedPTypes MapPlaceholderTypes
 }
 
 func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTestCase) {
-	if test.expectedArgs == nil {
-		test.expectedArgs = make(MapArgs)
+	if test.expectedPTypes == nil {
+		test.expectedPTypes = make(MapPlaceholderTypes)
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
-		ctx := SemaContext{Args: cloneMapArgs(test.args)}
+		ctx := SemaContext{PlaceholderTypes: cloneMapPlaceholderTypes(test.ptypes)}
 		_, typ, err := typeCheckSameTypedExprs(&ctx, test.desired, buildExprs(exprs)...)
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
@@ -233,8 +233,8 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 			if !typ.TypeEqual(test.expectedType) {
 				t.Errorf("%d: expected type %s:%s when type checking %s:%s, found %s", idx, test.expectedType, test.expectedType.Type(), buildExprs(exprs), typ, typ.Type())
 			}
-			if !reflect.DeepEqual(ctx.Args, test.expectedArgs) {
-				t.Errorf("%d: expected args %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedArgs, buildExprs(exprs), ctx.Args)
+			if !reflect.DeepEqual(ctx.PlaceholderTypes, test.expectedPTypes) {
+				t.Errorf("%d: expected plaecholder types %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), ctx.PlaceholderTypes)
 			}
 		}
 	})
@@ -257,17 +257,17 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, nil, exprs(ddecimal(1), intConst("1")), TypeDecimal, nil},
 		{nil, nil, exprs(ddecimal(1), decConst("1.1")), TypeDecimal, nil},
 		{nil, nil, exprs(ddecimal(1), ddecimal(1)), TypeDecimal, nil},
-		// Mixing resolved params with constants and resolved exprs.
-		{mapArgsDecimal, nil, exprs(ddecimal(1), valArg("a")), TypeDecimal, mapArgsDecimal},
-		{mapArgsDecimal, nil, exprs(intConst("1"), valArg("a")), TypeDecimal, mapArgsDecimal},
-		{mapArgsDecimal, nil, exprs(decConst("1.1"), valArg("a")), TypeDecimal, mapArgsDecimal},
-		{mapArgsInt, nil, exprs(intConst("1"), valArg("a")), TypeInt, mapArgsInt},
-		{mapArgsInt, nil, exprs(decConst("1.0"), valArg("a")), TypeInt, mapArgsInt},
-		{mapArgsDecimalAndDecimal, nil, exprs(valArg("b"), valArg("a")), TypeDecimal, mapArgsDecimalAndDecimal},
-		// Mixing unresolved params with constants and resolved exprs.
-		{nil, nil, exprs(ddecimal(1), valArg("a")), TypeDecimal, mapArgsDecimal},
-		{nil, nil, exprs(intConst("1"), valArg("a")), TypeInt, mapArgsInt},
-		{nil, nil, exprs(decConst("1.1"), valArg("a")), TypeDecimal, mapArgsDecimal},
+		// Mixing resolved placeholders with constants and resolved exprs.
+		{mapPTypesDecimal, nil, exprs(ddecimal(1), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{mapPTypesDecimal, nil, exprs(intConst("1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{mapPTypesDecimal, nil, exprs(decConst("1.1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{mapPTypesInt, nil, exprs(intConst("1"), placeholder("a")), TypeInt, mapPTypesInt},
+		{mapPTypesInt, nil, exprs(decConst("1.0"), placeholder("a")), TypeInt, mapPTypesInt},
+		{mapPTypesDecimalAndDecimal, nil, exprs(placeholder("b"), placeholder("a")), TypeDecimal, mapPTypesDecimalAndDecimal},
+		// Mixing unresolved placeholders with constants and resolved exprs.
+		{nil, nil, exprs(ddecimal(1), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{nil, nil, exprs(intConst("1"), placeholder("a")), TypeInt, mapPTypesInt},
+		{nil, nil, exprs(decConst("1.1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
 		// Verify dealing with Null.
 		{nil, nil, exprs(dnull), DNull, nil},
 		{nil, nil, exprs(dnull, dnull), DNull, nil},
@@ -291,9 +291,9 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, TypeInt, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
 		{nil, TypeDecimal, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
 		// Verify desired type when possible with unresolved placeholders.
-		{nil, TypeDecimal, exprs(valArg("a")), TypeDecimal, mapArgsDecimal},
-		{nil, TypeDecimal, exprs(intConst("1"), valArg("a")), TypeDecimal, mapArgsDecimal},
-		{nil, TypeDecimal, exprs(decConst("1.1"), valArg("a")), TypeDecimal, mapArgsDecimal},
+		{nil, TypeDecimal, exprs(placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{nil, TypeDecimal, exprs(intConst("1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{nil, TypeDecimal, exprs(decConst("1.1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
@@ -313,20 +313,20 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 		// Mixing constants and resolved exprs.
 		{nil, nil, exprs(tuple(dint(1), decConst("1.1")), tuple(intConst("1"), ddecimal(1))), dtuple(TypeInt, TypeDecimal), nil},
 		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), dtuple(TypeInt, TypeInt), nil},
-		// Mixing resolved params with constants and resolved exprs.
-		{mapArgsDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeDecimal, TypeDecimal), mapArgsDecimal},
-		{mapArgsDecimalAndDecimal, nil, exprs(tuple(valArg("b"), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeDecimal, TypeDecimal), mapArgsDecimalAndDecimal},
-		{mapArgsIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(TypeInt, TypeDecimal), mapArgsIntAndDecimal},
-		// Mixing unresolved params with constants and resolved exprs.
-		{nil, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(TypeDecimal, TypeDecimal), mapArgsDecimal},
-		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(TypeInt, TypeInt), mapArgsIntAndInt},
+		// Mixing resolved placeholders with constants and resolved exprs.
+		{mapPTypesDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder("a"), placeholder("a"))), dtuple(TypeDecimal, TypeDecimal), mapPTypesDecimal},
+		{mapPTypesDecimalAndDecimal, nil, exprs(tuple(placeholder("b"), intConst("1")), tuple(placeholder("a"), placeholder("a"))), dtuple(TypeDecimal, TypeDecimal), mapPTypesDecimalAndDecimal},
+		{mapPTypesIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder("a"), placeholder("b"))), dtuple(TypeInt, TypeDecimal), mapPTypesIntAndDecimal},
+		// Mixing unresolved placeholders with constants and resolved exprs.
+		{nil, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder("a"), placeholder("a"))), dtuple(TypeDecimal, TypeDecimal), mapPTypesDecimal},
+		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder("a"), placeholder("b"))), dtuple(TypeInt, TypeInt), mapPTypesIntAndInt},
 		// Verify dealing with Null.
 		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, decConst("1"))), dtuple(TypeInt, TypeDecimal), nil},
 		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, ddecimal(1))), dtuple(TypeInt, TypeDecimal), nil},
 		// Verify desired type when possible.
 		{nil, dtuple(TypeInt, TypeDecimal), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), dtuple(TypeInt, TypeDecimal), nil},
 		// Verify desired type when possible with unresolved constants.
-		{nil, dtuple(TypeInt, TypeDecimal), exprs(tuple(valArg("a"), intConst("1")), tuple(intConst("1"), valArg("b"))), dtuple(TypeInt, TypeDecimal), mapArgsIntAndDecimal},
+		{nil, dtuple(TypeInt, TypeDecimal), exprs(tuple(placeholder("a"), intConst("1")), tuple(intConst("1"), placeholder("b"))), dtuple(TypeInt, TypeDecimal), mapPTypesIntAndDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
@@ -337,10 +337,10 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
 	tupleLenErr := `expected tuple .* to have a length of .*`
-	paramErr := `could not determine data type of parameter .*`
+	placeholderErr := `could not determine data type of placeholder .*`
 
 	testData := []struct {
-		args    MapArgs
+		ptypes  MapPlaceholderTypes
 		desired Datum
 		exprs   []copyableExpr
 
@@ -349,18 +349,18 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		// Single type mismatches.
 		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
 		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
-		{mapArgsInt, nil, exprs(ddecimal(1.1), valArg("a")), decimalIntMismatchErr},
-		{mapArgsInt, nil, exprs(decConst("1.1"), valArg("a")), decimalIntMismatchErr},
-		{mapArgsIntAndDecimal, nil, exprs(valArg("b"), valArg("a")), decimalIntMismatchErr},
+		{mapPTypesInt, nil, exprs(ddecimal(1.1), placeholder("a")), decimalIntMismatchErr},
+		{mapPTypesInt, nil, exprs(decConst("1.1"), placeholder("a")), decimalIntMismatchErr},
+		{mapPTypesIntAndDecimal, nil, exprs(placeholder("b"), placeholder("a")), decimalIntMismatchErr},
 		// Tuple type mismatches.
 		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1), dint(1))), tupleLenErr},
-		// Parameter ambiguity.
-		{nil, nil, exprs(valArg("b"), valArg("a")), paramErr},
+		// Placeholder ambiguity.
+		{nil, nil, exprs(placeholder("b"), placeholder("a")), placeholderErr},
 	}
 	for i, d := range testData {
-		ctx := SemaContext{Args: d.args}
+		ctx := SemaContext{PlaceholderTypes: d.ptypes}
 		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
 			if _, _, err := typeCheckSameTypedExprs(&ctx, d.desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
@@ -375,46 +375,46 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 
 	testData := []struct {
 		stmtExprs []Expr
-		desired   MapArgs
+		desired   MapPlaceholderTypes
 	}{
-		{[]Expr{ValArg{"a"}}, MapArgs{}},
-		{[]Expr{ValArg{"a"}, ValArg{"b"}}, MapArgs{}},
+		{[]Expr{Placeholder{"a"}}, MapPlaceholderTypes{}},
+		{[]Expr{Placeholder{"a"}, Placeholder{"b"}}, MapPlaceholderTypes{}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"a"}, Type: boolType},
-		}, MapArgs{}},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
+		}, MapPlaceholderTypes{}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
-		}, MapArgs{
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+		}, MapPlaceholderTypes{
 			"a": TypeInt,
 			"b": TypeBool,
 		}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: intType},
-		}, MapArgs{
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: intType},
+		}, MapPlaceholderTypes{
 			"a": TypeInt,
 		}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
-			ValArg{"a"},
-		}, MapArgs{
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			Placeholder{"a"},
+		}, MapPlaceholderTypes{
 			"b": TypeBool,
 		}},
 		{[]Expr{
-			ValArg{"a"},
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
-		}, MapArgs{
+			Placeholder{"a"},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+		}, MapPlaceholderTypes{
 			"b": TypeBool,
 		}},
 	}
 	for i, d := range testData {
-		args := make(MapArgs)
+		args := make(MapPlaceholderTypes)
 		stmt := &ValuesClause{Tuples: []*Tuple{{Exprs: d.stmtExprs}}}
 		if err := ProcessPlaceholderAnnotations(stmt, args); err != nil {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)

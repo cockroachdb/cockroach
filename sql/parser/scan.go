@@ -156,19 +156,19 @@ func (s *scanner) scan(lval *sqlSymType) {
 
 	switch ch {
 	case '$':
-		// param? $[0-9]+
+		// placeholder? $[0-9]+
 		if isDigit(s.peek()) {
-			s.scanParam(lval)
+			s.scanPlaceholder(lval)
 			return
 		} else if s.syntax == Modern {
 			// TODO(pmattis): This should really be prefixed with '@', but that
 			// conflicts with using '@' for index indirection in qualified names.
 			//
-			// param? $<ident>
+			// placeholder? $<ident>
 			if t := s.peek(); isIdentStart(t) {
 				s.pos++
 				s.scanIdent(lval, t)
-				lval.id = PARAM
+				lval.id = PLACEHOLDER
 				return
 			}
 		}
@@ -567,7 +567,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	}
 }
 
-func (s *scanner) scanParam(lval *sqlSymType) {
+func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	start := s.pos
 	for isDigit(s.peek()) {
 		s.pos++
@@ -587,7 +587,7 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
 	lval.union.val = &NumVal{Value: constant.MakeUint64(uval)}
-	lval.id = PARAM
+	lval.id = PLACEHOLDER
 }
 
 func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {

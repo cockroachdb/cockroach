@@ -102,11 +102,11 @@ type preparedStatement struct {
 	portalNames map[string]struct{}
 }
 
-// preparedPortal is a preparedStatement that has been bound with parameters.
+// preparedPortal is a preparedStatement that has been bound with query arguments.
 type preparedPortal struct {
 	stmt       preparedStatement
 	stmtName   string
-	params     []parser.Datum
+	qargs      []parser.Datum
 	outFormats []formatCode
 }
 
@@ -340,12 +340,12 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	numParamTypes, err := buf.getInt16()
+	numQArgTypes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
 
-	inTypeHints := make([]oid.Oid, numParamTypes)
+	inTypeHints := make([]oid.Oid, numQArgTypes)
 	for i := range inTypeHints {
 		typ, err := buf.getInt32()
 		if err != nil {
@@ -353,7 +353,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		}
 		inTypeHints[i] = oid.Oid(typ)
 	}
-	args := make(parser.MapArgs)
+	ptypes := make(parser.MapPlaceholderTypes)
 	for i, t := range inTypeHints {
 		if t == 0 {
 			continue
@@ -362,27 +362,27 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
 		}
-		args[fmt.Sprint(i+1)] = v
+		ptypes[fmt.Sprint(i+1)] = v
 	}
-	cols, err := c.executor.Prepare(ctx, query, c.session, args)
+	cols, err := c.executor.Prepare(ctx, query, c.session, ptypes)
 	if err != nil {
 		return c.sendError(err)
 	}
 	pq := preparedStatement{
 		query:       query,
-		inTypes:     make([]oid.Oid, 0, len(args)),
+		inTypes:     make([]oid.Oid, 0, len(ptypes)),
 		portalNames: make(map[string]struct{}),
 		columns:     cols,
 	}
-	for k, v := range args {
+	for k, v := range ptypes {
 		i, err := strconv.Atoi(k)
 		if err != nil {
-			return c.sendInternalError(fmt.Sprintf("non-integer parameter: %s", k))
+			return c.sendInternalError(fmt.Sprintf("non-integer placholder name: %s", k))
 		}
-		// ValArgs are 1-indexed, pq.inTypes are 0-indexed.
+		// Placeholders are 1-indexed, pq.inTypes are 0-indexed.
 		i--
 		if i < 0 {
-			return c.sendInternalError(fmt.Sprintf("there is no parameter $%s", k))
+			return c.sendInternalError(fmt.Sprintf("invalid placeholder name $%s", k))
 		}
 		// Grow pq.inTypes to be at least as large as i.
 		for j := len(pq.inTypes); j <= i; j++ {
@@ -405,7 +405,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	for i := range pq.inTypes {
 		if pq.inTypes[i] == 0 {
 			return c.sendInternalError(
-				fmt.Sprintf("could not determine data type of parameter $%d", i+1))
+				fmt.Sprintf("could not determine data type of placeholder $%d", i+1))
 		}
 	}
 	c.preparedStatements[name] = pq
@@ -504,70 +504,70 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", statementName))
 	}
 
-	numParams := int16(len(stmt.inTypes))
-	paramFormatCodes := make([]formatCode, numParams)
+	numQArgs := int16(len(stmt.inTypes))
+	qArgFormatCodes := make([]formatCode, numQArgs)
 
-	// From the docs on number of parameter format codes to bind:
-	// This can be zero to indicate that there are no parameters or that the
-	// parameters all use the default format (text); or one, in which case the
-	// specified format code is applied to all parameters; or it can equal the
-	// actual number of parameters.
+	// From the docs on number of argument format codes to bind:
+	// This can be zero to indicate that there are no arguments or that the
+	// arguments all use the default format (text); or one, in which case the
+	// specified format code is applied to all arguments; or it can equal the
+	// actual number of arguments.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numParamFormatCodes, err := buf.getInt16()
+	numQArgFormatCodes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	switch numParamFormatCodes {
+	switch numQArgFormatCodes {
 	case 0:
 	case 1:
-		// `1` means read one code and apply it to every param.
+		// `1` means read one code and apply it to every argument.
 		c, err := buf.getInt16()
 		if err != nil {
 			return err
 		}
 		fmtCode := formatCode(c)
-		for i := range paramFormatCodes {
-			paramFormatCodes[i] = fmtCode
+		for i := range qArgFormatCodes {
+			qArgFormatCodes[i] = fmtCode
 		}
-	case numParams:
-		// Read one format code for each param and apply it to that param.
-		for i := range paramFormatCodes {
+	case numQArgs:
+		// Read one format code for each argument and apply it to that argument.
+		for i := range qArgFormatCodes {
 			c, err := buf.getInt16()
 			if err != nil {
 				return err
 			}
-			paramFormatCodes[i] = formatCode(c)
+			qArgFormatCodes[i] = formatCode(c)
 		}
 	default:
-		return c.sendInternalError(fmt.Sprintf("wrong number of format codes specified: %d for %d paramaters", numParamFormatCodes, numParams))
+		return c.sendInternalError(fmt.Sprintf("wrong number of format codes specified: %d for %d arguments", numQArgFormatCodes, numQArgs))
 	}
 
 	numValues, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	if numValues != numParams {
-		return c.sendInternalError(fmt.Sprintf("expected %d parameters, got %d", numParams, numValues))
+	if numValues != numQArgs {
+		return c.sendInternalError(fmt.Sprintf("expected %d arguments, got %d", numQArgs, numValues))
 	}
-	params := make([]parser.Datum, numParams)
+	qargs := make([]parser.Datum, numQArgs)
 	for i, t := range stmt.inTypes {
 		plen, err := buf.getInt32()
 		if err != nil {
 			return err
 		}
 		if plen == -1 {
-			// TODO(mjibson): a NULL parameter, figure out what this should do
+			// TODO(mjibson): a NULL argument, figure out what this should do
 			continue
 		}
 		b, err := buf.getBytes(int(plen))
 		if err != nil {
 			return err
 		}
-		d, err := decodeOidDatum(t, paramFormatCodes[i], b)
+		d, err := decodeOidDatum(t, qArgFormatCodes[i], b)
 		if err != nil {
-			return c.sendInternalError(fmt.Sprintf("param $%d: %s", i+1, err))
+			return c.sendInternalError(fmt.Sprintf("error in argument for $%d: %s", i+1, err))
 		}
-		params[i] = d
+		qargs[i] = d
 	}
 
 	numColumns := int16(len(stmt.columns))
@@ -612,7 +612,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	c.preparedPortals[portalName] = preparedPortal{
 		stmt:       stmt,
 		stmtName:   statementName,
-		params:     params,
+		qargs:      qargs,
 		outFormats: columnFormatCodes,
 	}
 	c.writeBuf.initMsg(serverMsgBindComplete)
@@ -633,19 +633,19 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 		return err
 	}
 
-	return c.executeStatements(ctx, portal.stmt.query, portal.params, portal.outFormats, false, limit)
+	return c.executeStatements(ctx, portal.stmt.query, portal.qargs, portal.outFormats, false, limit)
 }
 
 func (c *v3Conn) executeStatements(
 	ctx context.Context,
 	stmts string,
-	params []parser.Datum,
+	qargs []parser.Datum,
 	formatCodes []formatCode,
 	sendDescription bool,
 	limit int32,
 ) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(ctx, c.session, stmts, params)
+	results := c.executor.ExecuteStatements(ctx, c.session, stmts, qargs)
 
 	tracing.AnnotateTrace()
 	if results.Empty {

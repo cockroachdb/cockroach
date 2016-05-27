@@ -53,7 +53,7 @@ type planner struct {
 	verifyFnCheckedOnce     bool
 
 	parser parser.Parser
-	params parameters
+	qargs  queryArguments
 
 	// Avoid allocations by embedding commonly used visitors.
 	isAggregateVisitor          isAggregateVisitor
@@ -167,7 +167,7 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.systemConfig = cfg
 	p.databaseCache = cache
 
-	p.params = parameters{}
+	p.qargs = queryArguments{}
 
 	// The parser cannot be reused between batches.
 	p.parser = parser.Parser{}
@@ -192,7 +192,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	stmt, err = parser.FillArgs(stmt, golangParameters(args))
+	stmt, err = parser.FillQueryArgs(stmt, golangQueryArguments(args))
 	if err != nil {
 		return nil, err
 	}

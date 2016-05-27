@@ -505,7 +505,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT SCONST BCONST
 %token <*NumVal> ICONST FCONST
-%token <str>   PARAM
+%token <str>   PLACEHOLDER
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str>   ERROR
@@ -1151,9 +1151,9 @@ var_list:
 var_value:
   opt_boolean_or_string
 | numeric_only
-| PARAM
+| PLACEHOLDER
   {
-    $$.val = ValArg{Name: $1}
+    $$.val = Placeholder{Name: $1}
   }
 
 iso_level:
@@ -3314,9 +3314,9 @@ c_expr:
     $$.val = $1.qname()
   }
 | a_expr_const
-| PARAM
+| PLACEHOLDER
   {
-    $$.val = ValArg{Name: $1}
+    $$.val = Placeholder{Name: $1}
   }
 | '(' a_expr ')'
   {

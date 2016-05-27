@@ -278,7 +278,7 @@ const SCONST = 57347
 const BCONST = 57348
 const ICONST = 57349
 const FCONST = 57350
-const PARAM = 57351
+const PLACEHOLDER = 57351
 const TYPECAST = 57352
 const DOT_DOT = 57353
 const LESS_EQUALS = 57354
@@ -543,7 +543,7 @@ var sqlToknames = [...]string{
 	"BCONST",
 	"ICONST",
 	"FCONST",
-	"PARAM",
+	"PLACEHOLDER",
 	"TYPECAST",
 	"DOT_DOT",
 	"LESS_EQUALS",
@@ -4957,7 +4957,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1155
 		{
-			sqlVAL.union.val = ValArg{Name: sqlDollar[1].str}
+			sqlVAL.union.val = Placeholder{Name: sqlDollar[1].str}
 		}
 	case 118:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -7569,7 +7569,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3318
 		{
-			sqlVAL.union.val = ValArg{Name: sqlDollar[1].str}
+			sqlVAL.union.val = Placeholder{Name: sqlDollar[1].str}
 		}
 	case 570:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]

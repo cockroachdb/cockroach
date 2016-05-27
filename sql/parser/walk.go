@@ -361,7 +361,7 @@ func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
 func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr ValArg) Walk(_ Visitor) Expr { return expr }
+func (expr Placeholder) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DBool) Walk(_ Visitor) Expr { return expr }
@@ -400,7 +400,7 @@ func (expr *DTimestampTZ) Walk(_ Visitor) Expr { return expr }
 func (expr *DTuple) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *DValArg) Walk(_ Visitor) Expr { return expr }
+func (expr *DPlaceholder) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
@@ -751,39 +751,26 @@ func WalkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
 	return newStmt, (stmt != newStmt)
 }
 
-// Args defines the interface for retrieving arguments. Return false for the
-// second return value if the argument cannot be found.
-type Args interface {
-	Arg(name string) (Datum, bool)
-}
-
-var _ Args = MapArgs{}
-
-// MapArgs is an Args implementation which is used for the type
-// inference necessary to support the postgres wire protocol.
-// See various TypeCheck() implementations for details.
-type MapArgs map[string]Datum
-
-// Arg implements the Args interface.
-func (m MapArgs) Arg(name string) (Datum, bool) {
-	d, ok := m[name]
-	return d, ok
-}
+// MapPlaceholderTypes maps placeholder names (without leading "$") to
+// their type. This is populated by the type inference necessary to
+// support the postgres wire protocol.  See various TypeCheck()
+// implementations for details.
+type MapPlaceholderTypes map[string]Datum
 
 // SetInferredType sets the bind var argument d to the type typ in m. If m is
-// nil or d is not a DValArg, nil is returned. If the bind var argument is set,
+// nil or d is not a DPlaceholder, nil is returned. If the bind var argument is set,
 // typ is returned. An error is returned if typ cannot be set because a
 // different type is already present.
-func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
+func (m MapPlaceholderTypes) SetInferredType(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}
-	v, ok := d.(*DValArg)
+	v, ok := d.(*DPlaceholder)
 	if !ok {
 		return nil, nil
 	}
 	if t, ok := m[v.name]; ok && !typ.TypeEqual(t) {
-		return nil, fmt.Errorf("parameter %s has multiple types: %s, %s", v, typ.Type(), t.Type())
+		return nil, fmt.Errorf("placeholder %s has multiple types: %s, %s", v, typ.Type(), t.Type())
 	}
 	m[v.name] = typ
 	return typ, nil
@@ -792,13 +779,20 @@ func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 // IsUnresolvedArgument returns whether expr is an unresolved var argument. In
 // other words, it returns whether the provided expression is an argument, and
 // if so, whether the variable's type remains unset or not.
-func (m MapArgs) IsUnresolvedArgument(expr Expr) bool {
-	if t, ok := expr.(ValArg); ok {
+func (m MapPlaceholderTypes) IsUnresolvedArgument(expr Expr) bool {
+	if t, ok := expr.(Placeholder); ok {
 		if _, ok := m[t.Name]; !ok {
 			return true
 		}
 	}
 	return false
+}
+
+// Args defines the interface for retrieving the value provided as
+// argument by the client for a placeholder. Return false for the
+// second return value if no argument was provided for the placeholder.
+type Args interface {
+	Arg(name string) (Datum, bool)
 }
 
 type argVisitor struct {
@@ -812,7 +806,7 @@ func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.err != nil {
 		return false, expr
 	}
-	placeholder, ok := expr.(ValArg)
+	placeholder, ok := expr.(Placeholder)
 	if !ok {
 		return true, expr
 	}
@@ -829,9 +823,9 @@ func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 func (v *argVisitor) VisitPost(expr Expr) Expr { return expr }
 
-// FillArgs replaces any placeholder nodes in the expression with arguments
+// FillQueryArgs replaces any placeholder nodes in the expression with arguments
 // supplied with the query.
-func FillArgs(stmt Statement, args Args) (Statement, error) {
+func FillQueryArgs(stmt Statement, args Args) (Statement, error) {
 	v := argVisitor{args: args}
 	stmt, _ = WalkStmt(&v, stmt)
 	return stmt, v.err

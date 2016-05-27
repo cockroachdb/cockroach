@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// valArgsConvert is a parser.Visitor that converts ValArgs ($0, $1, etc.) to
+// valArgsConvert is a parser.Visitor that converts Placeholders ($0, $1, etc.) to
 // IndexedVars.
 type valArgsConvert struct {
 	h   *parser.IndexedVarHelper
@@ -31,7 +31,7 @@ type valArgsConvert struct {
 }
 
 func (v *valArgsConvert) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if val, ok := expr.(parser.ValArg); ok {
+	if val, ok := expr.(parser.Placeholder); ok {
 		idx, err := strconv.Atoi(val.Name)
 		if err != nil || idx < 0 || idx >= v.h.NumVars() {
 			v.err = util.Errorf("invalid variable index %s", val.Name)
@@ -53,7 +53,7 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 		return nil, err
 	}
 
-	// Convert ValArgs to IndexedVars
+	// Convert Placeholders to IndexedVars
 	v := valArgsConvert{h: h, err: nil}
 	expr, _ = parser.WalkExpr(&v, expr)
 	if v.err != nil {

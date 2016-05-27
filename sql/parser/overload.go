@@ -195,7 +195,7 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	// defaultTypeCheck type checks the constant and valArg expressions without a preference
+	// defaultTypeCheck type checks the constant and placeholder expressions without a preference
 	// and adds them to the type checked slice.
 	defaultTypeCheck := func(errorOnArgs bool) error {
 		for _, expr := range constExprs {
@@ -207,11 +207,11 @@ func typeCheckOverloadedExprs(
 		}
 		for _, expr := range valExprs {
 			if errorOnArgs {
-				_, err := expr.e.(ValArg).TypeCheck(ctx, nil)
+				_, err := expr.e.(Placeholder).TypeCheck(ctx, nil)
 				return err
 			}
 			// If we dont want to error on args, avoid type checking them without a desired type.
-			typedExprs[expr.i] = &DValArg{name: expr.e.(ValArg).Name}
+			typedExprs[expr.i] = &DPlaceholder{name: expr.e.(Placeholder).Name}
 		}
 		return nil
 	}

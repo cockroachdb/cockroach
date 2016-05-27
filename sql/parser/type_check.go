@@ -52,19 +52,19 @@ var (
 // SemaContext defines the context in which to perform semantic analysis on an
 // expression syntax tree.
 type SemaContext struct {
-	// Args maps ValArg names to types inferred while type-checking.
-	Args MapArgs
+	// Args maps Placeholder names to types inferred while type-checking.
+	PlaceholderTypes MapPlaceholderTypes
 
 	// Location references the *Location on the current Session.
 	Location **time.Location
 }
 
 // args provides a nil-safe method to access a SemaContext's argument map.
-func (sc *SemaContext) args() MapArgs {
+func (sc *SemaContext) args() MapPlaceholderTypes {
 	if sc == nil {
 		return nil
 	}
-	return sc.Args
+	return sc.PlaceholderTypes
 }
 
 // isUnresolvedArgument provides a nil-safe method to determine whether expr is an
@@ -81,12 +81,12 @@ func (sc *SemaContext) getLocation() *time.Location {
 	return *sc.Location
 }
 
-type parameterTypeAmbiguityError struct {
-	v ValArg
+type placeholderTypeAmbiguityError struct {
+	v Placeholder
 }
 
-func (err parameterTypeAmbiguityError) Error() string {
-	return fmt.Sprintf("could not determine data type of parameter %s", err.v)
+func (err placeholderTypeAmbiguityError) Error() string {
+	return fmt.Sprintf("could not determine data type of placeholder %s", err.v)
 }
 
 type unexpectedTypeError struct {
@@ -100,7 +100,7 @@ func (err unexpectedTypeError) Error() string {
 }
 
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
-	if _, ok := err.(parameterTypeAmbiguityError); ok {
+	if _, ok := err.(placeholderTypeAmbiguityError); ok {
 		return err
 	}
 	return fmt.Errorf(format+": %v", append(a, err)...)
@@ -510,14 +510,14 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr ValArg) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
-	dVal := &DValArg{name: expr.Name}
+func (expr Placeholder) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
+	dVal := &DPlaceholder{name: expr.Name}
 	if v, ok := ctx.args()[expr.Name]; ok {
 		dVal.typeAnnotation.typ = v
 		return dVal, nil
 	}
 	if desired == NoTypePreference || desired == DNull {
-		return nil, parameterTypeAmbiguityError{expr}
+		return nil, placeholderTypeAmbiguityError{expr}
 	}
 	if _, err := ctx.args().SetInferredType(dVal, desired); err != nil {
 		return nil, err
@@ -576,7 +576,7 @@ func (d dNull) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { ret
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DValArg) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { return d, nil }
+func (d *DPlaceholder) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { return d, nil }
 
 func typeCheckAndRequireBoolean(ctx *SemaContext, expr Expr, op string) (TypedExpr, error) {
 	return typeCheckAndRequire(ctx, expr, TypeBool, op)
@@ -728,11 +728,11 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 		}
 	}
 
-	// Used to set ValArgs to the desired typ. If the typ is not provided or is
+	// Used to set Placeholders to the desired typ. If the typ is not provided or is
 	// nil, an error will be thrown.
 	typeCheckSameTypedArgs := func(typ Datum) error {
 		for _, valExpr := range valExprs {
-			typedExpr, err := typeCheckAndRequire(ctx, valExpr.e, typ, "parameter")
+			typedExpr, err := typeCheckAndRequire(ctx, valExpr.e, typ, "placeholder")
 			if err != nil {
 				return err
 			}
@@ -954,7 +954,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 	// TODO(nvanbenschoten) Add support for explicit type annotations.
 	// case *TypeAnnotationExpr:
 	case *CastExpr:
-		if arg, ok := t.Expr.(ValArg); ok {
+		if arg, ok := t.Expr.(Placeholder); ok {
 			castType, _ := t.castTypeAndValidArgTypes()
 			if state, ok := v.placeholders[arg.Name]; ok {
 				if state.every && !castType.TypeEqual(state.typ) {
@@ -969,7 +969,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 			}
 			return false, expr
 		}
-	case ValArg:
+	case Placeholder:
 		v.placeholders[t.Name] = annotationState{every: false}
 	}
 	return true, expr
@@ -991,7 +991,7 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 //
 // TODO(nvanbenschoten) Add support for explicit placeholder annotations.
 // TODO(nvanbenschoten) Can this visitor and map be preallocated (like normalizeVisitor)?
-func ProcessPlaceholderAnnotations(stmt Statement, args MapArgs) error {
+func ProcessPlaceholderAnnotations(stmt Statement, args MapPlaceholderTypes) error {
 	v := placeholderAnnotationVisitor{make(map[string]annotationState)}
 	WalkStmt(&v, stmt)
 	for placeholder, state := range v.placeholders {

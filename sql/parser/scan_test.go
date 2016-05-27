@@ -67,7 +67,7 @@ func TestScanner(t *testing.T) {
 		{`||`, []int{CONCAT}},
 		{`#`, []int{'#'}},
 		{`~`, []int{'~'}},
-		{`$1`, []int{PARAM}},
+		{`$1`, []int{PLACEHOLDER}},
 		{`$a`, []int{'$', IDENT}},
 		{`a`, []int{IDENT}},
 		{`foo + bar`, []int{IDENT, '+', IDENT}},
@@ -126,7 +126,7 @@ func TestScannerModern(t *testing.T) {
 		{`E'a' E"a"`, []int{SCONST, SCONST}},
 		{`r'a' r"a"`, []int{SCONST, SCONST}},
 		{`R'a' R"a"`, []int{SCONST, SCONST}},
-		{`$1 $foo $select`, []int{PARAM, PARAM, PARAM}},
+		{`$1 $foo $select`, []int{PLACEHOLDER, PLACEHOLDER, PLACEHOLDER}},
 	}
 	for i, d := range testData {
 		s := makeScanner(d.sql, Modern)
@@ -254,7 +254,7 @@ func TestScanNumber(t *testing.T) {
 	}
 }
 
-func TestScanParam(t *testing.T) {
+func TestScanPlaceholder(t *testing.T) {
 	testData := []struct {
 		sql      string
 		expected int64
@@ -267,8 +267,8 @@ func TestScanParam(t *testing.T) {
 		s := makeScanner(d.sql, Traditional)
 		var lval sqlSymType
 		id := s.Lex(&lval)
-		if id != PARAM {
-			t.Errorf("%s: expected %d, but found %d", d.sql, PARAM, id)
+		if id != PLACEHOLDER {
+			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, id)
 		}
 		if i, err := lval.union.numVal().asInt64(); err != nil {
 			t.Errorf("%s: expected success, but found %v", d.sql, err)

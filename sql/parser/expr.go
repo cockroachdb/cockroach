@@ -48,9 +48,9 @@ type TypedExpr interface {
 	// straightforward walk over the parse tree. The only significant complexity is
 	// the handling of types and implicit conversions. See binOps and cmpOps for
 	// more details. Note that expression evaluation returns an error if certain
-	// node types are encountered: ValArg, QualifiedName or Subquery. These nodes
+	// node types are encountered: Placeholder, QualifiedName or Subquery. These nodes
 	// should be replaced prior to expression evaluation by an appropriate
-	// WalkExpr. For example, ValArg should be replace by the argument passed from
+	// WalkExpr. For example, Placeholder should be replace by the argument passed from
 	// the client.
 	Eval(EvalContext) (Datum, error)
 	// ReturnType provides the type of the TypedExpr, which is the type of Datum that
@@ -499,18 +499,18 @@ func (node DefaultVal) Format(buf *bytes.Buffer, f FmtFlags) {
 // ReturnType implements the TypedExpr interface.
 func (DefaultVal) ReturnType() Datum { return nil }
 
-var _ VariableExpr = ValArg{}
+var _ VariableExpr = Placeholder{}
 
-// ValArg represents a named bind var argument.
-type ValArg struct {
+// Placeholder represents a named bind var argument.
+type Placeholder struct {
 	Name string
 }
 
 // Variable implements the VariableExpr interface.
-func (ValArg) Variable() {}
+func (Placeholder) Variable() {}
 
 // Format implements the NodeFormatter interface.
-func (node ValArg) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('$')
 	buf.WriteString(node.Name)
 }
@@ -1169,7 +1169,7 @@ func (node *DString) String() string          { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
-func (node *DValArg) String() string          { return AsString(node) }
+func (node *DPlaceholder) String() string     { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
@@ -1190,6 +1190,6 @@ func (node *Subquery) String() string         { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
-func (node ValArg) String() string            { return AsString(node) }
+func (node Placeholder) String() string       { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list NameList) String() string          { return AsString(list) }
