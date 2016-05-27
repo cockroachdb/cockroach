@@ -9,8 +9,8 @@ import { Action } from "../interfaces/action";
 
 describe("UIData reducer", function() {
   describe("actions", function() {
-    it("setUIData() creates the correct action type.", function() {
-      assert.equal(uidata.setUIData("string", null).type, uidata.SET);
+    it("setUIDataKey() creates the correct action type.", function() {
+      assert.equal(uidata.setUIDataKey("string", null).type, uidata.SET);
     });
 
     it("errorUIData() creates the correct action type.", function() {
@@ -45,7 +45,7 @@ describe("UIData reducer", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch setUIData.", function() {
+    it("should correctly dispatch setUIDataKey.", function() {
       let objKey = "obj";
       let boolKey = "bool";
       let numKey = "num";
@@ -54,9 +54,9 @@ describe("UIData reducer", function() {
       let num = 240;
 
       // Validate setting a variety of object types.
-      dispatch(uidata.setUIData(objKey, obj));
-      dispatch(uidata.setUIData(boolKey, bool));
-      dispatch(uidata.setUIData(numKey, num));
+      dispatch(uidata.setUIDataKey(objKey, obj));
+      dispatch(uidata.setUIDataKey(boolKey, bool));
+      dispatch(uidata.setUIDataKey(numKey, num));
 
       assert.isDefined(state.data);
       assert.lengthOf(_.keys(state.data), 3);
@@ -66,7 +66,7 @@ describe("UIData reducer", function() {
 
       // validate overwrite.
       let obj2 = { value: 2 };
-      dispatch(uidata.setUIData(objKey, obj2));
+      dispatch(uidata.setUIDataKey(objKey, obj2));
       assert.lengthOf(_.keys(state.data), 3);
       assert.equal(state.data[objKey], obj2);
     });
@@ -76,7 +76,7 @@ describe("UIData reducer", function() {
       dispatch(uidata.errorUIData(err));
       assert.equal(state.error, err);
 
-      dispatch(uidata.setUIData("num", 4));
+      dispatch(uidata.setUIDataKey("num", 4));
       assert.isNull(state.error);
     });
 
