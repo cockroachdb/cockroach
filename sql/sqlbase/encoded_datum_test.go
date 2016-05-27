@@ -132,3 +132,41 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		}
 	}
 }
+
+func TestEncDatumRowAlloc(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
+		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
+			var in, out EncDatumRows
+			in = make(EncDatumRows, rows)
+			for i := 0; i < rows; i++ {
+				in[i] = make(EncDatumRow, cols)
+				for j := 0; j < cols; j++ {
+					in[i][j] = RandEncDatum(rng)
+				}
+			}
+			var alloc EncDatumRowAlloc
+			out = make(EncDatumRows, rows)
+			for i := 0; i < rows; i++ {
+				out[i] = alloc.CopyRow(in[i])
+				if len(out[i]) != cols {
+					t.Fatalf("allocated row has invalid length %d (expected %d)", len(out[i]), cols)
+				}
+			}
+			// Do some random appends to make sure the buffers never overlap.
+			for x := 0; x < 10; x++ {
+				i := rng.Intn(rows)
+				j := rng.Intn(rows)
+				out[i] = append(out[i], out[j]...)
+				out[i] = out[i][:cols]
+			}
+			for i := 0; i < rows; i++ {
+				for j := 0; j < cols; j++ {
+					if a, b := in[i][j].Datum, out[i][j].Datum; a.Compare(b) != 0 {
+						t.Errorf("copied datum %s doesn't equal original %s", b, a)
+					}
+				}
+			}
+		}
+	}
+}
