@@ -39,13 +39,13 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
 func (ie InternalExecutor) ExecuteStatementInTransaction(
-	txn *client.Txn, statement string, params ...interface{},
+	txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
 	p := makePlanner()
 	p.setTxn(txn)
 	p.session.User = security.RootUser
 	p.leaseMgr = ie.LeaseManager
-	return p.exec(statement, params...)
+	return p.exec(statement, qargs...)
 }
 
 // GetTableSpan gets the key span for a SQL table, including any indices.

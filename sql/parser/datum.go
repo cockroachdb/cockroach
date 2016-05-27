@@ -1340,7 +1340,7 @@ func (*DPlaceholder) Variable() {}
 
 // Type implements the Datum interface.
 func (*DPlaceholder) Type() string {
-	return "parameter"
+	return "placeholder"
 }
 
 // TypeEqual implements the Datum interface.

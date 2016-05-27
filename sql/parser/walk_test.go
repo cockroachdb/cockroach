@@ -22,6 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// MapArgs maps a placeholder to a query argument (value)
+type MapArgs map[string]Datum
+
+// Arg implements the Args interface.
+func (m MapArgs) Arg(name string) (Datum, bool) {
+	d, ok := m[name]
+	return d, ok
+}
+
 // TestFillArgs tests both FillArgs and WalkExpr.
 func TestFillArgs(t *testing.T) {
 	dstring := NewDString
@@ -87,7 +96,7 @@ func TestFillArgs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		q, err = FillArgs(q, d.args)
+		q, err = FillQueryArgs(q, d.args)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -111,7 +120,7 @@ func TestFillArgsError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := FillArgs(q, d.args); err == nil {
+		if _, err := FillQueryArgs(q, d.args); err == nil {
 			t.Fatalf("%s: expected failure, but found success", d.expr)
 		} else if d.expected != err.Error() {
 			t.Fatalf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -153,7 +162,7 @@ func TestWalkStmt(t *testing.T) {
 		qOrig := q
 		qOrigStr := q.String()
 		// FillArgs is where the walk happens, using argVisitor.
-		q, err = FillArgs(q, d.args)
+		q, err = FillQueryArgs(q, d.args)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}

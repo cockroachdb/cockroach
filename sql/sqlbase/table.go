@@ -986,7 +986,7 @@ func EncodeSecondaryIndexes(
 // CheckColumnType verifies that a given value is compatible
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) error {
+func CheckColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapPlaceholderTypes) error {
 	if val == parser.DNull {
 		return nil
 	}

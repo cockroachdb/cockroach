@@ -278,7 +278,7 @@ const SCONST = 57347
 const BCONST = 57348
 const ICONST = 57349
 const FCONST = 57350
-const PARAM = 57351
+const PLACEHOLDER = 57351
 const TYPECAST = 57352
 const DOT_DOT = 57353
 const LESS_EQUALS = 57354
@@ -543,7 +543,7 @@ var sqlToknames = [...]string{
 	"BCONST",
 	"ICONST",
 	"FCONST",
-	"PARAM",
+	"PLACEHOLDER",
 	"TYPECAST",
 	"DOT_DOT",
 	"LESS_EQUALS",

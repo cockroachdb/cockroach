@@ -147,7 +147,7 @@ type floatAlias float32
 type boolAlias bool
 type stringAlias string
 
-func TestGolangParams(t *testing.T) {
+func TestGolangQueryArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Each test case pairs an arbitrary value and parser.Datum which has the same
 	// type
@@ -203,8 +203,8 @@ func TestGolangParams(t *testing.T) {
 	}
 
 	for i, tcase := range testCases {
-		params := golangParameters([]interface{}{tcase.value})
-		output, valid := params.Arg("1")
+		qargs := golangQueryArguments([]interface{}{tcase.value})
+		output, valid := qargs.Arg("1")
 		if !valid {
 			t.Errorf("case %d failed: argument was invalid", i)
 			continue
