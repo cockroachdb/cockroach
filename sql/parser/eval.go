@@ -1928,7 +1928,7 @@ func (t *DTuple) Eval(_ EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t *DValArg) Eval(_ EvalContext) (Datum, error) {
+func (t *DPlaceholder) Eval(_ EvalContext) (Datum, error) {
 	return t, nil
 }
 

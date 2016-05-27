@@ -361,7 +361,7 @@ func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
 func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr ValArg) Walk(_ Visitor) Expr { return expr }
+func (expr Placeholder) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DBool) Walk(_ Visitor) Expr { return expr }
@@ -400,7 +400,7 @@ func (expr *DTimestampTZ) Walk(_ Visitor) Expr { return expr }
 func (expr *DTuple) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *DValArg) Walk(_ Visitor) Expr { return expr }
+func (expr *DPlaceholder) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
@@ -771,14 +771,14 @@ func (m MapArgs) Arg(name string) (Datum, bool) {
 }
 
 // SetInferredType sets the bind var argument d to the type typ in m. If m is
-// nil or d is not a DValArg, nil is returned. If the bind var argument is set,
+// nil or d is not a DPlaceholder, nil is returned. If the bind var argument is set,
 // typ is returned. An error is returned if typ cannot be set because a
 // different type is already present.
 func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}
-	v, ok := d.(*DValArg)
+	v, ok := d.(*DPlaceholder)
 	if !ok {
 		return nil, nil
 	}
@@ -793,7 +793,7 @@ func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 // other words, it returns whether the provided expression is an argument, and
 // if so, whether the variable's type remains unset or not.
 func (m MapArgs) IsUnresolvedArgument(expr Expr) bool {
-	if t, ok := expr.(ValArg); ok {
+	if t, ok := expr.(Placeholder); ok {
 		if _, ok := m[t.Name]; !ok {
 			return true
 		}
@@ -812,7 +812,7 @@ func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.err != nil {
 		return false, expr
 	}
-	placeholder, ok := expr.(ValArg)
+	placeholder, ok := expr.(Placeholder)
 	if !ok {
 		return true, expr
 	}
