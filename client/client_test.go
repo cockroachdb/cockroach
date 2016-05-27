@@ -865,7 +865,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			client.CheckKVs(t, rows,
+			checkKVs(t, rows,
 				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
 				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		}
@@ -876,7 +876,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			client.CheckKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		}
 
 		// Try limit maximum rows.
@@ -885,7 +885,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			client.CheckKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
 		}
 
 		// Try reverse scan with the same start and end key.
