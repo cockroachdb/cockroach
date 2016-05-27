@@ -18,14 +18,12 @@ package distsql
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 const outboxBufRows = 16
-const outboxChanRows = 16
 const outboxFlushPeriod = 100 * time.Microsecond
 
 // preferredEncoding is the encoding used for EncDatums that don't already have
@@ -43,17 +41,14 @@ type outboxStream interface {
 
 // outbox implements an outgoing mailbox as a rowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
-// when we accumulate outboxChanRows or every outboxFlushPeriod (whichever comes
+// when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
 // first).
 type outbox struct {
+	// RowChannel implements the rowReceiver interface.
+	RowChannel
+
 	outStream outboxStream
 
-	// dataChan is the channel through which the outbox goroutine receives rows
-	// from the producer.
-	dataChan chan streamMsg
-	// noMoreRows is an atomic that signals we no longer accept rows via
-	// PushRow.
-	noMoreRows  uint32
 	flushTicker *time.Ticker
 
 	encoder StreamEncoder
@@ -68,24 +63,6 @@ var _ rowReceiver = &outbox{}
 
 func newOutbox(stream outboxStream) *outbox {
 	return &outbox{outStream: stream}
-}
-
-// PushRow is part of the rowReceiver interface.
-func (m *outbox) PushRow(row sqlbase.EncDatumRow) bool {
-	if atomic.LoadUint32(&m.noMoreRows) == 1 {
-		return false
-	}
-
-	m.dataChan <- streamMsg{row: row, err: nil}
-	return true
-}
-
-// Close is part of the rowReceiver interface.
-func (m *outbox) Close(err error) {
-	if err != nil {
-		m.dataChan <- streamMsg{row: nil, err: err}
-	}
-	close(m.dataChan)
 }
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated
@@ -123,7 +100,7 @@ func (m *outbox) mainLoop() {
 loop:
 	for {
 		select {
-		case d, ok := <-m.dataChan:
+		case d, ok := <-m.RowChannel.C:
 			if !ok {
 				// No more data.
 				err = m.flush(true, nil)
@@ -146,8 +123,8 @@ loop:
 			}
 		}
 	}
-	atomic.StoreUint32(&m.noMoreRows, 1)
 	m.flushTicker.Stop()
+	m.RowChannel.NoMoreRows()
 	if err != nil {
 		// Drain to allow senders to finish.
 		for range m.dataChan {
@@ -161,7 +138,7 @@ loop:
 
 func (m *outbox) start(wg *sync.WaitGroup) {
 	m.wg = wg
-	m.dataChan = make(chan streamMsg, outboxChanRows)
+	m.RowChannel.init()
 	m.flushTicker = time.NewTicker(outboxFlushPeriod)
 	go m.mainLoop()
 }

@@ -165,7 +165,7 @@ func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 	}
 	// TODO(radu): investigate removing this allocation. We can't reuse the
 	// same slice because it is being read asynchronously on the other side
-	// of the channel. Perhaps streamMsg can store a few preallocated
+	// of the channel. Perhaps StreamMsg can store a few preallocated
 	// elements to avoid allocation in most cases.
 	outRow := make(sqlbase.EncDatumRow, len(tr.outputCols))
 	for i, col := range tr.outputCols {
