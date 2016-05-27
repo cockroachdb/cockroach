@@ -326,7 +326,10 @@ func (cli resilientDockerClient) ContainerCreate(
 	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
 		log.Infof("unable to create container %s: %v", containerName, err)
-		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{All: true})
+		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
+			All:   true,
+			Limit: -1, // no limit
+		})
 		if cerr != nil {
 			log.Infof("unable to list containers: %v", cerr)
 			return types.ContainerCreateResponse{}, err
