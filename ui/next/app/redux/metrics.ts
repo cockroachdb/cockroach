@@ -6,10 +6,11 @@
  */
 
 import _ = require("lodash");
-import "isomorphic-fetch";
-import * as protos from  "../js/protos";
 import { Dispatch } from "redux";
+
+import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";
+import { queryTimeSeries } from "../util/api";
 
 type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
 type TSResponse = cockroach.ts.TimeSeriesQueryResponse;
@@ -30,7 +31,7 @@ interface WithID<T> {
   data: T;
 }
 
-/** 
+/**
  * A request/response pair.
  */
 interface RequestWithResponse {
@@ -229,7 +230,7 @@ export function fetchMetricsComplete(): Action {
   };
 }
 
-/** 
+/**
  * queuedRequests is a list of requests that should be asynchronously sent to
  * the server. As a purely asynchronous concept, this lives outside of the redux
  * store.
@@ -291,18 +292,7 @@ export function queryMetrics(id: string, query: TSRequestMessage) {
           let toFlatten = _.map(batch, (req) => req.data.queries);
           unifiedRequest.queries = _.flatten(toFlatten);
 
-          return fetch("/ts/query", {
-            method: "POST",
-            headers: {
-              "Accept": "application/json",
-              "Content-Type": "application/json",
-            },
-            body: unifiedRequest.encodeJSON(),
-          }).then((response) => {
-            return response.json() as TSResponse;
-          }).then((json) => {
-            let response = new protos.cockroach.ts.TimeSeriesQueryResponse(json);
-
+          return queryTimeSeries(unifiedRequest).then((response) => {
             // The number of results should match the queries exactly, and should
             // be in the exact order passed.
             if (response.results.length !== unifiedRequest.queries.length) {
@@ -315,8 +305,7 @@ export function queryMetrics(id: string, query: TSRequestMessage) {
             // query. Each request may have sent multiple queries in the batch.
             _.each(batch, (request) => {
               let numQueries = request.data.queries.length;
-              dispatch(receiveMetrics(request.id, request.data,
-                                      new protos.cockroach.ts.TimeSeriesQueryResponse({
+              dispatch(receiveMetrics(request.id, request.data, new protos.cockroach.ts.TimeSeriesQueryResponse({
                 results: results.splice(0, numQueries),
               })));
             });
