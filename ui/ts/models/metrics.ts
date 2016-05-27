@@ -115,11 +115,6 @@ module Models {
        */
       export class Selector {
         /**
-         * Construct a new selector which requests data for the given time
-         * series, downsampling data using the provided aggregator.
-         */
-        constructor(private seriesName: string, private downsampler: Proto.QueryAggregator) {}
-        /**
          * sources returns the data sources to which this query is restrained.
          */
         sources: Utils.ChainProperty<string[], Selector> = Utils.ChainProp(this, []);
@@ -182,6 +177,12 @@ module Models {
             derivative: this.derivative(),
           };
         };
+
+        /**
+         * Construct a new selector which requests data for the given time
+         * series, downsampling data using the provided aggregator.
+         */
+        constructor(private seriesName: string, private downsampler: Proto.QueryAggregator) { }
       }
 
       /**
