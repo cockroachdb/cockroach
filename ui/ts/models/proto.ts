@@ -198,7 +198,7 @@ module Models {
      */
     export interface Datapoint {
       timestamp_nanos: Long;
-      value: number;
+      value?: number;
     }
 
     /**
