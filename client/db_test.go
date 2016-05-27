@@ -36,13 +36,13 @@ func setup() (server.TestServer, *client.DB) {
 
 func checkIntResult(t *testing.T, expected, result int64) {
 	if expected != result {
-		t.Errorf("expected %d, got %d\n", expected, result)
+		t.Errorf("expected %d, got %d", expected, result)
 	}
 }
 
 func checkResult(t *testing.T, expected, result []byte) {
 	if !bytes.Equal(expected, result) {
-		t.Errorf("expected \"%s\", got \"%s\"\n", expected, result)
+		t.Errorf("expected \"%s\", got \"%s\"", expected, result)
 	}
 }
 
@@ -58,7 +58,7 @@ func checkResults(t *testing.T, expected map[string][]byte, results []client.Res
 func checkRows(t *testing.T, expected map[string][]byte, rows []client.KeyValue) {
 	for i, row := range rows {
 		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
-			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"\n",
+			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"",
 				i,
 				row.Key,
 				expected[string(row.Key)],
