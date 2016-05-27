@@ -1,9 +1,9 @@
 import { assert } from "chai";
 import _ = require("lodash");
 import * as fetchMock from "fetch-mock";
-import * as protos from "../js/protos";
 import Long = require("long");
 
+import * as protos from "../js/protos";
 import * as api from "./api";
 
 describe("rest api", function() {

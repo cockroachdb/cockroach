@@ -1,12 +1,13 @@
-/// <reference path="../../typings/main.d.ts" />
+/// <reference path="../../typings/index.d.ts" />
 
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
 
 import "isomorphic-fetch";
-import * as protos from "../js/protos";
 import * as _ from "lodash";
+
+import * as protos from "../js/protos";
 
 let server = protos.cockroach.server;
 let ts = protos.cockroach.ts;

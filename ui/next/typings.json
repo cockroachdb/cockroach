@@ -1,32 +1,31 @@
 {
-  "ambientDependencies": {
+  "globalDependencies": {
     "bytebuffer": "file:local_typings/bytebuffer/bytebuffer.d.ts",
-    "chai": "registry:dt/chai#3.4.0+20160317120654",
     "classnames": "registry:dt/classnames#0.0.0+20160316155526",
     "cockroach-protos": "file:generated/protos.d.ts",
-    "es6-promise": "registry:dt/es6-promise#0.0.0+20160317120654",
-    "isomorphic-fetch": "registry:dt/isomorphic-fetch#0.0.0+20160316155526",
+    "es6-promise": "registry:dt/es6-promise#0.0.0+20160423074304",
+    "isomorphic-fetch": "registry:dt/isomorphic-fetch#0.0.0+20160524142046",
     "long": "file:local_typings/long/long.d.ts",
     "mocha": "registry:dt/mocha#2.2.5+20160317120654",
-    "object-assign": "registry:dt/object-assign#4.0.1+20160316155526",
-    "proxyquire": "registry:dt/proxyquire#1.3.0+20160316155526",
-    "react": "registry:dt/react#0.14.0+20160319053454",
-    "react-dom": "registry:dt/react-dom#0.14.0+20160316155526",
-    "react-redux": "registry:dt/react-redux#4.4.0+20160406115600",
-    "react-router": "registry:dt/react-router#2.0.0+20160423062133",
+    "react": "registry:dt/react#0.14.0+20160526134601",
+    "react-dom": "registry:dt/react-dom#0.14.0+20160412154040",
+    "react-redux": "registry:dt/react-redux#4.4.0+20160501125835",
+    "react-router": "registry:dt/react-router#2.0.0+20160501155536",
     "react-router-redux": "registry:dt/react-router-redux#4.0.0+20160316155526",
     "react-router/history": "registry:dt/react-router/history#2.0.0+20160316155526",
     "redux": "registry:dt/redux#3.3.1+20160326112656",
     "redux-thunk": "registry:dt/redux-thunk#2.0.1+20160317120654"
   },
   "dependencies": {
+    "chai": "registry:npm/chai#3.5.0+20160415060238",
     "d3": "registry:npm/d3#3.0.0+20160211003958",
     "enzyme": "registry:npm/enzyme#2.2.0+20160322031343",
     "fetch-mock": "registry:npm/fetch-mock#4.1.1+20160310030142",
     "lodash": "registry:npm/lodash#4.0.0+20160416211519",
     "moment": "registry:npm/moment#2.10.5+20160211003958",
     "nvd3": "registry:npm/nvd3#1.8.3+20160501004949",
-    "reselect": "github:reactjs/reselect/src/reselect.d.ts#v2.5.1",
-    "sinon": "registry:npm/sinon#1.16.0+20160309002336"
+    "object-assign": "registry:npm/object-assign#4.0.1+20160301180549",
+    "proxyquire": "registry:npm/proxyquire#1.0.0+20160211003958",
+    "sinon": "registry:npm/sinon#1.16.0+20160427193336"
   }
 }
