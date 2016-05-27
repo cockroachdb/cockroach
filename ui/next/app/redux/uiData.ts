@@ -1,9 +1,11 @@
 import _ = require("lodash");
-import "isomorphic-fetch";
-import * as protos from  "../js/protos";
+
 import { Dispatch } from "redux";
-import { Action, PayloadAction } from "../interfaces/action";
 import ByteBuffer = require("bytebuffer");
+
+import * as protos from  "../js/protos";
+import { Action, PayloadAction } from "../interfaces/action";
+import { getUIData, setUIData } from "../util/api";
 
 export const SET = "cockroachui/uidata/SET_OPTIN";
 export const ERROR = "cockroachui/uidata/ERROR";
@@ -51,9 +53,9 @@ export default function(state = new UIDataSet(), action: Action): UIDataSet {
 }
 
 /**
- * setUIData sets the value of the given UIData key.
+ * setUIDataKey sets the value of the given UIData key.
  */
-export function setUIData(key: string, value: any): PayloadAction<KeyValue> {
+export function setUIDataKey(key: string, value: any): PayloadAction<KeyValue> {
   return {
     type: SET,
     payload: { key, value },
@@ -114,20 +116,9 @@ export function saveUIData(...values: KeyValue[]) {
       request.key_values.set(kv.key, ByteBuffer.fromUTF8(stringifiedValue));
     });
 
-    return fetch("/_admin/v1/uidata", {
-      method: "POST",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-      },
-      body: request.encodeJSON(),
-    }).then((response) => {
-      if (!response.ok) {
-        throw new Error(response.statusText);
-      }
-    }).then(() => {
+    return setUIData(request).then((response) => {
       // SetUIDataResponse is empty. A positive return indicates success.
-      _.each(values, (kv) => dispatch(setUIData(kv.key, kv.value)));
+      _.each(values, (kv) => dispatch(setUIDataKey(kv.key, kv.value)));
     }).catch((error) => {
       dispatch(errorUIData(error));
     }).then(() => {
@@ -144,14 +135,7 @@ export function loadUIData(...keys: string[]) {
   return (dispatch: Dispatch, getState: () => any): Promise<void> => {
     dispatch(fetchUIData());
 
-    // GetUIData is requested with query string.
-    let queryStr = _.map(keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
-
-    return fetch("/_admin/v1/uidata?" + queryStr)
-    .then((response) => {
-      return response.json() as Promise<cockroach.server.GetUIDataResponse>;
-    }).then((json) => {
-      let response = new protos.cockroach.server.GetUIDataResponse(json);
+    return getUIData({ keys }).then((response) => {
       response.getKeyValues().forEach((val, key) => {
         // Responses from the server return values as ByteBuffer objects, which
         // represent stringified JSON objects.
@@ -161,7 +145,7 @@ export function loadUIData(...keys: string[]) {
         if (str) {
           decoded = JSON.parse(str);
         }
-        dispatch(setUIData(key, decoded));
+        dispatch(setUIDataKey(key, decoded));
       });
     }).catch((error) => {
       dispatch(errorUIData(error));
