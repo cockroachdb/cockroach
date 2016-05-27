@@ -1992,3 +1992,54 @@ func TestStoreNoConcurrentRaftSnapshots(t *testing.T) {
 	}
 	store.ReleaseRaftSnapshot()
 }
+
+func TestStoreGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	store := tc.store
+
+	assertThreshold := func(ts roachpb.Timestamp) {
+		repl, err := store.GetReplica(1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		repl.mu.Lock()
+		gcThreshold := repl.mu.gcThreshold
+		repl.mu.Unlock()
+		pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !gcThreshold.Equal(pgcThreshold) {
+			t.Fatal(util.ErrorfSkipFrames(1, "persisted != in-memory threshold: %s vs %s",
+				pgcThreshold, gcThreshold))
+		}
+		if !pgcThreshold.Equal(ts) {
+			t.Fatal(util.ErrorfSkipFrames(1, "expected timestamp %s, got %s", ts, pgcThreshold))
+		}
+	}
+
+	// Threshold should start at zero.
+	assertThreshold(roachpb.Timestamp{})
+
+	threshold := roachpb.Timestamp{
+		WallTime: 2E9,
+	}
+
+	b := tc.store.Engine().NewBatch()
+	var h roachpb.Header
+	gcr := roachpb.GCRequest{
+		Threshold: threshold,
+	}
+	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	b.Close()
+
+	assertThreshold(threshold)
+}
