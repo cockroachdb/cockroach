@@ -64,8 +64,7 @@ module Components {
           }
 
           this.chart
-            // HACK: Convert string to long to number.
-            .x((d: Models.Proto.Datapoint) => new Date(Utils.Convert.NanoToMilli(d && Long.fromString(d.timestamp_nanos as any).toNumber())))
+            .x((d: Models.Proto.Datapoint) => new Date(Utils.Convert.NanoToMilli(d && d.timestamp_nanos.toNumber())))
             .y((d: Models.Proto.Datapoint) => d && d.value)
             // .interactive(true)
             .useInteractiveGuideline(true)
