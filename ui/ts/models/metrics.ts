@@ -405,7 +405,11 @@ module Models {
                         downsampler: Proto.QueryAggregator[r.query.downsampler] as any,
                         source_aggregator: Proto.QueryAggregator[r.query.source_aggregator] as any,
                         derivative: Proto.QueryDerivative[r.query.derivative] as any,
-                        datapoints: r.datapoints || [],
+                        datapoints: _.map(r.datapoints || [], (datapoint) => {
+                          // HACK: Convert string to long
+                          datapoint.timestamp_nanos = Long.fromString(datapoint.timestamp_nanos as any);
+                          return datapoint;
+                        }),
                       });
                   });
                   return result;
