@@ -128,7 +128,7 @@ func (n *scanNode) Start() error {
 }
 
 // initScan sets up the rowFetcher and starts a scan.
-func (n *scanNode) initScan() (err error) {
+func (n *scanNode) initScan() error {
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix. This isn't needed for the fetcher, but it is for
