@@ -179,7 +179,7 @@ func ddecimal(f float64) copyableExpr {
 }
 func valArg(name string) copyableExpr {
 	return func() Expr {
-		return ValArg{name}
+		return Placeholder{name}
 	}
 }
 func tuple(exprs ...copyableExpr) copyableExpr {
@@ -377,38 +377,38 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		stmtExprs []Expr
 		desired   MapArgs
 	}{
-		{[]Expr{ValArg{"a"}}, MapArgs{}},
-		{[]Expr{ValArg{"a"}, ValArg{"b"}}, MapArgs{}},
+		{[]Expr{Placeholder{"a"}}, MapArgs{}},
+		{[]Expr{Placeholder{"a"}, Placeholder{"b"}}, MapArgs{}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"a"}, Type: boolType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
 		}, MapArgs{}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
 		}, MapArgs{
 			"a": TypeInt,
 			"b": TypeBool,
 		}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: intType},
 		}, MapArgs{
 			"a": TypeInt,
 		}},
 		{[]Expr{
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
-			ValArg{"a"},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			Placeholder{"a"},
 		}, MapArgs{
 			"b": TypeBool,
 		}},
 		{[]Expr{
-			ValArg{"a"},
-			&CastExpr{Expr: ValArg{"a"}, Type: intType},
-			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
+			Placeholder{"a"},
+			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
 		}, MapArgs{
 			"b": TypeBool,
 		}},

@@ -89,9 +89,9 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, binaryIntFn}, unaryIntFn},
 		{nil, nil, []Expr{intConst("1")}, []overloadImpl{unaryFloatFn, unaryStringFn}, unaryFloatFn},
 		{nil, nil, []Expr{intConst("1")}, []overloadImpl{unaryStringFn, binaryIntFn}, nil},
-		// Unary unresolved ValArgs.
-		{nil, nil, []Expr{ValArg{"a"}}, []overloadImpl{unaryStringFn, unaryIntFn}, nil},
-		{nil, nil, []Expr{ValArg{"a"}}, []overloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn},
+		// Unary unresolved Placeholders.
+		{nil, nil, []Expr{Placeholder{"a"}}, []overloadImpl{unaryStringFn, unaryIntFn}, nil},
+		{nil, nil, []Expr{Placeholder{"a"}}, []overloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn},
 		// Unary values (not constants).
 		{nil, nil, []Expr{NewDInt(1)}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn},
 		{nil, nil, []Expr{NewDFloat(1)}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryFloatFn},
@@ -102,12 +102,12 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		// Binary constants.
 		{nil, nil, []Expr{intConst("1"), intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryIntFn}, binaryIntFn},
 		{nil, nil, []Expr{intConst("1"), decConst("1.0")}, []overloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryDecimalFn},
-		// Binary unresolved ValArgs.
-		{nil, nil, []Expr{ValArg{"a"}, ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, nil},
-		{nil, nil, []Expr{ValArg{"a"}, ValArg{"b"}}, []overloadImpl{binaryIntFn, unaryStringFn}, binaryIntFn},
-		{nil, nil, []Expr{ValArg{"a"}, NewDString("a")}, []overloadImpl{binaryIntFn, binaryStringFn}, binaryStringFn},
-		{nil, nil, []Expr{ValArg{"a"}, intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn},
-		{nil, nil, []Expr{ValArg{"a"}, intConst("1")}, []overloadImpl{binaryStringFn, binaryFloatFn}, binaryFloatFn},
+		// Binary unresolved Placeholders.
+		{nil, nil, []Expr{Placeholder{"a"}, Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, nil},
+		{nil, nil, []Expr{Placeholder{"a"}, Placeholder{"b"}}, []overloadImpl{binaryIntFn, unaryStringFn}, binaryIntFn},
+		{nil, nil, []Expr{Placeholder{"a"}, NewDString("a")}, []overloadImpl{binaryIntFn, binaryStringFn}, binaryStringFn},
+		{nil, nil, []Expr{Placeholder{"a"}, intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn},
+		{nil, nil, []Expr{Placeholder{"a"}, intConst("1")}, []overloadImpl{binaryStringFn, binaryFloatFn}, binaryFloatFn},
 		// Binary values.
 		{nil, nil, []Expr{NewDString("a"), NewDString("b")}, []overloadImpl{binaryStringFn, binaryFloatFn, unaryFloatFn}, binaryStringFn},
 		{nil, nil, []Expr{NewDString("a"), intConst("1")}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, binaryStringFloatFn1},
@@ -121,7 +121,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, TypeInt, []Expr{intConst("1"), NewDFloat(1)}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn},
 		{nil, TypeInt, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1},
 		{nil, TypeFloat, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2},
-		{nil, TypeFloat, []Expr{ValArg{"a"}, ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
+		{nil, TypeFloat, []Expr{Placeholder{"a"}, Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
 		// Sub-expressions.
 		{nil, nil, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn},
 		{nil, nil, []Expr{decConst("1.1"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryDecimalFn},
@@ -129,14 +129,14 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, nil, []Expr{plus(intConst("1"), intConst("2")), plus(decConst("1.1"), decConst("2.2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, nil}, // Limitation.
 		{nil, nil, []Expr{plus(decConst("1.1"), decConst("2.2")), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryDecimalFn},
 		// Homogenous preference.
-		{nil, nil, []Expr{NewDInt(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn},
-		{nil, nil, []Expr{NewDFloat(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
-		{nil, nil, []Expr{intConst("1"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn},
-		{nil, nil, []Expr{decConst("1.0"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil}, // Limitation.
-		{nil, TypeDate, []Expr{NewDInt(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
-		{nil, TypeDate, []Expr{NewDFloat(1), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
-		{nil, TypeDate, []Expr{intConst("1"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
-		{nil, TypeDate, []Expr{decConst("1.0"), ValArg{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
+		{nil, nil, []Expr{NewDInt(1), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn},
+		{nil, nil, []Expr{NewDFloat(1), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
+		{nil, nil, []Expr{intConst("1"), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn},
+		{nil, nil, []Expr{decConst("1.0"), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil}, // Limitation.
+		{nil, TypeDate, []Expr{NewDInt(1), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
+		{nil, TypeDate, []Expr{NewDFloat(1), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, nil},
+		{nil, TypeDate, []Expr{intConst("1"), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
+		{nil, TypeDate, []Expr{decConst("1.0"), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
 	}
 	for i, d := range testData {
 		ctx := SemaContext{Args: d.args}

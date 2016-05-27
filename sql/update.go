@@ -208,7 +208,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	// ValArgs have their types populated in the above Select if they are part
+	// Placeholders have their types populated in the above Select if they are part
 	// of an expression ("SET a = 2 + $1") in the type check step where those
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression

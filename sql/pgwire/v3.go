@@ -379,7 +379,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if err != nil {
 			return c.sendInternalError(fmt.Sprintf("non-integer parameter: %s", k))
 		}
-		// ValArgs are 1-indexed, pq.inTypes are 0-indexed.
+		// Placeholders are 1-indexed, pq.inTypes are 0-indexed.
 		i--
 		if i < 0 {
 			return c.sendInternalError(fmt.Sprintf("there is no parameter $%s", k))
