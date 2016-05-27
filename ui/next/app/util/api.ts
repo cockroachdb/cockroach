@@ -9,6 +9,7 @@ import * as protos from "../js/protos";
 import * as _ from "lodash";
 
 let server = protos.cockroach.server;
+let ts = protos.cockroach.ts;
 
 type DatabasesRequest = cockroach.server.DatabasesRequest;
 type DatabasesResponseMessage = cockroach.server.DatabasesResponseMessage;
@@ -21,6 +22,18 @@ type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
 
 type EventsRequest = cockroach.server.EventsRequest;
 type EventsResponseMessage = cockroach.server.EventsResponseMessage;
+
+type NodesRequest = cockroach.server.NodesRequest;
+type NodesResponseMessage = cockroach.server.NodesResponseMessage;
+
+type GetUIDataRequest = cockroach.server.GetUIDataRequest;
+type GetUIDataResponseMessage = cockroach.server.GetUIDataResponseMessage;
+
+type SetUIDataRequestMessage = cockroach.server.SetUIDataRequestMessage;
+type SetUIDataResponseMessage = cockroach.server.SetUIDataResponseMessage;
+
+type TimeSeriesQueryRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
+type TimeSeriesQueryResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
@@ -56,22 +69,22 @@ function timeout<T>(promise: Promise<T>): Promise<T> {
 // makeFetch will communicate with the server using serialized protocol buffers
 // in production mode, and using JSON in development mode. This paragraph will
 // be removed when that behaviour is implemented.
-function makeFetch<TResponse, TResponseMessage>(
-  builder: {
-    new (json: TResponse): TResponseMessage
-    decode(buffer: ArrayBuffer): TResponseMessage
-    decode(buffer: ByteBuffer): TResponseMessage
-    decode64(buffer: string): TResponseMessage
-  },
-  url: string,
-  method = "GET"
-): Promise<TResponseMessage> {
+function makeFetch<TRequestMessage extends {
+  encodeJSON(): string
+  toArrayBuffer(): ArrayBuffer
+}, TResponse, TResponseMessage, TResponseMessageBuilder extends {
+  new (json: TResponse): TResponseMessage
+  decode(buffer: ArrayBuffer): TResponseMessage
+  decode(buffer: ByteBuffer): TResponseMessage
+  decode64(buffer: string): TResponseMessage
+}>(builder: TResponseMessageBuilder, url: string, req: TRequestMessage = null): Promise<TResponseMessage> {
   return timeout(fetch(url, {
+    method: req ? "POST" : "GET",
     headers: {
       "Accept": "application/json",
       "Content-Type": "application/json",
     },
-    method,
+    body: req ? req.encodeJSON() : undefined,
   })).then((res) => res.json<TResponse>()).then((json) => new builder(json));
 }
 // propsToQueryString is a helper function that converts a set of object
@@ -86,7 +99,7 @@ export function propsToQueryString(props: any) {
  */
 
 // getDatabaseList gets a list of all database names
-export function getDatabaseList(): Promise<DatabasesResponseMessage> {
+export function getDatabaseList(req: DatabasesRequest = {}): Promise<DatabasesResponseMessage> {
   return makeFetch(server.DatabasesResponse, `${API_PREFIX}/databases`);
 }
 
@@ -100,8 +113,29 @@ export function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsR
   return makeFetch(server.TableDetailsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}`);
 }
 
+// getUIData gets UI data
+export function getUIData(req: GetUIDataRequest): Promise<GetUIDataResponseMessage> {
+  let queryString = _.map(req.keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
+  return makeFetch(server.GetUIDataResponse, `${API_PREFIX}/uidata?${queryString}`);
+}
+
+// setUIData sets UI data
+export function setUIData(req: SetUIDataRequestMessage): Promise<SetUIDataResponseMessage> {
+  return makeFetch(server.SetUIDataResponse, `${API_PREFIX}/uidata`, req);
+}
+
 // getEvents gets event data
 export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessage> {
   let queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
   return makeFetch(server.EventsResponse, `${API_PREFIX}/events?${queryString}`);
+}
+
+// getNodes gets node data
+export function getNodes(req: NodesRequest = {}): Promise<NodesResponseMessage> {
+  return makeFetch(server.DatabasesResponse, `/_status/nodes`);
+}
+
+// queryTimeSeries queries for time series data
+export function queryTimeSeries(req: TimeSeriesQueryRequestMessage): Promise<TimeSeriesQueryResponseMessage> {
+  return makeFetch(ts.TimeSeriesQueryResponse, `/ts/query`, req);
 }
