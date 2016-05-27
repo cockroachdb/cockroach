@@ -142,13 +142,14 @@ func newTableReader(
 	return tr, nil
 }
 
-// nextRow processes table rows until it finds a row that passes the filter.
-// Returns a nil row when there are no more rows.
-func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
+// nextRow processes table rows until it finds a row that passes the filter;
+// populates outRow with the values for outputCols.
+// Returns false when there are no more rows.
+func (tr *tableReader) nextRow(outRow sqlbase.EncDatumRow) (bool, error) {
 	for {
 		fetcherRow, err := tr.fetcher.NextRow()
 		if err != nil || fetcherRow == nil {
-			return nil, err
+			return false, err
 		}
 
 		// TODO(radu): we are defeating the purpose of EncDatum here - we
@@ -161,7 +162,7 @@ func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 		}
 		passesFilter, err := sqlbase.RunFilter(tr.filter, tr.evalCtx)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 		if passesFilter {
 			break
@@ -171,11 +172,10 @@ func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 	// same slice because it is being read asynchronously on the other side
 	// of the channel. Perhaps StreamMsg can store a few preallocated
 	// elements to avoid allocation in most cases.
-	outRow := make(sqlbase.EncDatumRow, len(tr.outputCols))
 	for i, col := range tr.outputCols {
 		outRow[i] = tr.row[col]
 	}
-	return outRow, nil
+	return true, nil
 }
 
 // Run is the "main loop".
@@ -191,9 +191,10 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		return
 	}
 	tr.row = make(sqlbase.EncDatumRow, len(tr.desc.Columns))
+	outRow := make(sqlbase.EncDatumRow, len(tr.outputCols))
 	for {
-		outRow, err := tr.nextRow()
-		if err != nil || outRow == nil {
+		gotRow, err := tr.nextRow(outRow)
+		if err != nil || !gotRow {
 			tr.output.Close(err)
 			return
 		}

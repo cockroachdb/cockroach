@@ -61,6 +61,8 @@ type RowChannel struct {
 	// noMoreRows is an atomic that signals we no longer accept rows via
 	// PushRow.
 	noMoreRows uint32
+
+	rowBuf []sqlbase.EncDatum
 }
 
 var _ rowReceiver = &RowChannel{}
@@ -76,8 +78,19 @@ func (rc *RowChannel) PushRow(row sqlbase.EncDatumRow) bool {
 	if atomic.LoadUint32(&rc.noMoreRows) == 1 {
 		return false
 	}
+	num := len(row)
+	if len(rc.rowBuf) < num {
+		// Allocate for a bunch of rows at once to amortize the cost.
+		rc.rowBuf = make([]sqlbase.EncDatum, num*16)
+	}
+	// Chop off a row from the rowBuf, and limit its capacity to avoid
+	// corrupting the following row in the unlikely case that the receiver
+	// appends to the slice.
+	rowCopy := sqlbase.EncDatumRow(rc.rowBuf[:num:num])
+	rc.rowBuf = rc.rowBuf[len(row):]
+	copy(rowCopy, row)
 
-	rc.dataChan <- StreamMsg{row: row, err: nil}
+	rc.dataChan <- StreamMsg{row: rowCopy, err: nil}
 	return true
 }
 
