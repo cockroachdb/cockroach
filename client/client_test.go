@@ -839,3 +839,81 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestTxn_ReverseScan a simple test for Txn.ReverseScan
+func TestTxn_ReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+
+	keys := []roachpb.Key{}
+	b := &client.Batch{}
+	for i := 0; i < 10; i++ {
+		key := roachpb.Key(fmt.Sprintf("%s/key/%02d", testUser, i))
+		keys = append(keys, key)
+		b.Put(key, i)
+	}
+	if err := db.Run(b); err != nil {
+		t.Error(err)
+	}
+
+	err := db.Txn(func(txn *client.Txn) error {
+		// Try reverse scans for all keys.
+		{
+			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/10", 100)
+			if err != nil {
+				return err
+			}
+			checkKVs(t, rows,
+				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
+				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		}
+
+		// Try reverse scans for half of the keys.
+		{
+			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/05", 100)
+			if err != nil {
+				return err
+			}
+			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		}
+
+		// Try limit maximum rows.
+		{
+			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/05", 3)
+			if err != nil {
+				return err
+			}
+			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		}
+
+		// Try reverse scan with the same start and end key.
+		{
+			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/00", 100)
+			if len(rows) > 0 {
+				t.Errorf("expected empty, got %v", rows)
+			}
+			if err == nil {
+				t.Errorf("expected a truncation error, got %s", err)
+			}
+		}
+
+		// Try reverse scan with non-existent key.
+		{
+			rows, err := txn.ReverseScan(testUser+"/key/aa", testUser+"/key/bb", 100)
+			if err != nil {
+				return err
+			}
+			if len(rows) > 0 {
+				t.Errorf("expected empty, got %v", rows)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+}
