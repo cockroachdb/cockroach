@@ -17,6 +17,7 @@
 package distsql
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -35,6 +36,14 @@ type rowReceiver interface {
 	// process all rows and clean up. If err is not null, the error is sent to
 	// the receiver (and the function may block).
 	Close(err error)
+}
+
+// processor is a common interface implemented by all processors, used by the
+// higher-level flow orchestration code.
+type processor interface {
+	// Run is the main loop of the processor.
+	// If wg is non-nil, wg.Done is called before exiting.
+	Run(wg *sync.WaitGroup)
 }
 
 // StreamMsg is the message used in the channels that implement

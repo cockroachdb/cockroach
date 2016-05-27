@@ -24,22 +24,24 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type flow struct {
-	evalCtx           parser.EvalContext
-	txn               *client.Txn
-	simpleFlowMailbox *outbox
-	waitGroup         sync.WaitGroup
+// Flow represents a flow which consists of processors and streams.
+type Flow struct {
+	evalCtx            parser.EvalContext
+	txn                *client.Txn
+	simpleFlowConsumer rowReceiver
+	waitGroup          sync.WaitGroup
+	processors         []processor
 }
 
-func (f *flow) setupMailbox(sp *MailboxSpec) (rowReceiver, error) {
+func (f *Flow) setupMailbox(sp *MailboxSpec) (rowReceiver, error) {
 	// TODO(radu): for now we only support the simple flow mailbox.
 	if !sp.SimpleResponse {
 		return nil, util.Errorf("mailbox spec %s not supported", sp)
 	}
-	return f.simpleFlowMailbox, nil
+	return f.simpleFlowConsumer, nil
 }
 
-func (f *flow) setupStreamOut(spec StreamEndpointSpec) (rowReceiver, error) {
+func (f *Flow) setupStreamOut(spec StreamEndpointSpec) (rowReceiver, error) {
 	if spec.LocalStreamID != nil {
 		return nil, util.Errorf("local endpoints not supported")
 	}
@@ -49,7 +51,7 @@ func (f *flow) setupStreamOut(spec StreamEndpointSpec) (rowReceiver, error) {
 	return f.setupMailbox(spec.Mailbox)
 }
 
-func (f *flow) setupRouter(spec OutputRouterSpec) (rowReceiver, error) {
+func (f *Flow) setupRouter(spec OutputRouterSpec) (rowReceiver, error) {
 	streams := make([]rowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -63,7 +65,7 @@ func (f *flow) setupRouter(spec OutputRouterSpec) (rowReceiver, error) {
 
 // TODO(radu): this should return a general processor interface, not
 // a TableReader.
-func (f *flow) setupProcessor(ps *ProcessorSpec) (*tableReader, error) {
+func (f *Flow) setupProcessor(ps *ProcessorSpec) (*tableReader, error) {
 	if ps.Core.TableReader == nil {
 		return nil, util.Errorf("unsupported processor %s", ps)
 	}
@@ -74,6 +76,23 @@ func (f *flow) setupProcessor(ps *ProcessorSpec) (*tableReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTableReader(ps.Core.TableReader, f.txn, out, f.evalCtx)
+	tr, err := newTableReader(ps.Core.TableReader, f.txn, out, f.evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	f.processors = append(f.processors, tr)
+	return tr, nil
+}
 
+// Start starts the flow (each processor runs in their own goroutine).
+func (f *Flow) Start() {
+	f.waitGroup.Add(len(f.processors))
+	for _, p := range f.processors {
+		go p.Run(&f.waitGroup)
+	}
+}
+
+// Wait waits for all the goroutines for this flow to exit.
+func (f *Flow) Wait() {
+	f.waitGroup.Wait()
 }

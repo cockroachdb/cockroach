@@ -85,7 +85,7 @@ func TestTableReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.run()
+	tr.Run(nil)
 	if out.err != nil {
 		t.Fatal(out.err)
 	}
@@ -115,7 +115,7 @@ func TestTableReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.run()
+	tr.Run(nil)
 	if out.err != nil {
 		t.Fatal(out.err)
 	}
