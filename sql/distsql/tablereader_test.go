@@ -81,7 +81,7 @@ func TestTableReader(t *testing.T) {
 	txn := client.NewTxn(context.Background(), *kvDB)
 
 	out := &testingReceiver{}
-	tr, err := newTableReader(&ts, txn, out, parser.EvalContext{})
+	tr, err := newTableReader(&ts, txn, out, &parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestTableReader(t *testing.T) {
 		OutputColumns: []uint32{0, 2},               // a, c
 	}
 	out = &testingReceiver{}
-	tr, err = newTableReader(&ts, txn, out, parser.EvalContext{})
+	tr, err = newTableReader(&ts, txn, out, &parser.EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}

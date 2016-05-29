@@ -114,7 +114,7 @@ func (p *planner) Insert(
 		}
 	}
 
-	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
+	defaultExprs, err := makeDefaultExprs(cols, &p.parser, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func (n *insertNode) Next() (bool, error) {
 			rowVals = append(rowVals, parser.DNull)
 			continue
 		}
-		d, err := n.defaultExprs[i].Eval(n.p.evalCtx)
+		d, err := n.defaultExprs[i].Eval(&n.p.evalCtx)
 		if err != nil {
 			return false, err
 		}
@@ -305,7 +305,7 @@ func (n *insertNode) Next() (bool, error) {
 	}
 
 	n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false)
-	if err := n.checkHelper.check(n.p.evalCtx); err != nil {
+	if err := n.checkHelper.check(&n.p.evalCtx); err != nil {
 		return false, err
 	}
 
@@ -406,7 +406,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.TypedExpr,
 }
 
 func makeDefaultExprs(
-	cols []sqlbase.ColumnDescriptor, parse *parser.Parser, evalCtx parser.EvalContext,
+	cols []sqlbase.ColumnDescriptor, parse *parser.Parser, evalCtx *parser.EvalContext,
 ) ([]parser.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the

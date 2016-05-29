@@ -20,7 +20,7 @@ package sqlbase
 import "github.com/cockroachdb/cockroach/sql/parser"
 
 // RunFilter runs a filter expression and returns whether the filter passes.
-func RunFilter(filter parser.TypedExpr, evalCtx parser.EvalContext) (bool, error) {
+func RunFilter(filter parser.TypedExpr, evalCtx *parser.EvalContext) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}

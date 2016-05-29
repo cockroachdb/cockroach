@@ -1399,7 +1399,8 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	eq, err := eqOp.fn(EvalContext{}, l, r)
+	ctx := &EvalContext{}
+	eq, err := eqOp.fn(ctx, l, r)
 	if err != nil {
 		panic(err)
 	}
@@ -1412,7 +1413,7 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	lt, err := ltOp.fn(EvalContext{}, l, r)
+	lt, err := ltOp.fn(ctx, l, r)
 	if err != nil {
 		panic(err)
 	}

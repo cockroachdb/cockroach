@@ -81,7 +81,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			if err != nil {
 				return nil, err
 			}
-			typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr)
+			typedExpr, err = p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -145,7 +145,7 @@ func (n *valuesNode) Start() error {
 			}
 
 			var err error
-			row[i], err = typedExpr.Eval(n.p.evalCtx)
+			row[i], err = typedExpr.Eval(&n.p.evalCtx)
 			if err != nil {
 				return err
 			}

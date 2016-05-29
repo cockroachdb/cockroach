@@ -322,7 +322,7 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 //   a + 1 = 2             -> a = 1
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
-func (ctx EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
+func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
 	v := normalizeVisitor{ctx: ctx}
 	expr, _ := WalkExpr(&v, typedExpr)
 	if v.err != nil {
@@ -332,7 +332,7 @@ func (ctx EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
 }
 
 type normalizeVisitor struct {
-	ctx EvalContext
+	ctx *EvalContext
 	err error
 
 	isConstVisitor isConstVisitor

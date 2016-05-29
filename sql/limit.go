@@ -68,7 +68,7 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			normalized, err := p.parser.NormalizeExpr(p.evalCtx, typedExpr)
+			normalized, err := p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -165,12 +165,12 @@ func (n *limitNode) evalLimit() error {
 				return err
 			}
 
-			normalized, err := n.p.parser.NormalizeExpr(n.p.evalCtx, datum.src)
+			normalized, err := n.p.parser.NormalizeExpr(&n.p.evalCtx, datum.src)
 			if err != nil {
 				return err
 			}
 
-			dstDatum, err := normalized.Eval(n.p.evalCtx)
+			dstDatum, err := normalized.Eval(&n.p.evalCtx)
 			if err != nil {
 				return err
 			}

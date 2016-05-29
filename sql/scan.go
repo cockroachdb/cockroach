@@ -161,7 +161,7 @@ func (n *scanNode) debugNext() (bool, error) {
 	}
 
 	if n.row != nil {
-		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
 		if err != nil {
 			return false, err
 		}
@@ -196,7 +196,7 @@ func (n *scanNode) Next() (bool, error) {
 		if err != nil || n.row == nil {
 			return false, err
 		}
-		passesFilter, err := sqlbase.RunFilter(n.filter, n.p.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
 		if err != nil {
 			return false, err
 		}
@@ -344,7 +344,7 @@ func (n *scanNode) computeOrdering(
 // scanNode implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &scanNode{}
 
-func (n *scanNode) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
+func (n *scanNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
 	return n.row[idx].Eval(ctx)
 }
 
