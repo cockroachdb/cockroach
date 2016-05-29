@@ -17,7 +17,7 @@
 package client_test
 
 import (
-	"fmt"
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -34,7 +34,48 @@ func setup() (server.TestServer, *client.DB) {
 	return s, s.DB()
 }
 
-func ExampleDB_Get() {
+func checkIntResult(t *testing.T, expected, result int64) {
+	if expected != result {
+		t.Errorf("expected %d, got %d", expected, result)
+	}
+}
+
+func checkResult(t *testing.T, expected, result []byte) {
+	if !bytes.Equal(expected, result) {
+		t.Errorf("expected \"%s\", got \"%s\"", expected, result)
+	}
+}
+
+func checkResults(t *testing.T, expected map[string][]byte, results []client.Result) {
+	count := 0
+	for _, result := range results {
+		checkRows(t, expected, result.Rows)
+		count++
+	}
+	checkLen(t, len(expected), count)
+}
+
+func checkRows(t *testing.T, expected map[string][]byte, rows []client.KeyValue) {
+	for i, row := range rows {
+		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
+			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"",
+				i,
+				row.Key,
+				expected[string(row.Key)],
+				row.Key,
+				row.ValueBytes())
+		}
+	}
+}
+
+func checkLen(t *testing.T, expected, count int) {
+	if expected != count {
+		t.Errorf("expected length to be %d, got %d", expected, count)
+	}
+}
+
+func TestDB_Get(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -42,13 +83,11 @@ func ExampleDB_Get() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
-
-	// Output:
-	// aa=
+	checkResult(t, []byte(""), result.ValueBytes())
 }
 
-func ExampleDB_Put() {
+func TestDB_Put(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -59,13 +98,11 @@ func ExampleDB_Put() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
-
-	// Output:
-	// aa=1
+	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
-func ExampleDB_CPut() {
+func TestDB_CPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -79,7 +116,7 @@ func ExampleDB_CPut() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
+	checkResult(t, []byte("2"), result.ValueBytes())
 
 	if err = db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
@@ -88,7 +125,7 @@ func ExampleDB_CPut() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
+	checkResult(t, []byte("2"), result.ValueBytes())
 
 	if err = db.CPut("bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
@@ -97,7 +134,8 @@ func ExampleDB_CPut() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("bb=%s\n", result.ValueBytes())
+	checkResult(t, []byte(""), result.ValueBytes())
+
 	if err = db.CPut("bb", "4", nil); err != nil {
 		panic(err)
 	}
@@ -105,16 +143,11 @@ func ExampleDB_CPut() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("bb=%s\n", result.ValueBytes())
-
-	// Output:
-	// aa=2
-	// aa=2
-	// bb=
-	// bb=4
+	checkResult(t, []byte("4"), result.ValueBytes())
 }
 
-func ExampleDB_InitPut() {
+func TestDB_InitPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -131,13 +164,11 @@ func ExampleDB_InitPut() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
-
-	// Output:
-	// aa=1
+	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
-func ExampleDB_Inc() {
+func TestDB_Inc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -148,13 +179,11 @@ func ExampleDB_Inc() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%d\n", result.ValueInt())
-
-	// Output:
-	// aa=100
+	checkIntResult(t, 100, result.ValueInt())
 }
 
-func ExampleBatch() {
+func TestBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -164,18 +193,16 @@ func ExampleBatch() {
 	if err := db.Run(b); err != nil {
 		panic(err)
 	}
-	for _, result := range b.Results {
-		for _, row := range result.Rows {
-			fmt.Printf("%s=%s\n", row.Key, row.ValueBytes())
-		}
-	}
 
-	// Output:
-	// "aa"=
-	// "bb"=2
+	expected := map[string][]byte{
+		"aa": []byte(""),
+		"bb": []byte("2"),
+	}
+	checkResults(t, expected, b.Results)
 }
 
-func ExampleDB_Scan() {
+func TestDB_Scan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -190,16 +217,17 @@ func ExampleDB_Scan() {
 	if err != nil {
 		panic(err)
 	}
-	for i, row := range rows {
-		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	expected := map[string][]byte{
+		"aa": []byte("1"),
+		"ab": []byte("2"),
 	}
 
-	// Output:
-	// 0: "aa"=1
-	// 1: "ab"=2
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
 }
 
-func ExampleDB_ReverseScan() {
+func TestDB_ReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -214,16 +242,17 @@ func ExampleDB_ReverseScan() {
 	if err != nil {
 		panic(err)
 	}
-	for i, row := range rows {
-		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	expected := map[string][]byte{
+		"bb": []byte("3"),
+		"ab": []byte("2"),
 	}
 
-	// Output:
-	// 0: "bb"=3
-	// 1: "ab"=2
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
 }
 
-func ExampleDB_Del() {
+func TestDB_Del(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -241,16 +270,16 @@ func ExampleDB_Del() {
 	if err != nil {
 		panic(err)
 	}
-	for i, row := range rows {
-		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	expected := map[string][]byte{
+		"aa": []byte("1"),
+		"ac": []byte("3"),
 	}
-
-	// Output:
-	// 0: "aa"=1
-	// 1: "ac"=3
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
 }
 
-func ExampleTxn_Commit() {
+func TestTxn_Commit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -270,18 +299,15 @@ func ExampleTxn_Commit() {
 	if err := db.Run(b); err != nil {
 		panic(err)
 	}
-	for i, result := range b.Results {
-		for j, row := range result.Rows {
-			fmt.Printf("%d/%d: %s=%s\n", i, j, row.Key, row.ValueBytes())
-		}
+	expected := map[string][]byte{
+		"aa": []byte("1"),
+		"ab": []byte("2"),
 	}
-
-	// Output:
-	// 0/0: "aa"=1
-	// 1/0: "ab"=2
+	checkResults(t, expected, b.Results)
 }
 
-func ExampleDB_Put_insecure() {
+func TestDB_Put_insecure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx := server.MakeTestContext()
 	ctx.Insecure = true
 	s := server.TestServer{
@@ -300,10 +326,7 @@ func ExampleDB_Put_insecure() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
-
-	// Output:
-	// aa=1
+	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
 func TestDebugName(t *testing.T) {
