@@ -317,13 +317,36 @@ BEGIN;
 	}
 }
 
+// rollbackStrategy is the type of statement which a client can use to
+// rollback aborted txns from retryable errors. We accept two statements
+// for rolling back to the cockroach_restart savepoint. See
+// *Executor.execStmtInAbortedTxn for more about transaction retries.
+type rollbackStrategy int
+
+const (
+	rollbackToSavepoint rollbackStrategy = iota
+	declareSavepoint
+)
+
+func (rs rollbackStrategy) SQLCommand() string {
+	switch rs {
+	case rollbackToSavepoint:
+		return "ROLLBACK TO SAVEPOINT cockroach_restart"
+	case declareSavepoint:
+		return "SAVEPOINT cockroach_restart"
+	}
+	panic("unreachable")
+}
+
 // exec takes a closure and executes it repeatedly as long as it says it needs
-// to be retried.
+// to be retried. The function also takes a rollback strategy, which specifies
+// the statement which the client will use to rollback aborted txns from retryable
+// errors.
 // This function needs to be called from tests that set
 // server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 // TODO(andrei): change this to return an error and make runTestTxn inspect the
 // error to see if it's retriable once we get a retriable error code.
-func exec(t *testing.T, sqlDB *gosql.DB, fn func(*gosql.Tx) bool) {
+func exec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx) bool) {
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -334,7 +357,7 @@ func exec(t *testing.T, sqlDB *gosql.DB, fn func(*gosql.Tx) bool) {
 	}
 
 	for fn(tx) {
-		if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); err != nil {
+		if _, err := tx.Exec(rs.SQLCommand()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -442,51 +465,53 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 
 	for _, tc := range testCases {
-		cleanupFilter := cmdFilters.AppendFilter(
-			func(args storagebase.FilterArgs) *roachpb.Error {
-				if err := injectErrors(args.Req, args.Hdr, tc.magicVals); err != nil {
-					return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
-				}
-				return nil
-			}, false)
+		for _, rs := range []rollbackStrategy{rollbackToSavepoint, declareSavepoint} {
+			cleanupFilter := cmdFilters.AppendFilter(
+				func(args storagebase.FilterArgs) *roachpb.Error {
+					if err := injectErrors(args.Req, args.Hdr, tc.magicVals); err != nil {
+						return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+					}
+					return nil
+				}, false)
 
-		// Also inject an error at RELEASE time, besides the error injected by magicVals.
-		injectReleaseError := true
+			// Also inject an error at RELEASE time, besides the error injected by magicVals.
+			injectReleaseError := true
 
-		commitCount := server.TestServer.MustGetSQLCounter("txn.commit.count")
-		// This is the magic. Run the txn closure until all the retries are exhausted.
-		exec(t, sqlDB, func(tx *gosql.Tx) bool {
-			return runTestTxn(t, tc.magicVals, tc.expectedErr, &injectReleaseError, sqlDB, tx)
-		})
-		checkRestarts(t, tc.magicVals)
+			commitCount := server.TestServer.MustGetSQLCounter("txn.commit.count")
+			// This is the magic. Run the txn closure until all the retries are exhausted.
+			exec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
+				return runTestTxn(t, tc.magicVals, tc.expectedErr, &injectReleaseError, sqlDB, tx)
+			})
+			checkRestarts(t, tc.magicVals)
 
-		// Check that we only wrote the sentinel row.
-		rows, err := sqlDB.Query("SELECT * FROM t.test")
-		if err != nil {
-			t.Fatal(err)
-		}
-		for rows.Next() {
-			var k int
-			var v string
-			err = rows.Scan(&k, &v)
+			// Check that we only wrote the sentinel row.
+			rows, err := sqlDB.Query("SELECT * FROM t.test")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if k != 0 || v != "sentinel" {
-				t.Fatalf("didn't find expected row: %d %s", k, v)
+			for rows.Next() {
+				var k int
+				var v string
+				err = rows.Scan(&k, &v)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if k != 0 || v != "sentinel" {
+					t.Fatalf("didn't find expected row: %d %s", k, v)
+				}
 			}
+			// Check that the commit counter was incremented. It could have been
+			// incremented by more than 1 because of the transactions we use to force
+			// aborts, plus who knows what else the server is doing in the background.
+			checkCounterGE(t, server, "txn.commit.count", commitCount+1)
+			// Clean up the table for the next test iteration.
+			_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows.Close()
+			cleanupFilter()
 		}
-		// Check that the commit counter was incremented. It could have been
-		// incremented by more than 1 because of the transactions we use to force
-		// aborts, plus who knows what else the server is doing in the background.
-		checkCounterGE(t, server, "txn.commit.count", commitCount+1)
-		// Clean up the table for the next test iteration.
-		_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows.Close()
-		cleanupFilter()
 	}
 }
 
