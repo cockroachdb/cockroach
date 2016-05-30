@@ -105,6 +105,7 @@ type rowInserter struct {
 	helper                rowHelper
 	insertCols            []sqlbase.ColumnDescriptor
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
+	fks                   fkInsertHelper
 
 	// For allocation avoidance.
 	marshalled    []roachpb.Value
@@ -116,6 +117,7 @@ type rowInserter struct {
 //
 // insertCols must contain every column in the primary key.
 func makeRowInserter(
+	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
 ) (rowInserter, error) {
@@ -141,6 +143,12 @@ func makeRowInserter(
 			return rowInserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
+
+	fks, err := makeFKInsertHelper(txn, tableDesc, ri.insertColIDtoRowIndex)
+	if err != nil {
+		return ri, err
+	}
+	ri.fks = fks
 
 	return ri, nil
 }
@@ -188,6 +196,10 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 
 	primaryIndexKey, secondaryIndexEntries, err := ri.helper.encodeIndexes(ri.insertColIDtoRowIndex, values)
 	if err != nil {
+		return err
+	}
+
+	if err := ri.fks.check(values); err != nil {
 		return err
 	}
 
@@ -260,6 +272,7 @@ type rowUpdater struct {
 // expectation of which values are passed as oldValues to updateRow. Any column
 // passed in requestedCols will be included in fetchCols.
 func makeRowUpdater(
+	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
@@ -334,12 +347,12 @@ func makeRowUpdater(
 		var err error
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
-		if ru.rd, err = makeRowDeleter(tableDesc, tableDesc.Columns); err != nil {
+		if ru.rd, err = makeRowDeleter(txn, tableDesc, tableDesc.Columns); err != nil {
 			return rowUpdater{}, err
 		}
 		ru.fetchCols = ru.rd.fetchCols
 		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
-		if ru.ri, err = makeRowInserter(tableDesc, tableDesc.Columns); err != nil {
+		if ru.ri, err = makeRowInserter(txn, tableDesc, tableDesc.Columns); err != nil {
 			return rowUpdater{}, err
 		}
 	} else {
@@ -518,7 +531,7 @@ type rowDeleter struct {
 	helper               rowHelper
 	fetchCols            []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex map[sqlbase.ColumnID]int
-
+	fks                  fkDeleteHelper
 	// For allocation avoidance.
 	startKey roachpb.Key
 	endKey   roachpb.Key
@@ -530,6 +543,7 @@ type rowDeleter struct {
 // expectation of which values are passed as values to deleteRow. Any column
 // passed in requestedCols will be included in fetchCols.
 func makeRowDeleter(
+	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 ) (rowDeleter, error) {
@@ -567,17 +581,28 @@ func makeRowDeleter(
 		}
 	}
 
+	fks, err := makeFKDeleteHelper(txn, tableDesc, fetchColIDtoRowIndex)
+	if err != nil {
+		return rowDeleter{}, nil
+	}
+
 	rd := rowDeleter{
 		helper:               rowHelper{tableDesc: tableDesc, indexes: indexes},
 		fetchCols:            fetchCols,
 		fetchColIDtoRowIndex: fetchColIDtoRowIndex,
+		fks:                  fks,
 	}
+
 	return rd, nil
 }
 
 // deleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
 func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
+	if err := rd.fks.check(values); err != nil {
+		return err
+	}
+
 	primaryIndexKey, secondaryIndexEntries, err := rd.helper.encodeIndexes(rd.fetchColIDtoRowIndex, values)
 	if err != nil {
 		return err

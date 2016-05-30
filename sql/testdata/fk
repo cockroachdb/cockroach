@@ -2,7 +2,13 @@ statement ok
 CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE)
 
 statement ok
+INSERT INTO customers VALUES (1, 'a@co.tld'), (2, 'b@co.tld')
+
+statement ok
 CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+
+statement ok
+INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
 
 statement error referenced table "productz" not found
 CREATE TABLE missing (product STRING REFERENCES productz)
@@ -46,7 +52,41 @@ CREATE TABLE reviews (
 )
 
 statement ok
-CREATE TABLE scans (ts TIMESTAMP, upc STRING REFERENCES products (upc), INDEX (upc))
+INSERT INTO orders VALUES (1, '780', 2);
+
+statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
+INSERT INTO orders VALUES (2, '790', 2);
+
+statement error foreign key violation: value \[43\] not found in customers@primary \[id\]
+INSERT INTO orders VALUES (2, '780', 43);
+
+statement ok
+INSERT INTO orders VALUES (2, '780', 1);
+
+statement error foreign key violation: value\(s\) \['780'\] in columns \[sku\] referenced in table "orders".
+DELETE FROM products WHERE sku = '780'
+
+# "scans" is interesting since it references a secondary index with different col names.
+statement ok
+CREATE TABLE scans (ts TIMESTAMP DEFAULT NOW(), scanned STRING REFERENCES products (upc), INDEX (scanned))
+
+statement ok
+INSERT INTO scans (scanned) VALUES ('867072000006'), ('867072000006'), ('885155001450'), ('867072000006');
+
+statement error foreign key violation: value \['missing'\] not found in products@products_upc_key \[upc\]
+INSERT INTO scans (scanned) VALUES ('867072000006'), ('missing'), ('885155001450'), ('867072000006');
+
+statement error foreign key violation: value\(s\) \['867072000006'\] in columns \[upc\] referenced in table "scans".
+DELETE FROM products WHERE sku = 'VP-W9QH-W44L'
+
+statement ok
+DELETE FROM scans
+
+statement ok
+DELETE FROM orders
+
+statement ok
+DELETE FROM products WHERE sku = '780'
 
 statement error "products_upc_key" is referenced by foreign key from table "scans"
 DROP INDEX products@products_upc_key

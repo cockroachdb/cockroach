@@ -57,7 +57,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		requestedCols = en.tableDesc.Columns
 	}
 
-	rd, err := makeRowDeleter(en.tableDesc, requestedCols)
+	rd, err := makeRowDeleter(p.txn, en.tableDesc, requestedCols)
 	if err != nil {
 		return nil, err
 	}
