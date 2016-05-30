@@ -798,6 +798,9 @@ message RaftCommand {
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   optional ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
   optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
+  // When the command is applied, its result is an error if the lease log
+  // counter has already reached (or exceeded) max_lease_index.
+  optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
 }
 
 // StoreRequestHeader locates a Store on a Node.
