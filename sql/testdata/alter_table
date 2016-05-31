@@ -286,6 +286,26 @@ SELECT a,b FROM add_default WHERE e > d AND e - d < interval '10s'
 3 10
 5 NULL
 
+# Multiple columns can be added at once with heterogeneous DEFAULT usage
+statement ok
+CREATE TABLE d (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO d VALUES (1), (2)
+
+statement ok
+ALTER TABLE d ADD COLUMN c INT, ADD COLUMN b INT DEFAULT 7
+
+statement ok
+INSERT INTO d (a, c) VALUES (3, 4)
+
+query III
+SELECT * FROM d
+----
+1 NULL 7
+2 NULL 7
+3 4    7
+
 # Test privileges.
 
 statement ok
