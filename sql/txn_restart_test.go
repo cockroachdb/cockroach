@@ -696,11 +696,11 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 
 // Verifies that a read-only transaction that triggers a deadline-exceeded error finishes
 // without causing an Executor error. In particular, this test case creates a read-only txn
-// that elides EndTransactionRequest and makes sure a deadline-exceeded error causes a retryable error.
+// that elides EndTransactionRequest and makes sure a deadline-exceeded error causes a
+// non-retryable error.
 //
-// This test triggers the above scenario by shortening the lease durations and making
-// ReadWithinUncertaintyIntervalError advance the clock, so that the transaction timestamp
-// exceeds the deadline of the EndTransactionRequest.
+// This test triggers the above scenario by making ReadWithinUncertaintyIntervalError advance
+// the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
 func TestTxnDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -722,9 +722,6 @@ func TestTxnDeadline(t *testing.T) {
 			return pErr
 		},
 	}
-	defer func() {
-		testingKnobs.PErrOverride = nil
-	}()
 
 	ctx := server.MakeTestContext()
 	ctx.TestingKnobs.Store = testingKnobs
