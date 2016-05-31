@@ -18,6 +18,7 @@ package kv
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -491,7 +492,6 @@ type historyVerifier struct {
 	verify         *verifier
 	preHistoryCmds []*cmd
 	verifyCmds     []*cmd
-	expSuccess     bool
 	symmetric      bool
 
 	sync.Mutex // protects actual slice of command outcomes.
@@ -499,14 +499,13 @@ type historyVerifier struct {
 	wg         sync.WaitGroup
 }
 
-func newHistoryVerifier(name string, txns []string, verify *verifier, expSuccess bool, t *testing.T) *historyVerifier {
+func newHistoryVerifier(name string, txns []string, verify *verifier, t *testing.T) *historyVerifier {
 	return &historyVerifier{
 		name:           name,
 		txns:           parseHistories(txns, t),
 		verify:         verify,
 		preHistoryCmds: parseHistory(0, verify.preHistory, t),
 		verifyCmds:     parseHistory(0, verify.history, t),
-		expSuccess:     expSuccess,
 		symmetric:      areHistoriesSymmetric(txns),
 	}
 }
@@ -532,27 +531,24 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 	enumHis := enumerateHistories(hv.txns, hv.symmetric)
 
 	historyIdx := 1
-	var failures []error
 	for _, p := range enumPri {
 		for _, i := range enumIso {
 			for _, h := range enumHis {
 				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
-					failures = append(failures, err)
+					t.Errorf("expected success, experienced %v", err)
+					return
 				}
 				historyIdx++
 			}
 		}
 	}
-
-	if hv.expSuccess == true && len(failures) > 0 {
-		t.Errorf("expected success, experienced %d errors", len(failures))
-	} else if !hv.expSuccess && len(failures) == 0 {
-		t.Errorf("expected failures for the %q anomaly, but experienced none", hv.name)
-	}
 }
 
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	if t.Failed() {
+		return errors.New("already failed")
+	}
 	// Execute pre-history if applicable.
 	if hv.preHistoryCmds != nil {
 		if str, _, err := hv.runCmds(hv.preHistoryCmds, historyIdx, db, t); err != nil {
@@ -599,7 +595,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 			log.Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
 		}
 	}
-	if hv.expSuccess && err != nil {
+	if err != nil {
 		t.Errorf("%d: iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s",
 			historyIdx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
 	}
@@ -680,9 +676,14 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cm
 
 // checkConcurrency creates a history verifier, starts a new database
 // and runs the verifier.
-func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []string,
-	verify *verifier, expSuccess bool, t *testing.T) {
-	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
+func checkConcurrency(
+	name string,
+	isolations []roachpb.IsolationType,
+	txns []string,
+	verify *verifier,
+	t *testing.T,
+) {
+	verifier := newHistoryVerifier(name, txns, verify, t)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.TxnRetryOptions = correctnessTestRetryOptions
 	s, _ := createTestDBWithContext(t, dbCtx)
@@ -738,7 +739,7 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("inconsistent analysis", bothIsolations, []string{txn1, txn2}, verify, true, t)
+	checkConcurrency("inconsistent analysis", bothIsolations, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBLostUpdateAnomaly verifies that neither SI nor SSI isolation
@@ -769,7 +770,7 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("lost update", bothIsolations, []string{txn, txn}, verify, true, t)
+	checkConcurrency("lost update", bothIsolations, []string{txn, txn}, verify, t)
 }
 
 // TestTxnDBLostDeleteAnomaly verifies that neither SI nor SSI
@@ -801,7 +802,7 @@ func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("lost update (delete)", onlySnapshot, []string{txn1, txn2}, verify, true, t)
+	checkConcurrency("lost update (delete)", onlySnapshot, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBLostDeleteRangeAnomaly verifies that neither SI nor SSI
@@ -836,7 +837,7 @@ func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("lost update (range delete)", onlySnapshot, []string{txn1, txn2}, verify, true, t)
+	checkConcurrency("lost update (range delete)", onlySnapshot, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBPhantomReadAnomaly verifies that neither SI nor SSI isolation
@@ -864,7 +865,7 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("phantom read", bothIsolations, []string{txn1, txn2}, verify, true, t)
+	checkConcurrency("phantom read", bothIsolations, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBPhantomDeleteAnomaly verifies that neither SI nor SSI
@@ -887,7 +888,31 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("phantom delete", bothIsolations, []string{txn1, txn2}, verify, true, t)
+	checkConcurrency("phantom delete", bothIsolations, []string{txn1, txn2}, verify, t)
+}
+
+func runWriteSkewTest(t *testing.T, iso roachpb.IsolationType) {
+	checks := make(map[roachpb.IsolationType]func(map[string]int64) error)
+	checks[roachpb.SERIALIZABLE] = func(env map[string]int64) error {
+		if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
+			return util.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
+		}
+		return nil
+	}
+	checks[roachpb.SNAPSHOT] = func(env map[string]int64) error {
+		if env["A"] == 1 && env["B"] == 1 {
+			return nil
+		}
+		return checks[roachpb.SERIALIZABLE](env)
+	}
+
+	txn1 := "SC(A-C) W(A,A+B+1) C"
+	txn2 := "SC(A-C) W(B,A+B+1) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: checks[iso],
+	}
+	checkConcurrency("write skew", []roachpb.IsolationType{iso}, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBWriteSkewAnomaly verifies that SI suffers from the write
@@ -911,17 +936,6 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 // history above) and may set A=1, B=1.
 func TestTxnDBWriteSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	txn1 := "SC(A-C) W(A,A+B+1) C"
-	txn2 := "SC(A-C) W(B,A+B+1) C"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
-				return util.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("write skew", onlySerializable, []string{txn1, txn2}, verify, true, t)
-	checkConcurrency("write skew", onlySnapshot, []string{txn1, txn2}, verify, false, t)
+	runWriteSkewTest(t, roachpb.SERIALIZABLE)
+	runWriteSkewTest(t, roachpb.SNAPSHOT)
 }
