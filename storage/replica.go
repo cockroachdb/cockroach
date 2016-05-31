@@ -1421,20 +1421,25 @@ func (r *Replica) handleRaftReady() error {
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 	if !raft.IsEmptySnap(rd.Snapshot) {
+		// TODO(peter): Could use a "distinct" batch within applySnapshot, but we
+		// also need the Batch.Defer mechanism.
 		var err error
 		if lastIndex, err = r.applySnapshot(batch, rd.Snapshot); err != nil {
 			return err
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
+	// We know that all of the writes from here forward will be to distinct keys.
+	writer := batch.Distinct()
 	if len(rd.Entries) > 0 {
+		// All of the entries are appended to distinct keys.
 		var err error
-		if lastIndex, err = r.append(batch, lastIndex, rd.Entries); err != nil {
+		if lastIndex, err = r.append(writer, lastIndex, rd.Entries); err != nil {
 			return err
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := r.setHardState(batch, rd.HardState); err != nil {
+		if err := r.setHardState(writer, rd.HardState); err != nil {
 			return err
 		}
 	}
