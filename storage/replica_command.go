@@ -201,6 +201,11 @@ func (r *Replica) Put(
 	if args.Blind {
 		return reply, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 	}
+	if h.DistinctSpans {
+		if b, ok := batch.(engine.Batch); ok {
+			batch = b.Distinct()
+		}
+	}
 	return reply, engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 }
 
@@ -214,6 +219,11 @@ func (r *Replica) ConditionalPut(
 
 	if args.Blind {
 		return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+	}
+	if h.DistinctSpans {
+		if b, ok := batch.(engine.Batch); ok {
+			batch = b.Distinct()
+		}
 	}
 	return reply, engine.MVCCConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 }
