@@ -519,3 +519,17 @@ func TestRangesResponse(t *testing.T) {
 		}
 	}
 }
+
+func TestRaftDebug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stop()
+
+	var resp serverpb.RaftDebugResponse
+	if err := getRequestProto(t, s, statusRaftEndpoint, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Ranges) == 0 {
+		t.Errorf("didn't get any ranges")
+	}
+}
