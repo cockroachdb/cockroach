@@ -733,10 +733,9 @@ func (r *rocksDBIterator) Seek(key MVCCKey) {
 		// to access start[0] in an explicit seek.
 		r.setState(C.DBIterSeekToFirst(r.iter))
 	} else {
-		// We can avoid seeking if we're already at the key we seek.
-		if r.valid && key.Equal(r.unsafeKey()) {
-			return
-		}
+		// It's tempting to avoid seeking if we're already at the desired key,
+		// but it may already have changed on the underlying engine, so we
+		// must seek again.
 		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
 	}
 }
