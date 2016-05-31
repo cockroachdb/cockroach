@@ -57,6 +57,7 @@ import thunk from "redux-thunk";
 
 import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
+import uiDataReducer from "./redux/uiData";
 import metricsReducer from "./redux/metrics";
 import timeWindowReducer from "./redux/timewindow";
 import databaseInfoReducer from "./redux/databaseInfo";
@@ -89,6 +90,7 @@ const store = createStore(
     routing: routerReducer,
     nodes: nodesReducer,
     ui: uiReducer,
+    uiData: uiDataReducer,
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
     databaseInfo: databaseInfoReducer,
