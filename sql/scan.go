@@ -181,7 +181,7 @@ func (n *scanNode) Next() (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.scanInitialized {
 		if err := n.initScan(); err != nil {
-			return false, nil
+			return false, err
 		}
 	}
 
