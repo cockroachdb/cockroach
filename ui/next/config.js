@@ -62,6 +62,8 @@ System.config({
   },
 
   map: {
+    "ByteBuffer": "npm:ByteBuffer@0.2.6",
+    "bytebuffer": "npm:bytebuffer@5.0.1",
     "classnames": "npm:classnames@2.2.5",
     "d3": "npm:d3@3.5.17",
     "es6-promise": "npm:es6-promise@3.2.1",
@@ -88,7 +90,7 @@ System.config({
       "typescript": "npm:typescript@1.8.10"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
-      "assert": "npm:assert@1.4.0"
+      "assert": "npm:assert@1.4.1"
     },
     "github:jspm/nodelibs-buffer@0.1.0": {
       "buffer": "npm:buffer@3.6.0"
@@ -137,6 +139,9 @@ System.config({
     "github:jspm/nodelibs-zlib@0.1.0": {
       "browserify-zlib": "npm:browserify-zlib@0.1.4"
     },
+    "npm:ByteBuffer@0.2.6": {
+      "buffer": "github:jspm/nodelibs-buffer@0.1.0"
+    },
     "npm:asap@2.0.4": {
       "domain": "github:jspm/nodelibs-domain@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2"
@@ -148,10 +153,9 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },
-    "npm:assert@1.4.0": {
+    "npm:assert@1.4.1": {
       "assert": "github:jspm/nodelibs-assert@0.1.0",
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
-      "buffer-shims": "npm:buffer-shims@1.0.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "npm:util@0.10.3"
     },
