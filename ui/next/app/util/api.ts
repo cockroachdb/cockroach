@@ -133,7 +133,7 @@ export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessag
 
 // getNodes gets node data
 export function getNodes(req: NodesRequest = {}): Promise<NodesResponseMessage> {
-  return Fetch(server.DatabasesResponse, `/_status/nodes`);
+  return Fetch(server.NodesResponse, `/_status/nodes`);
 }
 
 // queryTimeSeries queries for time series data
