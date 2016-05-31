@@ -606,6 +606,12 @@
                             "type": "string",
                             "name": "raft_state",
                             "id": 2
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "pending_cmds",
+                            "id": 3
                         }
                     ]
                 },
@@ -743,6 +749,83 @@
                             "rule": "optional",
                             "type": "string",
                             "name": "node_id",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "RaftDebugRequest",
+                    "fields": []
+                },
+                {
+                    "name": "RaftDebugResponse",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "RaftRangeStatus",
+                            "name": "ranges",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "RaftRangeStatus",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "range_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.customname)": "RangeID",
+                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "RaftRangeError",
+                            "name": "errors",
+                            "id": 2
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "RaftRangeNode",
+                            "name": "nodes",
+                            "id": 3
+                        }
+                    ]
+                },
+                {
+                    "name": "RaftRangeNode",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "node_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.customname)": "NodeID",
+                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "RangeInfo",
+                            "name": "range",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "RaftRangeError",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "message",
                             "id": 1
                         }
                     ]
@@ -961,6 +1044,13 @@
                             "response": "status.NodeStatus",
                             "options": {
                                 "(google.api.http).get": "/_status/nodes/{node_id}"
+                            }
+                        },
+                        "RaftDebug": {
+                            "request": "RaftDebugRequest",
+                            "response": "RaftDebugResponse",
+                            "options": {
+                                "(google.api.http).get": "/_status/raft"
                             }
                         },
                         "Ranges": {

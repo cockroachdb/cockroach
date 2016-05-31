@@ -62,6 +62,7 @@ import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
 import timeWindowReducer from "./redux/timewindow";
 import databaseInfoReducer from "./redux/databaseInfo";
+import raftReducer from "./redux/raft";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -79,6 +80,8 @@ import Node from "./containers/node";
 import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
+import Raft from "./containers/raft";
+import RaftRanges from "./containers/raftRanges";
 
 // TODO(mrtracy): Redux now provides official typings, and their Store
 // definition is generic. That would let us enforce that the store actually has
@@ -93,6 +96,7 @@ const store = createStore(
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
     databaseInfo: databaseInfoReducer,
+    raft: raftReducer,
   }),
   compose(
     applyMiddleware(thunk),
@@ -137,6 +141,10 @@ ReactDOM.render(
           </Route>
         </Route>
         <Route path="help-us/reporting" component={ HelpUs } />
+        <Route path="raft" component={ Raft }>
+          <IndexRedirect to="ranges" />
+          <Route path="ranges" component={ RaftRanges } />
+        </Route>
       </Route>
     </Router>
   </Provider>,
