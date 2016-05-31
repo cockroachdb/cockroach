@@ -920,7 +920,7 @@ func TestSortRangeDescByAge(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
+func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
 		return err
@@ -933,7 +933,9 @@ func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.M
 	return nil
 }
 
-func verifyRecomputedStats(eng engine.Engine, d *roachpb.RangeDescriptor, expMS engine.MVCCStats, nowNanos int64) error {
+func verifyRecomputedStats(
+	eng engine.Reader, d *roachpb.RangeDescriptor, expMS engine.MVCCStats, nowNanos int64,
+) error {
 	if ms, err := storage.ComputeStatsForRange(d, eng, nowNanos); err != nil {
 		return err
 	} else if expMS != ms {

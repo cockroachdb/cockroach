@@ -70,7 +70,7 @@ var _ Engine = &RocksDB{}
 
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget, maxSize int64,
-	stopper *stop.Stopper) Engine {
+	stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic("dir must be non-empty")
 	}
@@ -187,8 +187,8 @@ func (r *RocksDB) Close() {
 	close(r.deallocated)
 }
 
-// Closed returns true if the engine is closed.
-func (r *RocksDB) Closed() bool {
+// closed returns true if the engine is closed.
+func (r *RocksDB) closed() bool {
 	return r.rdb == nil
 }
 
@@ -336,7 +336,7 @@ func (r *RocksDB) NewIterator(prefix bool) Iterator {
 
 // NewSnapshot creates a snapshot handle from engine and returns a
 // read-only rocksDBSnapshot engine.
-func (r *RocksDB) NewSnapshot() Engine {
+func (r *RocksDB) NewSnapshot() Reader {
 	if r.rdb == nil {
 		panic("RocksDB is not initialized yet")
 	}
@@ -349,21 +349,6 @@ func (r *RocksDB) NewSnapshot() Engine {
 // NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Batch {
 	return newRocksDBBatch(r)
-}
-
-// Commit is a noop for RocksDB engine.
-func (r *RocksDB) Commit() error {
-	return nil
-}
-
-// Repr is not implemented for RocksDB engine.
-func (r *RocksDB) Repr() []byte {
-	panic("only implemented for rocksDBBatch")
-}
-
-// Defer is not implemented for RocksDB engine.
-func (r *RocksDB) Defer(func()) {
-	panic("only implemented for rocksDBBatch")
 }
 
 // GetStats retrieves stats from this Engine's RocksDB instance and
@@ -394,30 +379,15 @@ type rocksDBSnapshot struct {
 	handle *C.DBEngine
 }
 
-// Open is a noop.
-func (r *rocksDBSnapshot) Open() error {
-	return nil
-}
-
 // Close releases the snapshot handle.
 func (r *rocksDBSnapshot) Close() {
 	C.DBClose(r.handle)
 	r.handle = nil
 }
 
-// Closed returns true if the engine is closed.
-func (r *rocksDBSnapshot) Closed() bool {
+// closed returns true if the engine is closed.
+func (r *rocksDBSnapshot) closed() bool {
 	return r.handle == nil
-}
-
-// Attrs returns the engine/store attributes.
-func (r *rocksDBSnapshot) Attrs() roachpb.Attributes {
-	return r.parent.Attrs()
-}
-
-// Put is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Put(key MVCCKey, value []byte) error {
-	return util.Errorf("cannot Put to a snapshot")
 }
 
 // Get returns the value for the given key, nil otherwise using
@@ -438,65 +408,10 @@ func (r *rocksDBSnapshot) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool
 	return dbIterate(r.handle, r, start, end, f)
 }
 
-// Clear is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Clear(key MVCCKey) error {
-	return util.Errorf("cannot Clear from a snapshot")
-}
-
-// Merge is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Merge(key MVCCKey, value []byte) error {
-	return util.Errorf("cannot Merge to a snapshot")
-}
-
-// ApplyBatchRepr is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) ApplyBatchRepr(repr []byte) error {
-	return util.Errorf("cannot ApplyBatchRepr to a snapshot")
-}
-
-// Capacity returns capacity details for the engine's available storage.
-func (r *rocksDBSnapshot) Capacity() (roachpb.StoreCapacity, error) {
-	return r.parent.Capacity()
-}
-
-// Flush is a no-op for snapshots.
-func (r *rocksDBSnapshot) Flush() error {
-	return nil
-}
-
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
 func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.handle, prefix, r)
-}
-
-// NewSnapshot is illegal for snapshot.
-func (r *rocksDBSnapshot) NewSnapshot() Engine {
-	panic("cannot create a NewSnapshot from a snapshot")
-}
-
-// NewBatch is illegal for snapshot.
-func (r *rocksDBSnapshot) NewBatch() Batch {
-	panic("cannot create a NewBatch from a snapshot")
-}
-
-// Commit is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Commit() error {
-	return util.Errorf("cannot Commit to a snapshot")
-}
-
-// Repr is not implemented for rocksDBSnapshot.
-func (r *rocksDBSnapshot) Repr() []byte {
-	panic("only implemented for rocksDBBatch")
-}
-
-// Defer is not implemented for rocksDBSnapshot.
-func (r *rocksDBSnapshot) Defer(func()) {
-	panic("only implemented for rocksDBBatch")
-}
-
-// GetStats is not implemented for rocksDBSnapshot.
-func (r *rocksDBSnapshot) GetStats() (*Stats, error) {
-	return nil, util.Errorf("GetStats is not implemented for %T", r)
 }
 
 // reusableIterator wraps rocksDBIterator and allows reuse of an iterator
@@ -629,10 +544,6 @@ func newRocksDBBatch(parent *RocksDB) *rocksDBBatch {
 	return r
 }
 
-func (r *rocksDBBatch) Open() error {
-	return util.Errorf("cannot open a batch")
-}
-
 func (r *rocksDBBatch) Close() {
 	r.distinct.close()
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
@@ -646,14 +557,9 @@ func (r *rocksDBBatch) Close() {
 	}
 }
 
-// Closed returns true if the engine is closed.
-func (r *rocksDBBatch) Closed() bool {
+// closed returns true if the engine is closed.
+func (r *rocksDBBatch) closed() bool {
 	return r.batch == nil
-}
-
-// Attrs returns the engine/store attributes.
-func (r *rocksDBBatch) Attrs() roachpb.Attributes {
-	return r.parent.Attrs()
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
@@ -693,14 +599,6 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
-	return r.parent.Capacity()
-}
-
-func (r *rocksDBBatch) Flush() error {
-	return util.Errorf("cannot flush a batch")
-}
-
 // NewIterator returns an iterator over the batch and underlying engine. Note
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
@@ -719,14 +617,6 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	}
 	iter.batch = r
 	return iter
-}
-
-func (r *rocksDBBatch) NewSnapshot() Engine {
-	panic("cannot create a NewSnapshot from a batch")
-}
-
-func (r *rocksDBBatch) NewBatch() Batch {
-	return newRocksDBBatch(r.parent)
 }
 
 func (r *rocksDBBatch) Commit() error {
@@ -770,12 +660,7 @@ func (r *rocksDBBatch) Defer(fn func()) {
 	r.defers = append(r.defers, fn)
 }
 
-// GetStats is not implemented for rocksDBBatch.
-func (r *rocksDBBatch) GetStats() (*Stats, error) {
-	return nil, util.Errorf("GetStats is not implemented for %T", r)
-}
-
-func (r *rocksDBBatch) Distinct() Engine {
+func (r *rocksDBBatch) Distinct() ReadWriter {
 	return &r.distinct
 }
 
@@ -790,7 +675,7 @@ func (r *rocksDBBatch) flushMutations() {
 }
 
 type rocksDBIterator struct {
-	engine Engine
+	engine Reader
 	iter   *C.DBIterator
 	valid  bool
 	key    C.DBKey
@@ -809,7 +694,7 @@ var iterPool = sync.Pool{
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Engine) Iterator {
+func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Reader) Iterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
@@ -819,13 +704,13 @@ func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Engine) Iterator {
 	return r
 }
 
-func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Engine) {
+func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader) {
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
 	r.engine = engine
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
-	if r.engine.Closed() {
+	if r.engine.closed() {
 		panic("iterator used after backing engine closed")
 	}
 }
@@ -1154,7 +1039,7 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
 }
 
-func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
+func dbIterate(rdb *C.DBEngine, engine Reader, start, end MVCCKey,
 	f func(MVCCKeyValue) (bool, error)) error {
 	if !start.Less(end) {
 		return nil

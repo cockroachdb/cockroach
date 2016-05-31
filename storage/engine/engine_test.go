@@ -150,7 +150,7 @@ func TestEngineBatch(t *testing.T) {
 			{key, appender("  B"), true},
 		}
 
-		apply := func(eng Engine, d data) error {
+		apply := func(eng ReadWriter, d data) error {
 			if d.value == nil {
 				return eng.Clear(d.key)
 			} else if d.merge {
@@ -159,7 +159,7 @@ func TestEngineBatch(t *testing.T) {
 			return eng.Put(d.key, d.value)
 		}
 
-		get := func(eng Engine, key MVCCKey) []byte {
+		get := func(eng ReadWriter, key MVCCKey) []byte {
 			b, err := eng.Get(key)
 			if err != nil {
 				t.Fatal(err)
@@ -605,11 +605,6 @@ func TestSnapshotMethods(t *testing.T) {
 			t.Errorf("attrs mismatch; expected %+v, got %+v", attrs, engine.Attrs())
 		}
 
-		// Verify Put is error.
-		if err := snap.Put(mvccKey("c"), []byte("3")); err == nil {
-			t.Error("expected error on Put to snapshot")
-		}
-
 		// Verify Get.
 		for i := range keys {
 			valSnapshot, err := snap.Get(keys[i])
@@ -646,31 +641,6 @@ func TestSnapshotMethods(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Verify Clear is error.
-		if err := snap.Clear(keys[0]); err == nil {
-			t.Error("expected error on Clear to snapshot")
-		}
-
-		// Verify Merge is error.
-		if err := snap.Merge(mvccKey("merge-key"), appender("x")); err == nil {
-			t.Error("expected error on Merge to snapshot")
-		}
-
-		// Verify Capacity.
-		capacity, err := engine.Capacity()
-		if err != nil {
-			t.Fatal(err)
-		}
-		capacitySnapshot, err := snap.Capacity()
-		if err != nil {
-			t.Fatal(err)
-		}
-		// The Available fields of capacity may differ due to processes beyond our control.
-		if capacity.Capacity != capacitySnapshot.Capacity {
-			t.Errorf("expected capacities to be equal: %v != %v",
-				capacity.Capacity, capacitySnapshot.Capacity)
-		}
-
 		// Write a new key to engine.
 		newKey := mvccKey("c")
 		newVal := []byte("3")
@@ -685,41 +655,6 @@ func TestSnapshotMethods(t *testing.T) {
 			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
 		}
 		iter.Close()
-
-		// Verify Commit is error.
-		if err := snap.Commit(); err == nil {
-			t.Error("expected error on Commit to snapshot")
-		}
-	}, t)
-}
-
-// TestSnapshotNewSnapshot panics.
-func TestSnapshotNewSnapshot(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Error("expected panic")
-			}
-		}()
-		snap := engine.NewSnapshot()
-		defer snap.Close()
-		snap.NewSnapshot()
-	}, t)
-}
-
-// TestSnapshotNewBatch panics.
-func TestSnapshotNewBatch(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Error("expected panic")
-			}
-		}()
-		snap := engine.NewSnapshot()
-		defer snap.Close()
-		snap.NewBatch()
 	}, t)
 }
 

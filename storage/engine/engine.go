@@ -87,17 +87,14 @@ type Iterator interface {
 	ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error)
 }
 
-// Engine is the interface that wraps the core operations of a
-// key/value store.
-type Engine interface {
-	// Open initializes the engine.
-	Open() error
-	// Close closes the engine, freeing up any outstanding resources.
+// Reader is the read interface to an engine's data.
+type Reader interface {
+	// Close closes the reader, freeing up any outstanding resources.
 	Close()
-	// Attrs returns the engine/store attributes.
-	Attrs() roachpb.Attributes
-	// Put sets the given key to the value provided.
-	Put(key MVCCKey, value []byte) error
+	// closed returns true if the reader has been closed or is not usable.
+	// Objects backed by this reader (e.g. Iterators) can check this to ensure
+	// that they are not using a closed engine.
+	closed() bool
 	// Get returns the value for the given key, nil otherwise.
 	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
@@ -111,6 +108,21 @@ type Engine interface {
 	// an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops.
 	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error
+	// NewIterator returns a new instance of an Iterator over this engine. When
+	// prefix is true, Seek will use the user-key prefix of the supplied MVCC key
+	// to restrict which sstables are searched, but iteration (using Next) over
+	// keys without the same user-key prefix will not work correctly (keys may be
+	// skipped). The caller must invoke Iterator.Close() when finished with the
+	// iterator to free resources.
+	NewIterator(prefix bool) Iterator
+}
+
+// Writer is the write interface to an engine's data.
+type Writer interface {
+	// ApplyBatchRepr atomically applies a set of batched updates. Created by
+	// calling Repr() on a batch. Using this method is equivalent to constructing
+	// and committing a batch whose Repr() equals repr.
+	ApplyBatchRepr(repr []byte) error
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
@@ -129,59 +141,54 @@ type Engine interface {
 	//
 	// The logic for merges is written in db.cc in order to be compatible with RocksDB.
 	Merge(key MVCCKey, value []byte) error
+	// Put sets the given key to the value provided.
+	Put(key MVCCKey, value []byte) error
+}
+
+// ReadWriter is the read/write interface to an engine's data.
+type ReadWriter interface {
+	Reader
+	Writer
+}
+
+// Engine is the interface that wraps the core operations of a key/value store.
+type Engine interface {
+	ReadWriter
+	// Attrs returns the engine/store attributes.
+	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
-	// NewIterator returns a new instance of an Iterator over this engine. When
-	// prefix is true, Seek will use the user-key prefix of the supplied MVCC key
-	// to restrict which sstables are searched, but iteration (using Next) over
-	// keys without the same user-key prefix will not work correctly (keys may be
-	// skipped). The caller must invoke Iterator.Close() when finished with the
-	// iterator to free resources.
-	NewIterator(prefix bool) Iterator
+	// GetStats retrieves stats from the engine.
+	GetStats() (*Stats, error)
+	// NewBatch returns a new instance of a batched engine which wraps
+	// this engine. Batched engines accumulate all mutations and apply
+	// them atomically on a call to Commit().
+	NewBatch() Batch
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
-	NewSnapshot() Engine
-	// NewBatch returns a new instance of a batched engine which wraps
-	// this engine. Batched engines accumulate all mutations and apply
-	// them atomically on a call to Commit().
-	NewBatch() Batch
+	NewSnapshot() Reader
+	// Open initializes the engine.
+	Open() error
+}
+
+// Batch is the interface for batch specific operations.
+type Batch interface {
+	ReadWriter
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
-	// ApplyBatchRepr atomically applies a set of batched updates. Created by
-	// calling Repr() on a batch. Using this method is equivalent to constructing
-	// and committing a batch whose Repr() equals repr.
-	ApplyBatchRepr(repr []byte) error
-	// Repr returns the underlying representation of the batch and can be used to
-	// reconstitute the batch on a remote node using
-	// Engine.NewBatchFromRepr(). This method is only valid on engines created
-	// via NewBatch().
-	Repr() []byte
 	// Defer adds a callback to be run after the batch commits
 	// successfully.  If Commit() fails (or if this engine was not
 	// created via NewBatch()), deferred callbacks are not called. As
 	// with the defer statement, the last callback to be deferred is the
 	// first to be executed.
 	Defer(fn func())
-	// Closed returns true if the engine has been close or not usable.
-	// Objects backed by this engine (e.g. Iterators) can check this to ensure
-	// that they are not using an closed engine.
-	Closed() bool
-	// GetStats retrieves stats from the engine.
-	GetStats() (*Stats, error)
-}
-
-// Batch is the interface for batch specific operations.
-//
-// TODO(peter): Move various methods of Engine to Batch, such as Commit() and Repr().
-type Batch interface {
-	Engine
 	// Distinct returns a view of the existing batch which passes reads directly
 	// to the underlying engine (the one the batch was created from). That is,
 	// the returned batch will not read its own writes. This is used as an
@@ -189,7 +196,12 @@ type Batch interface {
 	// situations where we know all of the batched operations are for distinct
 	// keys. Closing/committing the returned engine is equivalent to
 	// closing/committing the original batch.
-	Distinct() Engine
+	Distinct() ReadWriter
+	// Repr returns the underlying representation of the batch and can be used to
+	// reconstitute the batch on a remote node using
+	// Engine.NewBatchFromRepr(). This method is only valid on engines created
+	// via NewBatch().
+	Repr() []byte
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB
@@ -220,7 +232,7 @@ type Stats struct {
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
-func PutProto(engine Engine, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
+func PutProto(engine Writer, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
@@ -236,7 +248,7 @@ func PutProto(engine Engine, key MVCCKey, msg proto.Message) (keyBytes, valBytes
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // Specify max=0 for unbounded scans.
-func Scan(engine Engine, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) {
+func Scan(engine Reader, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
 	err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
@@ -254,12 +266,10 @@ func Scan(engine Engine, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) 
 // none, and an error will be returned. Note that this function
 // actually removes entries from the storage engine, rather than
 // inserting tombstones, as with deletion through the MVCC.
-func ClearRange(engine Engine, start, end MVCCKey) (int, error) {
-	b := engine.NewBatch()
-	defer b.Close()
+func ClearRange(engine ReadWriter, start, end MVCCKey) (int, error) {
 	count := 0
 	if err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
-		if err := b.Clear(kv.Key); err != nil {
+		if err := engine.Clear(kv.Key); err != nil {
 			return false, err
 		}
 		count++
@@ -267,5 +277,5 @@ func ClearRange(engine Engine, start, end MVCCKey) (int, error) {
 	}); err != nil {
 		return 0, err
 	}
-	return count, b.Commit()
+	return count, nil
 }

@@ -100,7 +100,12 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	return entries(snap, r.RangeID, r.isInitializedLocked(), lo, hi, maxBytes)
 }
 
-func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+func entries(
+	e engine.Reader,
+	rangeID roachpb.RangeID,
+	isInitialized bool,
+	lo, hi, maxBytes uint64,
+) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
@@ -174,7 +179,7 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 }
 
 func iterateEntries(
-	e engine.Engine, rangeID roachpb.RangeID, lo, hi uint64, scanFunc func(roachpb.KeyValue) (bool, error),
+	e engine.Reader, rangeID roachpb.RangeID, lo, hi uint64, scanFunc func(roachpb.KeyValue) (bool, error),
 ) error {
 	_, err := engine.MVCCIterate(
 		context.Background(), e,
@@ -197,7 +202,7 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 	return term(snap, r.RangeID, r.isInitializedLocked(), i)
 }
 
-func term(eng engine.Engine, rangeID roachpb.RangeID, isInitialized bool, i uint64) (uint64, error) {
+func term(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool, i uint64) (uint64, error) {
 	ents, err := entries(eng, rangeID, isInitialized, i, i+1, 0)
 	if err == raft.ErrCompacted {
 		ts, err := raftTruncatedState(eng, rangeID, isInitialized)
@@ -249,7 +254,9 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 	return ts, nil
 }
 
-func raftTruncatedState(eng engine.Engine, rangeID roachpb.RangeID, isInitialized bool) (roachpb.RaftTruncatedState, error) {
+func raftTruncatedState(
+	eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool,
+) (roachpb.RaftTruncatedState, error) {
 	ts := roachpb.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
 		roachpb.ZeroTimestamp, true, nil, &ts)
@@ -290,7 +297,7 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 }
 
 // loadAppliedIndex retrieves the applied index from the supplied engine.
-func loadAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
+func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
 	var appliedIndex uint64
 	if isInitialized {
 		appliedIndex = raftInitialLogIndex
@@ -313,7 +320,7 @@ func loadAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, isInitialized 
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, appliedIndex uint64) error {
+func setAppliedIndex(eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, appliedIndex uint64) error {
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 
@@ -325,7 +332,7 @@ func setAppliedIndex(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.Ra
 }
 
 // loadLastIndex retrieves the last index from storage.
-func loadLastIndex(eng engine.Engine, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
+func loadLastIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(context.Background(), eng,
 		keys.RaftLastIndexKey(rangeID),
@@ -353,7 +360,7 @@ func loadLastIndex(eng engine.Engine, rangeID roachpb.RangeID, isInitialized boo
 }
 
 // setLastIndex persists a new last index.
-func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) error {
+func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint64) error {
 	var value roachpb.Value
 	value.SetInt(int64(lastIndex))
 
@@ -428,7 +435,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 }
 
 func snapshot(
-	snap engine.Engine,
+	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	isInitialized bool,
 	startKey roachpb.RKey,
@@ -530,7 +537,7 @@ func snapshot(
 // of r.lastIndex and returns a new value. We do this rather than
 // modifying r.lastIndex directly because this modification needs to
 // be atomic with the commit of the batch.
-func (r *Replica) append(batch engine.Engine, prevLastIndex uint64, entries []raftpb.Entry) (uint64, error) {
+func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries []raftpb.Entry) (uint64, error) {
 	if len(entries) == 0 {
 		return prevLastIndex, nil
 	}
@@ -592,7 +599,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 
 // applySnapshot updates the replica based on the given snapshot.
 // Returns the new last index.
-func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint64, error) {
+func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint64, error) {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
@@ -744,7 +751,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 }
 
 // setHardState persists the raft HardState.
-func (r *Replica) setHardState(batch engine.Engine, st raftpb.HardState) error {
+func (r *Replica) setHardState(batch engine.ReadWriter, st raftpb.HardState) error {
 	return engine.MVCCPutProto(context.Background(), batch, nil, keys.RaftHardStateKey(r.RangeID),
 		roachpb.ZeroTimestamp, nil, &st)
 }

@@ -43,7 +43,10 @@ type treeContext struct {
 // SetupRangeTree creates a new RangeTree. This should only be called as part
 // of store.BootstrapRange.
 // TODO(tschottdorf): other RangeTree operations should also propagate a Context.
-func SetupRangeTree(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb.Timestamp, startKey roachpb.RKey) error {
+func SetupRangeTree(
+	ctx context.Context, batch engine.Batch, ms *engine.MVCCStats,
+	timestamp roachpb.Timestamp, startKey roachpb.RKey,
+) error {
 	tree := &RangeTree{
 		RootKey: startKey,
 	}
