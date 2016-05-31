@@ -7,11 +7,10 @@
 import _ = require("lodash");
 import { Dispatch } from "redux";
 import assign = require("object-assign");
+
 import { Action, PayloadAction } from "../interfaces/action";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
-import "isomorphic-fetch";
-
-import * as protos from "../js/protos";
+import { getNodes } from "../util/api";
 
 const REQUEST = "cockroachui/nodes/REQUEST";
 const RECEIVE = "cockroachui/nodes/RECEIVE";
@@ -135,16 +134,11 @@ export function refreshNodes() {
     dispatch(requestNodes());
 
     // Fetch node status from the servers and convert it to JSON.
-    fetch("/_status/nodes").then((response) => {
-      return response.json() as cockroach.server.NodesResponse;
-    }).then((json) => {
-      // Extract the result, an array of NodeStatus objects.
-      let { nodes: jsonResult } = json;
+    getNodes().then((response) => {
       // Roll up store status metrics, additively, on each node status.
-      let result = _.map(jsonResult, (nsObj) => {
-        let ns = new protos.cockroach.server.status.NodeStatus(nsObj);
-        RollupStoreMetrics(ns);
-        return ns;
+      let result = _.map(response.nodes, (node) => {
+        RollupStoreMetrics(node);
+        return node;
       });
 
       // Dispatch the processed results to the store.
