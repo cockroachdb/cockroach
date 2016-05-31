@@ -62,6 +62,7 @@ System.config({
   },
 
   map: {
+    "bytebuffer": "github:dcodeIO/bytebuffer.js@5.0.1",
     "classnames": "npm:classnames@2.2.5",
     "d3": "npm:d3@3.5.17",
     "es6-promise": "npm:es6-promise@3.2.1",
@@ -84,11 +85,14 @@ System.config({
     "ts-runtime": "npm:babel-runtime@6.9.1",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "npm:whatwg-fetch@0.11.0",
+    "github:dcodeIO/bytebuffer.js@5.0.1": {
+      "long": "github:dcodeIO/long.js@3.1.0"
+    },
     "github:frankwallis/plugin-typescript@4.0.16": {
       "typescript": "npm:typescript@1.8.10"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
-      "assert": "npm:assert@1.4.0"
+      "assert": "npm:assert@1.4.1"
     },
     "github:jspm/nodelibs-buffer@0.1.0": {
       "buffer": "npm:buffer@3.6.0"
@@ -148,10 +152,9 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },
-    "npm:assert@1.4.0": {
+    "npm:assert@1.4.1": {
       "assert": "github:jspm/nodelibs-assert@0.1.0",
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
-      "buffer-shims": "npm:buffer-shims@1.0.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "npm:util@0.10.3"
     },

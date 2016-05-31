@@ -11,6 +11,24 @@ export const ERROR = "cockroachui/uidata/ERROR";
 export const FETCH = "cockroachui/uidata/FETCH";
 export const FETCH_COMPLETE = "cockroachui/uidata/FETCH_COMPLETE";
 
+// Opt In Attribute Keys
+export const KEY_HELPUS: string = "helpus";
+// The "server." prefix denotes that this key is shared with the server, so
+// changes to this key must be synchronized with the server code.
+export const KEY_OPTIN: string = "server.optin-reporting";
+/**
+ * OptInAttributes tracks the values the user has provided when opting in to usage reporting
+ */
+export class OptInAttributes {
+  email: string = "";
+  optin: boolean = null; // Did the user opt in/out of reporting usage
+  dismissed: number = null; // How many times did the user dismiss the banner/modal without opting in/out
+  firstname: string = "";
+  lastname: string = "";
+  company: string = "";
+  updates: boolean = null; // Did the user sign up for product/feature updates
+}
+
 /**
  * UIDataSet maintains the current values of fields that are persisted to the
  * server as UIData. Fields are maintained in this collection as untyped
