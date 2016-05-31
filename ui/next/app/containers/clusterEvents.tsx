@@ -1,5 +1,6 @@
 /// <reference path="../../typings/main.d.ts" />
 import * as React from "react";
+import Events from "./events";
 
 /**
  * Renders the content of the Cluster events tab.
@@ -10,8 +11,8 @@ export default class extends React.Component<{}, {}> {
   }
 
   render() {
-    return <div className="section">
-      <h1>Cluster Events</h1>
+    return <div className="section table">
+      <Events></Events>
     </div>;
   }
 }

@@ -62,6 +62,7 @@ import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
 import timeWindowReducer from "./redux/timewindow";
 import databaseInfoReducer from "./redux/databaseInfo";
+import eventsReducer from "./redux/events";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -93,6 +94,7 @@ const store = createStore(
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
     databaseInfo: databaseInfoReducer,
+    events: eventsReducer,
   }),
   compose(
     applyMiddleware(thunk),
