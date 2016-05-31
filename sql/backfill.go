@@ -17,11 +17,9 @@
 package sql
 
 import (
-	"bytes"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -229,7 +227,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 
 			// Add and delete columns for a chunk of the key space.
 			sp.Start, done, err = sc.truncateAndBackfillColumnsChunk(
-				added, dropped, nonNullableColumn, defaultExprs, &sc.evalCtx, sp,
+				added, dropped, defaultExprs, &sc.evalCtx, sp,
 			)
 			if err != nil {
 				return err
@@ -242,12 +240,11 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
-	nonNullableColumn string,
 	defaultExprs []parser.TypedExpr,
 	evalCtx *parser.EvalContext,
 	sp sqlbase.Span,
 ) (roachpb.Key, bool, error) {
-	var curSentinel roachpb.Key
+	var curIndexKey roachpb.Key
 	done := false
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
@@ -260,92 +257,86 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return nil
 		}
 
+		updateCols := append(added, dropped...)
+		// TODO(dan): Tighten up the bound on fetchCols.
+		ru, err := makeRowUpdater(tableDesc, updateCols, tableDesc.Columns)
+		if err != nil {
+			return err
+		}
+
+		// TODO(dan): This check is an unfortunate bleeding of the internals of
+		// rowUpdater. Extract the sql row to k/v mapping logic out into something
+		// usable here.
+		if !ru.isSimpleUpdate() {
+			panic("only column data should be modified, but the rowUpdater is configured otherwise")
+		}
+
 		// Run a scan across the table using the primary key. Running
 		// the scan and applying the changes in many transactions is
 		// fine because the schema change is in the correct state to
 		// handle intermediate OLTP commands which delete and add
 		// values during the scan.
-		b := &client.Batch{}
-		b.Scan(sp.Start, sp.End, ColumnTruncateAndBackfillChunkSize)
-		if err := txn.Run(b); err != nil {
+		var rf sqlbase.RowFetcher
+		colIDtoRowIndex := colIDtoRowIndexFromCols(tableDesc.Columns)
+		valNeededForCol := make([]bool, len(tableDesc.Columns))
+		for i := range valNeededForCol {
+			_, valNeededForCol[i] = ru.fetchColIDtoRowIndex[tableDesc.Columns[i].ID]
+		}
+		err = rf.Init(tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false, valNeededForCol)
+		if err != nil {
+			return err
+		}
+		if err := rf.StartScan(txn, sqlbase.Spans{sp}, 0); err != nil {
 			return err
 		}
 
-		// Use a different batch to truncate/backfill columns.
+		indexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID)
 		writeBatch := &client.Batch{}
-		marshalled := make([]roachpb.Value, len(defaultExprs))
-		done = true
-		for _, result := range b.Results {
-			var sentinelKey roachpb.Key
-			for _, kv := range result.Rows {
-				// Still processing table.
-				done = false
-				if nonNullableColumn != "" {
-					return sqlbase.NewNonNullViolationError(nonNullableColumn)
+		var i int
+		for ; i < ColumnTruncateAndBackfillChunkSize; i++ {
+			row, err := rf.NextRow()
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				break // Done
+			}
+
+			curIndexKey, _, err = sqlbase.EncodeIndexKey(
+				&tableDesc.PrimaryIndex, colIDtoRowIndex, row, indexKeyPrefix)
+
+			updateValues := make(parser.DTuple, len(updateCols))
+			for i, col := range added {
+				if defaultExprs == nil || defaultExprs[i] == nil {
+					updateValues[i] = parser.DNull
+				} else {
+					updateValues[i], err = defaultExprs[i].Eval(evalCtx)
+					if err != nil {
+						return err
+					}
 				}
-				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
-					// Sentinel keys have a 0 suffix indicating 0 bytes of
-					// column ID. Strip off that suffix to determine the
-					// prefix shared with the other keys for the row.
-					sentinelKey = sqlbase.StripColumnIDLength(kv.Key)
-					// Store away key for the next table row as the point from
-					// which to start from.
-					curSentinel = sentinelKey
-
-					// Delete the entire dropped columns. This used to use SQL
-					// UPDATE in the past to update the dropped column to
-					// NULL; but a column in the process of being dropped is
-					// placed in the table descriptor mutations, and a SQL
-					// UPDATE of a column in mutations will fail.
-					for _, columnDesc := range dropped {
-						// Delete the dropped column.
-						colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
-						if log.V(2) {
-							log.Infof("Del %s", colKey)
-						}
-						writeBatch.Del(colKey)
-					}
-
-					// Add the new columns and backfill the values.
-					for i, expr := range defaultExprs {
-						if expr == nil {
-							continue
-						}
-						col := added[i]
-						colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
-						d, err := expr.Eval(evalCtx)
-						if err != nil {
-							return err
-						}
-						marshalled[i], err = sqlbase.MarshalColumnValue(col, d)
-						if err != nil {
-							return err
-						}
-
-						if log.V(2) {
-							log.Infof("Put %s -> %v", colKey, d)
-						}
-						// Insert default value into the column. If this row
-						// was recently added the default value might have
-						// already been populated, because the
-						// ColumnDescriptor is in the WRITE_ONLY state.
-						// Reinserting the default value is not a big deal.
-						//
-						// Note: a column in the WRITE_ONLY state cannot be
-						// populated directly through SQL. A SQL INSERT cannot
-						// directly reference the column, and the INSERT
-						// populates the column with the default value.
-						writeBatch.Put(colKey, &marshalled[i])
-					}
+				if !col.Nullable && updateValues[i].Compare(parser.DNull) == 0 {
+					return sqlbase.NewNonNullViolationError(col.Name)
 				}
 			}
+			for i := range dropped {
+				updateValues[i+len(defaultExprs)] = parser.DNull
+			}
+
+			if _, err := ru.updateRow(writeBatch, row, updateValues); err != nil {
+				return err
+			}
 		}
+		if i < ColumnTruncateAndBackfillChunkSize {
+			done = true
+		}
+
 		if err := txn.Run(writeBatch); err != nil {
 			return convertBackfillError(tableDesc, writeBatch)
 		}
 		return nil
 	})
-	return curSentinel.PrefixEnd(), done, err
+	return curIndexKey.PrefixEnd(), done, err
 }
 
 func (sc *SchemaChanger) truncateIndexes(

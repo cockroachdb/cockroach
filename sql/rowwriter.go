@@ -472,6 +472,18 @@ func (ru *rowUpdater) updateRow(
 	return ru.newValues, nil
 }
 
+// isSimpleUpdate returns true if this rowUpdater is only updating column data
+// (in contrast to updating the primary key or other indexes).
+func (ru *rowUpdater) isSimpleUpdate() bool {
+	// TODO(dan): This is used in the schema change backfill to assert that it was
+	// configured correctly and will not be doing things it shouldn't. This is an
+	// unfortunate bleeding of responsibility and indicates the abstraction could
+	// be improved. Specifically, rowUpdater currently has two responsibilities
+	// (computing which indexes need to be updated and mapping sql rows to k/v
+	// operations) and these should be split.
+	return !ru.primaryKeyColChange && len(ru.deleteOnlyIndex) == 0 && len(ru.helper.indexes) == 0
+}
+
 // rowDeleter abstracts the key/value operations for deleting table rows.
 type rowDeleter struct {
 	helper               rowHelper
