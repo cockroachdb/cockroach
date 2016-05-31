@@ -87,6 +87,12 @@ export interface serverBuilder {
 	LogFileRequest: server.LogFileRequestBuilder;
 	StacksRequest: server.StacksRequestBuilder;
 	MetricsRequest: server.MetricsRequestBuilder;
+	RaftRangeNode: server.RaftRangeNodeBuilder;
+	RaftRangeError: server.RaftRangeErrorBuilder;
+	RaftRangeStatus: server.RaftRangeStatusBuilder;
+	RaftDebugRequest: server.RaftDebugRequestBuilder;
+	RaftDebugResponse: server.RaftDebugResponseBuilder;
+	PrettyRangeDescriptor: server.PrettyRangeDescriptorBuilder;
 	status: server.statusBuilder;
 	DrainMode: server.DrainMode;
 	
@@ -1594,11 +1600,11 @@ declare module cockroach.server {
 	
 		
 
-desc?: roachpb.RangeDescriptor;
+desc?: PrettyRangeDescriptor;
 		
 
-getDesc?() : roachpb.RangeDescriptor;
-		setDesc?(desc : roachpb.RangeDescriptor): void;
+getDesc?() : PrettyRangeDescriptor;
+		setDesc?(desc : PrettyRangeDescriptor): void;
 		
 
 
@@ -1608,6 +1614,15 @@ raft_state?: string;
 
 getRaftState?() : string;
 		setRaftState?(raftState : string): void;
+		
+
+
+
+pending_cmds?: number;
+		
+
+getPendingCmds?() : number;
+		setPendingCmds?(pendingCmds : number): void;
 		
 
 
@@ -2005,6 +2020,276 @@ export interface MetricsRequestBuilder {
 	decode(buffer: ArrayBuffer) : MetricsRequestMessage;
 	decode(buffer: ByteBuffer) : MetricsRequestMessage;
 	decode64(buffer: string) : MetricsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftRangeNode {
+	
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+range?: RangeInfo;
+		
+
+getRange?() : RangeInfo;
+		setRange?(range : RangeInfo): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeNodeMessage extends RaftRangeNode {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeNodeBuilder {
+	new(data?: RaftRangeNode): RaftRangeNodeMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeNodeMessage;
+	decode(buffer: ByteBuffer) : RaftRangeNodeMessage;
+	decode64(buffer: string) : RaftRangeNodeMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftRangeError {
+	
+		
+
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeErrorMessage extends RaftRangeError {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeErrorBuilder {
+	new(data?: RaftRangeError): RaftRangeErrorMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeErrorMessage;
+	decode(buffer: ByteBuffer) : RaftRangeErrorMessage;
+	decode64(buffer: string) : RaftRangeErrorMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftRangeStatus {
+	
+		
+
+range_id?: Long;
+		
+
+getRangeId?() : Long;
+		setRangeId?(rangeId : Long): void;
+		
+
+
+
+errors?: RaftRangeError[];
+		
+
+getErrors?() : RaftRangeError[];
+		setErrors?(errors : RaftRangeError[]): void;
+		
+
+
+
+nodes?: RaftRangeNode[];
+		
+
+getNodes?() : RaftRangeNode[];
+		setNodes?(nodes : RaftRangeNode[]): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeStatusMessage extends RaftRangeStatus {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeStatusBuilder {
+	new(data?: RaftRangeStatus): RaftRangeStatusMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeStatusMessage;
+	decode(buffer: ByteBuffer) : RaftRangeStatusMessage;
+	decode64(buffer: string) : RaftRangeStatusMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftDebugRequest {
+	
+		
+
+}
+	
+	export interface RaftDebugRequestMessage extends RaftDebugRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftDebugRequestBuilder {
+	new(data?: RaftDebugRequest): RaftDebugRequestMessage;
+	decode(buffer: ArrayBuffer) : RaftDebugRequestMessage;
+	decode(buffer: ByteBuffer) : RaftDebugRequestMessage;
+	decode64(buffer: string) : RaftDebugRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftDebugResponse {
+	
+		
+
+ranges?: ProtoBufMap<Long, RaftRangeStatus>;
+		
+
+getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
+		setRanges?(ranges : ProtoBufMap<Long, RaftRangeStatus>): void;
+		
+
+
+
+}
+	
+	export interface RaftDebugResponseMessage extends RaftDebugResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftDebugResponseBuilder {
+	new(data?: RaftDebugResponse): RaftDebugResponseMessage;
+	decode(buffer: ArrayBuffer) : RaftDebugResponseMessage;
+	decode(buffer: ByteBuffer) : RaftDebugResponseMessage;
+	decode64(buffer: string) : RaftDebugResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface PrettyRangeDescriptor {
+	
+		
+
+range_id?: Long;
+		
+
+getRangeId?() : Long;
+		setRangeId?(rangeId : Long): void;
+		
+
+
+
+start_key?: string;
+		
+
+getStartKey?() : string;
+		setStartKey?(startKey : string): void;
+		
+
+
+
+end_key?: string;
+		
+
+getEndKey?() : string;
+		setEndKey?(endKey : string): void;
+		
+
+
+
+replicas?: roachpb.ReplicaDescriptor[];
+		
+
+getReplicas?() : roachpb.ReplicaDescriptor[];
+		setReplicas?(replicas : roachpb.ReplicaDescriptor[]): void;
+		
+
+
+
+next_replica_id?: number;
+		
+
+getNextReplicaId?() : number;
+		setNextReplicaId?(nextReplicaId : number): void;
+		
+
+
+
+}
+	
+	export interface PrettyRangeDescriptorMessage extends PrettyRangeDescriptor {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface PrettyRangeDescriptorBuilder {
+	new(data?: PrettyRangeDescriptor): PrettyRangeDescriptorMessage;
+	decode(buffer: ArrayBuffer) : PrettyRangeDescriptorMessage;
+	decode(buffer: ByteBuffer) : PrettyRangeDescriptorMessage;
+	decode64(buffer: string) : PrettyRangeDescriptorMessage;
 	
 }
 	
