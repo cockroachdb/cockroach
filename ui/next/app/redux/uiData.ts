@@ -1,5 +1,4 @@
 import _ = require("lodash");
-
 import { Dispatch } from "redux";
 import ByteBuffer = require("bytebuffer");
 

@@ -1,10 +1,11 @@
 import { assert } from "chai";
-import * as databases from "./databaseInfo";
-import * as protos from "../js/protos";
 import * as proxyquire from "proxyquire";
-import { Action } from "../interfaces/action";
 import { Dispatch } from "redux";
 import * as _ from "lodash";
+
+import * as databases from "./databaseInfo";
+import * as protos from "../js/protos";
+import { Action } from "../interfaces/action";
 
 type DatabasesResponse = cockroach.server.DatabasesResponse;
 

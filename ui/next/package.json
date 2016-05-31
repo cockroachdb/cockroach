@@ -1,5 +1,5 @@
 {
-  "devDependencies": {
+  "dependencies": {
     "chai": "^3.5.0",
     "d3": "^3.5.17",
     "enzyme": "^2.2.0",
@@ -22,7 +22,7 @@
     "ts-node": "^0.7.2",
     "tslint": "^3.8.1",
     "typescript": "^1.8.10",
-    "typings": "^0.8.1"
+    "typings": "^1.0.4"
   },
   "jspm": {
     "dependencies": {
