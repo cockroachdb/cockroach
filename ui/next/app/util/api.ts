@@ -33,6 +33,9 @@ type GetUIDataResponseMessage = cockroach.server.GetUIDataResponseMessage;
 type SetUIDataRequestMessage = cockroach.server.SetUIDataRequestMessage;
 type SetUIDataResponseMessage = cockroach.server.SetUIDataResponseMessage;
 
+type RaftDebugRequest = cockroach.server.RaftDebugRequest;
+type RaftDebugResponseMessage = cockroach.server.RaftDebugResponseMessage;
+
 type TimeSeriesQueryRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
 type TimeSeriesQueryResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
 
@@ -135,6 +138,11 @@ export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessag
 // getNodes gets node data
 export function getNodes(req: NodesRequest = {}): Promise<NodesResponseMessage> {
   return Fetch(server.NodesResponse, `/_status/nodes`);
+}
+
+// raftDebug returns raft debug information.
+export function raftDebug(req: RaftDebugRequest = {}): Promise<RaftDebugResponseMessage> {
+  return Fetch(server.RaftDebugResponse, `/_status/raft`);
 }
 
 // queryTimeSeries queries for time series data
