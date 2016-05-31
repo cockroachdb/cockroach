@@ -172,3 +172,39 @@ header
             text-transform none
             &:focus
               outline 0
+
+ul.pagination
+  letter-spacing 2.17px
+  text-transform uppercase
+  font-family Lato-Heavy
+  font-size 1.1rem
+  color $main-nav-inactive
+  list-style-type none
+  text-align center
+
+  li
+    display inline-block
+
+    &.active, &.active:hover
+      color $subnav-active-color
+      font-weight 600
+      border-bottom $subnav-underline-height solid $subnav-active-color
+
+    &:hover
+      color $main-nav-hover
+
+    &.disabled
+      display none
+
+    a
+      height 100%
+      display block
+      color inherit
+      text-decoration none
+      cursor pointer
+      padding 10px
+
+      &:hover
+      &:visited
+      &:active
+        color @color
