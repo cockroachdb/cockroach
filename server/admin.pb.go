@@ -47,6 +47,12 @@
 		LogFileRequest
 		StacksRequest
 		MetricsRequest
+		RaftRangeNode
+		RaftRangeError
+		RaftRangeStatus
+		RaftDebugRequest
+		RaftDebugResponse
+		PrettyRangeDescriptor
 */
 package server
 
