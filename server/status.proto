@@ -51,8 +51,10 @@ message NodeRequest {
 }
 
 message RangeInfo {
-  roachpb.RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  PrettyRangeDescriptor desc = 1 [(gogoproto.nullable) = false];
   string raft_state = 2;
+  // pending_cmds is the number of pendingCmds on the range.
+  int32 pending_cmds = 3;
 }
 
 message RangesRequest {
@@ -97,6 +99,31 @@ message MetricsRequest {
   string node_id = 1;
 }
 
+message RaftRangeNode {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+  RangeInfo range = 2 [(gogoproto.nullable) = false];
+}
+
+message RaftRangeError {
+  string message = 1;
+}
+
+message RaftRangeStatus {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
+  repeated RaftRangeNode nodes = 3 [(gogoproto.nullable) = false];
+}
+
+message RaftDebugRequest {
+}
+
+message RaftDebugResponse {
+  map<int64, RaftRangeStatus> ranges = 1 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+}
+
 service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
@@ -116,6 +143,11 @@ service Status {
       get: "/_status/nodes/{node_id}"
     };
   }
+  rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
+    option (google.api.http) = {
+      get: "/_status/raft"
+    };
+  }
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
       get: "/_status/ranges/{node_id}"
@@ -131,4 +163,27 @@ service Status {
   rpc Logs(LogsRequest) returns (JSONResponse) {}
   rpc LogFilesList(LogFilesListRequest) returns (JSONResponse) {}
   rpc LogFile(LogFileRequest) returns (JSONResponse) {}
+}
+
+
+// PrettyRangeDescriptor is identical to roachpb.RangeDescriptor except the
+// start and end keys are encoded as strings instead of bytes. This needs to be
+// kept in sync with roachpb.RangeDescriptor.
+message PrettyRangeDescriptor {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  // start_key is the first key which may be contained by this range.
+  string start_key = 2;
+  // end_key marks the end of the range's possible keys.  EndKey itself is not
+  // contained in this range - it will be contained in the immediately
+  // subsequent range.
+  string end_key = 3;
+  // replicas is the set of nodes/stores on which replicas of this
+  // range are stored, the ordering being arbitrary and subject to
+  // permutation.
+  repeated roachpb.ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
+
+  // next_replica_id is a counter used to generate replica IDs.
+  int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.ReplicaID"];
 }

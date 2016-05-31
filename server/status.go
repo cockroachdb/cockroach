@@ -95,6 +95,9 @@ const (
 	// statusRangesPrefix exposes range information.
 	statusRangesPrefix = statusPrefix + "ranges/"
 
+	// statusRaftEndpoint exposes raft debug information.
+	statusRaftEndpoint = statusPrefix + "raft"
+
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
 	healthEndpoint = "/health"
@@ -547,7 +550,87 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 	writeJSONResponse(w, resp)
 }
 
-// Ranges returns range info for the server specified
+// RaftDebug returns raft debug information for all known nodes.
+func (s *statusServer) RaftDebug(ctx context.Context, _ *RaftDebugRequest) (*RaftDebugResponse, error) {
+	nodes, err := s.Nodes(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	rangeNodes := make(map[roachpb.RangeID]RaftRangeStatus)
+
+	for _, node := range nodes.Nodes {
+		nodeID := node.Desc.NodeID
+		ranges, err := s.Ranges(ctx, &RangesRequest{NodeId: nodeID.String()})
+		if err != nil {
+			log.Infof("Failed to get ranges from %d: %q", node.Desc.NodeID, err)
+			continue
+		}
+		for _, rng := range ranges.Ranges {
+			rangeID := rng.Desc.RangeID
+			status, ok := rangeNodes[rangeID]
+			if !ok {
+				status = RaftRangeStatus{
+					RangeID: rangeID,
+				}
+			}
+			status.Nodes = append(status.Nodes, RaftRangeNode{
+				NodeID: nodeID,
+				Range:  rng,
+			})
+			rangeNodes[rangeID] = status
+		}
+	}
+	resp := RaftDebugResponse{
+		Ranges: rangeNodes,
+	}
+
+	// Check for errors.
+	for i, rng := range resp.Ranges {
+		for j, node := range rng.Nodes {
+			desc := node.Range.Desc
+			// Check for whether replica should be GCed.
+			containsNode := false
+			for _, replica := range desc.Replicas {
+				if replica.NodeID == node.NodeID {
+					containsNode = true
+				}
+			}
+			if !containsNode {
+				rng.Errors = append(rng.Errors, RaftRangeError{
+					Message: fmt.Sprintf("node %d not in replica and should be GCed", node.NodeID),
+				})
+			}
+
+			// Check for replica descs not matching.
+			if j > 0 {
+				prevDesc := rng.Nodes[j-1].Range.Desc
+				if !reflect.DeepEqual(&desc, &prevDesc) {
+					prevNodeID := rng.Nodes[j-1].NodeID
+					rng.Errors = append(rng.Errors, RaftRangeError{
+						Message: fmt.Sprintf("node %d range descriptor does not match node %d", node.NodeID, prevNodeID),
+					})
+				}
+			}
+			resp.Ranges[i] = rng
+		}
+	}
+	return &resp, nil
+}
+
+// PrettifyRangeDescriptor converts a roachpb.RangeDescriptor into a version
+// with string encoded keys for better readability.
+func PrettifyRangeDescriptor(rng roachpb.RangeDescriptor) PrettyRangeDescriptor {
+	return PrettyRangeDescriptor{
+		RangeID:       rng.RangeID,
+		StartKey:      rng.StartKey.String(),
+		EndKey:        rng.EndKey.String(),
+		Replicas:      rng.Replicas,
+		NextReplicaID: rng.NextReplicaID,
+	}
+}
+
+// Ranges returns range info for the server specified.
 func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -570,7 +653,11 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 		// because it's already exported.
 		err := storage.IterateRangeDescriptors(store.Engine(),
 			func(desc roachpb.RangeDescriptor) (bool, error) {
-				status := store.RaftStatus(desc.RangeID)
+				rep, err := store.GetReplica(desc.RangeID)
+				if err != nil {
+					return true, err
+				}
+				status := rep.RaftStatus()
 				var raftState string
 				if status != nil {
 					// We can't put the whole raft.Status object in the json output
@@ -579,8 +666,9 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 					raftState = status.RaftState.String()
 				}
 				output.Ranges = append(output.Ranges, RangeInfo{
-					Desc:      desc,
-					RaftState: raftState,
+					Desc:        PrettifyRangeDescriptor(desc),
+					RaftState:   raftState,
+					PendingCmds: int32(rep.PendingCmdsLen()),
 				})
 				return false, nil
 			})
