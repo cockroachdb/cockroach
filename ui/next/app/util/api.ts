@@ -24,7 +24,6 @@ type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsRespons
 type EventsRequest = cockroach.server.serverpb.EventsRequest;
 type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
 
-type NodesRequest = cockroach.server.serverpb.NodesRequest;
 type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
 
 type GetUIDataRequest = cockroach.server.serverpb.GetUIDataRequest;
@@ -32,6 +31,8 @@ type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessa
 
 type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
 type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
+
+type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
 
 type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
@@ -133,8 +134,13 @@ export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessag
 }
 
 // getNodes gets node data
-export function getNodes(req: NodesRequest = {}): Promise<NodesResponseMessage> {
+export function getNodes(): Promise<NodesResponseMessage> {
   return Fetch(serverpb.NodesResponse, `/_status/nodes`);
+}
+
+// raftDebug returns raft debug information.
+export function raftDebug(): Promise<RaftDebugResponseMessage> {
+  return Fetch(serverpb.RaftDebugResponse, `/_status/raft`);
 }
 
 // queryTimeSeries queries for time series data
