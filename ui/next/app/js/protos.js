@@ -605,7 +605,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "fields": [
                                 {
                                     "rule": "optional",
-                                    "type": "roachpb.RangeDescriptor",
+                                    "type": "PrettyRangeDescriptor",
                                     "name": "desc",
                                     "id": 1,
                                     "options": {
@@ -617,6 +617,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "string",
                                     "name": "raft_state",
                                     "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "pending_cmds",
+                                    "id": 3
                                 }
                             ]
                         },
@@ -757,6 +763,140 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 1
                                 }
                             ]
+                        },
+                        {
+                            "name": "RaftRangeNode",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "node_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "NodeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "RangeInfo",
+                                    "name": "range",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftRangeError",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "message",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftRangeStatus",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "range_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "RangeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "RaftRangeError",
+                                    "name": "errors",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "RaftRangeNode",
+                                    "name": "nodes",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftDebugRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "RaftDebugResponse",
+                            "fields": [
+                                {
+                                    "rule": "map",
+                                    "type": "RaftRangeStatus",
+                                    "keytype": "int64",
+                                    "name": "ranges",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "PrettyRangeDescriptor",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "range_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "RangeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "start_key",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "end_key",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "roachpb.ReplicaDescriptor",
+                                    "name": "replicas",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "next_replica_id",
+                                    "id": 5,
+                                    "options": {
+                                        "(gogoproto.customname)": "NextReplicaID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.ReplicaID"
+                                    }
+                                }
+                            ]
                         }
                     ],
                     "enums": [
@@ -885,6 +1025,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "response": "status.NodeStatus",
                                     "options": {
                                         "(google.api.http).get": "/_status/nodes/{node_id}"
+                                    }
+                                },
+                                "RaftDebug": {
+                                    "request": "RaftDebugRequest",
+                                    "response": "RaftDebugResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/raft"
                                     }
                                 },
                                 "Ranges": {
