@@ -123,12 +123,10 @@ describe("UIData reducer", function() {
     });
 
     it("correctly saves UIData", function() {
-
       fetchMock.mock("/_admin/v1/uidata", "post", (url: string, requestObj: RequestInit) => {
         assert.equal(state.inFlight, 1);
-        let requestJSON = JSON.parse(requestObj.body as string);
-        let request = new protos.cockroach.server.SetUIDataRequest(requestJSON);
-        let kvs = request.getKeyValues();
+
+        let kvs = new protos.cockroach.server.SetUIDataRequest(JSON.parse(requestObj.body as string)).getKeyValues();
 
         assert.equal(kvs.size, 2);
 
@@ -140,7 +138,8 @@ describe("UIData reducer", function() {
         assert.deepEqual(deserialize(kvs.get(uiKey2)), uiObj2);
 
         return {
-          body: new protos.cockroach.server.SetUIDataResponse(),
+          sendAsJson: false,
+          body: new protos.cockroach.server.SetUIDataResponse().encodeJSON(),
         };
       });
 
@@ -178,8 +177,8 @@ describe("UIData reducer", function() {
     });
 
     it("correctly loads UIData", function() {
-
       let expectedURL = `/_admin/v1/uidata?keys=${uiKey1}&keys=${uiKey2}`;
+
       fetchMock.mock(expectedURL, "get", function() {
         // FetchMock URL must match the above string exactly, requesting both
         // keys.
@@ -195,6 +194,7 @@ describe("UIData reducer", function() {
         setValue(uiKey2, uiObj2);
 
         return {
+          sendAsJson: false,
           body: response.encodeJSON(),
         };
       });
