@@ -25,6 +25,8 @@ import (
 	"strconv"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -110,6 +112,76 @@ func TestEngineBatchCommit(t *testing.T) {
 		}
 		close(writesDone)
 		<-readsDone
+	}, t)
+}
+
+func TestEngineBatchStaleCachedIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Prevent regression of a bug which caused spurious MVCC errors due to an
+	// invalid optimization which let an iterator return key-value pairs which
+	// had since been deleted from the underlying engine.
+	// Discovered in #6878.
+	runWithAllEngines(func(eng Engine, t *testing.T) {
+		// Focused failure mode: highlights the actual bug.
+		{
+			batch := eng.NewBatch()
+			defer batch.Close()
+			iter := batch.NewIterator(false)
+			key := MVCCKey{Key: roachpb.Key("b")}
+
+			if err := batch.Put(key, []byte("foo")); err != nil {
+				t.Fatal(err)
+			}
+
+			iter.Seek(key)
+
+			if err := batch.Clear(key); err != nil {
+				t.Fatal(err)
+			}
+
+			// Iterator should not reuse its cached result.
+			iter.Seek(key)
+
+			if iter.Valid() {
+				t.Fatalf("iterator unexpectedly valid: %v -> %v",
+					iter.unsafeKey(), iter.unsafeValue())
+			}
+		}
+
+		// Higher-level failure mode. Mostly for documentation.
+		{
+			batch := eng.NewBatch().(*rocksDBBatch)
+			defer batch.Close()
+
+			key := roachpb.Key("z")
+
+			// Put a value so that the deletion below finds a value to seek
+			// to.
+			if err := MVCCPut(context.Background(), batch, nil, key, roachpb.ZeroTimestamp,
+				roachpb.MakeValueFromString("x"), nil); err != nil {
+				t.Fatal(err)
+			}
+
+			// Seeks the iterator to `key` and clears the value (but without
+			// telling the iterator about that).
+			if err := MVCCDelete(context.Background(), batch, nil, key,
+				roachpb.ZeroTimestamp, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			// Trigger a seek on the cached iterator by seeking to the (now
+			// absent) key.
+			// The underlying iterator will already be in the right position
+			// due to its usage in MVCCDelete, and if it reports its cached
+			// result back, we'll see the (newly deleted) value (due to the
+			// failure mode above).
+			if v, _, err := MVCCGet(context.Background(), batch, key,
+				roachpb.ZeroTimestamp, true, nil); err != nil {
+				t.Fatal(err)
+			} else if v != nil {
+				t.Fatalf("expected no value, got %+v", v)
+			}
+		}
 	}, t)
 }
 
