@@ -447,7 +447,7 @@ func (r *Replica) IsFirstRange() bool {
 }
 
 func setFrozenStatus(
-	eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, frozen bool,
+	eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, frozen bool,
 ) error {
 	var status int64
 	if frozen {
@@ -459,7 +459,7 @@ func setFrozenStatus(
 		keys.RangeFrozenStatusKey(rangeID), roachpb.ZeroTimestamp, val, nil)
 }
 
-func loadFrozenStatus(eng engine.Engine, rangeID roachpb.RangeID) (bool, error) {
+func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) {
 	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeFrozenStatusKey(rangeID),
 		roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
@@ -475,7 +475,7 @@ func loadFrozenStatus(eng engine.Engine, rangeID roachpb.RangeID) (bool, error) 
 	return s != 0, nil
 }
 
-func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
 	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
@@ -491,12 +491,14 @@ func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	return r.mu.leaderLease, len(r.mu.llChans) > 0
 }
 
-func setGCThreshold(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp) error {
+func setGCThreshold(
+	eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp,
+) error {
 	return engine.MVCCPutProto(context.Background(), eng, ms,
 		keys.RangeLastGCKey(rangeID), roachpb.ZeroTimestamp, nil, threshold)
 }
 
-func loadGCThreshold(eng engine.Engine, rangeID roachpb.RangeID) (roachpb.Timestamp, error) {
+func loadGCThreshold(eng engine.Reader, rangeID roachpb.RangeID) (roachpb.Timestamp, error) {
 	var t roachpb.Timestamp
 	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLastGCKey(rangeID),
 		roachpb.ZeroTimestamp, true, nil, &t)
@@ -1660,7 +1662,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
-	var batch engine.Engine
+	var batch engine.Batch
 	var br *roachpb.BatchResponse
 	var ms engine.MVCCStats
 	var intents []intentsWithArg
@@ -1678,10 +1680,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	// The only remaining use of the batch is for range-local keys which we know
 	// have not been previously written within this batch. Currently the only
 	// remaining writes are the raft applied index and the updated MVCC stats.
-	writer := batch
-	if b, ok := batch.(engine.Batch); ok {
-		writer = b.Distinct()
-	}
+	writer := batch.Distinct()
 
 	// Advance the last applied index and commit the batch.
 	if err := setAppliedIndex(writer, &ms, r.RangeID, index); err != nil {
@@ -1735,7 +1734,7 @@ func (r *Replica) applyRaftCommandInBatch(
 	idKey storagebase.CmdIDKey,
 	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-) (engine.Engine, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+) (engine.Batch, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
@@ -1803,7 +1802,9 @@ func (r *Replica) applyRaftCommandInBatch(
 // checkIfTxnAborted checks the txn abort cache for the given
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error. Locks the replica.
-func (r *Replica) checkIfTxnAborted(ctx context.Context, b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
+func (r *Replica) checkIfTxnAborted(
+	ctx context.Context, b engine.Reader, txn roachpb.Transaction,
+) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1843,7 +1844,7 @@ type intentsWithArg struct {
 // txn is restored and it's re-executed as transactional.
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest) (
-	engine.Engine, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+	engine.Batch, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	batch := r.store.Engine().NewBatch()
 	ms := engine.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn
@@ -1922,7 +1923,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // range of keys being written is empty. If so, then the run can be
 // set to put "blindly", meaning no iterator need be used to read
 // existing values during the MVCC write.
-func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion, distinctSpans bool) {
+func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinctSpans bool) {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
 	if !distinctSpans {
@@ -1994,7 +1995,7 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion, distinctSpan
 
 func (r *Replica) executeBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey,
-	batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (
+	batch engine.ReadWriter, ms *engine.MVCCStats, ba roachpb.BatchRequest) (
 	*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := ba.CreateReply()
 	var intents []intentsWithArg

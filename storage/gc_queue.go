@@ -152,7 +152,7 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 // returned separately and are not added to txnMap nor intentSpanMap.
 func processTransactionTable(
 	ctx context.Context,
-	snap engine.Engine,
+	snap engine.Reader,
 	desc *roachpb.RangeDescriptor,
 	txnMap map[uuid.UUID]*roachpb.Transaction,
 	cutoff roachpb.Timestamp,
@@ -245,7 +245,7 @@ func processTransactionTable(
 // all of the keys over the wire).
 func processAbortCache(
 	ctx context.Context,
-	snap engine.Engine,
+	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	now roachpb.Timestamp,
 	minAge time.Duration,
@@ -383,8 +383,15 @@ type lockableGCInfo struct {
 // resolveIntents to clarify the true status of and clean up after encountered
 // transactions. It returns a slice of gc'able keys from the data, transaction,
 // and abort spans.
-func RunGC(ctx context.Context, desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timestamp, policy config.GCPolicy,
-	pushTxn pushFunc, resolveIntents resolveFunc) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
+func RunGC(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	snap engine.Reader,
+	now roachpb.Timestamp,
+	policy config.GCPolicy,
+	pushTxn pushFunc,
+	resolveIntents resolveFunc,
+) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
 
 	iter := newReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()

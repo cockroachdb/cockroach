@@ -76,7 +76,9 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor, metaFunc func(roachpb.Rang
 	}
 }
 
-func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine, replicatedOnly bool) *replicaDataIterator {
+func newReplicaDataIterator(
+	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
+) *replicaDataIterator {
 	rangeFunc := makeAllKeyRanges
 	if replicatedOnly {
 		rangeFunc = makeReplicatedKeyRanges

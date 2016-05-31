@@ -75,15 +75,20 @@ func (sc *AbortCache) max() roachpb.Key {
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *AbortCache) ClearData(e engine.Engine) error {
-	_, err := engine.ClearRange(e, engine.MakeMVCCMetadataKey(sc.min()), engine.MakeMVCCMetadataKey(sc.max()))
-	return err
+	b := e.NewBatch()
+	defer b.Close()
+	_, err := engine.ClearRange(b, engine.MakeMVCCMetadataKey(sc.min()), engine.MakeMVCCMetadataKey(sc.max()))
+	if err != nil {
+		return err
+	}
+	return b.Commit()
 }
 
 // Get looks up an abort cache entry recorded for this transaction ID.
 // Returns whether an abort record was found and any error.
 func (sc *AbortCache) Get(
 	ctx context.Context,
-	e engine.Engine,
+	e engine.Reader,
 	txnID *uuid.UUID,
 	entry *roachpb.AbortCacheEntry,
 ) (bool, error) {
@@ -103,7 +108,7 @@ func (sc *AbortCache) Get(
 // TODO(tschottdorf): should not use a pointer to UUID.
 func (sc *AbortCache) Iterate(
 	ctx context.Context,
-	e engine.Engine,
+	e engine.Reader,
 	f func([]byte, *uuid.UUID, roachpb.AbortCacheEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), roachpb.ZeroTimestamp,
@@ -123,7 +128,7 @@ func (sc *AbortCache) Iterate(
 }
 
 func copySeqCache(
-	e engine.Engine,
+	e engine.ReadWriter,
 	ms *engine.MVCCStats,
 	srcID, dstID roachpb.RangeID,
 	keyMin, keyMax engine.MVCCKey,
@@ -171,7 +176,7 @@ func copySeqCache(
 // abort cache. Failures decoding individual cache entries return an error.
 // On success, returns the number of entries (key-value pairs) copied.
 func (sc *AbortCache) CopyInto(
-	e engine.Engine,
+	e engine.ReadWriter,
 	ms *engine.MVCCStats,
 	destRangeID roachpb.RangeID,
 ) (int, error) {
@@ -187,7 +192,7 @@ func (sc *AbortCache) CopyInto(
 // On success, returns the number of entries (key-value pairs) copied.
 func (sc *AbortCache) CopyFrom(
 	ctx context.Context,
-	e engine.Engine,
+	e engine.ReadWriter,
 	ms *engine.MVCCStats,
 	originRangeID roachpb.RangeID,
 ) (int, error) {
@@ -199,7 +204,7 @@ func (sc *AbortCache) CopyFrom(
 // Del removes all abort cache entries for the given transaction.
 func (sc *AbortCache) Del(
 	ctx context.Context,
-	e engine.Engine,
+	e engine.ReadWriter,
 	ms *engine.MVCCStats,
 	txnID *uuid.UUID,
 ) error {
@@ -210,7 +215,7 @@ func (sc *AbortCache) Del(
 // Put writes an entry for the specified transaction ID.
 func (sc *AbortCache) Put(
 	ctx context.Context,
-	e engine.Engine,
+	e engine.ReadWriter,
 	ms *engine.MVCCStats,
 	txnID *uuid.UUID,
 	entry *roachpb.AbortCacheEntry,

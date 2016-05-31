@@ -483,7 +483,7 @@ func updateStatsOnGC(
 // sets the values in the supplied MVCCStats struct.
 func MVCCGetRangeStats(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	rangeID roachpb.RangeID,
 	ms *MVCCStats,
 ) error {
@@ -493,7 +493,7 @@ func MVCCGetRangeStats(
 
 // MVCCSetRangeStats sets stat counters for specified range.
 func MVCCSetRangeStats(ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	rangeID roachpb.RangeID,
 	ms *MVCCStats,
 ) error {
@@ -508,7 +508,7 @@ func MVCCSetRangeStats(ctx context.Context,
 // invalid.
 func MVCCGetProto(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
 	consistent bool,
@@ -534,7 +534,7 @@ func MVCCGetProto(
 // string of msg and the provided timestamp.
 func MVCCPutProto(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -596,7 +596,7 @@ func (b *getBuffer) release() {
 // the previous value (if any) is read instead.
 func MVCCGet(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
 	consistent bool,
@@ -646,7 +646,7 @@ func mvccGetUsingIter(
 // The read is carried out without the chance of uncertainty restarts.
 func MVCCGetAsTxn(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
 	txnMeta roachpb.TxnMeta,
@@ -913,7 +913,7 @@ func (b *putBuffer) release() {
 // the value. In addition, zero timestamp values may be merged.
 func MVCCPut(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -932,7 +932,7 @@ func MVCCPut(
 // exist.
 func MVCCBlindPut(
 	ctx context.Context,
-	engine Engine,
+	engine Writer,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -946,7 +946,7 @@ func MVCCBlindPut(
 // future get responses.
 func MVCCDelete(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -966,7 +966,7 @@ var noValue = roachpb.Value{}
 // for the key, else the bytes provided by the valueFn will be used.
 func mvccPutUsingIter(
 	ctx context.Context,
-	engine Engine,
+	engine Writer,
 	iter Iterator,
 	ms *MVCCStats,
 	key roachpb.Key,
@@ -1002,7 +1002,7 @@ func mvccPutUsingIter(
 // []byte{} will write an empty value, not delete.
 func mvccPutInternal(
 	ctx context.Context,
-	engine Engine,
+	engine Writer,
 	iter Iterator,
 	ms *MVCCStats,
 	key roachpb.Key,
@@ -1196,7 +1196,7 @@ func mvccPutInternal(
 // timestamp as we use to write a value.
 func MVCCIncrement(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -1238,7 +1238,7 @@ func MVCCIncrement(
 // timestamp as we use to write a value.
 func MVCCConditionalPut(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -1259,7 +1259,7 @@ func MVCCConditionalPut(
 // currently exist.
 func MVCCBlindConditionalPut(
 	ctx context.Context,
-	engine Engine,
+	engine Writer,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -1272,7 +1272,7 @@ func MVCCBlindConditionalPut(
 
 func mvccConditionalPutUsingIter(
 	ctx context.Context,
-	engine Engine,
+	engine Writer,
 	iter Iterator,
 	ms *MVCCStats,
 	key roachpb.Key,
@@ -1281,21 +1281,23 @@ func mvccConditionalPutUsingIter(
 	expVal *roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(existVal *roachpb.Value) ([]byte, error) {
-		if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
-			// Every type flows through here, so we can't use the typed getters.
-			if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
+	return mvccPutUsingIter(
+		ctx, engine, iter, ms, key, timestamp, noValue, txn,
+		func(existVal *roachpb.Value) ([]byte, error) {
+			if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
+				// Every type flows through here, so we can't use the typed getters.
+				if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
+					return nil, &roachpb.ConditionFailedError{
+						ActualValue: existVal.ShallowClone(),
+					}
+				}
+			} else if expValPresent != existValPresent {
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ShallowClone(),
 				}
 			}
-		} else if expValPresent != existValPresent {
-			return nil, &roachpb.ConditionFailedError{
-				ActualValue: existVal.ShallowClone(),
-			}
-		}
-		return value.RawBytes, nil
-	})
+			return value.RawBytes, nil
+		})
 }
 
 var errInitPutValueMatchesExisting = errors.New("the value matched the existing value")
@@ -1305,7 +1307,7 @@ var errInitPutValueMatchesExisting = errors.New("the value matched the existing 
 // existing value that is different from the supplied value.
 func MVCCInitPut(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -1343,7 +1345,7 @@ func MVCCInitPut(
 // indicates the value byte slice is of type TIMESERIES.
 func MVCCMerge(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -1380,7 +1382,7 @@ func MVCCMerge(
 // start and end keys. Specify max=0 for unbounded deletes.
 func MVCCDeleteRange(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	key,
 	endKey roachpb.Key,
@@ -1492,7 +1494,7 @@ func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (M
 // in descending instead of ascending order.
 func mvccScanInternal(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	key,
 	endKey roachpb.Key,
 	max int64,
@@ -1521,7 +1523,7 @@ func mvccScanInternal(
 // results in ascending order. Specify max=0 for unbounded scans.
 func MVCCScan(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	key,
 	endKey roachpb.Key,
 	max int64,
@@ -1537,7 +1539,7 @@ func MVCCScan(
 // results in descending order. Specify max=0 for unbounded scans.
 func MVCCReverseScan(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	key,
 	endKey roachpb.Key,
 	max int64,
@@ -1554,7 +1556,7 @@ func MVCCReverseScan(
 // (done) or an error, the iteration stops and the error is propagated. If the
 // reverse is flag set the iterator will be moved in reverse order.
 func MVCCIterate(ctx context.Context,
-	engine Engine,
+	engine Reader,
 	startKey,
 	endKey roachpb.Key,
 	timestamp roachpb.Timestamp,
@@ -1742,7 +1744,7 @@ func MVCCIterate(ctx context.Context,
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	intent roachpb.Intent,
 ) error {
@@ -1759,7 +1761,7 @@ func MVCCResolveWriteIntent(ctx context.Context,
 // uses iterator and buffer passed as parameters (e.g. when used in a loop).
 func MVCCResolveWriteIntentUsingIter(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	iterAndBuf IterAndBuf,
 	ms *MVCCStats,
 	intent roachpb.Intent,
@@ -1770,7 +1772,7 @@ func MVCCResolveWriteIntentUsingIter(
 
 func mvccResolveWriteIntent(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	iter Iterator,
 	ms *MVCCStats,
 	intent roachpb.Intent,
@@ -1965,7 +1967,7 @@ type IterAndBuf struct {
 }
 
 // GetIterAndBuf returns a IterAndBuf for passing into various MVCC* methods.
-func GetIterAndBuf(engine Engine) IterAndBuf {
+func GetIterAndBuf(engine Reader) IterAndBuf {
 	return IterAndBuf{
 		buf:  newPutBuffer(),
 		iter: engine.NewIterator(false),
@@ -1983,7 +1985,7 @@ func (b IterAndBuf) Cleanup() {
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64,
+	ctx context.Context, engine ReadWriter, ms *MVCCStats, intent roachpb.Intent, max int64,
 ) (int64, error) {
 	iterAndBuf := GetIterAndBuf(engine)
 	defer iterAndBuf.Cleanup()
@@ -1997,7 +1999,7 @@ func MVCCResolveWriteIntentRange(
 // txns. Specify max=0 for unbounded resolves.
 func MVCCResolveWriteIntentRangeUsingIter(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	iterAndBuf IterAndBuf,
 	ms *MVCCStats,
 	intent roachpb.Intent,
@@ -2052,7 +2054,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // The timestamp parameter is used to compute the intent age on GC.
 func MVCCGarbageCollect(
 	ctx context.Context,
-	engine Engine,
+	engine ReadWriter,
 	ms *MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
 	timestamp roachpb.Timestamp,
@@ -2159,7 +2161,7 @@ func IsValidSplitKey(key roachpb.Key) bool {
 // the key finding process.
 func MVCCFindSplitKey(
 	ctx context.Context,
-	engine Engine,
+	engine Reader,
 	rangeID roachpb.RangeID,
 	key,
 	endKey roachpb.RKey,

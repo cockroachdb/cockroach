@@ -47,7 +47,7 @@ func mvccKey(k interface{}) MVCCKey {
 	}
 }
 
-func testBatchBasics(t *testing.T, commit func(e, b Engine) error) {
+func testBatchBasics(t *testing.T, commit func(e Engine, b Batch) error) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
@@ -118,14 +118,14 @@ func testBatchBasics(t *testing.T, commit func(e, b Engine) error) {
 // visible until commit, and then are all visible after commit.
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testBatchBasics(t, func(e, b Engine) error {
+	testBatchBasics(t, func(e Engine, b Batch) error {
 		return b.Commit()
 	})
 }
 
 func TestBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testBatchBasics(t, func(e, b Engine) error {
+	testBatchBasics(t, func(e Engine, b Batch) error {
 		repr := b.Repr()
 
 		// Simple sanity checks about the format of the batch representation. This
