@@ -1964,9 +1964,6 @@ func TestMVCCAbortTxn(t *testing.T) {
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1AbortWithTS.TxnMeta, Status: txn1AbortWithTS.Status}); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.Commit(); err != nil {
-		t.Fatal(err)
-	}
 
 	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil); err != nil {
 		t.Fatal(err)
@@ -2000,9 +1997,6 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	txn1AbortWithTS.Timestamp = makeTS(2, 0)
 
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn1AbortWithTS.Status, Txn: txn1AbortWithTS.TxnMeta}); err != nil {
-		t.Fatal(err)
-	}
-	if err := engine.Commit(); err != nil {
 		t.Fatal(err)
 	}
 

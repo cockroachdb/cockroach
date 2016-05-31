@@ -43,7 +43,7 @@ type rangeStats struct {
 // nanos and intent count are pulled from the engine and cached in the
 // struct for efficient processing (i.e. each new merge does not
 // require the values to be read from the engine).
-func newRangeStats(rangeID roachpb.RangeID, e engine.Engine) (*rangeStats, error) {
+func newRangeStats(rangeID roachpb.RangeID, e engine.Reader) (*rangeStats, error) {
 	rs := &rangeStats{rangeID: rangeID}
 	if err := engine.MVCCGetRangeStats(context.Background(), e, rangeID, &rs.mvccStats); err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (rs *rangeStats) GetSize() int64 {
 // MergeMVCCStats merges the results of an MVCC operation or series of MVCC
 // operations into the range's stats. Stats are stored to the underlying engine
 // and the rangeStats MVCCStats updated to reflect merged totals.
-func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
+func (rs *rangeStats) MergeMVCCStats(e engine.ReadWriter, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.mvccStats.Add(ms)
@@ -92,7 +92,7 @@ func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms engine.MVCCStats) error
 }
 
 // SetStats sets stats wholesale.
-func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
+func (rs *rangeStats) SetMVCCStats(e engine.ReadWriter, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.mvccStats = ms
@@ -130,7 +130,9 @@ func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 // ComputeStatsForRange computes the stats for a given range by
 // iterating over all key ranges for the given range that should
 // be accounted for in its stats.
-func ComputeStatsForRange(d *roachpb.RangeDescriptor, e engine.Engine, nowNanos int64) (engine.MVCCStats, error) {
+func ComputeStatsForRange(
+	d *roachpb.RangeDescriptor, e engine.Reader, nowNanos int64,
+) (engine.MVCCStats, error) {
 	iter := e.NewIterator(false)
 	defer iter.Close()
 

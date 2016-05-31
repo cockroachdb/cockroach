@@ -733,7 +733,9 @@ func (s *Store) IsStarted() bool {
 // IterateRangeDescriptors calls the provided function with each descriptor
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
-func IterateRangeDescriptors(eng engine.Engine, fn func(desc roachpb.RangeDescriptor) (bool, error)) error {
+func IterateRangeDescriptors(
+	eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
+) error {
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -1583,7 +1585,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 }
 
 // NewSnapshot creates a new snapshot engine.
-func (s *Store) NewSnapshot() engine.Engine {
+func (s *Store) NewSnapshot() engine.Reader {
 	return s.engine.NewSnapshot()
 }
 
