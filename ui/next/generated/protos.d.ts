@@ -87,6 +87,11 @@ export interface serverBuilder {
 	LogFileRequest: server.LogFileRequestBuilder;
 	StacksRequest: server.StacksRequestBuilder;
 	MetricsRequest: server.MetricsRequestBuilder;
+	RaftRangeNode: server.RaftRangeNodeBuilder;
+	RaftRangeError: server.RaftRangeErrorBuilder;
+	RaftRangeStatus: server.RaftRangeStatusBuilder;
+	RaftDebugRequest: server.RaftDebugRequestBuilder;
+	RaftDebugResponse: server.RaftDebugResponseBuilder;
 	status: server.statusBuilder;
 	DrainMode: server.DrainMode;
 	
@@ -1612,6 +1617,15 @@ getRaftState?() : string;
 
 
 
+pending_cmds?: number;
+		
+
+getPendingCmds?() : number;
+		setPendingCmds?(pendingCmds : number): void;
+		
+
+
+
 }
 	
 	export interface RangeInfoMessage extends RangeInfo {
@@ -2005,6 +2019,204 @@ export interface MetricsRequestBuilder {
 	decode(buffer: ArrayBuffer) : MetricsRequestMessage;
 	decode(buffer: ByteBuffer) : MetricsRequestMessage;
 	decode64(buffer: string) : MetricsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftRangeNode {
+	
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+range?: RangeInfo;
+		
+
+getRange?() : RangeInfo;
+		setRange?(range : RangeInfo): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeNodeMessage extends RaftRangeNode {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeNodeBuilder {
+	new(data?: RaftRangeNode): RaftRangeNodeMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeNodeMessage;
+	decode(buffer: ByteBuffer) : RaftRangeNodeMessage;
+	decode64(buffer: string) : RaftRangeNodeMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftRangeError {
+	
+		
+
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeErrorMessage extends RaftRangeError {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeErrorBuilder {
+	new(data?: RaftRangeError): RaftRangeErrorMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeErrorMessage;
+	decode(buffer: ByteBuffer) : RaftRangeErrorMessage;
+	decode64(buffer: string) : RaftRangeErrorMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftRangeStatus {
+	
+		
+
+range_id?: Long;
+		
+
+getRangeId?() : Long;
+		setRangeId?(rangeId : Long): void;
+		
+
+
+
+errors?: RaftRangeError[];
+		
+
+getErrors?() : RaftRangeError[];
+		setErrors?(errors : RaftRangeError[]): void;
+		
+
+
+
+nodes?: RaftRangeNode[];
+		
+
+getNodes?() : RaftRangeNode[];
+		setNodes?(nodes : RaftRangeNode[]): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeStatusMessage extends RaftRangeStatus {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeStatusBuilder {
+	new(data?: RaftRangeStatus): RaftRangeStatusMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeStatusMessage;
+	decode(buffer: ByteBuffer) : RaftRangeStatusMessage;
+	decode64(buffer: string) : RaftRangeStatusMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftDebugRequest {
+	
+		
+
+}
+	
+	export interface RaftDebugRequestMessage extends RaftDebugRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftDebugRequestBuilder {
+	new(data?: RaftDebugRequest): RaftDebugRequestMessage;
+	decode(buffer: ArrayBuffer) : RaftDebugRequestMessage;
+	decode(buffer: ByteBuffer) : RaftDebugRequestMessage;
+	decode64(buffer: string) : RaftDebugRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server {
+	
+	export interface RaftDebugResponse {
+	
+		
+
+ranges?: RaftRangeStatus[];
+		
+
+getRanges?() : RaftRangeStatus[];
+		setRanges?(ranges : RaftRangeStatus[]): void;
+		
+
+
+
+}
+	
+	export interface RaftDebugResponseMessage extends RaftDebugResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftDebugResponseBuilder {
+	new(data?: RaftDebugResponse): RaftDebugResponseMessage;
+	decode(buffer: ArrayBuffer) : RaftDebugResponseMessage;
+	decode(buffer: ByteBuffer) : RaftDebugResponseMessage;
+	decode64(buffer: string) : RaftDebugResponseMessage;
 	
 }
 	
