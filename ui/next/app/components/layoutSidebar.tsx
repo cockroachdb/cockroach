@@ -44,6 +44,7 @@ export default class extends React.Component<{}, {}> {
           <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster"/>
           <IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
           <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
+          <IconLink to="/raft" icon={Icons.wrenchIcon} title="Raft"/>
           <IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
         </ul>
       </header>
