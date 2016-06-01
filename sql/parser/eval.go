@@ -1924,7 +1924,10 @@ func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t *DPlaceholder) Eval(_ *EvalContext) (Datum, error) {
-	return t, nil
+	if v, ok := t.pmap.Value(t.name); ok {
+		return v, nil
+	}
+	panic(fmt.Sprintf("Eval() called on placeholder $%s without argument", t.name))
 }
 
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {

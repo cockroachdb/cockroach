@@ -150,7 +150,7 @@ func (p *planner) Insert(
 				if err != nil {
 					return nil, err
 				}
-				err = sqlbase.CheckColumnType(cols[eIdx], typedExpr.ReturnType(), p.semaCtx.PlaceholderTypes)
+				err = sqlbase.CheckColumnType(cols[eIdx], typedExpr.ReturnType(), p.semaCtx.Placeholders)
 				if err != nil {
 					return nil, err
 				}

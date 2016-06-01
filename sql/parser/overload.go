@@ -211,7 +211,7 @@ func typeCheckOverloadedExprs(
 				return err
 			}
 			// If we dont want to error on args, avoid type checking them without a desired type.
-			typedExprs[expr.i] = &DPlaceholder{name: expr.e.(Placeholder).Name}
+			typedExprs[expr.i] = &DPlaceholder{name: expr.e.(Placeholder).Name, pmap: ctx.Placeholders}
 		}
 		return nil
 	}
