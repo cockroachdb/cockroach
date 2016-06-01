@@ -33,3 +33,13 @@ export function Bytes(bytes: number): string {
   let unitVal: UnitValue = BytesToUnitValue(bytes);
   return unitVal.value.toFixed(1) + " " + unitVal.units;
 }
+
+/**
+ * Percentage creates a string representation of a fraction as a percentage.
+ */
+export function Percentage(numerator: number, denominator: number): string {
+  if (denominator === 0) {
+    return "100%";
+  }
+  return Math.floor(numerator / denominator * 100).toString() + "%";
+}
