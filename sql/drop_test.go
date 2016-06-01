@@ -170,22 +170,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
-	gr, err := kvDB.Get(nameKey)
+	tableDesc, err := getTableDesc("t", "kv", kvDB)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	tableDesc := desc.GetTable()
 
 	status, i, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
@@ -214,10 +202,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if err := kvDB.GetProto(descKey, desc); err != nil {
+	tableDesc, err = getTableDesc("t", "kv", kvDB)
+	if err != nil {
 		t.Fatal(err)
 	}
-	tableDesc = desc.GetTable()
+
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -239,8 +228,13 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
+	tableDesc, err := getTableDesc("t", "kv", kvDB)
+	if err != nil {
+		t.Fatal(err)
+	}
 	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
 	gr, err := kvDB.Get(nameKey)
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,11 +244,6 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	tableDesc := desc.GetTable()
 
 	// Add a zone config for the table.
 	cfg := config.DefaultZoneConfig()

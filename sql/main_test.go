@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -238,4 +239,36 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	testingshim.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
+}
+
+// getTableDesc returns the table descriptor for table dbName.tableName.
+func getTableDesc(dbName, tableName string, db *client.DB) (*sqlbase.TableDescriptor, error) {
+	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
+	r, err := db.Get(dbNameKey)
+	if err != nil {
+		return nil, err
+	}
+	if !r.Exists() {
+		return nil, fmt.Errorf("database %q does not exist", dbName)
+	}
+	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
+	desc := &sqlbase.Descriptor{}
+	if err := db.GetProto(dbDescKey, desc); err != nil {
+		return nil, err
+	}
+	dbDesc := desc.GetDatabase()
+
+	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, tableName)
+	gr, err := db.Get(tbNameKey)
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		return nil, fmt.Errorf("table %q does not exist", tableName)
+	}
+	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	if err := db.GetProto(tbDescKey, desc); err != nil {
+		return nil, err
+	}
+	return desc.GetTable(), nil
 }
