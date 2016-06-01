@@ -97,6 +97,7 @@ const (
 // of arguments and results have been determined.
 type preparedStatement struct {
 	query       string
+	sqlTypes    parser.PlaceholderTypes
 	inTypes     []oid.Oid
 	columns     []sql.ResultColumn
 	portalNames map[string]struct{}
@@ -106,7 +107,7 @@ type preparedStatement struct {
 type preparedPortal struct {
 	stmt       preparedStatement
 	stmtName   string
-	qargs      []parser.Datum
+	qargs      parser.QueryArguments
 	outFormats []formatCode
 }
 
@@ -340,11 +341,12 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
+	// The client may provide type information for (some of) the
+	// placeholders.  Read this first.
 	numQArgTypes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-
 	inTypeHints := make([]oid.Oid, numQArgTypes)
 	for i := range inTypeHints {
 		typ, err := buf.getInt32()
@@ -353,7 +355,10 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		}
 		inTypeHints[i] = oid.Oid(typ)
 	}
-	ptypes := make(parser.MapPlaceholderTypes)
+	// Prepare the mapping of SQL placeholder names to
+	// types. Pre-populate it with the type hints received from the
+	// client, if any.
+	sqlTypes := make(parser.PlaceholderTypes)
 	for i, t := range inTypeHints {
 		if t == 0 {
 			continue
@@ -362,53 +367,57 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
 		}
-		ptypes[fmt.Sprint(i+1)] = v
+		sqlTypes[fmt.Sprint(i+1)] = v
 	}
-	cols, err := c.executor.Prepare(ctx, query, c.session, ptypes)
+	// Prepare the query. This completes typing the placeholders.
+	cols, err := c.executor.Prepare(ctx, query, c.session, sqlTypes)
 	if err != nil {
 		return c.sendError(err)
 	}
-	pq := preparedStatement{
-		query:       query,
-		inTypes:     make([]oid.Oid, 0, len(ptypes)),
-		portalNames: make(map[string]struct{}),
-		columns:     cols,
-	}
-	for k, v := range ptypes {
+	// Convert the inferred SQL types back to an array of pgwire Oids.
+	inTypes := make([]oid.Oid, 0, len(sqlTypes))
+	for k := range sqlTypes {
 		i, err := strconv.Atoi(k)
-		if err != nil {
-			return c.sendInternalError(fmt.Sprintf("non-integer placholder name: %s", k))
+		if err != nil || i < 1 {
+			return c.sendInternalError(fmt.Sprintf("invalid placeholder name: $%s", k))
 		}
-		// Placeholders are 1-indexed, pq.inTypes are 0-indexed.
+		// Placeholder names are 1-indexed; the arrays in the protocol are
+		// 0-indexed.
 		i--
-		if i < 0 {
-			return c.sendInternalError(fmt.Sprintf("invalid placeholder name $%s", k))
-		}
-		// Grow pq.inTypes to be at least as large as i.
-		for j := len(pq.inTypes); j <= i; j++ {
-			pq.inTypes = append(pq.inTypes, 0)
+		// Grow inTypes to be at least as large as i. Prepopulate all
+		// slots with the hints provided, if any.
+		for j := len(inTypes); j <= i; j++ {
+			inTypes = append(inTypes, 0)
 			if j < len(inTypeHints) {
-				pq.inTypes[j] = inTypeHints[j]
+				inTypes[j] = inTypeHints[j]
 			}
 		}
-		// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
-		// to DummyInt), so we need to maintain the types sent by the client.
-		if pq.inTypes[i] != 0 {
+		// OID to Datum is not a 1-1 mapping (for example, int4 and int8
+		// both map to TypeInt), so we need to maintain the types sent by
+		// the client.
+		if inTypes[i] != 0 {
 			continue
 		}
-		id, ok := datumToOid[reflect.TypeOf(v)]
+		t, _ := sqlTypes[k]
+		id, ok := datumToOid[reflect.TypeOf(t)]
 		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", v.Type()))
+			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", t.Type()))
 		}
-		pq.inTypes[i] = id
+		inTypes[i] = id
 	}
-	for i := range pq.inTypes {
-		if pq.inTypes[i] == 0 {
+	for i := range inTypes {
+		if inTypes[i] == 0 {
 			return c.sendInternalError(
 				fmt.Sprintf("could not determine data type of placeholder $%d", i+1))
 		}
 	}
-	c.preparedStatements[name] = pq
+	c.preparedStatements[name] = preparedStatement{
+		query:       query,
+		sqlTypes:    sqlTypes,
+		inTypes:     inTypes,
+		portalNames: make(map[string]struct{}),
+		columns:     cols,
+	}
 	c.writeBuf.initMsg(serverMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
@@ -506,7 +515,6 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 
 	numQArgs := int16(len(stmt.inTypes))
 	qArgFormatCodes := make([]formatCode, numQArgs)
-
 	// From the docs on number of argument format codes to bind:
 	// This can be zero to indicate that there are no arguments or that the
 	// arguments all use the default format (text); or one, in which case the
@@ -549,14 +557,16 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if numValues != numQArgs {
 		return c.sendInternalError(fmt.Sprintf("expected %d arguments, got %d", numQArgs, numValues))
 	}
-	qargs := make([]parser.Datum, numQArgs)
+	qargs := make(parser.QueryArguments)
 	for i, t := range stmt.inTypes {
 		plen, err := buf.getInt32()
 		if err != nil {
 			return err
 		}
+		k := fmt.Sprint(i + 1)
 		if plen == -1 {
-			// TODO(mjibson): a NULL argument, figure out what this should do
+			// The argument is a NULL value.
+			qargs[k] = parser.DNull
 			continue
 		}
 		b, err := buf.getBytes(int(plen))
@@ -567,7 +577,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		if err != nil {
 			return c.sendInternalError(fmt.Sprintf("error in argument for $%d: %s", i+1, err))
 		}
-		qargs[i] = d
+		qargs[k] = d
 	}
 
 	numColumns := int16(len(stmt.columns))
@@ -633,19 +643,24 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 		return err
 	}
 
-	return c.executeStatements(ctx, portal.stmt.query, portal.qargs, portal.outFormats, false, limit)
+	pinfo := parser.PlaceholderInfo{
+		Types:  portal.stmt.sqlTypes,
+		Values: portal.qargs,
+	}
+
+	return c.executeStatements(ctx, portal.stmt.query, &pinfo, portal.outFormats, false, limit)
 }
 
 func (c *v3Conn) executeStatements(
 	ctx context.Context,
 	stmts string,
-	qargs []parser.Datum,
+	pinfo *parser.PlaceholderInfo,
 	formatCodes []formatCode,
 	sendDescription bool,
 	limit int32,
 ) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(ctx, c.session, stmts, qargs)
+	results := c.executor.ExecuteStatements(ctx, c.session, stmts, pinfo)
 
 	tracing.AnnotateTrace()
 	if results.Empty {

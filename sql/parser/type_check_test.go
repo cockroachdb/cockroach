@@ -130,11 +130,11 @@ func TestTypeCheckError(t *testing.T) {
 }
 
 var (
-	mapPTypesInt               = MapPlaceholderTypes{"a": TypeInt}
-	mapPTypesDecimal           = MapPlaceholderTypes{"a": TypeDecimal}
-	mapPTypesIntAndInt         = MapPlaceholderTypes{"a": TypeInt, "b": TypeInt}
-	mapPTypesIntAndDecimal     = MapPlaceholderTypes{"a": TypeInt, "b": TypeDecimal}
-	mapPTypesDecimalAndDecimal = MapPlaceholderTypes{"a": TypeDecimal, "b": TypeDecimal}
+	mapPTypesInt               = PlaceholderTypes{"a": TypeInt}
+	mapPTypesDecimal           = PlaceholderTypes{"a": TypeDecimal}
+	mapPTypesIntAndInt         = PlaceholderTypes{"a": TypeInt, "b": TypeInt}
+	mapPTypesIntAndDecimal     = PlaceholderTypes{"a": TypeInt, "b": TypeDecimal}
+	mapPTypesDecimalAndDecimal = PlaceholderTypes{"a": TypeDecimal, "b": TypeDecimal}
 )
 
 // copyableExpr can provide each test permutation with a deep copy of the expression tree.
@@ -203,8 +203,8 @@ func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
 	}
 }
 
-func cloneMapPlaceholderTypes(args MapPlaceholderTypes) MapPlaceholderTypes {
-	clone := make(MapPlaceholderTypes)
+func clonePlaceholderTypes(args PlaceholderTypes) PlaceholderTypes {
+	clone := make(PlaceholderTypes)
 	for k, v := range args {
 		clone[k] = v
 	}
@@ -212,20 +212,21 @@ func cloneMapPlaceholderTypes(args MapPlaceholderTypes) MapPlaceholderTypes {
 }
 
 type sameTypedExprsTestCase struct {
-	ptypes  MapPlaceholderTypes
+	ptypes  PlaceholderTypes
 	desired Datum
 	exprs   []copyableExpr
 
 	expectedType   Datum
-	expectedPTypes MapPlaceholderTypes
+	expectedPTypes PlaceholderTypes
 }
 
 func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTestCase) {
 	if test.expectedPTypes == nil {
-		test.expectedPTypes = make(MapPlaceholderTypes)
+		test.expectedPTypes = make(PlaceholderTypes)
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
-		ctx := SemaContext{PlaceholderTypes: cloneMapPlaceholderTypes(test.ptypes)}
+		ctx := SemaContext{Placeholders: MakePlaceholderInfo()}
+		ctx.Placeholders.SetTypes(clonePlaceholderTypes(test.ptypes))
 		_, typ, err := typeCheckSameTypedExprs(&ctx, test.desired, buildExprs(exprs)...)
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
@@ -233,8 +234,8 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 			if !typ.TypeEqual(test.expectedType) {
 				t.Errorf("%d: expected type %s:%s when type checking %s:%s, found %s", idx, test.expectedType, test.expectedType.Type(), buildExprs(exprs), typ, typ.Type())
 			}
-			if !reflect.DeepEqual(ctx.PlaceholderTypes, test.expectedPTypes) {
-				t.Errorf("%d: expected plaecholder types %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), ctx.PlaceholderTypes)
+			if !reflect.DeepEqual(ctx.Placeholders.Types, test.expectedPTypes) {
+				t.Errorf("%d: expected placeholder types %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), ctx.Placeholders.Types)
 			}
 		}
 	})
@@ -340,7 +341,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	placeholderErr := `could not determine data type of placeholder .*`
 
 	testData := []struct {
-		ptypes  MapPlaceholderTypes
+		ptypes  PlaceholderTypes
 		desired Datum
 		exprs   []copyableExpr
 
@@ -360,7 +361,8 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		{nil, nil, exprs(placeholder("b"), placeholder("a")), placeholderErr},
 	}
 	for i, d := range testData {
-		ctx := SemaContext{PlaceholderTypes: d.ptypes}
+		ctx := SemaContext{Placeholders: MakePlaceholderInfo()}
+		ctx.Placeholders.SetTypes(d.ptypes)
 		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
 			if _, _, err := typeCheckSameTypedExprs(&ctx, d.desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
@@ -375,18 +377,18 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 
 	testData := []struct {
 		stmtExprs []Expr
-		desired   MapPlaceholderTypes
+		desired   PlaceholderTypes
 	}{
-		{[]Expr{Placeholder{"a"}}, MapPlaceholderTypes{}},
-		{[]Expr{Placeholder{"a"}, Placeholder{"b"}}, MapPlaceholderTypes{}},
+		{[]Expr{Placeholder{"a"}}, PlaceholderTypes{}},
+		{[]Expr{Placeholder{"a"}, Placeholder{"b"}}, PlaceholderTypes{}},
 		{[]Expr{
 			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
 			&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
-		}, MapPlaceholderTypes{}},
+		}, PlaceholderTypes{}},
 		{[]Expr{
 			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
 			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-		}, MapPlaceholderTypes{
+		}, PlaceholderTypes{
 			"a": TypeInt,
 			"b": TypeBool,
 		}},
@@ -395,31 +397,31 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
 			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
 			&CastExpr{Expr: Placeholder{"b"}, Type: intType},
-		}, MapPlaceholderTypes{
+		}, PlaceholderTypes{
 			"a": TypeInt,
 		}},
 		{[]Expr{
 			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
 			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
 			Placeholder{"a"},
-		}, MapPlaceholderTypes{
+		}, PlaceholderTypes{
 			"b": TypeBool,
 		}},
 		{[]Expr{
 			Placeholder{"a"},
 			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
 			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-		}, MapPlaceholderTypes{
+		}, PlaceholderTypes{
 			"b": TypeBool,
 		}},
 	}
 	for i, d := range testData {
-		args := make(MapPlaceholderTypes)
+		pinfo := MakePlaceholderInfo()
 		stmt := &ValuesClause{Tuples: []*Tuple{{Exprs: d.stmtExprs}}}
-		if err := ProcessPlaceholderAnnotations(stmt, args); err != nil {
+		if err := pinfo.Types.ProcessPlaceholderAnnotations(stmt); err != nil {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
-		} else if !reflect.DeepEqual(args, d.desired) {
-			t.Errorf("%d: expected args %v after processing placeholder annotations for %v, found %v", i, d.desired, stmt, args)
+		} else if !reflect.DeepEqual(pinfo.Types, d.desired) {
+			t.Errorf("%d: expected args %v after processing placeholder annotations for %v, found %v", i, d.desired, stmt, pinfo)
 		}
 	}
 }
