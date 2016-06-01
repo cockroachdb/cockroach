@@ -377,7 +377,7 @@ func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 }
 
-// FamilyElem represents a column in a FAMILY contraint.
+// FamilyElem represents a column in a FAMILY constraint.
 type FamilyElem struct {
 	Column Name
 }

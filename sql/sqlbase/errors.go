@@ -267,7 +267,7 @@ func (e *ErrUndefinedDatabase) SrcContext() SrcCtx {
 }
 
 // IsIntegrityConstraintError returns true if the error is some kind of SQL
-// contraint violation.
+// constraint violation.
 func IsIntegrityConstraintError(err error) bool {
 	switch err.(type) {
 	case *ErrNonNullViolation, *ErrUniquenessConstraintViolation:
