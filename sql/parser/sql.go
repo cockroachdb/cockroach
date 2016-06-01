@@ -5246,6 +5246,11 @@ sqldefault:
 		{
 			sqlVAL.union.val = sqlDollar[1].union.colDef()
 		}
+	case 169:
+		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
+		//line sql.y:1384
+		{ /* unimplemented */
+		}
 	case 170:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1386
