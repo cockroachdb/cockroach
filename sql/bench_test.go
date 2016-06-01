@@ -1184,8 +1184,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int) {
 	const schema = `CREATE TABLE bench.widetable (
     f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
     f11 INT, f12 INT, f13 INT, f14 INT, f15 INT, f16 INT, f17 INT, f18 INT, f19 INT, f20 INT,
-    PRIMARY KEY (f1, f2, f3),
-    FAMILY (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19, f20)
+    PRIMARY KEY (f1, f2, f3)
   )`
 	if _, err := db.Exec(schema); err != nil {
 		b.Fatal(err)
