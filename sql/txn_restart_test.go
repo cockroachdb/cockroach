@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	_ "github.com/cockroachdb/pq"
+	"github.com/cockroachdb/pq"
 )
 
 type failureRecord struct {
@@ -344,8 +344,6 @@ func (rs rollbackStrategy) SQLCommand() string {
 // errors.
 // This function needs to be called from tests that set
 // server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
-// TODO(andrei): change this to return an error and make runTestTxn inspect the
-// error to see if it's retriable once we get a retriable error code.
 func exec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx) bool) {
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -366,6 +364,12 @@ func exec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx)
 	}
 }
 
+// isRetryableErr returns whether the given error is a PG retryable error.
+func isRetryableErr(err error) bool {
+	pqErr, ok := err.(*pq.Error)
+	return ok && pqErr.Code == "40001"
+}
+
 // Returns true on retriable errors.
 func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 	injectReleaseError *bool, sqlDB *gosql.DB, tx *gosql.Tx) bool {
@@ -377,7 +381,7 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 		if !testutils.IsError(err, expectedErr) {
 			t.Fatalf("expected to fail here. err: %s", err)
 		}
-		return true
+		return isRetryableErr(err)
 	}
 	// Now the INSERT should succeed.
 	_, err = tx.Exec("DELETE FROM t.test WHERE true; INSERT INTO t.test (k, v) VALUES (0, 'sentinel');")
@@ -400,7 +404,7 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 			t.Fatal(err)
 		}
 	}
-	return retriesNeeded
+	return isRetryableErr(err)
 }
 
 // abortTxn writes to a key (with retries) and as a side effect aborts a txn
