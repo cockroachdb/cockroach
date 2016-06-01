@@ -377,7 +377,7 @@ func (tu *tableUpserter) upsertRowPKs() ([]roachpb.Key, error) {
 	b := tu.txn.NewBatch()
 	for _, insertRow := range tu.insertRows {
 		entry, err := sqlbase.EncodeSecondaryIndex(
-			tu.tableDesc.ID, tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow)
+			tu.tableDesc.ID, &tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow)
 		if err != nil {
 			return nil, err
 		}

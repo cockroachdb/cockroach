@@ -485,8 +485,10 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			rowVals := rows.Values()
 
 			for _, desc := range added {
-				secondaryIndexEntries, err := sqlbase.EncodeSecondaryIndexes(
-					tableDesc.ID, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
+				secondaryIndexEntries := make([]sqlbase.IndexEntry, 1)
+				err := sqlbase.EncodeSecondaryIndexes(
+					tableDesc.ID, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex,
+					rowVals, secondaryIndexEntries)
 				if err != nil {
 					return err
 				}
@@ -495,7 +497,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 						log.Infof("InitPut %s -> %v", secondaryIndexEntry.Key,
 							secondaryIndexEntry.Value)
 					}
-					b.InitPut(secondaryIndexEntry.Key, secondaryIndexEntry.Value)
+					b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)
 				}
 			}
 		}
