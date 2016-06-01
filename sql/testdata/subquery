@@ -305,3 +305,14 @@ query B
 INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz))
 ----
 true
+
+# check that residual filters are not expanded twice
+query ITTT
+EXPLAIN(VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
+----
+0 select                          +x,unique
+1 render/filter  (x)@xyz          +x,unique
+2 scan           xyz@primary  -   +x,unique
+3 select                          +x,unique
+4 render/filter  (x)@xyz          +x,unique
+5 scan           xyz@primary      +x,unique
