@@ -1195,6 +1195,11 @@ class BaseDeltaIterator : public rocksdb::Iterator {
           return;
         }
         if (check_prefix && CheckPrefix(delta_iterator_->Entry().key)) {
+          // The delta iterator key has a different prefix than the
+          // one we're searching for. We set current_at_base_ to true
+          // which will cause the iterator overall to be considered
+          // not valid (since base currently isn't valid).
+          current_at_base_ = true;
           return;
         }
         if (!ProcessDelta()) {
@@ -1214,16 +1219,13 @@ class BaseDeltaIterator : public rocksdb::Iterator {
       int compare = Compare();
       if (compare > 0) {
         // Delta is greater than base.
-        if (check_prefix && CheckPrefix(base_iterator_->key())) {
-          return;
-        }
         current_at_base_ = true;
         return;
       }
-      // Delta is less than or equal to base.
-      if (check_prefix && CheckPrefix(delta_iterator_->Entry().key)) {
-        return;
-      }
+      // Delta is less than or equal to base. If check_prefix is true,
+      // for base to be valid is has to contain the prefix we were
+      // searching for. It follows that delta contains the prefix
+      // we're searching for.
       if (compare == 0) {
         // Delta is equal to base.
         equal_keys_ = true;
