@@ -92,6 +92,9 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 	case proto.Message:
 		err := r.SetProto(t)
 		return r, err
+
+	case roachpb.Value:
+		panic("unexpected type roachpb.Value (use *roachpb.Value)")
 	}
 
 	// Handle all of the Go primitive types besides struct and pointers. This

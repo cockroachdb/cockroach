@@ -262,22 +262,24 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 // a full index key.
 func EncodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
-	dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
-	for _, dir := range index.ColumnDirections {
-		convertedDir, err := dir.ToEncodingDirection()
-		if err != nil {
-			return nil, false, err
-		}
-		dirs = append(dirs, convertedDir)
+	return EncodeColumns(index.ColumnIDs, directions(index.ColumnDirections),
+		colMap, values, indexKey)
+}
+
+type directions []IndexDescriptor_Direction
+
+func (d directions) get(i int) (encoding.Direction, error) {
+	if i < len(d) {
+		return d[i].ToEncodingDirection()
 	}
-	return EncodeColumns(index.ColumnIDs, dirs, colMap, values, indexKey)
+	return encoding.Ascending, nil
 }
 
 // EncodeColumns is a version of EncodeIndexKey that takes ColumnIDs and
 // directions explicitly.
 func EncodeColumns(
 	columnIDs []ColumnID,
-	directions []encoding.Direction,
+	directions directions,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
 	indexKey []byte,
@@ -300,8 +302,12 @@ func EncodeColumns(
 			containsNull = true
 		}
 
-		var err error
-		if key, err = EncodeTableKey(key, val, directions[colIdx]); err != nil {
+		dir, err := directions.get(colIdx)
+		if err != nil {
+			return nil, containsNull, err
+		}
+
+		if key, err = EncodeTableKey(key, val, dir); err != nil {
 			return nil, containsNull, err
 		}
 	}
@@ -910,30 +916,26 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Datum, b []byte) (parser.Dat
 // IndexEntry represents an encoded key/value for an index entry.
 type IndexEntry struct {
 	Key   roachpb.Key
-	Value []byte
+	Value roachpb.Value
 }
 
 // EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
 // ColumnIDs to indices in `values`.
 func EncodeSecondaryIndex(
 	tableID ID,
-	secondaryIndex IndexDescriptor,
+	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
 ) (IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 	secondaryIndexKey, containsNull, err := EncodeIndexKey(
-		&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 	if err != nil {
 		return IndexEntry{}, err
 	}
 
 	// Add the implicit columns - they are encoded ascendingly.
-	implicitDirs := make([]encoding.Direction, 0, len(secondaryIndex.ImplicitColumnIDs))
-	for range secondaryIndex.ImplicitColumnIDs {
-		implicitDirs = append(implicitDirs, encoding.Ascending)
-	}
-	extraKey, _, err := EncodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
+	extraKey, _, err := EncodeColumns(secondaryIndex.ImplicitColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
 		return IndexEntry{}, err
@@ -958,7 +960,10 @@ func EncodeSecondaryIndex(
 		// unique. We could potentially get rid of the duplication here but at
 		// the expense of complicating scanNode when dealing with unique
 		// secondary indexes.
-		entry.Value = extraKey
+		entry.Value.SetBytes(extraKey)
+	} else {
+		// The zero value for an index-key is a 0-length bytes field.
+		entry.Value.SetBytes([]byte{})
 	}
 
 	return entry, nil
@@ -971,16 +976,16 @@ func EncodeSecondaryIndexes(
 	indexes []IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
-) ([]IndexEntry, error) {
-	var secondaryIndexEntries []IndexEntry
-	for _, secondaryIndex := range indexes {
-		entry, err := EncodeSecondaryIndex(tableID, secondaryIndex, colMap, values)
+	secondaryIndexEntries []IndexEntry,
+) error {
+	for i := range indexes {
+		var err error
+		secondaryIndexEntries[i], err = EncodeSecondaryIndex(tableID, &indexes[i], colMap, values)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		secondaryIndexEntries = append(secondaryIndexEntries, entry)
 	}
-	return secondaryIndexEntries, nil
+	return nil
 }
 
 // CheckColumnType verifies that a given value is compatible
