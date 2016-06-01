@@ -1001,7 +1001,9 @@ DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta,
 }
 
 // This was cribbed from RocksDB and modified to support merge
-// records.
+// records. A BaseDeltaIterator is an iterator which provides a merged
+// view of a base iterator and a delta where the delta iterator is
+// from a WriteBatchWithIndex.
 class BaseDeltaIterator : public rocksdb::Iterator {
  public:
   BaseDeltaIterator(rocksdb::Iterator* base_iterator,
@@ -1009,7 +1011,6 @@ class BaseDeltaIterator : public rocksdb::Iterator {
                     bool prefix)
       : current_at_base_(true),
         equal_keys_(false),
-        done_(false),
         status_(rocksdb::Status::OK()),
         base_iterator_(base_iterator),
         delta_iterator_(delta_iterator),
@@ -1022,11 +1023,10 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
 
   bool Valid() const override {
-    return !done_ && (current_at_base_ ? BaseValid() : DeltaValid());
+    return current_at_base_ ? BaseValid() : DeltaValid();
   }
 
   void SeekToFirst() override {
-    done_ = false;
     base_iterator_->SeekToFirst();
     delta_iterator_->SeekToFirst();
     UpdateCurrent(false /* no prefix check */);
@@ -1034,7 +1034,6 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
 
   void SeekToLast() override {
-    done_ = false;
     prefix_start_key_.clear();
     base_iterator_->SeekToLast();
     delta_iterator_->SeekToLast();
@@ -1043,7 +1042,6 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
 
   void Seek(const rocksdb::Slice& k) override {
-    done_ = false;
     if (prefix_same_as_start_) {
       prefix_start_key_ = KeyPrefix(k);
     }
@@ -1105,6 +1103,8 @@ class BaseDeltaIterator : public rocksdb::Iterator {
                                base_iterator_->key());
   }
 
+  // Advance the iterator to the next key, advancing either the base
+  // or delta iterators or both.
   void Advance() {
     if (equal_keys_) {
       assert(BaseValid() && DeltaValid());
@@ -1122,11 +1122,18 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     UpdateCurrent(prefix_same_as_start_);
   }
 
+  // Advance the delta iterator, clearing any cached (merged) value
+  // the delta iterator was pointing at.
   void AdvanceDelta() {
     delta_iterator_->Next();
     ClearMerged();
   }
 
+  // Process the current entry the delta iterator is pointing at. This
+  // is needed to handle merge operations. Note that all of the
+  // entries for a particular key are stored consecutively in the
+  // write batch with the "earlier" entries appearing first. Returns
+  // true if the current entry is deleted and false otherwise.
   bool ProcessDelta() {
     IteratorGetter base(equal_keys_ ? base_iterator_.get() : NULL);
     // The contents of WBWIIterator.Entry() are only valid until the
@@ -1153,10 +1160,14 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     return merged_.data == NULL;
   }
 
+  // Advance the base iterator.
   void AdvanceBase() {
     base_iterator_->Next();
   }
 
+  // Save the prefix start key if prefix iteration is enabled. The
+  // prefix start key is the prefix of the key that was seeked to. See
+  // also Seek() where similar code is inlined.
   void MaybeSavePrefixStart() {
     if (prefix_same_as_start_) {
       if (Valid()) {
@@ -1183,6 +1194,14 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     return delta_iterator_->Valid();
   }
 
+  // Update the state for the iterator. The check_prefix parameter
+  // specifies whether iteration should stop if the next non-deleted
+  // key has a prefix that differs from prefix_start_key_.
+  //
+  // UpdateCurrent is the work horse of the BaseDeltaIterator methods
+  // and contains the logic for advancing either the base or delta
+  // iterators or both, as well as overlaying the delta iterator state
+  // on the base iterator.
   void UpdateCurrent(bool check_prefix) {
     ClearMerged();
 
@@ -1195,12 +1214,18 @@ class BaseDeltaIterator : public rocksdb::Iterator {
           return;
         }
         if (check_prefix && CheckPrefix(delta_iterator_->Entry().key)) {
+          // The delta iterator key has a different prefix than the
+          // one we're searching for. We set current_at_base_ to true
+          // which will cause the iterator overall to be considered
+          // not valid (since base currently isn't valid).
+          current_at_base_ = true;
           return;
         }
         if (!ProcessDelta()) {
           current_at_base_ = false;
           return;
         }
+        // Delta is a deletion tombstone.
         AdvanceDelta();
         continue;
       }
@@ -1211,19 +1236,19 @@ class BaseDeltaIterator : public rocksdb::Iterator {
         return;
       }
 
-      int compare = Compare();
+      // Delta and base are both valid. We need to compare keys to see
+      // which to use.
+
+      const int compare = Compare();
       if (compare > 0) {
-        // Delta is greater than base.
-        if (check_prefix && CheckPrefix(base_iterator_->key())) {
-          return;
-        }
+        // Delta is greater than base (use base).
         current_at_base_ = true;
         return;
       }
-      // Delta is less than or equal to base.
-      if (check_prefix && CheckPrefix(delta_iterator_->Entry().key)) {
-        return;
-      }
+      // Delta is less than or equal to base. If check_prefix is true,
+      // for base to be valid is has to contain the prefix we were
+      // searching for. It follows that delta contains the prefix
+      // we're searching for.
       if (compare == 0) {
         // Delta is equal to base.
         equal_keys_ = true;
@@ -1242,6 +1267,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     }
   }
 
+  // Clear the merged delta iterator value.
   void ClearMerged() const {
     if (merged_.data != NULL) {
       free(merged_.data);
@@ -1250,15 +1276,27 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     }
   }
 
+  // Is the iterator currently pointed at the base or delta iterator?
+  // Also see equal_keys_ which indicates the base and delta iterator
+  // keys are the same and both need to be advanced.
   bool current_at_base_;
   bool equal_keys_;
-  bool done_;
   mutable rocksdb::Status status_;
+  // The merged delta value returned when we're pointed at the delta
+  // iterator.
   mutable DBString merged_;
+  // The base iterator, presumably obtained from a rocksdb::DB.
   std::unique_ptr<rocksdb::Iterator> base_iterator_;
+  // The delta iterator obtained from a rocksdb::WriteBatchWithIndex.
   std::unique_ptr<rocksdb::WBWIIterator> delta_iterator_;
+  // The key the delta iterator is currently pointed at. We can't use
+  // delta_iterator_->Entry().key due to the handling merge
+  // operations.
   std::string delta_key_;
+  // Is this a prefix iterator?
   const bool prefix_same_as_start_;
+  // The key prefix that we're restricting iteration to. Only used if
+  // prefix_same_as_start_ is true.
   std::string prefix_start_buf_;
   rocksdb::Slice prefix_start_key_;
 };
