@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	_ "github.com/cockroachdb/pq"
@@ -706,20 +707,23 @@ func TestTxnDeadline(t *testing.T) {
 
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
+
+	restartDone := false
+	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
 		TestingCommandFilter: cmdFilters.runFilters,
-		PErrOverride: func(pErr *roachpb.Error) *roachpb.Error {
-			if rErr, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-				// Hack to advance the transaction timestamp on a transaction restart. Wait for a
-				// longer period than the lease duration so that the transaction timestamp
-				// exceeds the deadline of the EndTransactionRequest, which is set from th
-				txn := pErr.GetTxn()
-				now := rErr.ReadTimestamp
-				now.WallTime += int64(5 * sql.LeaseDuration)
-				txn.ResetObservedTimestamps()
-				txn.UpdateObservedTimestamp(pErr.OriginNode, now)
+		AdvanceClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
+			// Hack to advance the transaction timestamp on a transaction restart.
+			for _, union := range ba.Requests {
+				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
+					if bytes.Contains(req.Key, testKey) && !restartDone {
+						now := c.Now()
+						now.WallTime += int64(5 * sql.LeaseDuration)
+						c.Update(now)
+						break
+					}
+				}
 			}
-			return pErr
 		},
 	}
 
@@ -728,14 +732,17 @@ func TestTxnDeadline(t *testing.T) {
 	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
-	restartDone := false
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
-				if bytes.Contains(req.Key, []byte("test_key")) && !restartDone {
+				if bytes.Contains(req.Key, testKey) && !restartDone {
 					restartDone = true
 					now := server.Clock().Now()
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), args.Hdr.Txn)
+
+					txn := args.Hdr.Txn
+					txn.ResetObservedTimestamps()
+					txn.UpdateObservedTimestamp(server.Gossip().GetNodeID(), now)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
 				}
 			}
 			return nil
