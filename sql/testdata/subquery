@@ -305,3 +305,30 @@ query B
 INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz))
 ----
 true
+
+# check that residual filters are not expanded twice
+statement OK
+CREATE TABLE tab1(
+  pk INTEGER PRIMARY KEY,
+  col0 INTEGER,
+  col1 FLOAT,
+  col2 TEXT,
+  col3 INTEGER,
+  col4 FLOAT,
+  col5 TEXT
+);
+
+statement OK
+CREATE INDEX idx_tab1_0 on tab1 (col0); CREATE INDEX idx_tab1_1 on tab1 (col1); CREATE INDEX idx_tab1_3 on tab1 (col3); CREATE INDEX idx_tab1_4 on tab1 (col4);
+
+query ITTT
+EXPLAIN(VERBOSE) SELECT pk FROM tab1 WHERE (col4 IN (5.85,5.95,6.30,0.0,1.27) AND (col4 IN (9.41,4.56,2.55,0.83,3.95,6.92) AND (col1 = 6.24)) OR col0 IN (SELECT col3 FROM tab1 WHERE (((((col0 IN (8,1) AND col0 IS NULL AND col1 < 9.21) AND col4 > 8.64 AND (col3 >= 9) OR col0 < 5)))))) AND (col1 < 7.95 OR col0 < 0) AND col3 >= 9 AND col0 < 2 OR col4 BETWEEN 1.13 AND 0.71 AND (col3 > 9) AND (col0 < 3);
+----
+0  select
+1  render/filter  (pk)@tab1
+2  index-join                            +col0,+pk,unique
+3  scan           tab1@idx_tab1_0 /#-/2  +col0,+pk,unique
+3  scan           tab1@primary           +pk,unique
+4  select
+5  render/filter  (col3)@tab1
+6  scan           tab1@primary -         +pk,unique
