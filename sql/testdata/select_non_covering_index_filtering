@@ -8,7 +8,11 @@ CREATE TABLE t (
   b INT,
   c INT,
   s STRING,
-  INDEX bc (b, c)
+  INDEX bc (b, c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (s)
 )
 
 statement ok
