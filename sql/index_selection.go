@@ -71,7 +71,7 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 // replacing expressions which are not usable by indexes by "true". The
 // simplified expression is then considered for each index and a set of range
 // constraints is created for the index. The candidate indexes are ranked using
-// these constraints and the best index is selected. The contraints are then
+// these constraints and the best index is selected. The constraints are then
 // transformed into a set of spans to scan within the index.
 //
 // The analyzeOrdering function is used to determine how useful the ordering of
@@ -457,7 +457,7 @@ func (v *indexInfo) makeOrConstraints(orExprs []parser.TypedExprs) error {
 // This method generates one indexConstraint for a prefix of the columns in
 // the index (except for tuple constraints which can account for more than
 // one column). A prefix of the generated constraints has a .start, and
-// similarly a prefix of the contraints has a .end (in other words,
+// similarly a prefix of the constraints has a .end (in other words,
 // once a constraint doesn't have a .start, no further constraints will
 // have one). This is because they wouldn't be useful when generating spans.
 //

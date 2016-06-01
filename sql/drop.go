@@ -221,9 +221,9 @@ func (n *dropIndexNode) Start() error {
 			// If an index is either end of a FK constraint, it cannot be dropped.
 			if idx.ForeignKey != nil {
 				if n.n.DropBehavior == parser.DropCascade {
-					return fmt.Errorf("CASCADE is not yet supported and index %q is in use as a foreign key contraint", idx.Name)
+					return fmt.Errorf("CASCADE is not yet supported and index %q is in use as a foreign key constraint", idx.Name)
 				}
-				return fmt.Errorf("index %q is in use as a foreign key contraint", idx.Name)
+				return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 			}
 			if err := checkIndexDependees(idx, "index", idx.Name, n.p.txn, n.n.DropBehavior); err != nil {
 				return err

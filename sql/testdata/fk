@@ -1,58 +1,26 @@
 statement ok
-CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE);
+CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE)
 
 statement ok
-CREATE TABLE products (
-  sku STRING PRIMARY KEY,
-  upc STRING UNIQUE,
-  vendor STRING
-);
+CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
 
 statement error referenced table "productz" not found
-CREATE TABLE orders (
-  id INT PRIMARY KEY,
-  product STRING REFERENCES productz,
-  customer INT REFERENCES customers (id),
-  INDEX (product),
-  INDEX (customer)
-);
+CREATE TABLE missing (product STRING REFERENCES productz)
 
 statement error referenced table "customerz" not found
-CREATE TABLE orders (
-  id INT PRIMARY KEY,
-  product STRING REFERENCES products,
-  customer INT REFERENCES customerz (id),
-  INDEX (product),
-  INDEX (customer)
-);
+CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 
+statement error column "idz" does not exist
+CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
+
+statement error foreign key column "customer" must be the prefix of an index
+CREATE TABLE unindexed (customer INT REFERENCES customers)
 
 statement error foreign key requires a unique index on products.vendor
-CREATE TABLE orders (
-  id INT PRIMARY KEY,
-  product STRING REFERENCES products (vendor),
-  customer INT REFERENCES customers,
-  INDEX (product),
-  INDEX (customer)
-);
-
+CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
-CREATE TABLE orders (
-  id INT PRIMARY KEY,
-  product STRING REFERENCES products,
-  customer INT REFERENCES customers (email),
-  INDEX (product),
-  INDEX (customer)
-);
-
-statement error foreign key column "product" must be the prefix of an index
-CREATE TABLE orders (
-  id INT PRIMARY KEY,
-  product STRING REFERENCES products,
-  customer INT REFERENCES customers (email),
-  INDEX (customer)
-);
+CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
 statement ok
 CREATE TABLE orders (
@@ -63,6 +31,8 @@ CREATE TABLE orders (
   INDEX (customer)
 );
 
+# "reviews" makes "products" have multiple inbound references, as well as making
+# "orders" have both directions.
 statement ok
 CREATE TABLE reviews (
   id INT PRIMARY KEY,
@@ -78,7 +48,7 @@ CREATE TABLE reviews (
 statement error "products_upc_key" is referenced by foreign key from table "orders"
 DROP INDEX products@products_upc_key
 
-statement error index "orders_product_idx" is in use as a foreign key contraint
+statement error index "orders_product_idx" is in use as a foreign key constraint
 DROP INDEX orders@orders_product_idx
 
 statement error "products" is referenced by foreign key from table "orders"
@@ -87,7 +57,7 @@ DROP TABLE products
 statement error CASCADE is not yet supported and index "products_upc_key" is referenced by foreign key from table "orders"
 DROP INDEX products@products_upc_key CASCADE
 
-statement error CASCADE is not yet supported and index "orders_product_idx" is in use as a foreign key contraint
+statement error CASCADE is not yet supported and index "orders_product_idx" is in use as a foreign key constraint
 DROP INDEX orders@orders_product_idx CASCADE
 
 statement error CASCADE is not yet supported and table "products" is referenced by foreign key from table "orders"
@@ -96,7 +66,7 @@ DROP TABLE products CASCADE
 statement error "products_upc_key" is referenced by foreign key from table "orders"
 DROP INDEX products@products_upc_key RESTRICT
 
-statement error index "orders_product_idx" is in use as a foreign key contraint
+statement error index "orders_product_idx" is in use as a foreign key constraint
 DROP INDEX orders@orders_product_idx RESTRICT
 
 statement error referenced by foreign key from table "orders"
