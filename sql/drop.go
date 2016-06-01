@@ -311,7 +311,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			// Table does not exist, but we want it to: error out.
 			return nil, sqlbase.NewUndefinedTableError(name.String())
 		}
-		for _, idx := range droppedDesc.Indexes {
+		for _, idx := range droppedDesc.AllNonDropIndexes() {
 			if err := checkIndexDependees(idx, "table", droppedDesc.Name, p.txn, n.DropBehavior); err != nil {
 				return nil, err
 			}
@@ -405,34 +405,9 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 
 	// If this table had foreign key relationships to other tables, remove the
 	// back-references from those tables.
-	for _, idx := range tableDesc.Indexes {
-		if idx.ForeignKey != nil {
-			t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
-			if err != nil {
-				return util.Errorf("error resolving referenced table ID %d: %v",
-					idx.ForeignKey.Table, err)
-			}
-			for i := range t.Indexes {
-				if t.Indexes[i].ID == idx.ForeignKey.Index {
-					for k, ref := range t.Indexes[i].ReferencedBy {
-						if ref.Table == tableDesc.ID {
-							t.Indexes[i].ReferencedBy = append(t.Indexes[i].ReferencedBy[:k],
-								t.Indexes[i].ReferencedBy[k+1:]...)
-						}
-					}
-
-				}
-			}
-			if err := t.SetUpVersion(); err != nil {
-				return err
-			}
-			if err := t.Validate(); err != nil {
-				return err
-			}
-			if err := p.writeTableDesc(t); err != nil {
-				return err
-			}
-			p.notifySchemaChange(t.ID, sqlbase.InvalidMutationID)
+	for _, idx := range tableDesc.AllNonDropIndexes() {
+		if err := p.removeFKBackReference(tableDesc, idx); err != nil {
+			return err
 		}
 	}
 
@@ -453,6 +428,38 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 		return verifyMetadataCallback(systemConfig, tableDesc.ID)
 	})
 
+	return nil
+}
+
+func (p *planner) removeFKBackReference(
+	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+) error {
+	if idx.ForeignKey != nil {
+		t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
+		if err != nil {
+			return util.Errorf("error resolving referenced table ID %d: %v",
+				idx.ForeignKey.Table, err)
+		}
+		targetIdx, err := t.FindIndexByID(idx.ForeignKey.Index)
+		if err != nil {
+			return err
+		}
+		for k, ref := range targetIdx.ReferencedBy {
+			if ref.Table == tableDesc.ID {
+				targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
+			}
+		}
+		if err := t.SetUpVersion(); err != nil {
+			return err
+		}
+		if err := t.Validate(); err != nil {
+			return err
+		}
+		if err := p.writeTableDesc(t); err != nil {
+			return err
+		}
+		p.notifySchemaChange(t.ID, sqlbase.InvalidMutationID)
+	}
 	return nil
 }
 

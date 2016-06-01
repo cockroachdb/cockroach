@@ -328,13 +328,16 @@ func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 // determined. This struct accumulates the information needed to edit a
 // referenced table after the referencing table is created and has an ID.
 type fkTargetUpdate struct {
-	target *sqlbase.TableDescriptor // table to update
-	idx    int                      // index into target.Indexes
-	srcIdx sqlbase.IndexID          // ID of source index
+	srcIdx    sqlbase.IndexID          // ID of source (referencing) index
+	target    *sqlbase.TableDescriptor // Table to update
+	targetIdx sqlbase.IndexID          // ID of target (referenced) index
 }
 
 func (n *createTableNode) resolveColFK(
-	tbl *sqlbase.TableDescriptor, fromCol string, targetTable *parser.QualifiedName, targetCol string,
+	tbl *sqlbase.TableDescriptor,
+	fromCol string,
+	targetTable *parser.QualifiedName,
+	targetColName string,
 ) (fkTargetUpdate, error) {
 	var ret fkTargetUpdate
 	src, err := tbl.FindActiveColumnByName(fromCol)
@@ -351,45 +354,56 @@ func (n *createTableNode) resolveColFK(
 	}
 	ret.target = target
 	// If a column isn't specified, attempt to default to PK.
-	if targetCol == "" {
+	if targetColName == "" {
 		if len(target.PrimaryIndex.ColumnNames) != 1 {
 			return ret, util.Errorf("must specify a single unique column to reference %q", targetTable.String())
 		}
-		targetCol = target.PrimaryIndex.ColumnNames[0]
+		targetColName = target.PrimaryIndex.ColumnNames[0]
 	}
 
-	fk, err := target.FindActiveColumnByName(targetCol)
+	targetCol, err := target.FindActiveColumnByName(targetColName)
 	if err != nil {
 		return ret, err
 	}
 
-	if src.Type.Kind != fk.Type.Kind {
-		return ret, fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)", fromCol, src.Type.Kind, target.Name, fk.Name, fk.Type.Kind)
+	if src.Type.Kind != targetCol.Type.Kind {
+		return ret, fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
+			fromCol, src.Type.Kind, target.Name, targetCol.Name, targetCol.Type.Kind)
 	}
 
 	found := false
-	// Find the index corresponding to the referenced column.
-	for i, idx := range target.AllNonDropIndexes() {
-		if idx.Unique && idx.ColumnIDs[0] == fk.ID {
-			ret.idx = i
-			found = true
-			break
+	if target.PrimaryIndex.ColumnIDs[0] == targetCol.ID {
+		found = true
+		ret.targetIdx = target.PrimaryIndex.ID
+	} else {
+		// Find the index corresponding to the referenced column.
+		for _, idx := range target.Indexes {
+			if idx.Unique && idx.ColumnIDs[0] == targetCol.ID {
+				ret.targetIdx = idx.ID
+				found = true
+				break
+			}
 		}
 	}
 	if !found {
-		return ret, fmt.Errorf("foreign key requires a unique index on %s.%s", targetTable.String(), targetCol)
+		return ret, fmt.Errorf("foreign key requires a unique index on %s.%s", targetTable.String(), targetCol.Name)
 	}
 
+	ref := &sqlbase.TableAndIndexID{Table: target.ID, Index: ret.targetIdx}
+
 	found = false
-	for i, idx := range tbl.Indexes {
-		if tbl.Indexes[i].ColumnNames[0] == src.Name {
-			tbl.Indexes[i].ForeignKey = &sqlbase.TableAndIndexID{
-				Table: target.ID,
-				Index: target.Indexes[ret.idx].ID,
+	if tbl.PrimaryIndex.ColumnIDs[0] == src.ID {
+		tbl.PrimaryIndex.ForeignKey = ref
+		ret.srcIdx = tbl.PrimaryIndex.ID
+		found = true
+	} else {
+		for i, idx := range tbl.Indexes {
+			if tbl.Indexes[i].ColumnIDs[0] == src.ID {
+				tbl.Indexes[i].ForeignKey = ref
+				ret.srcIdx = idx.ID
+				found = true
+				break
 			}
-			ret.srcIdx = idx.ID
-			found = true
-			break
 		}
 	}
 	if !found {
@@ -402,10 +416,12 @@ func (n *createTableNode) resolveColFK(
 
 func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets []fkTargetUpdate) error {
 	for _, t := range fkTargets {
-		t.target.Indexes[t.idx].ReferencedBy = append(
-			t.target.Indexes[t.idx].ReferencedBy,
-			&sqlbase.TableAndIndexID{Table: desc.ID, Index: t.srcIdx},
-		)
+		targetIdx, err := t.target.FindIndexByID(t.targetIdx)
+		if err != nil {
+			return err
+		}
+		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy,
+			&sqlbase.TableAndIndexID{Table: desc.ID, Index: t.srcIdx})
 
 		// TODO(dt): Only save each referenced table once.
 		if err := t.target.SetUpVersion(); err != nil {
