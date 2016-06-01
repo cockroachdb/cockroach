@@ -2000,6 +2000,13 @@ func (r *Replica) executeBatch(
 	br := ba.CreateReply()
 	var intents []intentsWithArg
 
+	r.mu.Lock()
+	threshold := r.mu.gcThreshold
+	r.mu.Unlock()
+	if !threshold.Less(ba.Timestamp) {
+		return nil, nil, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
+	}
+
 	remScanResults := int64(math.MaxInt64)
 	if ba.Header.MaxScanResults != 0 {
 		// We have a batch of Scan or ReverseScan requests with a limit. We keep track of how many

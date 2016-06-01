@@ -5585,3 +5585,60 @@ func TestReplicaIDChangePending(t *testing.T) {
 		t.Fatal("command was not re-proposed")
 	}
 }
+
+// TestCommandTimeThreshold verifies that commands outside the replica GC
+// threshold fail.
+func TestCommandTimeThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	ts := makeTS(2, 0)
+
+	key := roachpb.Key("a")
+
+	// Verify a Get works.
+	gArgs := getArgs(key)
+	if _, err := tc.SendWrappedWith(roachpb.Header{
+		Timestamp: ts,
+	}, &gArgs); err != nil {
+		t.Fatalf("could not get data: %s", err)
+	}
+	// Verify a later Get works.
+	if _, err := tc.SendWrappedWith(roachpb.Header{
+		Timestamp: makeTS(3, 0),
+	}, &gArgs); err != nil {
+		t.Fatalf("could not get data: %s", err)
+	}
+
+	// Do a GC.
+	b := tc.store.Engine().NewBatch()
+	var h roachpb.Header
+	gcr := roachpb.GCRequest{
+		Threshold: ts,
+	}
+	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	b.Close()
+
+	// Do the same Get, which should now fail.
+	if _, err := tc.SendWrappedWith(roachpb.Header{
+		Timestamp: ts,
+	}, &gArgs); err == nil {
+		t.Fatal("expected failure")
+	} else if err.String() != "batch timestamp 0.000000002,0 must be after replica GC threshold 0.000000002,0" {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Verify a later Get works.
+	if _, err := tc.SendWrappedWith(roachpb.Header{
+		Timestamp: makeTS(3, 0),
+	}, &gArgs); err != nil {
+		t.Fatalf("could not get data: %s", err)
+	}
+}
