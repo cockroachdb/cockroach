@@ -18,5 +18,6 @@
 // stylesheets.
 package ui
 
+// Generate the UI files and UI next
 //go:generate make
 //go:generate make next
