@@ -1105,32 +1105,6 @@ class BaseDeltaIterator : public rocksdb::Iterator {
                                base_iterator_->key());
   }
 
-  void AssertInvariants() {
-#ifndef NDEBUG
-    if (!Valid()) {
-      return;
-    }
-    if (!BaseValid()) {
-      assert(!current_at_base_ && delta_iterator_->Valid());
-      return;
-    }
-    if (!DeltaValid()) {
-      assert(current_at_base_ && base_iterator_->Valid());
-      return;
-    }
-    // we don't support those yet
-    assert(delta_iterator_->Entry().type != rocksdb::kLogDataRecord);
-    int compare = kComparator.Compare(delta_iterator_->Entry().key,
-                                      base_iterator_->key());
-    // current_at_base -> compare < 0
-    assert(!current_at_base_ || compare < 0);
-    // !current_at_base -> compare <= 0
-    assert(current_at_base_ && compare >= 0);
-    // equal_keys_ <=> compare == 0
-    assert((equal_keys_ || compare != 0) && (!equal_keys_ || compare == 0));
-#endif
-  }
-
   void Advance() {
     if (equal_keys_) {
       assert(BaseValid() && DeltaValid());
@@ -1266,8 +1240,6 @@ class BaseDeltaIterator : public rocksdb::Iterator {
         AdvanceBase();
       }
     }
-
-    AssertInvariants();
   }
 
   void ClearMerged() const {
