@@ -93,14 +93,10 @@ t      primary  true    1    a       ASC        false
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx  Key             Value  Disposition
-0       /t/primary/1    NULL   ROW
-1       /t/primary/2    NULL   PARTIAL
-1       /t/primary/2/b  1      PARTIAL
-1       /t/primary/2/c  1      ROW
-2       /t/primary/3    NULL   PARTIAL
-2       /t/primary/3/b  2      PARTIAL
-2       /t/primary/3/c  1      ROW
+RowIdx  Key               Value  Disposition
+0       /t/primary/1      NULL   ROW
+1       /t/primary/2/b/c  /1/1   ROW
+2       /t/primary/3/b/c  /2/1   ROW
 
 statement ok
 ALTER TABLE t DROP b, DROP c

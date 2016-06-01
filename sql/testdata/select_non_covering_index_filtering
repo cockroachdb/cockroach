@@ -34,13 +34,11 @@ EXPLAIN SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 ----
-0 /t/bc/2/1/4    NULL FILTERED
-1 /t/bc/2/2/5    NULL PARTIAL
-0 /t/primary/5   NULL PARTIAL
-0 /t/primary/5/b 2    PARTIAL
-0 /t/primary/5/c 2    PARTIAL
-0 /t/primary/5/s '22' ROW
-2 /t/bc/2/3/6    NULL FILTERED
+0  /t/bc/2/1/4       NULL  FILTERED
+1  /t/bc/2/2/5       NULL  PARTIAL
+0  /t/primary/5/b/c  /2/2  PARTIAL
+0  /t/primary/5/s    '22'  ROW
+2  /t/bc/2/3/6       NULL  FILTERED
 
 query ITT
 EXPLAIN SELECT * FROM t WHERE b = 2 AND c != b
@@ -53,53 +51,39 @@ EXPLAIN SELECT * FROM t WHERE b = 2 AND c != b
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c != b
 ----
-0 /t/bc/2/1/4    NULL PARTIAL
-0 /t/primary/4   NULL PARTIAL
-0 /t/primary/4/b 2    PARTIAL
-0 /t/primary/4/c 1    PARTIAL
-0 /t/primary/4/s '21' ROW
-1 /t/bc/2/2/5    NULL FILTERED
-2 /t/bc/2/3/6    NULL PARTIAL
-1 /t/primary/6   NULL PARTIAL
-1 /t/primary/6/b 2    PARTIAL
-1 /t/primary/6/c 3    PARTIAL
-1 /t/primary/6/s '23' ROW
+0  /t/bc/2/1/4       NULL  PARTIAL
+0  /t/primary/4/b/c  /2/1  PARTIAL
+0  /t/primary/4/s    '21'  ROW
+1  /t/bc/2/2/5       NULL  FILTERED
+2  /t/bc/2/3/6       NULL  PARTIAL
+1  /t/primary/6/b/c  /2/3  PARTIAL
+1  /t/primary/6/s    '23'  ROW
 
 # We do NOT look up the table row for '22'.
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c != b AND s <> '21'
 ----
-0 /t/bc/2/1/4    NULL PARTIAL
-0 /t/primary/4   NULL PARTIAL
-0 /t/primary/4/b 2    PARTIAL
-0 /t/primary/4/c 1    PARTIAL
-0 /t/primary/4/s '21' FILTERED
-1 /t/bc/2/2/5    NULL FILTERED
-2 /t/bc/2/3/6    NULL PARTIAL
-1 /t/primary/6   NULL PARTIAL
-1 /t/primary/6/b 2    PARTIAL
-1 /t/primary/6/c 3    PARTIAL
-1 /t/primary/6/s '23' ROW
+0  /t/bc/2/1/4       NULL  PARTIAL
+0  /t/primary/4/b/c  /2/1  PARTIAL
+0  /t/primary/4/s    '21'  FILTERED
+1  /t/bc/2/2/5       NULL  FILTERED
+2  /t/bc/2/3/6       NULL  PARTIAL
+1  /t/primary/6/b/c  /2/3  PARTIAL
+1  /t/primary/6/s    '23'  ROW
 
 # We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))
 ----
-0 /t/bc/2/1/4    NULL FILTERED
-1 /t/bc/2/2/5    NULL FILTERED
-2 /t/bc/2/3/6    NULL PARTIAL
-0 /t/primary/6   NULL PARTIAL
-0 /t/primary/6/b 2    PARTIAL
-0 /t/primary/6/c 3    PARTIAL
-0 /t/primary/6/s '23' FILTERED
-3 /t/bc/3/1/7    NULL FILTERED
-4 /t/bc/3/2/8    NULL PARTIAL
-1 /t/primary/8   NULL PARTIAL
-1 /t/primary/8/b 3    PARTIAL
-1 /t/primary/8/c 2    PARTIAL
-1 /t/primary/8/s '32' FILTERED
-5 /t/bc/3/3/9    NULL PARTIAL
-2 /t/primary/9   NULL PARTIAL
-2 /t/primary/9/b 3    PARTIAL
-2 /t/primary/9/c 3    PARTIAL
-2 /t/primary/9/s '33' ROW
+0  /t/bc/2/1/4       NULL  FILTERED
+1  /t/bc/2/2/5       NULL  FILTERED
+2  /t/bc/2/3/6       NULL  PARTIAL
+0  /t/primary/6/b/c  /2/3  PARTIAL
+0  /t/primary/6/s    '23'  FILTERED
+3  /t/bc/3/1/7       NULL  FILTERED
+4  /t/bc/3/2/8       NULL  PARTIAL
+1  /t/primary/8/b/c  /3/2  PARTIAL
+1  /t/primary/8/s    '32'  FILTERED
+5  /t/bc/3/3/9       NULL  PARTIAL
+2  /t/primary/9/b/c  /3/3  PARTIAL
+2  /t/primary/9/s    '33'  ROW

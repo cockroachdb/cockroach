@@ -595,15 +595,10 @@ SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
 query ITTT
 EXPLAIN (DEBUG) SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
 ----
-0 /xyz/primary/1    NULL                                                          PARTIAL
-0 /xyz/primary/1/y  2                                                             PARTIAL
-0 /xyz/primary/1/z  3.0                                                           BUFFERED
-1 /xyz/primary/4    NULL                                                          PARTIAL
-1 /xyz/primary/4/y  5                                                             PARTIAL
-1 /xyz/primary/4/z  6.0                                                           BUFFERED
-2 /xyz/primary/7    NULL                                                          PARTIAL
-2 /xyz/primary/7/z  8.0                                                           BUFFERED
-0 0                 (9.0000000000000000,  4.5000000000000000,  6.333333333333333) ROW
+0  /xyz/primary/1/y/z  /2/3.0                                                       BUFFERED
+1  /xyz/primary/4/y/z  /5/6.0                                                       BUFFERED
+2  /xyz/primary/7/z    /8.0                                                         BUFFERED
+0  0                   (9.0000000000000000, 4.5000000000000000, 6.333333333333333)  ROW
 
 query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 10
@@ -726,9 +721,8 @@ EXPLAIN SELECT MIN(a) FROM abc
 query ITTT
 EXPLAIN (DEBUG) SELECT MIN(a) FROM ab
 ----
-0 /ab/primary/1   NULL PARTIAL
-0 /ab/primary/1/b 10   BUFFERED
-0 0               (1)  ROW
+0  /ab/primary/1  NULL  BUFFERED
+0  0              (1)   ROW
 
 query ITT
 EXPLAIN SELECT MAX(a) FROM abc
@@ -740,7 +734,6 @@ EXPLAIN SELECT MAX(a) FROM abc
 query ITTT
 EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
 ----
-0 /ab/primary/5/b 50   PARTIAL
-0 /ab/primary/5   NULL BUFFERED
-0 0               (5)  ROW
+0  /ab/primary/5  NULL  BUFFERED
+0  0              (5)   ROW
 

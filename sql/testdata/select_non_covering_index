@@ -21,11 +21,8 @@ EXPLAIN SELECT * FROM t WHERE b = 2
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2
 ----
-0 /t/b/2/1       NULL PARTIAL
-0 /t/primary/1   NULL PARTIAL
-0 /t/primary/1/b 2    PARTIAL
-0 /t/primary/1/c 3    PARTIAL
-0 /t/primary/1/d 4    ROW
+0  /t/b/2/1            NULL    PARTIAL
+0  /t/primary/1/b/c/d  /2/3/4  ROW
 
 query IIII
 SELECT * FROM t WHERE b = 2
@@ -42,11 +39,8 @@ EXPLAIN SELECT * FROM t WHERE c = 6
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 7
 ----
-0 /t/c/7         /5   PARTIAL
-0 /t/primary/5   NULL PARTIAL
-0 /t/primary/5/b 6    PARTIAL
-0 /t/primary/5/c 7    PARTIAL
-0 /t/primary/5/d 8    ROW
+0  /t/c/7              /5      PARTIAL
+0  /t/primary/5/b/c/d  /6/7/8  ROW
 
 query IIII
 SELECT * FROM t WHERE c = 7

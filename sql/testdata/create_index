@@ -10,8 +10,7 @@ INSERT INTO t VALUES (1,1)
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-0  /t/primary/1    NULL  PARTIAL
-0  /t/primary/1/b  1     ROW
+0  /t/primary/1/b  /1  ROW
 
 user root
 

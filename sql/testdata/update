@@ -265,5 +265,4 @@ UPDATE pks SET k1 = 2 WHERE k1 = 1
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM pks WHERE k1 = 2
 ----
-0  /pks/primary/2/2    NULL  PARTIAL
-0  /pks/primary/2/2/v  3     ROW
+0  /pks/primary/2/2/v  /3  ROW

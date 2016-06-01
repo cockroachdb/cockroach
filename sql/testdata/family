@@ -80,7 +80,7 @@ SELECT * from abcd WHERE a > 1
 
 # Check the descriptor bookkeeping
 statement ok
-ALTER TABLE abcd ADD COLUMN f INT
+ALTER TABLE abcd ADD COLUMN f DECIMAL
 
 query TT
 SHOW CREATE TABLE abcd
@@ -91,11 +91,11 @@ abcd  CREATE TABLE abcd (
       c INT NULL,
       d INT NULL,
       e STRING NULL,
-      f INT NULL,
+      f DECIMAL NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
       FAMILY f1 (a, b, e),
       FAMILY fam_1_c_d (c, d),
-      FAMILY fam_6_f (f)
+      FAMILY fam_2_f (f)
       )
 
 statement ok
@@ -107,10 +107,10 @@ SHOW CREATE TABLE abcd
 abcd  CREATE TABLE abcd (
       a INT NOT NULL,
       b INT NULL,
-      f INT NULL,
+      f DECIMAL NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
       FAMILY f1 (a, b),
-      FAMILY fam_6_f (f)
+      FAMILY fam_2_f (f)
       )
 
 statement error unknown family \"foo\"
