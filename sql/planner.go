@@ -51,7 +51,6 @@ type planner struct {
 	verifyFnCheckedOnce     bool
 
 	parser parser.Parser
-	qargs  queryArguments
 
 	// Avoid allocations by embedding commonly used visitors.
 	isAggregateVisitor          isAggregateVisitor
@@ -157,6 +156,30 @@ func (p *planner) resetTxn() {
 	p.setTxn(nil)
 }
 
+// resetEvalContext (re-)initializes the structures
+// needed for expression handling.
+func (p *planner) resetEvalContext() {
+	// Need to reset the parser because it cannot be reused between
+	// batches.
+	p.parser = parser.Parser{}
+
+	p.semaCtx = parser.SemaContext{
+		Location:     &p.session.Location,
+		Placeholders: parser.NewPlaceholderInfo(),
+	}
+	p.evalCtx = parser.EvalContext{
+		Location: &p.session.Location,
+	}
+}
+
+func makeInternalPlanner(txn *client.Txn, user string) *planner {
+	p := makePlanner()
+	p.setTxn(txn)
+	p.resetEvalContext()
+	p.session.User = user
+	return p
+}
+
 // resetForBatch implements the queryRunner interface.
 func (p *planner) resetForBatch(e *Executor) {
 	// Update the systemConfig to a more recent copy, so that we can use tables
@@ -164,21 +187,10 @@ func (p *planner) resetForBatch(e *Executor) {
 	cfg, cache := e.getSystemConfig()
 	p.systemConfig = cfg
 	p.databaseCache = cache
-
-	p.qargs = queryArguments{}
-
-	// The parser cannot be reused between batches.
-	p.parser = parser.Parser{}
-
-	p.semaCtx = parser.SemaContext{
-		Location: &p.session.Location,
-	}
-	p.evalCtx = parser.EvalContext{
-		NodeID:   e.nodeID,
-		ReCache:  e.reCache,
-		Location: &p.session.Location,
-	}
 	p.session.TxnState.schemaChangers.curGroupNum++
+	p.resetEvalContext()
+	p.evalCtx.NodeID = e.nodeID
+	p.evalCtx.ReCache = e.reCache
 }
 
 // query initializes a planNode from a SQL statement string.  This
@@ -189,10 +201,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	stmt, err = parser.FillQueryArgs(stmt, golangQueryArguments(args))
-	if err != nil {
-		return nil, err
-	}
+	golangFillQueryArguments(p.semaCtx.Placeholders, args)
 	return p.makePlan(stmt, false)
 }
 

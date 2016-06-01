@@ -1324,13 +1324,18 @@ var _ VariableExpr = &DPlaceholder{}
 // DPlaceholder is the named bind var argument Datum.
 type DPlaceholder struct {
 	name string
-	typeAnnotation
+	pmap *PlaceholderInfo
+}
+
+// Name gives access to the placeholder's name to other packages.
+func (d *DPlaceholder) Name() string {
+	return d.name
 }
 
 // ReturnType implements the TypedExpr interface.
 func (d *DPlaceholder) ReturnType() Datum {
-	if d.typeAnnotation.typ != nil {
-		return d.typeAnnotation.typ
+	if typ, ok := d.pmap.Type(d.name); ok {
+		return typ
 	}
 	return d
 }
