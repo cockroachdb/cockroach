@@ -115,11 +115,3 @@ func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
 	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
 	return key
 }
-
-// StripColumnIDLength strips off a one byte suffix from the key.
-func StripColumnIDLength(key roachpb.Key) roachpb.Key {
-	if n := len(key); n > 0 {
-		return key[:n-1]
-	}
-	return key
-}
