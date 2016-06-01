@@ -2481,7 +2481,7 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $2.aliasClause()}
   }
-| joined_table
+| joined_table { unimplemented() }
 | '(' joined_table ')' alias_clause { unimplemented() }
 
 // It may seem silly to separate joined_table from table_ref, but there is
