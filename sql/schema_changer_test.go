@@ -555,11 +555,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	// number of keys == 4 * number of rows; 3 columns and 1 index entry for
-	// each row.
+	// number of keys == 3 * number of rows; 2 column families and 1 index entry
+	// for each row.
 	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if e := 4 * (maxValue + 1); len(kvs) != e {
+	} else if e := 3 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
@@ -573,7 +573,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
-		5,
+		4,
 		backfillNotification)
 
 	// Drop column.
@@ -584,7 +584,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
-		4,
+		3,
 		backfillNotification)
 
 	// Add index.
@@ -595,7 +595,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
-		5,
+		4,
 		backfillNotification)
 
 	// Drop index.
@@ -606,7 +606,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"DROP INDEX t.test@vidx",
 		maxValue,
-		4,
+		3,
 		backfillNotification)
 
 	// Verify that the index foo over v is consistent, and that column x has
@@ -858,7 +858,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if e := 2*(maxValue+2) + numGarbageValues; len(kvs) != e {
+	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
@@ -878,7 +878,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	numGarbageValues = 0
 	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if e := 2*(maxValue+2) + numGarbageValues; len(kvs) != e {
+	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }

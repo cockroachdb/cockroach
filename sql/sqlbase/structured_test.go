@@ -76,14 +76,9 @@ func TestAllocateIDs(t *testing.T) {
 		Families: []ColumnFamilyDescriptor{
 			{
 				ID: 0, Name: "primary",
-				ColumnNames: []string{"a", "b"},
-				ColumnIDs:   []ColumnID{1, 2},
-			},
-			{
-				ID: 3, Name: "fam_3_c",
-				ColumnNames:     []string{"c"},
-				ColumnIDs:       []ColumnID{3},
-				DefaultColumnID: ColumnID(3),
+				ColumnNames:     []string{"a", "b", "c"},
+				ColumnIDs:       []ColumnID{1, 2, 3},
+				DefaultColumnID: 3,
 			},
 		},
 		PrimaryIndex: IndexDescriptor{
@@ -101,7 +96,7 @@ func TestAllocateIDs(t *testing.T) {
 		},
 		Privileges:     NewDefaultPrivilegeDescriptor(),
 		NextColumnID:   4,
-		NextFamilyID:   4,
+		NextFamilyID:   1,
 		NextIndexID:    4,
 		NextMutationID: 1,
 		FormatVersion:  FamilyFormatVersion,

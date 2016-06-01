@@ -248,7 +248,9 @@ CREATE TABLE pks (
   k2 INT,
   v INT,
   PRIMARY KEY (k1, k2),
-  UNIQUE INDEX i (k2, v)
+  UNIQUE INDEX i (k2, v),
+  FAMILY (k1, k2),
+  FAMILY (v)
 )
 
 statement ok
