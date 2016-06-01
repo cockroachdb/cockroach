@@ -156,8 +156,8 @@ func updatesTimestampCache(r roachpb.Request) bool {
 type pendingCmd struct {
 	ctx context.Context
 	// TODO(tschottdorf): idKey is legacy at this point: We could easily key
-	// commands by their RequiredIndex, and doing so should be ok with a stop-
-	// the-world migration. However, requires adapting tryCancel.
+	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
+	// the-world migration. However, requires adapting tryAbandon.
 	idKey   storagebase.CmdIDKey
 	raftCmd roachpb.RaftCommand
 	done    chan roachpb.ResponseWithError // Used to signal waiting RPC handler
@@ -223,7 +223,8 @@ type Replica struct {
 		lastIndex   uint64
 		leaderLease *roachpb.Lease
 		// Max bytes before split.
-		maxBytes       int64
+		maxBytes int64
+		// TODO(tschottdorf): evaluate whether this should be a slice.
 		pendingCmds    map[storagebase.CmdIDKey]*pendingCmd
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
@@ -1324,13 +1325,12 @@ func (r *Replica) prepareRaftCommandLocked(
 	idKey storagebase.CmdIDKey,
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-	delta uint64, // delta to be added to last assigned lease index, usually 1
 ) (*pendingCmd, error) {
 	if r.mu.lastAssignedLeaseIndex < r.mu.leaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.leaseAppliedIndex + 1
 	}
-	if _, ok := ba.GetArg(roachpb.LeaderLease); !ok {
-		r.mu.lastAssignedLeaseIndex += delta
+	if !ba.IsLease() {
+		r.mu.lastAssignedLeaseIndex++
 	}
 	pendingCmd := &pendingCmd{
 		ctx:   ctx,
@@ -1364,11 +1364,11 @@ func makeIDKey() storagebase.CmdIDKey {
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns
 // - a channel which receives a response or error upon application
-// - a closure used to attempt to abandon the command. When called, it tries
-//	 to pending command from the internal commands map. This is possible until
-// 	 execution of the command at the local replica has already begun, in which
-// 	 case false is returned and the client needs to continue waiting for
-// 	 successful execution.
+// - a closure used to attempt to abandon the command. When called, it tries to
+//   remove the pending command from the internal commands map. This is
+//   possible until execution of the command at the local replica has already
+//   begun, in which case false is returned and the client needs to continue
+//   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) proposeRaftCommand(
@@ -1381,7 +1381,7 @@ func (r *Replica) proposeRaftCommand(
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
-	pCmd, err := r.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba, 1)
+	pCmd, err := r.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1585,7 +1585,7 @@ func (r *Replica) tick() error {
 	return nil
 }
 
-// pendingCmdSlice sorts by increasing RequiredIndex.
+// pendingCmdSlice sorts by increasing MaxLeaseIndex.
 type pendingCmdSlice []*pendingCmd
 
 func (s pendingCmdSlice) Len() int      { return len(s) }
@@ -1599,26 +1599,28 @@ func (r *Replica) reproposePendingCmdsLocked() error {
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
 	// applied.
-	maxCanRefurbish := r.mu.leaseAppliedIndex // indexes <= can be refurbished
+	maxWillRefurbish := r.mu.leaseAppliedIndex // indexes <= will be refurbished
 	origNum := len(r.mu.pendingCmds)
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.pendingCmds {
-		if p.raftCmd.MaxLeaseIndex > maxCanRefurbish {
+		if p.raftCmd.MaxLeaseIndex > maxWillRefurbish {
 			reproposals = append(reproposals, p)
 			continue
 		}
 		delete(r.mu.pendingCmds, idKey)
 		// The command can be refurbished.
-		ch, pErr := r.refurbishPendingCmdLocked(p, 1 /* delta */)
-		// Send to returned channel in case we weren't able to refurbish (in
-		// which case the waiting client is on the receiving end).
-		ch <- roachpb.ResponseWithError{Err: pErr}
+		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
+			p.done <- roachpb.ResponseWithError{Err: pErr}
+		}
 	}
 	if log.V(1) && origNum > 0 {
 		log.Infof("range %d: refurbished %d, reproposing %d commands after empty entry at %d (%d)",
 			r.mu.desc.RangeID, origNum-len(reproposals), len(reproposals), r.mu.appliedIndex, r.mu.leaseAppliedIndex)
 	}
 
+	// Reproposals are those commands which we weren't able to refurbish (since
+	// we're not sure that another copy of them could apply at the "correct"
+	// index).
 	// For reproposals, it's generally pretty unlikely that they can make it in
 	// the right place. Reproposing in order is definitely required, however.
 	sort.Sort(reproposals)
@@ -1678,28 +1680,26 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 }
 
 // refurbishPendingCmdLocked takes a pendingCmd which was discovered to apply
-// at an illegal log position. It creates and proposes a new command and
-// returns a channel to which the execution of the "stale" command should
-// report. This is either the client's original done channel (if reproposing
-// wasn't possible, i.e. the client will receive the error), or a spare channel
-// (in which case the newly proposed command will report to the client).
-// The command passed must have been deleted from r.mu.pendingCmds.
-func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd, delta uint64) (chan roachpb.ResponseWithError, *roachpb.Error) {
+// at a log position other than the one at which it was originally proposed
+// (this can happen when the range lease held by a raft follower, who must
+// forward MsgProp messages to the raft leader without guaranteed ordering).
+// It creates and proposes a new command, returning an error if that fails.
+// The passed command must have been deleted from r.mu.pendingCmds.
+func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 	// Note that the new command has the same idKey (which matters since we
 	// leaked that to the pending client).
 	newPCmd, err := r.prepareRaftCommandLocked(cmd.ctx, cmd.idKey,
-		cmd.raftCmd.OriginReplica, cmd.raftCmd.Cmd, delta)
+		cmd.raftCmd.OriginReplica, cmd.raftCmd.Cmd)
 	if err != nil {
-		return cmd.done, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
-	spareDone := newPCmd.done
 	newPCmd.done = cmd.done
 	r.insertRaftCommandLocked(newPCmd)
 	if err := r.proposePendingCmdLocked(newPCmd); err != nil {
 		delete(r.mu.pendingCmds, newPCmd.idKey)
-		return cmd.done, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
-	return spareDone, nil
+	return nil
 }
 
 // processRaftCommand processes a raft command by unpacking the command
@@ -1711,44 +1711,63 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		log.Fatalc(r.context(context.TODO()), "processRaftCommand requires a non-zero index")
 	}
 
-	// TODO(tschottdorf): will clients know to handle the errors potentially
-	// generated in reproposal scenarios? After all, they are not usually
-	// received on the 'done' channel.
 	var forcedErr *roachpb.Error
 	var ctx context.Context
 	r.mu.Lock()
 	cmd := r.mu.pendingCmds[idKey]
-	if r.mu.leaderLease.Replica != raftCmd.OriginReplica && !raftCmd.Cmd.IsLease() {
+
+	catchesLeaseError := func() bool {
+		l, ba, origin := r.mu.leaderLease, raftCmd.Cmd, raftCmd.OriginReplica
+		if l.Replica != origin && !ba.IsLease() {
+			return true
+		}
+		notCovered := !l.OwnedBy(origin.StoreID) || !l.Covers(ba.Timestamp)
+		if notCovered && !ba.IsFreeze() && !ba.IsLease() {
+			// Verify the leader lease is held, unless this command is trying
+			// to obtain it or is a freeze change (which can be proposed by any
+			// Replica). Any other Raft command has had the leader lease held
+			// by the replica at proposal time, but this may no longer be the
+			// case. Corruption aside, the most likely reason is a leadership
+			// change (the most recent leader assumes responsibility for all
+			// past timestamps as well). In that case, it's not valid to go
+			// ahead with the execution: Writes must be aware of the last time
+			// the mutated key was read, and since reads are served locally by
+			// the lease holder without going through Raft, a read which was
+			// not taken into account may have been served. Hence, we must
+			// retry at the current leader.
+			return true
+		}
+		return false
+	}
+
+	if catchesLeaseError() {
 		if log.V(1) {
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
 				raftCmd.OriginReplica, r.mu.leaderLease.Replica, raftCmd.Cmd)
 		}
-		forcedErr = roachpb.NewError(r.newNotLeaderErrorLocked(r.mu.leaderLease, raftCmd.OriginReplica.StoreID))
+		forcedErr = roachpb.NewError(r.newNotLeaderErrorLocked(
+			r.mu.leaderLease, raftCmd.OriginReplica.StoreID))
 	}
 
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
-	}
-	if cmd != nil {
 		delete(r.mu.pendingCmds, idKey)
 	}
 	leaseIndex := r.mu.leaseAppliedIndex
 	if raftCmd.Cmd.IsLease() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by
-		// anyone, so we can't expect a coherent RequiredIndex. Also, lease
+		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
 		// proposals are often replayed, so not making them update the counter
-		// makes sense from a testing perspective. The alternative is to set
-		// RequiredIndex to leaseIndex+1 but that will likely throw off the
-		// proposer's counter.
+		// makes sense from a testing perspective.
 	} else if r.mu.leaseAppliedIndex < raftCmd.MaxLeaseIndex {
 		// The happy case: the command is applying at or ahead of the minimal
 		// permissible index. It's ok if it skips a few slots (as can happen
 		// during rearrangement); this command will apply, but later ones which
 		// were proposed at lower indexes may not. Overall though, this is more
 		// stable and simpler than requiring commands to apply at their exact
-		// lease index: Handling the case in which RequiredIndex > oldIndex+1
+		// lease index: Handling the case in which MaxLeaseIndex > oldIndex+1
 		// is otherwise tricky since a refurbishment is not allowed
 		// (reproposals could exist and may apply at the right index, leading
 		// to a replay), and assigning the required index would be tedious
@@ -1771,8 +1790,12 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 			// so that the future incarnation can apply and notify the it.
 			// Note that we keep the context as to not hide these internal
 			// cycles from traces.
-			if cmd.raftCmd.MaxLeaseIndex <= raftCmd.MaxLeaseIndex {
-				cmd.done, forcedErr = r.refurbishPendingCmdLocked(cmd, 1 /* delta */)
+			if localMaxLeaseIndex := cmd.raftCmd.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
+				if pErr := r.refurbishPendingCmdLocked(cmd); pErr == nil {
+					cmd.done = make(chan roachpb.ResponseWithError, 1)
+				} else {
+					forcedErr = pErr
+				}
 			} else {
 				// The refurbishment is already in flight, so we better get cmd back
 				// into pendingCmds (the alternative, not deleting it in this case
@@ -1927,25 +1950,6 @@ func (r *Replica) applyRaftCommandInBatch(
 		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
 			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil, pErr
 		}
-	}
-
-	if lease, _ := r.getLeaderLease(); (!lease.OwnedBy(originReplica.StoreID) ||
-		!lease.Covers(ba.Timestamp)) && !ba.IsLease() && !ba.IsFreeze() {
-
-		// Verify the leader lease is held, unless this command is trying to
-		// obtain it or is a freeze change (which can be proposed by any Replica).
-		// Any other Raft command has had the leader lease held by the
-		// replica at proposal time, but this may no longer be the case.
-		// Corruption aside, the most likely reason is a leadership change
-		// (the most recent leader assumes responsibility for all past
-		// timestamps as well). In that case, it's not valid to go ahead
-		// with the execution: Writes must be aware of the last time the
-		// mutated key was read, and since reads are served locally by the
-		// lease holder without going through Raft, a read which was not
-		// taken into account may have been served. Hence, we must retry at
-		// the current leader.
-		return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil,
-			roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 	}
 
 	// Keep track of original txn Writing state to sanitize txn

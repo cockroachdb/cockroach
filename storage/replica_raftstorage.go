@@ -754,10 +754,12 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 		r.mu.Lock()
 		// As outlined above, last and applied index are the same after applying
 		// the snapshot.
-		//
-		// TODO(tschottdorf): Why does this not simply use appliedIndex?
+		if appliedIndex != snap.Metadata.Index {
+			log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+				r.Desc().RangeID, appliedIndex, snap.Metadata.Index)
+		}
+		r.mu.lastIndex = appliedIndex
 		r.mu.appliedIndex = appliedIndex
-		r.mu.appliedIndex = snap.Metadata.Index
 		r.mu.leaseAppliedIndex = leaseAppliedIndex
 		r.mu.leaderLease = lease
 		r.mu.frozen = frozen

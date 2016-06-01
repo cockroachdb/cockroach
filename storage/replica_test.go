@@ -5588,12 +5588,17 @@ func TestReplicaIDChangePending(t *testing.T) {
 	}
 }
 
-func runWrongIndexTest(t *testing.T, repropose bool, withRefurbishError bool, expProposals int32) {
+// runWrongIndexTest runs a reproposal or refurbishment test, optionally
+// simulating an error during the renewal of the command. If repropose is
+// false, refurbishes instead.
+// If withErr is true, injects an error when the reproposal or refurbishment
+// takes place.
+func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals int32) {
 	var tc testContext
 	tc.Start(t)
 	defer tc.Stop()
 
-	prefix := fmt.Sprintf("repropose=%t withErr=%t: ", repropose, withRefurbishError)
+	prefix := fmt.Sprintf("repropose=%t withErr=%t: ", repropose, withErr)
 	fatalf := func(msg string, args ...interface{}) {
 		t.Fatal(util.ErrorfSkipFrames(1, prefix+msg, args...))
 	}
@@ -5606,7 +5611,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withRefurbishError bool, ex
 	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			curAttempt := atomic.AddInt32(&c, 1)
-			if (repropose || curAttempt == 2) && withRefurbishError {
+			if (repropose || curAttempt == 2) && withErr {
 				return errors.New("boom")
 			}
 		}
@@ -5636,7 +5641,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withRefurbishError bool, ex
 		t.Fatal("committed a batch, but still at lease index zero")
 	}
 
-	wrongIndex := ai - 1 // will chose this as RequiredIndex
+	wrongIndex := ai - 1 // will chose this as MaxLeaseIndex
 
 	log.Infof("test begins")
 
@@ -5648,26 +5653,31 @@ func runWrongIndexTest(t *testing.T, repropose bool, withRefurbishError bool, ex
 	ch := func() chan roachpb.ResponseWithError {
 		tc.rng.mu.Lock()
 		defer tc.rng.mu.Unlock()
+		// Make a new command, but pretend it didn't increment the assignment
+		// counter. This leaks some implementation, but not too much.
+		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
 		cmd, err := tc.rng.prepareRaftCommandLocked(
 			context.WithValue(context.Background(), magicKey{}, "foo"),
-			makeIDKey(), replica, ba, 0 /* no increment */)
+			makeIDKey(), replica, ba)
+		cmd.raftCmd.MaxLeaseIndex = preAssigned
+		tc.rng.mu.lastAssignedLeaseIndex = preAssigned
 		if err != nil {
-			fatalf(err.Error())
+			fatalf("%s", err)
 		}
 		cmd.raftCmd.MaxLeaseIndex = wrongIndex
 		tc.rng.insertRaftCommandLocked(cmd)
 		if repropose {
 			if err := tc.rng.reproposePendingCmdsLocked(); err != nil {
-				fatalf(err.Error())
+				fatalf("%s", err)
 			}
 		} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
-			fatalf(err.Error())
+			fatalf("%s", err)
 		}
 		return cmd.done
 	}()
-	if rwe := <-ch; rwe.Err != nil != withRefurbishError ||
-		(withRefurbishError && !testutils.IsPError(rwe.Err, "boom")) {
-		fatalf(rwe.Err.String())
+	if rwe := <-ch; rwe.Err != nil != withErr ||
+		(withErr && !testutils.IsPError(rwe.Err, "boom")) {
+		fatalf("%s", rwe.Err)
 	}
 	if n := atomic.LoadInt32(&c); n != expProposals {
 		fatalf("expected %d proposals, got %d", expProposals, n)
@@ -5711,12 +5721,8 @@ func TestReplicaRefurbishOnWrongIndex_ProposeError(t *testing.T) {
 	runWrongIndexTest(t, propose, withErr, 2)
 }
 
-func TestReplicaRefurbishOnWrongIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-}
-
 // TestReplicaBurstPendingCommandsAndRepropose verifies that a burst of
-// proposed commands assigns roughly the correct sequence of required indexes,
+// proposed commands assigns a correct sequence of required indexes,
 // and then goes and checks that a reproposal (without prior proposal) results
 // in these commands applying at the computed indexes.
 func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
@@ -5745,7 +5751,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 
 	expIndexes := make([]int, 0, num)
-	for _, ch := range func() []chan roachpb.ResponseWithError {
+	chs := func() []chan roachpb.ResponseWithError {
 		tc.rng.mu.Lock()
 		defer tc.rng.mu.Unlock()
 		chs := make([]chan roachpb.ResponseWithError, 0, num)
@@ -5758,7 +5764,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, err := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), replica, ba, 1)
+			cmd, err := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), replica, ba)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -5781,7 +5787,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			t.Fatal(err)
 		}
 		return chs
-	}() {
+	}()
+	for _, ch := range chs {
 		if pErr := (<-ch).Err; pErr != nil {
 			t.Fatal(pErr)
 		}
