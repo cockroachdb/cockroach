@@ -26,6 +26,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -41,8 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // mustGetInt decodes an int64 value from the bytes field of the receiver
@@ -260,7 +261,7 @@ func TestReplicateRange(t *testing.T) {
 			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
 				return util.Errorf("failed to resolve %s", key.AsRawKey())
 			}
-			if !reflect.DeepEqual(metaDesc, desc) {
+			if !proto.Equal(&metaDesc, &desc) {
 				return util.Errorf("descs not equal: %+v != %+v", metaDesc, desc)
 			}
 		}
@@ -506,7 +507,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); !reflect.DeepEqual(mvcc, mvcc2) {
+	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
 		t.Fatalf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
 	}
 
