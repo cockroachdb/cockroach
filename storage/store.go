@@ -2320,27 +2320,6 @@ func (s *Store) ComputeMetrics() error {
 	return nil
 }
 
-// ComputeMVCCStatsTest immediately computes correct total MVCC usage statistics
-// for the store, returning the computed values (but without modifying the
-// store). This is intended for use only by unit tests.
-func (s *Store) ComputeMVCCStatsTest() (engine.MVCCStats, error) {
-	var totalStats engine.MVCCStats
-	var err error
-
-	visitor := newStoreRangeSet(s)
-	now := s.Clock().PhysicalNow()
-	visitor.Visit(func(r *Replica) bool {
-		var stats engine.MVCCStats
-		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
-		if err != nil {
-			return false
-		}
-		totalStats.Add(stats)
-		return true
-	})
-	return totalStats, err
-}
-
 // SetRangeRetryOptions sets the retry options used for this store.
 // For unittests only.
 // TODO(bdarnell): have the affected tests pass retry options in through

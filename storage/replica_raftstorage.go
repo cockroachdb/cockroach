@@ -228,14 +228,6 @@ func (r *Replica) LastIndex() (uint64, error) {
 	return r.mu.lastIndex, nil
 }
 
-// GetLastIndex is the same function as LastIndex but it does not require
-// that the replica lock is held.
-func (r *Replica) GetLastIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.LastIndex()
-}
-
 // raftTruncatedStateLocked returns metadata about the log that preceded the
 // first current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
