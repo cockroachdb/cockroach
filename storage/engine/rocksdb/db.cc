@@ -1246,7 +1246,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
         return;
       }
       // Delta is less than or equal to base. If check_prefix is true,
-      // for base to be valid is has to contain the prefix we were
+      // for base to be valid it has to contain the prefix we were
       // searching for. It follows that delta contains the prefix
       // we're searching for.
       if (compare == 0) {
@@ -1290,7 +1290,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   // The delta iterator obtained from a rocksdb::WriteBatchWithIndex.
   std::unique_ptr<rocksdb::WBWIIterator> delta_iterator_;
   // The key the delta iterator is currently pointed at. We can't use
-  // delta_iterator_->Entry().key due to the handling merge
+  // delta_iterator_->Entry().key due to the handling of merge
   // operations.
   std::string delta_key_;
   // Is this a prefix iterator?
