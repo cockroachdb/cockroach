@@ -1421,8 +1421,6 @@ func (r *Replica) handleRaftReady() error {
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		// TODO(peter): Could use a "distinct" batch within applySnapshot, but we
-		// also need the Batch.Defer mechanism.
 		var err error
 		if lastIndex, err = r.applySnapshot(batch, rd.Snapshot); err != nil {
 			return err

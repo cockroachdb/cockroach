@@ -734,36 +734,85 @@ func TestBatchDistinct(t *testing.T) {
 		t.Fatalf("expected a, but got %s", v)
 	}
 
-	// The distinct batch will not see writes to the batch.
-	distinct := batch.(Batch).Distinct()
+	// The distinct batch will see previous writes to the batch.
+	distinct := batch.Distinct()
 	if v, err := distinct.Get(mvccKey("a")); err != nil {
 		t.Fatal(err)
-	} else if v != nil {
-		t.Fatalf("expected nothing, but found %s", v)
+	} else if string(v) != "a" {
+		t.Fatalf("expected a, but got %s", v)
 	}
 	if v, err := distinct.Get(mvccKey("b")); err != nil {
 		t.Fatal(err)
-	} else if string(v) != "b" {
-		t.Fatalf("expected b, but got %s", v)
+	} else if v != nil {
+		t.Fatalf("expected nothing, but got %s", v)
 	}
 
-	// Similarly, distinct batch iterators do not see writes to the batch.
+	// Similarly, for distinct batch iterators we will see previous writes to the
+	// batch.
 	iter := distinct.NewIterator(false)
 	iter.Seek(mvccKey("a"))
 	if !iter.Valid() {
 		t.Fatalf("expected iterator to be valid")
 	}
-	if string(iter.Key().Key) != "b" {
-		t.Fatalf("expected b, but got %s", iter.Key())
+	if string(iter.Key().Key) != "a" {
+		t.Fatalf("expected a, but got %s", iter.Key())
 	}
 
-	// Writes to the distinct batch are reflected in the original batch.
+	// Writes to the distinct batch are not readable by the distinct batch.
 	if err := distinct.Put(mvccKey("c"), []byte("c")); err != nil {
 		t.Fatal(err)
 	}
+	if v, err := distinct.Get(mvccKey("c")); err != nil {
+		t.Fatal(err)
+	} else if v != nil {
+		t.Fatalf("expected nothing, but got %s", v)
+	}
+	distinct.Close()
+
+	// Writes to the distinct batch are reflected in the original batch.
 	if v, err := batch.Get(mvccKey("c")); err != nil {
 		t.Fatal(err)
 	} else if string(v) != "c" {
 		t.Fatalf("expected c, but got %s", v)
+	}
+}
+
+func TestBatchDistinctPanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+
+	batch := e.NewBatch()
+	defer batch.Close()
+
+	distinct := batch.Distinct()
+	defer distinct.Close()
+
+	// The various Reader and Writer methods on the original batch should panic
+	// while the distinct batch is open.
+	a := mvccKey("a")
+	testCases := []func(){
+		func() { _ = batch.Put(a, nil) },
+		func() { _ = batch.Merge(a, nil) },
+		func() { _ = batch.Clear(a) },
+		func() { _ = batch.ApplyBatchRepr(nil) },
+		func() { _, _ = batch.Get(a) },
+		func() { _, _, _, _ = batch.GetProto(a, nil) },
+		func() { _ = batch.Iterate(a, a, nil) },
+		func() { _ = batch.NewIterator(false) },
+	}
+	for i, f := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Fatalf("%d: test did not panic", i)
+				} else if r != "distinct batch open" {
+					t.Fatalf("%d: unexpected panic: %v", i, r)
+				}
+			}()
+			f()
+		}()
 	}
 }
