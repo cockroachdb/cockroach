@@ -14,20 +14,31 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-// +build jemalloc
+// +build !stdmalloc
 
-package main
+package status
 
-// #cgo darwin CPPFLAGS: -I../c-jemalloc/darwin_includes/internal/include
-// #cgo linux CPPFLAGS: -I../c-jemalloc/linux_includes/internal/include
+// #cgo darwin CPPFLAGS: -I../../../c-jemalloc/darwin_includes/internal/include
+// #cgo linux CPPFLAGS: -I../../../c-jemalloc/linux_includes/internal/include
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo linux LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <jemalloc/jemalloc.h>
 import "C"
 
-import _ "github.com/cockroachdb/c-jemalloc"
+import (
+	"github.com/cockroachdb/cockroach/util/log"
+)
 
 func init() {
-	C.malloc_stats_print(nil, nil, nil)
+	if logBuildStats != nil {
+		panic("logBuildStats is already set")
+	}
+	logBuildStats = logJemallocStats
+}
+
+func logJemallocStats() {
+	if log.V(3) {
+		C.malloc_stats_print(nil, nil, nil)
+	}
 }

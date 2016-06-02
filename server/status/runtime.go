@@ -44,9 +44,9 @@ const (
 	nameRSS            = "rss"
 )
 
-// logOSStats is a function that logs OS-specific stats. We will not necessarily
-// have implementations for all OSes.
-var logOSStats func()
+// logBuildStats is a function that logs build-specific stats. We will not necessarily
+// have implementations for all builds.
+var logBuildStats func()
 
 // RuntimeStatSampler is used to periodically sample the runtime environment
 // for useful statistics, performing some rudimentary calculations and storing
@@ -161,8 +161,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	if log.V(2) {
 		log.Infof("memstats: %+v", ms)
 	}
-	if logOSStats != nil {
-		logOSStats()
+	if logBuildStats != nil {
+		logBuildStats()
 	}
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC

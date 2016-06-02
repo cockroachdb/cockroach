@@ -22,9 +22,9 @@ github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/chzyer/readline 03625fbce39089d52a89922753e80125430d0d62
 github.com/client9/misspell cb4479668098a047b6cd630c5ac3d3208f3d22ff
 github.com/cockroachdb/c-jemalloc 6362977a9a1989062dccfa5fe314d6c864e7590c
-github.com/cockroachdb/c-protobuf 696e54fb5290cbd6bb1ad7991c0cca8d493b566e
-github.com/cockroachdb/c-rocksdb 88fbafdb85bc940dfcef995d57213d2dac231d3d
-github.com/cockroachdb/c-snappy 36be97020133fa143426c56cc975a415417fc3fb
+github.com/cockroachdb/c-protobuf d7e9deda9f3204c90283e0176e0cfb6a7b5ce7c8
+github.com/cockroachdb/c-rocksdb 9dd1f18d3ab20667957cf240724a5d12e660ad42
+github.com/cockroachdb/c-snappy 9841c19c0a8c8da34f4536e7fff2815030bacb9d
 github.com/cockroachdb/cmux 9d8f8e431ac319fe4e84d8eaffa4061ddfea1efb
 github.com/cockroachdb/pq 3d7f893b32668bbf6dacfc59367d7a4c004457cc
 github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
