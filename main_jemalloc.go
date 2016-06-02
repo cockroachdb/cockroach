@@ -18,9 +18,5 @@
 
 package main
 
-// #cgo darwin CPPFLAGS: -I../c-jemalloc/darwin_includes/internal/include
-// #cgo linux CPPFLAGS: -I../c-jemalloc/linux_includes/internal/include
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo linux LDFLAGS: -Wl,-unresolved-symbols=ignore-all
-//
-// #include <jemalloc/jemalloc.h>
+// Link in jemalloc.
+import _ "github.com/cockroachdb/c-jemalloc"
