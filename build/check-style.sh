@@ -105,7 +105,7 @@ TestVet() {
 
 TestVetShadow() {
   ! go tool vet --shadow . 2>&1 | \
-    grep -vE '(declaration of (pE|e)rr shadows|^vet: cannot process directory \.git)' | \
+    grep -vE '(declaration of (")?(pE|e)rr(")? shadows|^vet: cannot process directory \.git)' | \
     grep -vE '\.pb\.gw\.go'
 }
 
