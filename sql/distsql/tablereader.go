@@ -140,7 +140,7 @@ func newTableReader(
 		colIdxMap[c.ID] = i
 	}
 	err := tr.fetcher.Init(&tr.desc, colIdxMap, index, spec.Reverse, isSecondaryIndex,
-		valNeededForCol)
+		tr.desc.Columns, valNeededForCol)
 	if err != nil {
 		return nil, err
 	}
