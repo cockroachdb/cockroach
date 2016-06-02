@@ -207,8 +207,8 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		}
 	}
 
-	// If we didn't find a lease, acquire one.
-	if lease == nil {
+	// If we didn't find a lease or a lease is about to expire, acquire one.
+	if lease == nil || !lease.hasSomeLifeLeft(p.leaseMgr.clock) {
 		var err error
 		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
 		if err != nil {
