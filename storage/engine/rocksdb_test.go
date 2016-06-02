@@ -109,6 +109,35 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	}()
 }
 
+func TestBatchPrefixIter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db, stopper := setupMVCCInMemRocksDB(t, "iter_read_own_write")
+	defer stopper.Stop()
+
+	b := db.NewBatch()
+
+	// Set up a batch with: delete("a"), put("b"). We'll then prefix seek for "b"
+	// which should succeed and then prefix seek for "a" which should fail. Note
+	// that order of operations is important here to stress the C++ code paths.
+	if err := b.Clear(mvccKey("a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Put(mvccKey("b"), []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+
+	iter := b.NewIterator(true /* prefix */)
+	defer iter.Close()
+
+	if iter.Seek(mvccKey("b")); !iter.Valid() {
+		t.Fatalf("expected to find \"b\"")
+	}
+	if iter.Seek(mvccKey("a")); iter.Valid() {
+		t.Fatalf("expected to not find anything, found %s -> %q", iter.Key(), iter.Value())
+	}
+}
+
 func makeKey(i int) MVCCKey {
 	return MakeMVCCMetadataKey(roachpb.Key(strconv.Itoa(i)))
 }
