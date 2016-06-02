@@ -185,9 +185,15 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1: false
 	//   tb1: true
 	//   tb2: false
-	db1Cfg := config.ZoneConfig{ReplicaAttrs: []roachpb.Attributes{{[]string{"db1"}}}}
-	tb11Cfg := config.ZoneConfig{ReplicaAttrs: []roachpb.Attributes{{[]string{"db1.tb1"}}}}
-	tb21Cfg := config.ZoneConfig{ReplicaAttrs: []roachpb.Attributes{{[]string{"db2.tb1"}}}}
+	db1Cfg := config.ZoneConfig{
+		ReplicaAttrs: []roachpb.Attributes{{Attrs: []string{"db1"}}},
+	}
+	tb11Cfg := config.ZoneConfig{
+		ReplicaAttrs: []roachpb.Attributes{{Attrs: []string{"db1.tb1"}}},
+	}
+	tb21Cfg := config.ZoneConfig{
+		ReplicaAttrs: []roachpb.Attributes{{Attrs: []string{"db2.tb1"}}},
+	}
 	for objID, objZone := range map[uint32]config.ZoneConfig{
 		db1:  db1Cfg,
 		tb11: tb11Cfg,
