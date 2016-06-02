@@ -203,7 +203,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		Exprs: targets,
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	}, nil, nil, desiredTypesFromSelect)
+	}, nil, nil, desiredTypesFromSelect, true)
 	if err != nil {
 		return nil, err
 	}

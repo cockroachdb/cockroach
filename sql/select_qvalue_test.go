@@ -27,7 +27,7 @@ import (
 func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 	scan := &scanNode{}
 	scan.desc = *desc
-	scan.initDescDefaults()
+	scan.initDescDefaults(false)
 
 	sel := &selectNode{}
 	sel.qvals = make(qvalMap)

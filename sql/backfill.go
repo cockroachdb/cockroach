@@ -34,11 +34,18 @@ func makeColIDtoRowIndex(row planNode, desc *sqlbase.TableDescriptor) (
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(columns))
 	for i, column := range columns {
-		col, err := desc.FindActiveColumnByName(column.Name)
+		s, idx, err := desc.FindColumnByName(column.Name)
 		if err != nil {
 			return nil, err
 		}
-		colIDtoRowIndex[col.ID] = i
+		switch s {
+		case sqlbase.DescriptorActive:
+			colIDtoRowIndex[desc.Columns[idx].ID] = i
+		case sqlbase.DescriptorIncomplete:
+			colIDtoRowIndex[desc.Mutations[idx].GetColumn().ID] = i
+		default:
+			panic("unreachable")
+		}
 	}
 	return colIDtoRowIndex, nil
 }
@@ -284,7 +291,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		for i := range valNeededForCol {
 			_, valNeededForCol[i] = ru.fetchColIDtoRowIndex[tableDesc.Columns[i].ID]
 		}
-		err = rf.Init(tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false, valNeededForCol)
+		err = rf.Init(tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false,
+			tableDesc.Columns, valNeededForCol)
 		if err != nil {
 			return err
 		}
@@ -457,7 +465,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		scan := planner.Scan()
 		scan.desc = *tableDesc
 		scan.spans = []sqlbase.Span{sp}
-		scan.initDescDefaults()
+		scan.initDescDefaults(true)
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
 			return err

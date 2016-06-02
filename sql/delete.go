@@ -72,7 +72,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		Exprs: sqlbase.ColumnsSelectors(rd.fetchCols),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	}, nil, nil, nil)
+	}, nil, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
