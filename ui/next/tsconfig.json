@@ -9,7 +9,6 @@
   "exclude": [
     "generated",
     "jspm_packages",
-    "local_typings",
     "node_modules",
     "typings"
   ]
