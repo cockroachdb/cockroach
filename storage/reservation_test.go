@@ -85,13 +85,15 @@ func TestReserve(t *testing.T) {
 	for i, testCase := range testCases {
 		if testCase.reserve {
 			// Try to reserve the range.
-			res := reservation{
-				rangeID: roachpb.RangeID(testCase.rangeID),
-				storeID: roachpb.StoreID(i),
-				nodeID:  roachpb.NodeID(i),
-				size:    int64(testCase.rangeID),
+			req := roachpb.ReservationRequest{
+				StoreRequestHeader: roachpb.StoreRequestHeader{
+					StoreID: roachpb.StoreID(i),
+					NodeID:  roachpb.NodeID(i),
+				},
+				RangeID:   roachpb.RangeID(testCase.rangeID),
+				RangeSize: int64(testCase.rangeID),
 			}
-			if reserved := b.Reserve(res); reserved != testCase.expSuc {
+			if resp := b.Reserve(req); resp.Approved != testCase.expSuc {
 				if testCase.expSuc {
 					t.Errorf("%d: expected a successful reservation, was rejected", i)
 				} else {
@@ -114,14 +116,16 @@ func TestReserve(t *testing.T) {
 
 	// Test that repeated requests with the same store and node number extend the timeout of the
 	// pre-existing reservation.
-	repeatRes := reservation{
-		rangeID: 100,
-		storeID: 100,
-		nodeID:  100,
-		size:    100,
+	repeatReq := roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: 100,
+			NodeID:  100,
+		},
+		RangeID:   100,
+		RangeSize: 100,
 	}
 	for i := 1; i < 10; i++ {
-		if !b.Reserve(repeatRes) {
+		if !b.Reserve(repeatReq).Approved {
 			t.Errorf("%d: could not add repeated reservation", i)
 		}
 		verifyBookie(t, b, 1, 4+i, 100)
@@ -148,7 +152,7 @@ func expireNextBooking(t *testing.T, mc *hlc.ManualClock, b *bookie, expireCount
 		if expectedExpires != len(b.mu.queue) {
 			nextExpiredBooking := b.mu.queue.peek()
 			return fmt.Errorf("expiration has not occured yet, next expiration in %s for rangeID:%d",
-				nextExpiredBooking.expireAt, nextExpiredBooking.reservation.rangeID)
+				nextExpiredBooking.expireAt, nextExpiredBooking.RangeID)
 		}
 		return nil
 	})
@@ -167,12 +171,14 @@ func TestReservationQueue(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		// Ensure all the bookings expire 100 nanoseconds apart.
 		mc.Increment(100)
-		if !b.Reserve(reservation{
-			rangeID: roachpb.RangeID(i),
-			storeID: roachpb.StoreID(i),
-			nodeID:  roachpb.NodeID(i),
-			size:    bytesPerReservation,
-		}) {
+		if !b.Reserve(roachpb.ReservationRequest{
+			StoreRequestHeader: roachpb.StoreRequestHeader{
+				StoreID: roachpb.StoreID(i),
+				NodeID:  roachpb.NodeID(i),
+			},
+			RangeID:   roachpb.RangeID(i),
+			RangeSize: bytesPerReservation,
+		}).Approved {
 			t.Fatalf("could not book a reservation for reservation number %d", i)
 		}
 	}
@@ -210,34 +216,40 @@ func TestReservationQueue(t *testing.T) {
 	// timed out, and 6, which has been filled by not timed out. Only increment
 	// by 10 here to ensure we don't expire any of the other reservations.
 	mc.Increment(10)
-	if !b.Reserve(reservation{
-		rangeID: roachpb.RangeID(1),
-		storeID: roachpb.StoreID(11),
-		nodeID:  roachpb.NodeID(11),
-		size:    bytesPerReservation,
-	}) {
+	if !b.Reserve(roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: roachpb.StoreID(11),
+			NodeID:  roachpb.NodeID(11),
+		},
+		RangeID:   roachpb.RangeID(1),
+		RangeSize: bytesPerReservation,
+	}).Approved {
 		t.Fatalf("could not book a reservation for reservation number 1 (second pass)")
 	}
 	verifyBookie(t, b, 6 /*reservations*/, 7 /*bookings*/, 6*bytesPerReservation /*bytes*/)
 
 	mc.Increment(10)
-	if !b.Reserve(reservation{
-		rangeID: roachpb.RangeID(2),
-		storeID: roachpb.StoreID(12),
-		nodeID:  roachpb.NodeID(12),
-		size:    bytesPerReservation,
-	}) {
+	if !b.Reserve(roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: roachpb.StoreID(12),
+			NodeID:  roachpb.NodeID(12),
+		},
+		RangeID:   roachpb.RangeID(2),
+		RangeSize: bytesPerReservation,
+	}).Approved {
 		t.Fatalf("could not book a reservation for reservation number 2 (second pass)")
 	}
 	verifyBookie(t, b, 7 /*reservations*/, 8 /*bookings*/, 7*bytesPerReservation /*bytes*/)
 
 	mc.Increment(10)
-	if !b.Reserve(reservation{
-		rangeID: roachpb.RangeID(6),
-		storeID: roachpb.StoreID(13),
-		nodeID:  roachpb.NodeID(13),
-		size:    bytesPerReservation,
-	}) {
+	if !b.Reserve(roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: roachpb.StoreID(13),
+			NodeID:  roachpb.NodeID(13),
+		},
+		RangeID:   roachpb.RangeID(6),
+		RangeSize: bytesPerReservation,
+	}).Approved {
 		t.Fatalf("could not book a reservation for reservation number 6 (second pass)")
 	}
 	verifyBookie(t, b, 8 /*reservations*/, 9 /*bookings*/, 8*bytesPerReservation /*bytes*/)

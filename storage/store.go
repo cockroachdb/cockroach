@@ -2359,3 +2359,8 @@ func (s *Store) FrozenStatus() (numFrozen int64, numThawed int64) {
 	})
 	return
 }
+
+// Reserve requests a reservation from the store's bookie.
+func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
+	return s.bookie.Reserve(req)
+}
