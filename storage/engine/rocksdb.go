@@ -672,12 +672,16 @@ func (r *rocksDBBatch) flushMutations() {
 	if err := r.ApplyBatchRepr(r.builder.Finish()); err != nil {
 		panic(err)
 	}
+	// For a seek of the underlying iterator on the next Seek/ReverseSeek.
+	r.prefixIter.reseek = true
+	r.normalIter.reseek = true
 }
 
 type rocksDBIterator struct {
 	engine Reader
 	iter   *C.DBIterator
 	valid  bool
+	reseek bool
 	key    C.DBKey
 	value  C.DBSlice
 }
@@ -733,9 +737,10 @@ func (r *rocksDBIterator) Seek(key MVCCKey) {
 		// to access start[0] in an explicit seek.
 		r.setState(C.DBIterSeekToFirst(r.iter))
 	} else {
-		// It's tempting to avoid seeking if we're already at the desired key,
-		// but it may already have changed on the underlying engine, so we
-		// must seek again.
+		// We can avoid seeking if we're already at the key we seek.
+		if r.valid && !r.reseek && key.Equal(r.unsafeKey()) {
+			return
+		}
 		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
 	}
 }
@@ -745,6 +750,10 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 	if len(key.Key) == 0 {
 		r.setState(C.DBIterSeekToLast(r.iter))
 	} else {
+		// We can avoid seeking if we're already at the key we seek.
+		if r.valid && !r.reseek && key.Equal(r.unsafeKey()) {
+			return
+		}
 		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
 		// Maybe the key sorts after the last key in RocksDB.
 		if !r.Valid() {
@@ -820,6 +829,7 @@ func (r *rocksDBIterator) Less(key MVCCKey) bool {
 
 func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.valid = bool(state.valid)
+	r.reseek = false
 	r.key = state.key
 	r.value = state.value
 }
