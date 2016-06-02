@@ -27,11 +27,16 @@ import (
 )
 
 // createTestBookie creates a new bookie, stopper and manual clock for testing.
-func createTestBookie(reservationTimeout time.Duration) (*stop.Stopper, *hlc.ManualClock, *bookie) {
+func createTestBookie(
+	reservationTimeout time.Duration,
+	maxReservations int,
+	maxReservedBytes int64) (*stop.Stopper, *hlc.ManualClock, *bookie) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	b := newBookie(clock, reservationTimeout, stopper, newStoreMetrics())
+	b := newBookie(clock, reservationTimeout, maxReservations, maxReservedBytes, stopper,
+		newStoreMetrics())
+	b.metrics.available.Update(100000)
 	return stopper, mc, b
 }
 
@@ -56,7 +61,7 @@ func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedB
 // correctly.
 func TestReserve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, b := createTestBookie(time.Hour)
+	stopper, _, b := createTestBookie(time.Hour, 20, 20*maxReservedBytes)
 	defer stopper.Stop()
 
 	testCases := []struct {
@@ -130,6 +135,63 @@ func TestReserve(t *testing.T) {
 		}
 		verifyBookie(t, b, 1, 4+i, 100)
 	}
+
+	// Test rejecting a reservation due to too many reservations existing.
+	b.mu.Lock()
+	b.maxReservations = len(b.mu.resByRangeID) - 1
+	b.mu.Unlock()
+	overbookedReq := roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: 200,
+			NodeID:  200,
+		},
+		RangeID:   200,
+		RangeSize: 200,
+	}
+	if b.Reserve(overbookedReq).Approved {
+		t.Errorf("overbooked the reservations system")
+	}
+	verifyBookie(t, b, 1, 13, 100) // The same numbers from the last call to verifyBookie.
+
+	// Test rejecting a reservation due to disk space contraints.
+	overfilledReq := roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: 200,
+			NodeID:  200,
+		},
+		RangeID:   200,
+		RangeSize: 200,
+	}
+	b.mu.Lock()
+	b.maxReservations = 1000
+	// Set the bytes have 1 less byte free than needed by the reservation.
+	b.metrics.available.Update(b.mu.size + (2 * overfilledReq.RangeSize) - 1)
+	b.mu.Unlock()
+
+	if b.Reserve(overfilledReq).Approved {
+		t.Errorf("overfilled the reservations system")
+	}
+	verifyBookie(t, b, 1, 13, 100) // The same numbers from the last call to verifyBookie.
+
+	// Test rejecting a reservation due to too reservation space available.
+	b.mu.Lock()
+	// Set the rangeSize to have 1 more byte than available by the bookie.
+	overfilledReq2 := roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: 200,
+			NodeID:  200,
+		},
+		RangeID:   200,
+		RangeSize: b.maxReservedBytes - b.mu.size + 1,
+	}
+	// Ensure we don't come up against the disk limit.
+	b.metrics.available.Update(b.maxReservedBytes * 1000)
+	b.mu.Unlock()
+
+	if b.Reserve(overfilledReq2).Approved {
+		t.Errorf("overfilled the reservations system")
+	}
+	verifyBookie(t, b, 1, 13, 100) // The same numbers from the last call to verifyBookie.
 }
 
 // expireNextBooking advances the manual clock to one nanosecond passed the
@@ -162,7 +224,7 @@ func expireNextBooking(t *testing.T, mc *hlc.ManualClock, b *bookie, expireCount
 // correctly expiring any unfilled reservations in a number of different cases.
 func TestReservationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, mc, b := createTestBookie(time.Microsecond)
+	stopper, mc, b := createTestBookie(time.Microsecond, 20, 20*maxReservedBytes)
 	defer stopper.Stop()
 
 	bytesPerReservation := int64(100)
