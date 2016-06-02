@@ -55,7 +55,7 @@ func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan
 	// Create a new table scan node with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
-	table.initDescDefaults()
+	table.initDescDefaults(false)
 	table.initOrdering(0)
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}

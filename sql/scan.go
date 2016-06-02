@@ -40,7 +40,9 @@ type scanNode struct {
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
-	// There is a 1-1 correspondence between desc.Columns and resultColumns.
+	// The table columns, possibly including ones currently in schema changes.
+	cols []sqlbase.ColumnDescriptor
+	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns []ResultColumn
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
@@ -49,7 +51,7 @@ type scanNode struct {
 	// as an optimization when the upper layer doesn't need all values).
 	valNeededForCol []bool
 
-	// Map used to get the index for columns in desc.Columns.
+	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
 	spans            []sqlbase.Span
@@ -119,8 +121,9 @@ func (n *scanNode) expandPlan() error {
 }
 
 func (n *scanNode) Start() error {
-	if err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse,
-		n.isSecondaryIndex, n.valNeededForCol); err != nil {
+	err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
+		n.valNeededForCol)
+	if err != nil {
 		return err
 	}
 
@@ -240,7 +243,10 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 // Initializes a scanNode with a tableName. Returns the table or index name that can be used for
 // fully-qualified columns if an alias is not specified.
 func (n *scanNode) initTable(
-	p *planner, tableName *parser.QualifiedName, indexHints *parser.IndexHints,
+	p *planner,
+	tableName *parser.QualifiedName,
+	indexHints *parser.IndexHints,
+	allowNonPublicCols bool,
 ) (string, error) {
 	var err error
 	n.desc, err = p.getTableLease(tableName)
@@ -271,7 +277,7 @@ func (n *scanNode) initTable(
 		}
 	}
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	n.initDescDefaults()
+	n.initDescDefaults(allowNonPublicCols)
 	return alias, nil
 }
 
@@ -285,20 +291,28 @@ func (n *scanNode) setNeededColumns(needed []bool) {
 }
 
 // Initializes the column structures.
-func (n *scanNode) initDescDefaults() {
+func (n *scanNode) initDescDefaults(allowNonPublicCols bool) {
 	n.index = &n.desc.PrimaryIndex
-	cols := n.desc.Columns
-	n.resultColumns = makeResultColumns(cols)
-	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
-	for i, c := range cols {
+	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	n.cols = append(n.cols, n.desc.Columns...)
+	if allowNonPublicCols {
+		for _, mutation := range n.desc.Mutations {
+			if c := mutation.GetColumn(); c != nil {
+				n.cols = append(n.cols, *c)
+			}
+		}
+	}
+	n.resultColumns = makeResultColumns(n.cols)
+	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
+	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.valNeededForCol = make([]bool, len(cols))
-	for i := range cols {
+	n.valNeededForCol = make([]bool, len(n.cols))
+	for i := range n.cols {
 		n.valNeededForCol[i] = true
 	}
-	n.row = make([]parser.Datum, len(cols))
-	n.filterVars = parser.MakeIndexedVarHelper(n, len(cols))
+	n.row = make([]parser.Datum, len(n.cols))
+	n.filterVars = parser.MakeIndexedVarHelper(n, len(n.cols))
 }
 
 // initOrdering initializes the ordering info using the selected index. This
