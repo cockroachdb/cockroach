@@ -94,6 +94,14 @@ func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.Replica
 	return s.logChange(txn, changeType, replica, desc)
 }
 
+// GetLastIndex is the same function as LastIndex but it does not require
+// that the replica lock is held.
+func (r *Replica) GetLastIndex() (uint64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.LastIndex()
+}
+
 // GetSnapshot wraps Snapshot() but does not require the replica lock
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
