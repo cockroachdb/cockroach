@@ -66,6 +66,8 @@ func (pq *bookingQ) dequeue() *booking {
 type bookie struct {
 	clock              *hlc.Clock
 	reservationTimeout time.Duration // How long each reservation is held.
+	maxReservations    int
+	maxReservedBytes   int64
 	metrics            *storeMetrics
 	mu                 struct {
 		sync.Mutex                                // Protects all values within the mu struct.
@@ -79,11 +81,15 @@ type bookie struct {
 func newBookie(
 	clock *hlc.Clock,
 	reservationTimeout time.Duration,
+	maxReservations int,
+	maxReservedBytes int64,
 	stopper *stop.Stopper,
 	metrics *storeMetrics) *bookie {
 	b := &bookie{
 		clock:              clock,
 		reservationTimeout: reservationTimeout,
+		maxReservations:    maxReservations,
+		maxReservedBytes:   maxReservedBytes,
 		metrics:            metrics,
 	}
 	b.mu.resByRangeID = make(map[roachpb.RangeID]*booking)
@@ -91,9 +97,8 @@ func newBookie(
 	return b
 }
 
-// Reserve a new replica. Returns true on a successful reservation.
-// TODO(bram): either here or in the store, prevent taking too many
-// reservations at once.
+// Reserve a new replica. Reservations can be rejected due to having too many
+// outstanding reservations already or not having enough free disk space.
 func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -115,6 +120,37 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			}
 			return roachpb.ReservationResponse{Approved: false}
 		}
+	}
+
+	// Do we have too many current reservations?
+	if len(b.mu.resByRangeID) > b.maxReservations {
+		if log.V(2) {
+			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
+				req, len(b.mu.resByRangeID), b.maxReservations)
+		}
+		return roachpb.ReservationResponse{Approved: false}
+	}
+
+	// Can we accommodate the requested number of bytes (doubled for safety) on
+	// the hard drive?
+	// TODO(bram): Explore if doubling the requested size enough?
+	// Store `available` in case it changes between if and log.
+	available := b.metrics.available.Value()
+	if b.mu.size+(req.RangeSize*2) > available {
+		if log.V(2) {
+			log.Infof("could not book reservation %v, not enough available disk space (reqested:%d*2, reserved:%d, available:%d)",
+				req, req.RangeSize, b.mu.size, available)
+		}
+		return roachpb.ReservationResponse{Approved: false}
+	}
+
+	// Do we have enough reserved space free for the reservation?
+	if b.mu.size+req.RangeSize > b.maxReservedBytes {
+		if log.V(2) {
+			log.Infof("could not book reservation %v, not enough available reservation space (reqested:%d, reserved:%d, maxReserved:%d)",
+				req, req.RangeSize, b.mu.size, b.maxReservations)
+		}
+		return roachpb.ReservationResponse{Approved: false}
 	}
 
 	newBooking := &booking{

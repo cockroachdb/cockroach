@@ -69,6 +69,11 @@ const (
 	maxReplicaDescCacheSize = 1000
 
 	raftReqBufferSize = 100
+
+	// TODO(bram): Tune maxReservations and maxReservedBytes values or make
+	// them reactive to the store in some way.
+	maxReservations  = 5
+	maxReservedBytes = 250 * (1 << 20) // 250 MiB
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -783,7 +788,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}))
 
 	// Add the bookie to the store.
-	s.bookie = newBookie(s.ctx.Clock, ttlStoreGossip, s.stopper, s.metrics)
+	s.bookie = newBookie(s.ctx.Clock, ttlStoreGossip, maxReservations, maxReservedBytes, s.stopper, s.metrics)
 
 	if s.Ident.NodeID == 0 {
 		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
