@@ -214,6 +214,7 @@ type Replica struct {
 		// Last index persisted to the raft log (not necessarily committed).
 		lastIndex   uint64
 		leaderLease *roachpb.Lease
+
 		// Max bytes before split.
 		maxBytes       int64
 		pendingCmds    map[storagebase.CmdIDKey]*pendingCmd
@@ -225,8 +226,7 @@ type Replica struct {
 		// gcThreshold is the GC threshold of the replica. Reads and writes must
 		// not happen <= this time.
 		gcThreshold roachpb.Timestamp
-		// Slice of channels to send on after leader lease acquisition.
-		llChans []chan *roachpb.Error
+
 		// proposeRaftCommandFn can be set to mock out the propose operation.
 		proposeRaftCommandFn func(*pendingCmd) error
 		// Computed checksum at a snapshot UUID.
@@ -243,6 +243,8 @@ type Replica struct {
 		// Whether the Replica is frozen.
 		frozen bool
 	}
+	// pendingLeaderLeaseRequest is used to coalesce LeaderLease requests.
+	pendingLeaderLeaseRequest pendingLeaderLeaseRequest
 }
 
 var _ client.Sender = &Replica{}
@@ -488,7 +490,8 @@ func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease
 func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.leaderLease, len(r.mu.llChans) > 0
+	_, isPending := r.pendingLeaderLeaseRequest.RequestPending()
+	return r.mu.leaderLease, isPending
 }
 
 func setGCThreshold(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp) error {
@@ -517,100 +520,8 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 	return err
 }
 
-// requestLeaderLease sends a request to obtain or extend a leader
-// lease for this replica. Unless an error is returned, the obtained
-// lease will be valid for a time interval containing the requested
-// timestamp. Only a single lease request may be pending at a time.
-func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachpb.Error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	llChan := make(chan *roachpb.Error, 1)
-	if len(r.mu.llChans) > 0 {
-		r.mu.llChans = append(r.mu.llChans, llChan)
-		return llChan
-	}
-	if r.store.IsDrainingLeadership() || !r.store.Stopper().RunAsyncTask(func() {
-		pErr := func() *roachpb.Error {
-			// TODO(tschottdorf): get duration from configuration, either as a
-			// config flag or, later, dynamically adjusted.
-			startStasis := timestamp.Add(int64(LeaderLeaseActiveDuration), 0)
-			expiration := startStasis.Add(int64(r.store.Clock().MaxOffset()), 0)
-
-			// Prepare a Raft command to get a leader lease for this replica.
-			desc := r.Desc()
-			_, replica := desc.FindReplica(r.store.StoreID())
-			if replica == nil {
-				return roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
-			}
-			args := &roachpb.LeaderLeaseRequest{
-				Span: roachpb.Span{
-					Key: desc.StartKey.AsRawKey(),
-				},
-				Lease: roachpb.Lease{
-					Start:       timestamp,
-					StartStasis: startStasis,
-					Expiration:  expiration,
-					Replica:     *replica,
-				},
-			}
-			ba := roachpb.BatchRequest{}
-			ba.Timestamp = r.store.Clock().Now()
-			ba.RangeID = r.RangeID
-			ba.Add(args)
-
-			// Send lease request directly to raft in order to skip unnecessary
-			// checks from normal request machinery, (e.g. the command queue).
-			// Note that the command itself isn't traced, but usually the caller
-			// waiting for the result has an active Trace.
-			cmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-
-			// If the command was committed, wait for the range to apply it.
-			select {
-			case c := <-cmd.done:
-				if c.Err != nil {
-					if log.V(1) {
-						log.Infof("failed to acquire leader lease for replica %s: %s", r.store, c.Err)
-					}
-				}
-				return c.Err
-			case <-r.store.Stopper().ShouldDrain():
-				return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
-			}
-		}()
-
-		// Send result of leader lease to all waiter channels.
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		for i, llChan := range r.mu.llChans {
-			// Don't send the same pErr object twice; this can lead to
-			// races. We could clone every time but it's more efficient to
-			// send pErr itself to one of the channels (the last one; if we
-			// send it earlier the race can still happen).
-			if i == len(r.mu.llChans)-1 {
-				llChan <- pErr
-			} else {
-				llChan <- protoutil.Clone(pErr).(*roachpb.Error) // works with `nil`
-			}
-		}
-		r.mu.llChans = r.mu.llChans[:0]
-	}) {
-		// We failed to start the asynchronous task. Send a blank NotLeaderError
-		// back to indicate that we have no idea who the leader might be; we've
-		// withdrawn from active duty.
-		llChan <- roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
-		return llChan
-	}
-
-	r.mu.llChans = append(r.mu.llChans, llChan)
-	return llChan
-}
-
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
-// leader lease at the specified timestamp. If it does, returns
+// leader lease at the current timestamp. If it does, returns
 // success. If another replica currently holds the lease, redirects by
 // returning NotLeaderError. If the lease is expired, a renewal is
 // synchronously requested. This method uses the leader lease mutex
@@ -637,6 +548,15 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 				// If lease is currently held by another, redirect to holder.
 				return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 			}
+			// Check that we're not in the process of transferring the lease away
+			// (more exactly, we're not in the stasis period imposed by that process).
+			// TODO(andrei): This only needs to be checked for read commands?
+			// TODO(andrei): If the lease is in stasis because it's being transferred,
+			// consider returning a new error type so the client backs off until the
+			// transfer is completed.
+			if canPropose, nextLease := r.CanPropose(timestamp); !canPropose {
+				return roachpb.NewError(r.newNotLeaderError(&nextLease, r.store.StoreID()))
+			}
 			if !inFlight && !timestamp.Less(lease.StartStasis.Add(
 				-int64(leaderLeaseRenewalDuration), 0)) {
 				if log.V(2) {
@@ -646,7 +566,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 				// a lease extension. We don't need to wait for that extension
 				// to go through and simply ignore the returned channel (which
 				// is buffered).
-				r.requestLeaderLease(timestamp)
+				r.getOrExtendLeaderLease(timestamp)
 			}
 			return nil
 		}
@@ -654,7 +574,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 		log.Trace(ctx, fmt.Sprintf("request leader lease (attempt #%d)", attempt))
 
 		// Otherwise, no active lease: Request renewal if a renewal is not already pending.
-		llChan := r.requestLeaderLease(timestamp)
+		llChan := r.getOrExtendLeaderLease(timestamp)
 
 		// Wait for the leader lease to finish, or the context to expire.
 		select {

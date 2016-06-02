@@ -1394,7 +1394,6 @@ func (r *Replica) LeaderLease(
 	var reply roachpb.LeaderLeaseResponse
 
 	prevLease := r.mu.leaderLease
-	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
 		Requested: args.Lease,
@@ -1459,10 +1458,16 @@ func (r *Replica) LeaderLease(
 		// leads to spurious test failures in the case of two lease requests
 		// from the same node racing and the one with the earlier expiration
 		// coming in last. So we just ignore any shortening instead.
+		//
+		// !!! what remains of this comment? Shortening is not a thing, but we now
+		// have transfers. Not sure how we were getting races between requests from
+		// the same node, but now that shouldn't happen?
 		args.Lease.Expiration.Forward(prevLease.Expiration)
 	} else if effectiveStart.Less(prevLease.Expiration) {
-		rErr.Message = "requested lease overlaps previous lease"
-		return reply, rErr
+		if log.V(2) {
+			log.Infof("Switching to a LeaderLease starting before the old one's " +
+				"expiration. Looks like a lease transfer.")
+		}
 	}
 
 	args.Lease.Start = effectiveStart
