@@ -602,12 +602,15 @@ func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.
+// Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
+// callers can use returned values to modify the TableDesc.
 func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
-	indexes := append(desc.Indexes, desc.PrimaryIndex)
-
-	for i, c := range indexes {
+	if desc.PrimaryIndex.ID == id {
+		return &desc.PrimaryIndex, nil
+	}
+	for i, c := range desc.Indexes {
 		if c.ID == id {
-			return &indexes[i], nil
+			return &desc.Indexes[i], nil
 		}
 	}
 	for _, m := range desc.Mutations {
