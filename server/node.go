@@ -832,3 +832,16 @@ func (n *Node) PollFrozen(
 		})
 	return resp, err
 }
+
+// Reserve implements the roachpb.InternalServer interface.
+func (n *Node) Reserve(
+	ctx context.Context, req *roachpb.ReservationRequest,
+) (*roachpb.ReservationResponse, error) {
+	resp := &roachpb.ReservationResponse{}
+	err := n.execStoreCommand(req.StoreRequestHeader,
+		func(s *storage.Store) error {
+			*resp = s.Reserve(*req)
+			return nil
+		})
+	return resp, err
+}
