@@ -22,14 +22,15 @@ import (
 )
 
 func TestTruncateDuration(t *testing.T) {
+	zero := time.Duration(0).String()
 	testCases := []struct {
 		d, r time.Duration
 		s    string
 	}{
-		{0, 1, "0"},
-		{0, 1, "0"},
+		{0, 1, zero},
+		{0, 1, zero},
 		{time.Second, 1, "1s"},
-		{time.Second, 2 * time.Second, "0"},
+		{time.Second, 2 * time.Second, zero},
 		{time.Second + 1, time.Second, "1s"},
 		{11 * time.Nanosecond, 10 * time.Nanosecond, "10ns"},
 		{time.Hour + time.Nanosecond + 3*time.Millisecond + time.Second, time.Millisecond, "1h0m1.003s"},
