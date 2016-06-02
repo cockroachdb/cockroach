@@ -280,7 +280,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	}
 	err = tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
-		valNeededForCol)
+		tu.tableDesc.Columns, valNeededForCol)
 	if err != nil {
 		return err
 	}
