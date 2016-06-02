@@ -36,6 +36,7 @@ func interestingGoroutines() (gs []string) {
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/log.init") ||
 			// Below are the stacks ignored by the upstream leaktest code.
 			strings.Contains(stack, "testing.Main(") ||
+			strings.Contains(stack, "testing.tRunner(") ||
 			strings.Contains(stack, "runtime.goexit") ||
 			strings.Contains(stack, "created by runtime.gc") ||
 			strings.Contains(stack, "interestingGoroutines") ||
