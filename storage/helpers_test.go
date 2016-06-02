@@ -24,15 +24,38 @@ package storage
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
+// ComputeMVCCStatsTest immediately computes correct total MVCC usage statistics
+// for the store, returning the computed values (but without modifying the
+// store).
+func (s *Store) ComputeMVCCStatsTest() (engine.MVCCStats, error) {
+	var totalStats engine.MVCCStats
+	var err error
+
+	visitor := newStoreRangeSet(s)
+	now := s.Clock().PhysicalNow()
+	visitor.Visit(func(r *Replica) bool {
+		var stats engine.MVCCStats
+		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
+		if err != nil {
+			return false
+		}
+		totalStats.Add(stats)
+		return true
+	})
+	return totalStats, err
+}
+
 // ForceReplicationScanAndProcess iterates over all ranges and
-// enqueues any that need to be replicated. Exposed only for testing.
+// enqueues any that need to be replicated.
 func (s *Store) ForceReplicationScanAndProcess() {
 	s.mu.Lock()
 	for _, r := range s.mu.replicas {
@@ -44,13 +67,12 @@ func (s *Store) ForceReplicationScanAndProcess() {
 }
 
 // DisableReplicaGCQueue disables or enables the replica GC queue.
-// Exposed only for testing.
 func (s *Store) DisableReplicaGCQueue(disabled bool) {
 	s.replicaGCQueue.SetDisabled(disabled)
 }
 
 // ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
-// may need to be GC'd. Exposed only for testing.
+// may need to be GC'd.
 func (s *Store) ForceReplicaGCScanAndProcess() {
 	s.mu.Lock()
 	for _, r := range s.mu.replicas {
@@ -62,14 +84,12 @@ func (s *Store) ForceReplicaGCScanAndProcess() {
 }
 
 // DisableRaftLogQueue disables or enables the raft log queue.
-// Exposed only for testing.
 func (s *Store) DisableRaftLogQueue(disabled bool) {
 	s.raftLogQueue.SetDisabled(disabled)
 }
 
 // ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
 // need their raft logs truncated and then process each of them.
-// Exposed only for testing.
 func (s *Store) ForceRaftLogScanAndProcess() {
 	// Gather the list of replicas to call MaybeAdd on to avoid locking the
 	// Mutex twice.
@@ -89,9 +109,17 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the
-// range which contains the given key. This is intended for usage only in unit tests.
+// range which contains the given key.
 func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) error {
 	return s.logChange(txn, changeType, replica, desc)
+}
+
+// GetLastIndex is the same function as LastIndex but it does not require
+// that the replica lock is held.
+func (r *Replica) GetLastIndex() (uint64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.LastIndex()
 }
 
 // GetSnapshot wraps Snapshot() but does not require the replica lock
