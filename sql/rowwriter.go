@@ -32,14 +32,18 @@ import (
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
-	tableDesc *sqlbase.TableDescriptor
-	indexes   []sqlbase.IndexDescriptor
+	tableDesc    *sqlbase.TableDescriptor
+	indexes      []sqlbase.IndexDescriptor
+	indexEntries []sqlbase.IndexEntry
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
 	primaryIndexCols      map[sqlbase.ColumnID]struct{}
 }
 
+// encodeIndexes encodes the primary and secondary index keys. The
+// secondaryIndexEntries are only valid until the next call to encodeIndexes or
+// encodeSecondaryIndexes.
 func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
 ) (
@@ -56,13 +60,31 @@ func (rh *rowHelper) encodeIndexes(
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.tableDesc.ID, rh.indexes, colIDtoRowIndex, values)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return primaryIndexKey, secondaryIndexEntries, nil
+}
+
+// encodeSecondaryIndexes encodes the secondary index keys. The
+// secondaryIndexEntries are only valid until the next call to encodeIndexes or
+// encodeSecondaryIndexes.
+func (rh *rowHelper) encodeSecondaryIndexes(
+	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
+) (
+	secondaryIndexEntries []sqlbase.IndexEntry,
+	err error,
+) {
+	if len(rh.indexEntries) != len(rh.indexes) {
+		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.indexes))
+	}
+	err = sqlbase.EncodeSecondaryIndexes(
+		rh.tableDesc.ID, rh.indexes, colIDtoRowIndex, values, rh.indexEntries)
+	if err != nil {
+		return nil, err
+	}
+	return rh.indexEntries, nil
 }
 
 // TODO(dan): This logic is common and being moved into sqlbase.TableDescriptor (see
@@ -180,11 +202,10 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 	putFn(b, &ri.key, &ri.sentinelValue, &ri.sentinelValue)
 	ri.key = nil
 
-	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		ri.key = secondaryIndexEntry.Key
-		putFn(b, &ri.key, secondaryIndexEntry.Value, secondaryIndexEntry.Value)
+	for i := range secondaryIndexEntries {
+		e := &secondaryIndexEntries[i]
+		putFn(b, &e.Key, &e.Value, &e.Value)
 	}
-	ri.key = nil
 
 	// Write the row columns.
 	for i, val := range values {
@@ -224,9 +245,10 @@ type rowUpdater struct {
 	ri rowInserter
 
 	// For allocation avoidance.
-	marshalled []roachpb.Value
-	newValues  []parser.Datum
-	key        roachpb.Key
+	marshalled      []roachpb.Value
+	newValues       []parser.Datum
+	key             roachpb.Key
+	indexEntriesBuf []sqlbase.IndexEntry
 }
 
 // makeRowUpdater creates a rowUpdater for the given table.
@@ -376,6 +398,12 @@ func (ru *rowUpdater) updateRow(
 		return nil, err
 	}
 
+	// The secondary index entries returned by rowHelper.encodeIndexes are only
+	// valid until the next call to encodeIndexes. We need to copy them so that
+	// we can compare against the new secondary index entries.
+	secondaryIndexEntries = append(ru.indexEntriesBuf[:0], secondaryIndexEntries...)
+	ru.indexEntriesBuf = secondaryIndexEntries
+
 	// Check that the new value types match the column types. This needs to
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
@@ -395,14 +423,15 @@ func (ru *rowUpdater) updateRow(
 	rowPrimaryKeyChanged := false
 	var newSecondaryIndexEntries []sqlbase.IndexEntry
 	if ru.primaryKeyColChange {
-		newPrimaryIndexKey, newSecondaryIndexEntries, err = ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
+		newPrimaryIndexKey, newSecondaryIndexEntries, err =
+			ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
 	} else {
-		newSecondaryIndexEntries, err = sqlbase.EncodeSecondaryIndexes(
-			ru.helper.tableDesc.ID, ru.helper.indexes, ru.fetchColIDtoRowIndex, ru.newValues)
+		newSecondaryIndexEntries, err =
+			ru.helper.encodeSecondaryIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
@@ -431,7 +460,7 @@ func (ru *rowUpdater) updateRow(
 				if log.V(2) {
 					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value)
 				}
-				b.CPut(newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value, nil)
+				b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
 			}
 		}
 	}
