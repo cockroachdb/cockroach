@@ -635,8 +635,10 @@ func (e *Executor) execStmtsInCurrentTxn(
 }
 
 // execStmtInAbortedTxn executes a statement in a txn that's in state
-// Aborted or RestartWait.
-// Everything but COMMIT/ROLLBACK/RESTART causes errors.
+// Aborted or RestartWait. All statements cause errors except:
+// - COMMIT / ROLLBACK: aborts the current transaction.
+// - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
+//   allowing it to be retried.
 func (e *Executor) execStmtInAbortedTxn(
 	stmt parser.Statement, txnState *txnState, planMaker *planner,
 ) (Result, error) {
@@ -656,8 +658,20 @@ func (e *Executor) execStmtInAbortedTxn(
 		result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 		txnState.resetStateAndTxn(NoTxn)
 		return result, nil
-	case *parser.RollbackToSavepoint:
-		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+	case *parser.RollbackToSavepoint, *parser.Savepoint:
+		// We accept both the "ROLLBACK TO SAVEPOINT cockroach_restart" and the
+		// "SAVEPOINT cockroach_restart" commands to indicate client intent to
+		// retry a transaction in a RestartWait state.
+		var spName string
+		switch n := s.(type) {
+		case *parser.RollbackToSavepoint:
+			spName = n.Savepoint
+		case *parser.Savepoint:
+			spName = n.Name
+		default:
+			panic("unreachable")
+		}
+		if err := parser.ValidateRestartCheckpoint(spName); err != nil {
 			return Result{Err: err}, err
 		}
 		if txnState.State == RestartWait {
