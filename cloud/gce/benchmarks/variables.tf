@@ -3,7 +3,7 @@ variable "benchmarks_sha" {
   default = ""
 }
 
-# Type of benchmarks to run. eg: "static-tests.jemalloc".
+# Type of benchmarks to run. eg: "static-tests.stdmalloc".
 variable "benchmarks_package" {
   default = "static-tests"
 }

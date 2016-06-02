@@ -14,7 +14,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-// +build jemalloc
+// +build !stdmalloc
 
 package main
 
@@ -24,10 +24,3 @@ package main
 // #cgo linux LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <jemalloc/jemalloc.h>
-import "C"
-
-import _ "github.com/cockroachdb/c-jemalloc"
-
-func init() {
-	C.malloc_stats_print(nil, nil, nil)
-}
