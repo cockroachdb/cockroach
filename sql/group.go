@@ -62,6 +62,10 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range groupBy {
+		if p.aggregateInExpr(groupBy[i]) {
+			return nil, fmt.Errorf("aggregate functions are not allowed in GROUP BY")
+		}
+
 		expr, err := p.replaceSubqueries(groupBy[i], 1)
 		if err != nil {
 			return nil, err
