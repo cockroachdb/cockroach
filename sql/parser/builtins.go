@@ -662,54 +662,38 @@ var Builtins = map[string][]Builtin{
 
 	// Aggregate functions.
 	// These functions are handled in sql/group.go and are not evaluated normally.
-	//
-	// The functions are split into two groups when it comes to handling constant
-	// literal arguments:
-	// - If the result of the aggregate function with constant arguments
-	//   is dependent on the number of rows it is run across (COUNT,
-	//   SUM, VARIANCE, STDDEV), it should be marked as impure and not
-	//   provide an eval fn.
-	// - If the result of the aggregate function with constant arguments
-	//   is independent on the number of rows it is run across (AVG,
-	//   BOOL_AND, BOOL_OR), it should not be marked as impure and
-	//   provide an fn implementation that handles this constant
-	//   argument case.
 
 	"avg": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeDecimal,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				dd := &DDecimal{}
-				dd.SetUnscaled(int64(*args[0].(*DInt)))
-				return dd, nil
-			},
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeFloat,
-			fn:         identityFn,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeDecimal,
-			fn:         identityFn,
 		},
 	},
 
 	"bool_and": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeBool,
-			fn:         identityFn,
 		},
 	},
 
 	"bool_or": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeBool,
-			fn:         identityFn,
 		},
 	},
 
@@ -1075,9 +1059,9 @@ func aggregateImpls(types ...Datum) []Builtin {
 	var r []Builtin
 	for _, t := range types {
 		r = append(r, Builtin{
+			impure:     true,
 			Types:      ArgTypes{t},
 			ReturnType: t,
-			fn:         identityFn,
 		})
 	}
 	return r
@@ -1088,13 +1072,9 @@ func countImpls() []Builtin {
 	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
 	for _, t := range types {
 		r = append(r, Builtin{
+			impure:     true,
 			Types:      ArgTypes{t},
 			ReturnType: TypeInt,
-			// COUNT is not a pure function. As explained in #5170, it must
-			// be evaluated anew for every row in the result set.  To avoid
-			// constant folding during normalization, mark it as impure
-			// here.
-			impure: true,
 		})
 	}
 	return r
