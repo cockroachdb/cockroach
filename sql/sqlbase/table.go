@@ -194,6 +194,13 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.Type.Kind = ColumnType_INT
 		col.Type.Width = int32(t.N)
 		colDatumType = parser.TypeInt
+		if t.IsSerial() {
+			if d.DefaultExpr != nil {
+				return nil, nil, fmt.Errorf("multiple default values specified for column %q", col.Name)
+			}
+			s := (&parser.FuncExpr{Name: &parser.QualifiedName{Base: "unique_rowid"}}).String()
+			col.DefaultExpr = &s
+		}
 	case *parser.FloatColType:
 		col.Type.Kind = ColumnType_FLOAT
 		col.Type.Precision = int32(t.Prec)

@@ -2691,7 +2691,10 @@ simple_typename:
   {
     $$.val = stringColTypeText
   }
-| SERIAL { unimplementedWithIssue(4491) }
+| SERIAL
+  {
+    $$.val = intColTypeSerial
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
