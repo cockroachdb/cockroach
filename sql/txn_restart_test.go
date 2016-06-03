@@ -722,3 +722,39 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 }
+
+// TestNonRetryableError verifies that a non-retryable error is propagated to the client.
+func TestNonRetryableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, &ctx)
+	defer cleanup(server, sqlDB)
+
+	testKey := []byte("test_key")
+	hitError := false
+	cleanupFilter := cmdFilters.AppendFilter(
+		func(args storagebase.FilterArgs) *roachpb.Error {
+			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
+				if bytes.Contains(req.Key, testKey) {
+					hitError = true
+					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
+				}
+			}
+			return nil
+		}, false)
+	defer cleanupFilter()
+
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
+SELECT * from t.test WHERE k = 'test_key';
+`); !testutils.IsError(err, "pq: testError") {
+		t.Errorf("unexpected error %s", err)
+	}
+	if !hitError {
+		t.Errorf("expected to hit error, but it didn't happen")
+	}
+}
