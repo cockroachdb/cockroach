@@ -1009,3 +1009,22 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		return nil, strconv.Quote(string(b)), nil
 	}
 }
+
+// EncodeNonsortingVarint encodes an int value using encoding/binary, appends it
+// to the supplied buffer, and returns the final buffer.
+func EncodeNonsortingVarint(appendTo []byte, x int64) []byte {
+	// Fixed size array to allocate this on the stack.
+	var scratch [binary.MaxVarintLen64]byte
+	i := binary.PutVarint(scratch[:binary.MaxVarintLen64], x)
+	return append(appendTo, scratch[:i]...)
+}
+
+// DecodeNonsortingVarint decodes a value encoded by EncodeNonsortingVarint. It
+// returns the length and value.
+func DecodeNonsortingVarint(b []byte) ([]byte, int, int64, error) {
+	i, n := binary.Varint(b)
+	if n <= 0 {
+		return nil, 0, 0, fmt.Errorf("int64 varint decoding failed: %d", n)
+	}
+	return b[n:], n, i, nil
+}

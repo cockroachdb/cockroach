@@ -18,6 +18,7 @@ package encoding
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 	"math/rand"
 	"regexp"
@@ -1231,5 +1232,14 @@ func BenchmarkPeekLengthDuration(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = PeekLength(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkEncodeNonsortingVarint(b *testing.B) {
+	bytes := make([]byte, b.N*binary.MaxVarintLen64)
+	rng, _ := randutil.NewPseudoRand()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bytes = EncodeNonsortingVarint(bytes, rng.Int63())
 	}
 }

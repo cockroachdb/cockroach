@@ -3644,6 +3644,7 @@ declare module cockroach.roachpb {
 		DECIMAL = 5,
 		DELIMITED_DECIMAL = 9,
 		DURATION = 6,
+		TUPLE = 10,
 		TIMESERIES = 100,
 		
 }

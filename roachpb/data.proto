@@ -70,6 +70,10 @@ enum ValueType {
   DELIMITED_DECIMAL = 9;
   DURATION = 6;
 
+  // TUPLE represents a DTuple, encoded as repeated pairs of varint field number
+  // followed by a value encoded Datum.
+  TUPLE = 10;
+
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
 }
