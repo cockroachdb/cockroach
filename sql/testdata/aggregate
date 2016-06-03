@@ -17,10 +17,10 @@ INSERT INTO kv VALUES
 
 
 # Aggregate expression triggers aggregation (thus 1 row) even if it simplifies to a constant.
-query I rowsort
-SELECT MIN(1) FROM kv
+query IIIRRRBB rowsort
+SELECT MIN(1), COUNT(1), MAX(1), AVG(1), SUM(1), STDDEV(1), BOOL_AND(true), BOOL_OR(true)
 ----
-1
+1 1 1 1 1 NULL true true
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
 query I rowsort
@@ -63,15 +63,8 @@ SELECT COUNT(*), k FROM kv GROUP BY 2
 1 7
 1 8
 
-# Rendering the group column should work.
-query II rowsort
-SELECT v, COUNT(DISTINCT w) FROM kv GROUP BY v, COUNT(DISTINCT w)
-----
-2 1
-2 1
-4 1
-4 1
-NULL 1
+query error aggregate functions are not allowed in GROUP BY
+SELECT * FROM kv GROUP BY v, COUNT(DISTINCT w)
 
 query error invalid column index: 5 not in range \[1, 2\]
 SELECT COUNT(*), k FROM kv GROUP BY 5
