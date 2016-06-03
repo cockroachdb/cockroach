@@ -76,13 +76,13 @@ deployment:
       - aws configure set region us-east-1
       - build/builder.sh build/build-race-binaries.sh
       - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.race
-  jemalloc:
-    branch: jemalloc
+  stdmalloc:
+    branch: stdmalloc
     commands:
       - aws configure set region us-east-1
-      - build/builder.sh build/build-jemalloc-binaries.sh
-      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.jemalloc
-      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" static-tests.jemalloc.tar.gz
+      - build/builder.sh build/build-stdmalloc-binaries.sh
+      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.stdmalloc
+      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" static-tests.stdmalloc.tar.gz
   beta:
     branch: /branch-beta-[0-9]+/
     commands:
