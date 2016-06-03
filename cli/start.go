@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/pprof"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -38,10 +39,12 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 
 	"github.com/spf13/cobra"
 )
@@ -121,6 +124,43 @@ func initInsecure() error {
 	return nil
 }
 
+func initMemProfile(dir string) {
+	memProfileInterval := envutil.EnvOrDefaultDuration("memprof_interval", -1)
+	if memProfileInterval == -1 {
+		return
+	}
+	if min := time.Second; memProfileInterval < min {
+		log.Infof("fixing excessively small memory profiling interval: %s -> %s",
+			memProfileInterval, min)
+		memProfileInterval = min
+	}
+
+	log.Infof("writing memory profiles to %s every %s", dir, memProfileInterval)
+
+	go func() {
+		t := time.NewTicker(memProfileInterval)
+		for {
+			<-t.C
+
+			func() {
+				const format = "2006-01-02T15_04_05.999"
+				path := filepath.Join(dir, "memprof."+timeutil.Now().Format(format))
+				f, err := os.Create(path)
+				if err != nil {
+					log.Warningf("%s", err)
+					return
+				}
+				defer f.Close()
+				if err = pprof.WriteHeapProfile(f); err != nil {
+					log.Warningf("can't write %s: %s\n", path, err)
+					return
+				}
+				log.Infof("%s", path)
+			}()
+		}
+	}()
+}
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -162,6 +202,8 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
 	log.Infof(info.Short())
+
+	initMemProfile(f.Value.String())
 
 	// Default user for servers.
 	serverCtx.User = security.NodeUser
