@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -386,6 +387,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if runFilter.Load().(bool) {
 				if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
+					log.Infof("wtf: %T, %+v", et, et)
 					return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
 				}
 			}

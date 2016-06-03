@@ -2493,10 +2493,7 @@ func (r *Replica) ChangeReplicas(
 	changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor,
 ) error {
 
-	// Validate the request and prepare the new descriptor.
-	updatedDesc := *desc
-	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
-
+	// Validate the request.
 	found := -1       // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
@@ -2510,7 +2507,9 @@ func (r *Replica) ChangeReplicas(
 	}
 
 	rangeID := desc.RangeID
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
+	var updatedDesc roachpb.RangeDescriptor
 	switch changeType {
 	case roachpb.ADD_REPLICA:
 		// If the replica exists on the remote node, no matter in which store,
@@ -2518,9 +2517,30 @@ func (r *Replica) ChangeReplicas(
 		if nodeUsed {
 			return util.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
 		}
+
+		// We're going to run a small transaction to reserve the next replica ID
+		// before we send a snapshot. This prevents the case of the snapshot being
+		// sent with an invalid replica ID.
+		{
+			reservingDesc := *desc
+			replica.ReplicaID = reservingDesc.NextReplicaID
+			reservingDesc.NextReplicaID++
+
+			// We're going to run a small transaction so we can reserve the replica ID.
+			if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
+				b := txn.NewBatch()
+				if err := updateRangeDescriptor(b, descKey, desc, &reservingDesc); err != nil {
+					return err
+				}
+				return txn.CommitInBatch(b)
+			}); pErr != nil {
+				return util.Errorf("change replicas of %d failed: %s", rangeID, pErr)
+			}
+			desc = &reservingDesc
 		}
-		replica.ReplicaID = updatedDesc.NextReplicaID
-		updatedDesc.NextReplicaID++
+
+		updatedDesc = *desc
+		updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), updatedDesc.Replicas...)
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 
 		snap, err := r.GetSnapshot()
@@ -2549,16 +2569,16 @@ func (r *Replica) ChangeReplicas(
 		if found == -1 {
 			return util.Errorf("removing replica %v which is not present in range %d", replica, rangeID)
 		}
-		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
-		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
+		updatedDesc = *desc
+		updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), updatedDesc.Replicas...)
+		updatedDesc.Replicas = append(updatedDesc.Replicas[:found], updatedDesc.Replicas[found+1:]...)
 	}
 
 	if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
+		b := txn.NewBatch()
+
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
-		b := &client.Batch{}
-		descKey := keys.RangeDescriptorKey(updatedDesc.StartKey)
-
 		if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
 			return err
 		}
