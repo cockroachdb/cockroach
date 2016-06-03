@@ -24,7 +24,47 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/coreos/etcd/raft"
 )
+
+func TestGetQuorumAppliedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		applied  uint64
+		progress []uint64
+		padding  uint64
+		expected uint64
+	}{
+		// Basic cases.
+		{1, []uint64{1}, 0, 1},
+		{2, []uint64{1, 2}, 0, 1},
+		{3, []uint64{1, 2, 3}, 0, 2},
+		{4, []uint64{1, 2, 3, 4}, 0, 2},
+		{5, []uint64{1, 2, 3, 4, 5}, 0, 3},
+		// Sorting.
+		{5, []uint64{5, 4, 3, 2, 1}, 0, 3},
+		// Padding.
+		{3, []uint64{1, 2, 3}, 1, 1},
+		{3, []uint64{1, 2, 3}, 2, 1},
+		{3, []uint64{1, 2, 3}, 3, 1},
+		// Applied limits progress values.
+		{1, []uint64{2, 2, 2}, 0, 1},
+	}
+	for i, c := range testCases {
+		status := &raft.Status{
+			Applied:  c.applied,
+			Progress: make(map[uint64]raft.Progress),
+		}
+		for j, v := range c.progress {
+			status.Progress[uint64(j)] = raft.Progress{Match: v}
+		}
+		quorumAppliedIndex := getQuorumAppliedIndex(status, c.padding)
+		if c.expected != quorumAppliedIndex {
+			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumAppliedIndex)
+		}
+	}
+}
 
 // TestGetTruncatableIndexes verifies that the correctly returns when there are
 // indexes to be truncated.
