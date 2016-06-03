@@ -1084,10 +1084,17 @@ func countImpls() []Builtin {
 	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
 	for _, t := range types {
 		r = append(r, Builtin{
-			impure:     true, // COUNT(1) is not a const. #5170.
 			Types:      ArgTypes{t},
 			ReturnType: TypeInt,
-			fn:         identityFn,
+			// COUNT is not a pure function. As explained in #5170, it must
+			// be evaluated anew for every row in the result set.  To avoid
+			// constant folding during normalization, mark it as impure
+			// here.  Also since it is never directly evaluated, it doesn't
+			// need a real function.
+			impure: true,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return nil, fmt.Errorf("COUNT cannot be evaluated as a simple expression")
+			},
 		})
 	}
 	return r
