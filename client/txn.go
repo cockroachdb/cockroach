@@ -415,7 +415,7 @@ func (txn *Txn) CommitOrCleanup() error {
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
 func (txn *Txn) UpdateDeadlineMaybe(deadline roachpb.Timestamp) bool {
-	if txn.deadline == nil || txn.deadline.Less(deadline) {
+	if txn.deadline == nil || deadline.Less(*txn.deadline) {
 		txn.deadline = &deadline
 		return true
 	}
