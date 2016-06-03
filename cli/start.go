@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -125,7 +126,7 @@ func initInsecure() error {
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
-func runStart(_ *cobra.Command, _ []string) error {
+func runStart(_ *cobra.Command, args []string) error {
 	if startBackground {
 		return rerunBackground()
 	}
@@ -264,11 +265,18 @@ func runStart(_ *cobra.Command, _ []string) error {
 
 // rerunBackground restarts the current process in the background.
 func rerunBackground() error {
-	args := append([]string(nil), os.Args...)
-	// TODO(bdarnell): this looks silly in ps. Try to remove the
-	// `--background` flag instead of adding a second flag to reverse
-	// it.
-	args = append(args, "--background=false")
+	args := make([]string, 0, len(os.Args))
+	foundBackground := false
+	for _, arg := range os.Args {
+		if arg == "--background" || strings.HasPrefix(arg, "--background=") {
+			foundBackground = true
+			continue
+		}
+		args = append(args, arg)
+	}
+	if !foundBackground {
+		args = append(args, "--background=false")
+	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
