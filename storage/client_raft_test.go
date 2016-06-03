@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -731,8 +732,8 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
-	if err := addReplica(2, origDesc); err == nil {
-		t.Fatal("Expected error calling ChangeReplicas with stale RangeDescriptor")
+	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of \d+ failed`) {
+		t.Fatalf("got unexpected error: %v", err)
 	}
 
 	// Both addReplica calls attempted to use origDesc.NextReplicaID.
