@@ -525,16 +525,16 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\000:\010\230\240\037\000\270\240\037\001\"|\n\017AbortCacheEntry\022\024\n\003key\030\001 "
     "\001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockro"
     "ach.roachpb.TimestampB\004\310\336\037\000\022\026\n\010priority\030"
-    "\003 \001(\005B\004\310\336\037\000:\004\270\240\037\001*\242\001\n\tValueType\022\013\n\007UNKNO"
+    "\003 \001(\005B\004\310\336\037\000:\004\270\240\037\001*\255\001\n\tValueType\022\013\n\007UNKNO"
     "WN\020\000\022\010\n\004NULL\020\007\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BY"
     "TES\020\003\022\023\n\017DELIMITED_BYTES\020\010\022\010\n\004TIME\020\004\022\013\n\007"
     "DECIMAL\020\005\022\025\n\021DELIMITED_DECIMAL\020\t\022\014\n\010DURA"
-    "TION\020\006\022\016\n\nTIMESERIES\020d*>\n\021ReplicaChangeT"
-    "ype\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001"
-    "\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020"
-    "\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStat"
-    "us\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTE"
-    "D\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3462);
+    "TION\020\006\022\t\n\005TUPLE\020\n\022\016\n\nTIMESERIES\020d*>\n\021Rep"
+    "licaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOV"
+    "E_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SE"
+    "RIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Tran"
+    "sactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020"
+    "\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3473);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -592,6 +592,7 @@ bool ValueType_IsValid(int value) {
     case 7:
     case 8:
     case 9:
+    case 10:
     case 100:
       return true;
     default:

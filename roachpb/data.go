@@ -382,20 +382,11 @@ func (v Value) dataBytes() []byte {
 	return v.RawBytes[headerSize:]
 }
 
-// encodeGoVarint encodes an int value using encoding/binary, appends it to the
-// supplied buffer, and returns the final buffer.
-func encodeGoVarint(appendTo []byte, x int64) []byte {
-	// Fixed size array to allocate this on the stack.
-	var scratch [binary.MaxVarintLen64]byte
-	i := binary.PutVarint(scratch[:binary.MaxVarintLen64], x)
-	return append(appendTo, scratch[:i]...)
-}
-
 // EncodeIntValue encodes an int value, appends it to the supplied buffer, and
 // returns the final buffer.
 func EncodeIntValue(appendTo []byte, i int64) []byte {
 	appendTo = append(appendTo, byte(ValueType_INT))
-	return encodeGoVarint(appendTo, i)
+	return encoding.EncodeGoVarint(appendTo, i)
 }
 
 // EncodeFloatValue encodes a float value, appends it to the supplied buffer,
@@ -410,7 +401,7 @@ func EncodeFloatValue(appendTo []byte, f float64) []byte {
 func EncodeBytesValue(appendTo []byte, data []byte, delimited bool) []byte {
 	if delimited {
 		appendTo = append(appendTo, byte(ValueType_DELIMITED_BYTES))
-		appendTo = encodeGoVarint(appendTo, int64(len(data)))
+		appendTo = encoding.EncodeGoVarint(appendTo, int64(len(data)))
 	} else {
 		appendTo = append(appendTo, byte(ValueType_BYTES))
 	}
@@ -461,12 +452,7 @@ func DecodeIntValue(b []byte) ([]byte, int64, error) {
 	if tag := ValueType(b[0]); tag != ValueType_INT {
 		return nil, 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
-	b = b[1:]
-	i, n := binary.Varint(b)
-	if n <= 0 {
-		return nil, 0, fmt.Errorf("int64 varint decoding failed: %d", n)
-	}
-	return b[n:], i, nil
+	return encoding.DecodeGoVarint(b[1:])
 }
 
 // DecodeFloatValue decodes a value encoded by EncodeFloatValue.
@@ -496,11 +482,13 @@ func DecodeBytesValue(b []byte) ([]byte, []byte, error) {
 	case ValueType_BYTES:
 		return nil, b, nil
 	case ValueType_DELIMITED_BYTES:
-		i, n := binary.Varint(b)
-		if n <= 0 {
-			return nil, nil, fmt.Errorf("int64 varint decoding failed: %d", n)
+		var i int64
+		var err error
+		b, i, err = encoding.DecodeGoVarint(b)
+		if err != nil {
+			return nil, nil, err
 		}
-		return b[n+int(i):], b[n : n+int(i)], nil
+		return b[int(i):], b[:int(i)], nil
 	}
 	return nil, nil, fmt.Errorf(
 		"value type is not %s or %s: %s", ValueType_BYTES, ValueType_DELIMITED_BYTES, tag)
@@ -530,12 +518,14 @@ func DecodeDecimalValue(b []byte) ([]byte, *inf.Dec, error) {
 		d, err := encoding.DecodeNonsortingDecimal(b, nil)
 		return nil, d, err
 	case ValueType_DELIMITED_DECIMAL:
-		i, n := binary.Varint(b)
-		if n <= 0 {
-			return nil, nil, fmt.Errorf("int64 varint decoding failed: %d", n)
+		var i int64
+		var err error
+		b, i, err = encoding.DecodeGoVarint(b)
+		if err != nil {
+			return nil, nil, err
 		}
-		d, err := encoding.DecodeNonsortingDecimal(b[n:n+int(i)], nil)
-		return b[n+int(i):], d, err
+		d, err := encoding.DecodeNonsortingDecimal(b[:int(i)], nil)
+		return b[int(i):], d, err
 	}
 	return nil, nil, fmt.Errorf("value type is not %s or %s: %s", ValueType_DECIMAL, ValueType_DELIMITED_DECIMAL, tag)
 }
@@ -622,6 +612,14 @@ func (v *Value) SetDecimal(dec *inf.Dec) error {
 	return nil
 }
 
+// SetTuple sets the tuple bytes and tag field of the receiver and clears the
+// checksum.
+func (v *Value) SetTuple(data []byte) {
+	v.RawBytes = make([]byte, headerSize+len(data))
+	copy(v.dataBytes(), data)
+	v.setTag(ValueType_TUPLE)
+}
+
 // GetBytes returns the bytes field of the receiver. If the tag is not
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
@@ -694,6 +692,15 @@ func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 	return ts, v.GetProto(&ts)
 }
 
+// GetTuple returns the tuple bytes of the receiver. If the tag is not TUPLE an
+// error will be returned.
+func (v Value) GetTuple() ([]byte, error) {
+	if tag := v.GetTag(); tag != ValueType_TUPLE {
+		return nil, fmt.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
+	}
+	return v.dataBytes(), nil
+}
+
 // PeekValueLength returns the length of the encoded value at the start of b.
 // Note: If this function succeeds, it's not a guarantee that decoding the value
 // will succeed.
@@ -706,12 +713,12 @@ func PeekValueLength(b []byte) (int, error) {
 	case ValueType_NULL:
 		return 1, nil
 	case ValueType_INT:
-		n, _, err := getGoVarintLen(b[1:])
+		n, _, err := encoding.GetGoVarintLen(b[1:])
 		return 1 + n, err
 	case ValueType_FLOAT:
 		return 9, nil
 	case ValueType_DELIMITED_BYTES, ValueType_DELIMITED_DECIMAL:
-		n, i, err := getGoVarintLen(b[1:])
+		n, i, err := encoding.GetGoVarintLen(b[1:])
 		return 1 + n + i, err
 	case ValueType_TIME:
 		n, err := encoding.GetMultiVarintLen(b[1:], 2)
@@ -723,14 +730,6 @@ func PeekValueLength(b []byte) (int, error) {
 		return 0, util.Errorf("not a self-delimiting tag: %q", tag)
 	}
 	return 0, util.Errorf("unknown tag %q", tag)
-}
-
-func getGoVarintLen(b []byte) (int, int, error) {
-	i, n := binary.Varint(b)
-	if n <= 0 {
-		return 0, 0, util.Errorf("invalid varint")
-	}
-	return n, int(i), nil
 }
 
 var crc32Pool = sync.Pool{

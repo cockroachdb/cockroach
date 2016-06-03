@@ -18,7 +18,6 @@ package roachpb
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"math"
 	"math/rand"
@@ -868,14 +867,6 @@ func TestLeaseCovers(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeGoVarint(b *testing.B) {
-	bytes := make([]byte, b.N*binary.MaxVarintLen64)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		bytes = encodeGoVarint(bytes, int64(i))
-	}
-}
-
 func BenchmarkValueSetBytes(b *testing.B) {
 	v := Value{}
 	bytes := make([]byte, 16)
@@ -931,6 +922,15 @@ func BenchmarkValueSetDecimal(b *testing.B) {
 		if err := v.SetDecimal(dec); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func BenchmarkValueSetTuple(b *testing.B) {
+	v := Value{}
+	bytes := make([]byte, 16)
+
+	for i := 0; i < b.N; i++ {
+		v.SetTuple(bytes)
 	}
 }
 
@@ -1005,6 +1005,18 @@ func BenchmarkValueGetDecimal(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		if _, err := v.GetDecimal(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetTuple(b *testing.B) {
+	v := Value{}
+	bytes := make([]byte, 16)
+	v.SetTuple(bytes)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetTuple(); err != nil {
 			b.Fatal(err)
 		}
 	}

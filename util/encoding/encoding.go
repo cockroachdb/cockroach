@@ -1009,3 +1009,31 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		return nil, strconv.Quote(string(b)), nil
 	}
 }
+
+// EncodeGoVarint encodes an int value using encoding/binary, appends it to the
+// supplied buffer, and returns the final buffer.
+func EncodeGoVarint(appendTo []byte, x int64) []byte {
+	// Fixed size array to allocate this on the stack.
+	var scratch [binary.MaxVarintLen64]byte
+	i := binary.PutVarint(scratch[:binary.MaxVarintLen64], x)
+	return append(appendTo, scratch[:i]...)
+}
+
+// DecodeGoVarint decodes a value encoded by EncodeGoVarint.
+func DecodeGoVarint(b []byte) ([]byte, int64, error) {
+	i, n := binary.Varint(b)
+	if n <= 0 {
+		return nil, 0, fmt.Errorf("int64 varint decoding failed: %d", n)
+	}
+	return b[n:], i, nil
+}
+
+// GetGoVarintLen returns the length and value of a value encoded by
+// EncodeGoVarint.
+func GetGoVarintLen(b []byte) (int, int, error) {
+	i, n := binary.Varint(b)
+	if n <= 0 {
+		return 0, 0, util.Errorf("invalid varint")
+	}
+	return n, int(i), nil
+}
