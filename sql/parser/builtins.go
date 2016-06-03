@@ -664,12 +664,16 @@ var Builtins = map[string][]Builtin{
 	// These functions are handled in sql/group.go and are not evaluated normally.
 	//
 	// The functions are split into two groups when it comes to handling constant
-	// literal arguments. If the result of the aggregate function with constant
-	// arguments is dependent on the number of rows it is run across (eg. SUM(1)),
-	// it should be marked as impure. If the result of the aggregate function with
-	// constant arguments is independent on the number of rows it is run across
-	// (eg. BOOL_AND(true)), it should provide an fn implementation that handles this
-	// constant argument case.
+	// literal arguments:
+	// - If the result of the aggregate function with constant arguments
+	//   is dependent on the number of rows it is run across (COUNT,
+	//   SUM, VARIANCE, STDDEV), it should be marked as impure and not
+	//   provide an eval fn.
+	// - If the result of the aggregate function with constant arguments
+	//   is independent on the number of rows it is run across (AVG,
+	//   BOOL_AND, BOOL_OR), it should not be marked as impure and
+	//   provide an fn implementation that handles this constant
+	//   argument case.
 
 	"avg": {
 		Builtin{
@@ -1084,10 +1088,13 @@ func countImpls() []Builtin {
 	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
 	for _, t := range types {
 		r = append(r, Builtin{
-			impure:     true, // COUNT(1) is not a const. #5170.
 			Types:      ArgTypes{t},
 			ReturnType: TypeInt,
-			fn:         identityFn,
+			// COUNT is not a pure function. As explained in #5170, it must
+			// be evaluated anew for every row in the result set.  To avoid
+			// constant folding during normalization, mark it as impure
+			// here.
+			impure: true,
 		})
 	}
 	return r
