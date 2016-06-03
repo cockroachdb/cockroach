@@ -241,8 +241,10 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(rng.Desc().StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); !ok || err != nil {
-		t.Fatalf("fetching range descriptor yielded %t, %s", ok, err)
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatalf("range descriptor key %s was not found", key)
 	}
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
@@ -257,7 +259,9 @@ func TestReplicateRange(t *testing.T) {
 		}
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
+			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); err != nil {
+				return err
+			} else if !ok {
 				return util.Errorf("failed to resolve %s", key.AsRawKey())
 			}
 			if !reflect.DeepEqual(metaDesc, desc) {
