@@ -1087,6 +1087,7 @@ func countImpls() []Builtin {
 			impure:     true, // COUNT(1) is not a const. #5170.
 			Types:      ArgTypes{t},
 			ReturnType: TypeInt,
+			fn:         identityFn,
 		})
 	}
 	return r
