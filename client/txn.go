@@ -470,6 +470,15 @@ type TxnExecOptions struct {
 	MinInitialTimestamp roachpb.Timestamp
 }
 
+// AutoCommitError wraps a non-retryable error coming from auto-commit.
+type AutoCommitError struct {
+	cause error
+}
+
+func (e *AutoCommitError) Error() string {
+	return e.cause.Error()
+}
+
 // Exec executes fn in the context of a distributed transaction.
 // Execution is controlled by opt (see comments in TxnExecOptions).
 //
@@ -534,6 +543,10 @@ RetryLoop:
 		if (err == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
+			// Wrap a non-retryable error so that a caller can inspect.
+			if _, retryable := err.(*roachpb.RetryableTxnError); err != nil && !retryable {
+				err = &AutoCommitError{cause: err}
+			}
 		}
 
 		if err == nil {

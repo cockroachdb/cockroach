@@ -449,6 +449,22 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
 		err := txnState.txn.Exec(execOpt, txnClosure)
+
+		// Update the Err field of the last result if the error was coming from
+		// auto commit. The error was generated outside of the txn closure, so it was not
+		// set in any result.
+		if err != nil {
+			lastResult := &results[len(results)-1]
+			if aErr, ok := err.(*client.AutoCommitError); ok {
+				lastResult.Err = aErr
+				e.txnAbortCount.Inc(1)
+				txnState.txn.CleanupOnError(err)
+			}
+			if lastResult.Err == nil {
+				log.Fatalf("error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
+			}
+		}
+
 		res.ResultList = append(res.ResultList, results...)
 		// Now make sense of the state we got into and update txnState.
 		if txnState.State == RestartWait && txnState.commitSeen {
@@ -535,8 +551,10 @@ func runTxnAttempt(
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
 		stmts, planMaker, txnState,
 		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */)
-	if opt.AutoCommit && len(remainingStmts) > 0 {
-		panic("implicit txn failed to execute all stmts")
+	if opt.AutoCommit {
+		if len(remainingStmts) > 0 {
+			panic("implicit txn failed to execute all stmts")
+		}
 	}
 	planMaker.resetTxn()
 	return results, remainingStmts, err
