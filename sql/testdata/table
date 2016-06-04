@@ -37,6 +37,16 @@ SHOW TABLES FROM test
 Table
 a
 
+query TT colnames
+SHOW CREATE TABLE a
+----
+Table CreateTable
+a     CREATE TABLE a (
+         id INT NOT NULL,
+	 CONSTRAINT "primary" PRIMARY KEY (id)
+      )
+
+
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
@@ -50,6 +60,21 @@ CREATE TABLE c (
   INDEX c_foo_bar_idx (foo ASC, bar DESC),
   UNIQUE (bar)
 )
+
+query TT colnames
+SHOW CREATE TABLE c
+----
+Table CreateTable
+c     CREATE TABLE c (
+          id INT NOT NULL,
+          foo INT NULL,
+          bar INT NULL,
+          CONSTRAINT "primary" PRIMARY KEY (id),
+          INDEX c_foo_idx (foo),
+          INDEX c_foo_idx1 (foo),
+          INDEX c_foo_bar_idx (foo, bar),
+          UNIQUE INDEX c_bar_key (bar)
+      )
 
 query TTBITTB colnames
 SHOW INDEXES FROM c
