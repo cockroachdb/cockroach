@@ -28,13 +28,10 @@ import (
 	"strings"
 
 	"github.com/chzyer/readline"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
-
-	"github.com/cockroachdb/pq"
 )
 
 const (
@@ -300,7 +297,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			addHistory(strings.Join(stmt, " "))
 		}
 
-		if exitErr = runPrettyQuery(conn, os.Stdout, makeQuery(fullStmt)); exitErr != nil {
+		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), true); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
 
@@ -313,33 +310,10 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(conn *sqlConn, stmts []string) error {
+func runStatements(conn *sqlConn, stmts []string, pretty bool) error {
 	for _, stmt := range stmts {
-		q := makeQuery(stmt)
-		for {
-			cols, allRows, tag, err := runQuery(conn, q)
-			if err != nil {
-				if err == pq.ErrNoMoreResults {
-					break
-				}
-				return err
-			}
-
-			if len(cols) == 0 {
-				// No result selected, inform the user.
-				fmt.Fprintln(os.Stdout, tag)
-			} else {
-				// Some results selected, inform the user about how much data to expect.
-				fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows),
-					util.Pluralize(int64(len(allRows))))
-
-				// Then print the results themselves.
-				fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
-				for _, row := range allRows {
-					fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
-				}
-			}
-			q = nextResult
+		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt), pretty); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -359,7 +333,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts)
+		return runStatements(conn, sqlCtx.execStmts, sqlCtx.prettyFmt)
 	}
 	return runInteractive(conn)
 }
