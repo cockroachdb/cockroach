@@ -98,22 +98,7 @@ func (p *planner) makeUpsertHelper(
 	var normExprs []parser.TypedExpr
 	qvals := make(qvalMap)
 	for _, expr := range untupledExprs {
-		expandedExpr, err := p.replaceSubqueries(expr, 1)
-		if err != nil {
-			return nil, err
-		}
-
-		resolvedExpr, err := resolveQNames(expandedExpr, tables, qvals, &p.qnameVisitor)
-		if err != nil {
-			return nil, err
-		}
-
-		typedExpr, err := parser.TypeCheck(resolvedExpr, &p.semaCtx, parser.NoTypePreference)
-		if err != nil {
-			return nil, err
-		}
-
-		normExpr, err := p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
+		normExpr, err := p.analyzeExpr(expr, tables, qvals, parser.NoTypePreference, false, "")
 		if err != nil {
 			return nil, err
 		}

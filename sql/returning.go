@@ -130,20 +130,12 @@ func (rh *returningHelper) startPlans() error {
 // returningHelper have the right type.
 func (rh *returningHelper) TypeCheck() error {
 	for i, expr := range rh.untypedExprs {
-		baseExpr, bErr := rh.p.replaceSubqueries(expr, 1)
-		if bErr != nil {
-			return bErr
-		}
-
 		desired := parser.NoTypePreference
 		if len(rh.desiredTypes) > i {
 			desired = rh.desiredTypes[i]
 		}
-		typedExpr, err := parser.TypeCheck(baseExpr, &rh.p.semaCtx, desired)
-		if err != nil {
-			return err
-		}
-		typedExpr, err = rh.p.parser.NormalizeExpr(&rh.p.evalCtx, typedExpr)
+
+		typedExpr, err := rh.p.analyzeExpr(expr, nil, nil, desired, false, "")
 		if err != nil {
 			return err
 		}

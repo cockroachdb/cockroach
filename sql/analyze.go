@@ -1562,3 +1562,48 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 		parser.DNull,
 	)
 }
+
+// analyzeExpr performs semantic analysis of an axpression, including:
+// - replacing sub-queries by a sql.subquery node;
+// - resolving qnames (optional);
+// - type checking (with optional type enforcement);
+// - normalization.
+// The parameters tables and qvals, if non-nil, indicate qname resolution
+// should be performed. The qvals map will be filled as a result.
+func (p *planner) analyzeExpr(
+	raw parser.Expr,
+	tables []*tableInfo, qvals qvalMap,
+	expectedType parser.Datum, requireType bool, expectedContext string,
+) (parser.TypedExpr, error) {
+	// Replace the sub-queries.
+	replaced, err := p.replaceSubqueries(raw, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	// Perform optional qname resolution.
+	var resolved parser.Expr
+	if tables == nil || qvals == nil {
+		resolved = replaced
+	} else {
+		resolved, err = resolveQNames(replaced, tables, qvals, &p.qnameVisitor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Type check.
+	var typedExpr parser.TypedExpr
+	if requireType {
+		typedExpr, err = parser.TypeCheckAndRequire(resolved, &p.semaCtx,
+			expectedType, expectedContext)
+	} else {
+		typedExpr, err = parser.TypeCheck(resolved, &p.semaCtx, expectedType)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Normalize.
+	return p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
+}
