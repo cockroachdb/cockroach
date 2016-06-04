@@ -640,11 +640,12 @@ func Example_sql_escape() {
 	// 7 rows
 	// s	d
 	// foo	printable ASCII
-	// "foo\n"	non-printable ASCII
-	// "\u03ba\u1f79\u03c3\u03bc\u03b5"	printable UTF8
-	// "\u00f1"	printable UTF8 using escapes
+	// foo
+	// 	non-printable ASCII
+	// κόσμε	printable UTF8
+	// ñ	printable UTF8 using escapes
 	// "\x01"	non-printable UTF8 string
-	// "\u070885"	UTF8 string with RTL char
+	// ܈85	UTF8 string with RTL char
 	// "\xc3("	non-UTF8 string
 }
 
