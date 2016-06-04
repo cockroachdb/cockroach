@@ -6,6 +6,23 @@ CREATE TABLE kv (
   s STRING
 )
 
+# Aggregate functions return NULL if there are no rows.
+query IIIRRRRBB
+SELECT MIN(1), MAX(1), COUNT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false) FROM kv
+----
+NULL NULL 0 NULL NULL NULL NULL NULL NULL
+
+query IIIRRRRBB
+SELECT MIN(v), MAX(v), COUNT(v), AVG(v), SUM(1), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1) FROM kv
+----
+NULL NULL 0 NULL NULL NULL NULL NULL NULL
+
+# Aggregate functions triggers aggregation and computation when there is no source.
+query IIIRRRRBB 
+SELECT MIN(1), COUNT(1), MAX(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true)
+----
+1 1 1 1 1 NULL NULL true true
+
 statement OK
 INSERT INTO kv VALUES
 (1, 2, 3, 'a'),
@@ -15,12 +32,11 @@ INSERT INTO kv VALUES
 (7, 2, 2, 'b'),
 (8, 4, 2, 'A')
 
-
-# Aggregate expression triggers aggregation (thus 1 row) even if it simplifies to a constant.
-query IIIRRRBB rowsort
-SELECT MIN(1), COUNT(1), MAX(1), AVG(1), SUM(1), STDDEV(1), BOOL_AND(true), BOOL_OR(true)
+# Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
+query IIIRRRRBB 
+SELECT MIN(1), COUNT(1), MAX(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true) FROM kv
 ----
-1 1 1 1 1 NULL true true
+1 6 1 1 6 0 0 true true
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
 query I rowsort
@@ -611,7 +627,7 @@ EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 0 0                (3.0) ROW
 
 query RRR
-SELECT AVG(1::int), AVG(2::float), AVG(3::decimal)
+SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
 ----
 1 2 3
 
