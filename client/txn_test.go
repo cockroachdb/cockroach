@@ -769,3 +769,37 @@ func TestBatchMixRawRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUpdateDeadlineMaybe(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := NewDB(newTestSender(nil, nil))
+	txn := NewTxn(context.Background(), *db)
+
+	if txn.deadline != nil {
+		t.Errorf("unexpected initial deadline: %s", txn.deadline)
+	}
+
+	deadline := roachpb.Timestamp{WallTime: 10, Logical: 1}
+	if !txn.UpdateDeadlineMaybe(deadline) {
+		t.Errorf("expected update, but it didn't happen")
+	}
+	if !txn.deadline.Equal(deadline) {
+		t.Errorf("unexpected deadline: %s", txn.deadline)
+	}
+
+	futureDeadline := roachpb.Timestamp{WallTime: 11, Logical: 1}
+	if txn.UpdateDeadlineMaybe(futureDeadline) {
+		t.Errorf("expected no update, but update happened")
+	}
+	if !txn.deadline.Equal(deadline) {
+		t.Errorf("unexpected deadline: %s", txn.deadline)
+	}
+
+	pastDeadline := roachpb.Timestamp{WallTime: 9, Logical: 1}
+	if !txn.UpdateDeadlineMaybe(pastDeadline) {
+		t.Errorf("expected update, but it didn't happen")
+	}
+	if !txn.deadline.Equal(pastDeadline) {
+		t.Errorf("unexpected deadline: %s", txn.deadline)
+	}
+}
