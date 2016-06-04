@@ -42,7 +42,7 @@ func TestRunQuery(t *testing.T) {
 	var b bytes.Buffer
 
 	// Non-query statement.
-	if err := runPrettyQuery(conn, &b, makeQuery(`SET DATABASE=system`)); err != nil {
+	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`), true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, _, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`))
+	cols, rows, _, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,8 +74,8 @@ SET
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
 	}
 
-	if err := runPrettyQuery(conn, &b,
-		makeQuery(`SHOW COLUMNS FROM system.namespace`)); err != nil {
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SHOW COLUMNS FROM system.namespace`), true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,8 +95,8 @@ SET
 	b.Reset()
 
 	// Test placeholders.
-	if err := runPrettyQuery(conn, &b,
-		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")); err != nil {
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"), true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,8 +113,8 @@ SET
 	b.Reset()
 
 	// Test multiple results.
-	if err := runPrettyQuery(conn, &b,
-		makeQuery(`SELECT 1; SELECT 2, 3; SELECT 'hello'`)); err != nil {
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SELECT 1; SELECT 2, 3; SELECT 'hello'`), true); err != nil {
 		t.Fatal(err)
 	}
 

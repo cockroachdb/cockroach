@@ -45,6 +45,10 @@ type sqlContext struct {
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
+
+	// prettyFmt indicates whether tables should be pretty-formatted in
+	// the output during non-interactive execution.
+	prettyFmt bool
 }
 
 type debugContext struct {
