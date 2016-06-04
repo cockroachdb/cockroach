@@ -534,27 +534,9 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 		return nil
 	}
 
-	var untypedFilter parser.Expr
 	var err error
-	untypedFilter, err = s.planner.replaceSubqueries(where.Expr, 1)
-	if err != nil {
-		return err
-	}
-
-	untypedFilter, err = s.resolveQNames(untypedFilter)
-	if err != nil {
-		return err
-	}
-
-	s.filter, err = parser.TypeCheckAndRequire(untypedFilter, &s.planner.semaCtx,
-		parser.TypeBool, "WHERE")
-	if err != nil {
-		return err
-	}
-
-	// Normalize the expression (this will also evaluate any branches that are
-	// constant).
-	s.filter, err = s.planner.parser.NormalizeExpr(&s.planner.evalCtx, s.filter)
+	s.filter, err = s.planner.analyzeExpr(where.Expr, []*tableInfo{&s.source.info}, s.qvals,
+		parser.TypeBool, true, "WHERE")
 	if err != nil {
 		return err
 	}
@@ -638,22 +620,8 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// manipulations to the expression.
 	outputName = getRenderColName(target)
 
-	// Resolve qualified names. This has the side-effect of normalizing any
-	// qualified name found.
-	replaced, err := s.planner.replaceSubqueries(target.Expr, 1)
-	if err != nil {
-		return err
-	}
-	resolved, err := s.resolveQNames(replaced)
-	if err != nil {
-		return err
-	}
-	typedResolved, err := parser.TypeCheck(resolved, &s.planner.semaCtx, desiredType)
-	if err != nil {
-		return err
-	}
-
-	normalized, err := s.planner.parser.NormalizeExpr(&s.planner.evalCtx, typedResolved)
+	normalized, err := s.planner.analyzeExpr(target.Expr,
+		[]*tableInfo{&s.source.info}, s.qvals, desiredType, false, "")
 	if err != nil {
 		return err
 	}

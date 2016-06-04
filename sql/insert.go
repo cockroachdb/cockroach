@@ -54,7 +54,7 @@ type insertNode struct {
 func (p *planner) Insert(
 	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
 ) (planNode, error) {
-	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.INSERT)
+	en, err := p.makeEditNode(n.Table, autoCommit, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
@@ -158,10 +158,6 @@ func (p *planner) Insert(
 		}
 	}
 
-	if err := en.rh.TypeCheck(); err != nil {
-		return nil, err
-	}
-
 	ri, err := makeRowInserter(p.txn, en.tableDesc, cols)
 	if err != nil {
 		return nil, err
@@ -214,15 +210,14 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	in.run.initEditNode(rows)
+	if err := in.run.initEditNode(&in.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+		return nil, err
+	}
 
 	return in, nil
 }
 
 func (n *insertNode) expandPlan() error {
-	if err := n.rh.expandPlans(); err != nil {
-		return err
-	}
 
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
