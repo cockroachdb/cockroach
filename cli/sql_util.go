@@ -21,6 +21,9 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/olekukonko/tablewriter"
 
@@ -104,12 +107,20 @@ type sqlRowsI interface {
 }
 
 type sqlRows struct {
-	rows sqlRowsI
-	conn *sqlConn
+	rows    sqlRowsI
+	conn    *sqlConn
+	columns []string
 }
 
 func (r *sqlRows) Columns() []string {
-	return r.rows.Columns()
+	if r.columns == nil {
+		srcCols := r.rows.Columns()
+		r.columns = make([]string, len(srcCols))
+		for i, c := range srcCols {
+			r.columns[i] = escapeString(c)
+		}
+	}
+	return r.columns
 }
 
 func (r *sqlRows) Result() driver.Result {
@@ -279,12 +290,21 @@ func formatVal(val driver.Value) string {
 	case nil:
 		return "NULL"
 	case []byte:
-		// We don't escape strings that contain only printable ASCII characters.
-		if len(bytes.TrimLeftFunc(t, func(r rune) bool { return r >= 0x20 && r < 0x80 })) == 0 {
-			return string(t)
+		// We don't escape valid strings that contain only printable characters.
+		if utf8.Valid(t) && bytes.IndexFunc(t, func(r rune) bool { return r != '\t' && r != '\n' && !unicode.IsGraphic(r) }) == -1 {
+			return strings.Replace(string(t), "\t", "    ", -1)
 		}
 		// We use %+q to ensure the output contains only ASCII (see issue #4315).
 		return fmt.Sprintf("%+q", t)
 	}
 	return fmt.Sprint(val)
+}
+
+func escapeString(t string) string {
+	// We don't escape strings that contain only printable characters.
+	if utf8.ValidString(t) && strings.IndexFunc(t, func(r rune) bool { return !unicode.IsGraphic(r) }) == -1 {
+		return t
+	}
+	// We use %+q to ensure the output contains only ASCII (see issue #4315).
+	return fmt.Sprintf("%+q", t)
 }
