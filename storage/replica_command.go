@@ -198,13 +198,17 @@ func (r *Replica) Put(
 	if !args.Inline {
 		ts = h.Timestamp
 	}
-	if args.Blind {
-		return reply, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
-	}
 	if h.DistinctSpans {
 		if b, ok := batch.(engine.Batch); ok {
+			// Use the distinct batch for both blind and normal ops so that we don't
+			// accidentally flush mutations to make them visible to the distinct
+			// batch.
 			batch = b.Distinct()
+			defer batch.Close()
 		}
+	}
+	if args.Blind {
+		return reply, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 	}
 	return reply, engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 }
@@ -218,13 +222,17 @@ func (r *Replica) ConditionalPut(
 ) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
 
-	if args.Blind {
-		return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
-	}
 	if h.DistinctSpans {
 		if b, ok := batch.(engine.Batch); ok {
+			// Use the distinct batch for both blind and normal ops so that we don't
+			// accidentally flush mutations to make them visible to the distinct
+			// batch.
 			batch = b.Distinct()
+			defer batch.Close()
 		}
+	}
+	if args.Blind {
+		return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 	}
 	return reply, engine.MVCCConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 }

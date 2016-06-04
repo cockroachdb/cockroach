@@ -436,6 +436,13 @@ type distinctBatch struct {
 	normalIter reusableIterator
 }
 
+func (r *distinctBatch) Close() {
+	if !r.distinctOpen {
+		panic("distinct batch not open")
+	}
+	r.distinctOpen = false
+}
+
 // NewIterator returns an iterator over the batch and underlying engine. Note
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
@@ -447,7 +454,7 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
+		iter.rocksDBIterator.init(r.batch, prefix, r)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -457,16 +464,31 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 }
 
 func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
-	return dbGet(r.parent.rdb, key)
+	return dbGet(r.batch, key)
 }
 
 func (r *distinctBatch) GetProto(key MVCCKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
-	return dbGetProto(r.parent.rdb, key, msg)
+	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *distinctBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	return dbIterate(r.parent.rdb, r, start, end, f)
+	return dbIterate(r.batch, r, start, end, f)
+}
+
+func (r *distinctBatch) Put(key MVCCKey, value []byte) error {
+	r.builder.Put(key, value)
+	return nil
+}
+
+func (r *distinctBatch) Merge(key MVCCKey, value []byte) error {
+	r.builder.Merge(key, value)
+	return nil
+}
+
+func (r *distinctBatch) Clear(key MVCCKey) error {
+	r.builder.Clear(key)
+	return nil
 }
 
 func (r *distinctBatch) close() {
@@ -525,14 +547,16 @@ func (r *rocksDBBatchIterator) PrevKey() {
 }
 
 type rocksDBBatch struct {
-	parent     *RocksDB
-	batch      *C.DBEngine
-	defers     []func()
-	flushes    int
-	prefixIter rocksDBBatchIterator
-	normalIter rocksDBBatchIterator
-	builder    rocksDBBatchBuilder
-	distinct   distinctBatch
+	parent             *RocksDB
+	batch              *C.DBEngine
+	defers             []func()
+	flushes            int
+	prefixIter         rocksDBBatchIterator
+	normalIter         rocksDBBatchIterator
+	builder            rocksDBBatchBuilder
+	distinct           distinctBatch
+	distinctOpen       bool
+	distinctNeedsFlush bool
 }
 
 func newRocksDBBatch(parent *RocksDB) *rocksDBBatch {
@@ -563,11 +587,19 @@ func (r *rocksDBBatch) closed() bool {
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.distinctNeedsFlush = true
 	r.builder.Put(key, value)
 	return nil
 }
 
 func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.distinctNeedsFlush = true
 	r.builder.Merge(key, value)
 	return nil
 }
@@ -575,26 +607,42 @@ func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
 // ApplyBatchRepr atomically applies a set of batched updates to the current
 // batch (the receiver).
 func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
 	return dbApplyBatchRepr(r.batch, repr)
 }
 
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
 	r.flushMutations()
 	return dbGet(r.batch, key)
 }
 
 func (r *rocksDBBatch) GetProto(key MVCCKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
 	r.flushMutations()
 	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
 	r.flushMutations()
 	return dbIterate(r.batch, r, start, end, f)
 }
 
 func (r *rocksDBBatch) Clear(key MVCCKey) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.distinctNeedsFlush = true
 	r.builder.Clear(key)
 	return nil
 }
@@ -604,6 +652,9 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
 func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
 	// Used the cached iterator, creating it on first access.
 	iter := &r.normalIter
 	if prefix {
@@ -624,6 +675,7 @@ func (r *rocksDBBatch) Commit() error {
 		panic("this batch was already committed")
 	}
 
+	r.distinctOpen = false
 	if r.flushes > 0 {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
 		// any remaining mutations as well and then commit the batch.
@@ -661,6 +713,13 @@ func (r *rocksDBBatch) Defer(fn func()) {
 }
 
 func (r *rocksDBBatch) Distinct() ReadWriter {
+	if r.distinctNeedsFlush {
+		r.flushMutations()
+	}
+	if r.distinctOpen {
+		panic("distinct batch already open")
+	}
+	r.distinctOpen = true
 	return &r.distinct
 }
 
@@ -668,6 +727,7 @@ func (r *rocksDBBatch) flushMutations() {
 	if r.builder.count == 0 {
 		return
 	}
+	r.distinctNeedsFlush = false
 	r.flushes++
 	if err := r.ApplyBatchRepr(r.builder.Finish()); err != nil {
 		panic(err)
