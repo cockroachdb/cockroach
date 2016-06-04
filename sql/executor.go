@@ -533,8 +533,18 @@ func runTxnAttempt(
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
 		stmts, planMaker, txnState,
 		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */)
-	if opt.AutoCommit && len(remainingStmts) > 0 {
-		panic("implicit txn failed to execute all stmts")
+	if opt.AutoCommit {
+		if len(remainingStmts) > 0 {
+			panic("implicit txn failed to execute all stmts")
+		}
+		// Commit the transaction here so that we can pass an
+		// error to a client (by storing the error to a Result).
+		if err == nil && txnState.txn.Proto.Status == roachpb.PENDING && !txnState.txn.IsFinalized() {
+			if cErr := txnState.txn.CommitOrCleanup(); cErr != nil {
+				res := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag(), Err: cErr}
+				results = append(results, res)
+			}
+		}
 	}
 	planMaker.resetTxn()
 	return results, remainingStmts, err
