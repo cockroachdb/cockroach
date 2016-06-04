@@ -45,13 +45,13 @@ type deleteNode struct {
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
-	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.DELETE)
+	en, err := p.makeEditNode(n.Table, autoCommit, privilege.DELETE)
 	if err != nil {
 		return nil, err
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if len(en.rh.exprs) > 0 {
+	if len(n.Returning) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns
@@ -77,23 +77,16 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		return nil, err
 	}
 
-	if err := en.rh.TypeCheck(); err != nil {
-		return nil, err
-	}
-
 	dn := &deleteNode{
 		n:            n,
 		editNodeBase: en,
 		tw:           tw,
 	}
-	dn.run.initEditNode(rows)
+	dn.run.initEditNode(&dn.editNodeBase, rows, n.Returning, desiredTypes)
 	return dn, nil
 }
 
 func (d *deleteNode) expandPlan() error {
-	if err := d.rh.expandPlans(); err != nil {
-		return err
-	}
 	return d.run.expandEditNodePlan(&d.editNodeBase, &d.tw)
 }
 

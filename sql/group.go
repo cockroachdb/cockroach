@@ -66,24 +66,10 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, fmt.Errorf("aggregate functions are not allowed in GROUP BY")
 		}
 
-		expr, err := p.replaceSubqueries(groupBy[i], 1)
-		if err != nil {
-			return nil, err
-		}
-
-		resolved, err := s.resolveQNames(expr)
-		if err != nil {
-			return nil, err
-		}
-
-		// We could potentially skip this, since it will be checked in addRender,
-		// but checking now allows early err return.
-		typedExpr, err := parser.TypeCheck(resolved, &p.semaCtx, parser.NoTypePreference)
-		if err != nil {
-			return nil, err
-		}
-
-		norm, err := p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
+		// We do not need to fully analyze the GROUP BY expression here
+		// (as per analyzeExpr) because this is taken care of by addRender
+		// below.
+		resolved, err := resolveQNames(groupBy[i], []*tableInfo{&s.source.info}, s.qvals, &p.qnameVisitor)
 		if err != nil {
 			return nil, err
 		}
@@ -92,35 +78,21 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		// NB: This is not a deep copy, and thus when extractAggregateFuncs runs
 		// on s.render, the GroupBy expressions can contain wrapped qvalues.
 		// aggregateFunc's Eval() method handles being called during grouping.
-		if col, err := colIndex(s.numOriginalCols, norm); err != nil {
+		if col, err := colIndex(s.numOriginalCols, resolved); err != nil {
 			return nil, err
 		} else if col >= 0 {
 			groupBy[i] = s.render[col]
 		} else {
-			groupBy[i] = norm
+			groupBy[i] = resolved
 		}
 	}
 
 	// Normalize and check the HAVING expression too if it exists.
 	var typedHaving parser.TypedExpr
+	var err error
 	if n.Having != nil {
-		having, err := p.replaceSubqueries(n.Having.Expr, 1)
-		if err != nil {
-			return nil, err
-		}
-
-		having, err = s.resolveQNames(having)
-		if err != nil {
-			return nil, err
-		}
-
-		typedHaving, err = parser.TypeCheckAndRequire(having, &p.semaCtx,
-			parser.TypeBool, "HAVING")
-		if err != nil {
-			return nil, err
-		}
-
-		typedHaving, err = p.parser.NormalizeExpr(&p.evalCtx, typedHaving)
+		typedHaving, err = p.analyzeExpr(n.Having.Expr,
+			[]*tableInfo{&s.source.info}, s.qvals, parser.TypeBool, true, "HAVING")
 		if err != nil {
 			return nil, err
 		}
