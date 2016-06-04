@@ -1280,6 +1280,25 @@ type RaftCommand struct {
 	Cmd           BatchRequest      `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 	// When the command is applied, its result is an error if the lease log
 	// counter has already reached (or exceeded) max_lease_index.
+	//
+	// The lease index is a replay protection mechanism. Similar to the Raft
+	// applied index, it is strictly increasing, but may have gaps. A command
+	// will only apply successfully if its max_lease_index has not been surpassed
+	// by the Range's applied lease index (in which case the command may need to
+	// be 'refurbished', that is, regenerated with a higher max_lease_index).
+	// When the command applies, the new lease index will increase to
+	// max_lease_index (so a potential later replay will fail).
+	//
+	// Refurbishment is conditional on whether there is a difference between the
+	// local pending and the applying version of the command - if the local copy
+	// has a different max_lease_index, an earlier incarnation of the command has
+	// already been refurbished, and no repeated refurbishment takes place.
+	//
+	// This mechanism was introduced as a simpler alternative to using the Raft
+	// applied index, which is fraught with complexity due to the need to predict
+	// exactly the log position at which a command will apply, even when the Raft
+	// leader is not colocated with the lease holder (which usually proposes all
+	// commands).
 	MaxLeaseIndex uint64 `protobuf:"varint,4,opt,name=max_lease_index,json=maxLeaseIndex" json:"max_lease_index"`
 }
 
