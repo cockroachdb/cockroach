@@ -387,8 +387,8 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to remove %s", args[0])
 	}
 
-	if err := runPrettyQuery(conn, os.Stdout,
-		makeQuery(`DELETE FROM system.zones WHERE id=$1`, id)); err != nil {
+	if err := runQueryAndFormatResults(conn, os.Stdout,
+		makeQuery(`DELETE FROM system.zones WHERE id=$1`, id), true); err != nil {
 		return err
 	}
 	return conn.Exec(`COMMIT`, nil)
@@ -485,11 +485,11 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 
 	id := path[len(path)-1]
 	if id == zoneID {
-		err = runPrettyQuery(conn, os.Stdout,
-			makeQuery(`UPDATE system.zones SET config = $2 WHERE id = $1`, id, buf))
+		err = runQueryAndFormatResults(conn, os.Stdout,
+			makeQuery(`UPDATE system.zones SET config = $2 WHERE id = $1`, id, buf), true)
 	} else {
-		err = runPrettyQuery(conn, os.Stdout,
-			makeQuery(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf))
+		err = runQueryAndFormatResults(conn, os.Stdout,
+			makeQuery(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf), true)
 	}
 	if err != nil {
 		return err

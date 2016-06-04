@@ -100,6 +100,10 @@ separated statements. If an error occurs in any statement, the command exits
 with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`),
 
+	cliflags.PrettyName: wrapText(`
+Causes table rows to be formatted as tables using ASCII art. 
+When not specified, table rows are printed as tab-separated values (TSV).`),
+
 	cliflags.JoinName: wrapText(`
 A comma-separated list of addresses to use when a new node is joining
 an existing cluster. For the first node in a cluster, --join should
@@ -441,6 +445,7 @@ func init() {
 	{
 		f := sqlShellCmd.Flags()
 		f.VarP(&sqlCtx.execStmts, cliflags.ExecuteName, "e", usageNoEnv(cliflags.ExecuteName))
+		f.BoolVar(&sqlCtx.prettyFmt, cliflags.PrettyName, false, usageNoEnv(cliflags.PrettyName))
 	}
 	{
 		f := freezeClusterCmd.PersistentFlags()

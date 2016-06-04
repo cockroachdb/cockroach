@@ -43,54 +43,54 @@ func TestShowCreateTable(t *testing.T) {
 	}{
 		{
 			stmt: `CREATE TABLE %s (
-	i INT,
-	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT NOW(),
-	CHECK (i > 0)
+  i INT,
+  s STRING NULL,
+  v FLOAT NOT NULL,
+  t TIMESTAMP DEFAULT NOW(),
+  CHECK (i > 0)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT NOW(),
-	CHECK (i > 0)
+  i INT NULL,
+  s STRING NULL,
+  v FLOAT NOT NULL,
+  t TIMESTAMP NULL DEFAULT NOW(),
+  CHECK (i > 0)
 )`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	i INT CHECK (i > 0),
-	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT NOW()
+  i INT CHECK (i > 0),
+  s STRING NULL,
+  v FLOAT NOT NULL,
+  t TIMESTAMP DEFAULT NOW()
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT NOW(),
-	CHECK (i > 0)
+  i INT NULL,
+  s STRING NULL,
+  v FLOAT NOT NULL,
+  t TIMESTAMP NULL DEFAULT NOW(),
+  CHECK (i > 0)
 )`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	i INT NULL,
-	s STRING NULL,
-	CONSTRAINT ck CHECK (i > 0)
+  i INT NULL,
+  s STRING NULL,
+  CONSTRAINT ck CHECK (i > 0)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	s STRING NULL,
-	CONSTRAINT ck CHECK (i > 0)
+  i INT NULL,
+  s STRING NULL,
+  CONSTRAINT ck CHECK (i > 0)
 )`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	i INT PRIMARY KEY
+  i INT PRIMARY KEY
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i)
+  i INT NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i)
 )`,
 		},
 		{
@@ -100,18 +100,18 @@ func TestShowCreateTable(t *testing.T) {
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	f FLOAT NULL,
-	s STRING NULL,
-	d DATE NULL,
-	INDEX idx_if (f, i) STORING (s, d),
-	UNIQUE INDEX %[1]s_d_key (d)
+  i INT NULL,
+  f FLOAT NULL,
+  s STRING NULL,
+  d DATE NULL,
+  INDEX idx_if (f, i) STORING (s, d),
+  UNIQUE INDEX %[1]s_d_key (d)
 )`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	"te""st" INT NOT NULL,
-	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st")
+  "te""st" INT NOT NULL,
+  CONSTRAINT "pri""mary" PRIMARY KEY ("te""st")
 )`,
 		},
 	}

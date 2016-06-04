@@ -611,20 +611,33 @@ func Example_sql_escape() {
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
-	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo\\x0a', 'non-printable ASCII')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\"foo', 'printable ASCII with quotes')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\\\foo', 'printable ASCII with backslash')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo\\x0abar', 'non-printable ASCII')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values ('κόσμε', 'printable UTF8')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xc3\\xb1', 'printable UTF8 using escapes')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\x01', 'non-printable UTF8 string')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xdc\\x88\\x38\\x35', 'UTF8 string with RTL char')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xc3\\x28', 'non-UTF8 string')"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "-e", "create table t.u (\"\"\"foo\" int, \"\\foo\" int, \"foo\nbar\" int, \"κόσμε\" int, \"܈85\" int)"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.u values (0, 0, 0, 0, 0)"})
+	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--pretty", "-e", "show columns from t.u"})
+	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.u"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
 	// INSERT 1
-	// sql -e insert into t.t values (e'foo\x0a', 'non-printable ASCII')
+	// sql -e insert into t.t values (e'"foo', 'printable ASCII with quotes')
+	// INSERT 1
+	// sql -e insert into t.t values (e'\\foo', 'printable ASCII with backslash')
+	// INSERT 1
+	// sql -e insert into t.t values (e'foo\x0abar', 'non-printable ASCII')
 	// INSERT 1
 	// sql -e insert into t.t values ('κόσμε', 'printable UTF8')
 	// INSERT 1
@@ -637,16 +650,68 @@ func Example_sql_escape() {
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
 	// INSERT 1
 	// sql -e select * from t.t
-	// 7 rows
+	// 9 rows
 	// s	d
 	// foo	printable ASCII
-	// foo
-	// 	non-printable ASCII
-	// κόσμε	printable UTF8
-	// ñ	printable UTF8 using escapes
+	// "\"foo"	printable ASCII with quotes
+	// "\\foo"	printable ASCII with backslash
+	// "foo\nbar"	non-printable ASCII
+	// "\u03ba\u1f79\u03c3\u03bc\u03b5"	printable UTF8
+	// "\u00f1"	printable UTF8 using escapes
 	// "\x01"	non-printable UTF8 string
-	// ܈85	UTF8 string with RTL char
+	// "\u070885"	UTF8 string with RTL char
 	// "\xc3("	non-UTF8 string
+	// sql -e create table t.u ("""foo" int, "\foo" int, "foo
+	// bar" int, "κόσμε" int, "܈85" int)
+	// CREATE TABLE
+	// sql -e insert into t.u values (0, 0, 0, 0, 0)
+	// INSERT 1
+	// sql -e show columns from t.u
+	// 6 rows
+	// Field	Type	Null	Default
+	// "\"foo"	INT	true	NULL
+	// "\\foo"	INT	true	NULL
+	// "foo\nbar"	INT	true	NULL
+	// "\u03ba\u1f79\u03c3\u03bc\u03b5"	INT	true	NULL
+	// "\u070885"	INT	true	NULL
+	// rowid	INT	false	unique_rowid()
+	// sql -e select * from t.u
+	// 1 row
+	// "\"foo"	"\\foo"	"foo\nbar"	"\u03ba\u1f79\u03c3\u03bc\u03b5"	"\u070885"
+	// 0	0	0	0	0
+	// sql --pretty -e select * from t.t
+	// +---------+--------------------------------+
+	// |    s    |               d                |
+	// +---------+--------------------------------+
+	// | foo     | printable ASCII                |
+	// | "foo    | printable ASCII with quotes    |
+	// | \foo    | printable ASCII with backslash |
+	// | foo     | non-printable ASCII            |
+	// | bar     |                                |
+	// | κόσμε   | printable UTF8                 |
+	// | ñ       | printable UTF8 using escapes   |
+	// | "\x01"  | non-printable UTF8 string      |
+	// | ܈85     | UTF8 string with RTL char      |
+	// | "\xc3(" | non-UTF8 string                |
+	// +---------+--------------------------------+
+	// sql --pretty -e show columns from t.u
+	// +---------+------+-------+----------------+
+	// |  Field  | Type | Null  |    Default     |
+	// +---------+------+-------+----------------+
+	// | "foo    | INT  | true  | NULL           |
+	// | \foo    | INT  | true  | NULL           |
+	// | foo     | INT  | true  | NULL           |
+	// | bar     |      |       |                |
+	// | κόσμε   | INT  | true  | NULL           |
+	// | ܈85     | INT  | true  | NULL           |
+	// | rowid   | INT  | false | unique_rowid() |
+	// +---------+------+-------+----------------+
+	// sql --pretty -e select * from t.u
+	// +------+------+------------+-------+-----+
+	// | "foo | \foo | "foo\nbar" | κόσμε | ܈85 |
+	// +------+------+------------+-------+-----+
+	// |    0 |    0 |          0 |     0 |   0 |
+	// +------+------+------------+-------+-----+
 }
 
 func Example_user() {

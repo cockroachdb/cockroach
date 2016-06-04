@@ -115,7 +115,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		if i != 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString("\n\t")
+		buf.WriteString("\n  ")
 		fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
 		if col.Nullable {
 			buf.WriteString(" NULL")
@@ -127,7 +127,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		}
 		if desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
-			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
+			primary = fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
 				quoteNames(desc.PrimaryIndex.Name),
 				quoteNames(desc.PrimaryIndex.ColumnNames...),
 			)
@@ -139,7 +139,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		if len(idx.StoreColumnNames) > 0 {
 			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
 		}
-		fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s",
+		fmt.Fprintf(&buf, ",\n  %sINDEX %s (%s)%s",
 			isUnique[idx.Unique],
 			quoteNames(idx.Name),
 			quoteNames(idx.ColumnNames...),
@@ -148,7 +148,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	}
 
 	for _, e := range desc.Checks {
-		fmt.Fprintf(&buf, ",\n\t")
+		fmt.Fprintf(&buf, ",\n  ")
 		if len(e.Name) > 0 {
 			fmt.Fprintf(&buf, "CONSTRAINT %s ", quoteNames(e.Name))
 		}
