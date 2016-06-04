@@ -23,6 +23,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
@@ -752,6 +753,36 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 SELECT * from t.test WHERE k = 'test_key';
 `); !testutils.IsError(err, "pq: testError") {
+		t.Errorf("unexpected error %s", err)
+	}
+	if !hitError {
+		t.Errorf("expected to hit error, but it didn't happen")
+	}
+}
+
+// TestNonRetryableError verifies that a non-retryable error from the
+// execution of EndTransactionRequests is propagated to the client.
+func TestNonRetryableErrorFromCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, &ctx)
+	defer cleanup(server, sqlDB)
+
+	hitError := false
+	cleanupFilter := cmdFilters.AppendFilter(
+		func(args storagebase.FilterArgs) *roachpb.Error {
+			if req, ok := args.Req.(*roachpb.EndTransactionRequest); ok {
+				if bytes.Contains(req.Key, []byte(keys.DescIDGenerator)) {
+					hitError = true
+					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
+				}
+			}
+			return nil
+		}, false)
+	defer cleanupFilter()
+
+	if _, err := sqlDB.Exec("CREATE DATABASE t;"); !testutils.IsError(err, "pq: testError") {
 		t.Errorf("unexpected error %s", err)
 	}
 	if !hitError {
