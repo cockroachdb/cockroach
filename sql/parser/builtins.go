@@ -661,55 +661,47 @@ var Builtins = map[string][]Builtin{
 	},
 
 	// Aggregate functions.
-	// These functions are handled in sql/group.go and are not evaluated normally.
-	//
-	// The functions are split into two groups when it comes to handling constant
-	// literal arguments:
-	// - If the result of the aggregate function with constant arguments
-	//   is dependent on the number of rows it is run across (COUNT,
-	//   SUM, VARIANCE, STDDEV), it should be marked as impure and not
-	//   provide an eval fn.
-	// - If the result of the aggregate function with constant arguments
-	//   is independent on the number of rows it is run across (AVG,
-	//   BOOL_AND, BOOL_OR), it should not be marked as impure and
-	//   provide an fn implementation that handles this constant
-	//   argument case.
+
+	// These functions are handled in sql/group.go and are not evaluated
+	// via Eval(), rather by aggregation objects.
+	// In particular they must not be simplified during normalization
+	// (and thus must be marked as impure), even when they are given a
+	// constant argument (e.g. SUM(1)). This is because aggregate
+	// functions must return NULL when they are no rows in the source
+	// table, so their evaluation must always be delayed until query
+	// execution.
 
 	"avg": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeDecimal,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				dd := &DDecimal{}
-				dd.SetUnscaled(int64(*args[0].(*DInt)))
-				return dd, nil
-			},
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeFloat,
-			fn:         identityFn,
 		},
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeDecimal,
-			fn:         identityFn,
 		},
 	},
 
 	"bool_and": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeBool,
-			fn:         identityFn,
 		},
 	},
 
 	"bool_or": {
 		Builtin{
+			impure:     true,
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeBool,
-			fn:         identityFn,
 		},
 	},
 
@@ -1063,11 +1055,6 @@ func init() {
 	}
 }
 
-// identityFn returns the first argument provided.
-func identityFn(_ *EvalContext, args DTuple) (Datum, error) {
-	return args[0], nil
-}
-
 // The aggregate functions all just return their first argument if given a
 // constant argument. The bulk of the aggregate function
 // implementation is performed at a higher level in sql.groupNode.
@@ -1075,9 +1062,11 @@ func aggregateImpls(types ...Datum) []Builtin {
 	var r []Builtin
 	for _, t := range types {
 		r = append(r, Builtin{
+			// See the comment about aggregate functions in the definitions
+			// of the Builtins array above.
+			impure:     true,
 			Types:      ArgTypes{t},
 			ReturnType: t,
-			fn:         identityFn,
 		})
 	}
 	return r
@@ -1088,13 +1077,11 @@ func countImpls() []Builtin {
 	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
 	for _, t := range types {
 		r = append(r, Builtin{
+			// See the comment about aggregate functions in the definitions
+			// of the Builtins array above.
+			impure:     true,
 			Types:      ArgTypes{t},
 			ReturnType: TypeInt,
-			// COUNT is not a pure function. As explained in #5170, it must
-			// be evaluated anew for every row in the result set.  To avoid
-			// constant folding during normalization, mark it as impure
-			// here.
-			impure: true,
 		})
 	}
 	return r
