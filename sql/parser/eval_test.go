@@ -72,7 +72,7 @@ func TestEval(t *testing.T) {
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
 		{`'a' || (1 + 2)::char`, `'a3'`},
-		{`'hello' || b'world'`, `'helloworld'`},
+		{`b'hello' || 'world'`, `b'helloworld'`},
 		// Bit shift operators.
 		{`1 << 2`, `4`},
 		{`4 >> 2`, `1`},
