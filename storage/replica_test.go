@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -5719,6 +5720,61 @@ func TestReplicaRefurbishOnWrongIndex_ProposeError(t *testing.T) {
 	// refurbish it. Refurbishing fails; asserts that the client receives
 	// the error.
 	runWrongIndexTest(t, propose, withErr, 2)
+}
+
+// TestReplicaCancelRaftCommandProgress creates a number of Raft commands and
+// immediately abandons some of them, while proposing the remaining ones. It
+// then verifies that all the non-abandoned commands get applied (which would
+// not be the case if abandoning pendingCmds prevented them from being
+// reproposed and eventually claiming their designated lease index).
+func TestReplicaCancelRaftCommandProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+	rng := tc.rng
+	replica := *rng.GetReplica()
+
+	const num = 10
+
+	var chs []chan roachpb.ResponseWithError
+
+	func() {
+		rng.mu.Lock()
+		defer rng.mu.Unlock()
+		for i := 0; i < num; i++ {
+			var ba roachpb.BatchRequest
+			ba.Timestamp = tc.clock.Now()
+			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
+				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
+			cmd, err := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), replica, ba)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.rng.insertRaftCommandLocked(cmd)
+			// We actually propose the command only if we don't
+			// cancel it to simulate the case in which Raft loses
+			// the command and it isn't reproposed due to the
+			// client abandoning it.
+			if rand.Intn(2) == 0 {
+				log.Infof("abandoning command %d", i)
+				if ok := rng.tryAbandonLocked(cmd.idKey); !ok {
+					t.Fatal("unexpectedly unable to abort command %d", i)
+				}
+			} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
+				t.Fatal(err)
+			} else {
+
+				chs = append(chs, cmd.done)
+			}
+		}
+	}()
+
+	for _, ch := range chs {
+		if rwe := <-ch; rwe.Err != nil {
+			t.Fatal(rwe.Err)
+		}
+	}
 }
 
 // TestReplicaBurstPendingCommandsAndRepropose verifies that a burst of
