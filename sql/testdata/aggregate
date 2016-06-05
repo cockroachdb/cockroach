@@ -66,6 +66,9 @@ SELECT COUNT(*), k FROM kv GROUP BY 2
 query error aggregate functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, COUNT(DISTINCT w)
 
+query error aggregate functions are not allowed in RETURNING
+INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
+
 query error invalid column index: 5 not in range \[1, 2\]
 SELECT COUNT(*), k FROM kv GROUP BY 5
 

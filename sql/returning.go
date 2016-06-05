@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
@@ -48,6 +50,12 @@ func (p *planner) makeReturningHelper(
 	}
 	if len(r) == 0 {
 		return rh, nil
+	}
+
+	for _, e := range r {
+		if p.aggregateInExpr(e.Expr) {
+			return rh, fmt.Errorf("aggregate functions are not allowed in RETURNING")
+		}
 	}
 
 	rh.columns = make([]ResultColumn, 0, len(r))
