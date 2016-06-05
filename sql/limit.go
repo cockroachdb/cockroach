@@ -57,6 +57,13 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 		{"OFFSET", n.Offset, &res.offsetExpr},
 	}
 
+	if p.aggregateInExpr(n.Count) {
+		return nil, fmt.Errorf("aggregate functions are not allowed in LIMIT")
+	}
+	if p.aggregateInExpr(n.Offset) {
+		return nil, fmt.Errorf("aggregate functions are not allowed in OFFSET")
+	}
+
 	for _, datum := range data {
 		if datum.src != nil {
 			replaced, err := p.replaceSubqueries(datum.src, 1)

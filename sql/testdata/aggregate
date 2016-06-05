@@ -18,7 +18,7 @@ SELECT MIN(v), MAX(v), COUNT(v), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AN
 NULL NULL 0 NULL NULL NULL NULL NULL NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIRRRRBB 
+query IIIRRRRBB
 SELECT MIN(1), COUNT(1), MAX(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true)
 ----
 1 1 1 1 1 NULL NULL true true
@@ -33,7 +33,7 @@ INSERT INTO kv VALUES
 (8, 4, 2, 'A')
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
-query IIIRRRRBB 
+query IIIRRRRBB
 SELECT MIN(1), COUNT(1), MAX(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true) FROM kv
 ----
 1 6 1 1 6 0 0 true true
@@ -81,6 +81,18 @@ SELECT COUNT(*), k FROM kv GROUP BY 2
 
 query error aggregate functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, COUNT(DISTINCT w)
+
+query error aggregate functions are not allowed in RETURNING
+INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
+
+query error aggregate functions are not allowed in LIMIT
+SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v)
+
+query error aggregate functions are not allowed in OFFSET
+SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
+
+query error aggregate functions are not allowed in VALUES
+INSERT INTO kv (k, v) VALUES (99, COUNT(1))
 
 query error invalid column index: 5 not in range \[1, 2\]
 SELECT COUNT(*), k FROM kv GROUP BY 5
