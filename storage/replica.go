@@ -1705,11 +1705,6 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 		// Update cached appliedIndex if we were able to set the applied index
 		// on disk.
 		r.mu.appliedIndex = index
-		// Invalidate the cache and let raftTruncatedStateLocked() read the
-		// value the next time it's required.
-		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
-			r.mu.truncatedState = nil
-		}
 		r.mu.Unlock()
 	}
 
