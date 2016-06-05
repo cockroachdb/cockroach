@@ -48,6 +48,9 @@ func (*valArgsConvert) VisitPost(expr parser.Expr) parser.Expr { return expr }
 // processExpression parses the string expression inside an Expression,
 // interpreting $0, $1, etc as indexed variables.
 func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.TypedExpr, error) {
+	if exprSpec.Expr == "" {
+		return nil, nil
+	}
 	expr, err := parser.ParseExprTraditional(exprSpec.Expr)
 	if err != nil {
 		return nil, err

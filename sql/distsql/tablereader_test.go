@@ -17,7 +17,6 @@
 package distsql
 
 import (
-	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -58,72 +57,90 @@ func TestTableReader(t *testing.T) {
 	_, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
 	defer cleanup()
 
-	if _, err := sqlDB.Exec(`
-		CREATE DATABASE test;
-		CREATE TABLE test.t (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX bc (b, c));
-		INSERT INTO test.t VALUES (1, 10, 11, 12), (2, 20, 21, 22), (3, 30, 31, 32);
-		INSERT INTO test.t VALUES (4, 60, 61, 62), (5, 50, 51, 52), (6, 40, 41, 42);
-	`); err != nil {
-		t.Fatal(err)
+	// Create a table where each row is:
+	//
+	//  |     a    |     b    |         sum         |         s           |
+	//  |-----------------------------------------------------------------|
+	//  | rowId/10 | rowId/10 | rowId/10 + rowId%10 | IntToEnglish(rowId) |
+
+	aFn := func(row int) parser.Datum {
+		return parser.NewDInt(parser.DInt(row / 10))
 	}
+	bFn := func(row int) parser.Datum {
+		return parser.NewDInt(parser.DInt(row % 10))
+	}
+	sumFn := func(row int) parser.Datum {
+		return parser.NewDInt(parser.DInt(row/10 + row%10))
+	}
+
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s)",
+		99,
+		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	ts := TableReaderSpec{
-		Table:         *td,
-		IndexIdx:      0,
-		Reverse:       false,
-		Spans:         nil,
-		Filter:        Expression{Expr: "$2 != 21"}, // c != 21
-		OutputColumns: []uint32{0, 3},               // a, d
+	makeIndexSpan := func(start, end int) TableReaderSpan {
+		var span roachpb.Span
+		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.ID, td.Indexes[0].ID))
+		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
+		span.EndKey = append(span.EndKey, prefix...)
+		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
+		return TableReaderSpan{Span: span}
 	}
 
-	txn := client.NewTxn(context.Background(), *kvDB)
+	testCases := []struct {
+		spec     TableReaderSpec
+		expected string
+	}{
+		{
+			spec: TableReaderSpec{
+				Filter:        Expression{Expr: "$2 < 5 AND $1 != 3"}, // sum < 5 && b != 3
+				OutputColumns: []uint32{0, 1},
+			},
+			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
+		},
+		{
+			spec: TableReaderSpec{
+				Filter:        Expression{Expr: "$2 < 5 AND $1 != 3"},
+				OutputColumns: []uint32{3}, // s
+				HardLimit:     4,
+			},
+			expected: "[['one'] ['two'] ['four'] ['one-zero']]",
+		},
+		{
+			spec: TableReaderSpec{
+				IndexIdx:      1,
+				Reverse:       true,
+				Spans:         []TableReaderSpan{makeIndexSpan(4, 6)},
+				Filter:        Expression{Expr: "$0 < 3"}, // sum < 8
+				OutputColumns: []uint32{0, 1},
+				SoftLimit:     1,
+			},
+			expected: "[[2 5] [1 5] [0 5] [2 4] [1 4] [0 4]]",
+		},
+	}
 
-	out := &testingReceiver{}
-	tr, err := newTableReader(&ts, txn, out, &parser.EvalContext{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr.Run(nil)
-	if out.err != nil {
-		t.Fatal(out.err)
-	}
-	if !out.closed {
-		t.Fatalf("output rowReceiver not closed")
-	}
-	expected := "[[1 12] [3 32] [4 62] [5 52] [6 42]]"
-	if fmt.Sprintf("%s", out.rows) != expected {
-		t.Errorf("invalid results: %s, expected %s'", out.rows, expected)
-	}
+	for _, c := range testCases {
+		ts := c.spec
+		ts.Table = *td
 
-	// Read using the bc index
-	var span roachpb.Span
-	span.Key = roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.ID, td.Indexes[0].ID))
-	span.EndKey = append(span.Key, encoding.EncodeVarintAscending(nil, 50)...)
+		txn := client.NewTxn(context.Background(), *kvDB)
 
-	ts = TableReaderSpec{
-		Table:         *td,
-		IndexIdx:      1,
-		Reverse:       true,
-		Spans:         []TableReaderSpan{{Span: span}},
-		Filter:        Expression{Expr: "$1 != 30"}, // b != 30
-		OutputColumns: []uint32{0, 2},               // a, c
-	}
-	out = &testingReceiver{}
-	tr, err = newTableReader(&ts, txn, out, &parser.EvalContext{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr.Run(nil)
-	if out.err != nil {
-		t.Fatal(out.err)
-	}
-	if !out.closed {
-		t.Fatalf("output rowReceiver not closed")
-	}
-	expected = "[[6 41] [2 21] [1 11]]"
-	if fmt.Sprintf("%s", out.rows) != expected {
-		t.Errorf("invalid results: %s, expected %s'", out.rows, expected)
+		out := &testingReceiver{}
+		tr, err := newTableReader(&ts, txn, out, &parser.EvalContext{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr.Run(nil)
+		if out.err != nil {
+			t.Fatal(out.err)
+		}
+		if !out.closed {
+			t.Fatalf("output rowReceiver not closed")
+		}
+		if result := out.rows.String(); result != c.expected {
+			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+		}
 	}
 }
