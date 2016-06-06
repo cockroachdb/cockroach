@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -420,7 +421,7 @@ func (is unionIterator) min() float64 {
 // returned datapoint will represent the sum of datapoints from all sources at
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
-func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]TimeSeriesDatapoint, []string, error) {
+func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
@@ -483,7 +484,7 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 	// If we are returning a derivative, iteration needs to start at offset -1
 	// (in order to correctly compute the rate of change at offset 0).
 	var startOffset int32
-	isDerivative := query.GetDerivative() != TimeSeriesQueryDerivative_NONE
+	isDerivative := query.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE
 	if isDerivative {
 		startOffset = -1
 	}
@@ -502,13 +503,13 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 	// unionIterator.
 	var valueFn func() float64
 	switch query.GetSourceAggregator() {
-	case TimeSeriesQueryAggregator_SUM:
+	case tspb.TimeSeriesQueryAggregator_SUM:
 		valueFn = iters.sum
-	case TimeSeriesQueryAggregator_AVG:
+	case tspb.TimeSeriesQueryAggregator_AVG:
 		valueFn = iters.avg
-	case TimeSeriesQueryAggregator_MAX:
+	case tspb.TimeSeriesQueryAggregator_MAX:
 		valueFn = iters.max
-	case TimeSeriesQueryAggregator_MIN:
+	case tspb.TimeSeriesQueryAggregator_MIN:
 		valueFn = iters.min
 	}
 
@@ -516,9 +517,9 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 	// unionIterator at each offset encountered. If the query is requesting a
 	// derivative, a rate of change is recorded instead of the actual values.
 	iters.init()
-	var last TimeSeriesDatapoint
+	var last tspb.TimeSeriesDatapoint
 	if isDerivative {
-		last = TimeSeriesDatapoint{
+		last = tspb.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          valueFn(),
 		}
@@ -531,9 +532,9 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 			iters.advance()
 		}
 	}
-	var responseData []TimeSeriesDatapoint
+	var responseData []tspb.TimeSeriesDatapoint
 	for iters.isValid() && iters.timestamp() <= endNanos {
-		current := TimeSeriesDatapoint{
+		current := tspb.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          valueFn(),
 		}
@@ -546,7 +547,7 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 				response.Value = (current.Value - last.Value) / float64(dTime)
 			}
 			if response.Value < 0 &&
-				query.GetDerivative() == TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
+				query.GetDerivative() == tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
 				response.Value = 0
 			}
 		}
@@ -587,15 +588,15 @@ func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSp
 }
 
 // getDownsampleFunction returns
-func getDownsampleFunction(agg TimeSeriesQueryAggregator) (downsampleFn, error) {
+func getDownsampleFunction(agg tspb.TimeSeriesQueryAggregator) (downsampleFn, error) {
 	switch agg {
-	case TimeSeriesQueryAggregator_AVG:
+	case tspb.TimeSeriesQueryAggregator_AVG:
 		return (roachpb.InternalTimeSeriesSample).Average, nil
-	case TimeSeriesQueryAggregator_SUM:
+	case tspb.TimeSeriesQueryAggregator_SUM:
 		return (roachpb.InternalTimeSeriesSample).Summation, nil
-	case TimeSeriesQueryAggregator_MAX:
+	case tspb.TimeSeriesQueryAggregator_MAX:
 		return (roachpb.InternalTimeSeriesSample).Maximum, nil
-	case TimeSeriesQueryAggregator_MIN:
+	case tspb.TimeSeriesQueryAggregator_MIN:
 		return (roachpb.InternalTimeSeriesSample).Minimum, nil
 	}
 	return nil, util.Errorf("query specified unknown time series aggregator %s", agg.String())

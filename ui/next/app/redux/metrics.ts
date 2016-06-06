@@ -12,9 +12,9 @@ import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";
 import { queryTimeSeries } from "../util/api";
 
-type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
-type TSResponse = cockroach.ts.TimeSeriesQueryResponse;
-type TSResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
+type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
+type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 export const REQUEST = "cockroachui/metrics/REQUEST";
 export const RECEIVE = "cockroachui/metrics/RECEIVE";
@@ -305,7 +305,7 @@ export function queryMetrics(id: string, query: TSRequestMessage) {
             // query. Each request may have sent multiple queries in the batch.
             _.each(batch, (request) => {
               let numQueries = request.data.queries.length;
-              dispatch(receiveMetrics(request.id, request.data, new protos.cockroach.ts.TimeSeriesQueryResponse({
+              dispatch(receiveMetrics(request.id, request.data, new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
                 results: results.splice(0, numQueries),
               })));
             });

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -54,7 +55,7 @@ func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolutio
 
 // A DataSource can be queryied for a slice of time series data.
 type DataSource interface {
-	GetTimeSeriesData() []TimeSeriesData
+	GetTimeSeriesData() []tspb.TimeSeriesData
 }
 
 // poller maintains information for a polling process started by PollSource().
@@ -102,7 +103,7 @@ func (p *poller) poll() {
 
 // StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
-func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
+func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 	var kvs []roachpb.KeyValue
 
 	// Process data collection: data is converted to internal format, and a key

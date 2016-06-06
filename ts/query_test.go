@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -242,14 +243,14 @@ func TestAggregation(t *testing.T) {
 func (tm *testModel) assertQuery(
 	name string,
 	sources []string,
-	downsample, agg *TimeSeriesQueryAggregator,
-	derivative *TimeSeriesQueryDerivative,
+	downsample, agg *tspb.TimeSeriesQueryAggregator,
+	derivative *tspb.TimeSeriesQueryDerivative,
 	r Resolution,
 	start, end int64,
 	expectedDatapointCount, expectedSourceCount int,
 ) {
 	// Query the actual server.
-	q := Query{
+	q := tspb.Query{
 		Name:             name,
 		Downsampler:      downsample,
 		SourceAggregator: agg,
@@ -269,7 +270,7 @@ func (tm *testModel) assertQuery(
 	}
 
 	// Construct an expected result for comparison.
-	var expectedDatapoints []TimeSeriesDatapoint
+	var expectedDatapoints []tspb.TimeSeriesDatapoint
 	expectedSources := make([]string, 0, 0)
 	dataSpans := make(map[string]*dataSpan)
 
@@ -318,7 +319,7 @@ func (tm *testModel) assertQuery(
 
 	// Iterate over data in all dataSpans and construct expected datapoints.
 	var startOffset int32
-	isDerivative := q.GetDerivative() != TimeSeriesQueryDerivative_NONE
+	isDerivative := q.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE
 	if isDerivative {
 		startOffset = -1
 	}
@@ -332,27 +333,27 @@ func (tm *testModel) assertQuery(
 	}
 
 	iters.init()
-	currentVal := func() TimeSeriesDatapoint {
+	currentVal := func() tspb.TimeSeriesDatapoint {
 		var value float64
 		switch q.GetSourceAggregator() {
-		case TimeSeriesQueryAggregator_SUM:
+		case tspb.TimeSeriesQueryAggregator_SUM:
 			value = iters.sum()
-		case TimeSeriesQueryAggregator_AVG:
+		case tspb.TimeSeriesQueryAggregator_AVG:
 			value = iters.avg()
-		case TimeSeriesQueryAggregator_MAX:
+		case tspb.TimeSeriesQueryAggregator_MAX:
 			value = iters.max()
-		case TimeSeriesQueryAggregator_MIN:
+		case tspb.TimeSeriesQueryAggregator_MIN:
 			value = iters.min()
 		default:
 			tm.t.Fatalf("unknown query aggregator %s", q.GetSourceAggregator())
 		}
-		return TimeSeriesDatapoint{
+		return tspb.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          value,
 		}
 	}
 
-	var last TimeSeriesDatapoint
+	var last tspb.TimeSeriesDatapoint
 	if isDerivative {
 		last = currentVal()
 		if iters.offset() < 0 {
@@ -370,7 +371,7 @@ func (tm *testModel) assertQuery(
 				result.Value = (current.Value - last.Value) / float64(dTime)
 			}
 			if result.Value < 0 &&
-				q.GetDerivative() == TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
+				q.GetDerivative() == tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
 				result.Value = 0
 			}
 		}
@@ -397,10 +398,10 @@ func TestQuery(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
 		{
 			Name: "test.metric",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(1, 100),
 				datapoint(5, 200),
 				datapoint(15, 300),
@@ -416,11 +417,11 @@ func TestQuery(t *testing.T) {
 	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 0, 60, 7, 1)
 
 	// Verify across multiple sources
-	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
 		{
 			Name:   "test.multimetric",
 			Source: "source1",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(1, 100),
 				datapoint(15, 300),
 				datapoint(17, 500),
@@ -430,7 +431,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.multimetric",
 			Source: "source2",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(5, 100),
 				datapoint(16, 300),
 				datapoint(22, 500),
@@ -445,27 +446,27 @@ func TestQuery(t *testing.T) {
 	// Test default query: avg downsampler, sum aggregator, no derivative.
 	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 0, 90, 8, 2)
 	// Test with aggregator specified.
-	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_MAX.Enum(), nil, nil,
+	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), nil, nil,
 		resolution1ns, 0, 90, 8, 2)
 	// Test with aggregator and downsampler.
-	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_MAX.Enum(), TimeSeriesQueryAggregator_AVG.Enum(), nil,
+	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
 		resolution1ns, 0, 90, 8, 2)
 	// Test with derivative specified.
-	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
+		tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
 	// Test with everything specified.
-	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_MIN.Enum(), TimeSeriesQueryAggregator_MAX.Enum(),
-		TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MIN.Enum(), tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
 	// Test query that returns no data.
 	tm.assertQuery("nodata", nil, nil, nil, nil, resolution1ns, 0, 90, 0, 0)
 
 	// Verify querying specific sources, thus excluding other available sources
 	// in the same time period.
-	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
 		{
 			Name:   "test.specificmetric",
 			Source: "source1",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(1, 9999),
 				datapoint(11, 9999),
 				datapoint(21, 9999),
@@ -475,7 +476,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source2",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(2, 10),
 				datapoint(12, 15),
 				datapoint(22, 25),
@@ -485,7 +486,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source3",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(3, 9999),
 				datapoint(13, 9999),
 				datapoint(23, 9999),
@@ -495,7 +496,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source4",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(4, 15),
 				datapoint(14, 45),
 				datapoint(24, 60),
@@ -505,7 +506,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source5",
-			Datapoints: []TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				datapoint(5, 9999),
 				datapoint(15, 9999),
 				datapoint(25, 9999),

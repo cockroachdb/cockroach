@@ -10,7 +10,7 @@ import { TextGraph, Axis, Metric } from "../components/graphs";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "./metricsDataProvider";
 import { MetricsQuery } from "../redux/metrics";
 
-type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
+type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 
 function makeDataProvider(id: string,
                           metrics: MetricsQuery,
@@ -30,30 +30,30 @@ function makeDataProvider(id: string,
 }
 
 function makeMetricsRequest(timeSpan: Long[], sources?: string[]) {
-  return new protos.cockroach.ts.TimeSeriesQueryRequest({
+  return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
     start_nanos: timeSpan[0],
     end_nanos: timeSpan[1],
     queries: [
       {
         name: "test.metric.1",
         sources: sources,
-        downsampler: cockroach.ts.TimeSeriesQueryAggregator.AVG,
-        source_aggregator: cockroach.ts.TimeSeriesQueryAggregator.SUM,
-        derivative: cockroach.ts.TimeSeriesQueryDerivative.NONE,
+        downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
+        derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
       },
       {
         name: "test.metric.2",
         sources: sources,
-        downsampler: cockroach.ts.TimeSeriesQueryAggregator.AVG,
-        source_aggregator: cockroach.ts.TimeSeriesQueryAggregator.SUM,
-        derivative: cockroach.ts.TimeSeriesQueryDerivative.NONE,
+        downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
+        derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
       },
       {
         name: "test.metric.3",
         sources: sources,
-        downsampler: cockroach.ts.TimeSeriesQueryAggregator.AVG,
-        source_aggregator: cockroach.ts.TimeSeriesQueryAggregator.SUM,
-        derivative: cockroach.ts.TimeSeriesQueryDerivative.NONE,
+        downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
+        derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
       },
     ],
   });
@@ -61,7 +61,7 @@ function makeMetricsRequest(timeSpan: Long[], sources?: string[]) {
 
 function makeMetricsQuery(id: string, timeSpan: Long[], sources?: string[]): MetricsQuery {
   let request = makeMetricsRequest(timeSpan, sources);
-  let data = new protos.cockroach.ts.TimeSeriesQueryResponse({
+  let data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
     results: _(request.queries).map((q) => {
       return {
         query: q,

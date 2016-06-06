@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -72,14 +72,14 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 
 	// Retrieve time-series data.
 	nowNanos := timeutil.Now().UnixNano()
-	queryRequest := ts.TimeSeriesQueryRequest{
+	queryRequest := tspb.TimeSeriesQueryRequest{
 		StartNanos: nowNanos - 10*time.Second.Nanoseconds(),
 		EndNanos:   nowNanos,
-		Queries: []ts.Query{
+		Queries: []tspb.Query{
 			{Name: "doesnt_matter", Sources: []string{}},
 		},
 	}
-	var queryResponse ts.TimeSeriesQueryResponse
+	var queryResponse tspb.TimeSeriesQueryResponse
 	if err := util.PostJSON(cluster.HTTPClient, c.URL(0)+"/ts/query",
 		&queryRequest, &queryResponse); err != nil {
 		t.Fatal(err)

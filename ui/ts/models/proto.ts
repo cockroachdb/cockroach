@@ -163,7 +163,7 @@ module Models {
     }
 
     /*****************************
-     * ts/timeseries.proto
+     * ts/tspb/timeseries.proto
      ****************************/
 
     /**

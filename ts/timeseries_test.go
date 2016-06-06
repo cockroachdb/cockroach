@@ -24,24 +24,25 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func ts(name string, dps ...TimeSeriesDatapoint) TimeSeriesData {
-	return TimeSeriesData{
+func ts(name string, dps ...tspb.TimeSeriesDatapoint) tspb.TimeSeriesData {
+	return tspb.TimeSeriesData{
 		Name:       name,
 		Datapoints: dps,
 	}
 }
 
-func tsdp(ts time.Duration, val float64) TimeSeriesDatapoint {
-	return TimeSeriesDatapoint{
+func tsdp(ts time.Duration, val float64) tspb.TimeSeriesDatapoint {
+	return tspb.TimeSeriesDatapoint{
 		TimestampNanos: ts.Nanoseconds(),
 		Value:          val,
 	}
 }
 
-// TestToInternal verifies the conversion of TimeSeriesData to internal storage
+// TestToInternal verifies the conversion of tspb.TimeSeriesData to internal storage
 // format is correct.
 func TestToInternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -49,7 +50,7 @@ func TestToInternal(t *testing.T) {
 		keyDuration    int64
 		sampleDuration int64
 		expectedError  string
-		input          TimeSeriesData
+		input          tspb.TimeSeriesData
 		expected       []roachpb.InternalTimeSeriesData
 	}{
 		{

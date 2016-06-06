@@ -4063,19 +4063,46 @@ export interface tsBuilder {
 	decode(buffer: ArrayBuffer) : tsMessage;
 	decode(buffer: ByteBuffer) : tsMessage;
 	decode64(buffer: string) : tsMessage;
-	TimeSeriesDatapoint: ts.TimeSeriesDatapointBuilder;
-	TimeSeriesData: ts.TimeSeriesDataBuilder;
-	Query: ts.QueryBuilder;
-	TimeSeriesQueryRequest: ts.TimeSeriesQueryRequestBuilder;
-	TimeSeriesQueryResponse: ts.TimeSeriesQueryResponseBuilder;
-	TimeSeriesQueryAggregator: ts.TimeSeriesQueryAggregator;
-	TimeSeriesQueryDerivative: ts.TimeSeriesQueryDerivative;
+	tspb: ts.tspbBuilder;
 	
 }
 	
 }
 
 declare module cockroach.ts {
+	
+	export interface tspb {
+	
+		
+
+}
+	
+	export interface tspbMessage extends tspb {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface tspbBuilder {
+	new(data?: tspb): tspbMessage;
+	decode(buffer: ArrayBuffer) : tspbMessage;
+	decode(buffer: ByteBuffer) : tspbMessage;
+	decode64(buffer: string) : tspbMessage;
+	TimeSeriesDatapoint: tspb.TimeSeriesDatapointBuilder;
+	TimeSeriesData: tspb.TimeSeriesDataBuilder;
+	Query: tspb.QueryBuilder;
+	TimeSeriesQueryRequest: tspb.TimeSeriesQueryRequestBuilder;
+	TimeSeriesQueryResponse: tspb.TimeSeriesQueryResponseBuilder;
+	TimeSeriesQueryAggregator: tspb.TimeSeriesQueryAggregator;
+	TimeSeriesQueryDerivative: tspb.TimeSeriesQueryDerivative;
+	
+}
+	
+}
+
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesDatapoint {
 	
@@ -4120,7 +4147,7 @@ export interface TimeSeriesDatapointBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesData {
 	
@@ -4174,7 +4201,7 @@ export interface TimeSeriesDataBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface Query {
 	
@@ -4246,7 +4273,7 @@ export interface QueryBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesQueryRequest {
 	
@@ -4300,7 +4327,7 @@ export interface TimeSeriesQueryRequestBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesQueryResponse {
 	
@@ -4336,7 +4363,7 @@ export interface TimeSeriesQueryResponseBuilder {
 	
 }
 
-declare module cockroach.ts.TimeSeriesQueryResponse {
+declare module cockroach.ts.tspb.TimeSeriesQueryResponse {
 	
 	export interface Result {
 	
@@ -4382,7 +4409,7 @@ export interface ResultBuilder {
 
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	export const enum TimeSeriesQueryAggregator {
 		AVG = 1,
 		SUM = 2,
@@ -4392,7 +4419,7 @@ declare module cockroach.ts {
 }
 }
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	export const enum TimeSeriesQueryDerivative {
 		NONE = 0,
 		DERIVATIVE = 1,
@@ -4400,6 +4427,7 @@ declare module cockroach.ts {
 		
 }
 }
+
 
 
 
