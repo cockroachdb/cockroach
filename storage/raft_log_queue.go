@@ -35,13 +35,14 @@ const (
 	// raftLogPadding is the number of log entries that should be kept for
 	// lagging replicas.
 	raftLogPadding = 10000
-	// RaftLogQueueTimerDuration is the duration between checking the
-	// raft logs.
-	RaftLogQueueTimerDuration = time.Second
+	// RaftLogQueueTimerDuration is the duration between truncations. This needs
+	// to be relatively short so that truncations can keep up with raft log entry
+	// creation.
+	RaftLogQueueTimerDuration = 50 * time.Millisecond
 	// RaftLogQueueStaleThreshold is the minimum threshold for stale raft log
 	// entries. A stale entry is one which all replicas of the range have
 	// progressed past and thus is no longer needed and can be pruned.
-	RaftLogQueueStaleThreshold = 1
+	RaftLogQueueStaleThreshold = 100
 )
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs
@@ -115,7 +116,7 @@ func (*raftLogQueue) shouldQueue(
 		return false, 0
 	}
 
-	return truncatableIndexes > RaftLogQueueStaleThreshold, float64(truncatableIndexes)
+	return truncatableIndexes >= RaftLogQueueStaleThreshold, float64(truncatableIndexes)
 }
 
 // process truncates the raft log of the range if the replica is the raft
@@ -128,7 +129,7 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ config.Sys
 	}
 
 	// Can and should the raft logs be truncated?
-	if truncatableIndexes > RaftLogQueueStaleThreshold {
+	if truncatableIndexes >= RaftLogQueueStaleThreshold {
 		if log.V(1) {
 			log.Infof("truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
 		}

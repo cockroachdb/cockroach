@@ -108,7 +108,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	}
 
 	// Write a few keys to the range.
-	for i := 0; i < 10; i++ {
+	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
 		if _, err := client.SendWrapped(store.testSender(), nil, &args); err != nil {

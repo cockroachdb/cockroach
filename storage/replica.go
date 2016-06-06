@@ -1710,10 +1710,10 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	}
 
 	// On successful write commands handle write-related triggers including
-	// splitting.
+	// splitting and raft log truncation.
 	if rErr == nil && ba.IsWrite() {
-		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
+		r.maybeAddToRaftLogQueue(index)
 	}
 
 	// On the replica on which this command originated, resolve skipped intents
@@ -2342,6 +2342,15 @@ func (r *Replica) needsSplitBySize() bool {
 func (r *Replica) maybeAddToSplitQueue() {
 	if r.needsSplitBySize() {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
+}
+
+// maybeAddToRaftLogQueue checks whether the raft log is a candidate for
+// truncation. If yes, the range is added to the raft log queue.
+func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
+	const raftLogCheckFrequency = RaftLogQueueStaleThreshold / 5
+	if appliedIndex%raftLogCheckFrequency == 0 {
+		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }
 
