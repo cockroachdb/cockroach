@@ -1481,11 +1481,17 @@ index_def:
   }
 
 family_def:
-  FAMILY opt_name '(' family_params ')'
+  FAMILY '(' family_params ')'
   {
     $$.val = &FamilyTableDef{
-      Name: Name($2),
-      Columns: $4.famElems(),
+      Columns: $3.famElems(),
+    }
+  }
+| FAMILY '(' family_params ')' AS name
+  {
+    $$.val = &FamilyTableDef{
+      Name: Name($6),
+      Columns: $3.famElems(),
     }
   }
 

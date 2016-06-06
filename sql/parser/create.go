@@ -415,13 +415,13 @@ func (node *FamilyTableDef) setName(name Name) {
 // Format implements the NodeFormatter interface.
 func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("FAMILY ")
-	if node.Name != "" {
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
-	}
 	buf.WriteByte('(')
 	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
+	if node.Name != "" {
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, node.Name)
+	}
 }
 
 // CreateTable represents a CREATE TABLE statement.

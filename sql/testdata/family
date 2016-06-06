@@ -3,5 +3,5 @@ CREATE TABLE abc(
   a INT PRIMARY KEY,
   b INT,
   c INT,
-  FAMILY pri (a, b)
+  FAMILY (a, b) AS pri
 )
