@@ -87,6 +87,15 @@ func StartTestServerJoining(t util.Tester, other TestServer) TestServer {
 	return s
 }
 
+// StartTestServerCluster starts a test server and has n other servers join locally.
+func StartTestServerCluster(t util.Tester, n int) TestServer {
+	s := StartTestServer(t)
+	for i := 0; i < n; i++ {
+		_ = StartTestServerJoining(t, s)
+	}
+	return s
+}
+
 // StartInsecureTestServer starts an insecure in-memory test server.
 func StartInsecureTestServer(t util.Tester) TestServer {
 	ctx := MakeTestContext()
