@@ -52,6 +52,11 @@ import (
 
 var errMissingParams = errors.New("missing or invalid parameters")
 
+// jemallocHeapDump is an optional function to be called at heap dump time.
+// This will be non-nil when jemalloc is linked in with profiling enabled.
+// The function takes a filename to write the profile to.
+var jemallocHeapDump func(string) error
+
 // panicGuard wraps an errorless command into one wrapping panics into errors.
 // This simplifies error handling for many commands for which more elaborate
 // error handling isn't needed and would otherwise bloat the code.
@@ -136,7 +141,12 @@ func initMemProfile(dir string) {
 		memProfileInterval = min
 	}
 
-	log.Infof("writing memory profiles to %s every %s", dir, memProfileInterval)
+	if jemallocHeapDump != nil {
+		log.Infof("writing go and jemalloc memory profiles to %s every %s", dir, memProfileInterval)
+	} else {
+		log.Infof("writing go only memory profiles to %s every %s", dir, memProfileInterval)
+		log.Infof(`to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
+	}
 
 	go func() {
 		t := time.NewTicker(memProfileInterval)
@@ -146,15 +156,26 @@ func initMemProfile(dir string) {
 
 			func() {
 				const format = "2006-01-02T15_04_05.999"
-				path := filepath.Join(dir, "memprof."+timeutil.Now().Format(format))
+				suffix := timeutil.Now().Format(format)
+
+				// Try jemalloc heap profile first, we only log errors.
+				if jemallocHeapDump != nil {
+					jepath := filepath.Join(dir, "jeprof."+suffix)
+					if err := jemallocHeapDump(jepath); err != nil {
+						log.Warningf("error writing jemalloc heap %s: %s", jepath, err)
+					}
+				}
+
+				path := filepath.Join(dir, "memprof."+suffix)
+				// Try writing a go heap profile.
 				f, err := os.Create(path)
 				if err != nil {
-					log.Warningf("%s", err)
+					log.Warningf("error creating go heap file %s", err)
 					return
 				}
 				defer f.Close()
 				if err = pprof.WriteHeapProfile(f); err != nil {
-					log.Warningf("can't write %s: %s", path, err)
+					log.Warningf("error writing go heap %s: %s", path, err)
 					return
 				}
 			}()
