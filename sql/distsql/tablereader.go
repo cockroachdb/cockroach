@@ -38,43 +38,16 @@ type tableReader struct {
 
 	output rowReceiver
 
-	filter parser.TypedExpr
-	// filterVars is used to generate IndexedVars that are "backed" by the
-	// values in the row tuple.
-	filterVars parser.IndexedVarHelper
+	filter exprHelper
 
-	evalCtx *parser.EvalContext
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 	// Last row returned by the rowFetcher; it has one entry per table column.
-	row        sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
-	rowAlloc   sqlbase.EncDatumRowAlloc
+	row      sqlbase.EncDatumRow
+	rowAlloc sqlbase.EncDatumRowAlloc
 }
 
 var _ processor = &tableReader{}
-
-// tableReader implements parser.IndexedVarContainer.
-var _ parser.IndexedVarContainer = &tableReader{}
-
-// IndexedVarReturnType is part of the parser.IndexedVarContainer interface.
-func (tr *tableReader) IndexedVarReturnType(idx int) parser.Datum {
-	return tr.desc.Columns[idx].Type.ToDatumType()
-}
-
-// IndexedVarEval is part of the parser.IndexedVarContainer interface.
-func (tr *tableReader) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
-	err := tr.row[idx].Decode(&tr.datumAlloc)
-	if err != nil {
-		return nil, err
-	}
-	return tr.row[idx].Datum.Eval(ctx)
-}
-
-// IndexedVarString is part of the parser.IndexedVarContainer interface.
-func (tr *tableReader) IndexedVarString(idx int) string {
-	return string(tr.desc.Columns[idx].Name)
-}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -84,7 +57,6 @@ func newTableReader(
 		desc:      spec.Table,
 		txn:       txn,
 		output:    output,
-		evalCtx:   evalCtx,
 		hardLimit: spec.HardLimit,
 		softLimit: spec.SoftLimit,
 	}
@@ -101,15 +73,6 @@ func newTableReader(
 		tr.outputCols[i] = int(v)
 	}
 
-	if spec.Filter.Expr != "" {
-		tr.filterVars = parser.MakeIndexedVarHelper(tr, numCols)
-		var err error
-		tr.filter, err = processExpression(spec.Filter, &tr.filterVars)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Figure out which columns we need: the output columns plus any other
 	// columns used by the filter expression.
 	valNeededForCol := make([]bool, numCols)
@@ -119,20 +82,32 @@ func newTableReader(
 		}
 		valNeededForCol[c] = true
 	}
-	for c := 0; c < numCols; c++ {
-		valNeededForCol[c] = valNeededForCol[c] || tr.filterVars.IndexedVarUsed(c)
+
+	if spec.Filter.Expr != "" {
+		types := make([]sqlbase.ColumnType_Kind, numCols)
+		for i := range types {
+			types[i] = tr.desc.Columns[i].Type.Kind
+		}
+		if err := tr.filter.init(spec.Filter, types, evalCtx); err != nil {
+			return nil, err
+		}
+		for c := 0; c < numCols; c++ {
+			valNeededForCol[c] = valNeededForCol[c] || tr.filter.vars.IndexedVarUsed(c)
+		}
+	}
+
+	if spec.IndexIdx > uint32(len(tr.desc.Indexes)) {
+		return nil, util.Errorf("invalid IndexIdx %d", spec.IndexIdx)
 	}
 
 	var index *sqlbase.IndexDescriptor
 	var isSecondaryIndex bool
-	switch {
-	case spec.IndexIdx == 0:
-		index = &tr.desc.PrimaryIndex
-	case spec.IndexIdx <= uint32(len(tr.desc.Indexes)):
+
+	if spec.IndexIdx > 0 {
 		index = &tr.desc.Indexes[spec.IndexIdx-1]
 		isSecondaryIndex = true
-	default:
-		return nil, util.Errorf("Invalid indexIdx %d", spec.IndexIdx)
+	} else {
+		index = &tr.desc.PrimaryIndex
 	}
 
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(tr.desc.Columns))
@@ -157,7 +132,7 @@ func newTableReader(
 func (tr *tableReader) getLimitHint() int64 {
 	softLimit := tr.softLimit
 	if tr.hardLimit != 0 {
-		if tr.filter == nil {
+		if tr.filter.expr == nil {
 			return tr.hardLimit
 		}
 		// If we have a filter, we don't know how many rows will pass the filter
@@ -188,7 +163,7 @@ func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
 				tr.row[i].SetDatum(tr.desc.Columns[i].Type.Kind, fetcherRow[i])
 			}
 		}
-		passesFilter, err := sqlbase.RunFilter(tr.filter, tr.evalCtx)
+		passesFilter, err := tr.filter.evalFilter(tr.row)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +184,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 	if log.V(1) {
-		log.Infof("TableReader filter: %s\n", tr.filter)
+		log.Infof("TableReader filter: %s\n", tr.filter.expr)
 	}
 
 	if err := tr.fetcher.StartScan(tr.txn, tr.spans, tr.getLimitHint()); err != nil {
