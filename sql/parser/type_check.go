@@ -999,12 +999,16 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 // situations.
 // - the placeholder is the subject of an explicit type annotation in at least one
 //   of its occurrences. If it is subject to multiple explicit type annotations where
-//   the types are not all in agreement, and error will be thrown.
+//   the types are not all in agreement, or if the subject already has an inferred
+//   type in the provided args map which conflicts with the explicit type annotation
+//   type, an error will be thrown.
 // - the placeholder is the subject to an implicit type annotation, meaning that it
 //   is not subject to an explicit type annotation, and that in all occurrences of the
 //   placeholder, it is subject to a cast to the same type. If it is subject to casts
-//   of multiple types, no error will be thrown, but the placeholder will not be
-//   annotated.
+//   of multiple types, no error will be thrown, but the placeholder type will not be
+//   inferred. If a type has already been assigned for the subject in the provided
+//   args map, no error will be thrown, and the placeholder will keep it's previously
+//   inferred type.
 //
 // TODO(nvanbenschoten) Add support for explicit placeholder annotations.
 // TODO(nvanbenschoten) Can this visitor and map be preallocated (like normalizeVisitor)?
