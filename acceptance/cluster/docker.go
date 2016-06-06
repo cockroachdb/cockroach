@@ -192,7 +192,7 @@ func (c *Container) Kill() error {
 //
 // TODO(pmattis): Generalize the setting of parameters here.
 func (c *Container) Start() error {
-	return c.cluster.client.ContainerStart(context.Background(), c.id, "")
+	return c.cluster.client.ContainerStart(context.Background(), c.id, types.ContainerStartOptions{})
 }
 
 // Pause pauses a running container.
@@ -447,10 +447,10 @@ func (cli retryingDockerClient) ContainerCreate(
 	return ret, err
 }
 
-func (cli retryingDockerClient) ContainerStart(ctx context.Context, container string, checkpointID string) error {
+func (cli retryingDockerClient) ContainerStart(ctx context.Context, container string, options types.ContainerStartOptions) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
-			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, checkpointID)
+			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, options)
 		})
 }
 
