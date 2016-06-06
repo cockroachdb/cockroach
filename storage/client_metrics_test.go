@@ -58,15 +58,15 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdx int) {
 	// Get the current store at storeIdx.
 	s := mtc.stores[storeIdx]
 	// Stop the store at the given index, while keeping the the reference to the
-	// store object. Method ComputeMVCCStatsTest() still works on a stopped
-	// store (it needs only the engine, which is still open), and the most
-	// recent stats are still available on the stopped store object; however, no
-	// further information can be committed to the store while it is stopped,
-	// preventing any races during verification.
+	// store object. ComputeMVCCStats() still works on a stopped store (it needs
+	// only the engine, which is still open), and the most recent stats are still
+	// available on the stopped store object; however, no further information can
+	// be committed to the store while it is stopped, preventing any races during
+	// verification.
 	mtc.stopStore(storeIdx)
 
 	// Compute real total MVCC statistics from store.
-	realStats, err := s.ComputeMVCCStatsTest()
+	realStats, err := s.ComputeMVCCStats()
 	if err != nil {
 		t.Fatal(err)
 	}

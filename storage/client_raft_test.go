@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -36,13 +38,12 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // mustGetInt decodes an int64 value from the bytes field of the receiver
@@ -241,8 +242,10 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(rng.Desc().StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); !ok || err != nil {
-		t.Fatalf("fetching range descriptor yielded %t, %s", ok, err)
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatalf("range descriptor key %s was not found", key)
 	}
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
@@ -257,7 +260,9 @@ func TestReplicateRange(t *testing.T) {
 		}
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
+			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); err != nil {
+				return err
+			} else if !ok {
 				return util.Errorf("failed to resolve %s", key.AsRawKey())
 			}
 			if !reflect.DeepEqual(metaDesc, desc) {
@@ -506,7 +511,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); !reflect.DeepEqual(mvcc, mvcc2) {
+	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
 		t.Fatalf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
 	}
 
@@ -727,8 +732,8 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
-	if err := addReplica(2, origDesc); err == nil {
-		t.Fatal("Expected error calling ChangeReplicas with stale RangeDescriptor")
+	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of \d+ failed`) {
+		t.Fatalf("got unexpected error: %v", err)
 	}
 
 	// Both addReplica calls attempted to use origDesc.NextReplicaID.

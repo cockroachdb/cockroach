@@ -228,14 +228,6 @@ func (r *Replica) LastIndex() (uint64, error) {
 	return r.mu.lastIndex, nil
 }
 
-// GetLastIndex is the same function as LastIndex but it does not require
-// that the replica lock is held.
-func (r *Replica) GetLastIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.LastIndex()
-}
-
 // raftTruncatedStateLocked returns metadata about the log that preceded the
 // first current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
@@ -558,7 +550,6 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries 
 		}
 	}
 
-	// Commit the batch and update the last index.
 	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
 		return 0, err
 	}
@@ -606,29 +597,21 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 		return 0, err
 	}
 
-	log.Infof("received snapshot for range %s at index %d. encoded size=%d, %d KV pairs, %d log entries",
-		r.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
-	defer func(start time.Time) {
-		log.Infof("applied snapshot for range %s in %s", r.RangeID, timeutil.Since(start))
-	}(timeutil.Now())
-
 	rangeID := r.RangeID
-
-	// First, save the HardState. The HardState must not be changed
-	// because it may record a previous vote cast by this node. This is
-	// usually unnecessary because a snapshot is nearly always
-	// accompanied by a new HardState which incorporates both our former
-	// state and new information from the leader, but in the event that
-	// the HardState has not changed, we want to use our own previous
-	// HardState and not one that was transmitted via the snapshot.
-	hardStateKey := keys.RaftHardStateKey(rangeID)
-	hardState, _, err := engine.MVCCGet(context.Background(), batch, hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
-	if err != nil {
-		return 0, err
-	}
 
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
+
+	replicaID := desc.NextReplicaID
+	if replicaDesc := r.GetReplica(); replicaDesc != nil {
+		replicaID = replicaDesc.ReplicaID
+	}
+
+	log.Infof("replica %s received snapshot for range %s at index %d. encoded size=%d, %d KV pairs, %d log entries",
+		replicaID, rangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
+	defer func(start time.Time) {
+		log.Infof("replica %s applied snapshot for range %s in %s", replicaID, rangeID, timeutil.Since(start))
+	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
@@ -669,19 +652,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 	// Write the snapshot's Raft log into the range.
 	if _, err := r.append(batch, 0, logEntries); err != nil {
 		return 0, err
-	}
-
-	// Restore the saved HardState.
-	if hardState == nil {
-		err := engine.MVCCDelete(context.Background(), batch, nil, hardStateKey, roachpb.ZeroTimestamp, nil)
-		if err != nil {
-			return 0, err
-		}
-	} else {
-		err := engine.MVCCPut(context.Background(), batch, nil, hardStateKey, roachpb.ZeroTimestamp, *hardState, nil)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	// Read the leader lease.
