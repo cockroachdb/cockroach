@@ -149,6 +149,9 @@ func TestStoreMetrics(t *testing.T) {
 	if err := mtc.stores[1].Engine().Flush(); err != nil {
 		t.Fatal(err)
 	}
+	mtc.stores[0].DisableRaftLogQueue(true)
+	mtc.stores[1].DisableRaftLogQueue(true)
+	mtc.stores[2].DisableRaftLogQueue(true)
 
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, roachpb.Key("m"))
