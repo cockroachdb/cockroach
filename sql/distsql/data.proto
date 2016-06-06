@@ -63,7 +63,12 @@ message TableReaderSpec {
   // their indices in table.columns.
   repeated uint32 output_columns = 6 [packed = true];
 
-  // TODO(radu): support limits and the single-key optimization (span.count)
+  // If nonzero, the table reader only needs to return this many rows.
+  optional int64 hard_limit = 8 [(gogoproto.nullable) = false];
+  // The soft limit is a hint for how many rows the consumer of the table reader
+  // output might need. If both the hard limit and the soft limit are set, the
+  // soft limit must be lower than the hard limit.
+  optional int64 soft_limit = 7 [(gogoproto.nullable) = false];
 }
 
 message MailboxSpec {

@@ -31,9 +31,10 @@ import (
 // desired column values to an output rowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	desc       sqlbase.TableDescriptor
-	spans      sqlbase.Spans
-	outputCols []int
+	desc                 sqlbase.TableDescriptor
+	spans                sqlbase.Spans
+	outputCols           []int
+	hardLimit, softLimit int64
 
 	output rowReceiver
 
@@ -80,10 +81,17 @@ func newTableReader(
 	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx *parser.EvalContext,
 ) (*tableReader, error) {
 	tr := &tableReader{
-		desc:    spec.Table,
-		txn:     txn,
-		output:  output,
-		evalCtx: evalCtx,
+		desc:      spec.Table,
+		txn:       txn,
+		output:    output,
+		evalCtx:   evalCtx,
+		hardLimit: spec.HardLimit,
+		softLimit: spec.SoftLimit,
+	}
+
+	if tr.hardLimit != 0 && tr.hardLimit < tr.softLimit {
+		return nil, util.Errorf("soft limit %d larger than hard limit %d", tr.softLimit,
+			tr.hardLimit)
 	}
 
 	numCols := len(tr.desc.Columns)
@@ -93,11 +101,13 @@ func newTableReader(
 		tr.outputCols[i] = int(v)
 	}
 
-	tr.filterVars = parser.MakeIndexedVarHelper(tr, numCols)
-	var err error
-	tr.filter, err = processExpression(spec.Filter, &tr.filterVars)
-	if err != nil {
-		return nil, err
+	if spec.Filter.Expr != "" {
+		tr.filterVars = parser.MakeIndexedVarHelper(tr, numCols)
+		var err error
+		tr.filter, err = processExpression(spec.Filter, &tr.filterVars)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Figure out which columns we need: the output columns plus any other
@@ -129,7 +139,7 @@ func newTableReader(
 	for i, c := range tr.desc.Columns {
 		colIdxMap[c.ID] = i
 	}
-	err = tr.fetcher.Init(&tr.desc, colIdxMap, index, spec.Reverse, isSecondaryIndex,
+	err := tr.fetcher.Init(&tr.desc, colIdxMap, index, spec.Reverse, isSecondaryIndex,
 		valNeededForCol)
 	if err != nil {
 		return nil, err
@@ -141,6 +151,24 @@ func newTableReader(
 	}
 
 	return tr, nil
+}
+
+// getLimitHint calculates the row limit hint for the row fetcher.
+func (tr *tableReader) getLimitHint() int64 {
+	softLimit := tr.softLimit
+	if tr.hardLimit != 0 {
+		if tr.filter == nil {
+			return tr.hardLimit
+		}
+		// If we have a filter, we don't know how many rows will pass the filter
+		// so the hard limit is actually a "soft" limit at the row fetcher.
+		if softLimit == 0 {
+			softLimit = tr.hardLimit
+		}
+	}
+	// If the limit is soft, we request a multiple of the limit.
+	// If the limit is 0 (no limit), we must return 0.
+	return softLimit * 2
 }
 
 // nextRow processes table rows until it finds a row that passes the filter.
@@ -183,11 +211,13 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	if log.V(1) {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}
-	if err := tr.fetcher.StartScan(tr.txn, tr.spans, 0); err != nil {
+
+	if err := tr.fetcher.StartScan(tr.txn, tr.spans, tr.getLimitHint()); err != nil {
 		tr.output.Close(err)
 		return
 	}
 	tr.row = make(sqlbase.EncDatumRow, len(tr.desc.Columns))
+	var rowIdx int64
 	for {
 		outRow, err := tr.nextRow()
 		if err != nil || outRow == nil {
@@ -197,6 +227,12 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		// Push the row to the output rowReceiver; stop if they don't need more
 		// rows.
 		if !tr.output.PushRow(outRow) {
+			tr.output.Close(nil)
+			return
+		}
+		rowIdx++
+		if tr.hardLimit != 0 && rowIdx == tr.hardLimit {
+			// We sent tr.hardLimit rows.
 			tr.output.Close(nil)
 			return
 		}
