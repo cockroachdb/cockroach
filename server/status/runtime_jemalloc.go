@@ -27,6 +27,9 @@ package status
 import "C"
 
 import (
+	// This is explicit because this Go library does not export any Go symbols.
+	_ "github.com/cockroachdb/c-jemalloc"
+
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
