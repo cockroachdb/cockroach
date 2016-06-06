@@ -1407,11 +1407,17 @@ func (r *Replica) TruncateLog(
 		}); err != nil {
 		return reply, err
 	}
-	tState := roachpb.RaftTruncatedState{
+	tState := &roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, &tState)
+
+	batch.(engine.Batch).Defer(func() {
+		r.mu.Lock()
+		r.mu.truncatedState = tState
+		r.mu.Unlock()
+	})
+	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, tState)
 }
 
 // LeaderLease sets the leader lease for this range. The command fails
