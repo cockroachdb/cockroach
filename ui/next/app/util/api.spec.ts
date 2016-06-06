@@ -109,7 +109,12 @@ describe("rest api", function() {
 
         assert.isUndefined(requestObj.body);
 
-        return { databases: ["system", "test"] };
+        return {
+          sendAsJson: false,
+          body: new protos.cockroach.server.DatabasesResponse({
+            databases: ["system", "test"],
+          }).encodeJSON(),
+        };
       });
 
       return api.getDatabaseList().then((result) => {
@@ -166,7 +171,16 @@ describe("rest api", function() {
       // Mock out the fetch query
       fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
-        return { table_names: ["table1", "table2"], grants: [{ user: "root", privileges: ["ALL"] }, { user: "other", privileges: [] }] };
+        return {
+          sendAsJson: false,
+          body: new protos.cockroach.server.DatabaseDetailsResponse({
+            table_names: ["table1", "table2"],
+            grants: [
+              { user: "root", privileges: ["ALL"] },
+              { user: "other", privileges: [] },
+            ],
+          }).encodeJSON(),
+        };
       });
 
       return api.getDatabaseDetails({ database: dbName }).then((result) => {
@@ -225,7 +239,10 @@ describe("rest api", function() {
       // Mock out the fetch query
       fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
-        return { columns: [], grants: [], indexes: [] };
+        return {
+          sendAsJson: false,
+          body: new protos.cockroach.server.TableDetailsResponse().encodeJSON(),
+        };
       });
 
       return api.getTableDetails({ database: dbName, table: tableName }).then((result) => {
@@ -284,9 +301,12 @@ describe("rest api", function() {
       fetchMock.mock(api.API_PREFIX + "/events?", "get", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return {
-          events: [{
-            event_type: "test",
-          }],
+          sendAsJson: false,
+          body: new protos.cockroach.server.EventsResponse({
+            events: [
+              { event_type: "test" },
+            ],
+          }).encodeJSON(),
         };
       });
 
@@ -314,9 +334,12 @@ describe("rest api", function() {
         });
         assert.isUndefined(requestObj.body);
         return {
-          events: [{
-            event_type: "test",
-          }],
+          sendAsJson: false,
+          body: new protos.cockroach.server.EventsResponse({
+            events: [
+              { event_type: "test" },
+            ],
+          }).encodeJSON(),
         };
       });
 
@@ -342,7 +365,10 @@ describe("rest api", function() {
         assert(params[0].split("=")[0] === "type");
         assert(params[0].split("=")[1] === "here");
         assert.isUndefined(requestObj.body);
-        return {};
+        return {
+          sendAsJson: false,
+          body: new protos.cockroach.server.EventsResponse().encodeJSON(),
+        };
       });
 
       return api.getEvents(req).then((result) => {

@@ -7,9 +7,7 @@ import * as protos from "../js/protos";
 import reducer, * as metrics from "./metrics";
 import { Action } from "../interfaces/action";
 
-type TSRequest = cockroach.ts.TimeSeriesQueryRequest;
 type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
-type TSResponse = cockroach.ts.TimeSeriesQueryResponse;
 
 describe("metrics reducer", function() {
   describe("actions", function() {
@@ -163,16 +161,18 @@ describe("metrics reducer", function() {
           assert.isAtLeast(mockMetricsState.inFlight, 1);
           assert.isAtMost(mockMetricsState.inFlight, 1);
 
-          let request = JSON.parse(requestObj.body as string) as TSRequest;
+          let request = new protos.cockroach.ts.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
+
           return {
-            body: {
+            sendAsJson: false,
+            body: new protos.cockroach.ts.TimeSeriesQueryResponse({
               results: _.map(request.queries, (q) => {
                 return {
                   query: q,
                   datapoints: [],
                 };
               }),
-            },
+            }).encodeJSON(),
           };
       });
 
@@ -227,20 +227,23 @@ describe("metrics reducer", function() {
           // Assert that metric store's "inFlight" is 1.
           assert.equal(mockMetricsState.inFlight, 1);
 
-          let request = JSON.parse(requestObj.body) as TSRequest;
           if (successSent) {
             return { status: 500 };
           }
           successSent = true;
+
+          let request = new protos.cockroach.ts.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
+
           return {
-            body: {
+            sendAsJson: false,
+            body: new protos.cockroach.ts.TimeSeriesQueryResponse({
               results: _.map(request.queries, (q) => {
                 return {
                   query: q,
                   datapoints: [],
                 };
               }),
-            },
+            }).encodeJSON(),
           };
       });
 
