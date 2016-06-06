@@ -28,11 +28,18 @@ import (
 
 // readerBase implements basic code shared by tableReader and joinReader.
 type readerBase struct {
-	desc    sqlbase.TableDescriptor
+	desc sqlbase.TableDescriptor
+
+	index            *sqlbase.IndexDescriptor
+	isSecondaryIndex bool
+
 	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 
 	filter exprHelper
+
+	// colIdxMap maps ColumnIDs to indices into desc.Columns
+	colIdxMap map[sqlbase.ColumnID]int
 
 	outputCols []int
 
@@ -87,21 +94,18 @@ func (rb *readerBase) init(
 		return util.Errorf("invalid indexIdx %d", indexIdx)
 	}
 
-	var index *sqlbase.IndexDescriptor
-	var isSecondaryIndex bool
-
 	if indexIdx > 0 {
-		index = &rb.desc.Indexes[indexIdx-1]
-		isSecondaryIndex = true
+		rb.index = &rb.desc.Indexes[indexIdx-1]
+		rb.isSecondaryIndex = true
 	} else {
-		index = &rb.desc.PrimaryIndex
+		rb.index = &rb.desc.PrimaryIndex
 	}
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(rb.desc.Columns))
+	rb.colIdxMap = make(map[sqlbase.ColumnID]int, len(rb.desc.Columns))
 	for i, c := range rb.desc.Columns {
-		colIdxMap[c.ID] = i
+		rb.colIdxMap[c.ID] = i
 	}
-	err := rb.fetcher.Init(&rb.desc, colIdxMap, index, reverseScan, isSecondaryIndex,
+	err := rb.fetcher.Init(&rb.desc, rb.colIdxMap, rb.index, reverseScan, rb.isSecondaryIndex,
 		valNeededForCol)
 	if err != nil {
 		return err
