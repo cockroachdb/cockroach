@@ -54,15 +54,19 @@ type RowFetcher struct {
 	isSecondaryIndex bool
 	indexColumnDirs  []encoding.Direction
 
-	// For each column in desc.Columns, indicates if the value is needed (used
-	// as an optimization when the upper layer doesn't need all values).
+	// The table columns to use for fetching, possibly including ones currently in
+	// schema changes.
+	cols []ColumnDescriptor
+
+	// For each column in cols, indicates if the value is needed (used as an
+	// optimization when the upper layer doesn't need all values).
 	valNeededForCol []bool
 
-	// Map used to get the index for columns in desc.Columns.
+	// Map used to get the index for columns in cols.
 	colIdxMap map[ColumnID]int
 
 	// One value per column that is part of the key; each value is a column
-	// index (into desc.Columns).
+	// index (into cols).
 	indexColIdx []int
 
 	// -- Fields updated during a scan --
@@ -91,6 +95,7 @@ func (rf *RowFetcher) Init(
 	colIdxMap map[ColumnID]int,
 	index *IndexDescriptor,
 	reverse, isSecondaryIndex bool,
+	cols []ColumnDescriptor,
 	valNeededForCol []bool,
 ) error {
 	rf.desc = desc
@@ -98,8 +103,9 @@ func (rf *RowFetcher) Init(
 	rf.index = index
 	rf.reverse = reverse
 	rf.isSecondaryIndex = isSecondaryIndex
+	rf.cols = cols
 	rf.valNeededForCol = valNeededForCol
-	rf.row = make([]parser.Datum, len(rf.desc.Columns))
+	rf.row = make([]parser.Datum, len(rf.cols))
 
 	var indexColumnIDs []ColumnID
 	indexColumnIDs, rf.indexColumnDirs = index.FullColumnIDs()
@@ -111,8 +117,8 @@ func (rf *RowFetcher) Init(
 
 	if isSecondaryIndex {
 		for i, needed := range valNeededForCol {
-			if needed && !index.ContainsColumnID(desc.Columns[i].ID) {
-				return util.Errorf("requested column %s not in index", desc.Columns[i].Name)
+			if needed && !index.ContainsColumnID(rf.cols[i].ID) {
+				return util.Errorf("requested column %s not in index", rf.cols[i].Name)
 			}
 		}
 	}
@@ -160,7 +166,7 @@ func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) e
 		if !rf.isSecondaryIndex {
 			// We have a sentinel key per row plus at most one key per non-PK column. Of course, we
 			// may have other keys due to a schema change, but this is only a hint.
-			firstBatchLimit *= int64(1 + len(rf.desc.Columns) - len(rf.index.ColumnIDs))
+			firstBatchLimit *= int64(1 + len(rf.cols) - len(rf.index.ColumnIDs))
 		}
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
@@ -205,7 +211,7 @@ func (rf *RowFetcher) NextKey() (rowDone bool, err error) {
 		rf.indexKey = nil
 
 		// Fill in any missing values with NULLs
-		for i, col := range rf.desc.Columns {
+		for i, col := range rf.cols {
 			if rf.valNeededForCol[i] && rf.row[i] == nil {
 				if !col.Nullable {
 					panic("Non-nullable column with no value!")
@@ -272,9 +278,9 @@ func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 		idx, ok := rf.colIdxMap[ColumnID(colID)]
 		if ok && (debugStrings || rf.valNeededForCol[idx]) {
 			if debugStrings {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
+				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.cols[idx].Name)
 			}
-			kind := rf.desc.Columns[idx].Type.Kind
+			kind := rf.cols[idx].Type.Kind
 			value, err := UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
 			if err != nil {
 				return "", "", err

@@ -246,7 +246,7 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 	case *parser.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(s, orderBy, limit, desiredTypes)
+		return p.SelectClause(s, orderBy, limit, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
@@ -276,7 +276,8 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 // SQL statements. In the slowest and most general case, select must perform
 // full table scans across multiple tables and sort and join the resulting rows
 // on arbitrary columns. Full table scans can be avoided when indexes can be
-// used to satisfy the where-clause.
+// used to satisfy the where-clause. scanVisibility controls which columns are
+// visible to the select.
 //
 // NB: This is passed directly to planNode only when there is no ORDER BY,
 // LIMIT, or parenthesis in the parsed SELECT. See `sql/parser.Select` and
@@ -285,12 +286,18 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) SelectClause(parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit, desiredTypes []parser.Datum) (planNode, error) {
+func (p *planner) SelectClause(
+	parsed *parser.SelectClause,
+	orderBy parser.OrderBy,
+	limit *parser.Limit,
+	desiredTypes []parser.Datum,
+	scanVisibility scanVisibility,
+) (planNode, error) {
 	s := &selectNode{planner: p}
 
 	s.qvals = make(qvalMap)
 
-	if err := s.initFrom(p, parsed); err != nil {
+	if err := s.initFrom(p, parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
@@ -435,7 +442,9 @@ func (s *selectNode) expandPlan() error {
 }
 
 // initFrom initializes the table node, given the parsed select expression
-func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
+func (s *selectNode) initFrom(
+	p *planner, parsed *parser.SelectClause, scanVisibility scanVisibility,
+) error {
 	from := parsed.From
 	var colAlias parser.NameList
 	var err error
@@ -453,7 +462,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 		case *parser.QualifiedName:
 			// Usual case: a table.
 			scan := p.Scan()
-			s.source.info.alias, err = scan.initTable(p, expr, ate.Hints)
+			s.source.info.alias, err = scan.initTable(p, expr, ate.Hints, scanVisibility)
 			if err != nil {
 				return err
 			}

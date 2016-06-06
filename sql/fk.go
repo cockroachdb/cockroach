@@ -128,7 +128,8 @@ func makeBaseFKHelepr(
 		needed[ids[i]] = true
 	}
 	isSecondary := searchTable.PrimaryIndex.ID != searchIdx.ID
-	if err := b.rf.Init(searchTable, ids, searchIdx, false, isSecondary, needed); err != nil {
+	err = b.rf.Init(searchTable, ids, searchIdx, false, isSecondary, searchTable.Columns, needed)
+	if err != nil {
 		return b, err
 	}
 
