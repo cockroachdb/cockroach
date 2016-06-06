@@ -272,6 +272,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT "FROM" FROM t`},
 		{`SELECT CAST(1 AS TEXT)`},
+		{`SELECT ANNOTATE_TYPE(1, TEXT)`},
 		{`SELECT a FROM t AS bar`},
 		{`SELECT a FROM t AS bar (bar1)`},
 		{`SELECT a FROM t AS bar (bar1, bar2, bar3)`},
@@ -572,6 +573,9 @@ func TestParse2(t *testing.T) {
 		// Shorthand type cast.
 		{`SELECT '1'::INT`,
 			`SELECT CAST('1' AS INT)`},
+		// Shorthand type annotation.
+		{`SELECT '1'!INT`,
+			`SELECT ANNOTATE_TYPE('1', INT)`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
 			`SELECT *, - (- 5)`},
@@ -869,6 +873,20 @@ DROP INDEX a
 			`syntax error at or near "family"
 ALTER TABLE t RENAME COLUMN x TO family
                                  ^
+`,
+		},
+		{
+			`SELECT CAST(1.2+2.3 AS notatype)`,
+			`syntax error at or near "notatype"
+SELECT CAST(1.2+2.3 AS notatype)
+                       ^
+`,
+		},
+		{
+			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
+			`syntax error at or near "notatype"
+SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
+                              ^
 `,
 		},
 	}
