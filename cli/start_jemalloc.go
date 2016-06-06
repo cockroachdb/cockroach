@@ -53,13 +53,20 @@ package cli
 //   return mallctl("prof.dump", NULL, NULL, &filename, sizeof(const char *));
 // }
 import "C"
+
 import (
+	// This is explicit because this Go library does not export any Go symbols.
+	_ "github.com/cockroachdb/c-jemalloc"
+
 	"fmt"
 	"unsafe"
 )
 
 func init() {
 	if C.is_profiling_enabled() {
+		if jemallocHeapDump != nil {
+			panic("jemallocHeapDump is already set")
+		}
 		jemallocHeapDump = writeJemallocProfile
 	}
 }
