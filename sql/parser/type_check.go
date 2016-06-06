@@ -250,6 +250,18 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 }
 
 // TypeCheck implements the Expr interface.
+func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
+	annotType := expr.annotationType()
+	subExpr, err := typeCheckAndRequire(ctx, expr.Expr, annotType,
+		fmt.Sprintf("type assertion for %v as %s, found", expr.Expr, annotType.Type()))
+	if err != nil {
+		return nil, err
+	}
+	expr.Expr = subExpr
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
 func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, expr.Exprs...)
 	if err != nil {
