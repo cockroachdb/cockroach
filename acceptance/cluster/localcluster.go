@@ -767,7 +767,7 @@ func (l *LocalCluster) Kill(i int) error {
 
 // Restart restarts the given node. If the node isn't running, this starts it.
 func (l *LocalCluster) Restart(i int) error {
-	return l.Nodes[i].Restart(5)
+	return l.Nodes[i].Restart(5 * time.Second)
 }
 
 // URL returns the base url.

@@ -192,7 +192,7 @@ func (c *Container) Kill() error {
 //
 // TODO(pmattis): Generalize the setting of parameters here.
 func (c *Container) Start() error {
-	return c.cluster.client.ContainerStart(context.Background(), c.id, "")
+	return c.cluster.client.ContainerStart(context.Background(), c.id, types.ContainerStartOptions{})
 }
 
 // Pause pauses a running container.
@@ -211,14 +211,14 @@ func (c *Container) Unpause() error {
 
 // Restart restarts a running container.
 // Container will be killed after 'timeout' seconds if it fails to stop.
-func (c *Container) Restart(timeoutSeconds int) error {
+func (c *Container) Restart(timeout time.Duration) error {
 	var exp []string
 	if ci, err := c.Inspect(); err != nil {
 		return err
 	} else if ci.State.Running {
 		exp = append(exp, eventDie)
 	}
-	if err := c.cluster.client.ContainerRestart(context.Background(), c.id, timeoutSeconds); err != nil {
+	if err := c.cluster.client.ContainerRestart(context.Background(), c.id, timeout); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, append(exp, eventRestart)...)
@@ -226,8 +226,8 @@ func (c *Container) Restart(timeoutSeconds int) error {
 }
 
 // Stop a running container.
-func (c *Container) Stop(timeoutSeconds int) error {
-	if err := c.cluster.client.ContainerStop(context.Background(), c.id, timeoutSeconds); err != nil {
+func (c *Container) Stop(timeout time.Duration) error {
+	if err := c.cluster.client.ContainerStop(context.Background(), c.id, timeout); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, eventDie)
@@ -447,10 +447,10 @@ func (cli retryingDockerClient) ContainerCreate(
 	return ret, err
 }
 
-func (cli retryingDockerClient) ContainerStart(ctx context.Context, container string, checkpointID string) error {
+func (cli retryingDockerClient) ContainerStart(ctx context.Context, container string, options types.ContainerStartOptions) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
-			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, checkpointID)
+			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, options)
 		})
 }
 

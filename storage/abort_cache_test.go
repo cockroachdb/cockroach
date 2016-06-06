@@ -49,7 +49,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	testTxnID2, err = uuid.FromString("9ab49d02-eb45-beef-9212-c23a92bc8211")
+	testTxnID2, err = uuid.FromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 	if err != nil {
 		panic(err)
 	}
