@@ -15,8 +15,8 @@
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.ts;
-option go_package = "ts";
+package cockroach.ts.tspb;
+option go_package = "tspb";
 
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";

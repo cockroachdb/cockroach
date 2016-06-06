@@ -50,7 +50,7 @@ GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_
 GW_SERVER_PROTOS := $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto
 GW_SERVER_SOURCES := $(GW_SERVER_PROTOS:%.proto=%.pb.gw.go)
 
-GW_TS_PROTOS := $(REPO_ROOT)/ts/timeseries.proto
+GW_TS_PROTOS := $(REPO_ROOT)/ts/tspb/timeseries.proto
 GW_TS_SOURCES := $(GW_TS_PROTOS:%.proto=%.pb.gw.go)
 
 GW_SOURCES := $(GW_SERVER_SOURCES) $(GW_TS_SOURCES)

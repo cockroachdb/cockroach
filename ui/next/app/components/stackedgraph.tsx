@@ -67,8 +67,8 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
 
     this.chart = nvd3.models.stackedAreaChart();
     this.chart
-      .x((d: cockroach.ts.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
-      .y((d: cockroach.ts.TimeSeriesDatapoint) => d && d.value)
+      .x((d: cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
+      .y((d: cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
       .useInteractiveGuideline(true)
       .showLegend(true)
       .showYAxis(true)
