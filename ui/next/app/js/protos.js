@@ -1966,6 +1966,10 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "id": 6
                         },
                         {
+                            "name": "TUPLE",
+                            "id": 10
+                        },
+                        {
                             "name": "TIMESERIES",
                             "id": 100
                         }
