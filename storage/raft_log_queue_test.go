@@ -108,7 +108,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	}
 
 	// Write a few keys to the range.
-	for i := 0; i < 10; i++ {
+	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
 		if _, err := client.SendWrapped(store.testSender(), nil, &args); err != nil {
@@ -164,4 +164,52 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestProactiveRaftLogTruncate verifies that we proactively truncate the raft
+// log even when replica scanning is disabled.
+func TestProactiveRaftLogTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	store.scanner.SetDisabled(true)
+
+	r, err := store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	r.mu.Lock()
+	oldFirstIndex, err := r.FirstIndex()
+	r.mu.Unlock()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Write a few keys to the range. While writing these keys, the raft log
+	// should be proactively truncated even though replica scanning is disabled.
+	for i := 0; i < 2*RaftLogQueueStaleThreshold; i++ {
+		key := roachpb.Key(fmt.Sprintf("key%02d", i))
+		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
+		if _, err := client.SendWrapped(store.testSender(), nil, &args); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait for tasks to finish, in case the processLoop grabbed the event
+	// before ForceRaftLogScanAndProcess but is still working on it.
+	stopper.Quiesce()
+
+	r.mu.Lock()
+	newFirstIndex, err := r.FirstIndex()
+	r.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if newFirstIndex <= oldFirstIndex {
+		t.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
+			oldFirstIndex, newFirstIndex)
+	}
 }
