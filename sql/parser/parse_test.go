@@ -870,6 +870,13 @@ DROP INDEX a
             ^
 `,
 		},
+		{
+			`ALTER TABLE t RENAME COLUMN x TO family`,
+			`syntax error at or near "family"
+ALTER TABLE t RENAME COLUMN x TO family
+                                 ^
+`,
+		},
 	}
 	for _, d := range testData {
 		_, err := parseTraditional(d.sql)

@@ -35,6 +35,7 @@ var reservedKeywords = map[string]struct{}{
 	"END":               {},
 	"EXCEPT":            {},
 	"FALSE":             {},
+	"FAMILY":            {},
 	"FETCH":             {},
 	"FOR":               {},
 	"FOREIGN":           {},
