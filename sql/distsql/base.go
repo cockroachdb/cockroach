@@ -71,10 +71,14 @@ type RowChannel struct {
 
 var _ rowReceiver = &RowChannel{}
 
-func (rc *RowChannel) init() {
-	rc.dataChan = make(chan StreamMsg, rowChannelBuf)
+func (rc *RowChannel) initWithBufSize(chanBuf int) {
+	rc.dataChan = make(chan StreamMsg, chanBuf)
 	rc.C = rc.dataChan
 	atomic.StoreUint32(&rc.noMoreRows, 0)
+}
+
+func (rc *RowChannel) init() {
+	rc.initWithBufSize(rowChannelBuf)
 }
 
 // PushRow is part of the rowReceiver interface.

@@ -15,8 +15,10 @@
 		Expression
 		TableReaderSpan
 		TableReaderSpec
+		JoinReaderSpec
 		MailboxSpec
 		StreamEndpointSpec
+		InputSyncSpec
 		OutputRouterSpec
 		ProcessorCoreUnion
 		ProcessorSpec
