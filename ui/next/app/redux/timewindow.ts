@@ -1,3 +1,5 @@
+/// <reference path="../../typings/index.d.ts" />
+
 /**
  * This module maintains a globally-available time window, currently used by all
  * metrics graphs in the ui.
