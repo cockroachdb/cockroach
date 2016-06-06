@@ -19,6 +19,7 @@ package tracing
 // static void annotateTrace() {
 // }
 import "C"
+
 import "github.com/cockroachdb/cockroach/util/envutil"
 
 var annotationEnabled = envutil.EnvOrDefaultBool("annotate_traces", false)
