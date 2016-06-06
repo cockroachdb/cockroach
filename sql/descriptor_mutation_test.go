@@ -33,10 +33,9 @@ import (
 
 type mutationTest struct {
 	*testing.T
-	kvDB    *client.DB
-	sqlDB   *gosql.DB
-	descKey roachpb.Key
-	desc    *sqlbase.Descriptor
+	kvDB      *client.DB
+	sqlDB     *gosql.DB
+	tableDesc *sqlbase.TableDescriptor
 }
 
 // checkQueryResponse runs the sql query q, and checks that it matches
@@ -99,8 +98,7 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 // in the table equals e.
 func (mt mutationTest) checkTableSize(e int) {
 	// Check that there are no hidden values
-	tableDesc := mt.desc.GetTable()
-	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
+	tablePrefix := keys.MakeTablePrefix(uint32(mt.tableDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := mt.kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
@@ -114,24 +112,26 @@ func (mt mutationTest) checkTableSize(e int) {
 // and write the updated table descriptor to the DB.
 func (mt mutationTest) makeMutationsActive() {
 	// Remove mutation to check real values in DB using SQL
-	tableDesc := mt.desc.GetTable()
-	if tableDesc.Mutations == nil || len(tableDesc.Mutations) == 0 {
+	if mt.tableDesc.Mutations == nil || len(mt.tableDesc.Mutations) == 0 {
 		mt.Fatal("No mutations to make active")
 	}
-	for _, m := range tableDesc.Mutations {
+	for _, m := range mt.tableDesc.Mutations {
 		if col := m.GetColumn(); col != nil {
-			tableDesc.Columns = append(tableDesc.Columns, *col)
+			mt.tableDesc.Columns = append(mt.tableDesc.Columns, *col)
 		} else if index := m.GetIndex(); index != nil {
-			tableDesc.Indexes = append(tableDesc.Indexes, *index)
+			mt.tableDesc.Indexes = append(mt.tableDesc.Indexes, *index)
 		} else {
 			mt.Fatalf("no descriptor in mutation: %v", m)
 		}
 	}
-	tableDesc.Mutations = nil
-	if err := tableDesc.Validate(); err != nil {
+	mt.tableDesc.Mutations = nil
+	if err := mt.tableDesc.Validate(); err != nil {
 		mt.Fatal(err)
 	}
-	if err := mt.kvDB.Put(mt.descKey, mt.desc); err != nil {
+	if err := mt.kvDB.Put(
+		sqlbase.MakeDescMetadataKey(mt.tableDesc.ID),
+		sqlbase.WrapDescriptor(mt.tableDesc),
+	); err != nil {
 		mt.Fatal(err)
 	}
 }
@@ -139,13 +139,12 @@ func (mt mutationTest) makeMutationsActive() {
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMutation) {
-	tableDesc := mt.desc.GetTable()
-	_, i, err := tableDesc.FindColumnByName(column)
+	_, i, err := mt.tableDesc.FindColumnByName(column)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	col := tableDesc.Columns[i]
-	tableDesc.Columns = append(tableDesc.Columns[:i], tableDesc.Columns[i+1:]...)
+	col := mt.tableDesc.Columns[i]
+	mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Column{Column: &col}
 	mt.writeMutation(m)
 }
@@ -154,12 +153,11 @@ func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMu
 // State or the Direction is undefined, these values are populated via
 // picking random values before the mutation is written.
 func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
-	tableDesc := mt.desc.GetTable()
 	if m.Direction == sqlbase.DescriptorMutation_NONE {
 		// randomly pick ADD/DROP mutation if this is the first mutation, or
 		// pick the direction already chosen for the first mutation.
-		if len(tableDesc.Mutations) > 0 {
-			m.Direction = tableDesc.Mutations[0].Direction
+		if len(mt.tableDesc.Mutations) > 0 {
+			m.Direction = mt.tableDesc.Mutations[0].Direction
 		} else {
 			m.Direction = sqlbase.DescriptorMutation_DROP
 			if rand.Intn(2) == 0 {
@@ -176,11 +174,14 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 			m.State = sqlbase.DescriptorMutation_WRITE_ONLY
 		}
 	}
-	tableDesc.Mutations = append(tableDesc.Mutations, m)
-	if err := tableDesc.Validate(); err != nil {
+	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
+	if err := mt.tableDesc.Validate(); err != nil {
 		mt.Fatal(err)
 	}
-	if err := mt.kvDB.Put(mt.descKey, mt.desc); err != nil {
+	if err := mt.kvDB.Put(
+		sqlbase.MakeDescMetadataKey(mt.tableDesc.ID),
+		sqlbase.WrapDescriptor(mt.tableDesc),
+	); err != nil {
 		mt.Fatal(err)
 	}
 }
@@ -206,26 +207,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 	}
 
 	// read table descriptor
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	mTest := mutationTest{
-		T:       t,
-		kvDB:    kvDB,
-		sqlDB:   sqlDB,
-		descKey: descKey,
-		desc:    desc,
+		T:         t,
+		kvDB:      kvDB,
+		sqlDB:     sqlDB,
+		tableDesc: tableDesc,
 	}
 
 	starQuery := `SELECT * FROM t.test`
@@ -342,7 +330,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 	}
 
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
-	tableDesc := desc.GetTable()
+	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{}}
 	if err := tableDesc.Validate(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
@@ -366,7 +354,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 // writeIndexMutation adds index as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMutation) {
-	tableDesc := mt.desc.GetTable()
+	tableDesc := mt.tableDesc
 	_, i, err := tableDesc.FindIndexByName(index)
 	if err != nil {
 		mt.Fatal(err)
@@ -397,26 +385,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 
 	// read table descriptor
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	mTest := mutationTest{
-		T:       t,
-		kvDB:    kvDB,
-		sqlDB:   sqlDB,
-		descKey: descKey,
-		desc:    desc,
+		T:         t,
+		kvDB:      kvDB,
+		sqlDB:     sqlDB,
+		tableDesc: tableDesc,
 	}
 
 	starQuery := `SELECT * FROM t.test`
@@ -502,7 +477,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 
 	// Check that a mutation can only be inserted with an explicit mutation state.
-	tableDesc := desc.GetTable()
+	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{Descriptor_: &sqlbase.DescriptorMutation_Index{Index: &tableDesc.Indexes[len(tableDesc.Indexes)-1]}}}
 	tableDesc.Indexes = tableDesc.Indexes[:len(tableDesc.Indexes)-1]
 	if err := tableDesc.Validate(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
@@ -534,26 +509,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v));
 	}
 
 	// read table descriptor
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	mTest := mutationTest{
-		T:       t,
-		kvDB:    kvDB,
-		sqlDB:   sqlDB,
-		descKey: descKey,
-		desc:    desc,
+		T:         t,
+		kvDB:      kvDB,
+		sqlDB:     sqlDB,
+		tableDesc: tableDesc,
 	}
 
 	starQuery := `SELECT * FROM t.test`
@@ -691,26 +653,13 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	}
 
 	// Read table descriptor
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	mt := mutationTest{
-		T:       t,
-		kvDB:    kvDB,
-		sqlDB:   sqlDB,
-		descKey: descKey,
-		desc:    desc,
+		T:         t,
+		kvDB:      kvDB,
+		sqlDB:     sqlDB,
+		tableDesc: tableDesc,
 	}
 
 	// Test CREATE INDEX in the presence of mutations.
@@ -850,9 +799,8 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	}
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	if err := mt.kvDB.GetProto(mt.descKey, mt.desc); err != nil {
-		mt.Fatal(err)
-	}
+	mt.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 	// Make "ufo" live.
 	mt.makeMutationsActive()
 	// The index has been renamed to ufo, and the column to d.
@@ -865,11 +813,11 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test RENAME COLUMN b TO e`); err != nil {
 		mt.Fatal(err)
 	}
+
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	if err := mt.kvDB.GetProto(mt.descKey, mt.desc); err != nil {
-		mt.Fatal(err)
-	}
+	mt.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 	// Make column "e" live.
 	mt.makeMutationsActive()
 	// Column b changed to d.
