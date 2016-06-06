@@ -4206,7 +4206,6 @@ unreserved_keyword:
 | DROP
 | ENCODING
 | EXPLAIN
-| FAMILY
 | FILTER
 | FIRST
 | FOLLOWING
@@ -4402,6 +4401,7 @@ reserved_keyword:
 | END
 | EXCEPT
 | FALSE
+| FAMILY
 | FETCH
 | FOR
 | FOREIGN
