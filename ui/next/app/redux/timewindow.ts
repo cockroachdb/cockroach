@@ -3,6 +3,7 @@
  * metrics graphs in the ui.
  */
 
+/// <reference path="../../typings/index.d.ts" />
 import { Action, PayloadAction } from "../interfaces/action";
 import _ = require("lodash");
 import moment = require("moment");

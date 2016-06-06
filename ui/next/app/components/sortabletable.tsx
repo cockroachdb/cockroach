@@ -1,3 +1,4 @@
+/// <reference path="../../typings/index.d.ts" />
 import * as React from "react";
 import _ = require("lodash");
 
@@ -45,7 +46,7 @@ interface TableProps {
 
 /**
  * SortableTable is designed to display tabular data where the data set can be
- * sorted by one or more columns. 
+ * sorted by one or more columns.
  *
  * SortableTable is not responsible for sorting data; however, it does allow the
  * user to indicate how data should be sorted by clicking on column headers.

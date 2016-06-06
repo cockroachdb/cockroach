@@ -8,6 +8,7 @@
 import _ = require("lodash");
 import { Dispatch } from "redux";
 
+/// <reference path="../js/protos.d.ts" />
 import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";
 import { queryTimeSeries } from "../util/api";
