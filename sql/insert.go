@@ -162,7 +162,7 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	ri, err := makeRowInserter(en.tableDesc, cols)
+	ri, err := makeRowInserter(p.txn, en.tableDesc, cols)
 	if err != nil {
 		return nil, err
 	}
