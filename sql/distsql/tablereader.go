@@ -26,25 +26,133 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// readerBase implements basic code shared by tableReader and joinReader.
+type readerBase struct {
+	desc    sqlbase.TableDescriptor
+	txn     *client.Txn
+	fetcher sqlbase.RowFetcher
+
+	filter exprHelper
+
+	outputCols []int
+
+	// Last row returned by the rowFetcher; it has one entry per table column.
+	row      sqlbase.EncDatumRow
+	rowAlloc sqlbase.EncDatumRowAlloc
+}
+
+func (rb *readerBase) init(
+	desc *sqlbase.TableDescriptor,
+	indexIdx int,
+	txn *client.Txn,
+	filter Expression,
+	evalCtx *parser.EvalContext,
+	outputCols []uint32,
+	reverseScan bool,
+) error {
+	rb.desc = *desc
+	rb.txn = txn
+
+	rb.outputCols = make([]int, len(outputCols))
+	for i, v := range outputCols {
+		rb.outputCols[i] = int(v)
+	}
+
+	numCols := len(rb.desc.Columns)
+
+	// Figure out which columns we need: the output columns plus any other
+	// columns used by the filter expression.
+	valNeededForCol := make([]bool, numCols)
+	for _, c := range rb.outputCols {
+		if c < 0 || c >= numCols {
+			return util.Errorf("invalid column index %d", c)
+		}
+		valNeededForCol[c] = true
+	}
+
+	if filter.Expr != "" {
+		types := make([]sqlbase.ColumnType_Kind, numCols)
+		for i := range types {
+			types[i] = rb.desc.Columns[i].Type.Kind
+		}
+		if err := rb.filter.init(filter, types, evalCtx); err != nil {
+			return err
+		}
+		for c := 0; c < numCols; c++ {
+			valNeededForCol[c] = valNeededForCol[c] || rb.filter.vars.IndexedVarUsed(c)
+		}
+	}
+
+	if indexIdx < 0 || indexIdx > len(rb.desc.Indexes) {
+		return util.Errorf("invalid indexIdx %d", indexIdx)
+	}
+
+	var index *sqlbase.IndexDescriptor
+	var isSecondaryIndex bool
+
+	if indexIdx > 0 {
+		index = &rb.desc.Indexes[indexIdx-1]
+		isSecondaryIndex = true
+	} else {
+		index = &rb.desc.PrimaryIndex
+	}
+
+	colIdxMap := make(map[sqlbase.ColumnID]int, len(rb.desc.Columns))
+	for i, c := range rb.desc.Columns {
+		colIdxMap[c.ID] = i
+	}
+	err := rb.fetcher.Init(&rb.desc, colIdxMap, index, reverseScan, isSecondaryIndex,
+		tr.desc.Columns, valNeededForCol)
+	if err != nil {
+		return err
+	}
+	rb.row = make(sqlbase.EncDatumRow, len(rb.desc.Columns))
+	return nil
+}
+
+// nextRow processes table rows until it finds a row that passes the filter.
+// Returns a nil row when there are no more rows.
+func (rb *readerBase) nextRow() (sqlbase.EncDatumRow, error) {
+	for {
+		fetcherRow, err := rb.fetcher.NextRow()
+		if err != nil || fetcherRow == nil {
+			return nil, err
+		}
+
+		// TODO(radu): we are defeating the purpose of EncDatum here - we
+		// should modify RowFetcher to return EncDatums directly and avoid
+		// the cost of decoding/reencoding.
+		for i := range fetcherRow {
+			if fetcherRow[i] != nil {
+				rb.row[i].SetDatum(rb.desc.Columns[i].Type.Kind, fetcherRow[i])
+			}
+		}
+		passesFilter, err := rb.filter.evalFilter(rb.row)
+		if err != nil {
+			return nil, err
+		}
+		if passesFilter {
+			break
+		}
+	}
+	outRow := rb.rowAlloc.AllocRow(len(rb.outputCols))
+	for i, col := range rb.outputCols {
+		outRow[i] = rb.row[col]
+	}
+	return outRow, nil
+}
+
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
 // desired column values to an output rowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	desc                 sqlbase.TableDescriptor
+	readerBase
+
 	spans                sqlbase.Spans
-	outputCols           []int
 	hardLimit, softLimit int64
 
 	output rowReceiver
-
-	filter exprHelper
-
-	txn     *client.Txn
-	fetcher sqlbase.RowFetcher
-	// Last row returned by the rowFetcher; it has one entry per table column.
-	row      sqlbase.EncDatumRow
-	rowAlloc sqlbase.EncDatumRowAlloc
 }
 
 var _ processor = &tableReader{}
@@ -54,8 +162,6 @@ func newTableReader(
 	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx *parser.EvalContext,
 ) (*tableReader, error) {
 	tr := &tableReader{
-		desc:      spec.Table,
-		txn:       txn,
 		output:    output,
 		hardLimit: spec.HardLimit,
 		softLimit: spec.SoftLimit,
@@ -66,56 +172,8 @@ func newTableReader(
 			tr.hardLimit)
 	}
 
-	numCols := len(tr.desc.Columns)
-
-	tr.outputCols = make([]int, len(spec.OutputColumns))
-	for i, v := range spec.OutputColumns {
-		tr.outputCols[i] = int(v)
-	}
-
-	// Figure out which columns we need: the output columns plus any other
-	// columns used by the filter expression.
-	valNeededForCol := make([]bool, numCols)
-	for _, c := range tr.outputCols {
-		if c < 0 || c >= numCols {
-			return nil, util.Errorf("invalid column index %d", c)
-		}
-		valNeededForCol[c] = true
-	}
-
-	if spec.Filter.Expr != "" {
-		types := make([]sqlbase.ColumnType_Kind, numCols)
-		for i := range types {
-			types[i] = tr.desc.Columns[i].Type.Kind
-		}
-		if err := tr.filter.init(spec.Filter, types, evalCtx); err != nil {
-			return nil, err
-		}
-		for c := 0; c < numCols; c++ {
-			valNeededForCol[c] = valNeededForCol[c] || tr.filter.vars.IndexedVarUsed(c)
-		}
-	}
-
-	if spec.IndexIdx > uint32(len(tr.desc.Indexes)) {
-		return nil, util.Errorf("invalid IndexIdx %d", spec.IndexIdx)
-	}
-
-	var index *sqlbase.IndexDescriptor
-	var isSecondaryIndex bool
-
-	if spec.IndexIdx > 0 {
-		index = &tr.desc.Indexes[spec.IndexIdx-1]
-		isSecondaryIndex = true
-	} else {
-		index = &tr.desc.PrimaryIndex
-	}
-
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(tr.desc.Columns))
-	for i, c := range tr.desc.Columns {
-		colIdxMap[c.ID] = i
-	}
-	err := tr.fetcher.Init(&tr.desc, colIdxMap, index, spec.Reverse, isSecondaryIndex,
-		tr.desc.Columns, valNeededForCol)
+	err := tr.readerBase.init(&spec.Table, int(spec.IndexIdx), txn, spec.Filter, evalCtx,
+		spec.OutputColumns, spec.Reverse)
 	if err != nil {
 		return nil, err
 	}
@@ -146,38 +204,6 @@ func (tr *tableReader) getLimitHint() int64 {
 	return softLimit * 2
 }
 
-// nextRow processes table rows until it finds a row that passes the filter.
-// Returns a nil row when there are no more rows.
-func (tr *tableReader) nextRow() (sqlbase.EncDatumRow, error) {
-	for {
-		fetcherRow, err := tr.fetcher.NextRow()
-		if err != nil || fetcherRow == nil {
-			return nil, err
-		}
-
-		// TODO(radu): we are defeating the purpose of EncDatum here - we
-		// should modify RowFetcher to return EncDatums directly and avoid
-		// the cost of decoding/reencoding.
-		for i := range fetcherRow {
-			if fetcherRow[i] != nil {
-				tr.row[i].SetDatum(tr.desc.Columns[i].Type.Kind, fetcherRow[i])
-			}
-		}
-		passesFilter, err := tr.filter.evalFilter(tr.row)
-		if err != nil {
-			return nil, err
-		}
-		if passesFilter {
-			break
-		}
-	}
-	outRow := tr.rowAlloc.AllocRow(len(tr.outputCols))
-	for i, col := range tr.outputCols {
-		outRow[i] = tr.row[col]
-	}
-	return outRow, nil
-}
-
 // Run is part of the processor interface.
 func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	if wg != nil {
@@ -191,7 +217,6 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		tr.output.Close(err)
 		return
 	}
-	tr.row = make(sqlbase.EncDatumRow, len(tr.desc.Columns))
 	var rowIdx int64
 	for {
 		outRow, err := tr.nextRow()
