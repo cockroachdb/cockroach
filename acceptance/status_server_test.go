@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -74,7 +74,7 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 	if nodeID == otherNodeID {
 		urlIDs = append(urlIDs, "local")
 	}
-	var details server.DetailsResponse
+	var details serverpb.DetailsResponse
 	for _, urlID := range urlIDs {
 		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/"+urlID, &details); err != nil {
 			t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
@@ -101,7 +101,7 @@ func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConf
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
-		var details server.DetailsResponse
+		var details serverpb.DetailsResponse
 		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}

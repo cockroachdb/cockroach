@@ -287,7 +287,7 @@ module Models {
     }
 
     /*****************************
-     * server/admin.proto
+     * server/serverpb/admin.proto
      ****************************/
 
     export interface Timestamp {

@@ -16,7 +16,7 @@
 
 syntax = "proto3";
 package cockroach.server;
-option go_package = "server";
+option go_package = "serverpb";
 
 import "cockroach/build/info.proto";
 import "cockroach/gossip/gossip.proto";

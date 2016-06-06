@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -212,7 +213,7 @@ func (s *Server) checkForUpdates() {
 func (s *Server) usageReportingEnabled() bool {
 	// Grab the optin value from the database.
 	var ctx context.Context
-	req := &GetUIDataRequest{Keys: []string{optinKey}}
+	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
 	resp, err := s.admin.GetUIData(ctx, req)
 	if err != nil {
 		log.Warning(err)
