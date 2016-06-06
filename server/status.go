@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -159,7 +160,7 @@ func newStatusServer(
 
 // RegisterService registers the GRPC service.
 func (s *statusServer) RegisterService(g *grpc.Server) {
-	RegisterStatusServer(g, s)
+	serverpb.RegisterStatusServer(g, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse
@@ -172,7 +173,7 @@ func (s *statusServer) RegisterGateway(
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
 	s.router.NotFound = mux
 
-	return RegisterStatusHandler(ctx, mux, conn)
+	return serverpb.RegisterStatusHandler(ctx, mux, conn)
 }
 
 // ServeHTTP implements the http.Handler interface.
@@ -194,7 +195,7 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 	return nodeID, nodeID == s.gossip.GetNodeID(), nil
 }
 
-func (s *statusServer) dialNode(nodeID roachpb.NodeID) (StatusClient, error) {
+func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, error) {
 	addr, err := s.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		return nil, err
@@ -203,11 +204,11 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (StatusClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewStatusClient(conn), nil
+	return serverpb.NewStatusClient(conn), nil
 }
 
 // Gossip returns gossip network status.
-func (s *statusServer) Gossip(ctx context.Context, req *GossipRequest) (*gossip.InfoStatus, error) {
+func (s *statusServer) Gossip(ctx context.Context, req *serverpb.GossipRequest) (*gossip.InfoStatus, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -225,13 +226,13 @@ func (s *statusServer) Gossip(ctx context.Context, req *GossipRequest) (*gossip.
 }
 
 // Details returns node details.
-func (s *statusServer) Details(ctx context.Context, req *DetailsRequest) (*DetailsResponse, error) {
+func (s *statusServer) Details(ctx context.Context, req *serverpb.DetailsRequest) (*serverpb.DetailsResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if local {
-		resp := &DetailsResponse{
+		resp := &serverpb.DetailsResponse{
 			NodeID:    s.gossip.GetNodeID(),
 			BuildInfo: build.GetInfo(),
 		}
@@ -248,7 +249,7 @@ func (s *statusServer) Details(ctx context.Context, req *DetailsRequest) (*Detai
 }
 
 // LogFilesList returns a list of available log files.
-func (s *statusServer) LogFilesList(ctx context.Context, req *LogFilesListRequest) (*JSONResponse, error) {
+func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesListRequest) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -270,7 +271,7 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *LogFilesListReques
 
 // handleLogFilesList handles GET requests for a list of available log files.
 func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.LogFilesList(context.TODO(), &LogFilesListRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.LogFilesList(context.TODO(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -279,7 +280,7 @@ func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request
 }
 
 // LogFile returns a single log file.
-func (s *statusServer) LogFile(ctx context.Context, req *LogFileRequest) (*JSONResponse, error) {
+func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -317,7 +318,7 @@ func (s *statusServer) LogFile(ctx context.Context, req *LogFileRequest) (*JSONR
 
 // handleLogFile handles GET requests for a single log file.
 func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	req := LogFileRequest{
+	req := serverpb.LogFileRequest{
 		NodeId: ps.ByName("node_id"),
 		File:   ps.ByName("file"),
 	}
@@ -357,7 +358,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   entries. Defaults to defaultMaxLogEntries.
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) Logs(ctx context.Context, req *LogsRequest) (*JSONResponse, error) {
+func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*serverpb.JSONResponse, error) {
 	log.Flush()
 
 	var sev log.Severity
@@ -413,7 +414,7 @@ func (s *statusServer) Logs(ctx context.Context, req *LogsRequest) (*JSONRespons
 // handleLogs handles GET requests for log entires.
 func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	q := r.URL.Query()
-	req := LogsRequest{
+	req := serverpb.LogsRequest{
 		NodeId:    ps.ByName("node_id"),
 		Level:     q.Get("level"),
 		StartTime: q.Get("starttime"),
@@ -430,7 +431,7 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 }
 
 // Stacks handles returns goroutine stack traces.
-func (s *statusServer) Stacks(ctx context.Context, req *StacksRequest) (*JSONResponse, error) {
+func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -454,13 +455,13 @@ func (s *statusServer) Stacks(ctx context.Context, req *StacksRequest) (*JSONRes
 			bufSize = bufSize * 2
 			continue
 		}
-		return &JSONResponse{Data: buf[:length]}, nil
+		return &serverpb.JSONResponse{Data: buf[:length]}, nil
 	}
 }
 
 // handleStacksLocal handles GET requests for goroutine stack traces.
 func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Stacks(context.TODO(), &StacksRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.Stacks(context.TODO(), &serverpb.StacksRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -473,7 +474,7 @@ func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps h
 }
 
 // Nodes returns all node statuses.
-func (s *statusServer) Nodes(_ context.Context, req *NodesRequest) (*NodesResponse, error) {
+func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -485,7 +486,7 @@ func (s *statusServer) Nodes(_ context.Context, req *NodesRequest) (*NodesRespon
 	}
 	rows := b.Results[0].Rows
 
-	resp := NodesResponse{
+	resp := serverpb.NodesResponse{
 		Nodes: make([]status.NodeStatus, len(rows)),
 	}
 	for i, row := range rows {
@@ -498,7 +499,7 @@ func (s *statusServer) Nodes(_ context.Context, req *NodesRequest) (*NodesRespon
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
-func (s *statusServer) Node(ctx context.Context, req *NodeRequest) (*status.NodeStatus, error) {
+func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*status.NodeStatus, error) {
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -522,7 +523,7 @@ func (s *statusServer) Node(ctx context.Context, req *NodeRequest) (*status.Node
 }
 
 // Metrics return metrics information for the server specified.
-func (s *statusServer) Metrics(ctx context.Context, req *MetricsRequest) (*JSONResponse, error) {
+func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -539,7 +540,7 @@ func (s *statusServer) Metrics(ctx context.Context, req *MetricsRequest) (*JSONR
 }
 
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Metrics(context.TODO(), &MetricsRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.Metrics(context.TODO(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -548,7 +549,7 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 }
 
 // Ranges returns range info for the server specified
-func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesResponse, error) {
+func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) (*serverpb.RangesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -562,8 +563,8 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 		return status.Ranges(ctx, req)
 	}
 
-	output := RangesResponse{
-		Ranges: make([]RangeInfo, 0, s.stores.GetStoreCount()),
+	output := serverpb.RangesResponse{
+		Ranges: make([]serverpb.RangeInfo, 0, s.stores.GetStoreCount()),
 	}
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		// Use IterateRangeDescriptors to read from the engine only
@@ -578,7 +579,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *RangesRequest) (*RangesR
 					// the most interesting bit for now.
 					raftState = status.RaftState.String()
 				}
-				output.Ranges = append(output.Ranges, RangeInfo{
+				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
 					Desc:      desc,
 					RaftState: raftState,
 				})
@@ -619,16 +620,16 @@ func marshalToJSON(value interface{}) ([]byte, error) {
 
 // marshalJSONResponse converts an arbitrary value into a JSONResponse protobuf
 // that can be sent via grpc.
-func marshalJSONResponse(value interface{}) (*JSONResponse, error) {
+func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 	data, err := marshalToJSON(value)
 	if err != nil {
 		return nil, err
 	}
-	return &JSONResponse{Data: data}, nil
+	return &serverpb.JSONResponse{Data: data}, nil
 }
 
 // writeJSONResponse writes a JSONResponse to a http.ResponseWriter.
-func writeJSONResponse(w http.ResponseWriter, resp *JSONResponse) {
+func writeJSONResponse(w http.ResponseWriter, resp *serverpb.JSONResponse) {
 	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
 	if _, err := w.Write(resp.Data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

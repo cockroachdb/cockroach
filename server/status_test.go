@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
@@ -82,7 +83,7 @@ func TestStatusJson(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var nodes NodesResponse
+	var nodes serverpb.NodesResponse
 	util.SucceedsSoon(t, func() error {
 		if err := getRequestProto(t, s, statusNodesPrefix, &nodes); err != nil {
 			t.Fatal(err)
@@ -99,7 +100,7 @@ func TestStatusJson(t *testing.T) {
 		"/_status/details/local",
 		"/_status/details/" + strconv.FormatUint(uint64(nodeID), 10),
 	} {
-		var details DetailsResponse
+		var details serverpb.DetailsResponse
 		if err := getRequestProto(t, s, path, &details); err != nil {
 			t.Fatal(err)
 		}
@@ -417,7 +418,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	defer ts.Stop()
 
 	// First fetch all the node statuses.
-	wrapper := NodesResponse{}
+	wrapper := serverpb.NodesResponse{}
 	if err := getRequestProto(t, ts, statusNodesPrefix, &wrapper); err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +496,7 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
-	var response RangesResponse
+	var response serverpb.RangesResponse
 	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
 		t.Fatal(err)
 	}

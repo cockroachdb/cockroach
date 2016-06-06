@@ -47,7 +47,7 @@ describe("events reducer", function() {
     });
 
     it("should correctly dispatch receiveEvents", function () {
-      let e = new protos.cockroach.server.EventsResponse();
+      let e = new protos.cockroach.server.serverpb.EventsResponse();
 
       state = reducer(state, events.receiveEvents(e));
       let expected = {

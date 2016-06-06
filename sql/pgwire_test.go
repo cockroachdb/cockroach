@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -184,7 +185,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		RawQuery: "sslmode=disable",
 	}
 
-	on := []server.DrainMode{server.DrainMode_CLIENT}
+	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
 
 	if now, err := s.Drain(on); err != nil {
 		t.Fatal(err)
@@ -194,7 +195,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
 		t.Fatal(err)
 	}
-	if now := s.Undrain([]server.DrainMode{server.DrainMode_CLIENT}); len(now) != 0 {
+	if now := s.Undrain([]serverpb.DrainMode{serverpb.DrainMode_CLIENT}); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
 	if err := trivialQuery(pgBaseURL); err != nil {

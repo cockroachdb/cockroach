@@ -9,7 +9,7 @@ import { Dispatch } from "redux";
 import { Action, PayloadAction } from "../interfaces/action";
 import { getEvents } from "../util/api";
 
-type EventsResponseMessage = cockroach.server.EventsResponseMessage;
+type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
 
 export const REQUEST = "cockroachui/events/REQUEST";
 export const RECEIVE = "cockroachui/events/RECEIVE";
@@ -35,7 +35,7 @@ export default function reducer(state: EventsState = new EventsState(), action: 
       return state;
     case RECEIVE:
       // The results of a request have been received.
-      let { payload } = action as PayloadAction<cockroach.server.EventsResponseMessage>;
+      let { payload } = action as PayloadAction<cockroach.server.serverpb.EventsResponseMessage>;
       state = _.clone(state);
       state.inFlight = false;
       state.data = payload;

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -69,7 +70,7 @@ func TestHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var data HealthResponse
+	var data serverpb.HealthResponse
 	if err := jsonpb.Unmarshal(resp.Body, &data); err != nil {
 		t.Error(err)
 	}
@@ -100,7 +101,7 @@ func TestPlainHTTPServer(t *testing.T) {
 		t.Fatalf("error requesting health at %s: %s", httpURL, err)
 	} else {
 		defer resp.Body.Close()
-		var data HealthResponse
+		var data serverpb.HealthResponse
 		if err := jsonpb.Unmarshal(resp.Body, &data); err != nil {
 			t.Error(err)
 		}
@@ -204,7 +205,7 @@ func TestAcceptEncoding(t *testing.T) {
 			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
 		}
 		r := d.newReader(resp.Body)
-		var data HealthResponse
+		var data serverpb.HealthResponse
 		if err := jsonpb.Unmarshal(r, &data); err != nil {
 			t.Error(err)
 		}

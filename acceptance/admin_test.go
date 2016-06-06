@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
@@ -43,7 +43,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	// Get the ids for each node.
 	nodeIDs := make([]roachpb.NodeID, c.NumNodes())
 	for i := 0; i < c.NumNodes(); i++ {
-		var details server.DetailsResponse
+		var details serverpb.DetailsResponse
 		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	}
 
 	// Retrieve node statuses.
-	var nodes server.NodesResponse
+	var nodes serverpb.NodesResponse
 	if err := util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes", &nodes); err != nil {
 		t.Fatal(err)
 	}

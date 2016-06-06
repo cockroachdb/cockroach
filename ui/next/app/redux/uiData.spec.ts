@@ -126,7 +126,7 @@ describe("UIData reducer", function() {
       fetchMock.mock("/_admin/v1/uidata", "post", (url: string, requestObj: RequestInit) => {
         assert.equal(state.inFlight, 1);
 
-        let kvs = new protos.cockroach.server.SetUIDataRequest(JSON.parse(requestObj.body as string)).getKeyValues();
+        let kvs = new protos.cockroach.server.serverpb.SetUIDataRequest(JSON.parse(requestObj.body as string)).getKeyValues();
 
         assert.equal(kvs.size, 2);
 
@@ -139,7 +139,7 @@ describe("UIData reducer", function() {
 
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.SetUIDataResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.SetUIDataResponse().encodeJSON(),
         };
       });
 
@@ -184,9 +184,9 @@ describe("UIData reducer", function() {
         // keys.
         assert.equal(state.inFlight, 1);
 
-        let response = new protos.cockroach.server.GetUIDataResponse();
+        let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
         let setValue = function(key: string, obj: any) {
-          let value = new protos.cockroach.server.GetUIDataResponse.Value();
+          let value = new protos.cockroach.server.serverpb.GetUIDataResponse.Value();
           value.setValue(ByteBuffer.fromUTF8(JSON.stringify(obj)));
           response.key_values.set(key, value);
         };

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/distsql"
@@ -65,7 +66,7 @@ var (
 
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
-	GracefulDrainModes = []DrainMode{DrainMode_CLIENT, DrainMode_LEADERSHIP}
+	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEADERSHIP}
 )
 
 // Server is the cockroach server node.
@@ -482,13 +483,13 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) doDrain(modes []DrainMode, setTo bool) ([]DrainMode, error) {
+func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.DrainMode, error) {
 	for _, mode := range modes {
 		var err error
 		switch {
-		case mode == DrainMode_CLIENT:
+		case mode == serverpb.DrainMode_CLIENT:
 			err = s.pgServer.SetDraining(setTo)
-		case mode == DrainMode_LEADERSHIP:
+		case mode == serverpb.DrainMode_LEADERSHIP:
 			err = s.node.SetDraining(setTo)
 		default:
 			err = util.Errorf("unknown drain mode: %v (%d)", mode, mode)
@@ -497,12 +498,12 @@ func (s *Server) doDrain(modes []DrainMode, setTo bool) ([]DrainMode, error) {
 			return nil, err
 		}
 	}
-	var nowOn []DrainMode
+	var nowOn []serverpb.DrainMode
 	if s.pgServer.IsDraining() {
-		nowOn = append(nowOn, DrainMode_CLIENT)
+		nowOn = append(nowOn, serverpb.DrainMode_CLIENT)
 	}
 	if s.node.IsDraining() {
-		nowOn = append(nowOn, DrainMode_LEADERSHIP)
+		nowOn = append(nowOn, serverpb.DrainMode_LEADERSHIP)
 	}
 	return nowOn, nil
 }
@@ -514,14 +515,14 @@ func (s *Server) doDrain(modes []DrainMode, setTo bool) ([]DrainMode, error) {
 // On success, returns all active drain modes after carrying out the request.
 // On failure, the system may be in a partially drained state and should be
 // recovered by calling Undrain() with the same (or a larger) slice of modes.
-func (s *Server) Drain(on []DrainMode) ([]DrainMode, error) {
+func (s *Server) Drain(on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
 	return s.doDrain(on, true)
 }
 
 // Undrain idempotently deactivates the given DrainModes on the Server in the
 // order in which they are supplied.
 // On success, returns any remaining active drain modes.
-func (s *Server) Undrain(off []DrainMode) []DrainMode {
+func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 	nowActive, err := s.doDrain(off, false)
 	if err != nil {
 		panic(fmt.Sprintf("error returned to Undrain: %s", err))

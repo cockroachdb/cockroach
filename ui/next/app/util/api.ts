@@ -9,29 +9,29 @@ import * as _ from "lodash";
 
 import * as protos from "../js/protos";
 
-let server = protos.cockroach.server;
+let serverpb = protos.cockroach.server.serverpb;
 let ts = protos.cockroach.ts;
 
-type DatabasesRequest = cockroach.server.DatabasesRequest;
-type DatabasesResponseMessage = cockroach.server.DatabasesResponseMessage;
+type DatabasesRequest = cockroach.server.serverpb.DatabasesRequest;
+type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
 
-type DatabaseDetailsRequest = cockroach.server.DatabaseDetailsRequest;
-type DatabaseDetailsResponseMessage = cockroach.server.DatabaseDetailsResponseMessage;
+type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
+type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
-type TableDetailsRequest = cockroach.server.TableDetailsRequest;
-type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
+type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
+type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
-type EventsRequest = cockroach.server.EventsRequest;
-type EventsResponseMessage = cockroach.server.EventsResponseMessage;
+type EventsRequest = cockroach.server.serverpb.EventsRequest;
+type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
 
-type NodesRequest = cockroach.server.NodesRequest;
-type NodesResponseMessage = cockroach.server.NodesResponseMessage;
+type NodesRequest = cockroach.server.serverpb.NodesRequest;
+type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
 
-type GetUIDataRequest = cockroach.server.GetUIDataRequest;
-type GetUIDataResponseMessage = cockroach.server.GetUIDataResponseMessage;
+type GetUIDataRequest = cockroach.server.serverpb.GetUIDataRequest;
+type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessage;
 
-type SetUIDataRequestMessage = cockroach.server.SetUIDataRequestMessage;
-type SetUIDataResponseMessage = cockroach.server.SetUIDataResponseMessage;
+type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
+type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
 
 type TimeSeriesQueryRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
 type TimeSeriesQueryResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
@@ -102,39 +102,39 @@ export function propsToQueryString(props: any) {
 
 // getDatabaseList gets a list of all database names
 export function getDatabaseList(req: DatabasesRequest = {}): Promise<DatabasesResponseMessage> {
-  return Fetch(server.DatabasesResponse, `${API_PREFIX}/databases`);
+  return Fetch(serverpb.DatabasesResponse, `${API_PREFIX}/databases`);
 }
 
 // getDatabaseDetails gets details for a specific database
 export function getDatabaseDetails(req: DatabaseDetailsRequest): Promise<DatabaseDetailsResponseMessage> {
-  return Fetch(server.DatabaseDetailsResponse, `${API_PREFIX}/databases/${req.database}`);
+  return Fetch(serverpb.DatabaseDetailsResponse, `${API_PREFIX}/databases/${req.database}`);
 }
 
 // getTableDetails gets details for a specific table
 export function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsResponseMessage> {
-  return Fetch(server.TableDetailsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}`);
+  return Fetch(serverpb.TableDetailsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}`);
 }
 
 // getUIData gets UI data
 export function getUIData(req: GetUIDataRequest): Promise<GetUIDataResponseMessage> {
   let queryString = _.map(req.keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
-  return Fetch(server.GetUIDataResponse, `${API_PREFIX}/uidata?${queryString}`);
+  return Fetch(serverpb.GetUIDataResponse, `${API_PREFIX}/uidata?${queryString}`);
 }
 
 // setUIData sets UI data
 export function setUIData(req: SetUIDataRequestMessage): Promise<SetUIDataResponseMessage> {
-  return Fetch(server.SetUIDataResponse, `${API_PREFIX}/uidata`, req);
+  return Fetch(serverpb.SetUIDataResponse, `${API_PREFIX}/uidata`, req);
 }
 
 // getEvents gets event data
 export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessage> {
   let queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
-  return Fetch(server.EventsResponse, `${API_PREFIX}/events?${queryString}`);
+  return Fetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`);
 }
 
 // getNodes gets node data
 export function getNodes(req: NodesRequest = {}): Promise<NodesResponseMessage> {
-  return Fetch(server.NodesResponse, `/_status/nodes`);
+  return Fetch(serverpb.NodesResponse, `/_status/nodes`);
 }
 
 // queryTimeSeries queries for time series data
