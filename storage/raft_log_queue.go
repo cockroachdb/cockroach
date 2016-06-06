@@ -41,7 +41,7 @@ const (
 	// RaftLogQueueStaleThreshold is the minimum threshold for stale raft log
 	// entries. A stale entry is one which all replicas of the range have
 	// progressed past and thus is no longer needed and can be pruned.
-	RaftLogQueueStaleThreshold = 1
+	RaftLogQueueStaleThreshold = 100
 )
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs
@@ -119,7 +119,7 @@ func (*raftLogQueue) shouldQueue(
 		return false, 0
 	}
 
-	return truncatableIndexes > RaftLogQueueStaleThreshold, float64(truncatableIndexes)
+	return truncatableIndexes >= RaftLogQueueStaleThreshold, float64(truncatableIndexes)
 }
 
 // process truncates the raft log of the range if the replica is the raft
@@ -132,7 +132,7 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ config.Sys
 	}
 
 	// Can and should the raft logs be truncated?
-	if truncatableIndexes > RaftLogQueueStaleThreshold {
+	if truncatableIndexes >= RaftLogQueueStaleThreshold {
 		if log.V(1) {
 			log.Infof("truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
 		}

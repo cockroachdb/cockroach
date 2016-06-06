@@ -255,6 +255,11 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // not be added, as the replica with the lowest priority will be
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
+	if bq.gossip == nil {
+		// The queue is disabled due to being part of the bootstrap store.
+		return
+	}
+
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {
