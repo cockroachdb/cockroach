@@ -13,10 +13,10 @@ import { MetricProps, Metric, MetricsDataComponentProps } from "../components/gr
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
 
-type TSQueryMessage = cockroach.ts.QueryMessage;
-type TSQuery = cockroach.ts.Query;
-type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
-type TSResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
+type TSQueryMessage = cockroach.ts.tspb.QueryMessage;
+type TSQuery = cockroach.ts.tspb.Query;
+type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 /**
  * TimeSeriesQueryAggregator is an enumeration used by Cockroach's time series
@@ -91,7 +91,7 @@ function queryFromProps(metricProps: MetricProps,
       sourceAggregator = TimeSeriesQueryAggregator.MIN;
     }
 
-    return new protos.cockroach.ts.Query({
+    return new protos.cockroach.ts.tspb.Query({
       name: metricProps.name,
       sources: metricProps.sources || graphProps.sources || undefined,
 
@@ -102,9 +102,9 @@ function queryFromProps(metricProps: MetricProps,
        * not available in the SystemJS compiler. Values are cast *through*
        * number, as apparently direct casts between enumerations are forbidden.
        */
-      downsampler: downsampler as number as cockroach.ts.TimeSeriesQueryAggregator,
-      source_aggregator: sourceAggregator as number as cockroach.ts.TimeSeriesQueryAggregator,
-      derivative: derivative as number as cockroach.ts.TimeSeriesQueryDerivative,
+      downsampler: downsampler as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+      source_aggregator: sourceAggregator as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+      derivative: derivative as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
     });
 }
 
@@ -174,7 +174,7 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
       if (!timeSpan) {
         return undefined;
       }
-      return new protos.cockroach.ts.TimeSeriesQueryRequest({
+      return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: timeSpan[0],
         end_nanos: timeSpan[1],
         queries,

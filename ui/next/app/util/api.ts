@@ -10,7 +10,7 @@ import * as _ from "lodash";
 import * as protos from "../js/protos";
 
 let serverpb = protos.cockroach.server.serverpb;
-let ts = protos.cockroach.ts;
+let ts = protos.cockroach.ts.tspb;
 
 type DatabasesRequest = cockroach.server.serverpb.DatabasesRequest;
 type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
@@ -33,8 +33,8 @@ type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessa
 type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
 type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
 
-type TimeSeriesQueryRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
-type TimeSeriesQueryResponseMessage = cockroach.ts.TimeSeriesQueryResponseMessage;
+type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds

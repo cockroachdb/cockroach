@@ -7,7 +7,9 @@ import * as protos from "../js/protos";
 import reducer, * as metrics from "./metrics";
 import { Action } from "../interfaces/action";
 
-type TSRequestMessage = cockroach.ts.TimeSeriesQueryRequestMessage;
+type TSRequest = cockroach.ts.tspb.TimeSeriesQueryRequest;
+type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 describe("metrics reducer", function() {
   describe("actions", function() {
@@ -49,7 +51,7 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch requestMetrics", function() {
-      let request = new protos.cockroach.ts.TimeSeriesQueryRequest({
+      let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: Long.fromInt(0),
         end_nanos: Long.fromInt(10),
         queries: [
@@ -71,14 +73,14 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch receiveMetrics", function() {
-      let response = new protos.cockroach.ts.TimeSeriesQueryResponse({
+      let response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: [
           {
             datapoints: [],
           },
         ],
       });
-      let request = new protos.cockroach.ts.TimeSeriesQueryRequest({
+      let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: Long.fromInt(0),
         end_nanos: Long.fromInt(10),
         queries: [
@@ -123,7 +125,7 @@ describe("metrics reducer", function() {
 
     // Helper function to generate metrics request.
     let createRequest = function(ts: timespan, ...names: string[]): TSRequestMessage {
-      return new protos.cockroach.ts.TimeSeriesQueryRequest({
+      return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: ts[0],
         end_nanos: ts[1],
         queries: _.map(names, (s) => {
@@ -161,11 +163,11 @@ describe("metrics reducer", function() {
           assert.isAtLeast(mockMetricsState.inFlight, 1);
           assert.isAtMost(mockMetricsState.inFlight, 1);
 
-          let request = new protos.cockroach.ts.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
+          let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
 
           return {
             sendAsJson: false,
-            body: new protos.cockroach.ts.TimeSeriesQueryResponse({
+            body: new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
               results: _.map(request.queries, (q) => {
                 return {
                   query: q,
@@ -232,11 +234,11 @@ describe("metrics reducer", function() {
           }
           successSent = true;
 
-          let request = new protos.cockroach.ts.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
+          let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest(JSON.parse(requestObj.body as string));
 
           return {
             sendAsJson: false,
-            body: new protos.cockroach.ts.TimeSeriesQueryResponse({
+            body: new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
               results: _.map(request.queries, (q) => {
                 return {
                   query: q,
