@@ -35,6 +35,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -237,7 +238,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(createRes.ResultList[0].Err)
 	}
 
-	var resp DatabasesResponse
+	var resp serverpb.DatabasesResponse
 	if err := apiGet(s, "databases", &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +265,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(grantRes.ResultList[0].Err)
 	}
 
-	var details DatabaseDetailsResponse
+	var details serverpb.DatabaseDetailsResponse
 	if err := apiGet(s, "databases/"+testdb, &details); err != nil {
 		t.Fatal(err)
 	}
@@ -373,13 +374,13 @@ CREATE TABLE test.tbl (
 	}
 
 	// Perform API call.
-	var resp TableDetailsResponse
+	var resp serverpb.TableDetailsResponse
 	if err := apiGet(s, "databases/test/tables/tbl", &resp); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify columns.
-	expColumns := []TableDetailsResponse_Column{
+	expColumns := []serverpb.TableDetailsResponse_Column{
 		{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
 		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
 		{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
@@ -399,7 +400,7 @@ CREATE TABLE test.tbl (
 	}
 
 	// Verify grants.
-	expGrants := []TableDetailsResponse_Grant{
+	expGrants := []serverpb.TableDetailsResponse_Grant{
 		{User: security.RootUser, Privileges: []string{"ALL"}},
 		{User: "app", Privileges: []string{"DELETE", "SELECT", "UPDATE"}},
 		{User: "readonly", Privileges: []string{"SELECT"}},
@@ -419,7 +420,7 @@ CREATE TABLE test.tbl (
 	}
 
 	// Verify indexes.
-	expIndexes := []TableDetailsResponse_Index{
+	expIndexes := []serverpb.TableDetailsResponse_Index{
 		{Name: "primary", Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
 		{Name: "descIdx", Column: "default2", Direction: "DESC", Unique: false, Seq: 1},
 	}
@@ -455,12 +456,12 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	}
 
 	// Query the API for users.
-	var resp UsersResponse
+	var resp serverpb.UsersResponse
 	if err := apiGet(s, "users", &resp); err != nil {
 		t.Fatal(err)
 	}
-	expResult := UsersResponse{
-		Users: []UsersResponse_User{
+	expResult := serverpb.UsersResponse{
+		Users: []serverpb.UsersResponse_User{
 			{"admin"},
 			{"bob"},
 		},
@@ -496,7 +497,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		}
 	}
 
-	var zeroTimestamp EventsResponse_Event_Timestamp
+	var zeroTimestamp serverpb.EventsResponse_Event_Timestamp
 
 	testcases := []struct {
 		eventType sql.EventLogType
@@ -517,7 +518,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		} else {
 			url = "events"
 		}
-		var resp EventsResponse
+		var resp serverpb.EventsResponse
 		if err := apiGet(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
@@ -566,15 +567,15 @@ func TestAdminAPIUIData(t *testing.T) {
 	start := timeutil.Now()
 
 	mustSetUIData := func(keyValues map[string][]byte) {
-		if err := apiPost(s, "uidata", &SetUIDataRequest{
+		if err := apiPost(s, "uidata", &serverpb.SetUIDataRequest{
 			KeyValues: keyValues,
-		}, &SetUIDataResponse{}); err != nil {
+		}, &serverpb.SetUIDataResponse{}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	expectKeyValues := func(expKeyValues map[string][]byte) {
-		var resp GetUIDataResponse
+		var resp serverpb.GetUIDataResponse
 		queryValues := make(url.Values)
 		for key := range expKeyValues {
 			queryValues.Add("keys", key)
@@ -614,7 +615,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	}
 
 	expectKeyNotFound := func(key string) {
-		var resp GetUIDataResponse
+		var resp serverpb.GetUIDataResponse
 		url := fmt.Sprintf("uidata?keys=%s", key)
 		if err := apiGet(s, url, &resp); err != nil {
 			t.Fatal(err)
@@ -625,7 +626,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	}
 
 	// Basic tests.
-	var badResp GetUIDataResponse
+	var badResp serverpb.GetUIDataResponse
 	if err := apiGet(s, "uidata", &badResp); !testutils.IsError(err, "400 Bad Request") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -669,7 +670,7 @@ func TestCluster(t *testing.T) {
 	// We need to retry, because the cluster ID isn't set until after
 	// bootstrapping.
 	util.SucceedsSoon(t, func() error {
-		var resp ClusterResponse
+		var resp serverpb.ClusterResponse
 		if err := apiGet(s, "cluster", &resp); err != nil {
 			return err
 		}
@@ -686,11 +687,11 @@ func TestClusterFreeze(t *testing.T) {
 	defer s.Stop()
 
 	for _, freeze := range []bool{true, false} {
-		req := ClusterFreezeRequest{
+		req := serverpb.ClusterFreezeRequest{
 			Freeze: freeze,
 		}
 
-		var resp ClusterFreezeResponse
+		var resp serverpb.ClusterFreezeResponse
 		if err := apiPost(s, "cluster/freeze", &req, &resp); err != nil {
 			t.Fatal(err)
 		}

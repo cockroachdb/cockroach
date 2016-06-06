@@ -9,9 +9,9 @@ import { Dispatch, combineReducers } from "redux";
 import { Action, PayloadAction } from "../interfaces/action";
 import { getDatabaseList, getDatabaseDetails, getTableDetails } from "../util/api";
 
-type DatabasesResponseMessage = cockroach.server.DatabasesResponseMessage;
-type DatabaseDetailsResponseMessage = cockroach.server.DatabaseDetailsResponseMessage;
-type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
+type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
+type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
 export const DATABASES_REQUEST = "cockroachui/databases/DATABASES_REQUEST";
 export const DATABASES_RECEIVE = "cockroachui/databases/DATABASES_RECEIVE";
@@ -78,7 +78,7 @@ export function databasesReducer(state: DatabasesState = new DatabasesState(), a
       return state;
     case DATABASES_RECEIVE:
       // The results of a request have been received.
-      let { payload } = action as PayloadAction<cockroach.server.DatabasesResponseMessage>;
+      let { payload } = action as PayloadAction<cockroach.server.serverpb.DatabasesResponseMessage>;
       state = _.clone(state);
       state.inFlight = false;
       state.data = payload;

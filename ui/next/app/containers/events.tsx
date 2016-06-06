@@ -4,7 +4,7 @@ import { refreshEvents } from "../redux/events";
 import { connect } from "react-redux";
 import { TimestampToMoment } from "../util/convert";
 
-type Event = cockroach.server.EventsResponse.Event;
+type Event = cockroach.server.serverpb.EventsResponse.Event;
 
 export interface EventRowProps {
   event: Event;

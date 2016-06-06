@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -187,7 +188,7 @@ func newAdminServer(s *Server) *adminServer {
 
 // RegisterService registers the GRPC service.
 func (s *adminServer) RegisterService(g *grpc.Server) {
-	RegisterAdminServer(g, s)
+	serverpb.RegisterAdminServer(g, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -200,7 +201,7 @@ func (s *adminServer) RegisterGateway(
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
 	s.ServeMux.Handle(apiEndpoint, mux)
 
-	return RegisterAdminHandler(ctx, mux, conn)
+	return serverpb.RegisterAdminHandler(ctx, mux, conn)
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default
@@ -272,14 +273,14 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 }
 
 // Databases is an endpoint that returns a list of databases.
-func (s *adminServer) Databases(ctx context.Context, req *DatabasesRequest) (*DatabasesResponse, error) {
+func (s *adminServer) Databases(ctx context.Context, req *serverpb.DatabasesRequest) (*serverpb.DatabasesResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, "SHOW DATABASES;", nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
 
-	var resp DatabasesResponse
+	var resp serverpb.DatabasesResponse
 	for _, row := range r.ResultList[0].Rows {
 		dbname, ok := row.Values[0].(*parser.DString)
 		if !ok {
@@ -293,7 +294,7 @@ func (s *adminServer) Databases(ctx context.Context, req *DatabasesRequest) (*Da
 
 // DatabaseDetails is an endpoint that returns grants and a list of table names
 // for the specified database.
-func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsRequest) (*DatabaseDetailsResponse, error) {
+func (s *adminServer) DatabaseDetails(ctx context.Context, req *serverpb.DatabaseDetailsRequest) (*serverpb.DatabaseDetailsResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 
 	// Placeholders don't work with SHOW statements, so we need to manually
@@ -311,7 +312,7 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsR
 	}
 
 	// Marshal grants.
-	var resp DatabaseDetailsResponse
+	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
 			userCol       = "User"
@@ -321,7 +322,7 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsR
 		scanner := makeResultScanner(r.ResultList[0].Columns)
 		for _, row := range r.ResultList[0].Rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
-			var grant DatabaseDetailsResponse_Grant
+			var grant serverpb.DatabaseDetailsResponse_Grant
 			var privileges string
 			if err := scanner.Scan(row, userCol, &grant.User); err != nil {
 				return nil, err
@@ -355,8 +356,8 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsR
 
 // TableDetails is an endpoint that returns columns, indices, and other
 // relevant details for the specified table.
-func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest) (
-	*TableDetailsResponse, error) {
+func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetailsRequest) (
+	*serverpb.TableDetailsResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
@@ -374,7 +375,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 		return nil, err
 	}
 
-	var resp TableDetailsResponse
+	var resp serverpb.TableDetailsResponse
 
 	// Marshal SHOW COLUMNS result.
 	//
@@ -391,7 +392,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 		)
 		scanner := makeResultScanner(r.ResultList[0].Columns)
 		for _, row := range r.ResultList[0].Rows {
-			var col TableDetailsResponse_Column
+			var col serverpb.TableDetailsResponse_Column
 			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
 				return nil, err
 			}
@@ -427,7 +428,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 		scanner := makeResultScanner(r.ResultList[1].Columns)
 		for _, row := range r.ResultList[1].Rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
-			var index TableDetailsResponse_Index
+			var index serverpb.TableDetailsResponse_Index
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
 				return nil, err
 			}
@@ -459,7 +460,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 		scanner := makeResultScanner(r.ResultList[2].Columns)
 		for _, row := range r.ResultList[2].Rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
-			var grant TableDetailsResponse_Grant
+			var grant serverpb.TableDetailsResponse_Grant
 			var privileges string
 			if err := scanner.Scan(row, userCol, &grant.User); err != nil {
 				return nil, err
@@ -505,7 +506,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 }
 
 // Users returns a list of users, stripped of any passwords.
-func (s *adminServer) Users(ctx context.Context, req *UsersRequest) (*UsersResponse, error) {
+func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 	query := "SELECT username FROM system.users"
 	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
@@ -513,9 +514,9 @@ func (s *adminServer) Users(ctx context.Context, req *UsersRequest) (*UsersRespo
 		return nil, s.serverError(err)
 	}
 
-	var resp UsersResponse
+	var resp serverpb.UsersResponse
 	for _, row := range r.ResultList[0].Rows {
-		resp.Users = append(resp.Users, UsersResponse_User{string(*row.Values[0].(*parser.DString))})
+		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(*row.Values[0].(*parser.DString))})
 	}
 	return &resp, nil
 }
@@ -525,7 +526,7 @@ func (s *adminServer) Users(ctx context.Context, req *UsersRequest) (*UsersRespo
 //
 // type=STRING  returns events with this type (e.g. "create_table")
 // targetID=INT returns events for that have this targetID
-func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsResponse, error) {
+func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 
 	// Execute the query.
@@ -550,15 +551,15 @@ func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsRe
 	}
 
 	// Marshal response.
-	var resp EventsResponse
+	var resp serverpb.EventsResponse
 	scanner := makeResultScanner(r.ResultList[0].Columns)
 	for _, row := range r.ResultList[0].Rows {
-		var event EventsResponse_Event
+		var event serverpb.EventsResponse_Event
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, err
 		}
-		event.Timestamp = EventsResponse_Event_Timestamp{Sec: ts.Unix(), Nsec: uint32(ts.Nanosecond())}
+		event.Timestamp = serverpb.EventsResponse_Event_Timestamp{Sec: ts.Unix(), Nsec: uint32(ts.Nanosecond())}
 		if err := scanner.ScanIndex(row, 1, &event.EventType); err != nil {
 			return nil, err
 		}
@@ -582,9 +583,9 @@ func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsRe
 
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
-func (s *adminServer) getUIData(session *sql.Session, user string, keys []string) (*GetUIDataResponse, error) {
+func (s *adminServer) getUIData(session *sql.Session, user string, keys []string) (*serverpb.GetUIDataResponse, error) {
 	if len(keys) == 0 {
-		return &GetUIDataResponse{}, nil
+		return &serverpb.GetUIDataResponse{}, nil
 	}
 
 	// Query database.
@@ -607,7 +608,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 	}
 
 	// Marshal results.
-	resp := GetUIDataResponse{KeyValues: make(map[string]GetUIDataResponse_Value)}
+	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
 	for _, row := range r.ResultList[0].Rows {
 		dKey, ok := row.Values[0].(*parser.DString)
 		if !ok {
@@ -622,9 +623,9 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[2])
 		}
 
-		resp.KeyValues[string(*dKey)] = GetUIDataResponse_Value{
+		resp.KeyValues[string(*dKey)] = serverpb.GetUIDataResponse_Value{
 			Value:       []byte(*dValue),
-			LastUpdated: GetUIDataResponse_Timestamp{Sec: dLastUpdated.Unix(), Nsec: uint32(dLastUpdated.Nanosecond())},
+			LastUpdated: serverpb.GetUIDataResponse_Timestamp{Sec: dLastUpdated.Unix(), Nsec: uint32(dLastUpdated.Nanosecond())},
 		}
 	}
 	return &resp, nil
@@ -632,7 +633,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 
 // SetUIData is an endpoint that stores the given key/value pairs in the
 // system.ui table. See GetUIData for more details on semantics.
-func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*SetUIDataResponse, error) {
+func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequest) (*serverpb.SetUIDataResponse, error) {
 	if len(req.KeyValues) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
@@ -684,7 +685,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*Se
 		}
 	}
 
-	return &SetUIDataResponse{}, nil
+	return &serverpb.SetUIDataResponse{}, nil
 }
 
 // GetUIData returns data associated with the given keys, which was stored
@@ -693,7 +694,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*Se
 // The stored values are meant to be opaque to the server. In the rare case that
 // the server code needs to call this method, it should only read from keys that
 // have the prefix `serverUIDataKeyPrefix`.
-func (s *adminServer) GetUIData(_ context.Context, req *GetUIDataRequest) (*GetUIDataResponse, error) {
+func (s *adminServer) GetUIData(_ context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 
 	if len(req.Keys) == 0 {
@@ -709,26 +710,26 @@ func (s *adminServer) GetUIData(_ context.Context, req *GetUIDataRequest) (*GetU
 }
 
 // Cluster returns cluster metadata.
-func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterResponse, error) {
+func (s *adminServer) Cluster(_ context.Context, req *serverpb.ClusterRequest) (*serverpb.ClusterResponse, error) {
 	clusterID := s.server.node.ClusterID
 	if uuid.Equal(clusterID, *uuid.EmptyUUID) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
-	return &ClusterResponse{ClusterID: clusterID.String()}, nil
+	return &serverpb.ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
-func (s *adminServer) Health(ctx context.Context, req *HealthRequest) (*HealthResponse, error) {
-	return &HealthResponse{}, nil
+func (s *adminServer) Health(ctx context.Context, req *serverpb.HealthRequest) (*serverpb.HealthResponse, error) {
+	return &serverpb.HealthResponse{}, nil
 }
 
-func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainResponse, error) {
-	on := make([]DrainMode, len(req.On))
+func (s *adminServer) Drain(ctx context.Context, req *serverpb.DrainRequest) (*serverpb.DrainResponse, error) {
+	on := make([]serverpb.DrainMode, len(req.On))
 	for i := range req.On {
-		on[i] = DrainMode(req.On[i])
+		on[i] = serverpb.DrainMode(req.On[i])
 	}
-	off := make([]DrainMode, len(req.Off))
+	off := make([]serverpb.DrainMode, len(req.Off))
 	for i := range req.Off {
-		off[i] = DrainMode(req.Off[i])
+		off[i] = serverpb.DrainMode(req.Off[i])
 	}
 
 	_ = s.server.Undrain(off)
@@ -749,7 +750,7 @@ func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainRespo
 			s.server.stopper.Stop()
 		}()
 	}
-	return &DrainResponse{On: nowOnInts}, nil
+	return &serverpb.DrainResponse{On: nowOnInts}, nil
 }
 
 // waitForStoreFrozen polls the given stores until they all report having no
@@ -872,9 +873,9 @@ func (s *adminServer) waitForStoreFrozen(
 }
 
 func (s *adminServer) ClusterFreeze(
-	ctx context.Context, req *ClusterFreezeRequest,
-) (*ClusterFreezeResponse, error) {
-	var resp ClusterFreezeResponse
+	ctx context.Context, req *serverpb.ClusterFreezeRequest,
+) (*serverpb.ClusterFreezeResponse, error) {
+	var resp serverpb.ClusterFreezeResponse
 	stores := make(map[roachpb.StoreID]roachpb.NodeID)
 	process := func(from, to roachpb.Key) (roachpb.Key, error) {
 		b := &client.Batch{}

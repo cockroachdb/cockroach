@@ -111,7 +111,7 @@ describe("rest api", function() {
 
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.DatabasesResponse({
+          body: new protos.cockroach.server.serverpb.DatabasesResponse({
             databases: ["system", "test"],
           }).encodeJSON(),
         };
@@ -173,7 +173,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.DatabaseDetailsResponse({
+          body: new protos.cockroach.server.serverpb.DatabaseDetailsResponse({
             table_names: ["table1", "table2"],
             grants: [
               { user: "root", privileges: ["ALL"] },
@@ -241,7 +241,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.TableDetailsResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.TableDetailsResponse().encodeJSON(),
         };
       });
 
@@ -302,7 +302,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.EventsResponse({
+          body: new protos.cockroach.server.serverpb.EventsResponse({
             events: [
               { event_type: "test" },
             ],
@@ -319,7 +319,7 @@ describe("rest api", function() {
     it("correctly requests filtered events", function () {
       this.timeout(1000);
 
-      let req = new protos.cockroach.server.EventsRequest({
+      let req = new protos.cockroach.server.serverpb.EventsRequest({
         target_id: new Long(1),
         type: "test type",
       });
@@ -335,7 +335,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.EventsResponse({
+          body: new protos.cockroach.server.serverpb.EventsResponse({
             events: [
               { event_type: "test" },
             ],
@@ -367,7 +367,7 @@ describe("rest api", function() {
         assert.isUndefined(requestObj.body);
         return {
           sendAsJson: false,
-          body: new protos.cockroach.server.EventsResponse().encodeJSON(),
+          body: new protos.cockroach.server.serverpb.EventsResponse().encodeJSON(),
         };
       });
 

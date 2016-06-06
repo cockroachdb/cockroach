@@ -109,7 +109,7 @@ export function saveUIData(...values: KeyValue[]) {
 
     // Encode data for each UIData key. Each object is stringified and written
     // to a ByteBuffer.
-    let request = new protos.cockroach.server.SetUIDataRequest();
+    let request = new protos.cockroach.server.serverpb.SetUIDataRequest();
     _.each(values, (kv) => {
       let stringifiedValue = JSON.stringify(kv.value);
       request.key_values.set(kv.key, ByteBuffer.fromUTF8(stringifiedValue));

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -357,12 +358,12 @@ func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 	return conn, stopper, nil
 }
 
-func getAdminClient() (server.AdminClient, *stop.Stopper, error) {
+func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
 	conn, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
-	return server.NewAdminClient(conn), stopper, nil
+	return serverpb.NewAdminClient(conn), stopper, nil
 }
 
 func stopperContext(stopper *stop.Stopper) context.Context {
@@ -397,7 +398,7 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	}
 	defer stopper.Stop()
 	if _, err := c.Drain(stopperContext(stopper),
-		&server.DrainRequest{
+		&serverpb.DrainRequest{
 			On:       onModes,
 			Shutdown: true,
 		}); err != nil {
@@ -429,7 +430,7 @@ func runFreezeCluster(_ *cobra.Command, _ []string) error {
 	}
 	defer stopper.Stop()
 	if _, err := c.ClusterFreeze(stopperContext(stopper),
-		&server.ClusterFreezeRequest{Freeze: !undoFreezeCluster}); err != nil {
+		&serverpb.ClusterFreezeRequest{Freeze: !undoFreezeCluster}); err != nil {
 		return err
 	}
 	fmt.Println("ok")

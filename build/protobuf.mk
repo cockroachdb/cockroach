@@ -47,7 +47,7 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACK
 # generated Go code.
 GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api
 
-GW_SERVER_PROTOS := $(REPO_ROOT)/server/admin.proto $(REPO_ROOT)/server/status.proto
+GW_SERVER_PROTOS := $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto
 GW_SERVER_SOURCES := $(GW_SERVER_PROTOS:%.proto=%.pb.gw.go)
 
 GW_TS_PROTOS := $(REPO_ROOT)/ts/timeseries.proto

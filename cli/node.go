@@ -24,7 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -60,7 +60,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	}
 	defer stopper.Stop()
 
-	nodeStatuses, err := c.Nodes(stopperContext(stopper), &server.NodesRequest{})
+	nodeStatuses, err := c.Nodes(stopperContext(stopper), &serverpb.NodesRequest{})
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 	switch len(args) {
 	case 0:
 		// Show status for all nodes.
-		nodes, err := c.Nodes(stopperContext(stopper), &server.NodesRequest{})
+		nodes, err := c.Nodes(stopperContext(stopper), &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}
@@ -123,7 +123,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 
 	case 1:
 		nodeID := args[0]
-		nodeStatus, err := c.Node(stopperContext(stopper), &server.NodeRequest{NodeId: nodeID})
+		nodeStatus, err := c.Node(stopperContext(stopper), &serverpb.NodeRequest{NodeId: nodeID})
 		if err != nil {
 			return err
 		}
@@ -203,10 +203,10 @@ func init() {
 	nodeCmd.AddCommand(nodeCmds...)
 }
 
-func getStatusClient() (server.StatusClient, *stop.Stopper, error) {
+func getStatusClient() (serverpb.StatusClient, *stop.Stopper, error) {
 	conn, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
-	return server.NewStatusClient(conn), stopper, nil
+	return serverpb.NewStatusClient(conn), stopper, nil
 }

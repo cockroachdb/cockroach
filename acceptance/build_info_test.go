@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -32,7 +32,7 @@ func TestBuildInfo(t *testing.T) {
 func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))
 
-	var details server.DetailsResponse
+	var details serverpb.DetailsResponse
 	util.SucceedsSoon(t, func() error {
 		select {
 		case <-stopper:

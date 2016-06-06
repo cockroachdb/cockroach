@@ -15,8 +15,8 @@
 // Author: Cuong Do (cdo@cockroachlabs.com)
 
 syntax = "proto3";
-package cockroach.server;
-option go_package = "server";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
 
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
