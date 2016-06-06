@@ -370,51 +370,107 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 }
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
-	intType := &IntColType{Name: "INT"}
-	boolType := &BoolColType{Name: "BOOLEAN"}
+	intType := intColTypeInt
+	boolType := boolColTypeBoolean
 
 	testData := []struct {
+		initArgs  MapPlaceholderTypes
 		stmtExprs []Expr
 		desired   MapPlaceholderTypes
 	}{
-		{[]Expr{Placeholder{"a"}}, MapPlaceholderTypes{}},
-		{[]Expr{Placeholder{"a"}, Placeholder{"b"}}, MapPlaceholderTypes{}},
-		{[]Expr{
-			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-			&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
-		}, MapPlaceholderTypes{}},
-		{[]Expr{
-			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-		}, MapPlaceholderTypes{
-			"a": TypeInt,
-			"b": TypeBool,
-		}},
-		{[]Expr{
-			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-			&CastExpr{Expr: Placeholder{"b"}, Type: intType},
-		}, MapPlaceholderTypes{
-			"a": TypeInt,
-		}},
-		{[]Expr{
-			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-			Placeholder{"a"},
-		}, MapPlaceholderTypes{
-			"b": TypeBool,
-		}},
-		{[]Expr{
-			Placeholder{"a"},
-			&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-			&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-		}, MapPlaceholderTypes{
-			"b": TypeBool,
-		}},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{Placeholder{"a"}},
+			MapPlaceholderTypes{},
+		},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{Placeholder{"a"}, Placeholder{"b"}},
+			MapPlaceholderTypes{},
+		},
+		{
+			MapPlaceholderTypes{"b": TypeBool},
+			[]Expr{Placeholder{"a"}, Placeholder{"b"}},
+			MapPlaceholderTypes{"b": TypeBool},
+		},
+		{
+			MapPlaceholderTypes{"c": TypeFloat},
+			[]Expr{Placeholder{"a"}, Placeholder{"b"}},
+			MapPlaceholderTypes{"c": TypeFloat},
+		},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
+			},
+			MapPlaceholderTypes{},
+		},
+		{
+			MapPlaceholderTypes{"a": TypeFloat},
+			[]Expr{
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
+			},
+			MapPlaceholderTypes{"a": TypeFloat},
+		},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			},
+			MapPlaceholderTypes{"a": TypeInt, "b": TypeBool},
+		},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: intType},
+			},
+			MapPlaceholderTypes{"a": TypeInt},
+		},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				Placeholder{"a"},
+			},
+			MapPlaceholderTypes{"b": TypeBool},
+		},
+		{
+			MapPlaceholderTypes{},
+			[]Expr{
+				Placeholder{"a"},
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			},
+			MapPlaceholderTypes{"b": TypeBool},
+		},
+		{
+			MapPlaceholderTypes{"a": TypeFloat, "b": TypeBool},
+			[]Expr{
+				Placeholder{"a"},
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			},
+			MapPlaceholderTypes{"a": TypeFloat, "b": TypeBool},
+		},
+		{
+			MapPlaceholderTypes{"a": TypeFloat, "b": TypeFloat},
+			[]Expr{
+				Placeholder{"a"},
+				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
+				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+			},
+			MapPlaceholderTypes{"a": TypeFloat, "b": TypeFloat},
+		},
 	}
 	for i, d := range testData {
-		args := make(MapPlaceholderTypes)
+		args := d.initArgs
 		stmt := &ValuesClause{Tuples: []*Tuple{{Exprs: d.stmtExprs}}}
 		if err := ProcessPlaceholderAnnotations(stmt, args); err != nil {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
