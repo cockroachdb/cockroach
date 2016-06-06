@@ -150,6 +150,11 @@ func TestStoreMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Disable the raft log truncation which confuses this test.
+	for _, s := range mtc.stores {
+		s.DisableRaftLogQueue(true)
+	}
+
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, roachpb.Key("m"))
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {

@@ -863,6 +863,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
+	// Disable raft log truncation which confuses this test.
+	tc.store.DisableRaftLogQueue(true)
 
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
