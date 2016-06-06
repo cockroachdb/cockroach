@@ -1147,8 +1147,8 @@ var (
 	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
 )
 
-func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
-	switch node.Type.(type) {
+func colTypeToTypeAndValidArgTypes(t ColumnType) (Datum, []Datum) {
+	switch t.(type) {
 	case *BoolColType:
 		return TypeBool, boolCastTypes
 	case *IntColType:
@@ -1171,6 +1171,32 @@ func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
 		return TypeInterval, intervalCastTypes
 	}
 	return nil, nil
+}
+
+func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
+	return colTypeToTypeAndValidArgTypes(node.Type)
+}
+
+// AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
+type AnnotateTypeExpr struct {
+	Expr Expr
+	Type ColumnType
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ANNOTATE_TYPE(")
+	FormatNode(buf, f, node.Expr)
+	buf.WriteString(", ")
+	FormatNode(buf, f, node.Type)
+	buf.WriteByte(')')
+}
+
+func (node *AnnotateTypeExpr) annotationType() Datum {
+	typ, _ := colTypeToTypeAndValidArgTypes(node.Type)
+	return typ
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
@@ -1213,6 +1239,7 @@ func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
+func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
 func (node Placeholder) String() string       { return AsString(node) }

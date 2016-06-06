@@ -533,7 +533,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 // Ordinary key words in alphabetical order.
 %token <str>   ACTION ADD
-%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ARRAY AS ASC
+%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
 %token <str>   BEGIN BETWEEN BIGINT BIGSERIAL BIT
@@ -675,7 +675,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %left      '~'
 %left      '[' ']'
 %left      '(' ')'
-%left      TYPECAST
+%left      '!' TYPECAST
 %left      '.'
 // These might seem to be low-precedence, but actually they are not part
 // of the arithmetic hierarchy at all in their use as JOIN operators.
@@ -3102,6 +3102,10 @@ a_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
+| a_expr '!' typename
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+  }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
   // These operators must be called out explicitly in order to make use of
@@ -3320,6 +3324,10 @@ b_expr:
 | b_expr TYPECAST typename
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
+  }
+| b_expr '!' typename
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
   }
 | '+' b_expr %prec UMINUS
   {
@@ -3552,6 +3560,10 @@ func_expr_common_subexpr:
 | CAST '(' a_expr AS typename ')'
   {
     $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType()}
+  }
+| ANNOTATE_TYPE '(' a_expr ',' typename ')'
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType()}
   }
 | EXTRACT '(' extract_list ')'
   {
@@ -4419,7 +4431,8 @@ unreserved_keyword:
 // can be followed by '(' in typename productions, which looks too much like a
 // function call for an LR(1) parser.
 col_name_keyword:
-  BETWEEN
+  ANNOTATE_TYPE
+| BETWEEN
 | BIGINT
 | BIGSERIAL
 | BIT
