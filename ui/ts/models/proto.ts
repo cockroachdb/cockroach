@@ -163,7 +163,7 @@ module Models {
     }
 
     /*****************************
-     * ts/timeseries.proto
+     * ts/tspb/timeseries.proto
      ****************************/
 
     /**
@@ -287,7 +287,7 @@ module Models {
     }
 
     /*****************************
-     * server/admin.proto
+     * server/serverpb/admin.proto
      ****************************/
 
     export interface Timestamp {

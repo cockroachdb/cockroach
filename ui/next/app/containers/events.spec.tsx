@@ -8,7 +8,7 @@ import * as sinon from "sinon";
 import * as protos from  "../js/protos";
 import { EventList, EventRow } from "./events";
 
-type Event = cockroach.server.EventsResponse.Event;
+type Event = cockroach.server.serverpb.EventsResponse.Event;
 
 function makeEventList(events: Event[], refreshEvents: () => void) {
   return shallow(<EventList events={events} refreshEvents={refreshEvents}></EventList>);
@@ -27,14 +27,14 @@ describe("<EventList>", function() {
 
   describe("refresh", function() {
     it("refreshes events when mounted.", function () {
-      makeEventList((new protos.cockroach.server.EventsResponse()).events, spy);
+      makeEventList((new protos.cockroach.server.serverpb.EventsResponse()).events, spy);
       assert.isTrue(spy.called);
     });
   });
 
   describe("attach", function() {
     it("attaches event data to contained component", function () {
-      let eventsResponse = new protos.cockroach.server.EventsResponse({
+      let eventsResponse = new protos.cockroach.server.serverpb.EventsResponse({
       events: [
         {
           target_id: Long.fromString("1"),
@@ -63,7 +63,7 @@ describe("<EventList>", function() {
 describe("<EventRow>", function () {
   describe("attach", function () {
     it("correctly renders a known event", function () {
-      let e = new protos.cockroach.server.EventsResponse.Event({
+      let e = new protos.cockroach.server.serverpb.EventsResponse.Event({
         target_id: Long.fromString("1"),
         event_type: "create_database",
       });
@@ -75,7 +75,7 @@ describe("<EventRow>", function () {
     });
 
     it("correctly renders an unknown event", function () {
-      let e = new protos.cockroach.server.EventsResponse.Event({
+      let e = new protos.cockroach.server.serverpb.EventsResponse.Event({
         target_id: Long.fromString("1"),
         event_type: "unknown",
       });

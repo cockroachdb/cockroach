@@ -7,17 +7,17 @@ import * as databases from "./databaseInfo";
 import * as protos from "../js/protos";
 import { Action } from "../interfaces/action";
 
-type DatabasesResponse = cockroach.server.DatabasesResponse;
+type DatabasesResponse = cockroach.server.serverpb.DatabasesResponse;
 
-type DatabaseDetailsRequest = cockroach.server.DatabaseDetailsRequest;
-type TableDetailsRequest = cockroach.server.TableDetailsRequest;
+type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
+type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
 
-type DatabaseDetailsResponse = cockroach.server.DatabaseDetailsResponse;
-type TableDetailsResponse = cockroach.server.TableDetailsResponse;
+type DatabaseDetailsResponse = cockroach.server.serverpb.DatabaseDetailsResponse;
+type TableDetailsResponse = cockroach.server.serverpb.TableDetailsResponse;
 
-type DatabasesResponseMessage = cockroach.server.DatabasesResponseMessage;
-type DatabaseDetailsResponseMessage = cockroach.server.DatabaseDetailsResponseMessage;
-type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
+type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
+type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
 describe("databases reducers", function () {
   describe("actions", function () {
@@ -128,7 +128,7 @@ describe("databases reducers", function () {
       });
 
       it("should correctly dispatch receiveDatabases", function () {
-        let dbs = new protos.cockroach.server.DatabasesResponse({ databases: ["db1", "db2"] });
+        let dbs = new protos.cockroach.server.serverpb.DatabasesResponse({ databases: ["db1", "db2"] });
         state = databases.databasesReducer(state, databases.receiveDatabases(dbs));
         assert.isFalse(state.inFlight);
         assert.isNull(state.lastError);
@@ -179,7 +179,7 @@ describe("databases reducers", function () {
       });
 
       it("should correctly dispatch receiveDatabaseDetails", function () {
-        let dbs = new protos.cockroach.server.DatabaseDetailsResponse({
+        let dbs = new protos.cockroach.server.serverpb.DatabaseDetailsResponse({
           table_names: ["table1", "table2"],
           grants: [{ user: "root", privileges: ["ALL"] }, { user: "user", privileges: ["CREATE", "DROP"] }],
         });
@@ -234,7 +234,7 @@ describe("databases reducers", function () {
       });
 
       it("should correctly dispatch receiveTableDetails", function () {
-        let dbs = new protos.cockroach.server.TableDetailsResponse({ columns: [], indexes: [], grants: [] });
+        let dbs = new protos.cockroach.server.serverpb.TableDetailsResponse({ columns: [], indexes: [], grants: [] });
         state = databases.singleTableDetailsReducer(state, databases.receiveTableDetails(dbName, tableName, dbs));
         assert.isFalse(state.inFlight);
         assert.isNull(state.lastError);
@@ -284,7 +284,7 @@ describe("databases reducers", function () {
       });
 
       it("should correctly dispatch receiveTableDetails", function () {
-        let action = databases.receiveTableDetails(dbName, tableName, new protos.cockroach.server.TableDetailsResponse({}));
+        let action = databases.receiveTableDetails(dbName, tableName, new protos.cockroach.server.serverpb.TableDetailsResponse({}));
         state = databases.allTablesDetailsReducer(state, action);
         assert.property(state, databases.generateTableID(dbName, tableName));
         let detailState = databases.singleTableDetailsReducer(undefined, action);
@@ -331,7 +331,7 @@ describe("databases reducers", function () {
       });
 
       it("should correctly dispatch receiveDatabaseDetails", function () {
-        let action = databases.receiveDatabaseDetails(dbName, new protos.cockroach.server.DatabaseDetailsResponse({}));
+        let action = databases.receiveDatabaseDetails(dbName, new protos.cockroach.server.serverpb.DatabaseDetailsResponse({}));
         state = databases.allDatabaseDetailsReducer(state, action);
         assert.property(state, dbName);
         let detailState = databases.singleDatabaseDetailsReducer(undefined, action);
@@ -374,7 +374,7 @@ describe("databases reducers", function () {
       let error: Error;
       beforeEach(function () {
         state = { databaseInfo: new databases.DatabaseInfoState() };
-        response = new protos.cockroach.server.DatabasesResponse({ databases: databaseList });
+        response = new protos.cockroach.server.serverpb.DatabasesResponse({ databases: databaseList });
       });
 
       it("refreshes database list", function () {
@@ -451,7 +451,7 @@ describe("databases reducers", function () {
           function getDatabaseDetails(req: DatabaseDetailsRequest): Promise<DatabaseDetailsResponseMessage> {
             return new Promise((resolve, reject) => {
               assert.deepEqual(state.databaseInfo.databaseDetails[req.database], { inFlight: true, valid: false });
-              response = new protos.cockroach.server.DatabaseDetailsResponse(dbs[req.database]);
+              response = new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[req.database]);
               resolve(response);
             });
           }
@@ -463,7 +463,7 @@ describe("databases reducers", function () {
           });
 
           return databasesMocked.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
-            assert.deepEqual(state.databaseInfo.databaseDetails[db].data, new protos.cockroach.server.DatabaseDetailsResponse(dbs[db]));
+            assert.deepEqual(state.databaseInfo.databaseDetails[db].data, new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[db]));
             assert.deepEqual(state.databaseInfo.databaseDetails[db], {
               inFlight: false,
               valid: true,
@@ -520,16 +520,16 @@ describe("databases reducers", function () {
 
       let dbTables: { [db: string]: { [table: string]: TableDetailsResponse}} = {
         [DB1]: {
-          [table1]: new protos.cockroach.server.TableDetailsResponse(),
+          [table1]: new protos.cockroach.server.serverpb.TableDetailsResponse(),
         },
         [DB2]: {
-          [table2]: new protos.cockroach.server.TableDetailsResponse(),
+          [table2]: new protos.cockroach.server.serverpb.TableDetailsResponse(),
         },
         [DB3]: {
-          [table3]: new protos.cockroach.server.TableDetailsResponse(),
+          [table3]: new protos.cockroach.server.serverpb.TableDetailsResponse(),
         },
         [DB4]: {
-          [table4]: new protos.cockroach.server.TableDetailsResponse(),
+          [table4]: new protos.cockroach.server.serverpb.TableDetailsResponse(),
         },
       };
 
@@ -555,7 +555,7 @@ describe("databases reducers", function () {
           function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsResponseMessage> {
             return new Promise((resolve, reject) => {
               assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
-              response = new protos.cockroach.server.TableDetailsResponse(dbTables[databases.generateTableID(req.database, req.table)]);
+              response = new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[databases.generateTableID(req.database, req.table)]);
               resolve(response);
             });
           }
@@ -568,7 +568,7 @@ describe("databases reducers", function () {
 
           return databasesMocked.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
             let generatedID = databases.generateTableID(id.db, id.table);
-            assert.deepEqual(state.databaseInfo.tableDetails[generatedID].data, new protos.cockroach.server.TableDetailsResponse(dbTables[id.db][id.table]));
+            assert.deepEqual(state.databaseInfo.tableDetails[generatedID].data, new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[id.db][id.table]));
             assert.deepEqual(state.databaseInfo.tableDetails[generatedID], {
               inFlight: false,
               valid: true,

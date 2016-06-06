@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -37,8 +37,8 @@ import (
 
 const sep = "-"
 
-// byTimeAndName is a slice of ts.TimeSeriesData.
-type byTimeAndName []ts.TimeSeriesData
+// byTimeAndName is a slice of tspb.TimeSeriesData.
+type byTimeAndName []tspb.TimeSeriesData
 
 // implement sort.Interface for byTimeAndName
 func (a byTimeAndName) Len() int      { return len(a) }
@@ -221,7 +221,7 @@ func TestMetricsRecorder(t *testing.T) {
 
 	// Add the metrics to each registry and set their values. At the same time,
 	// generate expected time series results and status summary metric values.
-	var expected []ts.TimeSeriesData
+	var expected []tspb.TimeSeriesData
 	expectedNodeSummaryMetrics := make(map[string]float64)
 	expectedStoreSummaryMetrics := make(map[string]float64)
 
@@ -232,10 +232,10 @@ func TestMetricsRecorder(t *testing.T) {
 		if !isNode {
 			tsPrefix = "cr.store."
 		}
-		expect := ts.TimeSeriesData{
+		expect := tspb.TimeSeriesData{
 			Name:   tsPrefix + prefix + name,
 			Source: strconv.FormatInt(source, 10),
-			Datapoints: []ts.TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
 					Value:          float64(val),

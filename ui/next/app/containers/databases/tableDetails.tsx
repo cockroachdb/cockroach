@@ -10,10 +10,10 @@ import { refreshTableDetails, generateTableID } from "../../redux/databaseInfo";
 
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
-type Column = cockroach.server.TableDetailsResponse.Column;
-type Index = cockroach.server.TableDetailsResponse.Index;
-type Grant = cockroach.server.DatabaseDetailsResponse.Grant;
-type TableDetailsResponseMessage = cockroach.server.TableDetailsResponseMessage;
+type Column = cockroach.server.serverpb.TableDetailsResponse.Column;
+type Index = cockroach.server.serverpb.TableDetailsResponse.Index;
+type Grant = cockroach.server.serverpb.DatabaseDetailsResponse.Grant;
+type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
 // Constants used to store sort settings in the redux UI store.
 

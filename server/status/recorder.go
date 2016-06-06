@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -173,7 +173,7 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 
 // GetTimeSeriesData serializes registered metrics for consumption by
 // CockroachDB's time series system.
-func (mr *MetricsRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
+func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
@@ -185,7 +185,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 		return nil
 	}
 
-	data := make([]ts.TimeSeriesData, 0, mr.mu.lastDataCount)
+	data := make([]tspb.TimeSeriesData, 0, mr.mu.lastDataCount)
 
 	// Record time series from node-level registries.
 	now := mr.mu.clock.PhysicalNow()
@@ -318,12 +318,12 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 	})
 }
 
-func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
+func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 	eachRecordableValue(rr.registry, func(name string, val float64) {
-		*dest = append(*dest, ts.TimeSeriesData{
+		*dest = append(*dest, tspb.TimeSeriesData{
 			Name:   fmt.Sprintf(rr.format, name),
 			Source: rr.source,
-			Datapoints: []ts.TimeSeriesDatapoint{
+			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: rr.timestampNanos,
 					Value:          val,

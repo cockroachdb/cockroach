@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -36,15 +37,15 @@ func TestRaftUpdate(t *testing.T) {
 	runTestOnConfigs(t, testRaftUpdateInner)
 }
 
-func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (server.ClusterFreezeResponse, error) {
+func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb.ClusterFreezeResponse, error) {
 	httpClient := cluster.HTTPClient
 	httpClient.Timeout = timeout
 
-	var resp server.ClusterFreezeResponse
+	var resp serverpb.ClusterFreezeResponse
 	err := util.PostJSON(
 		httpClient,
 		c.URL(0)+"/_admin/v1/cluster/freeze",
-		&server.ClusterFreezeRequest{Freeze: freeze},
+		&serverpb.ClusterFreezeRequest{Freeze: freeze},
 		&resp,
 	)
 	return resp, err
@@ -56,7 +57,7 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 	const long = time.Minute
 	const short = 10 * time.Second
 
-	mustPost := func(freeze bool) server.ClusterFreezeResponse {
+	mustPost := func(freeze bool) serverpb.ClusterFreezeResponse {
 		reply, err := postFreeze(c, freeze, long)
 		if err != nil {
 			t.Fatal(util.ErrorfSkipFrames(1, "%v", err))

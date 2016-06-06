@@ -52,7 +52,8 @@ TestForbiddenImports() {
   echo "checking for forbidden imports"
   go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' "$PKG" | \
        grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path)$' | \
-       grep -Ev 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
+       grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
+       grep -vE 'cockroach/(server/serverpb|ts/tspb): github.com/golang/protobuf/proto$' | \
        grep -vF 'util/uuid: github.com/satori/go.uuid' | tee forbidden.log; \
     if grep -E ' path$' forbidden.log > /dev/null; then \
        echo; echo "Consider using 'path/filepath' instead of 'path'."; echo; \
@@ -97,7 +98,7 @@ TestReturnCheck() {
 TestVet() {
   ! go tool vet -printfuncs Info:0,Infof:0,Warning:0,Warningf:0,UnimplementedWithIssueErrorf:1 . 2>&1 | \
     grep -vE '^vet: cannot process directory .git' | \
-    grep -vE '^(server/(admin|status)|ts/(server|timeseries))\..*\go:.+: constant [0-9]+ not a string in call to Errorf'
+    grep -vE '^(server/(serverpb/admin|serverpb/status|admin|status)|(ts|ts/tspb)/(server|timeseries))\..*\go:.+: constant [0-9]+ not a string in call to Errorf'
   # To return proper HTTP error codes (e.g. 404 Not Found), we need to use
   # grpc.Errorf, which has an error code as its first parameter. 'go vet'
   # doesn't like that the first parameter isn't a format string.

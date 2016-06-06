@@ -47,10 +47,10 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACK
 # generated Go code.
 GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api
 
-GW_SERVER_PROTOS := $(REPO_ROOT)/server/admin.proto $(REPO_ROOT)/server/status.proto
+GW_SERVER_PROTOS := $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto
 GW_SERVER_SOURCES := $(GW_SERVER_PROTOS:%.proto=%.pb.gw.go)
 
-GW_TS_PROTOS := $(REPO_ROOT)/ts/timeseries.proto
+GW_TS_PROTOS := $(REPO_ROOT)/ts/tspb/timeseries.proto
 GW_TS_SOURCES := $(GW_TS_PROTOS:%.proto=%.pb.gw.go)
 
 GW_SOURCES := $(GW_SERVER_SOURCES) $(GW_TS_SOURCES)
@@ -86,7 +86,6 @@ $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PRO
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
-	sed -i~ -E 's!golang/protobuf/proto!gogo/protobuf/proto!' $(GW_SOURCES)
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)

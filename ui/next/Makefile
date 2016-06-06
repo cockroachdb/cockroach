@@ -57,7 +57,7 @@ jspm.installed: npm.installed
 	touch npm.installed
 	touch $@
 
-UI_PROTOS = ../../server/admin.proto ../../server/status.proto ../../server/status/status.proto ../../ts/timeseries.proto
+UI_PROTOS = ../../server/serverpb/admin.proto ../../server/serverpb/status.proto ../../server/status/status.proto ../../ts/tspb/timeseries.proto
 
 PBJS_ARGS = --path ../../../ $(UI_PROTOS)
 

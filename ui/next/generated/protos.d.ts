@@ -50,51 +50,78 @@ export interface serverBuilder {
 	decode(buffer: ArrayBuffer) : serverMessage;
 	decode(buffer: ByteBuffer) : serverMessage;
 	decode64(buffer: string) : serverMessage;
-	DatabasesRequest: server.DatabasesRequestBuilder;
-	DatabasesResponse: server.DatabasesResponseBuilder;
-	DatabaseDetailsRequest: server.DatabaseDetailsRequestBuilder;
-	DatabaseDetailsResponse: server.DatabaseDetailsResponseBuilder;
-	TableDetailsRequest: server.TableDetailsRequestBuilder;
-	TableDetailsResponse: server.TableDetailsResponseBuilder;
-	UsersRequest: server.UsersRequestBuilder;
-	UsersResponse: server.UsersResponseBuilder;
-	EventsRequest: server.EventsRequestBuilder;
-	EventsResponse: server.EventsResponseBuilder;
-	SetUIDataRequest: server.SetUIDataRequestBuilder;
-	SetUIDataResponse: server.SetUIDataResponseBuilder;
-	GetUIDataRequest: server.GetUIDataRequestBuilder;
-	GetUIDataResponse: server.GetUIDataResponseBuilder;
-	ClusterRequest: server.ClusterRequestBuilder;
-	ClusterResponse: server.ClusterResponseBuilder;
-	DrainRequest: server.DrainRequestBuilder;
-	DrainResponse: server.DrainResponseBuilder;
-	HealthRequest: server.HealthRequestBuilder;
-	HealthResponse: server.HealthResponseBuilder;
-	ClusterFreezeRequest: server.ClusterFreezeRequestBuilder;
-	ClusterFreezeResponse: server.ClusterFreezeResponseBuilder;
-	DetailsRequest: server.DetailsRequestBuilder;
-	DetailsResponse: server.DetailsResponseBuilder;
-	NodesRequest: server.NodesRequestBuilder;
-	NodesResponse: server.NodesResponseBuilder;
-	NodeRequest: server.NodeRequestBuilder;
-	RangeInfo: server.RangeInfoBuilder;
-	RangesRequest: server.RangesRequestBuilder;
-	RangesResponse: server.RangesResponseBuilder;
-	GossipRequest: server.GossipRequestBuilder;
-	JSONResponse: server.JSONResponseBuilder;
-	LogsRequest: server.LogsRequestBuilder;
-	LogFilesListRequest: server.LogFilesListRequestBuilder;
-	LogFileRequest: server.LogFileRequestBuilder;
-	StacksRequest: server.StacksRequestBuilder;
-	MetricsRequest: server.MetricsRequestBuilder;
+	serverpb: server.serverpbBuilder;
 	status: server.statusBuilder;
-	DrainMode: server.DrainMode;
 	
 }
 	
 }
 
 declare module cockroach.server {
+	
+	export interface serverpb {
+	
+		
+
+}
+	
+	export interface serverpbMessage extends serverpb {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface serverpbBuilder {
+	new(data?: serverpb): serverpbMessage;
+	decode(buffer: ArrayBuffer) : serverpbMessage;
+	decode(buffer: ByteBuffer) : serverpbMessage;
+	decode64(buffer: string) : serverpbMessage;
+	DatabasesRequest: serverpb.DatabasesRequestBuilder;
+	DatabasesResponse: serverpb.DatabasesResponseBuilder;
+	DatabaseDetailsRequest: serverpb.DatabaseDetailsRequestBuilder;
+	DatabaseDetailsResponse: serverpb.DatabaseDetailsResponseBuilder;
+	TableDetailsRequest: serverpb.TableDetailsRequestBuilder;
+	TableDetailsResponse: serverpb.TableDetailsResponseBuilder;
+	UsersRequest: serverpb.UsersRequestBuilder;
+	UsersResponse: serverpb.UsersResponseBuilder;
+	EventsRequest: serverpb.EventsRequestBuilder;
+	EventsResponse: serverpb.EventsResponseBuilder;
+	SetUIDataRequest: serverpb.SetUIDataRequestBuilder;
+	SetUIDataResponse: serverpb.SetUIDataResponseBuilder;
+	GetUIDataRequest: serverpb.GetUIDataRequestBuilder;
+	GetUIDataResponse: serverpb.GetUIDataResponseBuilder;
+	ClusterRequest: serverpb.ClusterRequestBuilder;
+	ClusterResponse: serverpb.ClusterResponseBuilder;
+	DrainRequest: serverpb.DrainRequestBuilder;
+	DrainResponse: serverpb.DrainResponseBuilder;
+	HealthRequest: serverpb.HealthRequestBuilder;
+	HealthResponse: serverpb.HealthResponseBuilder;
+	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
+	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
+	DetailsRequest: serverpb.DetailsRequestBuilder;
+	DetailsResponse: serverpb.DetailsResponseBuilder;
+	NodesRequest: serverpb.NodesRequestBuilder;
+	NodesResponse: serverpb.NodesResponseBuilder;
+	NodeRequest: serverpb.NodeRequestBuilder;
+	RangeInfo: serverpb.RangeInfoBuilder;
+	RangesRequest: serverpb.RangesRequestBuilder;
+	RangesResponse: serverpb.RangesResponseBuilder;
+	GossipRequest: serverpb.GossipRequestBuilder;
+	JSONResponse: serverpb.JSONResponseBuilder;
+	LogsRequest: serverpb.LogsRequestBuilder;
+	LogFilesListRequest: serverpb.LogFilesListRequestBuilder;
+	LogFileRequest: serverpb.LogFileRequestBuilder;
+	StacksRequest: serverpb.StacksRequestBuilder;
+	MetricsRequest: serverpb.MetricsRequestBuilder;
+	DrainMode: serverpb.DrainMode;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb {
 	
 	export interface DatabasesRequest {
 	
@@ -121,7 +148,7 @@ export interface DatabasesRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DatabasesResponse {
 	
@@ -157,7 +184,7 @@ export interface DatabasesResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DatabaseDetailsRequest {
 	
@@ -193,7 +220,7 @@ export interface DatabaseDetailsRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DatabaseDetailsResponse {
 	
@@ -238,7 +265,7 @@ export interface DatabaseDetailsResponseBuilder {
 	
 }
 
-declare module cockroach.server.DatabaseDetailsResponse {
+declare module cockroach.server.serverpb.DatabaseDetailsResponse {
 	
 	export interface Grant {
 	
@@ -284,7 +311,7 @@ export interface GrantBuilder {
 
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface TableDetailsRequest {
 	
@@ -329,7 +356,7 @@ export interface TableDetailsRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface TableDetailsResponse {
 	
@@ -394,7 +421,7 @@ export interface TableDetailsResponseBuilder {
 	
 }
 
-declare module cockroach.server.TableDetailsResponse {
+declare module cockroach.server.serverpb.TableDetailsResponse {
 	
 	export interface Grant {
 	
@@ -439,7 +466,7 @@ export interface GrantBuilder {
 }
 
 
-declare module cockroach.server.TableDetailsResponse {
+declare module cockroach.server.serverpb.TableDetailsResponse {
 	
 	export interface Column {
 	
@@ -502,7 +529,7 @@ export interface ColumnBuilder {
 }
 
 
-declare module cockroach.server.TableDetailsResponse {
+declare module cockroach.server.serverpb.TableDetailsResponse {
 	
 	export interface Index {
 	
@@ -584,7 +611,7 @@ export interface IndexBuilder {
 
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface UsersRequest {
 	
@@ -611,7 +638,7 @@ export interface UsersRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface UsersResponse {
 	
@@ -647,7 +674,7 @@ export interface UsersResponseBuilder {
 	
 }
 
-declare module cockroach.server.UsersResponse {
+declare module cockroach.server.serverpb.UsersResponse {
 	
 	export interface User {
 	
@@ -684,7 +711,7 @@ export interface UserBuilder {
 
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface EventsRequest {
 	
@@ -729,7 +756,7 @@ export interface EventsRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface EventsResponse {
 	
@@ -765,7 +792,7 @@ export interface EventsResponseBuilder {
 	
 }
 
-declare module cockroach.server.EventsResponse {
+declare module cockroach.server.serverpb.EventsResponse {
 	
 	export interface Event {
 	
@@ -846,7 +873,7 @@ export interface EventBuilder {
 	
 }
 
-declare module cockroach.server.EventsResponse.Event {
+declare module cockroach.server.serverpb.EventsResponse.Event {
 	
 	export interface Timestamp {
 	
@@ -893,7 +920,7 @@ export interface TimestampBuilder {
 
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface SetUIDataRequest {
 	
@@ -929,7 +956,7 @@ export interface SetUIDataRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface SetUIDataResponse {
 	
@@ -956,7 +983,7 @@ export interface SetUIDataResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface GetUIDataRequest {
 	
@@ -992,7 +1019,7 @@ export interface GetUIDataRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface GetUIDataResponse {
 	
@@ -1029,7 +1056,7 @@ export interface GetUIDataResponseBuilder {
 	
 }
 
-declare module cockroach.server.GetUIDataResponse {
+declare module cockroach.server.serverpb.GetUIDataResponse {
 	
 	export interface Timestamp {
 	
@@ -1074,7 +1101,7 @@ export interface TimestampBuilder {
 }
 
 
-declare module cockroach.server.GetUIDataResponse {
+declare module cockroach.server.serverpb.GetUIDataResponse {
 	
 	export interface Value {
 	
@@ -1120,7 +1147,7 @@ export interface ValueBuilder {
 
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface ClusterRequest {
 	
@@ -1147,7 +1174,7 @@ export interface ClusterRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface ClusterResponse {
 	
@@ -1183,7 +1210,7 @@ export interface ClusterResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DrainRequest {
 	
@@ -1237,7 +1264,7 @@ export interface DrainRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DrainResponse {
 	
@@ -1273,7 +1300,7 @@ export interface DrainResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface HealthRequest {
 	
@@ -1300,7 +1327,7 @@ export interface HealthRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface HealthResponse {
 	
@@ -1327,7 +1354,7 @@ export interface HealthResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface ClusterFreezeRequest {
 	
@@ -1363,7 +1390,7 @@ export interface ClusterFreezeRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface ClusterFreezeResponse {
 	
@@ -1399,7 +1426,7 @@ export interface ClusterFreezeResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DetailsRequest {
 	
@@ -1435,7 +1462,7 @@ export interface DetailsRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface DetailsResponse {
 	
@@ -1489,7 +1516,7 @@ export interface DetailsResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface NodesRequest {
 	
@@ -1516,7 +1543,7 @@ export interface NodesRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface NodesResponse {
 	
@@ -1552,7 +1579,7 @@ export interface NodesResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface NodeRequest {
 	
@@ -1588,7 +1615,7 @@ export interface NodeRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface RangeInfo {
 	
@@ -1633,7 +1660,7 @@ export interface RangeInfoBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface RangesRequest {
 	
@@ -1669,7 +1696,7 @@ export interface RangesRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface RangesResponse {
 	
@@ -1705,7 +1732,7 @@ export interface RangesResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface GossipRequest {
 	
@@ -1741,7 +1768,7 @@ export interface GossipRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface JSONResponse {
 	
@@ -1777,7 +1804,7 @@ export interface JSONResponseBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface LogsRequest {
 	
@@ -1858,7 +1885,7 @@ export interface LogsRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface LogFilesListRequest {
 	
@@ -1894,7 +1921,7 @@ export interface LogFilesListRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface LogFileRequest {
 	
@@ -1939,7 +1966,7 @@ export interface LogFileRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface StacksRequest {
 	
@@ -1975,7 +2002,7 @@ export interface StacksRequestBuilder {
 }
 
 
-declare module cockroach.server {
+declare module cockroach.server.serverpb {
 	
 	export interface MetricsRequest {
 	
@@ -2008,6 +2035,15 @@ export interface MetricsRequestBuilder {
 	
 }
 	
+}
+
+
+declare module cockroach.server.serverpb {
+	export const enum DrainMode {
+		CLIENT = 0,
+		LEADERSHIP = 1,
+		
+}
 }
 
 
@@ -2165,14 +2201,6 @@ export interface NodeStatusBuilder {
 }
 
 
-
-declare module cockroach.server {
-	export const enum DrainMode {
-		CLIENT = 0,
-		LEADERSHIP = 1,
-		
-}
-}
 
 
 declare module cockroach {
@@ -4035,19 +4063,46 @@ export interface tsBuilder {
 	decode(buffer: ArrayBuffer) : tsMessage;
 	decode(buffer: ByteBuffer) : tsMessage;
 	decode64(buffer: string) : tsMessage;
-	TimeSeriesDatapoint: ts.TimeSeriesDatapointBuilder;
-	TimeSeriesData: ts.TimeSeriesDataBuilder;
-	Query: ts.QueryBuilder;
-	TimeSeriesQueryRequest: ts.TimeSeriesQueryRequestBuilder;
-	TimeSeriesQueryResponse: ts.TimeSeriesQueryResponseBuilder;
-	TimeSeriesQueryAggregator: ts.TimeSeriesQueryAggregator;
-	TimeSeriesQueryDerivative: ts.TimeSeriesQueryDerivative;
+	tspb: ts.tspbBuilder;
 	
 }
 	
 }
 
 declare module cockroach.ts {
+	
+	export interface tspb {
+	
+		
+
+}
+	
+	export interface tspbMessage extends tspb {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface tspbBuilder {
+	new(data?: tspb): tspbMessage;
+	decode(buffer: ArrayBuffer) : tspbMessage;
+	decode(buffer: ByteBuffer) : tspbMessage;
+	decode64(buffer: string) : tspbMessage;
+	TimeSeriesDatapoint: tspb.TimeSeriesDatapointBuilder;
+	TimeSeriesData: tspb.TimeSeriesDataBuilder;
+	Query: tspb.QueryBuilder;
+	TimeSeriesQueryRequest: tspb.TimeSeriesQueryRequestBuilder;
+	TimeSeriesQueryResponse: tspb.TimeSeriesQueryResponseBuilder;
+	TimeSeriesQueryAggregator: tspb.TimeSeriesQueryAggregator;
+	TimeSeriesQueryDerivative: tspb.TimeSeriesQueryDerivative;
+	
+}
+	
+}
+
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesDatapoint {
 	
@@ -4092,7 +4147,7 @@ export interface TimeSeriesDatapointBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesData {
 	
@@ -4146,7 +4201,7 @@ export interface TimeSeriesDataBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface Query {
 	
@@ -4218,7 +4273,7 @@ export interface QueryBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesQueryRequest {
 	
@@ -4272,7 +4327,7 @@ export interface TimeSeriesQueryRequestBuilder {
 }
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	
 	export interface TimeSeriesQueryResponse {
 	
@@ -4308,7 +4363,7 @@ export interface TimeSeriesQueryResponseBuilder {
 	
 }
 
-declare module cockroach.ts.TimeSeriesQueryResponse {
+declare module cockroach.ts.tspb.TimeSeriesQueryResponse {
 	
 	export interface Result {
 	
@@ -4354,7 +4409,7 @@ export interface ResultBuilder {
 
 
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	export const enum TimeSeriesQueryAggregator {
 		AVG = 1,
 		SUM = 2,
@@ -4364,7 +4419,7 @@ declare module cockroach.ts {
 }
 }
 
-declare module cockroach.ts {
+declare module cockroach.ts.tspb {
 	export const enum TimeSeriesQueryDerivative {
 		NONE = 0,
 		DERIVATIVE = 1,
@@ -4372,6 +4427,7 @@ declare module cockroach.ts {
 		
 }
 }
+
 
 
 

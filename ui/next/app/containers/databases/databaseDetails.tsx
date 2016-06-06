@@ -10,8 +10,8 @@ import { refreshDatabaseDetails } from "../../redux/databaseInfo";
 
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
-type Grant = cockroach.server.DatabaseDetailsResponse.Grant;
-type DatabaseDetailsResponseMessage = cockroach.server.DatabaseDetailsResponseMessage;
+type Grant = cockroach.server.serverpb.DatabaseDetailsResponse.Grant;
+type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_TABLES_SORT_SETTING_KEY = "databaseDetails/sort_setting/tables";

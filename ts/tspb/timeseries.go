@@ -14,7 +14,7 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package ts
+package tspb
 
 import (
 	"fmt"

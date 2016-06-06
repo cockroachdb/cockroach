@@ -17,6 +17,7 @@
 package ts
 
 import (
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -44,7 +45,7 @@ func MakeServer(db *DB) Server {
 
 // RegisterService registers the GRPC service.
 func (s *Server) RegisterService(g *grpc.Server) {
-	RegisterTimeSeriesServer(g, s)
+	tspb.RegisterTimeSeriesServer(g, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -54,25 +55,25 @@ func (s *Server) RegisterGateway(
 	mux *gwruntime.ServeMux,
 	conn *grpc.ClientConn,
 ) error {
-	return RegisterTimeSeriesHandler(ctx, mux, conn)
+	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }
 
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
-func (s *Server) Query(ctx context.Context, request *TimeSeriesQueryRequest) (*TimeSeriesQueryResponse, error) {
+func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest) (*tspb.TimeSeriesQueryResponse, error) {
 	if len(request.Queries) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
 	}
 
-	response := TimeSeriesQueryResponse{
-		Results: make([]TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
+	response := tspb.TimeSeriesQueryResponse{
+		Results: make([]tspb.TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
 	}
 	for _, q := range request.Queries {
 		datapoints, sources, err := s.db.Query(q, Resolution10s, request.StartNanos, request.EndNanos)
 		if err != nil {
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
-		result := TimeSeriesQueryResponse_Result{
+		result := tspb.TimeSeriesQueryResponse_Result{
 			Query:      q,
 			Datapoints: datapoints,
 		}
