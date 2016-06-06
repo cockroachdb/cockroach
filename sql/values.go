@@ -77,6 +77,9 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
+			if p.aggregateInExpr(expr) {
+				return nil, fmt.Errorf("aggregate functions are not allowed in VALUES")
+			}
 			typedExpr, err := parser.TypeCheck(expr, &p.semaCtx, desired)
 			if err != nil {
 				return nil, err
