@@ -69,22 +69,15 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 		tupleBuf = tupleBuf[numCols:]
 
 		for i, expr := range tuple.Exprs {
-			expr, err := p.replaceSubqueries(expr, 1)
-			if err != nil {
-				return nil, err
+			if p.aggregateInExpr(expr) {
+				return nil, fmt.Errorf("aggregate functions are not allowed in VALUES")
 			}
+
 			desired := parser.NoTypePreference
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			if p.aggregateInExpr(expr) {
-				return nil, fmt.Errorf("aggregate functions are not allowed in VALUES")
-			}
-			typedExpr, err := parser.TypeCheck(expr, &p.semaCtx, desired)
-			if err != nil {
-				return nil, err
-			}
-			typedExpr, err = p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
+			typedExpr, err := p.analyzeExpr(expr, nil, nil, desired, false, "")
 			if err != nil {
 				return nil, err
 			}

@@ -39,7 +39,7 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desiredTypes []parser.Datum, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
+func (p *planner) makeEditNode(t parser.TableExpr, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
 	tableDesc, err := p.getAliasedTableLease(t)
 	if err != nil {
 		return editNodeBase{}, err
@@ -49,14 +49,8 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desi
 		return editNodeBase{}, err
 	}
 
-	rh, err := p.makeReturningHelper(r, desiredTypes, tableDesc.Name, tableDesc.Columns)
-	if err != nil {
-		return editNodeBase{}, err
-	}
-
 	return editNodeBase{
 		p:          p,
-		rh:         rh,
 		tableDesc:  tableDesc,
 		autoCommit: autoCommit,
 	}, nil
@@ -70,11 +64,23 @@ type editNodeRun struct {
 	resultRow parser.DTuple
 }
 
-func (r *editNodeRun) initEditNode(rows planNode) {
+func (r *editNodeRun) initEditNode(en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Datum) error {
 	r.rows = rows
+
+	rh, err := en.p.makeReturningHelper(re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
+	if err != nil {
+		return err
+	}
+	en.rh = rh
+
+	return nil
 }
 
 func (r *editNodeRun) expandEditNodePlan(en *editNodeBase, tw tableWriter) error {
+	if err := en.rh.expandPlans(); err != nil {
+		return err
+	}
+
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
@@ -119,7 +125,7 @@ type updateNode struct {
 func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 
-	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.UPDATE)
+	en, err := p.makeEditNode(n.Table, autoCommit, privilege.UPDATE)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +157,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if len(en.rh.exprs) > 0 || len(en.tableDesc.Checks) > 0 {
+	if len(n.Returning) > 0 || len(en.tableDesc.Checks) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns
@@ -230,10 +236,6 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		}
 	}
 
-	if err := en.rh.TypeCheck(); err != nil {
-		return nil, err
-	}
-
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.updateCols))
 	for i, col := range ru.updateCols {
 		updateColsIdx[col.ID] = i
@@ -249,14 +251,13 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	if err := un.checkHelper.init(p, en.tableDesc); err != nil {
 		return nil, err
 	}
-	un.run.initEditNode(rows)
+	if err := un.run.initEditNode(&un.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+		return nil, err
+	}
 	return un, nil
 }
 
 func (u *updateNode) expandPlan() error {
-	if err := u.rh.expandPlans(); err != nil {
-		return err
-	}
 	return u.run.expandEditNodePlan(&u.editNodeBase, &u.tw)
 }
 

@@ -44,19 +44,9 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 		if err != nil {
 			return err
 		}
-		replaced, err := p.replaceSubqueries(raw, 1)
+		typedExpr, err := p.analyzeExpr(raw, []*tableInfo{&table}, c.qvals,
+			parser.TypeBool, false, "")
 		if err != nil {
-			return nil
-		}
-		resolved, err := resolveQNames(replaced, []*tableInfo{&table}, c.qvals, &p.qnameVisitor)
-		if err != nil {
-			return err
-		}
-		typedExpr, err := parser.TypeCheck(resolved, nil, parser.TypeBool)
-		if err != nil {
-			return err
-		}
-		if typedExpr, err = p.parser.NormalizeExpr(&p.evalCtx, typedExpr); err != nil {
 			return err
 		}
 		c.exprs[i] = typedExpr

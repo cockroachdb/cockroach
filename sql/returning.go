@@ -30,12 +30,10 @@ type returningHelper struct {
 	// Expected columns.
 	columns []ResultColumn
 	// Processed copies of expressions from ReturningExprs.
-	untypedExprs parser.Exprs
-	exprs        []parser.TypedExpr
-	qvals        qvalMap
-	rowCount     int
-	desiredTypes []parser.Datum
-	table        *tableInfo
+	exprs    []parser.TypedExpr
+	qvals    qvalMap
+	rowCount int
+	table    *tableInfo
 }
 
 func (p *planner) makeReturningHelper(
@@ -45,8 +43,7 @@ func (p *planner) makeReturningHelper(
 	tablecols []sqlbase.ColumnDescriptor,
 ) (returningHelper, error) {
 	rh := returningHelper{
-		p:            p,
-		desiredTypes: desiredTypes,
+		p: p,
 	}
 	if len(r) == 0 {
 		return rh, nil
@@ -64,14 +61,12 @@ func (p *planner) makeReturningHelper(
 		alias:   alias,
 	}
 	rh.qvals = make(qvalMap)
-	rh.untypedExprs = make([]parser.Expr, 0, len(r))
-	for _, target := range r {
-		if isStar, cols, exprs, err := checkRenderStar(target, rh.table, rh.qvals); err != nil {
+	rh.exprs = make([]parser.TypedExpr, 0, len(r))
+	for i, target := range r {
+		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.table, rh.qvals); err != nil {
 			return returningHelper{}, err
 		} else if isStar {
-			for _, expr := range exprs {
-				rh.untypedExprs = append(rh.untypedExprs, expr)
-			}
+			rh.exprs = append(rh.exprs, typedExprs...)
 			rh.columns = append(rh.columns, cols...)
 			continue
 		}
@@ -81,19 +76,18 @@ func (p *planner) makeReturningHelper(
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		replaced, err := p.replaceSubqueries(target.Expr, 1)
-		if err != nil {
-			return returningHelper{}, err
+		desired := parser.NoTypePreference
+		if len(desiredTypes) > i {
+			desired = desiredTypes[i]
 		}
 
-		resolved, err := resolveQNames(replaced, []*tableInfo{rh.table}, rh.qvals, &p.qnameVisitor)
+		typedExpr, err := rh.p.analyzeExpr(target.Expr, []*tableInfo{rh.table}, rh.qvals, desired, false, "")
 		if err != nil {
 			return returningHelper{}, err
 		}
-		rh.untypedExprs = append(rh.untypedExprs, resolved)
-		rh.columns = append(rh.columns, ResultColumn{Name: outputName})
+		rh.exprs = append(rh.exprs, typedExpr)
+		rh.columns = append(rh.columns, ResultColumn{Name: outputName, Typ: typedExpr.ReturnType()})
 	}
-	rh.exprs = make([]parser.TypedExpr, len(rh.untypedExprs))
 	return rh, nil
 }
 
@@ -130,33 +124,6 @@ func (rh *returningHelper) startPlans() error {
 		if err := rh.p.startSubqueryPlans(expr); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// TypeCheck ensures that the expressions mentioned in the
-// returningHelper have the right type.
-func (rh *returningHelper) TypeCheck() error {
-	for i, expr := range rh.untypedExprs {
-		baseExpr, bErr := rh.p.replaceSubqueries(expr, 1)
-		if bErr != nil {
-			return bErr
-		}
-
-		desired := parser.NoTypePreference
-		if len(rh.desiredTypes) > i {
-			desired = rh.desiredTypes[i]
-		}
-		typedExpr, err := parser.TypeCheck(baseExpr, &rh.p.semaCtx, desired)
-		if err != nil {
-			return err
-		}
-		typedExpr, err = rh.p.parser.NormalizeExpr(&rh.p.evalCtx, typedExpr)
-		if err != nil {
-			return err
-		}
-		rh.exprs[i] = typedExpr
-		rh.columns[i].Typ = typedExpr.ReturnType()
 	}
 	return nil
 }
