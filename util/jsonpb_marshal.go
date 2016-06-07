@@ -18,6 +18,8 @@ package util
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"reflect"
 
@@ -40,6 +42,12 @@ func (*JSONPb) ContentType() string {
 
 // Marshal implements gwruntime.Marshaler.
 func (j *JSONPb) Marshal(v interface{}) ([]byte, error) {
+	return j.marshal(v)
+}
+
+// a lower-case version of marshal allow for a call from marshalNonProtoField
+// without upsetting TestProtoMarshal().
+func (j *JSONPb) marshal(v interface{}) ([]byte, error) {
 	if pb, ok := v.(proto.Message); ok {
 		var buf bytes.Buffer
 		marshalFn := (*jsonpb.Marshaler)(j).Marshal
@@ -48,7 +56,49 @@ func (j *JSONPb) Marshal(v interface{}) ([]byte, error) {
 		}
 		return buf.Bytes(), nil
 	}
-	return nil, Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+	return j.marshalNonProtoField(v)
+}
+
+// Cribbed verbatim from grpc-gateway.
+type protoEnum interface {
+	fmt.Stringer
+	EnumDescriptor() ([]byte, []int)
+}
+
+// marshalNonProto marshals a non-message field of a protobuf message.
+// This function does not correctly marshals arbitrary data structure into JSON,
+// but it is only capable of marshaling non-message field values of protobuf,
+// i.e. primitive types, enums; pointers to primitives or enums; maps from
+// integer/string types to primitives/enums/pointers to messages.
+//
+// Cribbed verbatim from grpc-gateway.
+func (j *JSONPb) marshalNonProtoField(v interface{}) ([]byte, error) {
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return []byte("null"), nil
+		}
+		rv = rv.Elem()
+	}
+
+	if rv.Kind() == reflect.Map {
+		m := make(map[string]*json.RawMessage)
+		for _, k := range rv.MapKeys() {
+			buf, err := j.marshal(rv.MapIndex(k).Interface())
+			if err != nil {
+				return nil, err
+			}
+			m[fmt.Sprintf("%v", k.Interface())] = (*json.RawMessage)(&buf)
+		}
+		if j.Indent != "" {
+			return json.MarshalIndent(m, "", j.Indent)
+		}
+		return json.Marshal(m)
+	}
+	if enum, ok := rv.Interface().(protoEnum); ok && !j.EnumsAsInts {
+		return json.Marshal(enum.String())
+	}
+	return json.Marshal(rv.Interface())
 }
 
 // Unmarshal implements gwruntime.Marshaler.

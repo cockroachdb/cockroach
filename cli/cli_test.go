@@ -857,17 +857,30 @@ func Example_node() {
 	// Error: node 10000 doesn't exist
 }
 
-func Example_freeze() {
+func TestFreeze(t *testing.T) {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("freeze-cluster")
-	c.Run("freeze-cluster --undo")
-	// Output:
-	// freeze-cluster
-	// ok
-	// freeze-cluster --undo
-	// ok
+	assertOutput := func(msg string) {
+		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
+			t.Fatal(msg)
+		}
+	}
+
+	{
+		out, err := c.RunWithCapture("freeze-cluster")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertOutput(out)
+	}
+	{
+		out, err := c.RunWithCapture("freeze-cluster --undo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertOutput(out)
+	}
 }
 
 func TestNodeStatus(t *testing.T) {
