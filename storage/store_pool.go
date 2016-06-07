@@ -140,11 +140,13 @@ type StorePool struct {
 	clock              *hlc.Clock
 	timeUntilStoreDead time.Duration
 
-	// Each storeDetail is contained in both a map and a priorityQueue; pointers
-	// are used so that data can be kept in sync.
-	mu     sync.RWMutex // Protects stores and queue.
-	stores map[roachpb.StoreID]*storeDetail
-	queue  storePoolPQ
+	mu struct {
+		sync.RWMutex
+		// Each storeDetail is contained in both a map and a priorityQueue;
+		// pointers are used so that data can be kept in sync.
+		stores map[roachpb.StoreID]*storeDetail
+		queue  storePoolPQ
+	}
 }
 
 // NewStorePool creates a StorePool and registers the store updating callback
@@ -153,9 +155,9 @@ func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Du
 	sp := &StorePool{
 		clock:              clock,
 		timeUntilStoreDead: timeUntilStoreDead,
-		stores:             make(map[roachpb.StoreID]*storeDetail),
 	}
-	heap.Init(&sp.queue)
+	sp.mu.stores = make(map[roachpb.StoreID]*storeDetail)
+	heap.Init(&sp.mu.queue)
 
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
@@ -181,14 +183,14 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	// Does this storeDetail exist yet?
-	detail, ok := sp.stores[storeDesc.StoreID]
+	detail, ok := sp.mu.stores[storeDesc.StoreID]
 	if !ok {
 		// Setting index to -1 ensures this gets added to the queue.
 		detail = &storeDetail{index: -1}
-		sp.stores[storeDesc.StoreID] = detail
+		sp.mu.stores[storeDesc.StoreID] = detail
 	}
 	detail.markAlive(sp.clock.Now(), &storeDesc)
-	sp.queue.enqueue(detail)
+	sp.mu.queue.enqueue(detail)
 }
 
 // start will run continuously and mark stores as offline if they haven't been
@@ -200,7 +202,7 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 		for {
 			var timeout time.Duration
 			sp.mu.Lock()
-			detail := sp.queue.peek()
+			detail := sp.mu.queue.peek()
 			if detail == nil {
 				// No stores yet, wait the full timeout.
 				timeout = sp.timeUntilStoreDead
@@ -209,7 +211,7 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 				deadAsOf := detail.lastUpdatedTime.GoTime().Add(sp.timeUntilStoreDead)
 				now := sp.clock.Now()
 				if now.GoTime().After(deadAsOf) {
-					deadDetail := sp.queue.dequeue()
+					deadDetail := sp.mu.queue.dequeue()
 					deadDetail.markDead(now)
 					// The next store might be dead as well, set the timeout to
 					// 0 to process it immediately.
@@ -236,7 +238,7 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 // The lock must be held *in write mode* even though this looks like a
 // read-only method.
 func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) storeDetail {
-	detail, ok := sp.stores[storeID]
+	detail, ok := sp.mu.stores[storeID]
 	if !ok {
 		// We don't have this store yet (this is normal when we're
 		// starting up and don't have full information from the gossip
@@ -244,9 +246,9 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) storeDetail {
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
 		detail = &storeDetail{index: -1}
-		sp.stores[storeID] = detail
+		sp.mu.stores[storeID] = detail
 		detail.markAlive(sp.clock.Now(), nil)
-		sp.queue.enqueue(detail)
+		sp.mu.queue.enqueue(detail)
 	}
 
 	return *detail
@@ -258,7 +260,7 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) *roachpb.StoreD
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
-	detail, ok := sp.stores[storeID]
+	detail, ok := sp.mu.stores[storeID]
 	if !ok {
 		return nil
 	}
@@ -336,7 +338,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	defer sp.mu.RUnlock()
 
 	var storeIDs roachpb.StoreIDSlice
-	for storeID := range sp.stores {
+	for storeID := range sp.mu.stores {
 		storeIDs = append(storeIDs, storeID)
 	}
 	// Sort the stores by key if deterministic is requested. This is only for
@@ -347,7 +349,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	sl := StoreList{}
 	var aliveStoreCount int
 	for _, storeID := range storeIDs {
-		detail := sp.stores[roachpb.StoreID(storeID)]
+		detail := sp.mu.stores[roachpb.StoreID(storeID)]
 		if !detail.dead && detail.desc != nil {
 			aliveStoreCount++
 			if required.IsSubset(*detail.desc.CombinedAttrs()) {

@@ -73,7 +73,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 
 	sp.mu.RLock()
-	if _, ok := sp.stores[2]; ok {
+	if _, ok := sp.mu.stores[2]; ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
 	sp.mu.RUnlock()
@@ -81,10 +81,10 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	sg.GossipStores(uniqueStore, t)
 
 	sp.mu.RLock()
-	if _, ok := sp.stores[2]; !ok {
+	if _, ok := sp.mu.stores[2]; !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
-	if e, a := 1, sp.queue.Len(); e > a {
+	if e, a := 1, sp.mu.queue.Len(); e > a {
 		t.Fatalf("wrong number of stores in the queue expected at least:%d actual:%d", e, a)
 	}
 	sp.mu.RUnlock()
@@ -100,7 +100,7 @@ func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roa
 
 		sp.mu.RLock()
 		defer sp.mu.RUnlock()
-		store, ok := sp.stores[storeID]
+		store, ok := sp.mu.stores[storeID]
 		if !ok {
 			t.Fatalf("store %s isn't in the pool's store list", storeID)
 		}
@@ -124,7 +124,7 @@ func TestStorePoolDies(t *testing.T) {
 
 	{
 		sp.mu.RLock()
-		store2, ok := sp.stores[2]
+		store2, ok := sp.mu.stores[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -137,7 +137,7 @@ func TestStorePoolDies(t *testing.T) {
 		if store2.index == -1 {
 			t.Errorf("store 2 is mot the queue, it should be")
 		}
-		if e, a := 1, sp.queue.Len(); e > a {
+		if e, a := 1, sp.mu.queue.Len(); e > a {
 			t.Errorf("wrong number of stores in the queue expected to be at least:%d actual:%d", e, a)
 		}
 		sp.mu.RUnlock()
@@ -147,7 +147,7 @@ func TestStorePoolDies(t *testing.T) {
 	waitUntilDead(t, mc, sp, 2)
 	{
 		sp.mu.RLock()
-		store2, ok := sp.stores[2]
+		store2, ok := sp.mu.stores[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -164,7 +164,7 @@ func TestStorePoolDies(t *testing.T) {
 
 	{
 		sp.mu.RLock()
-		store2, ok := sp.stores[2]
+		store2, ok := sp.mu.stores[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -184,7 +184,7 @@ func TestStorePoolDies(t *testing.T) {
 	waitUntilDead(t, mc, sp, 2)
 	{
 		sp.mu.RLock()
-		store2, ok := sp.stores[2]
+		store2, ok := sp.mu.stores[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -276,7 +276,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	// Mark one store dead.
 	sp.mu.Lock()
-	sp.stores[deadStore.StoreID].markDead(sp.clock.Now())
+	sp.mu.stores[deadStore.StoreID].markDead(sp.clock.Now())
 	sp.mu.Unlock()
 
 	if err := verifyStoreList(sp, required, []int{
