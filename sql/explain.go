@@ -115,7 +115,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return node, nil
 
 	case explainTrace:
-		return &explainTraceNode{plan: plan, txn: p.txn}, nil
+		return makeTraceNode(plan, p.txn), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
