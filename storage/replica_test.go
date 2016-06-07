@@ -5672,3 +5672,59 @@ func TestCommandTimeThreshold(t *testing.T) {
 		t.Fatalf("could not cput data: %s", err)
 	}
 }
+
+// TestReserveAndApplySnapshot checks to see if a snapshot is correctly applied
+// and that its reservation is removed.
+func TestReserveAndApplySnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
+
+	checkReservations := func(t *testing.T, expected int) {
+		tc.store.bookie.mu.Lock()
+		defer tc.store.bookie.mu.Unlock()
+		if e, a := expected, len(tc.store.bookie.mu.resByRangeID); e != a {
+			t.Fatalf("wrong number of reservations - expected:%d, actual:%d", e, a)
+		}
+	}
+
+	key := roachpb.RKey("a")
+	firstRng := tc.store.LookupReplica(key, nil)
+	snap, err := firstRng.GetSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tc.store.metrics.available.Update(maxReservedBytes)
+
+	// Note that this is an artificial scenario in which we're adding a
+	// reservation for a replica that is already on the range. This test is
+	// designed to test the filling of the booking specifically and in normal
+	// operation there should not be a booking for an existing replica.
+	req := roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			StoreID: tc.store.StoreID(),
+			NodeID:  tc.store.nodeDesc.NodeID,
+		},
+		RangeID:   firstRng.RangeID,
+		RangeSize: 10,
+	}
+
+	if !tc.store.Reserve(req).Approved {
+		t.Fatalf("Can't reserve the replica")
+	}
+	checkReservations(t, 1)
+	b := tc.engine.NewBatch()
+	defer b.Close()
+	if _, err := firstRng.applySnapshot(b, snap); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	checkReservations(t, 0)
+}
