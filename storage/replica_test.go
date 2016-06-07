@@ -5672,8 +5672,6 @@ func TestCommandTimeThreshold(t *testing.T) {
 		t.Fatalf("could not cput data: %s", err)
 	}
 }
-<<<<<<< HEAD
-=======
 
 // TestReserveAndApplySnapshot checks to see if a snapshot is correctly applied
 // and that its reservation is removed.
@@ -5715,7 +5713,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		RangeSize: 10,
 	}
 
-	if !tc.store.Reserve(req).Reserved {
+	if !tc.store.Reserve(req).Approved {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
@@ -5729,4 +5727,3 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	b.Close()
 	checkReservations(t, 0)
 }
->>>>>>> 6b1af6f... fixup limits
