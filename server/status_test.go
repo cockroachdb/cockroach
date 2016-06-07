@@ -496,26 +496,29 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
-	var response serverpb.RangesResponse
-	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Ranges) == 0 {
-		t.Errorf("didn't get any ranges")
-	}
-	for _, ri := range response.Ranges {
-		// Do some simple validation based on the fact that this is a
-		// single-node cluster.
-		if ri.RaftState != "StateLeader" {
-			t.Errorf("expected to be raft leader but was %s", ri.RaftState)
+	util.SucceedsSoon(t, func() error {
+		var response serverpb.RangesResponse
+		if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
+			t.Fatal(err)
 		}
-		expReplica := roachpb.ReplicaDescriptor{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 1,
+		if len(response.Ranges) == 0 {
+			t.Errorf("didn't get any ranges")
 		}
-		if len(ri.Desc.Replicas) != 1 || ri.Desc.Replicas[0] != expReplica {
-			t.Errorf("unexpected replica list %+v", ri.Desc.Replicas)
+		for _, ri := range response.Ranges {
+			// Do some simple validation based on the fact that this is a
+			// single-node cluster.
+			if ri.RaftState != "StateLeader" {
+				return util.Errorf("expected to be raft leader but was %s", ri.RaftState)
+			}
+			expReplica := roachpb.ReplicaDescriptor{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			}
+			if len(ri.Desc.Replicas) != 1 || ri.Desc.Replicas[0] != expReplica {
+				return util.Errorf("unexpected replica list %+v", ri.Desc.Replicas)
+			}
 		}
-	}
+		return nil
+	})
 }

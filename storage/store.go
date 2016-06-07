@@ -2006,7 +2006,11 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		return nil
 	}
 	r.mu.Lock()
-	err = r.mu.raftGroup.Step(req.Message)
+	raftGroup, err := r.raftGroupLocked()
+	if err != nil {
+		return err
+	}
+	err = raftGroup.Step(req.Message)
 	r.mu.Unlock()
 	if err != nil {
 		return err
@@ -2261,6 +2265,10 @@ func (s *Store) computeReplicationStatus(now int64) (
 			continue
 		}
 		raftStatus := rng.RaftStatus()
+		// TODO(arjun): what is the appropriate response if there is no Raft Group up?
+		if raftStatus == nil {
+			return
+		}
 		if raftStatus.SoftState.RaftState == raft.StateLeader {
 			leaderRangeCount++
 			// TODO(bram): #4564 Compare attributes of the stores so we can

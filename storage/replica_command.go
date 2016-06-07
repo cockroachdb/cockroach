@@ -1518,6 +1518,11 @@ func (r *Replica) LeaderLease(
 	}
 	r.mu.leaderLease = &args.Lease
 
+	raftGroup, err := r.raftGroupLocked()
+	if err != nil {
+		return reply, err
+	}
+
 	if prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
 		// The lease is changing hands. Is this replica the new lease holder?
 		if r.mu.leaderLease.Replica.ReplicaID == r.mu.replicaID {
@@ -1528,13 +1533,13 @@ func (r *Replica) LeaderLease(
 			log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
 				r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
 			r.mu.tsCache.SetLowWater(prevLease.Expiration)
-		} else if r.mu.raftGroup.Status().RaftState == raft.StateLeader {
+		} else if raftGroup.Status().RaftState == raft.StateLeader {
 			// If this replica is the raft leader but it is not the new lease
 			// holder, then try to transfer the raft leadership to match the
 			// lease.
 			log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
 				r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
-			r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+			raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
 		}
 	}
 
@@ -2272,7 +2277,12 @@ func (r *Replica) splitTrigger(
 				}
 				replica.mu.Lock()
 				defer replica.mu.Unlock()
-				_ = replica.mu.raftGroup.Campaign()
+				raftGroup, err := replica.raftGroupLocked()
+				if err != nil {
+					// TODO(arjun): what is the appropriate behavior here?
+					panic(err)
+				}
+				_ = raftGroup.Campaign()
 			})
 		}
 	})

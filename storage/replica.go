@@ -220,6 +220,7 @@ type Replica struct {
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
+		raftCfg        *raft.Config
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
 		// gcThreshold is the GC threshold of the replica. Reads and writes must
@@ -243,6 +244,15 @@ type Replica struct {
 		// Whether the Replica is frozen.
 		frozen bool
 	}
+}
+
+// raftGroupLocked returns the RaftGroup owned by this replica. It assumes that
+// the replica lock has already been acquired.
+func (r *Replica) raftGroupLocked() (*raft.RawNode, error) {
+	if err := r.ensureRaftGroupLocked(); err != nil {
+		return nil, err
+	}
+	return r.mu.raftGroup, nil
 }
 
 var _ client.Sender = &Replica{}
@@ -378,43 +388,61 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 		CheckQuorum:     true,
 		Logger:          &raftLogger{group: uint64(r.RangeID)},
 	}
-	raftGroup, err := raft.NewRawNode(raftCfg, nil)
-	if err != nil {
-		return err
-	}
+
 	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
-	r.mu.raftGroup = raftGroup
+	r.mu.raftCfg = raftCfg
+	r.mu.raftGroup = nil
 
-	// Automatically campaign and elect a leader for this group if there's
-	// exactly one known node for this group.
-	//
-	// A grey area for this being correct happens in the case when we're
-	// currently in the progress of adding a second node to the group,
-	// with the change committed but not applied.
-	// Upon restarting, the node would immediately elect itself and only
-	// then apply the config change, where really it should be applying
-	// first and then waiting for the majority (which would now require
-	// two votes, not only its own).
-	// However, in that special case, the second node has no chance to
-	// be elected leader while this node restarts (as it's aware of the
-	// configuration and knows it needs two votes), so the worst that
-	// could happen is both nodes ending up in candidate state, timing
-	// out and then voting again. This is expected to be an extremely
-	// rare event.
-	if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].ReplicaID == replicaID {
-		if err := raftGroup.Campaign(); err != nil {
+	// We need to bring up the new raft group in order to repropose commands
+	// that were pending from the previous raft group.
+	if previousReplicaID != 0 {
+		err := r.ensureRaftGroupLocked()
+		if err != nil {
 			return err
 		}
-	}
-
-	if previousReplicaID != 0 {
-		// propose pending commands under new replicaID
+		// Propose pending commands under new replicaID
 		if err := r.reproposePendingCmdsLocked(); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// ensureRaftGroupLocked ensures that the raft group is brought up. It assumes
+// that the replica lock has been acquired.
+func (r *Replica) ensureRaftGroupLocked() error {
+	if r.mu.raftGroup == nil {
+		raftGroup, err := raft.NewRawNode(r.mu.raftCfg, nil)
+		if err != nil {
+			return err
+		}
+		r.mu.raftGroup = raftGroup
+		r.mu.raftCfg = nil
+
+		// Automatically campaign and elect a leader for this group if there's
+		// exactly one known node for this group.
+		//
+		// A grey area for this being correct happens in the case when we're
+		// currently in the progress of adding a second node to the group,
+		// with the change committed but not applied.
+		// Upon restarting, the node would immediately elect itself and only
+		// then apply the config change, where really it should be applying
+		// first and then waiting for the majority (which would now require
+		// two votes, not only its own).
+		// However, in that special case, the second node has no chance to
+		// be elected leader while this node restarts (as it's aware of the
+		// configuration and knows it needs two votes), so the worst that
+		// could happen is both nodes ending up in candidate state, timing
+		// out and then voting again. This is expected to be an extremely
+		// rare event.
+		if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].ReplicaID == r.mu.replicaID {
+			if err := raftGroup.Campaign(); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -835,10 +863,14 @@ func (r *Replica) setLastVerificationTimestamp(timestamp roachpb.Timestamp) erro
 	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
-// RaftStatus returns the current raft status of the replica.
+// RaftStatus returns the current raft status of the replica. It returns nil
+// if the Raft group has not been brought up yet.
 func (r *Replica) RaftStatus() *raft.Status {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.mu.raftGroup == nil {
+		return nil
+	}
 	return r.mu.raftGroup.Status()
 }
 
@@ -1393,8 +1425,11 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 			if err != nil {
 				return err
 			}
-
-			return r.mu.raftGroup.ProposeConfChange(
+			raftGroup, err := r.raftGroupLocked()
+			if err != nil {
+				return err
+			}
+			return raftGroup.ProposeConfChange(
 				raftpb.ConfChange{
 					Type:    changeTypeInternalToRaft[crt.ChangeType],
 					NodeID:  uint64(crt.Replica.ReplicaID),
@@ -1402,18 +1437,28 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				})
 		}
 	}
-	return r.mu.raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
+	raftGroup, err := r.raftGroupLocked()
+	if err != nil {
+		return err
+	}
+	return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
 }
 
 func (r *Replica) handleRaftReady() error {
 	// TODO(bram): #4562 There is a lot of locking and unlocking of the replica,
 	// consider refactoring this.
 	r.mu.Lock()
-	if !r.mu.raftGroup.HasReady() {
+
+	raftGroup, err := r.raftGroupLocked()
+	if err != nil {
+		return err
+	}
+
+	if !raftGroup.HasReady() {
 		r.mu.Unlock()
 		return nil
 	}
-	rd := r.mu.raftGroup.Ready()
+	rd := raftGroup.Ready()
 	lastIndex := r.mu.lastIndex
 	r.mu.Unlock()
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
@@ -1500,7 +1545,11 @@ func (r *Replica) handleRaftReady() error {
 			}
 			// TODO(bdarnell): update coalesced heartbeat mapping on success.
 			r.mu.Lock()
-			r.mu.raftGroup.ApplyConfChange(cc)
+			raftGroup, err = r.raftGroupLocked()
+			if err != nil {
+				return err
+			}
+			raftGroup.ApplyConfChange(cc)
 			r.mu.Unlock()
 		}
 
@@ -1518,7 +1567,7 @@ func (r *Replica) handleRaftReady() error {
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
 	r.mu.Lock()
-	r.mu.raftGroup.Advance(rd)
+	raftGroup.Advance(rd)
 	r.mu.Unlock()
 	return nil
 }
@@ -1527,7 +1576,11 @@ func (r *Replica) tick() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.ticks++
-	r.mu.raftGroup.Tick()
+	raftGroup, err := r.raftGroupLocked()
+	if err != nil {
+		return err
+	}
+	raftGroup.Tick()
 	if r.mu.ticks%r.store.ctx.RaftElectionTimeoutTicks == 0 {
 		// RaftElectionTimeoutTicks is a reasonable approximation of how
 		// long we should wait before deciding that our previous proposal
@@ -1587,7 +1640,13 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 				r.store.StoreID(), toReplica.StoreID, err)
 		}
 		r.mu.Lock()
-		r.mu.raftGroup.ReportUnreachable(msg.To)
+		raftGroup, err := r.raftGroupLocked()
+		if err != nil {
+			// TODO(arjun): Perhaps pass this through ReplicaCorruptionError?
+			panic(err)
+		}
+
+		raftGroup.ReportUnreachable(msg.To)
 		r.mu.Unlock()
 	}
 }
@@ -1598,7 +1657,13 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		snapStatus = raft.SnapshotFailure
 	}
 	r.mu.Lock()
-	r.mu.raftGroup.ReportSnapshot(to, snapStatus)
+
+	raftGroup, err := r.raftGroupLocked()
+	if err != nil {
+		// TODO(arjun): Perhaps pass this through ReplicaCorruptionError?
+		panic(err)
+	}
+	raftGroup.ReportSnapshot(to, snapStatus)
 	r.mu.Unlock()
 }
 
