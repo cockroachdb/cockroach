@@ -833,7 +833,7 @@ message ReservationRequest {
 
 // A ReservationResponse is the repoonse returned from a ReservationRequest.
 message ReservationResponse {
-  optional bool approved = 1 [(gogoproto.nullable) = false];
+  optional bool reserved = 1 [(gogoproto.nullable) = false];
 }
 
 // The two Batch services below are identical, except that some internal
