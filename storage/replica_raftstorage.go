@@ -711,6 +711,9 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 			panic(err)
 		}
 
+		// Fill the reservation if there was any one for this range.
+		_ = r.store.bookie.Fill(rangeID)
+
 		// Update the range descriptor. This is done last as this is the step that
 		// makes the Replica visible in the Store.
 		if err := r.setDesc(&desc); err != nil {
