@@ -57,10 +57,10 @@ func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedB
 	}
 }
 
-// TestReserve ensures that you can never have more than one reservation for a
-// specific rangeID at a time, and that both `Reserve` and `Fill` function
+// TestBookieReserve ensures that you can never have more than one reservation
+// for a specific rangeID at a time, and that both `Reserve` and `Fill` function
 // correctly.
-func TestReserve(t *testing.T) {
+func TestBookieReserve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, b := createTestBookie(time.Hour, 20, 20*maxReservedBytes)
 	defer stopper.Stop()

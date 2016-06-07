@@ -2592,6 +2592,22 @@ func (r *Replica) ChangeReplicas(
 			return util.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
 		}
 
+		// Before we try to add a new replica, we first need to secure a
+		// reservation for the replica on the receiving store.
+		maxSize := r.GetMaxBytes()
+		curSize := r.GetMVCCStats().Total()
+		if curSize > maxSize {
+			maxSize = curSize
+		}
+		if err := r.store.allocator.storePool.reserve(
+			r.store.Ident,
+			replica.StoreID,
+			rangeID,
+			maxSize,
+		); err != nil {
+			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
+		}
+
 		// Send a pre-emptive snapshot. Note that the replica to which this
 		// snapshot is addressed has not yet had its replica ID initialized; this
 		// is intentional, and serves to avoid the following race with the replica
