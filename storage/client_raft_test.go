@@ -1021,6 +1021,10 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 				}
 			}
 
+			// replica2 may not be initialized, which should not fail the test.
+			if replica2.RaftStatus() == nil {
+				return
+			}
 			originalTerm := replica2.RaftStatus().Term
 			time.Sleep(100 * time.Millisecond)
 			term := replica2.RaftStatus().Term

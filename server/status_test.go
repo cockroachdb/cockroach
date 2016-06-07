@@ -496,6 +496,11 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
+	// Perform a simple range action to ensure that the raft group is initialized.
+	if _, err := ts.db.Get(statusRangesPrefix + "a"); err != nil {
+		t.Fatal(err)
+	}
+
 	var response serverpb.RangesResponse
 	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
 		t.Fatal(err)
