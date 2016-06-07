@@ -1175,6 +1175,11 @@ func (node *AnnotateTypeExpr) ReturnType() Datum {
 	return node.annotationType()
 }
 
+// TypedInnerExpr returns the AnnotateTypeExpr's inner expression as a TypedExpr.
+func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
+}
+
 func (node *AnnotateTypeExpr) annotationType() Datum {
 	typ, _ := colTypeToTypeAndValidArgTypes(node.Type)
 	return typ
