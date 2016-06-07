@@ -1007,7 +1007,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			mtc.replicateRange(rangeID, 1)
 			store0 := mtc.stores[0]
 
-			// Make the split
+			// Make the split.
 			splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 			if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 				t.Fatal(err)
@@ -1019,6 +1019,12 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 				if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {
 					t.Fatal(err)
 				}
+			}
+
+			// If the raft group hasn't been initialized, then it hasn't
+			// campaigned.
+			if replica2.RaftStatus() == nil {
+				return
 			}
 
 			originalTerm := replica2.RaftStatus().Term
