@@ -2,6 +2,12 @@ machine:
   pre:
     - curl -sSL https://s3.amazonaws.com/circle-downloads/install-circleci-docker.sh | bash -s -- 1.10.0
 
+  environment:
+    # Used by https://godoc.org/github.com/docker/engine-api/client#NewEnvClient.
+    # Matches the docker daemon version in use.
+    # See https://docs.docker.com/engine/reference/api/docker_remote_api/
+    DOCKER_API_VERSION: v1.22
+
   services:
     - docker
 
