@@ -338,7 +338,7 @@ func makeRowUpdater(
 		deleteOnlyIndex:     deleteOnlyIndex,
 		primaryKeyColChange: primaryKeyColChange,
 		marshalled:          make([]roachpb.Value, len(updateCols)),
-		newValues:           make([]parser.Datum, len(tableDesc.Columns)),
+		newValues:           make([]parser.Datum, len(tableDesc.Columns)+len(tableDesc.Mutations)),
 	}
 
 	if primaryKeyColChange {
