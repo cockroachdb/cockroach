@@ -125,7 +125,14 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 		kv.NewTxnMetrics(metric.NewRegistry()))
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
-	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
+	sCtx.StorePool = storage.NewStorePool(
+		sCtx.Gossip,
+		clock,
+		rpcContext,
+		/* reservationsEnabled */ true,
+		storage.TestTimeUntilStoreDeadOff,
+		stopper,
+	)
 	sCtx.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*sCtx, eng, nodeDesc)
@@ -510,7 +517,17 @@ func (m *multiTestContext) addStore() {
 		if m.timeUntilStoreDead == 0 {
 			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
 		}
-		m.storePools = append(m.storePools, storage.NewStorePool(m.gossips[idx], m.clock, m.timeUntilStoreDead, m.clientStopper))
+		m.storePools = append(
+			m.storePools,
+			storage.NewStorePool(
+				m.gossips[idx],
+				m.clock,
+				m.rpcContext,
+				/* reservationsEnabled */ false,
+				m.timeUntilStoreDead,
+				m.clientStopper,
+			),
+		)
 	}
 	if len(m.dbs) <= idx {
 		retryOpts := base.DefaultRetryOptions()
