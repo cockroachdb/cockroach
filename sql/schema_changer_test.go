@@ -877,3 +877,171 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
+
+// TestSchemaChangeReverseMutations tests that schema changes get reversed
+// correctly when one of them violates a constraint.
+func TestSchemaChangeReverseMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Disable synchronous schema change processing so that the mutations get
+	// processed asynchronously.
+	ctx, _ := createTestServerContext()
+	var enableAsyncSchemaChanges uint32
+	ctx.TestingKnobs = base.TestingKnobs{
+		SQLExecutor: &csql.ExecutorTestingKnobs{
+			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+		},
+		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
+			AsyncSchemaChangerExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			AsyncSchemaChangerExecQuickly: true,
+		},
+	}
+	server, sqlDB, kvDB := setupWithContext(t, &ctx)
+	defer cleanup(server, sqlDB)
+
+	// Create a k-v table.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some data
+	maxValue := csql.IndexBackfillChunkSize + 1
+	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a column that is not NULL. This schema change doesn't return an
+	// error only because we've turned off the synchronous execution path; it
+	// will eventually fail when run by the asynchronous path.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD a INT NOT NULL`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add an index over a column that will be purged. This index will
+	// eventually not get added.
+	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_a ON t.test (a)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The purge of column 'a' doesn't influence these schema changes.
+
+	// Drop column 'v' moves along just fine.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP v`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add unique column 'b' moves along creating column b and the index on
+	// it.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b INT UNIQUE`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if e := 5; e != len(tableDesc.Mutations) {
+		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
+	}
+
+	// Enable async schema change processing.
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
+
+	// Wait until all the mutations have been processed.
+	util.SucceedsSoon(t, func() error {
+		// Read table descriptor.
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.Mutations) > 0 {
+			return util.Errorf("%d mutations remaining", len(tableDesc.Mutations))
+		}
+		return nil
+	})
+
+	// Verify that t.test has the expected data.
+	rows, err := sqlDB.Query(`SELECT * from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cols) != 2 || cols[0] != "k" || cols[1] != "b" {
+		t.Fatalf("incorrect columns: %v", cols)
+	}
+
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+	var count int64
+	for ; rows.Next(); count++ {
+		if err := rows.Scan(vals...); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		for j, v := range vals {
+			if j == 0 {
+				if val := *v.(*interface{}); val != nil {
+					switch k := val.(type) {
+					case int64:
+						if count != k {
+							t.Errorf("k = %d, expected %d", k, count)
+						}
+
+					default:
+						t.Errorf("error input of type %T", k)
+					}
+				} else {
+					t.Error("received nil value for column 'k'")
+				}
+			} else {
+				if val := *v.(*interface{}); val != nil {
+					t.Error("received non NULL value for column 'b'")
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := int64(maxValue + 1); eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// Check that the index on b eventually goes live even though a schema
+	// change in front of it in the queue got purged.
+	rows, err = sqlDB.Query(`SELECT * from t.test@test_b_key`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count = 0
+	for ; rows.Next(); count++ {
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := int64(maxValue + 1); eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// Check that the number of k-v pairs is accurate.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 2 * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}

@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -458,25 +459,52 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 
 // reverseMutations reverses the direction of all the mutations with the
 // mutationID. This is called after hitting an irrecoverable error while
-// applying a schema change.
+// applying a schema change. If a column being added is reversed and dropped
+// all new indexes referencing the column should also be dropped.
 func (sc *SchemaChanger) reverseMutations() error {
 	// Reverse the flow of the state machine.
 	_, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
-		for i, mutation := range desc.Mutations {
-			if mutation.MutationID != sc.mutationID {
-				// Mutations are applied in a FIFO order. Only apply the first set of
-				// mutations if they have the mutation ID we're looking for.
-				break
-			}
-			log.Warningf("reversing schema change mutation: %v", desc.Mutations[i])
-			switch mutation.Direction {
-			case sqlbase.DescriptorMutation_ADD:
-				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_DROP
+		// Keep track of the column mutations being reversed so that indexes
+		// referencing them can be dropped.
+		cols := make(map[string]struct{})
 
-			case sqlbase.DescriptorMutation_DROP:
-				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
+		newMutations := make([]sqlbase.DescriptorMutation, 0, len(desc.Mutations))
+
+	reverseMutationLoop:
+		for _, mutation := range desc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				if idx := mutation.GetIndex(); idx != nil &&
+					mutation.Direction == sqlbase.DescriptorMutation_ADD {
+					if mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
+						panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
+					}
+					for _, name := range idx.ColumnNames {
+						if _, ok := cols[name]; ok {
+							log.Warningf("delete schema change mutation: %+v", mutation)
+							// skip mutation.
+							continue reverseMutationLoop
+						}
+					}
+				}
+			} else {
+				log.Warningf("reverse schema change mutation: %+v", mutation)
+				switch mutation.Direction {
+				case sqlbase.DescriptorMutation_ADD:
+					mutation.Direction = sqlbase.DescriptorMutation_DROP
+					// A column ADD being reversed gets placed in the map.
+					if col := mutation.GetColumn(); col != nil {
+						cols[col.Name] = struct{}{}
+					}
+
+				case sqlbase.DescriptorMutation_DROP:
+					mutation.Direction = sqlbase.DescriptorMutation_ADD
+				}
 			}
+			// Add mutation to list of mutations.
+			newMutations = append(newMutations, mutation)
 		}
+		// Reset table descriptor mutations.
+		desc.Mutations = newMutations
 		// Publish() will increment the version.
 		return nil
 	})
