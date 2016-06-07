@@ -24,6 +24,7 @@ const (
 	DatabaseName          = "database"
 	DepsName              = "deps"
 	ExecuteName           = "execute"
+	PrettyName            = "pretty"
 	JoinName              = "join"
 	HostName              = "host"
 	InsecureName          = "insecure"
