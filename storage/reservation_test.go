@@ -98,7 +98,7 @@ func TestReserve(t *testing.T) {
 				RangeID:   roachpb.RangeID(testCase.rangeID),
 				RangeSize: int64(testCase.rangeID),
 			}
-			if resp := b.Reserve(req); resp.Approved != testCase.expSuc {
+			if resp := b.Reserve(req); resp.Reserved != testCase.expSuc {
 				if testCase.expSuc {
 					t.Errorf("%d: expected a successful reservation, was rejected", i)
 				} else {
@@ -130,7 +130,7 @@ func TestReserve(t *testing.T) {
 		RangeSize: 100,
 	}
 	for i := 1; i < 10; i++ {
-		if !b.Reserve(repeatReq).Approved {
+		if !b.Reserve(repeatReq).Reserved {
 			t.Errorf("%d: could not add repeated reservation", i)
 		}
 		verifyBookie(t, b, 1, 4+i, 100)
@@ -240,7 +240,7 @@ func TestReservationQueue(t *testing.T) {
 			},
 			RangeID:   roachpb.RangeID(i),
 			RangeSize: bytesPerReservation,
-		}).Approved {
+		}).Reserved {
 			t.Fatalf("could not book a reservation for reservation number %d", i)
 		}
 	}
@@ -285,7 +285,7 @@ func TestReservationQueue(t *testing.T) {
 		},
 		RangeID:   roachpb.RangeID(1),
 		RangeSize: bytesPerReservation,
-	}).Approved {
+	}).Reserved {
 		t.Fatalf("could not book a reservation for reservation number 1 (second pass)")
 	}
 	verifyBookie(t, b, 6 /*reservations*/, 7 /*bookings*/, 6*bytesPerReservation /*bytes*/)
@@ -298,7 +298,7 @@ func TestReservationQueue(t *testing.T) {
 		},
 		RangeID:   roachpb.RangeID(2),
 		RangeSize: bytesPerReservation,
-	}).Approved {
+	}).Reserved {
 		t.Fatalf("could not book a reservation for reservation number 2 (second pass)")
 	}
 	verifyBookie(t, b, 7 /*reservations*/, 8 /*bookings*/, 7*bytesPerReservation /*bytes*/)
@@ -311,7 +311,7 @@ func TestReservationQueue(t *testing.T) {
 		},
 		RangeID:   roachpb.RangeID(6),
 		RangeSize: bytesPerReservation,
-	}).Approved {
+	}).Reserved {
 		t.Fatalf("could not book a reservation for reservation number 6 (second pass)")
 	}
 	verifyBookie(t, b, 8 /*reservations*/, 9 /*bookings*/, 8*bytesPerReservation /*bytes*/)

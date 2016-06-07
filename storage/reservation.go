@@ -99,6 +99,7 @@ func newBookie(
 
 // Reserve a new replica. Reservations can be rejected due to having too many
 // outstanding reservations already or not having enough free disk space.
+// Accepted reservations return a ReservationResponse with Reserved set to true.
 func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -118,7 +119,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 				log.Infof("there is pre-existing reservation %+v, can't update with %+v",
 					olderReservation, req)
 			}
-			return roachpb.ReservationResponse{Approved: false}
+			return roachpb.ReservationResponse{Reserved: false}
 		}
 	}
 
@@ -128,7 +129,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
 				req, len(b.mu.resByRangeID), b.maxReservations)
 		}
-		return roachpb.ReservationResponse{Approved: false}
+		return roachpb.ReservationResponse{Reserved: false}
 	}
 
 	// Can we accommodate the requested number of bytes (doubled for safety) on
@@ -141,7 +142,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			log.Infof("could not book reservation %+v, not enough available disk space (reqested:%d*2, reserved:%d, available:%d)",
 				req, req.RangeSize, b.mu.size, available)
 		}
-		return roachpb.ReservationResponse{Approved: false}
+		return roachpb.ReservationResponse{Reserved: false}
 	}
 
 	// Do we have enough reserved space free for the reservation?
@@ -150,7 +151,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			log.Infof("could not book reservation %+v, not enough available reservation space (reqested:%d, reserved:%d, maxReserved:%d)",
 				req, req.RangeSize, b.mu.size, b.maxReservations)
 		}
-		return roachpb.ReservationResponse{Approved: false}
+		return roachpb.ReservationResponse{Reserved: false}
 	}
 
 	newBooking := &booking{
@@ -170,7 +171,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 		log.Infof("new reservation added: %+v", newBooking)
 	}
 
-	return roachpb.ReservationResponse{Approved: true}
+	return roachpb.ReservationResponse{Reserved: true}
 }
 
 // Fill removes a reservation. Returns true when the reservation has been

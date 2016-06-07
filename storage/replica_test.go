@@ -5713,7 +5713,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		RangeSize: 10,
 	}
 
-	if !tc.store.Reserve(req).Approved {
+	if !tc.store.Reserve(req).Reserved {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
