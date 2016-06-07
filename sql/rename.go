@@ -360,21 +360,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	// Rename the column in the indexes.
-	renameColumnInIndex := func(idx *sqlbase.IndexDescriptor) {
-		for i, id := range idx.ColumnIDs {
-			if id == column.ID {
-				idx.ColumnNames[i] = newColName
-			}
-		}
-	}
-	for i := range tableDesc.Indexes {
-		renameColumnInIndex(&tableDesc.Indexes[i])
-	}
-	for _, m := range tableDesc.Mutations {
-		if idx := m.GetIndex(); idx != nil {
-			renameColumnInIndex(idx)
-		}
-	}
+	tableDesc.RenameColumn(column.ID, newColName)
 	column.Name = newColName
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
