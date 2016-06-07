@@ -169,7 +169,14 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	g := gossip.New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, stopper)
+	storePool := NewStorePool(
+		g,
+		clock,
+		rpcContext,
+		/* reservationsEnabled */ false,
+		TestTimeUntilStoreDeadOff,
+		stopper,
+	)
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a, manualClock
 }
@@ -1029,7 +1036,14 @@ func Example_rebalancing() {
 	g := gossip.New(nil, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
-	sp := NewStorePool(g, hlc.NewClock(hlc.UnixNano), TestTimeUntilStoreDeadOff, stopper)
+	sp := NewStorePool(
+		g,
+		hlc.NewClock(hlc.UnixNano),
+		nil,
+		/* reservationsEnabled */ false,
+		TestTimeUntilStoreDeadOff,
+		stopper,
+	)
 	alloc := MakeAllocator(sp, AllocatorOptions{AllowRebalance: true, Deterministic: true})
 
 	var wg sync.WaitGroup
