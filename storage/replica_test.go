@@ -87,11 +87,11 @@ const (
 
 // LeaderLeaseExpiration returns an int64 to increment a manual clock with to
 // make sure that all active leader leases expire.
-func LeaderLeaseExpiration(clock *hlc.Clock) int64 {
+func LeaderLeaseExpiration(s *Store, clock *hlc.Clock) int64 {
 	// Due to lease extensions, the remaining interval can be longer than just
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
-	return 2 * int64(LeaderLeaseActiveDuration+clock.MaxOffset())
+	return 2 * int64(s.ctx.LeaderLeaseActiveDuration+clock.MaxOffset())
 }
 
 // leaseExpiry returns a duration in nanos after which any leader lease the

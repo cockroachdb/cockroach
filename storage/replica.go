@@ -89,15 +89,6 @@ var txnAutoGC = true
 const (
 	raftInitialLogIndex = 10
 	raftInitialLogTerm  = 5
-
-	// LeaderLeaseActiveDuration is the duration of the active period of leader
-	// leases requested.
-	LeaderLeaseActiveDuration = time.Second
-	// leaderLeaseRenewalDuration specifies a "time" interval at the
-	// end of the active lease interval (i.e. bounded to the right by the
-	// start of the stasis period) during which timestamps will trigger an
-	// asynchronous renewal of the lease.
-	leaderLeaseRenewalDuration = LeaderLeaseActiveDuration / 5
 )
 
 // consultsTimestampCacheMethods specifies the set of methods which
@@ -536,7 +527,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		pErr := func() *roachpb.Error {
 			// TODO(tschottdorf): get duration from configuration, either as a
 			// config flag or, later, dynamically adjusted.
-			startStasis := timestamp.Add(int64(LeaderLeaseActiveDuration), 0)
+			startStasis := timestamp.Add(int64(r.store.ctx.LeaderLeaseActiveDuration), 0)
 			expiration := startStasis.Add(int64(r.store.Clock().MaxOffset()), 0)
 
 			// Prepare a Raft command to get a leader lease for this replica.
@@ -640,7 +631,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 				return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 			}
 			if !inFlight && !timestamp.Less(lease.StartStasis.Add(
-				-int64(leaderLeaseRenewalDuration), 0)) {
+				-int64(r.store.ctx.LeaderLeaseRenewalDuration), 0)) {
 				if log.V(2) {
 					log.Warningf("extending lease %s at %s", lease, timestamp)
 				}
