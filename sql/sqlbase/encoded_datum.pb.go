@@ -16,6 +16,7 @@ It has these top-level messages:
 	ColumnType
 	TableAndIndexID
 	ColumnDescriptor
+	ColumnFamilyDescriptor
 	IndexDescriptor
 	DescriptorMutation
 	TableDescriptor

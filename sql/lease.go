@@ -152,6 +152,7 @@ func (s LeaseStore) Acquire(
 		return nil, util.Errorf("ID %d is not a table", tableID)
 	}
 
+	tableDesc.MaybeUpgradeFormatVersion()
 	lease.TableDescriptor = *tableDesc
 
 	if err := lease.Validate(); err != nil {
@@ -1103,6 +1104,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
+						table.MaybeUpgradeFormatVersion()
 						if err := table.Validate(); err != nil {
 							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
 							continue

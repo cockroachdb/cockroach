@@ -73,6 +73,14 @@ func TestAllocateIDs(t *testing.T) {
 			{ID: 2, Name: "b"},
 			{ID: 3, Name: "c"},
 		},
+		Families: []ColumnFamilyDescriptor{
+			{
+				ID: 0, Name: "primary",
+				ColumnNames:     []string{"a", "b", "c"},
+				ColumnIDs:       []ColumnID{1, 2, 3},
+				DefaultColumnID: ColumnID(3),
+			},
+		},
 		PrimaryIndex: IndexDescriptor{
 			ID: 1, Name: "c", ColumnIDs: []ColumnID{1, 2},
 			ColumnNames: []string{"a", "b"},
@@ -88,6 +96,7 @@ func TestAllocateIDs(t *testing.T) {
 		},
 		Privileges:     NewDefaultPrivilegeDescriptor(),
 		NextColumnID:   4,
+		NextFamilyID:   1,
 		NextIndexID:    4,
 		NextMutationID: 1,
 		FormatVersion:  BaseFormatVersion,
@@ -161,7 +170,11 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 			}},
 		{`duplicate column name: "bar"`,
 			TableDescriptor{
@@ -187,6 +200,177 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
+		{`at least 1 column family must be specified`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID: 2,
+			}},
+		{`the 0th family must have ID 0`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 1},
+				},
+				NextColumnID: 2,
+			}},
+		{`duplicate family name: "baz"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz"},
+					{ID: 1, Name: "baz"},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 2,
+			}},
+		{`family "qux" duplicate ID of family "baz": 0`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz"},
+					{ID: 0, Name: "qux"},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 2,
+			}},
+		{`duplicate family name: "baz"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz"},
+					{ID: 3, Name: "baz"},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 2,
+			}},
+		{`mismatched column ID size (1) and name size (0)`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz", ColumnIDs: []ColumnID{1}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`family "baz" contains unknown column "2"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz", ColumnIDs: []ColumnID{2}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`family "baz" column 1 should have name "bar", but found name "qux"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"qux"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`column 1 is not in any column family`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz"},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`column 1 is in both family 0 and 1`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "qux", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 2,
+			}},
+		{`primary key column 1 is not in column family 0`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "baz"},
+					{ID: 1, Name: "qux", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "quux",
+					ColumnIDs:        []ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 2,
+				NextIndexID:  2,
+			}},
 		{`table must contain a primary key`,
 			TableDescriptor{
 				ID:            2,
@@ -196,10 +380,14 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{
 					ID:               0,
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC}},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 			}},
 		{`invalid index ID 0`,
 			TableDescriptor{
@@ -210,10 +398,14 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{ID: 0, Name: "bar",
 					ColumnIDs:        []ColumnID{0},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC}},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 			}},
 		{`index "bar" must contain at least 1 column`,
 			TableDescriptor{
@@ -224,6 +416,9 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{
 					ID: 1, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -231,8 +426,8 @@ func TestValidateTableDesc(t *testing.T) {
 				Indexes: []IndexDescriptor{
 					{ID: 2, Name: "bar"},
 				},
-
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
 		{`mismatched column IDs (1) and names (0)`,
@@ -244,8 +439,12 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1}},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 		{`mismatched column IDs (1) and names (2)`,
@@ -258,11 +457,15 @@ func TestValidateTableDesc(t *testing.T) {
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1, 2}, ColumnNames: []string{"bar", "blah"}},
+				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar",
 					ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar", "blah"},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 				},
 				NextColumnID: 3,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 		{`duplicate index name: "bar"`,
@@ -273,6 +476,9 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: BaseFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar",
 					ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"},
@@ -285,6 +491,7 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 		{`index "blah" duplicate ID of index "bar": 1`,
@@ -295,6 +502,9 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: BaseFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1},
 					ColumnNames:      []string{"bar"},
@@ -307,6 +517,7 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 		{`index "bar" column "bar" should have ID 1, but found ID 2`,
@@ -318,11 +529,15 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{2},
 					ColumnNames:      []string{"bar"},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 				},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 		{`index "bar" contains unknown column "blah"`,
@@ -334,11 +549,15 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1},
 					ColumnNames:      []string{"blah"},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 				},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 		{`mismatched column IDs (1) and directions (0)`,
@@ -350,10 +569,14 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
 				PrimaryIndex: IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1},
 					ColumnNames: []string{"blah"},
 				},
 				NextColumnID: 2,
+				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
 	}
