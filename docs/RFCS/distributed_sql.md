@@ -464,7 +464,7 @@ Composition: src -> countdistinctmin -> final
 - `JOIN` performs a join on two streams, with equality constraints between
   certain columns. The aggregator is grouped on the columns that are
   constrained to be equal. See [Stream joins](#stream-joins).
-- `JOIN READER` performs point-lookups for rows with the kyes indicated by the
+- `JOIN READER` performs point-lookups for rows with the keys indicated by the
   input stream. It can do so by performing (potentially remote) KV reads, or by
   setting up remote flows. See [Join-by-lookup](#join-by-lookup) and
   [On-the-fly flows setup](#on-the-fly-flows-setup).
