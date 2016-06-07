@@ -5672,8 +5672,6 @@ func TestCommandTimeThreshold(t *testing.T) {
 		t.Fatalf("could not cput data: %s", err)
 	}
 }
-<<<<<<< HEAD
-=======
 
 // TestReserveAndApplySnapshot checks to see if a snapshot is correctly applied
 // and that its reservation is removed.
@@ -5689,7 +5687,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		tc.store.bookie.mu.Lock()
 		defer tc.store.bookie.mu.Unlock()
 		if e, a := expected, len(tc.store.bookie.mu.resByRangeID); e != a {
-			t.Fatalf("reservation still exists - expected:%d, actual:%d", e, a)
+			t.Fatalf("wrong number of reservations - expected:%d, actual:%d", e, a)
 		}
 	}
 
@@ -5697,7 +5695,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	firstRng := tc.store.LookupReplica(key, nil)
 	snap, err := firstRng.GetSnapshot()
 	if err != nil {
-		t.Fatalf("can't get snapshot: %s", err)
+		t.Fatal(err)
 	}
 
 	tc.store.metrics.available.Update(maxReservedBytes)
@@ -5715,18 +5713,18 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		RangeSize: 10,
 	}
 
-	if !tc.store.Reserve(req).Reserved {
+	if !tc.store.Reserve(req).Approved {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
 	b := tc.engine.NewBatch()
+	defer b.Close()
 	if _, err := firstRng.applySnapshot(b, snap); err != nil {
-		t.Fatalf("couldn't apply the snapshot: %s", err)
+		t.Fatal(err)
 	}
 	if err := b.Commit(); err != nil {
-		t.Fatalf("couldn't commit the batch: %s", err)
+		t.Fatal(err)
 	}
-	b.Close()
+
 	checkReservations(t, 0)
 }
->>>>>>> 6b1af6f... fixup limits

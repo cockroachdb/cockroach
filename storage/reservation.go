@@ -109,13 +109,13 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			// To update the reservation, fill the original one and add the
 			// new one.
 			if log.V(2) {
-				log.Infof("updating existing reservation for rangeID:%d, %v", req.RangeID,
+				log.Infof("updating existing reservation for rangeID:%d, %+v", req.RangeID,
 					olderReservation)
 			}
 			b.fillBookingLocked(olderReservation)
 		} else {
 			if log.V(2) {
-				log.Infof("there is pre-existing reservation %v, can't update with %v",
+				log.Infof("there is pre-existing reservation %+v, can't update with %+v",
 					olderReservation, req)
 			}
 			return roachpb.ReservationResponse{Approved: false}
@@ -138,7 +138,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	available := b.metrics.available.Value()
 	if b.mu.size+(req.RangeSize*2) > available {
 		if log.V(2) {
-			log.Infof("could not book reservation %v, not enough available disk space (reqested:%d*2, reserved:%d, available:%d)",
+			log.Infof("could not book reservation %+v, not enough available disk space (reqested:%d*2, reserved:%d, available:%d)",
 				req, req.RangeSize, b.mu.size, available)
 		}
 		return roachpb.ReservationResponse{Approved: false}
@@ -147,7 +147,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	// Do we have enough reserved space free for the reservation?
 	if b.mu.size+req.RangeSize > b.maxReservedBytes {
 		if log.V(2) {
-			log.Infof("could not book reservation %v, not enough available reservation space (reqested:%d, reserved:%d, maxReserved:%d)",
+			log.Infof("could not book reservation %+v, not enough available reservation space (reqested:%d, reserved:%d, maxReserved:%d)",
 				req, req.RangeSize, b.mu.size, b.maxReservations)
 		}
 		return roachpb.ReservationResponse{Approved: false}
@@ -165,6 +165,11 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	// Update the store metrics.
 	b.metrics.reservedReplicaCount.Inc(1)
 	b.metrics.reserved.Inc(req.RangeSize)
+
+	if log.V(2) {
+		log.Infof("new reservation added: %+v", newBooking)
+	}
+
 	return roachpb.ReservationResponse{Approved: true}
 }
 
@@ -190,6 +195,10 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 // fillBookingLocked fills a booking. It requires that the reservation lock is
 // held. This should only be called internally.
 func (b *bookie) fillBookingLocked(res *booking) {
+	if log.V(2) {
+		log.Infof("filling reservation: %+v", res)
+	}
+
 	// Remove it from resByRangeID. Note that we don't remove it from the queue
 	// since it will expire and remove itself.
 	delete(b.mu.resByRangeID, res.RangeID)
