@@ -180,7 +180,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-            .tooltip("The amount of network traffic sent to and from the SQL system, in bytes.")
+              .tooltip("The amount of network traffic sent to and from the SQL system, in bytes.")
           );
 
           this._addChart(
