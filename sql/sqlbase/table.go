@@ -265,12 +265,22 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	return col, idx, nil
 }
 
-// EncodeIndexKey doesn't deal with ImplicitColumnIDs, so it doesn't always produce
-// a full index key.
-func EncodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
-	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
+// EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
+// the columns in the index (into a new buffer - does not directly append to
+// keyPrefix).
+//
+// Returns the key and whether any of the encoded values were NULLs.
+//
+// Note that ImplicitColumnIDs are not encoded, so the result isn't always a
+// full index key.
+func EncodeIndexKey(
+	index *IndexDescriptor,
+	colMap map[ColumnID]int,
+	values []parser.Datum,
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
 	return EncodeColumns(index.ColumnIDs, directions(index.ColumnDirections),
-		colMap, values, indexKey)
+		colMap, values, keyPrefix)
 }
 
 type directions []IndexDescriptor_Direction
@@ -289,11 +299,12 @@ func EncodeColumns(
 	directions directions,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
-	indexKey []byte,
-) ([]byte, bool, error) {
-	var key []byte
-	var containsNull bool
-	key = append(key, indexKey...)
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
+	// We know we will append to the key which will cause the capacity to grow
+	// so make it bigger from the get-go.
+	key = make([]byte, len(keyPrefix), 2*len(keyPrefix))
+	copy(key, keyPrefix)
 
 	for colIdx, id := range columnIDs {
 		var val parser.Datum
