@@ -23,26 +23,35 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
-type fkInsertHelper []baseFKHelper
+type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKInsertHelper(
 	txn *client.Txn, table *sqlbase.TableDescriptor, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
-	fks := make(fkInsertHelper, 0, len(table.Indexes))
+	fks := make(fkInsertHelper, len(table.Indexes))
 	for _, idx := range table.AllNonDropIndexes() {
 		if idx.ForeignKey != nil {
 			fk, err := makeBaseFKHelepr(txn, idx, idx.ForeignKey, colMap)
 			if err != nil {
 				return fks, err
 			}
-			fks = append(fks, fk)
+			fks[idx.ID] = append(fks[idx.ID], fk)
 		}
 	}
 	return fks, nil
 }
 
-func (fks fkInsertHelper) check(row parser.DTuple) error {
-	for _, fk := range fks {
+func (fks fkInsertHelper) checkAll(row parser.DTuple) error {
+	for idx := range fks {
+		if err := fks.checkIdx(idx, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
+	for _, fk := range fks[idx] {
 		found, err := fk.check(row)
 		if err != nil {
 			return err
@@ -58,26 +67,35 @@ func (fks fkInsertHelper) check(row parser.DTuple) error {
 	return nil
 }
 
-type fkDeleteHelper []baseFKHelper
+type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
 	txn *client.Txn, table *sqlbase.TableDescriptor, colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
-	var fks fkDeleteHelper
+	fks := make(fkDeleteHelper)
 	for _, idx := range table.AllNonDropIndexes() {
 		for _, ref := range idx.ReferencedBy {
 			fk, err := makeBaseFKHelepr(txn, idx, ref, colMap)
 			if err != nil {
 				return fks, err
 			}
-			fks = append(fks, fk)
+			fks[idx.ID] = append(fks[idx.ID], fk)
 		}
 	}
 	return fks, nil
 }
 
-func (fks fkDeleteHelper) check(row parser.DTuple) error {
-	for _, fk := range fks {
+func (fks fkDeleteHelper) checkAll(row parser.DTuple) error {
+	for idx := range fks {
+		if err := fks.checkIdx(idx, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
+	for _, fk := range fks[idx] {
 		found, err := fk.check(row)
 		if err != nil {
 			return err
@@ -92,6 +110,30 @@ func (fks fkDeleteHelper) check(row parser.DTuple) error {
 		}
 	}
 	return nil
+}
+
+type fkUpdateHelper struct {
+	before fkDeleteHelper
+	after  fkInsertHelper
+}
+
+func makeFKUpdateHelper(
+	txn *client.Txn, table *sqlbase.TableDescriptor, colMap map[sqlbase.ColumnID]int,
+) (fkUpdateHelper, error) {
+	ret := fkUpdateHelper{}
+	var err error
+	if ret.before, err = makeFKDeleteHelper(txn, table, colMap); err != nil {
+		return ret, err
+	}
+	ret.after, err = makeFKInsertHelper(txn, table, colMap)
+	return ret, err
+}
+
+func (fks fkUpdateHelper) checkIdx(idx sqlbase.IndexID, oldValues, newValues parser.DTuple) error {
+	if err := fks.before.checkIdx(idx, oldValues); err != nil {
+		return err
+	}
+	return fks.after.checkIdx(idx, newValues)
 }
 
 type baseFKHelper struct {
