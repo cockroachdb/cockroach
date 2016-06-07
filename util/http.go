@@ -17,10 +17,12 @@
 package util
 
 import (
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
+	"github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 )
@@ -80,4 +82,44 @@ func PostJSON(httpClient http.Client, path string, request, response proto.Messa
 		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
+}
+
+// StreamJSON uses the supplied client to POST the given proto request as JSON
+// to the supplied streaming endpoint. The callback is called when a new
+// response chunk is available in the supplied destination; once the callback
+// returns, the destination is overwritten.
+func StreamJSON(
+	httpClient http.Client,
+	path string,
+	request proto.Message,
+	dest interface{},
+	callback func(),
+) error {
+	str, err := (&jsonpb.Marshaler{}).MarshalToString(request)
+	if err != nil {
+		return err
+	}
+	resp, err := httpClient.Post(path, JSONContentType, strings.NewReader(str))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+	}
+	// TODO(tschottdorf,tamird): We have cribbed parts of this object to deal
+	// with varying proto imports, and should technically use them here. We can
+	// get away with not cribbing more here for now though.
+	marshaler := runtime.JSONPb{}
+	decoder := marshaler.NewDecoder(resp.Body)
+	for {
+		if err := decoder.Decode(dest); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		callback()
+	}
+	return nil
 }

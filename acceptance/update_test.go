@@ -42,11 +42,20 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb
 	httpClient.Timeout = timeout
 
 	var resp serverpb.ClusterFreezeResponse
-	err := util.PostJSON(
+	var m map[string]*serverpb.ClusterFreezeResponse
+	cb := func() {
+		num := resp.RangesAffected
+		resp = *m["result"]
+		if num > resp.RangesAffected {
+			resp.RangesAffected = num
+		}
+	}
+	err := util.StreamJSON(
 		httpClient,
 		c.URL(0)+"/_admin/v1/cluster/freeze",
 		&serverpb.ClusterFreezeRequest{Freeze: freeze},
-		&resp,
+		&m,
+		cb,
 	)
 	return resp, err
 }
@@ -100,6 +109,10 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 		"Timeout exceeded while",
 		"connection is closing",
 		"deadline",
+		// error returned via JSON when the server-side gRPC stream times out (due to
+		// lack of new input). Unmarshaling that JSON fails with a message referencing
+		// unknown fields, unfortunately in map order.
+		"unknown field .*",
 	}, "|")
 	if reply, err := postFreeze(c, true, short); !testutils.IsError(err, acceptErrs) {
 		t.Fatalf("expected timeout, got %v: %v", err, reply)

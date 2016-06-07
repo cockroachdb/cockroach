@@ -592,6 +592,11 @@ type gzipResponseWriter struct {
 	http.ResponseWriter
 }
 
+// Flush implements http.Flusher as required by grpc-gateway for clients
+// which access streaming endpoints (as exercised by the acceptance tests
+// at time of writing).
+func (*gzipResponseWriter) Flush() {}
+
 func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
 	var gz *gzip.Writer
 	if gzI := gzipWriterPool.Get(); gzI == nil {

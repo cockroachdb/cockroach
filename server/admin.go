@@ -756,6 +756,7 @@ func (s *adminServer) Drain(ctx context.Context, req *serverpb.DrainRequest) (*s
 // waitForStoreFrozen polls the given stores until they all report having no
 // unfrozen Replicas (or an error or timeout occurs).
 func (s *adminServer) waitForStoreFrozen(
+	stream serverpb.Admin_ClusterFreezeServer,
 	stores map[roachpb.StoreID]roachpb.NodeID,
 	wantFrozen bool,
 ) error {
@@ -777,6 +778,7 @@ func (s *adminServer) waitForStoreFrozen(
 		default:
 		}
 	}
+
 	numWaiting := len(stores) // loop until this drops to zero
 	var err error
 	for r := retry.Start(opts); r.Next(); {
@@ -797,22 +799,30 @@ func (s *adminServer) waitForStoreFrozen(
 			action := func() (err error) {
 				var resp *roachpb.PollFrozenResponse
 				defer func() {
+					message := fmt.Sprintf("node %d, store %d: ", nodeID, storeID)
+
 					if err != nil {
-						return
-					}
-					mu.Lock()
-					ok := (wantFrozen && resp.NumThawed == 0) ||
-						(!wantFrozen && resp.NumFrozen == 0)
-					if ok {
-						// If the Store is in the right state, mark it as such.
-						// This means we won't try it again.
-						mu.oks[storeID] = true
+						message += err.Error()
 					} else {
-						// Otherwise, forget that we tried the Store so that
-						// the retry loop picks it up again.
-						delete(mu.oks, storeID)
+						mu.Lock()
+						ok := (wantFrozen && resp.NumThawed == 0) ||
+							(!wantFrozen && resp.NumFrozen == 0)
+						if ok {
+							// If the Store is in the right state, mark it as such.
+							// This means we won't try it again.
+							message += "ready"
+							mu.oks[storeID] = true
+						} else {
+							// Otherwise, forget that we tried the Store so that
+							// the retry loop picks it up again.
+							message += fmt.Sprintf("%d frozen and %d thawed ranges", resp.NumFrozen, resp.NumThawed)
+							delete(mu.oks, storeID)
+						}
+						mu.Unlock()
+						err = stream.Send(&serverpb.ClusterFreezeResponse{
+							Message: message,
+						})
 					}
-					mu.Unlock()
 				}()
 				conn, err := s.server.rpcContext.GRPCDial(addr)
 				if err != nil {
@@ -861,6 +871,12 @@ func (s *adminServer) waitForStoreFrozen(
 		if err != nil || numWaiting == 0 {
 			break
 		}
+		if err := stream.Send(&serverpb.ClusterFreezeResponse{
+			Message: fmt.Sprintf("waiting for %d store%s to apply operation",
+				numWaiting, util.Pluralize(int64(numWaiting))),
+		}); err != nil {
+			return err
+		}
 	}
 	if err != nil {
 		return err
@@ -873,9 +889,10 @@ func (s *adminServer) waitForStoreFrozen(
 }
 
 func (s *adminServer) ClusterFreeze(
-	ctx context.Context, req *serverpb.ClusterFreezeRequest,
-) (*serverpb.ClusterFreezeResponse, error) {
-	var resp serverpb.ClusterFreezeResponse
+	req *serverpb.ClusterFreezeRequest,
+	stream serverpb.Admin_ClusterFreezeServer,
+) error {
+	var totalAffected int64
 	stores := make(map[roachpb.StoreID]roachpb.NodeID)
 	process := func(from, to roachpb.Key) (roachpb.Key, error) {
 		b := &client.Batch{}
@@ -885,7 +902,7 @@ func (s *adminServer) ClusterFreeze(
 			return nil, err
 		}
 		fr := b.RawResponse().Responses[0].GetInner().(*roachpb.ChangeFrozenResponse)
-		resp.RangesAffected += fr.RangesAffected
+		totalAffected += fr.RangesAffected
 		for storeID, nodeID := range fr.Stores {
 			stores[storeID] = nodeID
 		}
@@ -910,7 +927,7 @@ func (s *adminServer) ClusterFreeze(
 		for _, freezeFrom := range freezeFroms {
 			var err error
 			if freezeTo, err = process(freezeFrom, freezeTo); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	} else {
@@ -923,10 +940,16 @@ func (s *adminServer) ClusterFreeze(
 		// descriptor unconditionally or we won't always be able to unfreeze
 		// (except by restarting a node which holds the first range).
 		if _, err := process(keys.LocalMax, roachpb.KeyMax); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &resp, s.waitForStoreFrozen(stores, req.Freeze)
+	if err := stream.Send(&serverpb.ClusterFreezeResponse{
+		RangesAffected: totalAffected,
+		Message:        fmt.Sprintf("proposed freeze to %d ranges", totalAffected),
+	}); err != nil {
+		return err
+	}
+	return s.waitForStoreFrozen(stream, stores, req.Freeze)
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
