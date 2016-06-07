@@ -500,6 +500,12 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT $1::INT": {
 			base.SetArgs(12).Results(12),
 		},
+		"SELECT ANNOTATE_TYPE($1, int)": {
+			base.SetArgs(12).Results(12),
+		},
+		"SELECT $1 + $2, $2!FLOAT": {
+			base.SetArgs(12, 23).Results(35, 23),
+		},
 		"INSERT INTO d.T VALUES ($1 + 1) RETURNING a": {
 			base.SetArgs(1).Results(2),
 			base.SetArgs(11).Results(12),
