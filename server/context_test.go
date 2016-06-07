@@ -110,6 +110,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Unsetenv("COCKROACH_RESERVATIONS_ENABLED"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	defer resetEnvVar()
 
@@ -161,6 +164,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctxExpected.ConsistencyCheckInterval = time.Millisecond * 10
+	if err := os.Setenv("COCKROACH_RESERVATIONS_ENABLED", "false"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ReservationsEnabled = false
 
 	envutil.ClearEnvCache()
 	ctx.readEnvironmentVariables()
@@ -198,6 +205,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_RESERVATIONS_ENABLED", "abcd"); err != nil {
 		t.Fatal(err)
 	}
 

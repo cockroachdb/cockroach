@@ -135,7 +135,14 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
-	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
+	s.storePool = storage.NewStorePool(
+		s.gossip,
+		s.clock,
+		s.rpcContext,
+		ctx.ReservationsEnabled,
+		ctx.TimeUntilStoreDead,
+		stopper,
+	)
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occurring during
