@@ -4,9 +4,9 @@ package sqlbase
 
 import "fmt"
 
-const _FormatVersion_name = "BaseFormatVersion"
+const _FormatVersion_name = "BaseFormatVersionFamilyFormatVersion"
 
-var _FormatVersion_index = [...]uint8{0, 17}
+var _FormatVersion_index = [...]uint8{0, 17, 36}
 
 func (i FormatVersion) String() string {
 	i -= 1
