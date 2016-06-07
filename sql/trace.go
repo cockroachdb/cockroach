@@ -159,23 +159,15 @@ func (n *explainTraceNode) Next() (bool, error) {
 }
 
 func (n *explainTraceNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	return n.plan.ExplainPlan(v)
+	return "explain", "trace", []planNode{n.plan}
 }
 
-func (n *explainTraceNode) ExplainTypes(fn func(string, string)) {
-	n.plan.ExplainTypes(fn)
-}
+func (n *explainTraceNode) ExplainTypes(fn func(string, string)) {}
 
 func (n *explainTraceNode) Values() parser.DTuple {
 	return n.rows[0]
 }
 
-func (*explainTraceNode) MarkDebug(_ explainMode) {
-	panic("debug mode not implemented in explainDebugNode")
-}
-
-func (*explainTraceNode) DebugValues() debugValues {
-	panic("debug mode not implemented in explainTraceNode")
-}
-
+func (*explainTraceNode) MarkDebug(_ explainMode)      {}
+func (*explainTraceNode) DebugValues() debugValues     { return debugValues{} }
 func (*explainTraceNode) SetLimitHint(_ int64, _ bool) {}
