@@ -126,6 +126,7 @@ func TestParse(t *testing.T) {
 		{`DROP INDEX IF EXISTS a.b@c RESTRICT`},
 
 		{`EXPLAIN SELECT 1`},
+		{`EXPLAIN EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
 		{`EXPLAIN (A, B, C) SELECT 1`},
 
