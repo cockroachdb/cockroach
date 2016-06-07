@@ -89,6 +89,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`(1, 2, 3) = (1, 2, 3)`, `true`},
 		{`(1, 2, 3) IN ((1, 2, 3), (4, 5, 6))`, `true`},
 		{`(1, 'one')`, `(1, 'one')`},
+		{`ANNOTATE_TYPE(1, float)`, `1.0`},
+		{`1!float`, `1.0`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
