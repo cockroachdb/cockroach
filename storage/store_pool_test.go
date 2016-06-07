@@ -19,14 +19,19 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -60,7 +65,7 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	g := gossip.New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(g, clock, timeUntilStoreDead, stopper)
+	storePool := NewStorePool(g, clock, rpcContext, false, timeUntilStoreDead, stopper)
 	return stopper, g, mc, storePool
 }
 
@@ -256,6 +261,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
 		Attrs:   roachpb.Attributes{Attrs: required},
 	}
+	declinedStore := roachpb.StoreDescriptor{
+		StoreID: 6,
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
+	}
 
 	// Mark all alive initially.
 	sg.GossipStores([]*roachpb.StoreDescriptor{
@@ -264,25 +274,28 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		&unmatchingStore,
 		&emptyStore,
 		&deadStore,
+		&declinedStore,
 	}, t)
 
 	if err := verifyStoreList(sp, required, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
 		int(deadStore.StoreID),
-	}, 5); err != nil {
+		int(declinedStore.StoreID),
+	}, 6); err != nil {
 		t.Error(err)
 	}
 
-	// Mark one store dead.
+	// Mark one store dead and one store declined.
 	sp.mu.Lock()
 	sp.mu.stores[deadStore.StoreID].markDead(sp.clock.Now())
+	sp.mu.stores[declinedStore.StoreID].reservationDeclinedOn = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.mu.Unlock()
 
 	if err := verifyStoreList(sp, required, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
-	}, 4); err != nil {
+	}, 5); err != nil {
 		t.Error(err)
 	}
 }
@@ -398,5 +411,129 @@ func TestStorePoolDefaultState(t *testing.T) {
 
 	if sl, c := sp.getStoreList(roachpb.Attributes{}, true); len(sl.stores) > 0 || c != 0 {
 		t.Errorf("expected 0 live stores; got list %v and total count %d", sl, c)
+	}
+}
+
+// fakeNodeServer implements the InternalServer interface. Specifically, this
+// is used for testing the Reserve() RPC.
+type fakeNodeServer struct {
+	reservationResponse bool
+	reservationErr      error
+}
+
+func (f fakeNodeServer) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	panic("unimplemented")
+}
+
+func (f fakeNodeServer) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
+	panic("unimplemented")
+}
+
+func (f fakeNodeServer) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
+	return &roachpb.ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
+}
+
+// newFakeNodeServer returns a newFakeNodeServer designed to handle internal
+// node server RPCs.
+func newFakeNodeServer(t *testing.T, ctx *rpc.Context) (*grpc.Server, net.Listener) {
+	s := rpc.NewServer(ctx)
+
+	ln, err := util.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return s, ln
+}
+
+// newFakeNodeServerContext returns a rpc.Context for testing internal node
+// server RPC calls using a fakeNodeServer.
+func newFakeNodeServerContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
+	ctx := rpc.NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx.HeartbeatInterval = 10 * time.Millisecond
+	ctx.HeartbeatTimeout = 5 * time.Second
+	return ctx
+}
+
+// TestRequestReservation tests that requestReservation performs correctly
+// when reservations are accepted, declined and when the Reserve RPC encounters
+// an error.
+func TestRequestReservation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Create a fake node server to generate responses for calls to Reserve.
+	ctx := newFakeNodeServerContext(nil, stopper)
+	s, ln := newFakeNodeServer(t, ctx)
+	defer ln.Close()
+	f := &fakeNodeServer{}
+	roachpb.RegisterInternalServer(s, f)
+
+	// Create a fake store pool.
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
+	g := gossip.New(ctx, nil, stopper)
+	// Have to call g.SetNodeID before call g.AddInfo
+	g.SetNodeID(roachpb.NodeID(1))
+	storePool := NewStorePool(g, clock, ctx, true, TestTimeUntilStoreDeadOff, stopper)
+	sg := gossiputil.NewStoreGossiper(g)
+
+	// Gossip a fake store descriptor into the store pool so we can redirect
+	// the Reserve call to our fake server.
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+				Address: util.UnresolvedAddr{
+					AddressField: ln.Addr().String(),
+				},
+			},
+		},
+	}
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		fakeResp bool
+		fakeErr  string
+		storeID  int
+		expErr   string //Regex Pattern
+	}{
+		// The reservation is successful.
+		{fakeResp: true, storeID: 2},
+		// The store is not in the StorePool.
+		{storeID: 3, expErr: "store does not exist in the store pool"},
+		// The reservation is declined.
+		{fakeResp: false, storeID: 2, expErr: "reservation declined"},
+		// The reservation is with an error.
+		{fakeResp: false, fakeErr: "abcd", storeID: 2, expErr: "abcd"},
+	}
+
+	for i, testCase := range testCases {
+		f.reservationResponse = testCase.fakeResp
+		if len(testCase.fakeErr) != 0 {
+			f.reservationErr = fmt.Errorf("%s", testCase.fakeErr)
+		} else {
+			f.reservationErr = nil
+		}
+		err := storePool.requestReservation(
+			roachpb.NodeID(1),
+			roachpb.StoreID(1),
+			roachpb.StoreID(testCase.storeID),
+			roachpb.RangeID(2),
+			100000,
+		)
+		if len(testCase.expErr) == 0 {
+			if err != nil {
+				t.Errorf("%d: expected no error, got %s", i, err)
+			}
+			continue
+		}
+		if err == nil {
+			t.Errorf("%d: expected an error:%s, got none", i, testCase.expErr)
+		} else if !testutils.IsError(err, testCase.expErr) {
+			t.Errorf("%d: expected error:%s, actual %s", i, testCase.expErr, err)
+		}
 	}
 }

@@ -56,6 +56,7 @@ const (
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
+	defaultReservationsEnabled      = true
 )
 
 // Context holds parameters needed to setup a server.
@@ -144,6 +145,10 @@ type Context struct {
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
 	TimeUntilStoreDead time.Duration
 
+	// ReservationsEnabled is a switch used to enable the add replica
+	// reservation system
+	ReservationsEnabled bool
+
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 }
@@ -211,6 +216,7 @@ func MakeContext() Context {
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
+		ReservationsEnabled:      defaultReservationsEnabled,
 		Stores: StoreSpecList{
 			Specs: []StoreSpec{{Path: defaultStorePath}},
 		},
@@ -296,6 +302,8 @@ func (ctx *Context) readEnvironmentVariables() {
 	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("scan_max_idle_time", ctx.ScanMaxIdleTime)
 	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("time_until_store_dead", ctx.TimeUntilStoreDead)
 	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("consistency_check_interval", ctx.ConsistencyCheckInterval)
+	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("reservations_enabled", ctx.ReservationsEnabled)
+
 }
 
 // parseGossipBootstrapResolvers parses a comma-separated list of

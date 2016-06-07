@@ -130,7 +130,7 @@ func createTestStoreWithoutStart(t *testing.T, ctx *StoreContext) (*Store, *hlc.
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	ctx.StorePool = NewStorePool(ctx.Gossip, ctx.Clock, TestTimeUntilStoreDeadOff, stopper)
+	ctx.StorePool = NewStorePool(ctx.Gossip, ctx.Clock, rpcContext, false, TestTimeUntilStoreDeadOff, stopper)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper)
 	ctx.Transport = NewDummyRaftTransport()
 	sender := &testSender{}
