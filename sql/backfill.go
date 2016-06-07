@@ -147,15 +147,17 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 		return err
 	}
 
+	// First drop indexes, then add/drop columns, and only then add indexes.
+
+	// Drop indexes.
+	if err := sc.truncateIndexes(lease, droppedIndexDescs); err != nil {
+		return err
+	}
+
 	// Add and drop columns.
 	if err := sc.truncateAndBackfillColumns(
 		lease, addedColumnDescs, droppedColumnDescs,
 	); err != nil {
-		return err
-	}
-
-	// Drop indexes.
-	if err := sc.truncateIndexes(lease, droppedIndexDescs); err != nil {
 		return err
 	}
 
