@@ -18,12 +18,16 @@ package storage
 
 import (
 	"container/heap"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -38,15 +42,20 @@ const (
 	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
 	// prevents the store pool from marking stores as dead.
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
+
+	// timeoutForDeclinedReservations is the amount of time to not consider the
+	// store available for up-replication after a reservation was declined.
+	timeoutForDeclinedReservations = 10 * time.Second
 )
 
 type storeDetail struct {
-	desc            *roachpb.StoreDescriptor
-	dead            bool
-	timesDied       int
-	foundDeadOn     roachpb.Timestamp
-	lastUpdatedTime roachpb.Timestamp // This is also the priority for the queue.
-	index           int               // index of the item in the heap, required for heap.Interface
+	desc                  *roachpb.StoreDescriptor
+	dead                  bool
+	timesDied             int
+	foundDeadOn           roachpb.Timestamp
+	reservationDeclinedOn time.Time         // The last time a reservation was declined.
+	lastUpdatedTime       roachpb.Timestamp // This is also the priority for the queue.
+	index                 int               // index of the item in the heap, required for heap.Interface
 }
 
 // markDead sets the storeDetail to dead(inactive).
@@ -67,6 +76,33 @@ func (sd *storeDetail) markAlive(foundAliveOn roachpb.Timestamp, storeDesc *roac
 	sd.desc = storeDesc
 	sd.dead = false
 	sd.lastUpdatedTime = foundAliveOn
+}
+
+// storeMatch is the return value for match().
+type storeMatch int
+
+// These are the possible values for a storeMatch.
+const (
+	storeMatchDead    storeMatch = iota // The store is not yet available or has been timed out.
+	storeMatchAlive                     // The store is alive, but its attributes didn't match the required ones.
+	storeMatchMatched                   // The store is alive and its attributes matched.
+)
+
+// match returns if the store is alive, and if the store is available and it's
+// attributes contain the required ones respectively.
+func (sd *storeDetail) match(now time.Time, required roachpb.Attributes) storeMatch {
+	// The store must be alive and it must have a descriptor to be considered
+	// alive.
+	if sd.dead || sd.desc == nil {
+		return storeMatchDead
+	}
+	// The store must not have a recent declined reservation to be considered
+	// available for matching.
+	if sd.reservationDeclinedOn.Add(timeoutForDeclinedReservations).After(now) ||
+		!required.IsSubset(*sd.desc.CombinedAttrs()) {
+		return storeMatchAlive
+	}
+	return storeMatchMatched
 }
 
 // storePoolPQ implements the heap.Interface (which includes sort.Interface)
@@ -136,10 +172,11 @@ func (pq *storePoolPQ) dequeue() *storeDetail {
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
-	clock              *hlc.Clock
-	timeUntilStoreDead time.Duration
-
-	mu struct {
+	clock               *hlc.Clock
+	timeUntilStoreDead  time.Duration
+	rpcContext          *rpc.Context
+	reservationsEnabled bool
+	mu                  struct {
 		sync.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
 		// pointers are used so that data can be kept in sync.
@@ -150,10 +187,19 @@ type StorePool struct {
 
 // NewStorePool creates a StorePool and registers the store updating callback
 // with gossip.
-func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Duration, stopper *stop.Stopper) *StorePool {
+func NewStorePool(
+	g *gossip.Gossip,
+	clock *hlc.Clock,
+	rpcContext *rpc.Context,
+	reservationsEnabled bool,
+	timeUntilStoreDead time.Duration,
+	stopper *stop.Stopper,
+) *StorePool {
 	sp := &StorePool{
-		clock:              clock,
-		timeUntilStoreDead: timeUntilStoreDead,
+		clock:               clock,
+		timeUntilStoreDead:  timeUntilStoreDead,
+		rpcContext:          rpcContext,
+		reservationsEnabled: reservationsEnabled,
 	}
 	sp.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	heap.Init(&sp.mu.queue)
@@ -335,16 +381,85 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	if deterministic {
 		sort.Sort(storeIDs)
 	}
+	now := sp.clock.Now().GoTime()
 	sl := StoreList{}
 	var aliveStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.mu.stores[roachpb.StoreID(storeID)]
-		if !detail.dead && detail.desc != nil {
+		matched := detail.match(now, required)
+		if matched >= storeMatchAlive {
 			aliveStoreCount++
-			if required.IsSubset(*detail.desc.CombinedAttrs()) {
-				sl.add(detail.desc)
-			}
+		}
+		if matched == storeMatchMatched {
+			sl.add(detail.desc)
 		}
 	}
 	return sl, aliveStoreCount
+}
+
+// reserve send a reservation request rpc to the node and store
+// based on the toStoreID. It returns an error if the reservation was not
+// successfully booked. When unsuccessful, the store is marked as having a
+// declined reservation so it will not be considered for up-replication or
+// rebalancing until after timeoutForDeclinedReservations has passed.
+// TODO(bram): consider moving the nodeID to the store pool during
+// NewStorePool.
+func (sp *StorePool) reserve(
+	curNodeID roachpb.NodeID,
+	curStoreID roachpb.StoreID,
+	toStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	rangeSize int64,
+) error {
+	if !sp.reservationsEnabled {
+		return nil
+	}
+	// We don't want to hold the lock for the rpc call, so make copies of all
+	// needed values to avoid the chance of any funny business.
+	sp.mu.RLock()
+	detail, ok := sp.mu.stores[toStoreID]
+	if !ok {
+		sp.mu.RUnlock()
+		return fmt.Errorf("store does not exist in the store pool")
+	}
+	address := detail.desc.Node.Address.String()
+	nodeID := detail.desc.Node.NodeID
+	sp.mu.RUnlock()
+
+	conn, err := sp.rpcContext.GRPCDial(address)
+	if err != nil {
+		return err
+	}
+
+	client := roachpb.NewInternalClient(conn)
+	req := &roachpb.ReservationRequest{
+		StoreRequestHeader: roachpb.StoreRequestHeader{
+			NodeID:  nodeID,
+			StoreID: toStoreID,
+		},
+		FromNodeID:  curNodeID,
+		FromStoreID: curStoreID,
+		RangeSize:   rangeSize,
+		RangeID:     rangeID,
+	}
+	resp, err := client.Reserve(context.Background(), req)
+
+	// If a reservation is declined, be it due to an error or because it was
+	// rejected, we mark the store detail as having been rejected so it won't
+	// be considered for other checks until after timeoutForDeclinedReservations
+	// has expired.
+	if err != nil || !resp.Reserved {
+		sp.mu.Lock()
+		defer sp.mu.Unlock()
+		if declinedDetail, ok := sp.mu.stores[toStoreID]; ok {
+			declinedDetail.reservationDeclinedOn = sp.clock.Now().GoTime()
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("reservation failed:%+v due to error:%s", req, err)
+	}
+	if !resp.Reserved {
+		return fmt.Errorf("reservation declined:%+v", req)
+	}
+	return nil
 }

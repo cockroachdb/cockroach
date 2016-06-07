@@ -78,7 +78,14 @@ func createCluster(
 	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
 	// instance to prevent conflicts with real NodeIDs.
 	g.SetNodeID(-1)
-	storePool := storage.NewStorePool(g, clock, storage.TestTimeUntilStoreDeadOff, stopper)
+	storePool := storage.NewStorePool(
+		g,
+		clock,
+		rpcContext,
+		/* reservationsEnabled */ false,
+		storage.TestTimeUntilStoreDeadOff,
+		stopper,
+	)
 	c := &Cluster{
 		stopper:   stopper,
 		clock:     clock,
