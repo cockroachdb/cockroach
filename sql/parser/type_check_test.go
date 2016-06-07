@@ -37,8 +37,6 @@ func TestTypeCheck(t *testing.T) {
 		`NULL::int`,
 		`NULL + 'hello'::bytes`,
 		`(1.1::decimal)::decimal`,
-		`ANNOTATE_TYPE(2, float)`,
-		`ANNOTATE_TYPE('PT12H2M', interval)`,
 		`NULL = 1`,
 		`1 = NULL`,
 		`true AND NULL`,
@@ -106,8 +104,6 @@ func TestTypeCheckError(t *testing.T) {
 		{`lower(1)`, `unknown signature for lower: lower(int)`},
 		{`1::date`, `invalid cast: int -> DATE`},
 		{`1::timestamp`, `invalid cast: int -> TIMESTAMP`},
-		{`ANNOTATE_TYPE(1, timestamp)`, `incompatible type assertion for 1 as timestamp, found type: int`},
-		{`ANNOTATE_TYPE(1.2+2.3, int)`, `incompatible type assertion for 3.5 as int, found type: decimal`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
@@ -375,6 +371,13 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 }
 
+func cast(p Placeholder, typ ColumnType) Expr {
+	return &CastExpr{Expr: p, Type: typ}
+}
+func annot(p Placeholder, typ ColumnType) Expr {
+	return &AnnotateTypeExpr{Expr: p, Type: typ}
+}
+
 func TestProcessPlaceholderAnnotations(t *testing.T) {
 	intType := intColTypeInt
 	boolType := boolColTypeBoolean
@@ -407,42 +410,67 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		{
 			PlaceholderTypes{},
 			[]Expr{
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"a"}, boolType),
 			},
 			PlaceholderTypes{},
 		},
 		{
 			PlaceholderTypes{"a": TypeFloat},
 			[]Expr{
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"a"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"a"}, boolType),
 			},
 			PlaceholderTypes{"a": TypeFloat},
 		},
 		{
 			PlaceholderTypes{},
 			[]Expr{
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, boolType),
 			},
 			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
 		},
 		{
 			PlaceholderTypes{},
 			[]Expr{
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: intType},
+				annot(Placeholder{"a"}, intType),
+				annot(Placeholder{"b"}, boolType),
+			},
+			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+		},
+		{
+			PlaceholderTypes{"b": TypeBool},
+			[]Expr{
+				annot(Placeholder{"a"}, intType),
+			},
+			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+		},
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, boolType),
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, intType),
 			},
 			PlaceholderTypes{"a": TypeInt},
 		},
 		{
 			PlaceholderTypes{},
 			[]Expr{
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				annot(Placeholder{"b"}, boolType),
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, intType),
+			},
+			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+		},
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, boolType),
 				Placeholder{"a"},
 			},
 			PlaceholderTypes{"b": TypeBool},
@@ -451,17 +479,35 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			PlaceholderTypes{},
 			[]Expr{
 				Placeholder{"a"},
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, boolType),
 			},
 			PlaceholderTypes{"b": TypeBool},
 		},
 		{
+			PlaceholderTypes{},
+			[]Expr{
+				annot(Placeholder{"a"}, intType),
+				annot(Placeholder{"b"}, boolType),
+				Placeholder{"a"},
+			},
+			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+		},
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				Placeholder{"a"},
+				annot(Placeholder{"a"}, intType),
+				annot(Placeholder{"b"}, boolType),
+			},
+			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+		},
+		{
 			PlaceholderTypes{"a": TypeFloat, "b": TypeBool},
 			[]Expr{
 				Placeholder{"a"},
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, boolType),
 			},
 			PlaceholderTypes{"a": TypeFloat, "b": TypeBool},
 		},
@@ -469,10 +515,28 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			PlaceholderTypes{"a": TypeFloat, "b": TypeFloat},
 			[]Expr{
 				Placeholder{"a"},
-				&CastExpr{Expr: Placeholder{"a"}, Type: intType},
-				&CastExpr{Expr: Placeholder{"b"}, Type: boolType},
+				cast(Placeholder{"a"}, intType),
+				cast(Placeholder{"b"}, boolType),
 			},
 			PlaceholderTypes{"a": TypeFloat, "b": TypeFloat},
+		},
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				cast(Placeholder{"a"}, intType),
+				annot(Placeholder{"a"}, intType),
+				cast(Placeholder{"a"}, intType),
+			},
+			PlaceholderTypes{"a": TypeInt},
+		},
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				cast(Placeholder{"a"}, intType),
+				annot(Placeholder{"a"}, boolType),
+				cast(Placeholder{"a"}, intType),
+			},
+			PlaceholderTypes{"a": TypeBool},
 		},
 	}
 	for i, d := range testData {
@@ -482,6 +546,74 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
 		} else if !reflect.DeepEqual(args, d.desired) {
 			t.Errorf("%d: expected args %v after processing placeholder annotations for %v, found %v", i, d.desired, stmt, args)
+		}
+	}
+}
+
+func TestProcessPlaceholderAnnotationsError(t *testing.T) {
+	intType := intColTypeInt
+	floatType := floatColTypeFloat
+
+	testData := []struct {
+		initArgs  PlaceholderTypes
+		stmtExprs []Expr
+		expected  string
+	}{
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				annot(Placeholder{"a"}, floatType),
+				annot(Placeholder{"a"}, intType),
+			},
+			"multiple conflicting type annotations around a",
+		},
+		{
+			PlaceholderTypes{},
+			[]Expr{
+				annot(Placeholder{"a"}, floatType),
+				cast(Placeholder{"a"}, floatType),
+				cast(Placeholder{"b"}, floatType),
+				annot(Placeholder{"a"}, intType),
+			},
+			"multiple conflicting type annotations around a",
+		},
+		{
+			PlaceholderTypes{"a": TypeFloat},
+			[]Expr{
+				annot(Placeholder{"a"}, intType),
+			},
+			"type annotation around a that conflicts with previously inferred type float",
+		},
+		{
+			PlaceholderTypes{"a": TypeFloat},
+			[]Expr{
+				cast(Placeholder{"a"}, intType),
+				annot(Placeholder{"a"}, intType),
+			},
+			"type annotation around a that conflicts with previously inferred type float",
+		},
+		{
+			PlaceholderTypes{"a": TypeFloat},
+			[]Expr{
+				annot(Placeholder{"a"}, floatType),
+				annot(Placeholder{"a"}, intType),
+			},
+			"type annotation around a that conflicts with previously inferred type float",
+		},
+		{
+			PlaceholderTypes{"a": TypeFloat},
+			[]Expr{
+				annot(Placeholder{"a"}, intType),
+				annot(Placeholder{"a"}, floatType),
+			},
+			"type annotation around a that conflicts with previously inferred type float",
+		},
+	}
+	for i, d := range testData {
+		args := d.initArgs
+		stmt := &ValuesClause{Tuples: []*Tuple{{Exprs: d.stmtExprs}}}
+		if err := args.ProcessPlaceholderAnnotations(stmt); !testutils.IsError(err, d.expected) {
+			t.Errorf("%d: expected %s, but found %v", i, d.expected, err)
 		}
 	}
 }
