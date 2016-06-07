@@ -30,6 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	checkFKs = true
+	skipFKs  = false
+)
+
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
 	tableDesc    *sqlbase.TableDescriptor
@@ -194,7 +199,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 		}
 	}
 
-	if err := ri.fks.check(values); err != nil {
+	if err := ri.fks.checkAll(values); err != nil {
 		return err
 	}
 
@@ -254,6 +259,9 @@ type rowUpdater struct {
 
 	rd rowDeleter
 	ri rowInserter
+
+	fksBefore fkDeleteHelper
+	fksAfter  fkInsertHelper
 
 	// For allocation avoidance.
 	marshalled      []roachpb.Value
@@ -346,12 +354,18 @@ func makeRowUpdater(
 		var err error
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
-		if ru.rd, err = makeRowDeleter(txn, tableDesc, tableDesc.Columns); err != nil {
+		if ru.rd, err = makeRowDeleter(txn, tableDesc, tableDesc.Columns, skipFKs); err != nil {
 			return rowUpdater{}, err
 		}
 		ru.fetchCols = ru.rd.fetchCols
 		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
 		if ru.ri, err = makeRowInserter(txn, tableDesc, tableDesc.Columns); err != nil {
+			return rowUpdater{}, err
+		}
+		if ru.fksBefore, err = makeFKDeleteHelper(txn, tableDesc, ru.fetchColIDtoRowIndex); err != nil {
+			return rowUpdater{}, err
+		}
+		if ru.fksAfter, err = makeFKInsertHelper(txn, tableDesc, ru.fetchColIDtoRowIndex); err != nil {
 			return rowUpdater{}, err
 		}
 	} else {
@@ -380,6 +394,13 @@ func makeRowUpdater(
 					return rowUpdater{}, err
 				}
 			}
+		}
+		var err error
+		if ru.fksBefore, err = makeFKDeleteHelper(txn, tableDesc, ru.fetchColIDtoRowIndex); err != nil {
+			return rowUpdater{}, err
+		}
+		if ru.fksAfter, err = makeFKInsertHelper(txn, tableDesc, ru.fetchColIDtoRowIndex); err != nil {
+			return rowUpdater{}, err
 		}
 	}
 
@@ -454,17 +475,26 @@ func (ru *rowUpdater) updateRow(
 		if err != nil {
 			return nil, err
 		}
+
+		if err := ru.fksBefore.checkIdx(ru.helper.tableDesc.PrimaryIndex.ID, oldValues); err != nil {
+			return nil, err
+		}
+		// NB: insertRow will do its own FK-after checks.
 		err = ru.ri.insertRow(b, ru.newValues, false)
 		return ru.newValues, err
 	}
-
-	// TODO(dt): FK checks.
 
 	// Update secondary indexes.
 	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 		secondaryIndexEntry := secondaryIndexEntries[i]
 		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
 		if secondaryKeyChanged {
+			if err := ru.fksBefore.checkIdx(ru.helper.indexes[i].ID, oldValues); err != nil {
+				return nil, err
+			}
+			if err := ru.fksAfter.checkIdx(ru.helper.indexes[i].ID, ru.newValues); err != nil {
+				return nil, err
+			}
 			if log.V(2) {
 				log.Infof("Del %s", secondaryIndexEntry.Key)
 			}
@@ -547,6 +577,7 @@ func makeRowDeleter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
+	checkFKs bool,
 ) (rowDeleter, error) {
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
@@ -582,16 +613,16 @@ func makeRowDeleter(
 		}
 	}
 
-	fks, err := makeFKDeleteHelper(txn, tableDesc, fetchColIDtoRowIndex)
-	if err != nil {
-		return rowDeleter{}, nil
-	}
-
 	rd := rowDeleter{
 		helper:               rowHelper{tableDesc: tableDesc, indexes: indexes},
 		fetchCols:            fetchCols,
 		fetchColIDtoRowIndex: fetchColIDtoRowIndex,
-		fks:                  fks,
+	}
+	if checkFKs {
+		var err error
+		if rd.fks, err = makeFKDeleteHelper(txn, tableDesc, fetchColIDtoRowIndex); err != nil {
+			return rowDeleter{}, nil
+		}
 	}
 
 	return rd, nil
@@ -600,7 +631,7 @@ func makeRowDeleter(
 // deleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
 func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
-	if err := rd.fks.check(values); err != nil {
+	if err := rd.fks.checkAll(values); err != nil {
 		return err
 	}
 
