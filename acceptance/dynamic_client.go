@@ -68,7 +68,7 @@ func (dc *dynamicClient) Close() {
 // or an issue with the node itself. This can occur when a node is restarting
 // or is unstable in some other way.
 func isRetryableError(err error) bool {
-	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF)")
+	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|context deadline exceeded)")
 }
 
 var errTestFinished = errors.New("test is shutting down")
