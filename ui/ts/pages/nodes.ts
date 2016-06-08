@@ -949,7 +949,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("goroutine count")
             ).format(d3.format(".1")).title("goroutine Count")
-              .tooltip("The number of Goroutines on this nodes. This count should rise and fall based on load.")
+              .tooltip("The number of Goroutines on this node. This count should rise and fall based on load.")
           );
           this._addChart(
             this.systemAxes,
