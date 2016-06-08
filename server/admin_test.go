@@ -692,14 +692,28 @@ func TestClusterFreeze(t *testing.T) {
 		}
 
 		var resp serverpb.ClusterFreezeResponse
-		if err := apiPost(s, "cluster/freeze", &req, &resp); err != nil {
+		cb := func(v proto.Message) {
+			oldNum := resp.RangesAffected
+			resp = *v.(*serverpb.ClusterFreezeResponse)
+			if oldNum > resp.RangesAffected {
+				resp.RangesAffected = oldNum
+			}
+		}
+
+		cli, err := s.ctx.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := s.Ctx.AdminURL() + apiEndpoint + "cluster/freeze"
+
+		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)
 		}
 		if aff := resp.RangesAffected; aff == 0 {
 			t.Fatalf("expected affected ranges: %+v", resp)
 		}
 
-		if err := apiPost(s, "cluster/freeze", &req, &resp); err != nil {
+		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)
 		}
 	}

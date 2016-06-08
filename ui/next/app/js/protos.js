@@ -518,6 +518,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "int64",
                                     "name": "ranges_affected",
                                     "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "message",
+                                    "id": 2
                                 }
                             ]
                         },
