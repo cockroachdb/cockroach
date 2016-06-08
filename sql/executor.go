@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
@@ -50,6 +51,7 @@ var errNotRetriable = errors.New("the transaction is not in a retriable state")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
+const testDistSQL bool = false
 
 type traceResult struct {
 	tag   string
@@ -153,6 +155,7 @@ type ExecutorContext struct {
 	Gossip       *gossip.Gossip
 	LeaseManager *LeaseManager
 	Clock        *hlc.Clock
+	DistSQLSrv   *distsql.ServerImpl
 
 	TestingKnobs *ExecutorTestingKnobs
 }
@@ -937,6 +940,13 @@ func (e *Executor) execStmt(
 	plan, err := planMaker.makePlan(stmt, autoCommit)
 	if err != nil {
 		return result, err
+	}
+
+	// TODO(radu): experimental code for testing distSQL flows.
+	if testDistSQL {
+		if err := hackPlanToUseDistSQL(plan); err != nil {
+			return result, err
+		}
 	}
 
 	if err := plan.Start(); err != nil {
