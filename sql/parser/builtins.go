@@ -63,8 +63,9 @@ type Builtin struct {
 	// e.g.: random(), clock_timestamp(). Some functions like now()
 	// return the same value in the same statement, but different values
 	// in separate statements, and should not be marked as impure.
-	impure bool
-	fn     func(*EvalContext, DTuple) (Datum, error)
+	impure        bool
+	AggregateFunc func() AggregateFunc
+	fn            func(*EvalContext, DTuple) (Datum, error)
 }
 
 func (b Builtin) params() typeList {
@@ -660,110 +661,6 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	// Aggregate functions.
-
-	// These functions are handled in sql/group.go and are not evaluated
-	// via Eval(), rather by aggregation objects.
-	// In particular they must not be simplified during normalization
-	// (and thus must be marked as impure), even when they are given a
-	// constant argument (e.g. SUM(1)). This is because aggregate
-	// functions must return NULL when they are no rows in the source
-	// table, so their evaluation must always be delayed until query
-	// execution.
-
-	"avg": {
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeInt},
-			ReturnType: TypeDecimal,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeFloat},
-			ReturnType: TypeFloat,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeDecimal},
-			ReturnType: TypeDecimal,
-		},
-	},
-
-	"bool_and": {
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeBool},
-			ReturnType: TypeBool,
-		},
-	},
-
-	"bool_or": {
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeBool},
-			ReturnType: TypeBool,
-		},
-	},
-
-	"count": countImpls(),
-
-	"max": aggregateImpls(TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval),
-	"min": aggregateImpls(TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval),
-
-	"sum": {
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeInt},
-			ReturnType: TypeDecimal,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeFloat},
-			ReturnType: TypeFloat,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeDecimal},
-			ReturnType: TypeDecimal,
-		},
-	},
-
-	"variance": {
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeInt},
-			ReturnType: TypeDecimal,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeDecimal},
-			ReturnType: TypeDecimal,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeFloat},
-			ReturnType: TypeFloat,
-		},
-	},
-
-	"stddev": {
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeInt},
-			ReturnType: TypeDecimal,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeDecimal},
-			ReturnType: TypeDecimal,
-		},
-		Builtin{
-			impure:     true,
-			Types:      ArgTypes{TypeFloat},
-			ReturnType: TypeFloat,
-		},
-	},
-
 	// Math functions
 
 	"abs": {
@@ -1053,38 +950,6 @@ func init() {
 	for k, v := range Builtins {
 		Builtins[strings.ToUpper(k)] = v
 	}
-}
-
-// The aggregate functions all just return their first argument if given a
-// constant argument. The bulk of the aggregate function
-// implementation is performed at a higher level in sql.groupNode.
-func aggregateImpls(types ...Datum) []Builtin {
-	var r []Builtin
-	for _, t := range types {
-		r = append(r, Builtin{
-			// See the comment about aggregate functions in the definitions
-			// of the Builtins array above.
-			impure:     true,
-			Types:      ArgTypes{t},
-			ReturnType: t,
-		})
-	}
-	return r
-}
-
-func countImpls() []Builtin {
-	var r []Builtin
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
-	for _, t := range types {
-		r = append(r, Builtin{
-			// See the comment about aggregate functions in the definitions
-			// of the Builtins array above.
-			impure:     true,
-			Types:      ArgTypes{t},
-			ReturnType: TypeInt,
-		})
-	}
-	return r
 }
 
 var substringImpls = []Builtin{

@@ -296,11 +296,18 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 	// case. Note that the Builtins map contains duplicate entries for
 	// upper/lower case names.
 	candidates, ok := Builtins[name]
+	lowerName := strings.ToLower(name)
 	if !ok {
-		candidates, ok = Builtins[strings.ToLower(name)]
-		if !ok {
-			return nil, fmt.Errorf("unknown function: %s", name)
-		}
+		candidates, ok = Builtins[lowerName]
+	}
+	if !ok {
+		candidates, ok = Aggregates[name]
+	}
+	if !ok {
+		candidates, ok = Aggregates[lowerName]
+	}
+	if !ok {
+		return nil, fmt.Errorf("unknown function: %s", name)
 	}
 
 	overloads := make([]overloadImpl, len(candidates))
