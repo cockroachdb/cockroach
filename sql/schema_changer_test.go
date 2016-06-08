@@ -153,29 +153,16 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Read table descriptor for version.
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	expectedVersion := tableDesc.Version
+
+	desc, err := changer.MaybeIncrementVersion()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-
-	// Check that MaybeIncrementVersion doesn't increment the version
-	// when the up_version bit is not set.
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	expectedVersion := desc.GetTable().Version
-
-	desc, err = changer.MaybeIncrementVersion()
-	if err != nil {
-		t.Fatal(err)
-	}
-	newVersion := desc.GetTable().Version
+	tableDesc = desc.GetTable()
+	newVersion := tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
@@ -184,14 +171,17 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		t.Fatal(err)
 	}
 	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", desc.GetTable())
+		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
 	}
 
 	// Check that MaybeIncrementVersion increments the version
 	// correctly.
 	expectedVersion++
-	desc.GetTable().UpVersion = true
-	if err := kvDB.Put(descKey, desc); err != nil {
+	tableDesc.UpVersion = true
+	if err := kvDB.Put(
+		sqlbase.MakeDescMetadataKey(tableDesc.ID),
+		sqlbase.WrapDescriptor(tableDesc),
+	); err != nil {
 		t.Fatal(err)
 	}
 	isDone, err = changer.IsDone()
@@ -205,15 +195,13 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if err != nil {
 		t.Fatal(err)
 	}
-	savedDesc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, savedDesc); err != nil {
-		t.Fatal(err)
-	}
-	newVersion = desc.GetTable().Version
+	tableDesc = desc.GetTable()
+	savedTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	newVersion = tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version in returned desc; e = %d, v = %d", expectedVersion, newVersion)
 	}
-	newVersion = savedDesc.GetTable().Version
+	newVersion = savedTableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
 	}
@@ -222,7 +210,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		t.Fatal(err)
 	}
 	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", desc.GetTable())
+		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
 	}
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
@@ -230,39 +218,37 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if err := changer.RunStateMachineBeforeBackfill(); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	newVersion = desc.GetTable().Version
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	newVersion = tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
 
 	// Check that RunStateMachineBeforeBackfill functions properly.
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	table := desc.GetTable()
-	expectedVersion = table.Version
+	expectedVersion = tableDesc.Version
 	// Make a copy of the index for use in a mutation.
-	index := protoutil.Clone(&table.Indexes[0]).(*sqlbase.IndexDescriptor)
+	index := protoutil.Clone(&tableDesc.Indexes[0]).(*sqlbase.IndexDescriptor)
 	index.Name = "bar"
-	index.ID = table.NextIndexID
-	table.NextIndexID++
-	changer = csql.NewSchemaChangerForTesting(id, table.NextMutationID, node, *db, leaseMgr)
-	table.Mutations = append(table.Mutations, sqlbase.DescriptorMutation{
+	index.ID = tableDesc.NextIndexID
+	tableDesc.NextIndexID++
+	changer = csql.NewSchemaChangerForTesting(id, tableDesc.NextMutationID, node, *db, leaseMgr)
+	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
 		Direction:   sqlbase.DescriptorMutation_ADD,
 		State:       sqlbase.DescriptorMutation_DELETE_ONLY,
-		MutationID:  table.NextMutationID,
+		MutationID:  tableDesc.NextMutationID,
 	})
-	table.NextMutationID++
+	tableDesc.NextMutationID++
 
 	// Run state machine in both directions.
 	for _, direction := range []sqlbase.DescriptorMutation_Direction{sqlbase.DescriptorMutation_ADD, sqlbase.DescriptorMutation_DROP} {
-		table.Mutations[0].Direction = direction
+		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
-		if err := kvDB.Put(descKey, desc); err != nil {
+		if err := kvDB.Put(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(tableDesc),
+		); err != nil {
 			t.Fatal(err)
 		}
 		// The expected end state.
@@ -275,15 +261,13 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			if err := changer.RunStateMachineBeforeBackfill(); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.GetProto(descKey, desc); err != nil {
-				t.Fatal(err)
-			}
-			table = desc.GetTable()
-			newVersion = table.Version
+
+			tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+			newVersion = tableDesc.Version
 			if newVersion != expectedVersion {
 				t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 			}
-			state := table.Mutations[0].State
+			state := tableDesc.Mutations[0].State
 			if state != expectedState {
 				t.Fatalf("bad state; e = %d, v = %d", expectedState, state)
 			}
@@ -295,7 +279,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		t.Fatal(err)
 	}
 	if isDone {
-		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
+		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
 
 }
@@ -331,22 +315,11 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Read table descriptor for version.
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 	// A long running schema change operation runs through
 	// a state machine that increments the version by 3.
-	expectedVersion := desc.GetTable().Version + 3
+	expectedVersion := tableDesc.Version + 3
 
 	// Run some schema change
 	if _, err := sqlDB.Exec(`
@@ -363,30 +336,25 @@ CREATE INDEX foo ON t.test (v)
 
 	// Wait until index is created.
 	for r := retry.Start(retryOpts); r.Next(); {
-		if err := kvDB.GetProto(descKey, desc); err != nil {
-			t.Fatal(err)
-		}
-		if len(desc.GetTable().Indexes) == 1 {
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.Indexes) == 1 {
 			break
 		}
 	}
 
 	// Ensure that the indexes have been created.
 	mTest := mutationTest{
-		T:       t,
-		kvDB:    kvDB,
-		sqlDB:   sqlDB,
-		descKey: descKey,
-		desc:    desc,
+		T:         t,
+		kvDB:      kvDB,
+		sqlDB:     sqlDB,
+		tableDesc: tableDesc,
 	}
 	indexQuery := `SELECT v FROM t.test@foo`
 	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"b"}, {"d"}})
 
 	// Ensure that the version has been incremented.
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	newVersion := desc.GetTable().Version
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	newVersion := tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
@@ -402,14 +370,12 @@ ALTER INDEX t.test@foo RENAME TO ufo
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Ensure that the version gets incremented.
-		if err := kvDB.GetProto(descKey, desc); err != nil {
-			t.Fatal(err)
-		}
-		name := desc.GetTable().Indexes[0].Name
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		name := tableDesc.Indexes[0].Name
 		if name != "ufo" {
 			t.Fatalf("bad index name %s", name)
 		}
-		newVersion = desc.GetTable().Version
+		newVersion = tableDesc.Version
 		if newVersion == expectedVersion {
 			break
 		}
@@ -426,10 +392,8 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 	// Wait until indexes are created.
 	for r := retry.Start(retryOpts); r.Next(); {
-		if err := kvDB.GetProto(descKey, desc); err != nil {
-			t.Fatal(err)
-		}
-		if len(desc.GetTable().Indexes) == count+1 {
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.Indexes) == count+1 {
 			break
 		}
 	}
@@ -448,14 +412,9 @@ func runSchemaChangeWithOperations(
 	schemaChange string,
 	maxValue int,
 	keyMultiple int,
-	descKey roachpb.Key,
 	backfillNotification chan bool,
 ) {
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	tableDesc := desc.GetTable()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
@@ -588,20 +547,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	// Read table descriptor for version.
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	tableDesc := desc.GetTable()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
 	// number of keys == 4 * number of rows; 3 columns and 1 index entry for
@@ -623,7 +569,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
 		5,
-		descKey,
 		backfillNotification)
 
 	// Drop column.
@@ -635,7 +580,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
 		4,
-		descKey,
 		backfillNotification)
 
 	// Add index.
@@ -647,7 +591,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		5,
-		descKey,
 		backfillNotification)
 
 	// Drop index.
@@ -659,7 +602,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"DROP INDEX t.test@vidx",
 		maxValue,
 		4,
-		descKey,
 		backfillNotification)
 
 	// Verify that the index foo over v is consistent, and that column x has
@@ -892,20 +834,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Read table descriptor.
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, err := kvDB.Get(nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
-		t.Fatal(err)
-	}
-	tableDesc := desc.GetTable()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// There is still a mutation hanging off of it.
 	if e := 1; len(tableDesc.Mutations) != e {
@@ -933,10 +862,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
 	util.SucceedsSoon(t, func() error {
-		if err := kvDB.GetProto(descKey, desc); err != nil {
-			t.Fatal(err)
-		}
-		tableDesc := desc.GetTable()
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
 			return util.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
