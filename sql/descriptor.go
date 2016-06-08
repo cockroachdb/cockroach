@@ -146,6 +146,12 @@ func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlba
 	switch t := descriptor.(type) {
 	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
+		table.MaybeUpgradeFormatVersion()
+		// TODO(dan): Write the upgraded TableDescriptor back to kv. This will break
+		// the ability to use a previous version of cockroach with the on-disk data,
+		// but it's worth it to avoid having to do the upgrade every time the
+		// descriptor is fetched. Our current test for this enforces compatibility
+		// backward and forward, so that'll have to be extended before this is done.
 		if table == nil {
 			return false, util.Errorf("%q is not a table", plainKey.Name())
 		}

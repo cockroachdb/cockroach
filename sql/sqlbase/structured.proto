@@ -64,6 +64,33 @@ message ColumnDescriptor {
   reserved 7;
 }
 
+// ColumnFamilyDescriptor is set of columns stored together in one kv entry.
+message ColumnFamilyDescriptor {
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "FamilyID"];
+
+  // A list of column names of which the family is comprised. This list
+  // parallels the column_ids list. If duplicating the storage of the column
+  // names here proves to be prohibitive, we could clear this field before
+  // saving and reconstruct it after loading.
+  repeated string column_names = 3;
+  // A list of column ids of which the family is comprised. This list parallels
+  // the column_names list.
+  repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+
+  // If nonzero, the column involved in the single column optimization.
+  //
+  // Families store colums in a ValueType_TUPLE as repeated <colid><data>
+  // entries. As a space optimization and for backward compatibility, a single
+  // column is written without the columnid prefix. Because more columns could
+  // be added, it would be ambiguous which column was stored when read back in,
+  // so this field supplies it.
+  optional uint32 default_column_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "DefaultColumnID", (gogoproto.casttype) = "ColumnID"];
+}
+
 message IndexDescriptor {
   // The direction of a column in the index.
   enum Direction {
@@ -233,6 +260,10 @@ message TableDescriptor {
   // next_column_id is used to ensure that deleted column ids are not reused.
   optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
+  repeated ColumnFamilyDescriptor families = 22 [(gogoproto.nullable) = false];
+  // next_family_id is used to ensure that deleted family ids are not reused.
+  optional uint32 next_family_id = 23 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextFamilyID", (gogoproto.casttype) = "FamilyID"];
   optional IndexDescriptor primary_index = 10 [(gogoproto.nullable) = false];
   // indexes are all the secondary indexes.
   repeated IndexDescriptor indexes = 11 [(gogoproto.nullable) = false];

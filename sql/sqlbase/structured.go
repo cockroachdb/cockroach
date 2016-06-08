@@ -17,6 +17,7 @@
 package sqlbase
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-// ID, ColumnID, and IndexID are all uint32, but are each given a
+// ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
 // type alias to prevent accidental use of one of the types where
 // another is expected.
 
@@ -36,6 +37,9 @@ type ID uint32
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID uint32
+
+// FamilyID is a custom type for ColumnFamilyDescriptor IDs.
+type FamilyID uint32
 
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
@@ -53,6 +57,9 @@ const (
 	// BaseFormatVersion corresponds to the encoding described in
 	// https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
 	BaseFormatVersion
+	// FamilyFormatVersion corresponds to the encoding described in
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_groups.md
+	FamilyFormatVersion
 )
 
 // MutationID is custom type for TableDescriptor mutations.
@@ -243,11 +250,81 @@ func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 	return indexes
 }
 
-// AllocateIDs allocates column and index ids for any column or index which has
-// an ID of 0.
+func generatedFamilyName(columnNames []string) string {
+	var buf bytes.Buffer
+	buf.WriteString(`fam`)
+	for _, n := range columnNames {
+		buf.WriteString(`_`)
+		buf.WriteString(n)
+	}
+	return buf.String()
+}
+
+// MaybeUpgradeFormatVersion transforms the TableDescriptor to the latest
+// FormatVersion (if it's not already there) and returns true if any changes
+// were made.
+func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
+	if desc.FormatVersion == FamilyFormatVersion {
+		return false
+	}
+
+	primaryIndexColumnIds := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+		primaryIndexColumnIds[colID] = struct{}{}
+	}
+
+	desc.Families = []ColumnFamilyDescriptor{
+		{ID: 0, Name: "primary"},
+	}
+	desc.NextFamilyID = desc.Families[0].ID + 1
+	addFamilyForCol := func(col ColumnDescriptor) {
+		if _, ok := primaryIndexColumnIds[col.ID]; ok {
+			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
+			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
+			return
+		}
+		colNames := []string{col.Name}
+		family := ColumnFamilyDescriptor{
+			ID:              FamilyID(col.ID),
+			Name:            generatedFamilyName(colNames),
+			ColumnNames:     colNames,
+			ColumnIDs:       []ColumnID{col.ID},
+			DefaultColumnID: col.ID,
+		}
+		desc.Families = append(desc.Families, family)
+		if family.ID >= desc.NextFamilyID {
+			desc.NextFamilyID = family.ID + 1
+		}
+	}
+
+	for _, c := range desc.Columns {
+		addFamilyForCol(c)
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			addFamilyForCol(*c)
+		}
+	}
+
+	// TODO(dan): Set desc.FormatVersion = FamilyFormatVersion once the tests are
+	// updated to handle forward-only changes.
+
+	return true
+}
+
+// AllocateIDs allocates column, family, and index ids for any column, family,
+// or index which has an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.NextColumnID == 0 {
 		desc.NextColumnID = 1
+	}
+	if desc.NextFamilyID == 0 {
+		if len(desc.Families) == 0 {
+			desc.Families = []ColumnFamilyDescriptor{
+				{ID: 0, Name: "primary"},
+			}
+		}
+		desc.NextFamilyID = 1
 	}
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
@@ -351,6 +428,85 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		}
 	}
 
+	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+		primaryIndexColIDs[colID] = struct{}{}
+	}
+
+	columnsInFamilies := make(map[ColumnID]struct{}, len(desc.Columns))
+	for i, family := range desc.Families {
+		if family.ID == 0 && i != 0 {
+			family.ID = desc.NextFamilyID
+			desc.NextFamilyID++
+		}
+
+		for j, colName := range family.ColumnNames {
+			if len(family.ColumnIDs) <= j {
+				family.ColumnIDs = append(family.ColumnIDs, 0)
+			}
+			if family.ColumnIDs[j] == 0 {
+				family.ColumnIDs[j] = columnNames[NormalizeName(colName)]
+			}
+			columnsInFamilies[family.ColumnIDs[j]] = struct{}{}
+		}
+
+		desc.Families[i] = family
+	}
+
+	ensureColumnInFamily := func(col *ColumnDescriptor) {
+		if _, ok := columnsInFamilies[col.ID]; ok {
+			return
+		}
+		if _, ok := primaryIndexColIDs[col.ID]; ok {
+			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
+			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
+			return
+		}
+		// TODO(dan): This assigns families such that the encoding is exactly the
+		// same as before column families. A followup commit will implement the
+		// heuristics described in the families rfc.
+		familyID := FamilyID(col.ID)
+		desc.Families = append(desc.Families, ColumnFamilyDescriptor{
+			ID:          familyID,
+			ColumnNames: []string{col.Name},
+			ColumnIDs:   []ColumnID{col.ID},
+		})
+		if familyID >= desc.NextFamilyID {
+			desc.NextFamilyID = familyID + 1
+		}
+	}
+	for i := range desc.Columns {
+		ensureColumnInFamily(&desc.Columns[i])
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			ensureColumnInFamily(c)
+		}
+	}
+
+	for i, family := range desc.Families {
+		if len(family.Name) == 0 {
+			family.Name = generatedFamilyName(family.ColumnNames)
+		}
+
+		if family.DefaultColumnID == 0 {
+			defaultColumnID := ColumnID(0)
+			for _, colID := range family.ColumnIDs {
+				if _, ok := primaryIndexColIDs[colID]; !ok {
+					if defaultColumnID == 0 {
+						defaultColumnID = colID
+					} else {
+						defaultColumnID = ColumnID(0)
+						break
+					}
+				}
+			}
+			family.DefaultColumnID = defaultColumnID
+		}
+
+		desc.Families[i] = family
+	}
+
 	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
 	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
 	// before AllocateIDs.
@@ -423,10 +579,11 @@ func (desc *TableDescriptor) Validate() error {
 		unSetEnums := m.State == DescriptorMutation_UNKNOWN || m.Direction == DescriptorMutation_NONE
 		switch desc := m.Descriptor_.(type) {
 		case *DescriptorMutation_Column:
+			col := desc.Column
 			if unSetEnums {
-				col := desc.Column
 				return util.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
 			}
+			columnIDs[col.ID] = col.Name
 		case *DescriptorMutation_Index:
 			if unSetEnums {
 				idx := desc.Index
@@ -434,6 +591,67 @@ func (desc *TableDescriptor) Validate() error {
 			}
 		default:
 			return util.Errorf("mutation in state %s, direction %s, and no column/index descriptor", m.State, m.Direction)
+		}
+	}
+
+	if len(desc.Families) < 1 {
+		return fmt.Errorf("at least 1 column family must be specified")
+	}
+	if desc.Families[0].ID != FamilyID(0) {
+		return fmt.Errorf("the 0th family must have ID 0")
+	}
+
+	familyNames := map[string]struct{}{}
+	familyIDs := map[FamilyID]string{}
+	colIDToFamilyID := map[ColumnID]FamilyID{}
+	for _, family := range desc.Families {
+		if err := validateName(family.Name, "family"); err != nil {
+			return err
+		}
+
+		normName := NormalizeName(family.Name)
+		if _, ok := familyNames[normName]; ok {
+			return fmt.Errorf("duplicate family name: \"%s\"", family.Name)
+		}
+		familyNames[normName] = struct{}{}
+
+		if other, ok := familyIDs[family.ID]; ok {
+			return fmt.Errorf("family \"%s\" duplicate ID of family \"%s\": %d",
+				family.Name, other, family.ID)
+		}
+		familyIDs[family.ID] = family.Name
+
+		if family.ID >= desc.NextFamilyID {
+			return fmt.Errorf("family \"%s\" invalid family ID (%d) > next family ID (%d)",
+				family.Name, family.ID, desc.NextFamilyID)
+		}
+
+		if len(family.ColumnIDs) != len(family.ColumnNames) {
+			return fmt.Errorf("mismatched column ID size (%d) and name size (%d)",
+				len(family.ColumnIDs), len(family.ColumnNames))
+		}
+
+		for i, colID := range family.ColumnIDs {
+			name, ok := columnIDs[colID]
+			if !ok {
+				return fmt.Errorf("family \"%s\" contains unknown column \"%d\"", family.Name, colID)
+			}
+			if NormalizeName(name) != NormalizeName(family.ColumnNames[i]) {
+				return fmt.Errorf("family \"%s\" column %d should have name %q, but found name %q",
+					family.Name, colID, name, family.ColumnNames[i])
+			}
+		}
+
+		for _, colID := range family.ColumnIDs {
+			if famID, ok := colIDToFamilyID[colID]; ok {
+				return fmt.Errorf("column %d is in both family %d and %d", colID, famID, family.ID)
+			}
+			colIDToFamilyID[colID] = family.ID
+		}
+	}
+	for colID := range columnIDs {
+		if _, ok := colIDToFamilyID[colID]; !ok {
+			return fmt.Errorf("column %d is not in any column family", colID)
 		}
 	}
 
@@ -495,6 +713,13 @@ func (desc *TableDescriptor) Validate() error {
 		}
 	}
 
+	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+		famID, ok := colIDToFamilyID[colID]
+		if !ok || famID != FamilyID(0) {
+			return fmt.Errorf("primary key column %d is not in column family 0", colID)
+		}
+	}
+
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }
@@ -521,6 +746,48 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 		desc.Indexes = append(desc.Indexes, idx)
 	}
 	return nil
+}
+
+// RemoveColumnFromFamily removes a colID from the family it's assigned to.
+func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
+	for i, family := range desc.Families {
+		for j, c := range family.ColumnIDs {
+			if c == colID {
+				desc.Families[i].ColumnIDs = append(
+					desc.Families[i].ColumnIDs[:j], desc.Families[i].ColumnIDs[j+1:]...)
+				desc.Families[i].ColumnNames = append(
+					desc.Families[i].ColumnNames[:j], desc.Families[i].ColumnNames[j+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// RenameColumn updates all references to a column name in indexes and families.
+func (desc *TableDescriptor) RenameColumn(colID ColumnID, newColName string) {
+	for i := range desc.Families {
+		for j := range desc.Families[i].ColumnIDs {
+			if desc.Families[i].ColumnIDs[j] == colID {
+				desc.Families[i].ColumnNames[j] = newColName
+			}
+		}
+	}
+
+	renameColumnInIndex := func(idx *IndexDescriptor) {
+		for i, id := range idx.ColumnIDs {
+			if id == colID {
+				idx.ColumnNames[i] = newColName
+			}
+		}
+	}
+	for i := range desc.Indexes {
+		renameColumnInIndex(&desc.Indexes[i])
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil {
+			renameColumnInIndex(idx)
+		}
+	}
 }
 
 // FindColumnByName finds the column with the specified name. It returns
@@ -636,9 +903,12 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 		}
 
 	case DescriptorMutation_DROP:
-		// Nothing to be done. The column/index was already
-		// removed from the set of column/index descriptors
-		// at mutation creation time.
+		switch t := m.Descriptor_.(type) {
+		case *DescriptorMutation_Column:
+			desc.RemoveColumnFromFamily(t.Column.ID)
+		}
+		// Nothing else to be done. The column/index was already removed from the
+		// set of column/index descriptors at mutation creation time.
 	}
 }
 
