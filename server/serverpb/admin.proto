@@ -282,10 +282,12 @@ message ClusterFreezeRequest {
   bool freeze = 1;
 }
 
-// ClusterFreezeResponse is the response to a ClusterFreezeRequest. It contains
-// the number of Ranges whose freeze state changed as a result of the request.
+// ClusterFreezeResponse is the streaming response to a ClusterFreezeRequest.
+// It contains a message intended for human consumption, and, for some updates,
+// the number of ranges whose state changed as a result of the request.
 message ClusterFreezeResponse {
   int64 ranges_affected = 1;
+  string message = 2;
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -388,7 +390,7 @@ service Admin {
   }
 
   // ClusterFreeze freezes/unfreezes the cluster.
-  rpc ClusterFreeze(ClusterFreezeRequest) returns (ClusterFreezeResponse) {
+  rpc ClusterFreeze(ClusterFreezeRequest) returns (stream ClusterFreezeResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/cluster/freeze"
       body: "*"

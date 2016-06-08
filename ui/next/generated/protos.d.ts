@@ -1405,6 +1405,15 @@ getRangesAffected?() : Long;
 
 
 
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
 }
 	
 	export interface ClusterFreezeResponseMessage extends ClusterFreezeResponse {
