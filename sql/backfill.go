@@ -268,7 +268,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		updateCols := append(added, dropped...)
 		// TODO(dan): Tighten up the bound on the requestedCols parameter to
 		// makeRowUpdater.
-		ru, err := makeRowUpdater(txn, tableDesc, updateCols, tableDesc.Columns)
+		ru, err := makeRowUpdater(
+			txn, tableDesc, updateCols, tableDesc.Columns, rowUpdaterOnlyColumns,
+		)
 		if err != nil {
 			return err
 		}
