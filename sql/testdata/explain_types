@@ -228,3 +228,27 @@ EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 1   render/filter   render 0   (x)[int]
 1   render/filter   render 1   (y)[int]
 2   scan            result     (x int, y int, rowid int)
+
+query ITTT
+EXPLAIN(TYPES) SELECT $1 + 2 AS a
+----
+0      select          result     (a int)
+1      render/filter   result     (a int)
+1      render/filter   render 0   (($1)[int] + (2)[int])[int]
+2      empty           result     ()
+
+query ITTT
+EXPLAIN(TYPES) SELECT ABS(2-3) AS a
+----
+0      select          result     (a int)
+1      render/filter   result     (a int)
+1      render/filter   render 0   (1)[int]
+2      empty           result     ()
+
+query ITTT
+EXPLAIN(TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
+----
+0      select          result     (a int)
+1      render/filter   result     (a int)
+1      render/filter   render 0   (ABS((-1)[int]))[int]
+2      empty           result     ()
