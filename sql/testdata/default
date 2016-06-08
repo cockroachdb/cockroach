@@ -1,10 +1,13 @@
-statement error incompatible column type and default expression: int vs bool
+statement error incompatible type for DEFAULT expression: int vs bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 
-statement error default expression .* may not contain placeholders
+statement error DEFAULT expression .* may not contain variable sub-expressions
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT $1)
 
-statement error qualified name "b" not found
+statement error DEFAULT expression .* may not contain variable sub-expressions
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT (SELECT 1))
+
+statement error DEFAULT expression .* may not contain variable sub-expressions
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
 
 statement ok

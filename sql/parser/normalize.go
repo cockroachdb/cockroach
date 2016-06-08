@@ -430,9 +430,6 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		}
 
 		switch t := expr.(type) {
-		case *Subquery:
-			v.isConst = false
-			return false, expr
 		case *FuncExpr:
 			if t.fn.impure {
 				v.isConst = false

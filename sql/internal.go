@@ -41,9 +41,7 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 func (ie InternalExecutor) ExecuteStatementInTransaction(
 	txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
-	p := makePlanner()
-	p.setTxn(txn)
-	p.session.User = security.RootUser
+	p := makeInternalPlanner(txn, security.RootUser)
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, qargs...)
 }
@@ -51,9 +49,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 // GetTableSpan gets the key span for a SQL table, including any indices.
 func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, tableName string) (roachpb.Span, error) {
 	// Lookup the table ID.
-	p := makePlanner()
-	p.setTxn(txn)
-	p.session.User = user
+	p := makeInternalPlanner(txn, user)
 	p.leaseMgr = ie.LeaseManager
 	qname := &parser.QualifiedName{Base: parser.Name(tableName)}
 	if err := qname.NormalizeTableName(dbName); err != nil {
