@@ -418,7 +418,7 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
 
 	// Execute the query.
-	q := &sqlQuery{}
+	q := makeSQLQuery()
 	q.Append("SELECT timestamp, eventType, targetID, reportingID, info, uniqueID ")
 	q.Append("FROM system.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
@@ -433,7 +433,7 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, q.String(), q.Params())
+	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, q.String(), q.QueryArguments())
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -477,7 +477,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 	}
 
 	// Query database.
-	var query sqlQuery
+	query := makeSQLQuery()
 	query.Append("SELECT key, value, lastUpdated FROM system.ui WHERE key IN (")
 	for i, key := range keys {
 		if i != 0 {
@@ -490,7 +490,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
 	r := s.server.sqlExecutor.ExecuteStatements(context.Background(),
-		session, query.String(), query.Params())
+		session, query.String(), query.QueryArguments())
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -546,11 +546,10 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 		// INSERT or UPDATE as appropriate.
 		if alreadyExists {
 			query := "UPDATE system.ui SET value = $1, lastUpdated = NOW() WHERE key = $2; COMMIT;"
-			params := []parser.Datum{
-				parser.NewDString(string(val)), // $1
-				parser.NewDString(key),         // $2
-			}
-			r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, params)
+			qargs := parser.NewPlaceholderInfo()
+			qargs.SetValue(`1`, parser.NewDString(string(val)))
+			qargs.SetValue(`2`, parser.NewDString(key))
+			r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, qargs)
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 				return nil, s.serverError(err)
 			}
@@ -559,11 +558,10 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 			}
 		} else {
 			query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW()); COMMIT;"
-			params := []parser.Datum{
-				parser.NewDString(key),               // $1
-				parser.NewDBytes(parser.DBytes(val)), // $2
-			}
-			r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, params)
+			qargs := parser.NewPlaceholderInfo()
+			qargs.SetValue(`1`, parser.NewDString(key))
+			qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
+			r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, qargs)
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 				return nil, s.serverError(err)
 			}
@@ -846,10 +844,16 @@ func (s *adminServer) ClusterFreeze(
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
 type sqlQuery struct {
-	buf    bytes.Buffer
-	pidx   int
-	params []parser.Datum
-	errs   []error
+	buf   bytes.Buffer
+	pidx  int
+	qargs parser.PlaceholderInfo
+	errs  []error
+}
+
+func makeSQLQuery() *sqlQuery {
+	res := &sqlQuery{}
+	res.qargs.Clear()
+	return res
 }
 
 // String returns the full query.
@@ -866,10 +870,10 @@ func (q *sqlQuery) Errors() []error {
 	return q.errs
 }
 
-// Params returns a slice containing all parameters that have been passed into
-// this query through Append.
-func (q *sqlQuery) Params() []parser.Datum {
-	return q.params
+// QueryArguments returns a filled map of placeholders containing all arguments
+// provided to this query through Append.
+func (q *sqlQuery) QueryArguments() *parser.PlaceholderInfo {
+	return &q.qargs
 }
 
 // Append appends the provided string and any number of query parameters.
@@ -891,6 +895,7 @@ func (q *sqlQuery) Params() []parser.Datum {
 // query construction code exceedingly tedious.
 func (q *sqlQuery) Append(s string, params ...parser.Datum) {
 	var placeholders int
+	firstpidx := q.pidx
 	for _, r := range s {
 		q.buf.WriteRune(r)
 		if r == '$' {
@@ -904,7 +909,9 @@ func (q *sqlQuery) Append(s string, params ...parser.Datum) {
 		q.errs = append(q.errs,
 			util.Errorf("# of placeholders %d != # of params %d", placeholders, len(params)))
 	}
-	q.params = append(q.params, params...)
+	for i, param := range params {
+		q.qargs.SetValue(fmt.Sprint(firstpidx+i+1), param)
+	}
 }
 
 // resultScanner scans columns from sql.ResultRow instances into variables,

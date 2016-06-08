@@ -202,9 +202,10 @@ func TestGolangQueryArgs(t *testing.T) {
 		{roachpb.RKey("key"), reflect.TypeOf(parser.TypeBytes)},
 	}
 
+	pinfo := &parser.PlaceholderInfo{}
 	for i, tcase := range testCases {
-		qargs := golangQueryArguments([]interface{}{tcase.value})
-		output, valid := qargs.Arg("1")
+		golangFillQueryArguments(pinfo, []interface{}{tcase.value})
+		output, valid := pinfo.Type("1")
 		if !valid {
 			t.Errorf("case %d failed: argument was invalid", i)
 			continue

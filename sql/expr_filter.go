@@ -72,10 +72,6 @@ func (v *varConvertVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pa
 	}
 
 	if varExpr, ok := expr.(parser.VariableExpr); ok {
-		// Ignore Placeholders
-		if _, isPlaceholder := expr.(parser.Placeholder); isPlaceholder {
-			return false, expr
-		}
 		// Ignore sub-queries
 		if _, isSubquery := expr.(*subquery); isSubquery {
 			return false, expr
