@@ -256,6 +256,28 @@ func (s *scanner) scan(lval *sqlSymType) {
 		s.scanIdent(lval, ch)
 		return
 
+	case 'x', 'X':
+		// Hex literal?
+		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+			// [xX]'[a-f0-9]'
+			start := s.pos - 1
+			s.pos++
+			if s.scanString(lval, t, true) {
+				lval.id = ICONST
+				intConst := constant.MakeFromLiteral("0x"+lval.str, token.INT, 0)
+				if intConst.Kind() == constant.Unknown {
+					lval.id = ERROR
+					lval.str = "invalid hexadecimal literal"
+					return
+				}
+				lval.str = s.in[start:s.pos]
+				lval.union.val = &NumVal{Value: intConst, OrigString: lval.str}
+			}
+			return
+		}
+		s.scanIdent(lval, ch)
+		return
+
 	case '.':
 		switch t := s.peek(); {
 		case t == '.': // ..

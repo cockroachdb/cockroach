@@ -230,6 +230,9 @@ func TestParse(t *testing.T) {
 		{`SELECT (ROW(1, 2, 3))`},
 		{`SELECT (ROW())`},
 		{`SELECT (TABLE a)`},
+		{`SELECT 0x1`},
+		{`SELECT x'a'`},
+		{`SELECT X'a'`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
