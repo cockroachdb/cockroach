@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
-const rowChannelBuf = 16
+const rowChannelBufSize = 16
 
 // rowReceiver is any component of a flow that receives rows from another
 // component. It can be an input synchronizer, a router, or a mailbox.
@@ -71,10 +71,14 @@ type RowChannel struct {
 
 var _ rowReceiver = &RowChannel{}
 
-func (rc *RowChannel) init() {
-	rc.dataChan = make(chan StreamMsg, rowChannelBuf)
+func (rc *RowChannel) initWithBufSize(chanBufSize int) {
+	rc.dataChan = make(chan StreamMsg, chanBufSize)
 	rc.C = rc.dataChan
 	atomic.StoreUint32(&rc.noMoreRows, 0)
+}
+
+func (rc *RowChannel) init() {
+	rc.initWithBufSize(rowChannelBufSize)
 }
 
 // PushRow is part of the rowReceiver interface.

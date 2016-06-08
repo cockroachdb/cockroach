@@ -17,9 +17,11 @@
 package distsql
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -70,4 +72,62 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 	}
 
 	return typedExpr, nil
+}
+
+// exprHelper implements the common logic around evaluating an expression that
+// depends on a set of values.
+type exprHelper struct {
+	expr parser.TypedExpr
+	// vars is used to generate IndexedVars that are "backed" by
+	// the values in `row`.
+	vars parser.IndexedVarHelper
+
+	evalCtx *parser.EvalContext
+
+	types      []sqlbase.ColumnType_Kind
+	row        sqlbase.EncDatumRow
+	datumAlloc sqlbase.DatumAlloc
+}
+
+// exprHelper implements parser.IndexedVarContainer.
+var _ parser.IndexedVarContainer = &exprHelper{}
+
+// IndexedVarReturnType is part of the parser.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarReturnType(idx int) parser.Datum {
+	return eh.types[idx].ToDatumType()
+}
+
+// IndexedVarEval is part of the parser.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	err := eh.row[idx].Decode(&eh.datumAlloc)
+	if err != nil {
+		return nil, err
+	}
+	return eh.row[idx].Datum.Eval(ctx)
+}
+
+// IndexedVarString is part of the parser.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarString(idx int) string {
+	return fmt.Sprintf("$%d", idx)
+}
+
+func (eh *exprHelper) init(
+	expr Expression, types []sqlbase.ColumnType_Kind, evalCtx *parser.EvalContext,
+) error {
+	if expr.Expr == "" {
+		return nil
+	}
+	eh.types = types
+	eh.evalCtx = evalCtx
+	eh.vars = parser.MakeIndexedVarHelper(eh, len(types))
+	var err error
+	eh.expr, err = processExpression(expr, &eh.vars)
+	return err
+}
+
+// evalFilter is used for filter expressions; it evaluates the expression and
+// returns whether the filter passes.
+func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
+	eh.row = row
+	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
 }
