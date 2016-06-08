@@ -434,9 +434,9 @@ func TestBatchError(t *testing.T) {
 	}
 }
 
-func TestMakeColumnKey(t *testing.T) {
-	const maxColID = math.MaxUint32
-	key := MakeColumnKey(nil, maxColID)
+func TestMakeFamilyKey(t *testing.T) {
+	const maxFamID = math.MaxUint32
+	key := MakeFamilyKey(nil, maxFamID)
 	if expected, n := 6, len(key); expected != n {
 		t.Errorf("expected %d bytes, but got %d: [% x]", expected, n, []byte(key))
 	}
