@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -113,9 +114,10 @@ type rowInserter struct {
 	fks                   fkInsertHelper
 
 	// For allocation avoidance.
-	marshalled    []roachpb.Value
-	key           roachpb.Key
-	sentinelValue roachpb.Value
+	marshalled []roachpb.Value
+	key        roachpb.Key
+	valueBuf   []byte
+	value      roachpb.Value
 }
 
 // makeRowInserter creates a rowInserter for the given table.
@@ -208,42 +210,86 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 	if err != nil {
 		return err
 	}
-	// Write the row sentinel. We want to write the sentinel first in case
-	// we are trying to insert a duplicate primary key: if we write the
-	// secondary indexes first, we may get an error that looks like a
-	// uniqueness violation on a non-unique index.
-	ri.key = keys.MakeNonColumnKey(primaryIndexKey)
-	// Each sentinel value needs a distinct RawBytes field as the computed
-	// checksum includes the key the value is associated with.
-	ri.sentinelValue.SetBytes([]byte{})
-	putFn(b, &ri.key, &ri.sentinelValue, &ri.sentinelValue)
-	ri.key = nil
+
+	// Add the new values.
+	// TODO(dan): This has gotten very similiar to the loop in updateRow, see if
+	// they can be DRY'd. Ideally, this would also work for
+	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
+	for _, family := range ri.helper.tableDesc.Families {
+		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
+			// Storage optimization to store DefaultColumnID directly as a value. Also
+			// backwards compatible with the original BaseFormatVersion.
+			if family.ID == 0 {
+				// TODO(dan): Delete this once column families can be created that are
+				// not backward compatible with the old format.
+				return util.Errorf("family is not backward compatible: #v", family)
+			}
+
+			idx, ok := ri.insertColIDtoRowIndex[family.DefaultColumnID]
+			if !ok {
+				continue
+			}
+
+			if ri.marshalled[idx].RawBytes != nil {
+				// We only output non-NULL values. Non-existent column keys are
+				// considered NULL during scanning and the row sentinel ensures we know
+				// the row exists.
+
+				ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+				putFn(b, &ri.key, &ri.marshalled[idx], values[idx])
+				ri.key = nil
+			}
+
+			continue
+		}
+
+		ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+		ri.valueBuf = ri.valueBuf[:0]
+
+		for _, colID := range family.ColumnIDs {
+			if ri.helper.columnInPK(colID) {
+				if family.ID != 0 {
+					return util.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
+				}
+				// Skip primary key columns as their values are encoded in the key of
+				// each family. Family 0 is guarenteed to exist and acts as a sentinal.
+				continue
+			}
+
+			idx, ok := ri.insertColIDtoRowIndex[colID]
+			if !ok {
+				// Column not being inserted.
+				continue
+			}
+			col := ri.insertCols[idx]
+
+			if values[idx].Compare(parser.DNull) == 0 {
+				continue
+			}
+
+			ri.valueBuf = encoding.EncodeNonsortingVarint(ri.valueBuf, int64(col.ID))
+			ri.valueBuf, err = sqlbase.EncodeTableValue(ri.valueBuf, values[idx])
+			if err != nil {
+				return err
+			}
+		}
+
+		if family.ID == 0 || len(ri.valueBuf) > 0 {
+			// TODO(dan): Delete this check once column families can be created that
+			// are not backward compatible with the old format.
+			if family.ID == 0 && len(ri.valueBuf) > 0 {
+				return util.Errorf("family is not backward compatible: #v", family)
+			}
+			ri.value.SetTuple(ri.valueBuf)
+			putFn(b, &ri.key, &ri.value, &ri.value)
+		}
+
+		ri.key = nil
+	}
 
 	for i := range secondaryIndexEntries {
 		e := &secondaryIndexEntries[i]
 		putFn(b, &e.Key, &e.Value, &e.Value)
-	}
-
-	// Write the row columns.
-	for i, val := range values {
-		col := ri.insertCols[i]
-
-		if ri.helper.columnInPK(col.ID) {
-			// Skip primary key columns as their values are encoded in the row
-			// sentinel key which is guaranteed to exist for as long as the row
-			// exists.
-			continue
-		}
-
-		if ri.marshalled[i].RawBytes != nil {
-			// We only output non-NULL values. Non-existent column keys are
-			// considered NULL during scanning and the row sentinel ensures we know
-			// the row exists.
-
-			ri.key = keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
-			putFn(b, &ri.key, &ri.marshalled[i], val)
-			ri.key = nil
-		}
 	}
 
 	return nil
@@ -251,12 +297,13 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 
 // rowUpdater abstracts the key/value operations for updating table rows.
 type rowUpdater struct {
-	helper               rowHelper
-	fetchCols            []sqlbase.ColumnDescriptor
-	fetchColIDtoRowIndex map[sqlbase.ColumnID]int
-	updateCols           []sqlbase.ColumnDescriptor
-	deleteOnlyIndex      map[int]struct{}
-	primaryKeyColChange  bool
+	helper                rowHelper
+	fetchCols             []sqlbase.ColumnDescriptor
+	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
+	updateCols            []sqlbase.ColumnDescriptor
+	updateColIDtoRowIndex map[sqlbase.ColumnID]int
+	deleteOnlyIndex       map[int]struct{}
+	primaryKeyColChange   bool
 
 	rd rowDeleter
 	ri rowInserter
@@ -268,6 +315,8 @@ type rowUpdater struct {
 	newValues       []parser.Datum
 	key             roachpb.Key
 	indexEntriesBuf []sqlbase.IndexEntry
+	valueBuf        []byte
+	value           roachpb.Value
 }
 
 type rowUpdaterType int
@@ -353,12 +402,13 @@ func makeRowUpdater(
 	}
 
 	ru := rowUpdater{
-		helper:              rowHelper{tableDesc: tableDesc, indexes: indexes},
-		updateCols:          updateCols,
-		deleteOnlyIndex:     deleteOnlyIndex,
-		primaryKeyColChange: primaryKeyColChange,
-		marshalled:          make([]roachpb.Value, len(updateCols)),
-		newValues:           make([]parser.Datum, len(tableDesc.Columns)+len(tableDesc.Mutations)),
+		helper:                rowHelper{tableDesc: tableDesc, indexes: indexes},
+		updateCols:            updateCols,
+		updateColIDtoRowIndex: updateColIDtoRowIndex,
+		deleteOnlyIndex:       deleteOnlyIndex,
+		primaryKeyColChange:   primaryKeyColChange,
+		marshalled:            make([]roachpb.Value, len(updateCols)),
+		newValues:             make([]parser.Datum, len(tableDesc.Columns)+len(tableDesc.Mutations)),
 	}
 
 	if primaryKeyColChange {
@@ -473,35 +523,18 @@ func (ru *rowUpdater) updateRow(
 		}
 	}
 
-	// Update secondary indexes.
-	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
-		secondaryIndexEntry := secondaryIndexEntries[i]
-		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
-		if secondaryKeyChanged {
-			if err := ru.fks.checkIdx(ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
-				return nil, err
-			}
-
-			if !rowPrimaryKeyChanged {
-				if log.V(2) {
-					log.Infof("Del %s", secondaryIndexEntry.Key)
-				}
-				b.Del(secondaryIndexEntry.Key)
-				// Do not update Indexes in the DELETE_ONLY state.
-				if _, ok := ru.deleteOnlyIndex[i]; !ok {
-					if log.V(2) {
-						log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value)
-					}
-					b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
-				}
-			}
-		}
-	}
-
 	if rowPrimaryKeyChanged {
 		if err := ru.fks.checkIdx(ru.helper.tableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
+		for i := range newSecondaryIndexEntries {
+			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
+				if err := ru.fks.checkIdx(ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		if err := ru.rd.deleteRow(b, oldValues); err != nil {
 			return nil, err
 		}
@@ -512,36 +545,109 @@ func (ru *rowUpdater) updateRow(
 	}
 
 	// Add the new values.
-	for i, val := range updateValues {
-		col := ru.updateCols[i]
+	// TODO(dan): This has gotten very similiar to the loop in insertRow, see if
+	// they can be DRY'd. Ideally, this would also work for
+	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
+	for _, family := range ru.helper.tableDesc.Families {
+		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
+			// Storage optimization to store DefaultColumnID directly as a value. Also
+			// backwards compatible with the original BaseFormatVersion.
+			if family.ID == 0 {
+				// TODO(dan): Delete this once column families can be created that are
+				// not backward compatible with the old format.
+				return nil, util.Errorf("family is not backward compatible: #v", family)
+			}
 
-		if ru.helper.columnInPK(col.ID) {
-			// Skip primary key columns as their values are encoded in the row
-			// sentinel key which is guaranteed to exist for as long as the row
-			// exists.
+			idx, ok := ru.updateColIDtoRowIndex[family.DefaultColumnID]
+			if !ok {
+				continue
+			}
+
+			ru.key = keys.MakeFamilyKey(newPrimaryIndexKey, uint32(family.ID))
+			if log.V(2) {
+				log.Infof("Put %s -> %v", ru.key, updateValues[idx])
+			}
+			b.Put(&ru.key, &ru.marshalled[idx])
+			ru.key = nil
+
 			continue
 		}
 
-		ru.key = keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
-		if ru.marshalled[i].RawBytes != nil {
-			// We only output non-NULL values. Non-existent column keys are
-			// considered NULL during scanning and the row sentinel ensures we know
-			// the row exists.
-			if log.V(2) {
-				log.Infof("Put %s -> %v", ru.key, val)
+		ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+		ru.valueBuf = ru.valueBuf[:0]
+
+		for _, colID := range family.ColumnIDs {
+			if ru.helper.columnInPK(colID) {
+				if family.ID != 0 {
+					return nil, util.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
+				}
+				// Skip primary key columns as their values are encoded in the key of
+				// each family. Family 0 is guarenteed to exist and acts as a sentinal.
+				continue
 			}
 
-			b.Put(&ru.key, &ru.marshalled[i])
-		} else {
-			// The column might have already existed but is being set to NULL, so
-			// delete it.
+			idx, ok := ru.fetchColIDtoRowIndex[colID]
+			if !ok {
+				return nil, util.Errorf("column %d was expected to be fetched, but wasn't", colID)
+			}
+			col := ru.fetchCols[idx]
+
+			if ru.newValues[idx].Compare(parser.DNull) == 0 {
+				continue
+			}
+
+			ru.valueBuf = encoding.EncodeNonsortingVarint(ru.valueBuf, int64(col.ID))
+			ru.valueBuf, err = sqlbase.EncodeTableValue(ru.valueBuf, ru.newValues[idx])
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if family.ID != 0 && len(ru.valueBuf) == 0 {
+			// The family might have already existed but every column in it is being
+			// set to NULL, so delete it.
 			if log.V(2) {
 				log.Infof("Del %s", ru.key)
 			}
 
 			b.Del(&ru.key)
+		} else {
+			// TODO(dan): Delete this check once column families can be created that
+			// are not backward compatible with the old format.
+			if family.ID == 0 && len(ru.valueBuf) > 0 {
+				return nil, util.Errorf("family is not backward compatible: #v", family)
+			}
+			ru.value.SetTuple(ru.valueBuf)
+			if log.V(2) {
+				log.Infof("Put %s -> %v", ru.key, &ru.value)
+			}
+			b.Put(&ru.key, &ru.value)
 		}
+
 		ru.key = nil
+	}
+
+	// Update secondary indexes.
+	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
+		secondaryIndexEntry := secondaryIndexEntries[i]
+		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
+		if secondaryKeyChanged {
+			if err := ru.fks.checkIdx(ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
+				return nil, err
+			}
+
+			if log.V(2) {
+				log.Infof("Del %s", secondaryIndexEntry.Key)
+			}
+			b.Del(secondaryIndexEntry.Key)
+			// Do not update Indexes in the DELETE_ONLY state.
+			if _, ok := ru.deleteOnlyIndex[i]; !ok {
+				if log.V(2) {
+					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value)
+				}
+				b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
+			}
+		}
 	}
 
 	return ru.newValues, nil

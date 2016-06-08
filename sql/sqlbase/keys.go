@@ -88,7 +88,7 @@ func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeColumnKey(k, uint32(namespaceTable.Columns[2].ID))
+		k = keys.MakeFamilyKey(k, uint32(namespaceTable.Columns[2].ID))
 	}
 	return k
 }
@@ -98,7 +98,7 @@ func MakeDescMetadataKey(descID ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
-	return keys.MakeColumnKey(k, uint32(DescriptorTable.Columns[1].ID))
+	return keys.MakeFamilyKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
@@ -106,7 +106,7 @@ func MakeZoneKey(id ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(zonesTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(zonesTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(id))
-	return keys.MakeColumnKey(k, uint32(zonesTable.Columns[1].ID))
+	return keys.MakeFamilyKey(k, uint32(zonesTable.Columns[1].ID))
 }
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data.
