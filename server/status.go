@@ -673,6 +673,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 					Desc:        PrettifyRangeDescriptor(desc),
 					RaftState:   raftState,
 					PendingCmds: int32(rep.PendingCmdsLen()),
+					RaftLogSize: rep.RaftLogSize(),
 				})
 				return false, nil
 			})
