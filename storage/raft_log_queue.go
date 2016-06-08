@@ -20,22 +20,24 @@ import (
 	"math"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 const (
 	// raftLogQueueMaxSize is the max size of the queue.
 	raftLogQueueMaxSize = 100
-	// raftLogPadding is the number of log entries that should be kept for
-	// lagging replicas.
-	raftLogPadding = 10000
 	// RaftLogQueueTimerDuration is the duration between truncations. This needs
 	// to be relatively short so that truncations can keep up with raft log entry
 	// creation.
@@ -86,12 +88,30 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		return 0, 0, nil
 	}
 
-	// Calculate the quorum matched index and adjust based on padding.
-	oldestIndex := getQuorumMatchedIndex(raftStatus, raftLogPadding)
-
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	firstIndex, err := r.FirstIndex()
+	raftLogSize := r.mu.raftLogSize
+	targetSize := r.mu.maxBytes
+	r.mu.Unlock()
+
+	// Drop all raft logs that are older than the most behind range.
+	oldestIndex := getMinimumMatchedIndex(raftStatus)
+
+	// Drop old raft logs if the log is too big.
+	if raftLogSize > targetSize {
+		oldestSizeIndex, err := getLogIndexForSize(r.store.Engine(), r.RangeID, raftLogSize, targetSize)
+		if err != nil {
+			return 0, 0, err
+		}
+		if oldestSizeIndex > oldestIndex {
+			oldestIndex = oldestSizeIndex
+		}
+	}
+
+	if oldestIndex > raftStatus.Commit {
+		oldestIndex = raftStatus.Commit
+	}
+
+	firstIndex, err := r.GetFirstIndex()
 	if err != nil {
 		return 0, 0, util.Errorf("error retrieving first index for range %d: %s", rangeID, err)
 	}
@@ -155,26 +175,31 @@ func (*raftLogQueue) purgatoryChan() <-chan struct{} {
 	return nil
 }
 
-// getQuorumMatchedIndex returns the index which a quorum of the nodes have
-// committed. The returned value is adjusted by padding to allow retaining
-// additional entries, but this adjustment is limited so that we won't keep
-// entries which all nodes have matched.
-func getQuorumMatchedIndex(raftStatus *raft.Status, padding uint64) uint64 {
-	index := raftStatus.Commit
-	if index >= padding {
-		index -= padding
-	} else {
-		index = 0
-	}
-
+// getMinimumMatchedIndex returns the index that has been committed by every
+// node in the cluster.
+func getMinimumMatchedIndex(raftStatus *raft.Status) uint64 {
 	smallestMatch := uint64(math.MaxUint64)
 	for _, progress := range raftStatus.Progress {
 		if smallestMatch > progress.Match {
 			smallestMatch = progress.Match
 		}
 	}
-	if index < smallestMatch {
-		index = smallestMatch
-	}
-	return index
+	return smallestMatch
+}
+
+// getLogIndexForSize returns the oldest raft log index that keeps the log size
+// under the target size. If there are no log entries 0 is returned.
+func getLogIndexForSize(eng engine.Engine, rangeID roachpb.RangeID, currentSize, targetSize int64) (uint64, error) {
+	prefix := keys.RaftLogPrefix(rangeID)
+	var entry raftpb.Entry
+	_, err := engine.MVCCIterate(context.Background(), eng, prefix, prefix.PrefixEnd(),
+		hlc.ZeroTimestamp, true /* consistent */, nil /* txn */, false, /* reverse */
+		func(kv roachpb.KeyValue) (bool, error) {
+			currentSize -= int64(kv.Size())
+			if currentSize < targetSize {
+				return true, kv.Value.GetProto(&entry)
+			}
+			return false, nil
+		})
+	return entry.Index, err
 }

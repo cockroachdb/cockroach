@@ -55,6 +55,7 @@ message RangeInfo {
   string raft_state = 2;
   // pending_cmds is the number of pendingCmds on the range.
   int32 pending_cmds = 3;
+  int64 raft_log_size = 4;
 }
 
 message RangesRequest {

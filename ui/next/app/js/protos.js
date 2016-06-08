@@ -623,6 +623,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "int32",
                                     "name": "pending_cmds",
                                     "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "raft_log_size",
+                                    "id": 4
                                 }
                             ]
                         },
