@@ -1,4 +1,3 @@
-/// <reference path="../../typings/index.d.ts" />
 import _ = require("lodash");
 
 type NodeStatus = cockroach.server.status.NodeStatus;
