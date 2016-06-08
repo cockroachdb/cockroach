@@ -462,8 +462,8 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	}
 	expResult := serverpb.UsersResponse{
 		Users: []serverpb.UsersResponse_User{
-			{"admin"},
-			{"bob"},
+			{Username: "admin"},
+			{Username: "bob"},
 		},
 	}
 
