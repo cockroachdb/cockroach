@@ -261,12 +261,18 @@ func (l *LocalCluster) panicOnStop() {
 func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
-	nets, err := l.client.NetworkList(context.Background(), types.NetworkListOptions{})
-	maybePanic(err)
-	for _, net := range nets {
-		if net.Name == networkName {
-			maybePanic(l.client.NetworkRemove(context.Background(), net.ID))
+	net, err := l.client.NetworkInspect(context.Background(), networkName)
+	if err == nil {
+		// We need to destroy the network and any running containers inside of it.
+		for containerID := range net.Containers {
+			// This call could fail if the container terminated on its own after we call
+			// NetworkInspect, but the likelihood of this seems low. If this line creates
+			// a lot of panics we should do more careful error checking.
+			maybePanic(l.client.ContainerKill(context.Background(), containerID, "9"))
 		}
+		maybePanic(l.client.NetworkRemove(context.Background(), networkName))
+	} else if !client.IsErrNotFound(err) {
+		panic(err)
 	}
 
 	resp, err := l.client.NetworkCreate(context.Background(), networkName, types.NetworkCreate{
