@@ -2525,13 +2525,25 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
-	humanSplitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax, nil)
-	if err != nil {
-		t.Fatal(err)
+
+	testData := []struct {
+		targetSize int64
+		splitInd   int
+	}{
+		{(ms.KeyBytes + ms.ValBytes) / 2, splitReservoirSize / 2},
+		{0, 0},
+		{math.MaxInt64, splitReservoirSize},
 	}
-	ind, _ := strconv.Atoi(string(humanSplitKey))
-	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
-		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
+
+	for i, td := range testData {
+		humanSplitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ind, _ := strconv.Atoi(string(humanSplitKey))
+		if diff := td.splitInd - ind; diff > 1 || diff < -1 {
+			t.Fatalf("%d. wanted key #%d+-1, but got %d (diff %d)", i, td.splitInd, ind, diff)
+		}
 	}
 }
 
@@ -2652,7 +2664,8 @@ func TestFindValidSplitKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		splitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, rangeStartAddr, rangeEndAddr, nil)
+		targetSize := (ms.KeyBytes + ms.ValBytes) / 2
+		splitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, rangeStartAddr, rangeEndAddr, targetSize, nil)
 		if test.expError {
 			if !testutils.IsError(err, "has no valid splits") {
 				t.Errorf("%d: unexpected error: %v", i, err)
@@ -2740,7 +2753,8 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
-		splitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, roachpb.RKey("\x02"), roachpb.RKeyMax, nil)
+		targetSize := (ms.KeyBytes + ms.ValBytes) / 2
+		splitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize, nil)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue

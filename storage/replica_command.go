@@ -2031,7 +2031,8 @@ func (r *Replica) AdminSplit(
 			snap := r.store.NewSnapshot()
 			defer snap.Close()
 			var err error
-			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, nil /* logFn */)
+			targetSize := r.GetMaxBytes() / 2
+			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize, nil /* logFn */)
 			if err != nil {
 				return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
@@ -2133,10 +2134,11 @@ func (r *Replica) AdminSplit(
 	return reply, nil
 }
 
-// splitTrigger is called on a successful commit of an AdminSplit
-// transaction. It copies the abort cache for the new range and
-// recomputes stats for both the existing, updated range and the new
-// range.
+// splitTrigger is called on a successful commit of an AdminSplit transaction.
+// It copies the abort cache for the new range and recomputes stats for both the
+// existing, updated range and the new range. For performance it only computes
+// the stats for the updated range and infers the rest by subtracting from the
+// original stats.
 func (r *Replica) splitTrigger(
 	ctx context.Context, batch engine.Batch, ms *engine.MVCCStats, split *roachpb.SplitTrigger, ts roachpb.Timestamp,
 ) error {
@@ -2161,6 +2163,9 @@ func (r *Replica) splitTrigger(
 	if err := deltaMs.AccountForSelf(split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to account for MVCCStats's own stats impact: %s", err)
 	}
+
+	// TODO(d4l3k): we should check which half is smaller and compute stats for it
+	// instead of having a constraint that the left side is smaller.
 
 	// Compute stats for updated range.
 	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
