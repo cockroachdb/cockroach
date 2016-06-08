@@ -297,10 +297,17 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 	// upper/lower case names.
 	candidates, ok := Builtins[name]
 	if !ok {
-		candidates, ok = Builtins[strings.ToLower(name)]
+		candidates, ok = Aggregates[name]
+	}
+	if !ok {
+		lowerName := strings.ToLower(name)
+		candidates, ok = Builtins[lowerName]
 		if !ok {
-			return nil, fmt.Errorf("unknown function: %s", name)
+			candidates, ok = Aggregates[lowerName]
 		}
+	}
+	if !ok {
+		return nil, fmt.Errorf("unknown function: %s", name)
 	}
 
 	overloads := make([]overloadImpl, len(candidates))
