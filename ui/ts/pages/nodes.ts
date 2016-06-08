@@ -234,7 +234,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
-              .tooltip("The total number of active SQL connections to the cluster.")            
+              .tooltip("The total number of active SQL connections across all nodes.")            
           );
           this._addChart(
             this.activityAxes,
@@ -246,7 +246,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-              .tooltip("The amount of network traffic sent to and from the SQL system, in bytes.")
+              .tooltip("The amount of SQL client network traffic, in bytes.")
           );
           this._addChart(
             this.activityAxes,
@@ -354,7 +354,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The memory in use across all nodes, broken down by CockroachDB Go code, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS)."
+              .tooltip("The memory in use across all nodes, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS)."
           );
           this._addChart(
             this.systemAxes,
@@ -371,7 +371,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
-              .tootlip("The number of calls to the C layer of CockroachDB across all nodes.")
+              .tootlip("The number of calls from Go to C by CockroachDB across all nodes.")
           );
 
           // Graphs for internals, such as RocksDB
@@ -940,7 +940,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The memory in use on this node, broken down by CockroachDB Go code, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
+              .tooltip("The memory in use on this node, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
           );
           this._addChart(
             this.systemAxes,
@@ -959,7 +959,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
-              .tootlip("The number of calls to the C layer of CockroachDB on this node.")
+              .tootlip("The number of calls from Go to C by CockroachDB on this node.")
           );
 
           // Graphs for internals, such as RocksDB

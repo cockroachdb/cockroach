@@ -168,7 +168,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Connections")
             ).format(d3.format(".1")).title("SQL Connections")
-              .tooltip("The total number of active SQL connections to the cluster.")
+              .tooltip("The total number of active SQL connections across all nodes.")
           );
 
           this._addChart(
@@ -180,7 +180,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-              .tooltip("The amount of network traffic sent to and from the SQL system, in bytes.")
+              .tooltip("The amount of SQL client network traffic, in bytes.")
           );
 
           this._addChart(
