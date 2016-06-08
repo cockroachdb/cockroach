@@ -16,15 +16,20 @@
 
 package acceptance
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
-func TestDockerReadWriteReferenceVersion(t *testing.T) {
-	func() { // OneShot assumes it is at specific call depth from TestFoo.
-		if testDockerSingleNode(t, "reference", []string{"/cockroach", "version"}) != nil {
-			t.Skip(`TODO(dt): No /cockroach binary in one-shot container. See #6086.`)
-		}
-	}()
-	testDockerSuccess(t, "reference", []string{"/bin/bash", "-c", `
+func runReadWriteReferenceTest(
+	t *testing.T,
+	referenceBinPath string,
+	backwardReferenceTest string,
+) {
+	if err := testDockerSingleNode(t, "reference", []string{"/cockroach", "version"}); err != nil {
+		t.Skipf(`TODO(dt): No /cockroach binary in one-shot container, see #6086: %s`, err)
+	}
+	referenceTestScript := fmt.Sprintf(`
 set -xe
 mkdir /old
 cd /old
@@ -32,8 +37,8 @@ cd /old
 export PGHOST=localhost
 export PGPORT=""
 
-bin=/reference-version/cockroach
-# TODO(bdarnell): when --background is in reference-version, use it here and below.
+bin=/%s/cockroach
+# TODO(bdarnell): when --background is in bidirectional-reference-version, use it here and below.
 $bin start &
 sleep 1
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
@@ -59,12 +64,30 @@ $bin quit
 sleep 1
 
 echo "Read the modified data using the reference binary again."
-bin=/reference-version/cockroach
+bin=/%s/cockroach
+%s
+`, referenceBinPath, referenceBinPath, backwardReferenceTest)
+	err := testDockerSingleNode(t, "reference", []string{"/bin/bash", "-c", referenceTestScript})
+	if err != nil {
+		t.Errorf("expected success: %s", err)
+	}
+}
+
+func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
+	backwardReferenceTest := `
 $bin start &
 sleep 1
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 $bin quit && wait
-`})
+`
+	runReadWriteReferenceTest(t, `bidirectional-reference-version`, backwardReferenceTest)
+}
+
+func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
+	backwardReferenceTest := `
+# TODO(dan): Once we have a version that's only forward compatible, test the failure message.
+`
+	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
 }
