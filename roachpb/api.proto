@@ -247,8 +247,6 @@ message ChangeFrozenResponse {
       (gogoproto.castkey) = "StoreID", (gogoproto.castvalue) = "NodeID" ];
 }
 
-
-
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 message BeginTransactionRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -820,6 +818,24 @@ message PollFrozenResponse {
   optional int64 num_thawed = 2 [(gogoproto.nullable) = false];
 }
 
+// A ReservationRequest asks the addressed Store to reserve the space for a new
+// replica for the Range of RangeID reserving RangeSize bytes.
+message ReservationRequest {
+  optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int32 from_node_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "FromNodeID", (gogoproto.casttype) = "NodeID"];
+  optional int32 from_store_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "FromStoreID", (gogoproto.casttype) = "StoreID"];
+  optional int64 range_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  optional int64 range_size = 5 [(gogoproto.nullable) = false];
+}
+
+// A ReservationResponse is the repoonse returned from a ReservationRequest.
+message ReservationResponse {
+  optional bool reserved = 1 [(gogoproto.nullable) = false];
+}
+
 // The two Batch services below are identical, except that some internal
 // Request types are not permitted in batches processed by External.Batch. This
 // distinction exists e.g. to prevent command-line tools from accessing
@@ -828,6 +844,7 @@ message PollFrozenResponse {
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
+  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
 
 service External {

@@ -67,6 +67,10 @@ func (n Node) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roac
 	panic("unimplemented")
 }
 
+func (n Node) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
+	panic("unimplemented")
+}
+
 func TestInvalidAddrLength(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
