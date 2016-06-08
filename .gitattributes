@@ -1,4 +1,4 @@
-sql/parser/sql.go binary
-ui/embedded.go binary
-*.woff binary
-*.woff2 binary
+sql/parser/sql.go -diff
+ui/embedded.go -diff
+*.pb.go -diff
+*.pb.gw.go -diff
