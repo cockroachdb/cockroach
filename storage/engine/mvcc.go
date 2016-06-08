@@ -1485,12 +1485,28 @@ func MVCCReverseScan(
 		consistent, txn, true /* reverse */)
 }
 
-// MVCCIterate iterates over the key range [start,end). At each step of the
-// iteration, f() is invoked with the current key/value pair. If f returns true
-// (done) or an error, the iteration stops and the error is propagated. If the
-// reverse is flag set the iterator will be moved in reverse order.
+// MVCCIterate calls MVCCIterateStats with a nil MVCCStats object.
 func MVCCIterate(ctx context.Context,
 	engine Reader,
+	startKey,
+	endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+	f func(roachpb.KeyValue) (bool, error),
+) ([]roachpb.Intent, error) {
+	return MVCCIterateStats(ctx, engine, nil /* ms */, startKey, endKey, timestamp, consistent, txn, reverse, f)
+}
+
+// MVCCIterateStats iterates over the key range [start,end). At each step of the
+// iteration, f() is invoked with the current key/value pair. If f returns true
+// (done) or an error, the iteration stops and the error is propagated. If the
+// reverse is flag set the iterator will be moved in reverse order. If ms is
+// provided, the size of the iterated keys and values will be added to it.
+func MVCCIterateStats(ctx context.Context,
+	engine Reader,
+	ms *enginepb.MVCCStats,
 	startKey,
 	endKey roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -1569,6 +1585,10 @@ func MVCCIterate(ctx context.Context,
 		// Exceeding the boundary.
 		if metaKey.Key == nil {
 			break
+		}
+
+		if ms != nil {
+			updateStatsForInline(ms, metaKey.Key, 0, 0, buf.meta.KeyBytes, buf.meta.ValBytes)
 		}
 
 		alloc, metaKey.Key = alloc.Copy(metaKey.Key, 1)
