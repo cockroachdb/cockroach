@@ -230,6 +230,7 @@ func TestParse(t *testing.T) {
 		{`SELECT (ROW(1, 2, 3))`},
 		{`SELECT (ROW())`},
 		{`SELECT (TABLE a)`},
+		{`SELECT 0x1`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
@@ -526,6 +527,9 @@ func TestParse2(t *testing.T) {
 			`SELECT e'\n\\'`},
 		{`SELECT "a'a" FROM t`,
 			`SELECT "a'a" FROM t`},
+		// Hexadecimal literal strings are turned into regular strings.
+		{`SELECT x'61'`, `SELECT 'a'`},
+		{`SELECT X'61'`, `SELECT 'a'`},
 		// Comments are stripped.
 		{`SELECT 1 FROM t -- hello world`,
 			`SELECT 1 FROM t`},

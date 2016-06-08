@@ -87,6 +87,9 @@ func TestScanner(t *testing.T) {
 		{`WITH TIME`, []int{WITH_LA, TIME}},
 		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
 		{`1`, []int{ICONST}},
+		{`0xa`, []int{ICONST}},
+		{`x'ba'`, []int{SCONST}},
+		{`X'ba'`, []int{SCONST}},
 		{`1.0`, []int{FCONST}},
 		{`1.0e1`, []int{FCONST}},
 		{`1e+1`, []int{FCONST}},
@@ -335,6 +338,10 @@ func TestScanString(t *testing.T) {
 		{`'hello
 world'`, `hello
 world`},
+		{`x'666f6f'`, `foo`},
+		{`X'626172'`, `bar`},
+		{`x'f'`, `invalid hexadecimal literal`},
+		{`X'f'`, `invalid hexadecimal literal`},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql, Traditional)
@@ -397,6 +404,8 @@ func TestScanError(t *testing.T) {
 		{`0x0x`, "invalid hexadecimal literal"},
 		{`00x0x`, "invalid hexadecimal literal"},
 		{`08`, "could not make constant int from literal \"08\""},
+		{`x'zzz'`, "invalid hexadecimal literal"},
+		{`X'zzz'`, "invalid hexadecimal literal"},
 		{`$9223372036854775809`, "integer value out of range"},
 	}
 	for _, d := range testData {

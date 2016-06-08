@@ -18,6 +18,7 @@ package parser
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"go/constant"
 	"go/token"
@@ -250,6 +251,28 @@ func (s *scanner) scan(lval *sqlSymType) {
 			s.pos++
 			if s.scanString(lval, t, true) {
 				lval.id = SCONST
+			}
+			return
+		}
+		s.scanIdent(lval, ch)
+		return
+
+	case 'x', 'X':
+		// Hex literal?
+		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+			// [xX]'[a-f0-9]'
+			s.pos++
+			if s.scanString(lval, t, false) {
+				stringBytes, err := hex.DecodeString(lval.str)
+				if err != nil {
+					// Either the string has an odd number of characters or contains one or
+					// more invalid bytes.
+					lval.id = ERROR
+					lval.str = "invalid hexadecimal string literal"
+					return
+				}
+				lval.id = SCONST
+				lval.str = string(stringBytes)
 			}
 			return
 		}
