@@ -2031,7 +2031,8 @@ func (r *Replica) AdminSplit(
 			snap := r.store.NewSnapshot()
 			defer snap.Close()
 			var err error
-			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, nil /* logFn */)
+			targetSize := r.GetMaxBytes() / 2
+			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize, nil /* logFn */)
 			if err != nil {
 				return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
