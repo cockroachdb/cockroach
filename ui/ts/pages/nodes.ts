@@ -362,7 +362,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("goroutines"))
                 .title("goroutine count")
             ).format(d3.format(".1")).title("goroutine Count")
-              .tootlip("The number of Goroutines across all nodes. This count should rise and fall based on load.")
+              .tooltip("The number of Goroutines across all nodes. This count should rise and fall based on load.")
           );
           this._addChart(
             this.systemAxes,
@@ -371,7 +371,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
-              .tootlip("The number of calls from Go to C by CockroachDB across all nodes.")
+              .tooltip("The number of calls from Go to C by CockroachDB across all nodes.")
           );
 
           // Graphs for internals, such as RocksDB
@@ -949,7 +949,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("goroutine count")
             ).format(d3.format(".1")).title("goroutine Count")
-              .tootlip("The number of Goroutines on this nodes. This count should rise and fall based on load.")
+              .tooltip("The number of Goroutines on this nodes. This count should rise and fall based on load.")
           );
           this._addChart(
             this.systemAxes,
@@ -959,7 +959,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
-              .tootlip("The number of calls from Go to C by CockroachDB on this node.")
+              .tooltip("The number of calls from Go to C by CockroachDB on this node.")
           );
 
           // Graphs for internals, such as RocksDB
