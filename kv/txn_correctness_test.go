@@ -86,20 +86,18 @@ type cmd struct {
 }
 
 func (c *cmd) init(prevCmd *cmd) {
-	c.ch = nil
 	if prevCmd != nil {
-		prevCmd.ch = make(chan struct{}) // unbuffered to force synchronous handoff
 		c.prev = prevCmd.ch
 	} else {
 		c.prev = nil
 	}
+	c.ch = make(chan struct{}, 1)
 	c.debug = ""
 }
 
 func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 	if c.prev != nil {
 		<-c.prev
-		c.prev = nil
 	}
 	if log.V(2) {
 		log.Infof("executing %s", c)
@@ -107,7 +105,6 @@ func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 	err := c.fn(c, txn, t)
 	if c.ch != nil {
 		c.ch <- struct{}{}
-		c.ch = nil
 	}
 	if len(c.key) > 0 && len(c.endKey) > 0 {
 		return fmt.Sprintf("%s%%d.%%d(%s-%s)%s", c.name, c.key, c.endKey, c.debug), err
@@ -119,14 +116,9 @@ func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 }
 
 func (c *cmd) done() {
-	if c.prev != nil {
-		<-c.prev
-		c.prev = nil
-	}
-	if c.ch != nil {
-		c.ch <- struct{}{}
-		c.ch = nil
-	}
+	close(c.ch)
+	c.ch = nil
+	c.prev = nil
 	c.debug = ""
 }
 
@@ -147,12 +139,12 @@ func (c *cmd) getEndKey() []byte {
 
 func (c *cmd) String() string {
 	if len(c.key) > 0 && len(c.endKey) > 0 {
-		return fmt.Sprintf("%s%d(%s-%s)", c.name, c.txnIdx+1, c.key, c.endKey)
+		return fmt.Sprintf("%s%d(%s-%s)", c.name, c.txnIdx, c.key, c.endKey)
 	}
 	if len(c.key) > 0 {
-		return fmt.Sprintf("%s%d(%s)", c.name, c.txnIdx+1, c.key)
+		return fmt.Sprintf("%s%d(%s)", c.name, c.txnIdx, c.key)
 	}
-	return fmt.Sprintf("%s%d", c.name, c.txnIdx+1)
+	return fmt.Sprintf("%s%d", c.name, c.txnIdx)
 }
 
 // readCmd reads a value from the db and stores it in the env.
@@ -321,7 +313,7 @@ func parseHistory(txnIdx int, history string, t *testing.T) []*cmd {
 func parseHistories(histories []string, t *testing.T) [][]*cmd {
 	var results [][]*cmd
 	for i, history := range histories {
-		results = append(results, parseHistory(i, history, t))
+		results = append(results, parseHistory(i+1, history, t))
 	}
 	return results
 }
@@ -543,7 +535,7 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 		for _, i := range enumIso {
 			for _, h := range enumHis {
 				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
-					t.Errorf("expected success, experienced %s", err)
+					t.Errorf("expected success, experienced %v", err)
 					return
 				}
 				historyIdx++
@@ -566,7 +558,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	}
 	plannedStr := historyString(cmds)
 	if log.V(1) {
-		log.Infof("attempting history %d: iso=%v pri=%v history=%s", historyIdx, isolations, priorities, plannedStr)
+		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
 	}
 
 	hv.actual = []string{}
@@ -576,19 +568,13 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	for _, c := range cmds {
 		c.historyIdx = historyIdx
 		txnMap[c.txnIdx] = append(txnMap[c.txnIdx], c)
-		// Because the command channels are unbuffered, don't wait if the
-		// previous command is from the same transaction (and thus will be
-		// executed in a single goroutine).
-		if prev != nil && c.txnIdx == prev.txnIdx {
-			prev = nil
-		}
 		c.init(prev)
 		prev = c
 	}
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
-			if err := hv.runTxn(i, priorities[i], isolations[i], txnCmds, db, t); err != nil {
-				t.Errorf("(%s): unexpected failure running %s: %s", cmds, cmds[i], err)
+			if err := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); err != nil {
+				t.Errorf("(%s): unexpected failure running %s: %v", cmds, cmds[i], err)
 			}
 		}(i, txnCmds)
 	}
@@ -667,9 +653,6 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		for i := range cmds {
 			cmds[i].env = env
 			if err := hv.runCmd(txn, txnIdx, retry, i, cmds, t); err != nil {
-				if log.V(1) {
-					log.Infof("%s encountered error: %s", cmds[i], err)
-				}
 				return err
 			}
 		}
