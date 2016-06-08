@@ -3474,6 +3474,86 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 	}
 }
 
+// TestMVCCIterateStats checks that the stats computed are the same as those
+// computed when putting data using MVCCPut.
+func TestMVCCIterateStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	ctx := context.Background()
+	// checkTs is the time that MVCCIterateStats will use.
+	checkTs := makeTS(0, 10000000)
+
+	testData := []struct {
+		kvs         []roachpb.KeyValue
+		ts          hlc.Timestamp
+		hasSysBytes bool
+	}{
+		{
+			[]roachpb.KeyValue{
+				{Key: testKey1, Value: mkVal("testValue1", hlc.ZeroTimestamp)},
+				{Key: testKey2, Value: mkVal("testValue2", hlc.ZeroTimestamp)},
+				{Key: testKey3, Value: mkVal("testValue3", hlc.ZeroTimestamp)},
+			},
+			makeTS(0, 1),
+			false,
+		},
+		{
+			[]roachpb.KeyValue{
+				{Key: testKey1, Value: mkVal("testValue1 inline", hlc.ZeroTimestamp)},
+				{Key: testKey2, Value: mkVal("testValue2 inline", hlc.ZeroTimestamp)},
+				{Key: testKey3, Value: mkVal("testValue3 inline", hlc.ZeroTimestamp)},
+			},
+			hlc.ZeroTimestamp,
+			false,
+		},
+		{
+			[]roachpb.KeyValue{
+				{Key: testKey1, Value: mkVal("testValue1 inline", hlc.ZeroTimestamp)},
+				{Key: roachpb.Key("\x01/local1"), Value: mkVal("localTestValue1 inline", hlc.ZeroTimestamp)},
+				{Key: roachpb.Key("\x01/local2"), Value: mkVal("localTestValue2 inline", hlc.ZeroTimestamp)},
+			},
+			hlc.ZeroTimestamp,
+			true,
+		},
+	}
+
+	for tdI, td := range testData {
+		engine := createTestEngine(stopper)
+
+		var ms enginepb.MVCCStats
+		for _, kv := range td.kvs {
+			if err := MVCCPut(ctx, engine, &ms, kv.Key, td.ts, kv.Value, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Check forward and reverse scans.
+		for _, reverse := range []bool{false, true} {
+			var iterMS enginepb.MVCCStats
+			_, err := MVCCIterateStats(ctx, engine, &iterMS, keys.MinKey, keys.MaxKey, checkTs, true, nil, reverse, func(kv roachpb.KeyValue) (bool, error) {
+				return false, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if proto.Equal(&iterMS, &enginepb.MVCCStats{}) {
+				t.Errorf("%d. stats should not be empty;\nwant %+v", tdI, ms)
+			}
+			if !proto.Equal(&iterMS, &ms) {
+				t.Errorf("%d. stats should be equal;\nwant %+v;\ngot  %+v", tdI, ms, iterMS)
+			}
+			if td.hasSysBytes && iterMS.SysBytes <= 0 {
+				t.Errorf("%d. stats.SysBytes should be positive;\ngot %+v", tdI, iterMS)
+			} else if !td.hasSysBytes && iterMS.SysBytes != 0 {
+				t.Errorf("%d. stats.SysBytes should be zero;\ngot %+v", tdI, iterMS)
+			}
+		}
+	}
+}
+
 func TestWillOverflow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
