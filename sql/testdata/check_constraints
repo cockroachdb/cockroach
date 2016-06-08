@@ -56,7 +56,7 @@ statement error \\* not allowed in constraint
 CREATE TABLE t3 (a INT, b INT CHECK (COUNT(*) = 1))
 
 # non-boolean expressions are errors
-statement error pq: argument of CHECK must be type bool, not type int
+statement error pq: incompatible type for CHECK expression: bool vs int
 CREATE TABLE t3 (a INT CHECK(1))
 
 # fail on bad check types
@@ -151,3 +151,11 @@ SELECT * FROM t5;
 ----
 1 10  9
 2 11  9
+
+statement error CHECK expression .* may not contain variable sub-expressions
+CREATE TABLE t6 (x INT CHECK (x = $1));
+
+statement error CHECK expression .* may not contain variable sub-expressions
+CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)));
+
+

@@ -261,7 +261,7 @@ func applyColumnMutation(col *sqlbase.ColumnDescriptor, mut parser.ColumnMutatio
 			col.DefaultExpr = nil
 		} else {
 			colDatumType := col.Type.ToDatumType()
-			if err := sqlbase.SanitizeDefaultExpr(t.Default, colDatumType); err != nil {
+			if err := sqlbase.SanitizeVarFreeExpr(t.Default, colDatumType, "DEFAULT"); err != nil {
 				return err
 			}
 			s := t.Default.String()

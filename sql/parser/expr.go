@@ -870,6 +870,9 @@ type Subquery struct {
 	Select SelectStatement
 }
 
+// Variable implements the VariableExpr interface.
+func (*Subquery) Variable() {}
+
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Select)

@@ -271,3 +271,6 @@ query I
 SELECT a FROM MaxIntTest WHERE a = 9223372036854775807
 ----
 9223372036854775807
+
+query error no value provided for placeholder
+SELECT $1::int

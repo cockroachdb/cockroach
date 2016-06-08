@@ -786,13 +786,6 @@ SELECT 0x FROM t
 `,
 		},
 		{
-			`CREATE TABLE a (b INT DEFAULT (SELECT 1))`,
-			`default expression contains a subquery at or near ")"
-CREATE TABLE a (b INT DEFAULT (SELECT 1))
-                                        ^
-`,
-		},
-		{
 			`SELECT POSITION('high', 'a')`,
 			`syntax error at or near ","
 SELECT POSITION('high', 'a')

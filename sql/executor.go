@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
 	"time"
 
@@ -283,23 +282,26 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 	return cfg, cache
 }
 
-// Prepare returns the result types of the given statement. ptypes may
-// be a partially populated map of placeholder names to placeholder
-// types. Prepare will populate the missing types in the map. The
-// column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(ctx context.Context,
-	query string, session *Session, ptypes parser.MapPlaceholderTypes) (
-	[]ResultColumn, error) {
+// Prepare returns the result types of the given statement. pinfo may
+// contain partial type information for placeholders. Prepare will
+// populate the missing types. The column result types are returned (or
+// nil if there are no results).
+func (e *Executor) Prepare(
+	ctx context.Context,
+	query string,
+	session *Session,
+	pinfo parser.PlaceholderTypes,
+) ([]ResultColumn, error) {
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
 	}
-	if err = parser.ProcessPlaceholderAnnotations(stmt, ptypes); err != nil {
+	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
 
 	session.planner.resetForBatch(e)
-	session.planner.semaCtx.PlaceholderTypes = ptypes
+	session.planner.semaCtx.Placeholders.SetTypes(pinfo)
 	session.planner.evalCtx.PrepareOnly = true
 
 	// Prepare needs a transaction because it needs to retrieve db/table
@@ -327,11 +329,11 @@ func (e *Executor) Prepare(ctx context.Context,
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
-	ctx context.Context, session *Session, stmts string,
-	qargs []parser.Datum) StatementResults {
+	ctx context.Context, session *Session, stmts string, pinfo *parser.PlaceholderInfo,
+) StatementResults {
 
 	session.planner.resetForBatch(e)
-	session.planner.qargs = queryArguments(qargs)
+	session.planner.semaCtx.Placeholders.Assign(pinfo)
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
@@ -827,13 +829,6 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{Err: err}, err
 	}
 
-	// Bind all the placeholder variables in the stmt to actual values.
-	stmt, err := parser.FillQueryArgs(stmt, &planMaker.qargs)
-	if err != nil {
-		txnState.updateStateAndCleanupOnErr(err, e)
-		return Result{Err: err}, err
-	}
-
 	if txnState.tr != nil {
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
@@ -1032,104 +1027,67 @@ func (e *Executor) Registry() *metric.Registry {
 	return e.registry
 }
 
-var _ parser.Args = queryArguments{}
-
-type queryArguments []parser.Datum
-
-var errNamedArgument = errors.New("named arguments are not supported")
-
-// getArgumentIndexForPlaceholder is a helper function that translates a numeric
-// placeholder name passed to an implementation of parser.Args. Currently, only
-// numeric placeholders (non-negative integers) are supported, but named placeholders may
-// be supported in the future.
-func getArgumentIndexForPlaceholder(name string) (int64, error) {
-	if len(name) == 0 {
-		// This shouldn't happen unless the parser let through an invalid placeholder
-		// specification.
-		panic(fmt.Sprintf("invalid empty placeholder name"))
-	}
-	if ch := name[0]; ch < '0' || ch > '9' {
-		// TODO(pmattis): Add support for named placeholder (vs the
-		// numbered placeholder support below).
-		return 0, errNamedArgument
-	}
-	return strconv.ParseInt(name, 10, 0)
-}
-
-// Arg implements the parser.Args interface.
-func (p queryArguments) Arg(name string) (parser.Datum, bool) {
-	i, err := getArgumentIndexForPlaceholder(name)
-	if err != nil {
-		return nil, false
-	}
-	if i < 1 || int(i) > len(p) {
-		return nil, false
-	}
-	return p[i-1], true
-}
-
-var _ parser.Args = golangQueryArguments{}
-
-type golangQueryArguments []interface{}
-
-// Arg implements the parser.Args interface.
+// golangFillQueryArguments populates the placeholder map with
+// types and values from an array of Go values.
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-func (gp golangQueryArguments) Arg(name string) (parser.Datum, bool) {
-	i, err := getArgumentIndexForPlaceholder(name)
-	if err != nil {
-		return nil, false
-	}
-	if i < 1 || int(i) > len(gp) {
-		return nil, false
-	}
-	arg := gp[i-1]
-	if arg == nil {
-		return parser.DNull, true
-	}
+func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{}) {
+	pinfo.Clear()
 
-	// A type switch to handle a few explicit types with special semantics.
-	switch t := arg.(type) {
-	// Datums are passed along as is.
-	case parser.Datum:
-		return t, true
-	// Time datatypes get special representation in the database.
-	case time.Time:
-		return parser.MakeDTimestamp(t, time.Microsecond), true
-	case time.Duration:
-		return &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}, true
-	case *inf.Dec:
-		dd := &parser.DDecimal{}
-		dd.Set(t)
-		return dd, true
-	}
-
-	// Handle all types which have an underlying type that can be stored in the
-	// database.
-	// Note: if this reflection becomes a performance concern in the future,
-	// commonly used types could be added explicitly into the type switch above
-	// for a performance gain.
-	val := reflect.ValueOf(arg)
-	switch val.Kind() {
-	case reflect.Bool:
-		return parser.MakeDBool(parser.DBool(val.Bool())), true
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return parser.NewDInt(parser.DInt(val.Int())), true
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return parser.NewDInt(parser.DInt(val.Uint())), true
-	case reflect.Float32, reflect.Float64:
-		return parser.NewDFloat(parser.DFloat(val.Float())), true
-	case reflect.String:
-		return parser.NewDString(val.String()), true
-	case reflect.Slice:
-		// Handle byte slices.
-		if val.Type().Elem().Kind() == reflect.Uint8 {
-			return parser.NewDBytes(parser.DBytes(val.Bytes())), true
+	for i, arg := range args {
+		k := fmt.Sprint(i + 1)
+		if arg == nil {
+			pinfo.SetValue(k, parser.DNull)
+			continue
 		}
-	}
 
-	panic(fmt.Sprintf("unexpected type %T", arg))
+		// A type switch to handle a few explicit types with special semantics:
+		// - Datums are passed along as is.
+		// - Time datatypes get special representation in the database.
+		var d parser.Datum
+		switch t := arg.(type) {
+		case parser.Datum:
+			d = t
+		case time.Time:
+			d = parser.MakeDTimestamp(t, time.Microsecond)
+		case time.Duration:
+			d = &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
+		case *inf.Dec:
+			dd := &parser.DDecimal{}
+			dd.Set(t)
+			d = dd
+		}
+		if d == nil {
+			// Handle all types which have an underlying type that can be stored in the
+			// database.
+			// Note: if this reflection becomes a performance concern in the future,
+			// commonly used types could be added explicitly into the type switch above
+			// for a performance gain.
+			val := reflect.ValueOf(arg)
+			switch val.Kind() {
+			case reflect.Bool:
+				d = parser.MakeDBool(parser.DBool(val.Bool()))
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				d = parser.NewDInt(parser.DInt(val.Int()))
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				d = parser.NewDInt(parser.DInt(val.Uint()))
+			case reflect.Float32, reflect.Float64:
+				d = parser.NewDFloat(parser.DFloat(val.Float()))
+			case reflect.String:
+				d = parser.NewDString(val.String())
+			case reflect.Slice:
+				// Handle byte slices.
+				if val.Type().Elem().Kind() == reflect.Uint8 {
+					d = parser.NewDBytes(parser.DBytes(val.Bytes()))
+				}
+			}
+			if d == nil {
+				panic(fmt.Sprintf("unexpected type %T", arg))
+			}
+		}
+		pinfo.SetValue(k, d)
+	}
 }
 
 func checkResultDatum(datum parser.Datum) error {
