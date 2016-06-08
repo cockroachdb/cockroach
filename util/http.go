@@ -17,10 +17,13 @@
 package util
 
 import (
+	"io"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strings"
 
+	"github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 )
@@ -80,4 +83,59 @@ func PostJSON(httpClient http.Client, path string, request, response proto.Messa
 		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
+}
+
+// StreamJSON uses the supplied client to POST the given proto request as JSON
+// to the supplied streaming grpc-gw endpoint; the response type serves only to
+// create the values passed to the callback (which is invoked for every message
+// in the stream with a value of the supplied response type masqueraded as an
+// interface).
+func StreamJSON(
+	httpClient http.Client,
+	path string,
+	request proto.Message,
+	dest proto.Message,
+	callback func(proto.Message),
+) error {
+	str, err := (&jsonpb.Marshaler{}).MarshalToString(request)
+	if err != nil {
+		return err
+	}
+
+	resp, err := httpClient.Post(path, JSONContentType, strings.NewReader(str))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+	}
+
+	// grpc-gw/runtime's JSONpb {en,de}coder is pretty half-baked. Essentially
+	// we must pass a *map[string]*concreteType or it won't work (in
+	// particular, using a struct or replacing `*concreteType` with either
+	// `concreteType` or `proto.Message leads to errors). This method should do
+	// a decent enough job at encapsulating this away; should this change, we
+	// should consider cribbing and fixing up the marshaling code.
+	m := reflect.New(reflect.MapOf(reflect.TypeOf(""), reflect.TypeOf(dest)))
+	// TODO(tschottdorf,tamird): We have cribbed parts of this object to deal
+	// with varying proto imports, and should technically use them here. We can
+	// get away with not cribbing more here for now though.
+	marshaler := runtime.JSONPb{}
+	decoder := marshaler.NewDecoder(resp.Body)
+	for {
+		if err := decoder.Decode(m.Interface()); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		v := m.Elem().MapIndex(reflect.ValueOf("result"))
+		if !v.IsValid() {
+			// TODO(tschottdorf): recover actual JSON.
+			return Errorf("unexpected JSON response: %+v", m)
+		}
+		callback(v.Interface().(proto.Message))
+	}
+	return nil
 }
