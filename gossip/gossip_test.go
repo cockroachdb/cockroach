@@ -135,31 +135,29 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 	numClients := len(peers) * 2
 	disconnectedCh := make(chan *client)
-	numFailedConns := 0
 
 	// Start a few overflow peers and assert that they don't get forwarded to us
 	// again.
 	for i := 0; i < numClients; i++ {
 		peer := startGossip(roachpb.NodeID(i+local.server.incoming.maxSize+2), stopper, t)
 
-		c := newClient(&local.is.NodeAddr)
-		c.start(peer, disconnectedCh, peer.rpcContext, stopper)
+		for {
+			c := newClient(&local.is.NodeAddr)
+			c.start(peer, disconnectedCh, peer.rpcContext, stopper)
 
-		disconnectedClient := <-disconnectedCh
-		if disconnectedClient != c {
-			t.Fatalf("expected %p to be disconnected, got %p", c, disconnectedClient)
-		} else if c.forwardAddr == nil {
-			// Under high load, clients sometimes fail to connect for reasons
-			// unrelated to the test, so we need to permit some.
-			numFailedConns++
-			t.Logf("node #%d: got nil forwarding address", peer.is.NodeID)
-		} else if *c.forwardAddr == local.is.NodeAddr {
-			t.Errorf("node #%d: got local's forwarding address", peer.is.NodeID)
+			disconnectedClient := <-disconnectedCh
+			if disconnectedClient != c {
+				t.Fatalf("expected %p to be disconnected, got %p", c, disconnectedClient)
+			} else if c.forwardAddr == nil {
+				// Under high load, clients sometimes fail to connect for reasons
+				// unrelated to the test, so we need to permit some.
+				t.Logf("node #%d: got nil forwarding address", peer.is.NodeID)
+				continue
+			} else if *c.forwardAddr == local.is.NodeAddr {
+				t.Errorf("node #%d: got local's forwarding address", peer.is.NodeID)
+			}
+			break
 		}
-	}
-
-	if numFailedConns > numClients/10 {
-		t.Errorf("%d clients disconnected for unexpected reasons", numFailedConns)
 	}
 }
 
