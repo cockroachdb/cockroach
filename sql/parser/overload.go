@@ -182,6 +182,10 @@ func typeCheckOverloadedExprs(
 	// Hold the resolved type expressions of the provided exprs, in order.
 	typedExprs := make([]TypedExpr, len(exprs))
 
+	// Split provided expressions into three groups:
+	// - Arguments
+	// - Numeric constants
+	// - All other Exprs
 	var resolvableExprs, constExprs, valExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
@@ -250,7 +254,7 @@ func typeCheckOverloadedExprs(
 
 	// Filter out overloads which constants cannot become.
 	for _, expr := range constExprs {
-		constExpr := expr.e.(*NumVal)
+		constExpr := expr.e.(Constant)
 		filterOverloads(func(o overloadImpl) bool {
 			return canConstantBecome(constExpr, o.params().getAt(expr.i))
 		})
@@ -355,7 +359,7 @@ func typeCheckOverloadedExprs(
 		if homogeneousTyp != nil {
 			all := true
 			for _, expr := range constExprs {
-				if !canConstantBecome(expr.e.(*NumVal), homogeneousTyp) {
+				if !canConstantBecome(expr.e.(Constant), homogeneousTyp) {
 					all = false
 					break
 				}
@@ -379,7 +383,7 @@ func typeCheckOverloadedExprs(
 		// The third heuristic is to prefer candidates where all numeric constants can become
 		// their "natural"" types.
 		for _, expr := range constExprs {
-			natural := naturalConstantType(expr.e.(*NumVal))
+			natural := naturalConstantType(expr.e.(Constant))
 			if natural != nil {
 				filterOverloads(func(o overloadImpl) bool {
 					return o.params().getAt(expr.i).TypeEqual(natural)
