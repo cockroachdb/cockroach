@@ -537,10 +537,13 @@ func (desc *TableDescriptor) Validate() error {
 		return fmt.Errorf("invalid parent ID %d", desc.ParentID)
 	}
 
-	if desc.GetFormatVersion() != BaseFormatVersion {
+	// TODO(dan): Once a beta with this check is released, update the reference
+	// tests with it as the new bidirectional compatibility version. Then remove
+	// support here for BaseFormatVersion.
+	if desc.GetFormatVersion() != BaseFormatVersion && desc.GetFormatVersion() != FamilyFormatVersion {
 		return fmt.Errorf(
-			"table %q is encoded using using version %d, but this client only supports version %d",
-			desc.Name, desc.GetFormatVersion(), BaseFormatVersion)
+			"table %q is encoded using using version %d, but this client only supports version %d and %d",
+			desc.Name, desc.GetFormatVersion(), BaseFormatVersion, FamilyFormatVersion)
 	}
 
 	if len(desc.Columns) == 0 {
