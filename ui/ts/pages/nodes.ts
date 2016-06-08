@@ -246,7 +246,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-              .tooltip("The amount of SQL client network traffic, in bytes.")
+              .tooltip("The average amount of SQL client network traffic per second across all nodes.")
           );
           this._addChart(
             this.activityAxes,
@@ -255,7 +255,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Queries/sec")
             ).format(d3.format(".1")).title("Queries Per Second")
-              .tooltip("The number of SQL queries across all nodes, averaged over a 10 second period.")
+              .tooltip("The average number of SQL queries per second across all nodes.")
           );
           this._addChart(
             this.activityAxes,
@@ -291,7 +291,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Selects")
             ).format(d3.format(".1")).title("Reads")
-              .tooltip("The number of SELECT statements across all nodes, averaged over a 10 second period.")
+              .tooltip("The average number of SELECT statements per second across all nodes.")
            );
           this._addChart(
             this.sqlAxes,
@@ -306,7 +306,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Deletes")
             ).format(d3.format(".1")).title("Writes")
-              .tooltip("The number of INSERT, UPDATE, and DELETE statements across all nodes, averaged over a 10 second period.")
+              .tooltip("The average number of INSERT, UPDATE, and DELETE statements per second across all nodes.")
           );
           this._addChart(
             this.sqlAxes,
@@ -321,7 +321,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Aborts")
             ).format(d3.format(".1")).title("Transactions")
-              .tooltip("The number of transactions committed, rolled back, or aborted across all nodes, averaged over a 10 second period.")
+              .tooltip("The average number of transactions committed, rolled back, or aborted per second across all nodes.")
           );
           this._addChart(
             this.sqlAxes,
@@ -330,7 +330,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("DDL Statements")
             ).format(d3.format(".1")).title("Schema Changes")
-              .tooltip("The number of DDL statements across all nodes, averaged over a 10 second period.")
+              .tooltip("The average number of DDL statements per second across all nodes.")
           );
 
           // System resource graphs
@@ -371,7 +371,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
-              .tooltip("The number of calls from Go to C by CockroachDB across all nodes.")
+              .tooltip("The average number of calls from Go to C per second across all nodes.")
           );
 
           // Graphs for internals, such as RocksDB
@@ -476,7 +476,7 @@ module AdminViews {
             ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("GC Pause Time")
             .label("Milliseconds")
-            .tooltip("The processor time used by Go’s garbage collector across all nodes, during which application code execution is paused."
+            .tooltip("The average amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused."
           );
 
           this.exec = new Metrics.Executor(this._query);
@@ -818,7 +818,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-              .tooltip("The amount of SQL traffic sent to and from this node, in bytes.")
+              .tooltip("The average amount of SQL client network traffic per second on this node.")
           );
           this._addChart(
             this.activityAxes,
@@ -828,7 +828,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Queries/sec")
             ).format(d3.format(".1")).title("Queries Per Second")
-              .tooltip("The number of SQL queries to this node, averaged over a 10 second period.")
+              .tooltip("The average number of SQL queries per second on this node.")
           );
           this._addChart(
             this.activityAxes,
@@ -865,7 +865,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Selects")
             ).format(d3.format(".1")).title("Reads")
-              .tooltip("The number of SELECT statements to this node, averaged over a 10 second period.")
+              .tooltip("The average number of SELECT statements per second on this node.")
            );
           this._addChart(
             this.sqlAxes,
@@ -883,7 +883,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Deletes")
             ).format(d3.format(".1")).title("Writes")
-              .tooltip("The number of INSERT, UPDATE, and DELETE statements to this node, averaged over a 10 second period.")
+              .tooltip("The average number of INSERT, UPDATE, and DELETE statements per second on this node.")
           );
           this._addChart(
             this.sqlAxes,
@@ -901,7 +901,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Aborts")
             ).format(d3.format(".1")).title("Transactions")
-              .tooltip("The number of transactions committed, rolled back, or aborted on this node, averaged over a 10 second period.")
+              .tooltip("The average number of transactions committed, rolled back, or aborted per second on this node.")
           );
           this._addChart(
             this.sqlAxes,
@@ -911,7 +911,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("DDL Statements")
             ).format(d3.format(".1")).title("Schema Changes")
-              .tooltip("The number of DDL statements to this node, averaged over a 10 second period.")
+              .tooltip("The average number of DDL statements per second on this node.")
           );
 
           // System resource graphs
@@ -959,7 +959,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
-              .tooltip("The number of calls from Go to C by CockroachDB on this node.")
+              .tooltip("The average number of calls from Go to C per second on this node.")
           );
 
           // Graphs for internals, such as RocksDB
@@ -1083,7 +1083,7 @@ module AdminViews {
             ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("GC Pause Time")
             .label("Milliseconds")
-            .tooltip("The processor time used by Go’s garbage collector on this node, during which application code execution is paused."
+            .tooltip("The average amount of processor time used by Go’s garbage collector per second on this node. During garbage collection, application code execution is paused."
           );
         }
 

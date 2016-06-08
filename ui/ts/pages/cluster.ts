@@ -180,7 +180,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-              .tooltip("The amount of SQL client network traffic, in bytes.")
+              .tooltip("The average amount of SQL client network traffic per second.")
           );
 
           this._addChart(
@@ -188,8 +188,8 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format(".1")).title("Reads Per Second")
-            .tooltip("The number of SELECT statements, averaged over a 10 second period.")
+            ).format(d3.format(".1")).title("Reads")
+            .tooltip("The average number of SELECT statements per second.")
           );
 
           this._addChart(
@@ -203,8 +203,8 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .nonNegativeRate()
                 .title("Delete")
-            ).format(d3.format(".1")).title("Writes Per Second")
-            .tooltip("The number of INSERT, UPDATE, and DELETE statements, averaged over a 10 second period.")
+            ).format(d3.format(".1")).title("Writes")
+            .tooltip("The average number of INSERT, UPDATE, and DELETE statements per second.")
           );
 
           this.exec = new Metrics.Executor(this._query);
