@@ -3,3 +3,5 @@ ui/embedded.go binary
 *.pdf binary
 *.woff binary
 *.woff2 binary
+*.pb.go -diff
+*.pb.gw.go -diff
