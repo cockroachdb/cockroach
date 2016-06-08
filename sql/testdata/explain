@@ -32,12 +32,12 @@ EXPLAIN (DEBUG, VERBOSE) SELECT 1
 RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
 
-query TTITTITTT
+query TTITTITTT colnames
 EXPLAIN (TRACE) SELECT 1
 ----
-0.000ms   1                                   0 NULL NULL NULL
-0.000ms   1                                   0 0    (1)  t
-0.000ms   0 coordinator tracing completed     0 NULL NULL
+Cumulative Time  Duration  Span Pos   Operation         Event        RowIdx  Key   Value  Disposition
+0.000ms                           1                                       0  NULL  NULL   t
+0.000ms                           0  coordinator  tracing completed       0  NULL         NULL
 
 query ITTT colnames
 EXPLAIN (TYPES) SELECT 1
@@ -59,3 +59,15 @@ EXPLAIN (PLAN, DEBUG) SELECT 1
 
 statement error unsupported EXPLAIN option
 EXPLAIN (TRACE, UNKNOWN) SELECT 1
+
+# Ensure that tracing results are sorted after gathering
+query ITTT colnames
+EXPLAIN(VERBOSE) EXPLAIN(TRACE) SELECT 1
+----
+Level  Type                  Description   Ordering
+0      select                              +9,+Span Pos
+1      sort                  +9,+Span Pos  +9,+Span Pos
+2      explain               trace
+3      select
+4      render/filter(debug)  (1)@
+5      empty                 -

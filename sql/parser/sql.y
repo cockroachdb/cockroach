@@ -950,6 +950,7 @@ explainable_stmt:
 | insert_stmt
 | update_stmt
 | delete_stmt
+| explain_stmt
 
 explain_option_list:
   explain_option_name

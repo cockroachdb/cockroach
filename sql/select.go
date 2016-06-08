@@ -213,7 +213,12 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 	}
 	fmt.Fprintf(&buf, ")@%s", s.source.info.alias)
 
-	return "render/filter", buf.String(), subplans
+	name = "render/filter"
+	if s.explain != explainNone {
+		name = fmt.Sprintf("%s(%s)", name, explainStrings[s.explain])
+	}
+
+	return name, buf.String(), subplans
 }
 
 func (s *selectNode) SetLimitHint(numRows int64, soft bool) {

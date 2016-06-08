@@ -38,6 +38,8 @@ const (
 	explainTypes
 )
 
+var explainStrings = []string{"", "debug", "plan", "trace", "types"}
+
 // Explain executes the explain statement, providing debugging and analysis
 // info about a DELETE, INSERT, SELECT or UPDATE statement.
 //
@@ -115,7 +117,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return node, nil
 
 	case explainTrace:
-		return &explainTraceNode{plan: plan, txn: p.txn}, nil
+		return makeTraceNode(plan, p.txn), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
@@ -135,9 +137,9 @@ func (e *explainTypesNode) Ordering() orderingInfo               { return e.resu
 func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
 func (e *explainTypesNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
-func (e *explainTypesNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
+func (e *explainTypesNode) MarkDebug(mode explainMode)           {}
 func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return e.plan.ExplainPlan(v)
+	return "explain", "types", []planNode{e.plan}
 }
 
 func (e *explainTypesNode) expandPlan() error {
@@ -211,9 +213,9 @@ func (e *explainPlanNode) Next() (bool, error)                  { return e.resul
 func (e *explainPlanNode) Columns() []ResultColumn              { return e.results.Columns() }
 func (e *explainPlanNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
-func (e *explainPlanNode) DebugValues() debugValues             { return e.results.DebugValues() }
+func (e *explainPlanNode) DebugValues() debugValues             { return debugValues{} }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
-func (e *explainPlanNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
+func (e *explainPlanNode) MarkDebug(mode explainMode)           {}
 func (e *explainPlanNode) expandPlan() error {
 	columns := []ResultColumn{
 		{Name: "Level", Typ: parser.TypeInt},
@@ -236,7 +238,7 @@ func (e *explainPlanNode) expandPlan() error {
 	return nil
 }
 func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return e.plan.ExplainPlan(v)
+	return "explain", "plan", []planNode{e.plan}
 }
 
 func (e *explainPlanNode) Start() error {
@@ -357,17 +359,14 @@ func (n *explainDebugNode) expandPlan() error {
 	return nil
 }
 
-func (n *explainDebugNode) Start() error { return n.plan.Start() }
-
+func (n *explainDebugNode) Start() error        { return n.plan.Start() }
 func (n *explainDebugNode) Next() (bool, error) { return n.plan.Next() }
 
 func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	return n.plan.ExplainPlan(v)
 }
 
-func (n *explainDebugNode) ExplainTypes(fn func(string, string)) {
-	n.plan.ExplainTypes(fn)
-}
+func (n *explainDebugNode) ExplainTypes(fn func(string, string)) {}
 
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()
@@ -385,12 +384,6 @@ func (n *explainDebugNode) Values() parser.DTuple {
 	}
 }
 
-func (*explainDebugNode) MarkDebug(_ explainMode) {
-	panic("debug mode not implemented in explainDebugNode")
-}
-
-func (*explainDebugNode) DebugValues() debugValues {
-	panic("debug mode not implemented in explainDebugNode")
-}
-
+func (*explainDebugNode) MarkDebug(_ explainMode)      {}
+func (*explainDebugNode) DebugValues() debugValues     { return debugValues{} }
 func (*explainDebugNode) SetLimitHint(_ int64, _ bool) {}
