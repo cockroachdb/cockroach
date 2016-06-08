@@ -1379,7 +1379,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		if !ok {
 			continue
 		}
-		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil && crt.ChangeType != roachpb.ALLOCATE_REPLICA_ID {
+		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 			// needs to understand it; it cannot simply be an opaque command.
 			log.Infof("raft: proposing %s %+v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)

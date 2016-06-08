@@ -156,7 +156,6 @@ enum ReplicaChangeType {
 
   ADD_REPLICA = 0;
   REMOVE_REPLICA = 1;
-  ALLOCATE_REPLICA_ID = 2;
 }
 
 message ChangeReplicasTrigger {

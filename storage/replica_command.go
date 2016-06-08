@@ -2475,9 +2475,7 @@ func (r *Replica) mergeTrigger(
 
 func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch, change *roachpb.ChangeReplicasTrigger) error {
 	cpy := *r.Desc()
-	if change.ChangeType != roachpb.ALLOCATE_REPLICA_ID {
-		cpy.Replicas = change.UpdatedReplicas
-	}
+	cpy.Replicas = change.UpdatedReplicas
 	cpy.NextReplicaID = change.NextReplicaID
 	if err := r.setDesc(&cpy); err != nil {
 		return err
@@ -2522,9 +2520,9 @@ func (r *Replica) ChangeReplicas(
 	}
 
 	rangeID := desc.RangeID
-	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	updatedDesc := *desc
+	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
 
-	var updatedDesc roachpb.RangeDescriptor
 	switch changeType {
 	case roachpb.ADD_REPLICA:
 		// If the replica exists on the remote node, no matter in which store,
@@ -2532,40 +2530,6 @@ func (r *Replica) ChangeReplicas(
 		if nodeUsed {
 			return util.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
 		}
-
-		// We're going to run a small transaction to reserve the next replica ID
-		// before we send a snapshot. This prevents the case of the snapshot being
-		// sent with an invalid replica ID.
-		{
-			reservingDesc := *desc
-			replica.ReplicaID = reservingDesc.NextReplicaID
-			reservingDesc.NextReplicaID++
-
-			// We're going to run a small transaction so we can reserve the replica ID.
-			if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
-				b := txn.NewBatch()
-				if err := updateRangeDescriptor(b, descKey, desc, &reservingDesc); err != nil {
-					return err
-				}
-				b.AddRawRequest(&roachpb.EndTransactionRequest{
-					Commit: true,
-					InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-						ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-							ChangeType:    roachpb.ALLOCATE_REPLICA_ID,
-							NextReplicaID: reservingDesc.NextReplicaID,
-						},
-					},
-				})
-				return txn.Run(b)
-			}); pErr != nil {
-				return util.Errorf("change replicas of %d failed: %s", rangeID, pErr)
-			}
-			desc = &reservingDesc
-		}
-
-		updatedDesc = *desc
-		updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), updatedDesc.Replicas...)
-		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 
 		snap, err := r.GetSnapshot()
 		if err != nil {
@@ -2587,16 +2551,21 @@ func (r *Replica) ChangeReplicas(
 		}); err != nil {
 			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
 		}
+
+		replica.ReplicaID = updatedDesc.NextReplicaID
+		updatedDesc.NextReplicaID++
+		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 	case roachpb.REMOVE_REPLICA:
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if replicaIdx == -1 {
 			return util.Errorf("removing replica %v which is not present in range %d", replica, rangeID)
 		}
-		updatedDesc = *desc
-		updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), updatedDesc.Replicas...)
-		updatedDesc.Replicas = append(updatedDesc.Replicas[:replicaIdx], updatedDesc.Replicas[replicaIdx+1:]...)
+		updatedDesc.Replicas[replicaIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
+		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
+
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
 	if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
