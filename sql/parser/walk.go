@@ -16,10 +16,7 @@
 
 package parser
 
-import (
-	"fmt"
-	"reflect"
-)
+import "reflect"
 
 // Visitor defines methods that are called for nodes during an expression or statement walk.
 type Visitor interface {
@@ -749,86 +746,6 @@ func WalkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
 	}
 	newStmt = walkable.WalkStmt(v)
 	return newStmt, (stmt != newStmt)
-}
-
-// MapPlaceholderTypes maps placeholder names (without leading "$") to
-// their type. This is populated by the type inference necessary to
-// support the postgres wire protocol.  See various TypeCheck()
-// implementations for details.
-type MapPlaceholderTypes map[string]Datum
-
-// SetInferredType sets the bind var argument d to the type typ in m. If m is
-// nil or d is not a DPlaceholder, nil is returned. If the bind var argument is set,
-// typ is returned. An error is returned if typ cannot be set because a
-// different type is already present.
-func (m MapPlaceholderTypes) SetInferredType(d, typ Datum) (set Datum, err error) {
-	if m == nil {
-		return nil, nil
-	}
-	v, ok := d.(*DPlaceholder)
-	if !ok {
-		return nil, nil
-	}
-	if t, ok := m[v.name]; ok && !typ.TypeEqual(t) {
-		return nil, fmt.Errorf("placeholder %s has multiple types: %s, %s", v, typ.Type(), t.Type())
-	}
-	m[v.name] = typ
-	return typ, nil
-}
-
-// IsUnresolvedArgument returns whether expr is an unresolved var argument. In
-// other words, it returns whether the provided expression is an argument, and
-// if so, whether the variable's type remains unset or not.
-func (m MapPlaceholderTypes) IsUnresolvedArgument(expr Expr) bool {
-	if t, ok := expr.(Placeholder); ok {
-		if _, ok := m[t.Name]; !ok {
-			return true
-		}
-	}
-	return false
-}
-
-// Args defines the interface for retrieving the value provided as
-// argument by the client for a placeholder. Return false for the
-// second return value if no argument was provided for the placeholder.
-type Args interface {
-	Arg(name string) (Datum, bool)
-}
-
-type argVisitor struct {
-	args Args
-	err  error
-}
-
-var _ Visitor = &argVisitor{}
-
-func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if v.err != nil {
-		return false, expr
-	}
-	placeholder, ok := expr.(Placeholder)
-	if !ok {
-		return true, expr
-	}
-	d, found := v.args.Arg(placeholder.Name)
-	if !found {
-		v.err = fmt.Errorf("arg %s not found", placeholder)
-		return false, expr
-	}
-	if d == nil {
-		d = DNull
-	}
-	return true, d
-}
-
-func (v *argVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// FillQueryArgs replaces any placeholder nodes in the expression with arguments
-// supplied with the query.
-func FillQueryArgs(stmt Statement, args Args) (Statement, error) {
-	v := argVisitor{args: args}
-	stmt, _ = WalkStmt(&v, stmt)
-	return stmt, v.err
 }
 
 type containsSubqueryVisitor struct {

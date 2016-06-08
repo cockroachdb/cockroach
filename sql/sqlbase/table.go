@@ -124,7 +124,8 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			if err != nil {
 				return desc, err
 			}
-			if typedExpr, err := expr.TypeCheck(nil, parser.TypeBool); err != nil {
+			semaCtx := parser.MakeSemaContext()
+			if typedExpr, err := expr.TypeCheck(&semaCtx, parser.TypeBool); err != nil {
 				return desc, err
 			} else if typ := typedExpr.ReturnType(); !typ.TypeEqual(parser.TypeBool) {
 				return desc, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
@@ -164,7 +165,8 @@ func incompatibleColumnDefaultTypeError(colDatumType parser.Datum, defaultType p
 // SanitizeDefaultExpr verifies a default expression is valid and has the
 // correct type.
 func SanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
-	typedExpr, err := parser.TypeCheck(expr, nil, colDatumType)
+	semaCtx := parser.MakeSemaContext()
+	typedExpr, err := parser.TypeCheck(expr, &semaCtx, colDatumType)
 	if err != nil {
 		return err
 	}
@@ -1012,59 +1014,66 @@ func EncodeSecondaryIndexes(
 // CheckColumnType verifies that a given value is compatible
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapPlaceholderTypes) error {
+func CheckColumnType(col ColumnDescriptor, val parser.Datum, pmap *parser.PlaceholderInfo) error {
 	if val == parser.DNull {
 		return nil
 	}
 
 	var ok bool
-	var err error
 	var set parser.Datum
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
 		_, ok = val.(*parser.DBool)
-		set, err = args.SetInferredType(val, parser.TypeBool)
+		set = parser.TypeBool
 	case ColumnType_INT:
 		_, ok = val.(*parser.DInt)
-		set, err = args.SetInferredType(val, parser.TypeInt)
+		set = parser.TypeInt
 	case ColumnType_FLOAT:
 		_, ok = val.(*parser.DFloat)
-		set, err = args.SetInferredType(val, parser.TypeFloat)
+		set = parser.TypeFloat
 	case ColumnType_DECIMAL:
 		_, ok = val.(*parser.DDecimal)
-		set, err = args.SetInferredType(val, parser.TypeDecimal)
+		set = parser.TypeDecimal
 	case ColumnType_STRING:
 		_, ok = val.(*parser.DString)
-		set, err = args.SetInferredType(val, parser.TypeString)
+		set = parser.TypeString
 	case ColumnType_BYTES:
 		_, ok = val.(*parser.DBytes)
 		if !ok {
 			_, ok = val.(*parser.DString)
 		}
-		set, err = args.SetInferredType(val, parser.TypeBytes)
+		set = parser.TypeBytes
 	case ColumnType_DATE:
 		_, ok = val.(*parser.DDate)
-		set, err = args.SetInferredType(val, parser.TypeDate)
+		set = parser.TypeDate
 	case ColumnType_TIMESTAMP:
 		_, ok = val.(*parser.DTimestamp)
-		set, err = args.SetInferredType(val, parser.TypeTimestamp)
+		set = parser.TypeTimestamp
 	case ColumnType_TIMESTAMPTZ:
 		_, ok = val.(*parser.DTimestampTZ)
-		set, err = args.SetInferredType(val, parser.TypeTimestampTZ)
+		set = parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		_, ok = val.(*parser.DInterval)
-		set, err = args.SetInferredType(val, parser.TypeInterval)
+		set = parser.TypeInterval
 	default:
 		return util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
-	// Check that the value cast has succeeded.
-	// We ignore the case where it has failed because val was a DArg,
-	// which is signalled by SetInferredType returning a non-nil assignment.
-	if !ok && set == nil {
-		return fmt.Errorf("value type %s doesn't match type %s of column %q",
-			val.Type(), col.Type.Kind, col.Name)
+
+	// If the value is a placeholder, then the column check above has
+	// populated 'set' with a type to assign to it.
+	if d, dok := val.(*parser.DPlaceholder); dok {
+		if err := pmap.SetType(d.Name(), set); err != nil {
+			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
+				d.Name(), col.Name, err)
+		}
+	} else {
+		// Not a placeholder; check that the value cast has succeeded.
+		if !ok && set == nil {
+			return fmt.Errorf("value type %s doesn't match type %s of column %q",
+				val.Type(), col.Type.Kind, col.Name)
+		}
 	}
-	return err
+	return nil
 }
 
 // MarshalColumnValue returns a Go primitive value equivalent of val, of the

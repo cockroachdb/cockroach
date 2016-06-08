@@ -52,25 +52,27 @@ var (
 // SemaContext defines the context in which to perform semantic analysis on an
 // expression syntax tree.
 type SemaContext struct {
-	// Args maps Placeholder names to types inferred while type-checking.
-	PlaceholderTypes MapPlaceholderTypes
+	// Placeholders relates placeholder names to their type and, later, value.
+	Placeholders *PlaceholderInfo
 
 	// Location references the *Location on the current Session.
 	Location **time.Location
 }
 
-// args provides a nil-safe method to access a SemaContext's argument map.
-func (sc *SemaContext) args() MapPlaceholderTypes {
-	if sc == nil {
-		return nil
-	}
-	return sc.PlaceholderTypes
+// MakeSemaContext initializes a simple SemaContext suitable
+// for "lightweight" type checking such as the one performed for default
+// expressions.
+func MakeSemaContext() SemaContext {
+	return SemaContext{Placeholders: NewPlaceholderInfo()}
 }
 
 // isUnresolvedArgument provides a nil-safe method to determine whether expr is an
 // unresolved var argument.
 func (sc *SemaContext) isUnresolvedArgument(expr Expr) bool {
-	return sc.args().IsUnresolvedArgument(expr)
+	if sc == nil {
+		return false
+	}
+	return sc.Placeholders.IsUnresolvedArgument(expr)
 }
 
 // GetLocation returns the session timezone.
@@ -528,18 +530,22 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error)
 
 // TypeCheck implements the Expr interface.
 func (expr Placeholder) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
-	dVal := &DPlaceholder{name: expr.Name}
-	if v, ok := ctx.args()[expr.Name]; ok {
-		dVal.typeAnnotation.typ = v
+	// If there is a value known already, immediately substitute with it.
+	if v, ok := ctx.Placeholders.Value(expr.Name); ok {
+		return v, nil
+	}
+
+	// Otherwise, perform placeholder typing.
+	dVal := &DPlaceholder{name: expr.Name, pmap: ctx.Placeholders}
+	if _, ok := ctx.Placeholders.Type(expr.Name); ok {
 		return dVal, nil
 	}
 	if desired == NoTypePreference || desired == DNull {
 		return nil, placeholderTypeAmbiguityError{expr}
 	}
-	if _, err := ctx.args().SetInferredType(dVal, desired); err != nil {
+	if err := ctx.Placeholders.SetType(dVal.name, desired); err != nil {
 		return nil, err
 	}
-	dVal.typeAnnotation.typ = desired
 	return dVal, nil
 }
 
@@ -1012,12 +1018,12 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 //
 // TODO(nvanbenschoten) Add support for explicit placeholder annotations.
 // TODO(nvanbenschoten) Can this visitor and map be preallocated (like normalizeVisitor)?
-func ProcessPlaceholderAnnotations(stmt Statement, args MapPlaceholderTypes) error {
+func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
 	v := placeholderAnnotationVisitor{make(map[string]annotationState)}
 	WalkStmt(&v, stmt)
 	for placeholder, state := range v.placeholders {
-		if _, ok := args[placeholder]; !ok && state.every {
-			args[placeholder] = state.typ
+		if _, ok := p[placeholder]; !ok && state.every {
+			p[placeholder] = state.typ
 		}
 	}
 	return nil

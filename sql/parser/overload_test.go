@@ -76,7 +76,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	binaryIntDateFn := makeTestOverload(TypeDate, TypeInt, TypeDate)
 
 	testData := []struct {
-		ptypes           MapPlaceholderTypes
+		ptypes           PlaceholderTypes
 		desired          Datum
 		exprs            []Expr
 		overloads        []overloadImpl
@@ -139,7 +139,8 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, TypeDate, []Expr{decConst("1.0"), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
 	}
 	for i, d := range testData {
-		ctx := SemaContext{PlaceholderTypes: d.ptypes}
+		ctx := SemaContext{Placeholders: NewPlaceholderInfo()}
+		ctx.Placeholders.SetTypes(d.ptypes)
 		_, fn, err := typeCheckOverloadedExprs(&ctx, d.desired, d.overloads, d.exprs...)
 		if d.expectedOverload != nil {
 			if err != nil {
