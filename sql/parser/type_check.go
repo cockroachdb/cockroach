@@ -298,9 +298,15 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 	candidates, ok := Builtins[name]
 	if !ok {
 		candidates, ok = Builtins[strings.ToLower(name)]
-		if !ok {
-			return nil, fmt.Errorf("unknown function: %s", name)
-		}
+	}
+	if !ok {
+		candidates, ok = Aggregates[name]
+	}
+	if !ok {
+		candidates, ok = Aggregates[strings.ToLower(name)]
+	}
+	if !ok {
+		return nil, fmt.Errorf("unknown function: %s", name)
 	}
 
 	overloads := make([]overloadImpl, len(candidates))
