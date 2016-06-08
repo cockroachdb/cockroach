@@ -2365,20 +2365,19 @@ func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 	s.mu.Unlock()
 }
 
-// FrozenStatus returns whether all of the Store's replicas are frozen or
-// unfrozen (thawed). It makes no attempt to prevent new data being rebalanced
-// to the Store, and thus does not guarantee that the Store remains in the
-// reported state.
-func (s *Store) FrozenStatus() (numFrozen int64, numThawed int64) {
+// FrozenStatus returns all of the Store's Replicas which are frozen (if the
+// parameter is false) or unfrozen (otherwise). It makes no attempt to prevent
+// new data being rebalanced to the Store, and thus does not guarantee that the
+// Store remains in the reported state.
+func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescriptor) {
 	newStoreRangeSet(s).Visit(func(r *Replica) bool {
-		if !r.IsInitialized() {
+		desc := r.GetReplica()
+		if !r.IsInitialized() || desc == nil {
 			return true
 		}
 		r.mu.Lock()
-		if r.mu.frozen {
-			numFrozen++
-		} else {
-			numThawed++
+		if r.mu.frozen == collectFrozen {
+			descs = append(descs, *desc)
 		}
 		r.mu.Unlock()
 		return true // want more

@@ -692,10 +692,9 @@ func (s *adminServer) waitForStoreFrozen(
 					if err != nil {
 						message += err.Error()
 					} else {
+						numMismatching := len(resp.Results)
 						mu.Lock()
-						ok := (wantFrozen && resp.NumThawed == 0) ||
-							(!wantFrozen && resp.NumFrozen == 0)
-						if ok {
+						if numMismatching == 0 {
 							// If the Store is in the right state, mark it as such.
 							// This means we won't try it again.
 							message += "ready"
@@ -703,7 +702,14 @@ func (s *adminServer) waitForStoreFrozen(
 						} else {
 							// Otherwise, forget that we tried the Store so that
 							// the retry loop picks it up again.
-							message += fmt.Sprintf("%d frozen and %d thawed ranges", resp.NumFrozen, resp.NumThawed)
+							message += fmt.Sprintf("%d replicas report wrong status", numMismatching)
+							if limit := 10; numMismatching > limit {
+								message += " [truncated]: "
+								resp.Results = resp.Results[:limit]
+							} else {
+								message += ": "
+							}
+							message += fmt.Sprintf("%+v", resp.Results)
 							delete(mu.oks, storeID)
 						}
 						mu.Unlock()
@@ -723,6 +729,9 @@ func (s *adminServer) waitForStoreFrozen(
 							NodeID:  nodeID,
 							StoreID: storeID,
 						},
+						// If we are looking to freeze everything, we want to
+						// collect thawed Replicas, and vice versa.
+						CollectFrozen: !wantFrozen,
 					})
 				return err
 			}
