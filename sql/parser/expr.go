@@ -501,7 +501,7 @@ func (DefaultVal) ReturnType() Datum { return nil }
 
 var _ VariableExpr = Placeholder{}
 
-// Placeholder represents a named bind var argument.
+// Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
 }

@@ -66,13 +66,13 @@ func MakeSemaContext() SemaContext {
 	return SemaContext{Placeholders: NewPlaceholderInfo()}
 }
 
-// isUnresolvedArgument provides a nil-safe method to determine whether expr is an
-// unresolved var argument.
-func (sc *SemaContext) isUnresolvedArgument(expr Expr) bool {
+// isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an
+// unresolved placeholder.
+func (sc *SemaContext) isUnresolvedPlaceholder(expr Expr) bool {
 	if sc == nil {
 		return false
 	}
-	return sc.Placeholders.IsUnresolvedArgument(expr)
+	return sc.Placeholders.IsUnresolvedPlaceholder(expr)
 }
 
 // GetLocation returns the session timezone.
@@ -223,7 +223,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 			desired = returnDatum
 		}
 	case Placeholder:
-		if ctx.isUnresolvedArgument(t) {
+		if ctx.isUnresolvedPlaceholder(t) {
 			// This case will be triggered if ProcessPlaceholderAnnotations found
 			// the same placeholder in another location where it was either not
 			// the child of a cast, or was the child of a cast to a different type.
@@ -735,29 +735,32 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 	// TODO(nvanbenschoten) Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
-	// Split the expressions into three groups of indexed expressions.
-	var resolvableExprs, constExprs, valExprs []indexedExpr
+	// Split the expressions into three groups of indexed expressions:
+	// - Placeholders
+	// - Numeric constants
+	// - All other Exprs
+	var resolvableExprs, constExprs, placeholderExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
 		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
-		case ctx.isUnresolvedArgument(expr):
-			valExprs = append(valExprs, idxExpr)
+		case ctx.isUnresolvedPlaceholder(expr):
+			placeholderExprs = append(placeholderExprs, idxExpr)
 		default:
 			resolvableExprs = append(resolvableExprs, idxExpr)
 		}
 	}
 
-	// Used to set Placeholders to the desired typ. If the typ is not provided or is
+	// Used to set placeholders to the desired typ. If the typ is not provided or is
 	// nil, an error will be thrown.
-	typeCheckSameTypedArgs := func(typ Datum) error {
-		for _, valExpr := range valExprs {
-			typedExpr, err := typeCheckAndRequire(ctx, valExpr.e, typ, "placeholder")
+	typeCheckSameTypedPlaceholders := func(typ Datum) error {
+		for _, placeholderExpr := range placeholderExprs {
+			typedExpr, err := typeCheckAndRequire(ctx, placeholderExpr.e, typ, "placeholder")
 			if err != nil {
 				return err
 			}
-			typedExprs[valExpr.i] = typedExpr
+			typedExprs[placeholderExpr.i] = typedExpr
 		}
 		return nil
 	}
@@ -767,26 +770,26 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 	// required shared type using the second parameter.
 	typeCheckSameTypedConsts := func(typ Datum, required bool) (Datum, error) {
 		setTypeForConsts := func(typ Datum) {
-			for _, numVal := range constExprs {
-				typedExpr, err := typeCheckAndRequire(ctx, numVal.e, typ, "numeric constant")
+			for _, constExpr := range constExprs {
+				typedExpr, err := typeCheckAndRequire(ctx, constExpr.e, typ, "numeric constant")
 				if err != nil {
 					panic(err)
 				}
-				typedExprs[numVal.i] = typedExpr
+				typedExprs[constExpr.i] = typedExpr
 			}
 		}
 
 		// If typ is not nil, all consts try to become typ.
 		if typ != nil {
 			all := true
-			for _, numVal := range constExprs {
-				if !canConstantBecome(numVal.e.(*NumVal), typ) {
+			for _, constExpr := range constExprs {
+				if !canConstantBecome(constExpr.e.(Constant), typ) {
 					if required {
-						typedExpr, err := numVal.e.TypeCheck(ctx, NoTypePreference)
+						typedExpr, err := constExpr.e.TypeCheck(ctx, NoTypePreference)
 						if err != nil {
 							return nil, err
 						}
-						return nil, unexpectedTypeError{numVal.e, typ, typedExpr.ReturnType()}
+						return nil, unexpectedTypeError{constExpr.e, typ, typedExpr.ReturnType()}
 					}
 					all = false
 					break
@@ -805,14 +808,14 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 	}
 
 	// Used to type check all constants with the optional desired type. The
-	// type that is chosen here will then be set to any arguments.
-	typeCheckConstsAndArgsWithDesired := func() ([]TypedExpr, Datum, error) {
+	// type that is chosen here will then be set to any placeholders.
+	typeCheckConstsAndPlaceholdersWithDesired := func() ([]TypedExpr, Datum, error) {
 		typ, err := typeCheckSameTypedConsts(desired, false)
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(valExprs) > 0 {
-			if err := typeCheckSameTypedArgs(typ); err != nil {
+		if len(placeholderExprs) > 0 {
+			if err := typeCheckSameTypedPlaceholders(typ); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -821,12 +824,12 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 
 	switch {
 	case len(resolvableExprs) == 0 && len(constExprs) == 0:
-		if err := typeCheckSameTypedArgs(desired); err != nil {
+		if err := typeCheckSameTypedPlaceholders(desired); err != nil {
 			return nil, nil, err
 		}
 		return typedExprs, desired, nil
 	case len(resolvableExprs) == 0:
-		return typeCheckConstsAndArgsWithDesired()
+		return typeCheckConstsAndPlaceholdersWithDesired()
 	default:
 		firstValidIdx := -1
 		firstValidType := DNull
@@ -846,9 +849,9 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 		if firstValidType == DNull {
 			switch {
 			case len(constExprs) > 0:
-				return typeCheckConstsAndArgsWithDesired()
-			case len(valExprs) > 0:
-				err := typeCheckSameTypedArgs(nil)
+				return typeCheckConstsAndPlaceholdersWithDesired()
+			case len(placeholderExprs) > 0:
+				err := typeCheckSameTypedPlaceholders(nil)
 				if err == nil {
 					panic("type checking parameters without a type should throw an error")
 				}
@@ -873,8 +876,8 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 				return nil, nil, err
 			}
 		}
-		if len(valExprs) > 0 {
-			if err := typeCheckSameTypedArgs(firstValidType); err != nil {
+		if len(placeholderExprs) > 0 {
+			if err := typeCheckSameTypedPlaceholders(firstValidType); err != nil {
 				return nil, nil, err
 			}
 		}
