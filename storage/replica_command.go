@@ -1439,14 +1439,23 @@ func (r *Replica) TruncateLog(
 	if err != nil {
 		return reply, err
 	}
+
+	raftLogSize := r.mu.raftLogSize
 	start := keys.RaftLogKey(r.RangeID, 0)
 	end := keys.RaftLogKey(r.RangeID, args.Index)
-	if err = batch.Iterate(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end),
-		func(kv engine.MVCCKeyValue) (bool, error) {
-			return false, batch.Clear(kv.Key)
-		}); err != nil {
+	_, err = engine.MVCCIterate(ctx, batch, start, end, hlc.ZeroTimestamp, true, /* consistent */
+		nil /* txn */, false /* reverse */, func(kv roachpb.KeyValue) (bool, error) {
+			raftLogSize -= int64(kv.Size())
+			return false, batch.Clear(engine.MakeMVCCMetadataKey(kv.Key))
+		})
+	if err != nil {
 		return reply, err
 	}
+
+	if err := setRaftLogSize(batch, r.RangeID, raftLogSize); err != nil {
+		return reply, err
+	}
+
 	tState := &roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
@@ -1455,6 +1464,7 @@ func (r *Replica) TruncateLog(
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
 		r.mu.state.TruncatedState = tState
+		r.mu.raftLogSize = raftLogSize
 		r.mu.Unlock()
 	})
 	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
