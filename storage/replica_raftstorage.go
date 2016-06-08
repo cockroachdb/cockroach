@@ -391,6 +391,53 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 		nil /* txn */)
 }
 
+// loadRaftLogSize retrieves the raft log size of range from storage and whether
+// it was found in the database.
+func loadRaftLogSize(eng engine.Reader, rangeID roachpb.RangeID) (int64, bool, error) {
+	v, _, err := engine.MVCCGet(context.Background(), eng, keys.RaftLogSizeKey(rangeID),
+		hlc.ZeroTimestamp, true /* consistent */, nil /* txn */)
+	if err != nil {
+		return 0, false, err
+	}
+	if v != nil {
+		raftLogSize, err := v.GetInt()
+		if err != nil {
+			return 0, false, err
+		}
+		return raftLogSize, true, nil
+	}
+	return 0, false, nil
+}
+
+// iterateRaftLog calls the provided function on all entries of the raft log.
+// The function should operate in the same manner if passed to engine.MVCCIterate.
+func iterateRaftLog(eng engine.Reader, rangeID roachpb.RangeID, f func(roachpb.KeyValue) (bool, error)) error {
+	prefix := keys.RaftLogPrefix(rangeID)
+	_, err := engine.MVCCIterate(context.Background(), eng, prefix,
+		prefix.PrefixEnd(), hlc.ZeroTimestamp, true /* consistent */, nil, /* txn */
+		false /* reverse */, f)
+	return err
+}
+
+// computeRaftLogSize scans the raft log to compute the size in bytes.
+func computeRaftLogSize(eng engine.Reader, rangeID roachpb.RangeID) (int64, error) {
+	var size int64
+	err := iterateRaftLog(eng, rangeID, func(kv roachpb.KeyValue) (bool, error) {
+		size += int64(kv.Size())
+		return false, nil
+	})
+	return size, err
+}
+
+// setRaftLogSize persists a new last index.
+func setRaftLogSize(eng engine.ReadWriter, rangeID roachpb.RangeID, raftLogSize int64) error {
+	var value roachpb.Value
+	value.SetInt(raftLogSize)
+
+	return engine.MVCCPut(context.Background(), eng, nil, keys.RaftLogSizeKey(rangeID),
+		hlc.ZeroTimestamp, value, nil /* txn */)
+}
+
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
@@ -595,32 +642,51 @@ func snapshot(
 // of r.lastIndex and returns a new value. We do this rather than
 // modifying r.lastIndex directly because this modification needs to
 // be atomic with the commit of the batch.
-func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries []raftpb.Entry) (uint64, error) {
+func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, prevRaftLogSize int64, entries []raftpb.Entry) (uint64, int64, error) {
 	if len(entries) == 0 {
-		return prevLastIndex, nil
+		return prevLastIndex, prevRaftLogSize, nil
 	}
+	ctx := context.Background()
+	raftLogSize := prevRaftLogSize
+	var kv roachpb.KeyValue
 	for i := range entries {
 		ent := &entries[i]
-		key := keys.RaftLogKey(r.RangeID, ent.Index)
-		if err := engine.MVCCPutProto(context.Background(), batch, nil, key, hlc.ZeroTimestamp, nil, ent); err != nil {
-			return 0, err
+		kv.Key = keys.RaftLogKey(r.RangeID, ent.Index)
+
+		if err := kv.Value.SetProto(ent); err != nil {
+			return 0, 0, err
+		}
+		kv.Value.InitChecksum(kv.Key)
+		raftLogSize += int64(kv.Size())
+
+		if err := engine.MVCCPut(ctx, batch, nil /* ms */, kv.Key, hlc.ZeroTimestamp, kv.Value, nil /* txn */); err != nil {
+			return 0, 0, err
 		}
 	}
 	lastIndex := entries[len(entries)-1].Index
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
-		err := engine.MVCCDelete(context.Background(), batch, nil,
-			keys.RaftLogKey(r.RangeID, i), hlc.ZeroTimestamp, nil)
+		kv.Key = keys.RaftLogKey(r.RangeID, i)
+		value, _, err := engine.MVCCGet(ctx, batch, kv.Key, hlc.ZeroTimestamp, true /* consistent */, nil /* txn */)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
+		}
+		kv.Value = *value
+		raftLogSize -= int64(kv.Size())
+		if err := batch.Clear(engine.MakeMVCCMetadataKey(kv.Key)); err != nil {
+			return 0, 0, err
 		}
 	}
 
-	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
-		return 0, err
+	if err := setRaftLogSize(batch, r.RangeID, raftLogSize); err != nil {
+		return 0, 0, err
 	}
 
-	return lastIndex, nil
+	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
+		return 0, 0, err
+	}
+
+	return lastIndex, raftLogSize, nil
 }
 
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
@@ -655,7 +721,6 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 }
 
 // applySnapshot updates the replica based on the given snapshot.
-// Returns the new last index.
 func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
@@ -713,7 +778,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	}
 
 	// Write the snapshot's Raft log into the range.
-	if _, err := r.append(batch, 0, logEntries); err != nil {
+	if _, _, err := r.append(batch, 0, 0, logEntries); err != nil {
 		return err
 	}
 
