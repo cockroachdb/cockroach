@@ -182,10 +182,6 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		return *desc, nil
 	}
 
-	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return sqlbase.TableDescriptor{}, err
-	}
-
 	dbID, err := p.getDatabaseID(qname.Database())
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
