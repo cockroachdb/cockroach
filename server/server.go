@@ -61,6 +61,8 @@ import (
 )
 
 var (
+	uiFileSystem http.FileSystem
+
 	// Allocation pool for gzip writers.
 	gzipWriterPool sync.Pool
 
@@ -71,33 +73,32 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	Tracer              opentracing.Tracer
-	ctx                 Context
-	mux                 *http.ServeMux
-	clock               *hlc.Clock
-	rpcContext          *rpc.Context
-	grpc                *grpc.Server
-	gossip              *gossip.Gossip
-	storePool           *storage.StorePool
-	distSender          *kv.DistSender
-	db                  *client.DB
-	kvDB                *kv.DBServer
-	pgServer            *pgwire.Server
-	distSQLServer       *distsql.ServerImpl
-	node                *Node
-	recorder            *status.MetricsRecorder
-	runtime             status.RuntimeStatSampler
-	admin               *adminServer
-	status              *statusServer
-	tsDB                *ts.DB
-	tsServer            ts.Server
-	raftTransport       *storage.RaftTransport
-	stopper             *stop.Stopper
-	sqlExecutor         *sql.Executor
-	leaseMgr            *sql.LeaseManager
-	schemaChangeManager *sql.SchemaChangeManager
-	parsedUpdatesURL    *url.URL
-	parsedReportingURL  *url.URL
+	Tracer             opentracing.Tracer
+	ctx                Context
+	mux                *http.ServeMux
+	clock              *hlc.Clock
+	rpcContext         *rpc.Context
+	grpc               *grpc.Server
+	gossip             *gossip.Gossip
+	storePool          *storage.StorePool
+	distSender         *kv.DistSender
+	db                 *client.DB
+	kvDB               *kv.DBServer
+	pgServer           *pgwire.Server
+	distSQLServer      *distsql.ServerImpl
+	node               *Node
+	recorder           *status.MetricsRecorder
+	runtime            status.RuntimeStatSampler
+	admin              adminServer
+	status             *statusServer
+	tsDB               *ts.DB
+	tsServer           ts.Server
+	raftTransport      *storage.RaftTransport
+	stopper            *stop.Stopper
+	sqlExecutor        *sql.Executor
+	leaseMgr           *sql.LeaseManager
+	parsedUpdatesURL   *url.URL
+	parsedReportingURL *url.URL
 }
 
 // NewServer creates a Server from a server.Context.
@@ -237,9 +238,9 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.tsDB)
 
-	s.admin = newAdminServer(s)
+	s.admin = makeAdminServer(s)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx.Context, s.rpcContext, s.node.stores)
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -260,8 +261,6 @@ type grpcGatewayServer interface {
 // Start starts the server on the specified port, starts gossip and
 // initializes the node using the engines from the server's context.
 func (s *Server) Start() error {
-	s.initHTTP()
-
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -404,15 +403,14 @@ func (s *Server) Start() error {
 	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
+
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
-	testingKnobs := &sql.SchemaChangeManagerTestingKnobs{}
+	testingKnobs := new(sql.SchemaChangeManagerTestingKnobs)
 	if s.ctx.TestingKnobs.SQLSchemaChangeManager != nil {
-		testingKnobs =
-			s.ctx.TestingKnobs.SQLSchemaChangeManager.(*sql.SchemaChangeManagerTestingKnobs)
+		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChangeManager.(*sql.SchemaChangeManagerTestingKnobs)
 	}
-	s.schemaChangeManager = sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr)
-	s.schemaChangeManager.Start(s.stopper)
+	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
 	s.periodicallyCheckForUpdates()
 
@@ -468,13 +466,21 @@ func (s *Server) Start() error {
 		return util.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
 	}
 
+	s.mux.Handle("/", http.FileServer(uiFileSystem))
+
+	// TODO(marc): when cookie-based authentication exists,
+	// apply it for all web endpoints.
+	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
+	s.mux.Handle(adminEndpoint, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
+	s.mux.Handle(statusPrefix, s.status)
+	s.mux.Handle(healthEndpoint, s.status)
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
@@ -546,21 +552,6 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 			}
 		}
 	})
-}
-
-var uiFileSystem http.FileSystem
-
-// initHTTP registers http prefixes.
-func (s *Server) initHTTP() {
-	s.mux.Handle("/", http.FileServer(uiFileSystem))
-
-	// The admin server handles both /debug/ and /_admin/
-	// TODO(marc): when cookie-based authentication exists,
-	// apply it for all web endpoints.
-	s.mux.Handle(adminEndpoint, s.admin)
-	s.mux.Handle(debugEndpoint, s.admin)
-	s.mux.Handle(statusPrefix, s.status)
-	s.mux.Handle(healthEndpoint, s.status)
 }
 
 // Stop stops the server.
