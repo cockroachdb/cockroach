@@ -5500,9 +5500,9 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
 	}
 
-	tc.rng.mu.Lock()
-	snapshotChan, ok := tc.rng.store.mu.snapshots[tc.rng.RangeID]
-	tc.rng.mu.Unlock()
+	tc.rng.store.snapMu.Lock()
+	snapshotChan, ok := tc.rng.store.snapMu.snapshots[tc.rng.RangeID]
+	tc.rng.store.snapMu.Unlock()
 
 	if ok {
 		// Wait for the snapshot to be generated and abandoned.
@@ -5513,8 +5513,10 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 		}
 	} else {
 		tc.rng.mu.Lock()
+		tc.rng.store.snapMu.Lock()
 		defer tc.rng.mu.Unlock()
-		t.Fatalf("expected snapshot channel for replica %d to exist but got %v instead", tc.rng.mu.replicaID, tc.rng.store.mu.snapshots)
+		defer tc.rng.store.snapMu.Unlock()
+		t.Fatalf("expected snapshot channel for replica %d to exist but got %v instead", tc.rng.mu.replicaID, tc.rng.store.snapMu.snapshots)
 	}
 }
 

@@ -321,6 +321,10 @@ type Store struct {
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 
 		replicaDescCache *cache.UnorderedCache
+	}
+
+	snapMu struct {
+		sync.Mutex
 
 		// Values are set to an open channel while a snapshot is being generated
 		// for the given key (range ID). Keys for which a snapshot is not in
@@ -702,10 +706,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 			return size > maxReplicaDescCacheSize
 		},
 	})
-	s.mu.snapshots = make(map[roachpb.RangeID]chan raftpb.Snapshot)
 	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
 
 	s.mu.Unlock()
+
+	s.snapMu.snapshots = make(map[roachpb.RangeID]chan raftpb.Snapshot)
 
 	// Add range scanner and configure with queues.
 	s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))

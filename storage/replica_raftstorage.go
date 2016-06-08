@@ -370,11 +370,11 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	rangeID := r.RangeID
 
-	r.store.mu.Lock()
-	defer r.store.mu.Unlock()
+	r.store.snapMu.Lock()
+	defer r.store.snapMu.Unlock()
 
 	// If a snapshot is in progress, see if it's ready.
-	if pendingSnapshotChan, ok := r.store.mu.snapshots[rangeID]; ok {
+	if pendingSnapshotChan, ok := r.store.snapMu.snapshots[rangeID]; ok {
 		select {
 		case snapData, ok := <-pendingSnapshotChan:
 			if ok {
@@ -389,7 +389,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	}
 
 	// See if too many snapshots are already running for this store.
-	if len(r.store.mu.snapshots) >= r.store.ctx.concurrentSnapshotLimit {
+	if len(r.store.snapMu.snapshots) >= r.store.ctx.concurrentSnapshotLimit {
 		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
@@ -399,9 +399,9 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer func() {
-			r.store.mu.Lock()
-			delete(r.store.mu.snapshots, rangeID)
-			r.store.mu.Unlock()
+			r.store.snapMu.Lock()
+			delete(r.store.snapMu.snapshots, rangeID)
+			r.store.snapMu.Unlock()
 			close(ch)
 		}()
 		snap := r.store.NewSnapshot()
@@ -421,7 +421,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			}
 		}
 	}) {
-		r.store.mu.snapshots[rangeID] = ch
+		r.store.snapMu.snapshots[rangeID] = ch
 	} else {
 		close(ch)
 	}
@@ -452,9 +452,9 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 		snap, err := r.Snapshot()
 		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
-			r.store.mu.Lock()
-			snapshotChan, ok := r.store.mu.snapshots[r.RangeID]
-			r.store.mu.Unlock()
+			r.store.snapMu.Lock()
+			snapshotChan, ok := r.store.snapMu.snapshots[r.RangeID]
+			r.store.snapMu.Unlock()
 			if !ok {
 				// The call to Snapshot() didn't start an async process due to
 				// rate limiting. Try again later.
