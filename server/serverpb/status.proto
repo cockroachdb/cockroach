@@ -54,6 +54,7 @@ message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   string raft_state = 2;
   storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+  int64 raft_log_size = 5;
 }
 
 message RangesRequest {

@@ -663,8 +663,9 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 						StartKey: desc.StartKey.String(),
 						EndKey:   desc.EndKey.String(),
 					},
-					RaftState: raftState,
-					State:     state,
+					RaftState:   raftState,
+					State:       state,
+					RaftLogSize: rep.RaftLogSize(),
 				})
 				return false, nil
 			})
