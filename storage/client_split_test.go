@@ -537,7 +537,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
-	maxBytes := int64(1 << 16)
+	const maxBytes = 1 << 16
 	// Set max bytes.
 	descID := uint32(keys.MaxReservedDescID + 1)
 	config.TestingSetZoneConfig(descID, &config.ZoneConfig{RangeMaxBytes: maxBytes})
@@ -595,7 +595,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	origRng := store.LookupReplica(roachpb.RKeyMin, nil)
 
 	// Set max bytes.
-	maxBytes := int64(1 << 16)
+	const maxBytes = 1 << 16
 	descID := uint32(keys.MaxReservedDescID + 1)
 	config.TestingSetZoneConfig(descID, &config.ZoneConfig{RangeMaxBytes: maxBytes})
 

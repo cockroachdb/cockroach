@@ -34,23 +34,16 @@ func TestGetQuorumMatchedIndex(t *testing.T) {
 	testCases := []struct {
 		commit   uint64
 		progress []uint64
-		padding  uint64
 		expected uint64
 	}{
 		// Basic cases.
-		{1, []uint64{1}, 0, 1},
-		{1, []uint64{1, 2}, 0, 1},
-		{2, []uint64{1, 2, 3}, 0, 2},
-		{2, []uint64{1, 2, 3, 4}, 0, 2},
-		{3, []uint64{1, 2, 3, 4, 5}, 0, 3},
+		{1, []uint64{1}, 1},
+		{1, []uint64{1, 2}, 1},
+		{2, []uint64{1, 2, 3}, 2},
+		{2, []uint64{1, 2, 3, 4}, 2},
+		{3, []uint64{1, 2, 3, 4, 5}, 3},
 		// Sorting.
-		{3, []uint64{5, 4, 3, 2, 1}, 0, 3},
-		// Padding.
-		{3, []uint64{1, 3, 3}, 1, 2},
-		{3, []uint64{1, 3, 3}, 2, 1},
-		{3, []uint64{1, 3, 3}, 3, 1},
-		// Minimum progress value limits padding.
-		{3, []uint64{2, 3, 3}, 3, 2},
+		{3, []uint64{5, 4, 3, 2, 1}, 3},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -62,7 +55,7 @@ func TestGetQuorumMatchedIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		quorumMatchedIndex := getQuorumMatchedIndex(status, c.padding)
+		quorumMatchedIndex := getQuorumMatchedIndex(status)
 		if c.expected != quorumMatchedIndex {
 			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
 		}

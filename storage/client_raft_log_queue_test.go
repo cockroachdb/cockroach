@@ -17,11 +17,13 @@
 package storage_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -33,6 +35,12 @@ func TestRaftLogQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var mtc multiTestContext
+
+	// Set max bytes.
+	const maxBytes = 1 << 16
+	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
+		RangeMaxBytes: maxBytes,
+	})()
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
@@ -62,8 +70,9 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 
 	// Write a collection of values to increase the raft log.
-	for i := 0; i < storage.RaftLogQueueStaleThreshold+1; i++ {
-		pArgs = putArgs([]byte(fmt.Sprintf("key-%d", i)), []byte("value"))
+	value := bytes.Repeat([]byte("a"), 1000) // 1KB
+	for size := int64(0); size < maxBytes; size += int64(len(value)) {
+		pArgs = putArgs([]byte(fmt.Sprintf("key-%d", size)), value)
 		if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &pArgs); err != nil {
 			t.Fatal(err)
 		}
