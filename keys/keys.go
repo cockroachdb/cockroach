@@ -240,6 +240,11 @@ func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	return key
 }
 
+// RaftLogSizeKey returns a system-local key for the size of the Raft log.
+func RaftLogSizeKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, localRaftLogSizeSuffix, nil)
+}
+
 // RangeLastReplicaGCTimestampKey returns a range-local key for
 // the range's last replica GC timestamp.
 func RangeLastReplicaGCTimestampKey(rangeID roachpb.RangeID) roachpb.Key {

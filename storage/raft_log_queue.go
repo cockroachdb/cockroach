@@ -20,13 +20,19 @@ import (
 	"math"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/dustin/go-humanize"
 )
 
 const (
@@ -84,14 +90,31 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		return 0, 0, nil
 	}
 
-	// Calculate the quorum matched index and adjust based on padding.
-	oldestIndex := getQuorumMatchedIndex(raftStatus, raftLogPadding)
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	firstIndex, err := r.FirstIndex()
+	firstIndex, err := r.GetFirstIndex()
 	if err != nil {
 		return 0, 0, util.Errorf("error retrieving first index for range %d: %s", rangeID, err)
+	}
+	oldestIndex := firstIndex
+
+	r.mu.Lock()
+	raftLogSize := r.mu.raftLogSize
+	targetSize := r.mu.maxBytes
+	log.Infof("raftLogSize %s targetSize %s", humanize.IBytes(uint64(raftLogSize)), humanize.IBytes(uint64(targetSize)))
+	r.mu.Unlock()
+
+	// Only trim if catching up will take more memory than sending a snapshot.
+	if raftLogSize > targetSize {
+		// Calculate the quorum matched index.
+		oldestQuorumIndex := getQuorumMatchedIndex(raftStatus)
+		oldestSizeIndex, err := getLogIndexForSize(r, raftLogSize, targetSize)
+		if err != nil {
+			return 0, 0, err
+		}
+		if oldestQuorumIndex < oldestSizeIndex {
+			oldestIndex = oldestQuorumIndex
+		} else {
+			oldestIndex = oldestSizeIndex
+		}
 	}
 
 	if oldestIndex < firstIndex {
@@ -127,6 +150,8 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ config.Sys
 		return err
 	}
 
+	log.Infof("truncatable indexes %d", truncatableIndexes)
+
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes > RaftLogQueueStaleThreshold {
 		if log.V(1) {
@@ -154,17 +179,9 @@ func (*raftLogQueue) purgatoryChan() <-chan struct{} {
 }
 
 // getQuorumMatchedIndex returns the index which a quorum of the nodes have
-// committed. The returned value is adjusted by padding to allow retaining
-// additional entries, but this adjustment is limited so that we won't keep
-// entries which all nodes have matched.
-func getQuorumMatchedIndex(raftStatus *raft.Status, padding uint64) uint64 {
+// committed.
+func getQuorumMatchedIndex(raftStatus *raft.Status) uint64 {
 	index := raftStatus.Commit
-	if index >= padding {
-		index -= padding
-	} else {
-		index = 0
-	}
-
 	smallestMatch := uint64(math.MaxUint64)
 	for _, progress := range raftStatus.Progress {
 		if smallestMatch > progress.Match {
@@ -175,4 +192,42 @@ func getQuorumMatchedIndex(raftStatus *raft.Status, padding uint64) uint64 {
 		index = smallestMatch
 	}
 	return index
+}
+
+// getLogIndexForSize returns the oldest raft log index that keeps the log size
+// under the target size.
+func getLogIndexForSize(r *Replica, size, targetSize int64) (uint64, error) {
+	log.Infof("getLogIndexForSize %s starting ", r.RangeID)
+	defer log.Infof("getLogIndexForSize %s done", r.RangeID)
+
+	eng := r.store.Engine()
+	clock := r.store.Clock()
+	nowNanos := clock.PhysicalNow()
+	prefix := keys.RaftLogPrefix(r.RangeID)
+	prefixStart := engine.MakeMVCCMetadataKey(prefix)
+	prefixEnd := engine.MakeMVCCMetadataKey(prefix.PrefixEnd())
+	iter := eng.NewIterator(false)
+	defer iter.Close()
+	var key engine.MVCCKey
+	err := eng.Iterate(prefixStart, prefixEnd, func(kv engine.MVCCKeyValue) (bool, error) {
+		key = kv.Key
+		keyEnd := engine.MakeMVCCMetadataKey(key.Key.PrefixEnd())
+		keyStats, err := iter.ComputeStats(key, keyEnd, nowNanos)
+		if err != nil {
+			return false, err
+		}
+		size -= keyStats.SysBytes
+		return size < targetSize, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	// Get the index of the last key iterated over.
+	var entry raftpb.Entry
+	found, err := engine.MVCCGetProto(context.Background(), eng, key.Key, clock.Timestamp(), true /* consistent */, nil /* txn */, &entry)
+	if found || err != nil {
+		return entry.Index, err
+	}
+	return r.FirstIndex()
 }

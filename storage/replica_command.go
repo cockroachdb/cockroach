@@ -1402,12 +1402,20 @@ func (r *Replica) TruncateLog(
 	}
 	start := keys.RaftLogKey(r.RangeID, 0)
 	end := keys.RaftLogKey(r.RangeID, args.Index)
-	if err = batch.Iterate(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end),
-		func(kv engine.MVCCKeyValue) (bool, error) {
-			return false, batch.Clear(kv.Key)
-		}); err != nil {
+	var diff engine.MVCCStats
+	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
+	// but it also computes stats.
+	deletedKeys, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */, true /* returnKeys */)
+	if err != nil {
 		return reply, err
 	}
+
+	log.Infof("TruncateLog raft log size difference %s  %dB cleared %d", r.RangeID, diff.SysBytes, len(deletedKeys))
+	raftLogSize := r.mu.raftLogSize + diff.SysBytes
+	if err := setRaftLogSize(batch, r.RangeID, raftLogSize); err != nil {
+		return reply, err
+	}
+
 	tState := &roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
@@ -1416,6 +1424,7 @@ func (r *Replica) TruncateLog(
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
 		r.mu.truncatedState = tState
+		r.mu.raftLogSize = raftLogSize
 		r.mu.Unlock()
 	})
 	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, tState)

@@ -211,7 +211,9 @@ type Replica struct {
 		// Replica.setDesc* methods.
 		desc *roachpb.RangeDescriptor
 		// Last index persisted to the raft log (not necessarily committed).
-		lastIndex   uint64
+		lastIndex uint64
+		// The size of the persisted raft log.
+		raftLogSize int64
 		leaderLease *roachpb.Lease
 		// Max bytes before split.
 		maxBytes int64
@@ -348,6 +350,19 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 
+	var found bool
+	r.mu.raftLogSize, found, err = loadRaftLogSize(r.store.Engine(), r.RangeID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		log.Infof("raft log size not found; computing for range %s", r.RangeID)
+		r.mu.raftLogSize, err = computeRaftLogSize(r.store.Engine(), r.RangeID, clock.PhysicalNow())
+		if err != nil {
+			return err
+		}
+	}
+
 	r.mu.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
@@ -403,6 +418,12 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	r.mu.Unlock()
 
 	return r.store.destroyReplicaData(desc)
+}
+
+func (r *Replica) RaftLogSize() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.raftLogSize
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -1469,6 +1490,7 @@ func (r *Replica) handleRaftReady() error {
 	var rd raft.Ready
 	r.mu.Lock()
 	lastIndex := r.mu.lastIndex // used for append below
+	raftLogSize := r.mu.raftLogSize
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
@@ -1513,13 +1535,14 @@ func (r *Replica) handleRaftReady() error {
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
 		var err error
-		if lastIndex, err = r.append(writer, lastIndex, rd.Entries); err != nil {
+		if lastIndex, raftLogSize, err = r.append(writer, lastIndex, raftLogSize, rd.Entries); err != nil {
 			return err
 		}
 		batch.Defer(func() {
 			// Update last index on commit.
 			r.mu.Lock()
 			r.mu.lastIndex = lastIndex
+			r.mu.raftLogSize = raftLogSize
 			r.mu.Unlock()
 		})
 
