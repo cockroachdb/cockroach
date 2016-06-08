@@ -4681,6 +4681,15 @@ getNumPending?() : Long;
 
 
 
+raft_log_size?: Long;
+		
+
+getRaftLogSize?() : Long;
+		setRaftLogSize?(raftLogSize : Long): void;
+		
+
+
+
 }
 	
 	export interface RangeInfoMessage extends RangeInfo {
