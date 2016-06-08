@@ -84,6 +84,11 @@ func (s *Store) DisableRaftLogQueue(disabled bool) {
 	s.raftLogQueue.SetDisabled(disabled)
 }
 
+// DisableSplitQueue disables or enables the replica split queue.
+func (s *Store) DisableSplitQueue(disabled bool) {
+	s.splitQueue.SetDisabled(disabled)
+}
+
 // ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
 // need their raft logs truncated and then process each of them.
 func (s *Store) ForceRaftLogScanAndProcess() {
