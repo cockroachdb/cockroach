@@ -21,6 +21,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -429,9 +430,20 @@ func runFreezeCluster(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	defer stopper.Stop()
-	if _, err := c.ClusterFreeze(stopperContext(stopper),
-		&serverpb.ClusterFreezeRequest{Freeze: !undoFreezeCluster}); err != nil {
+	stream, err := c.ClusterFreeze(stopperContext(stopper),
+		&serverpb.ClusterFreezeRequest{Freeze: !undoFreezeCluster})
+	if err != nil {
 		return err
+	}
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		fmt.Println(resp.Message)
 	}
 	fmt.Println("ok")
 	return nil
