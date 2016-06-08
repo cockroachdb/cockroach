@@ -163,7 +163,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		requestedCols = en.tableDesc.Columns
 	}
 
-	ru, err := makeRowUpdater(p.txn, en.tableDesc, updateCols, requestedCols)
+	ru, err := makeRowUpdater(p.txn, en.tableDesc, updateCols, requestedCols, rowUpdaterDefault)
 	if err != nil {
 		return nil, err
 	}

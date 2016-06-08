@@ -260,7 +260,9 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	if len(tu.updateCols) == 0 {
 		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
-		tu.ru, err = makeRowUpdater(txn, tu.tableDesc, tu.updateCols, requestedCols)
+		tu.ru, err = makeRowUpdater(
+			txn, tu.tableDesc, tu.updateCols, requestedCols, rowUpdaterDefault,
+		)
 		if err != nil {
 			return err
 		}

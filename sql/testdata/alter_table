@@ -190,6 +190,14 @@ ALTER TABLE tt ADD COLUMN q DECIMAL NOT NULL
 statement ok
 ALTER table tt ADD COLUMN r DECIMAL
 
+# Ensure that a UNIQUE NOT NULL COLUMN can be added when there is no data in
+# the table.
+statement ok
+ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
+
+statement ok
+ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
+
 query TTBT colnames
 SHOW COLUMNS FROM tt
 ----
@@ -197,6 +205,8 @@ Field  Type     Null   Default
 a      INT      false  NULL
 q      DECIMAL  false  NULL
 r      DECIMAL  true   NULL
+s      DECIMAL  false  NULL
+t      DECIMAL  true   4.0
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -285,6 +295,11 @@ SELECT a,b FROM add_default WHERE e > d AND e - d < interval '10s'
 2 42
 3 10
 5 NULL
+
+# Adding a unique column to an existing table with data with a default value
+# is illegal
+statement error duplicate key value .* violates unique constraint \"add_default_f_key\"
+ALTER TABLE add_default ADD f TIMESTAMP UNIQUE DEFAULT current_timestamp()
 
 # Multiple columns can be added at once with heterogeneous DEFAULT usage
 statement ok

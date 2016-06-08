@@ -270,6 +270,13 @@ type rowUpdater struct {
 	indexEntriesBuf []sqlbase.IndexEntry
 }
 
+type rowUpdaterType int
+
+const (
+	rowUpdaterDefault     rowUpdaterType = 0
+	rowUpdaterOnlyColumns rowUpdaterType = 1
+)
+
 // makeRowUpdater creates a rowUpdater for the given table.
 //
 // updateCols are the columns being updated and correspond to the updateValues
@@ -283,6 +290,7 @@ func makeRowUpdater(
 	tableDesc *sqlbase.TableDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
+	updateType rowUpdaterType,
 ) (rowUpdater, error) {
 	updateColIDtoRowIndex := colIDtoRowIndexFromCols(updateCols)
 
@@ -301,6 +309,10 @@ func makeRowUpdater(
 
 	// Secondary indexes needing updating.
 	needsUpdate := func(index sqlbase.IndexDescriptor) bool {
+		if updateType == rowUpdaterOnlyColumns {
+			// Only update columns.
+			return false
+		}
 		// If the primary key changed, we need to update all of them.
 		if primaryKeyColChange {
 			return true
