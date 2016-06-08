@@ -25,47 +25,33 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 )
 
-func TestGetQuorumMatchedIndex(t *testing.T) {
+func TestGetMaximumMatchedIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		commit   uint64
 		progress []uint64
-		padding  uint64
 		expected uint64
 	}{
 		// Basic cases.
-		{1, []uint64{1}, 0, 1},
-		{1, []uint64{1, 2}, 0, 1},
-		{2, []uint64{1, 2, 3}, 0, 2},
-		{2, []uint64{1, 2, 3, 4}, 0, 2},
-		{3, []uint64{1, 2, 3, 4, 5}, 0, 3},
-		// Sorting.
-		{3, []uint64{5, 4, 3, 2, 1}, 0, 3},
-		// Padding.
-		{3, []uint64{1, 3, 3}, 1, 2},
-		{3, []uint64{1, 3, 3}, 2, 1},
-		{3, []uint64{1, 3, 3}, 3, 1},
-		// Minimum progress value limits padding.
-		{3, []uint64{2, 3, 3}, 3, 2},
+		{[]uint64{1}, 1},
+		{[]uint64{1, 2}, 1},
+		{[]uint64{2, 3, 4}, 2},
+		// sorting.
+		{[]uint64{5, 4, 3, 2, 1}, 1},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
-			HardState: raftpb.HardState{
-				Commit: c.commit,
-			},
 			Progress: make(map[uint64]raft.Progress),
 		}
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		quorumMatchedIndex := getQuorumMatchedIndex(status, c.padding)
-		if c.expected != quorumMatchedIndex {
-			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
+		index := getMaximumMatchedIndex(status)
+		if c.expected != index {
+			t.Fatalf("%d: expected %d, but got %d", i, c.expected, index)
 		}
 	}
 }
@@ -74,7 +60,6 @@ func TestGetQuorumMatchedIndex(t *testing.T) {
 // indexes to be truncated.
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(bram): #7056")
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	if _, err := store.GetReplica(0); err == nil {

@@ -1371,6 +1371,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "raft_log_size",
+                                    "id": 5
                                 }
                             ]
                         }
