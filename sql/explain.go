@@ -48,6 +48,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	mode := explainNone
 	verbose := false
 	expanded := true
+	normalized := true
 	for _, opt := range n.Options {
 		newMode := explainNone
 		if strings.EqualFold(opt, "DEBUG") {
@@ -62,6 +63,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			verbose = true
 		} else if strings.EqualFold(opt, "NOEXPAND") {
 			expanded = false
+		} else if strings.EqualFold(opt, "NONORMALIZE") {
+			normalized = false
 		} else {
 			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
@@ -86,6 +89,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
 	}
 
+	p.evalCtx.SkipNormalize = !normalized
 	plan, err := p.newPlan(n.Statement, nil, autoCommit)
 	if err != nil {
 		return nil, err

@@ -1202,6 +1202,10 @@ type EvalContext struct {
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
 	PrepareOnly bool
+
+	// SkipNormalize indicates whether expressions should be normalized.
+	// It is set to true conditionally by EXPLAIN(TYPES).
+	SkipNormalize bool
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per

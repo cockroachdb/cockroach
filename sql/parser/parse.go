@@ -120,6 +120,9 @@ func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Datum, op string)
 // NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
 // a normalizeVisitor.
 func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr, error) {
+	if ctx.SkipNormalize {
+		return typedExpr, nil
+	}
 	p.normalizeVisitor = normalizeVisitor{ctx: ctx}
 	expr, _ := WalkExpr(&p.normalizeVisitor, typedExpr)
 	if err := p.normalizeVisitor.err; err != nil {
