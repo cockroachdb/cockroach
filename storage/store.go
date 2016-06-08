@@ -69,6 +69,14 @@ const (
 	maxReplicaDescCacheSize = 1000
 
 	raftReqBufferSize = 100
+
+	// leaderLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
+	// lease active duration should be of the raft election timeout.
+	leaderLeaseRaftElectionTimeoutMultiplier = 3
+
+	// leaderLeaseRenewalDivisor specifies what quotient the leader lease renewal
+	// duration should be of the leader lease active time.
+	leaderLeaseRenewalDivisor = 5
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -397,6 +405,16 @@ type StoreContext struct {
 	AsyncSnapshotMaxAge time.Duration
 
 	TestingKnobs StoreTestingKnobs
+
+	// leaderLeaseActiveDuration is the duration of the active period of leader
+	// leases requested.
+	leaderLeaseActiveDuration time.Duration
+
+	// leaderLeaseRenewalDuration specifies a time interval at the end of the
+	// active lease interval (i.e. bounded to the right by the start of the stasis
+	// period) during which operations will trigger an asynchronous renewal of the
+	// lease.
+	leaderLeaseRenewalDuration time.Duration
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -627,6 +645,10 @@ func (sc *StoreContext) setDefaults() {
 	if sc.AsyncSnapshotMaxAge == 0 {
 		sc.AsyncSnapshotMaxAge = defaultAsyncSnapshotMaxAge
 	}
+
+	raftElectionTimeout := time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval
+	sc.leaderLeaseActiveDuration = leaderLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
+	sc.leaderLeaseRenewalDuration = sc.leaderLeaseActiveDuration / leaderLeaseRenewalDivisor
 }
 
 // NewStore returns a new instance of a store.
@@ -699,7 +721,7 @@ func (s *Store) DrainLeadership(drain bool) error {
 		return nil
 	}
 
-	return util.RetryForDuration(10*LeaderLeaseActiveDuration, func() error {
+	return util.RetryForDuration(10*s.ctx.leaderLeaseActiveDuration, func() error {
 		var err error
 		now := s.Clock().Now()
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
