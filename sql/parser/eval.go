@@ -1279,7 +1279,7 @@ func (ctx *EvalContext) getTmpDec() *inf.Dec {
 	return &ctx.tmpDec
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *AndExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1307,7 +1307,7 @@ func (expr *AndExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return left, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1326,7 +1326,7 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr.fn.fn(ctx, left, right)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...
@@ -1373,7 +1373,7 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return DNull, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1551,7 +1551,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 	for _, e := range expr.Exprs {
 		d, err := e.(TypedExpr).Eval(ctx)
@@ -1565,7 +1565,7 @@ func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return DNull, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1603,13 +1603,13 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return MakeDBool(d), err
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
 	// Exists expressions are handled during subquery expansion.
 	return nil, util.Errorf("unhandled type %T", t)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 	args := make(DTuple, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -1636,12 +1636,12 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return res, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *OverlayExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1653,7 +1653,7 @@ func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr.Else.(TypedExpr).Eval(ctx)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1740,7 +1740,7 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return MakeDBool(!result), nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1756,7 +1756,7 @@ func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return MakeDBool(!v), nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	expr1, err := expr.Expr1.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1776,7 +1776,7 @@ func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr1, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *OrExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1807,25 +1807,25 @@ func (expr *OrExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return DBoolFalse, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr.Expr.(TypedExpr).Eval(ctx)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *RangeCond) Eval(_ *EvalContext) (Datum, error) {
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *Subquery) Eval(_ *EvalContext) (Datum, error) {
 	// Subquery expressions are handled during subquery expansion.
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -1837,19 +1837,19 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr.fn.fn(ctx, d)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr DefaultVal) Eval(_ *EvalContext) (Datum, error) {
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (expr *QualifiedName) Eval(ctx *EvalContext) (Datum, error) {
 	log.Errorf("unhandled type %T passed to Eval", expr)
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	tuple := make(DTuple, 0, len(t.Exprs))
 	for _, v := range t.Exprs {
@@ -1862,69 +1862,69 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	return &tuple, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DBool) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DDate) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DFloat) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DDecimal) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DInt) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DInterval) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t dNull) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DString) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DTimestamp) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DTimestampTZ) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
-// Eval implements the Expr interface.
+// Eval implements the TypedExpr interface.
 func (t *DPlaceholder) Eval(_ *EvalContext) (Datum, error) {
-	return t, nil
+	panic(fmt.Sprintf("Eval() called on placeholder $%s", t.name))
 }
 
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {

@@ -262,7 +262,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT $1 > 0 AND NOT $1":                  "pq: incompatible NOT argument type: int",
 		"CREATE TABLE $1 (id INT)":                  "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
 		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <placeholder> (desired <string>)",
-		"SELECT $0 > 0":                             "pq: invalid placeholder name $0",
+		"SELECT $0 > 0":                             "pq: invalid placeholder name: $0",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of placeholder $1",
@@ -281,7 +281,7 @@ func TestPGPrepareFail(t *testing.T) {
 				t.Fatal(err)
 			}
 		} else if err.Error() != reason {
-			t.Errorf("%s: unexpected error: %s", query, err)
+			t.Errorf(`%s: got: %q, expected: %q`, query, err, reason)
 		}
 	}
 }

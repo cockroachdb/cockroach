@@ -230,7 +230,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if err != nil {
 			return nil, err
 		}
-		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ReturnType(), p.semaCtx.PlaceholderTypes)
+		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ReturnType(), p.semaCtx.Placeholders)
 		if err != nil {
 			return nil, err
 		}

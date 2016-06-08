@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 type insertNode struct {
@@ -130,6 +129,10 @@ func (p *planner) Insert(
 	for i, col := range cols {
 		desiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}
+
+	// Create the plan for the data source.
+	// This performs type checking on source expressions, collecting
+	// types for placeholders in the process.
 	rows, err := p.newPlan(insertRows, desiredTypesFromSelect, false)
 	if err != nil {
 		return nil, err
@@ -137,25 +140,6 @@ func (p *planner) Insert(
 
 	if expressions := len(rows.Columns()); expressions > numInputColumns {
 		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
-	}
-
-	// Type check the tuples, if any, to collect placeholder types.
-	if values, ok := n.Rows.Select.(*parser.ValuesClause); ok {
-		for _, tuple := range values.Tuples {
-			for eIdx, val := range tuple.Exprs {
-				if _, ok := val.(parser.DefaultVal); ok {
-					continue
-				}
-				typedExpr, err := parser.TypeCheck(val, &p.semaCtx, desiredTypesFromSelect[eIdx])
-				if err != nil {
-					return nil, err
-				}
-				err = sqlbase.CheckColumnType(cols[eIdx], typedExpr.ReturnType(), p.semaCtx.PlaceholderTypes)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
 	}
 
 	ri, err := makeRowInserter(p.txn, en.tableDesc, cols, checkFKs)
@@ -434,9 +418,6 @@ func makeDefaultExprs(
 		}
 		if typedExpr, err = parse.NormalizeExpr(evalCtx, typedExpr); err != nil {
 			return nil, err
-		}
-		if parser.ContainsVars(typedExpr) {
-			return nil, util.Errorf("default expression contains variables")
 		}
 		defaultExprs = append(defaultExprs, typedExpr)
 	}
