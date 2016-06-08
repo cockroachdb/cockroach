@@ -84,12 +84,12 @@ true true
 # TIMESTAMP/DATE builtins.
 
 query T
-SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
+SELECT age('2001-04-10 22:06:45', '1957-06-13')
 ----
 384190h6m45s
 
 query B
-SELECT age(timestamp '1957-06-13') - age(now(), timestamp '1957-06-13') = interval '0s'
+SELECT age('1957-06-13') - age(now(), '1957-06-13') = interval '0s'
 ----
 true
 
@@ -294,83 +294,83 @@ SELECT k FROM kv ORDER BY v
 
 
 query I
-SELECT extract(year from timestamp '2001-04-10 12:04:59')
+SELECT extract(year from '2001-04-10 12:04:59')
 ----
 2001
 
 query I
-SELECT extract(quarter from timestamp '2001-04-10 12:04:59')
+SELECT extract(quarter from '2001-04-10 12:04:59')
 ----
 2
 
 query I
-SELECT extract(month from timestamp '2001-04-10 12:04:59')
+SELECT extract(month from '2001-04-10 12:04:59')
 ----
 4
 
 query I
-SELECT extract(week from timestamp '2001-04-10 12:04:59')
+SELECT extract(week from '2001-04-10 12:04:59')
 ----
 15
 
 query I
-SELECT extract(day from timestamp '2001-04-10 12:04:59')
+SELECT extract(day from '2001-04-10 12:04:59')
 ----
 10
 
 query I
-SELECT extract(dayofweek from timestamp '2001-04-10 12:04:59')
+SELECT extract(dayofweek from '2001-04-10 12:04:59')
 ----
 2
 
 query I
-SELECT extract(dow from timestamp '2001-04-12 12:04:59')
+SELECT extract(dow from '2001-04-12 12:04:59')
 ----
 4
 
 query I
-SELECT extract(dayofyear from timestamp '2001-04-10 12:04:59')
+SELECT extract(dayofyear from '2001-04-10 12:04:59')
 ----
 100
 
 query I
-SELECT extract(doy from timestamp '2001-04-12 12:04:59')
+SELECT extract(doy from '2001-04-12 12:04:59')
 ----
 102
 
 query I
-SELECT extract(epoch from timestamp '2001-04-10 12:04:59')
+SELECT extract(epoch from '2001-04-10 12:04:59')
 ----
 986904299
 
 query I
-SELECT extract(hour from timestamp '2001-04-10 12:04:59')
+SELECT extract(hour from '2001-04-10 12:04:59')
 ----
 12
 
 query I
-SELECT extract(minute from timestamp '2001-04-10 12:04:59')
+SELECT extract(minute from '2001-04-10 12:04:59')
 ----
 4
 
 query I
-SELECT extract(second from timestamp '2001-04-10 12:04:59.234')
+SELECT extract(second from '2001-04-10 12:04:59.234')
 ----
 59
 
 query I
-SELECT extract(millisecond from timestamp '2001-04-10 12:04:59.234567')
+SELECT extract(millisecond from '2001-04-10 12:04:59.234567')
 ----
 234
 
 query I
-SELECT extract(microsecond from timestamp '2001-04-10 12:04:59.34565423')
+SELECT extract(microsecond from '2001-04-10 12:04:59.34565423')
 ----
 345654
 
 # nanoseconds are truncated to microseconds
 query I
-SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
+SELECT extract(nanosecond from '2001-04-10 12:04:59.34565423')
 ----
 345654000
 
@@ -413,7 +413,7 @@ SELECT max(extract(nanosecond from a) % 1000) != 0 FROM t
 true
 
 query TT
-SELECT format_timestamp_ns('2001-04-10 12:04:59.345654423'::timestamp), format_timestamp_ns(parse_timestamp_ns('2001-04-10 12:04:59.345654423'))
+SELECT format_timestamp_ns('2001-04-10 12:04:59.345654423'), format_timestamp_ns(parse_timestamp_ns('2001-04-10 12:04:59.345654423'))
 ----
 2001-04-10 12:04:59.345654 2001-04-10 12:04:59.345654423
 
@@ -449,7 +449,7 @@ SELECT max(extract(nanosecond from expiration) % 1000) != 0 from system.lease
 true
 
 query error extract: unsupported timespan: nansecond
-SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
+SELECT extract(nansecond from '2001-04-10 12:04:59.34565423')
 
 # Test SET TIME ZONE
 
