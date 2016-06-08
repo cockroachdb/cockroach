@@ -827,7 +827,7 @@ func (n *Node) PollFrozen(
 	resp := &roachpb.PollFrozenResponse{}
 	err := n.execStoreCommand(args.StoreRequestHeader,
 		func(s *storage.Store) error {
-			resp.NumFrozen, resp.NumThawed = s.FrozenStatus()
+			resp.Results = s.FrozenStatus(args.CollectFrozen)
 			return nil
 		})
 	return resp, err
