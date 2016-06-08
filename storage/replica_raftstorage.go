@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -450,36 +451,40 @@ func snapshot(
 	}, nil
 }
 
-// append the given entries to the raft log. Takes the previous value
-// of r.lastIndex and returns a new value. We do this rather than
-// modifying r.lastIndex directly because this modification needs to
-// be atomic with the commit of the batch.
-func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries []raftpb.Entry) (uint64, error) {
+// append the given entries to the raft log. Takes the previous values of
+// r.mu.lastIndex and r.mu.raftLogSize, and returns new values. We do this
+// rather than modifying them directly because these modifications need to be
+// atomic with the commit of the batch.
+func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, prevRaftLogSize int64, entries []raftpb.Entry) (uint64, int64, error) {
 	if len(entries) == 0 {
-		return prevLastIndex, nil
+		return prevLastIndex, prevRaftLogSize, nil
 	}
+	var diff enginepb.MVCCStats
+	ctx := context.Background()
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKey(r.RangeID, ent.Index)
-		if err := engine.MVCCPutProto(context.Background(), batch, nil, key, hlc.ZeroTimestamp, nil, ent); err != nil {
-			return 0, err
+		if err := engine.MVCCPutProto(ctx, batch, &diff, key, hlc.ZeroTimestamp, nil /* txn */, ent); err != nil {
+			return 0, 0, err
 		}
 	}
 	lastIndex := entries[len(entries)-1].Index
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
-		err := engine.MVCCDelete(context.Background(), batch, nil,
-			keys.RaftLogKey(r.RangeID, i), hlc.ZeroTimestamp, nil)
+		err := engine.MVCCDelete(ctx, batch, &diff, keys.RaftLogKey(r.RangeID, i),
+			hlc.ZeroTimestamp, nil /* txn */)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 	}
 
 	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	return lastIndex, nil
+	raftLogSize := prevRaftLogSize + diff.SysBytes
+
+	return lastIndex, raftLogSize, nil
 }
 
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
@@ -532,6 +537,7 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 
 	r.mu.Lock()
 	replicaID := r.mu.replicaID
+	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
 
 	log.Infof("replica %d received snapshot for range %d at index %d. "+
@@ -580,7 +586,8 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	}
 
 	// Write the snapshot's Raft log into the range.
-	if _, err := r.append(batch, 0, logEntries); err != nil {
+	_, raftLogSize, err = r.append(batch, 0, raftLogSize, logEntries)
+	if err != nil {
 		return 0, err
 	}
 
@@ -618,6 +625,7 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = s.RaftAppliedIndex
+	r.mu.raftLogSize = raftLogSize
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(s.Stats)
