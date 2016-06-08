@@ -5686,7 +5686,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	checkReservations := func(t *testing.T, expected int) {
 		tc.store.bookie.mu.Lock()
 		defer tc.store.bookie.mu.Unlock()
-		if e, a := expected, len(tc.store.bookie.mu.resByRangeID); e != a {
+		if e, a := expected, len(tc.store.bookie.mu.reservationsByRangeID); e != a {
 			t.Fatalf("wrong number of reservations - expected:%d, actual:%d", e, a)
 		}
 	}
@@ -5702,8 +5702,9 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 
 	// Note that this is an artificial scenario in which we're adding a
 	// reservation for a replica that is already on the range. This test is
-	// designed to test the filling of the booking specifically and in normal
-	// operation there should not be a booking for an existing replica.
+	// designed to test the filling of the reservation specifically and in
+	// normal operation there should not be a reservation for an existing
+	// replica.
 	req := roachpb.ReservationRequest{
 		StoreRequestHeader: roachpb.StoreRequestHeader{
 			StoreID: tc.store.StoreID(),
