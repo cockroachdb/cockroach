@@ -1,4 +1,3 @@
-/// <reference path="../../typings/index.d.ts" />
 import * as React from "react";
 import * as d3 from "d3";
 import { RouteComponentProps } from "react-router";
