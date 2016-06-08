@@ -1572,7 +1572,6 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 
 	// Add the range and its current stats into metrics.
 	s.metrics.replicaCount.Inc(1)
-	s.metrics.addMVCCStats(rng.stats.GetMVCC())
 
 	if s.mu.replicasByKey.Has(rng) {
 		return rangeAlreadyExists{rng}
@@ -1961,7 +1960,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		// or the past?
 		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
 			if log.V(2) {
-				log.Infof("range %s: discarding message from replica %v, older than NextReplicaID %v",
+				log.Infof("range %s: discarding message from %+v, older than NextReplicaID %d",
 					req.GroupID, req.FromReplica, desc.NextReplicaID)
 			}
 			return nil
@@ -2000,7 +1999,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		// sender then we could prompt the sender to GC this replica
 		// immediately.
 		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for group %d from %s to %s: %s",
+			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %s",
 				req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
 		}
 		return nil
