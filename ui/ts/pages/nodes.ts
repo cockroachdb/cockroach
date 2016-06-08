@@ -263,7 +263,7 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("livebytes"))
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes)
-                .tooltip('The amount of storage space used by live (non-historical) CockroachDB data across all nodes.')
+                .tooltip('The amount of storage space used by live (non-historical) data across all nodes.')
           );
 
           let latencySelectors: Selector[] = _.map(
@@ -837,7 +837,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes)
-                .tooltip('The amount of storage space used by live (non-historical) CockroachDB data on this node.')
+                .tooltip('The amount of storage space used by live (non-historical) data on this node.')
           );
 
           let latencySelectors: Selector[] = _.map(
