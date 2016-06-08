@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/dustin/go-humanize"
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
 
@@ -669,10 +670,13 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 					// the most interesting bit for now.
 					raftState = status.RaftState.String()
 				}
+				raftLogSize := rep.RaftLogSize()
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
-					Desc:        PrettifyRangeDescriptor(desc),
-					RaftState:   raftState,
-					PendingCmds: int32(rep.PendingCmdsLen()),
+					Desc:             PrettifyRangeDescriptor(desc),
+					RaftState:        raftState,
+					PendingCmds:      int32(rep.PendingCmdsLen()),
+					RaftLogSize:      raftLogSize,
+					RaftLogSizeHuman: humanize.IBytes(uint64(raftLogSize)),
 				})
 				return false, nil
 			})
