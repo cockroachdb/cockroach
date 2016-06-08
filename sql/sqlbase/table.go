@@ -332,6 +332,36 @@ func EncodeColumns(
 	return key, containsNull, nil
 }
 
+// MakeKeyFromEncDatums creates a key by concatenating keyPrefix with the
+// encodings of the given EncDatum values.
+func MakeKeyFromEncDatums(
+	values EncDatumRow,
+	directions []IndexDescriptor_Direction,
+	keyPrefix []byte,
+	alloc *DatumAlloc,
+) (key roachpb.Key, err error) {
+	if len(values) != len(directions) {
+		return nil, util.Errorf("%d values, %d directions", len(values), len(directions))
+	}
+	// We know we will append to the key which will cause the capacity to grow
+	// so make it bigger from the get-go.
+	key = make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
+	copy(key, keyPrefix)
+
+	for i, val := range values {
+		encoding := DatumEncoding_ASCENDING_KEY
+		if directions[i] == IndexDescriptor_DESC {
+			encoding = DatumEncoding_DESCENDING_KEY
+		}
+		var err error
+		key, err = val.Encode(alloc, encoding, key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return key, nil
+}
+
 // EncodeDatum encodes a datum (order-preserving encoding, suitable for keys).
 func EncodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 	if values, ok := d.(*parser.DTuple); ok {

@@ -17,41 +17,19 @@
 package distsql
 
 import (
+	"sync"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// testingReceiver is an implementation of rowReceiver that accumulates
-// results which we can later verify.
-type testingReceiver struct {
-	rows   sqlbase.EncDatumRows
-	closed bool
-	err    error
-}
-
-var _ rowReceiver = &testingReceiver{}
-
-func (tr *testingReceiver) PushRow(row sqlbase.EncDatumRow) bool {
-	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
-	tr.rows = append(tr.rows, rowCopy)
-	return true
-}
-
-func (tr *testingReceiver) Close(err error) {
-	tr.err = err
-	tr.closed = true
-}
-
-func TestTableReader(t *testing.T) {
+func TestJoinReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	_, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
@@ -80,59 +58,67 @@ func TestTableReader(t *testing.T) {
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	makeIndexSpan := func(start, end int) TableReaderSpan {
-		var span roachpb.Span
-		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.ID, td.Indexes[0].ID))
-		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
-		span.EndKey = append(span.EndKey, prefix...)
-		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return TableReaderSpan{Span: span}
-	}
-
 	testCases := []struct {
-		spec     TableReaderSpec
+		spec     JoinReaderSpec
+		input    [][]parser.Datum
 		expected string
 	}{
 		{
-			spec: TableReaderSpec{
-				Filter:        Expression{Expr: "$2 < 5 AND $1 != 3"}, // sum < 5 && b != 3
-				OutputColumns: []uint32{0, 1},
+			spec: JoinReaderSpec{
+				OutputColumns: []uint32{0, 1, 2},
 			},
-			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
+			input: [][]parser.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			expected: "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
 		{
-			spec: TableReaderSpec{
-				Filter:        Expression{Expr: "$2 < 5 AND $1 != 3"},
-				OutputColumns: []uint32{3}, // s
-				HardLimit:     4,
+			spec: JoinReaderSpec{
+				Filter:        Expression{Expr: "$2 <= 5"}, // sum <= 5
+				OutputColumns: []uint32{3},
 			},
-			expected: "[['one'] ['two'] ['four'] ['one-zero']]",
-		},
-		{
-			spec: TableReaderSpec{
-				IndexIdx:      1,
-				Reverse:       true,
-				Spans:         []TableReaderSpan{makeIndexSpan(4, 6)},
-				Filter:        Expression{Expr: "$0 < 3"}, // sum < 8
-				OutputColumns: []uint32{0, 1},
-				SoftLimit:     1,
+			input: [][]parser.Datum{
+				{aFn(1), bFn(1)},
+				{aFn(25), bFn(25)},
+				{aFn(5), bFn(5)},
+				{aFn(21), bFn(21)},
+				{aFn(34), bFn(34)},
+				{aFn(13), bFn(13)},
+				{aFn(51), bFn(51)},
+				{aFn(50), bFn(50)},
 			},
-			expected: "[[2 5] [1 5] [0 5] [2 4] [1 4] [0 4]]",
+			expected: "[['one'] ['five'] ['two-one'] ['one-three'] ['five-zero']]",
 		},
 	}
-
 	for _, c := range testCases {
-		ts := c.spec
-		ts.Table = *td
+		js := c.spec
+		js.Table = *td
 
 		txn := client.NewTxn(context.Background(), *kvDB)
 
 		out := &testingReceiver{}
-		tr, err := newTableReader(&ts, txn, out, &parser.EvalContext{})
+		jr, err := newJoinReader(&js, txn, out, &parser.EvalContext{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Run(nil)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go jr.Run(&wg)
+		for _, row := range c.input {
+			encRow := make(sqlbase.EncDatumRow, len(row))
+			for i, d := range row {
+				encRow[i].SetDatum(sqlbase.ColumnType_INT, d)
+			}
+			ok := jr.PushRow(encRow)
+			if !ok {
+				t.Fatal("joinReader stopped accepting rows")
+			}
+		}
+		jr.Close(nil)
+		wg.Wait()
 		if out.err != nil {
 			t.Fatal(out.err)
 		}
