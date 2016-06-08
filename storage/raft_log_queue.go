@@ -17,7 +17,7 @@
 package storage
 
 import (
-	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -33,9 +33,6 @@ import (
 const (
 	// raftLogQueueMaxSize is the max size of the queue.
 	raftLogQueueMaxSize = 100
-	// raftLogPadding is the number of log entries that should be kept for
-	// lagging replicas.
-	raftLogPadding = 10000
 	// RaftLogQueueTimerDuration is the duration between truncations. This needs
 	// to be relatively short so that truncations can keep up with raft log entry
 	// creation.
@@ -66,13 +63,12 @@ func newRaftLogQueue(db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
 	return rlq
 }
 
-// getTruncatableIndexes returns the total number of stale raft log entries that
-// can be truncated and the oldest index that cannot be pruned.
+// getTruncatableIndexes returns the number of truncatable indexes and the
+// oldest index that cannot be pruned for the replica.
+// See computeTruncatableIndex.
 func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	rangeID := r.RangeID
-	// TODO(bram): r.store.RaftStatus(rangeID) differs from r.RaftStatus() in
-	// tests, causing TestGetTruncatableIndexes to fail. Figure out why and fix.
-	raftStatus := r.store.RaftStatus(rangeID)
+	raftStatus := r.RaftStatus()
 	if raftStatus == nil {
 		if log.V(1) {
 			log.Infof("the raft group doesn't exist for range %d", rangeID)
@@ -86,23 +82,54 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		return 0, 0, nil
 	}
 
-	// Calculate the quorum matched index and adjust based on padding.
-	oldestIndex := getQuorumMatchedIndex(raftStatus, raftLogPadding)
-
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	raftLogSize := r.mu.raftLogSize
+	targetSize := r.mu.maxBytes
 	firstIndex, err := r.FirstIndex()
+	r.mu.Unlock()
 	if err != nil {
 		return 0, 0, errors.Errorf("error retrieving first index for range %d: %s", rangeID, err)
 	}
 
-	if oldestIndex < firstIndex {
-		return 0, 0, errors.Errorf("raft log's oldest index (%d) is less than the first index (%d) for range %d",
-			oldestIndex, firstIndex, rangeID)
+	truncatableIndex := computeTruncatableIndex(raftStatus, raftLogSize, targetSize, firstIndex)
+	// Return the number of truncatable indexes.
+	return truncatableIndex - firstIndex, truncatableIndex, nil
+}
+
+// computeTruncatableIndex returns the oldest index that cannot be pruned. If
+// there is a behind node, we want to keep old raft logs so it can catch up
+// without having to send a full snapshot. However, if a node down is down long
+// enough, sending a snapshot is more efficient and we should truncate the log.
+// We currently truncate when the raft log size is bigger than the range max
+// bytes value (typically 64MB). When there are no nodes behind, or we can't
+// catch them up via the raft log (due to a previous truncation) this returns
+// the quorum committed index.
+func computeTruncatableIndex(raftStatus *raft.Status, raftLogSize, targetSize int64, firstIndex uint64) uint64 {
+	truncatableIndex := raftStatus.Commit
+	behindIndexes := getBehindIndexes(raftStatus)
+	for _, i := range behindIndexes {
+		// If the behind node's committed index is before the first raft log
+		// entry we have, the raft log is unable to catch that node up and the log
+		// should be truncated since a snapshot will have to be sent instead.
+		if i < firstIndex {
+			continue
+		}
+		// If the raft log is too big, truncate to the next behind node index or the
+		// quorum committed index. This allows for multiple nodes to be behind and not
+		// give up on the more recently behind node.
+		if raftLogSize > targetSize && i <= firstIndex {
+			continue
+		}
+		truncatableIndex = i
+		break
 	}
 
-	// Return the number of truncatable indexes.
-	return oldestIndex - firstIndex, oldestIndex, nil
+	// Never truncate past the quorum committed index.
+	if truncatableIndex > raftStatus.Commit {
+		truncatableIndex = raftStatus.Commit
+	}
+
+	return truncatableIndex
 }
 
 // shouldQueue determines whether a range should be queued for truncating. This
@@ -155,26 +182,35 @@ func (*raftLogQueue) purgatoryChan() <-chan struct{} {
 	return nil
 }
 
-// getQuorumMatchedIndex returns the index which a quorum of the nodes have
-// committed. The returned value is adjusted by padding to allow retaining
-// additional entries, but this adjustment is limited so that we won't keep
-// entries which all nodes have matched.
-func getQuorumMatchedIndex(raftStatus *raft.Status, padding uint64) uint64 {
-	index := raftStatus.Commit
-	if index >= padding {
-		index -= padding
-	} else {
-		index = 0
-	}
-
-	smallestMatch := uint64(math.MaxUint64)
+// getBehindIndexes returns the indexes of nodes that are behind the quorum
+// commit index without duplicates and sorted from most behind to most recent.
+func getBehindIndexes(raftStatus *raft.Status) []uint64 {
+	var behind []uint64
+	behindUniq := make(map[uint64]struct{})
 	for _, progress := range raftStatus.Progress {
-		if smallestMatch > progress.Match {
-			smallestMatch = progress.Match
+		index := progress.Match
+		if index < raftStatus.Commit {
+			if _, ok := behindUniq[index]; ok {
+				continue
+			}
+			behindUniq[index] = struct{}{}
+			behind = append(behind, index)
 		}
 	}
-	if index < smallestMatch {
-		index = smallestMatch
-	}
-	return index
+	sort.Sort(uint64Slice(behind))
+	return behind
 }
+
+var _ sort.Interface = uint64Slice(nil)
+
+// uint64Slice implements sort.Interface
+type uint64Slice []uint64
+
+// Len implements sort.Interface
+func (a uint64Slice) Len() int { return len(a) }
+
+// Swap implements sort.Interface
+func (a uint64Slice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+// Less implements sort.Interface
+func (a uint64Slice) Less(i, j int) bool { return a[i] < a[j] }

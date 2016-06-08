@@ -1377,6 +1377,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "uint64",
                                     "name": "num_dropped",
                                     "id": 5
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "raft_log_size",
+                                    "id": 6
                                 }
                             ]
                         }

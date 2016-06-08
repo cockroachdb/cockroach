@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -25,56 +26,84 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 )
 
-func TestGetQuorumMatchedIndex(t *testing.T) {
+// TestGetBehindIndexes verifies that the correc
+func TestGetBehindIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		commit   uint64
 		progress []uint64
-		padding  uint64
-		expected uint64
+		commit   uint64
+		expected []uint64
 	}{
 		// Basic cases.
-		{1, []uint64{1}, 0, 1},
-		{1, []uint64{1, 2}, 0, 1},
-		{2, []uint64{1, 2, 3}, 0, 2},
-		{2, []uint64{1, 2, 3, 4}, 0, 2},
-		{3, []uint64{1, 2, 3, 4, 5}, 0, 3},
-		// Sorting.
-		{3, []uint64{5, 4, 3, 2, 1}, 0, 3},
-		// Padding.
-		{3, []uint64{1, 3, 3}, 1, 2},
-		{3, []uint64{1, 3, 3}, 2, 1},
-		{3, []uint64{1, 3, 3}, 3, 1},
-		// Minimum progress value limits padding.
-		{3, []uint64{2, 3, 3}, 3, 2},
+		{[]uint64{1}, 1, nil},
+		{[]uint64{1, 2}, 2, []uint64{1}},
+		{[]uint64{2, 3, 4}, 4, []uint64{2, 3}},
+		{[]uint64{1, 2, 3, 4, 5}, 3, []uint64{1, 2}},
+		// sorting.
+		{[]uint64{5, 4, 3, 2, 1}, 3, []uint64{1, 2}},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
-			HardState: raftpb.HardState{
-				Commit: c.commit,
-			},
 			Progress: make(map[uint64]raft.Progress),
 		}
+		status.Commit = c.commit
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		quorumMatchedIndex := getQuorumMatchedIndex(status, c.padding)
-		if c.expected != quorumMatchedIndex {
-			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
+		out := getBehindIndexes(status)
+		if !reflect.DeepEqual(c.expected, out) {
+			t.Errorf("%d: getBehindIndexes(...) expected %d, but got %d", i, c.expected, out)
 		}
 	}
 }
 
-// TestGetTruncatableIndexes verifies that the correctly returns when there are
-// indexes to be truncated.
+// TestComputeTruncatableIndex verifies that the correc
+func TestComputeTruncatableIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const targetSize = 1000
+
+	testCases := []struct {
+		progress    []uint64
+		commit      uint64
+		raftLogSize int64
+		firstIndex  uint64
+		expected    uint64
+	}{
+		{[]uint64{1, 2}, 1, 100, 1, 1},
+		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 1},
+		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 2},
+		// If over targetSize, should truncate to next behind replica, or quorum
+		// committed index.
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 2},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 3},
+		// Never truncate past raftStatus.Commit.
+		{[]uint64{4, 5, 6}, 3, 100, 4, 3},
+	}
+	for i, c := range testCases {
+		status := &raft.Status{
+			Progress: make(map[uint64]raft.Progress),
+		}
+		status.Commit = c.commit
+		for j, v := range c.progress {
+			status.Progress[uint64(j)] = raft.Progress{Match: v}
+		}
+		out := computeTruncatableIndex(status, c.raftLogSize, targetSize, c.firstIndex)
+		if !reflect.DeepEqual(c.expected, out) {
+			t.Errorf("%d: computeTruncatableIndex(...) expected %d, but got %d", i, c.expected, out)
+		}
+	}
+}
+
+// TestGetTruncatableIndexes verifies that old raft log entries are correctly
+// removed.
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(bram): #7056")
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	if _, err := store.GetReplica(0); err == nil {
