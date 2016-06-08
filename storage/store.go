@@ -2005,12 +2005,13 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		}
 		return nil
 	}
-	r.mu.Lock()
-	err = r.mu.raftGroup.Step(req.Message)
-	r.mu.Unlock()
-	if err != nil {
+
+	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+		return raftGroup.Step(req.Message)
+	}); err != nil {
 		return err
 	}
+
 	s.enqueueRaftUpdateCheck(req.GroupID)
 	return nil
 }
@@ -2261,7 +2262,8 @@ func (s *Store) computeReplicationStatus(now int64) (
 			continue
 		}
 		raftStatus := rng.RaftStatus()
-		if raftStatus.SoftState.RaftState == raft.StateLeader {
+
+		if raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader {
 			leaderRangeCount++
 			// TODO(bram): #4564 Compare attributes of the stores so we can
 			// track ranges that have enough replicas but still need to be
