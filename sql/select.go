@@ -350,16 +350,6 @@ func (p *planner) SelectClause(
 }
 
 func (s *selectNode) expandPlan() error {
-	// Expand the sub-query plans in the sub-expressions, if any.
-	if err := s.planner.expandSubqueryPlans(s.filter); err != nil {
-		return err
-	}
-	for _, e := range s.render {
-		if err := s.planner.expandSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-
 	// Get the ordering for index selection (if any).
 	var ordering columnOrdering
 	var grouping bool
@@ -430,20 +420,23 @@ func (s *selectNode) expandPlan() error {
 		s.source.plan = plan
 	}
 
-	// If the source node is not a scanNode, expand its plan.
-	// (If it is a scanNode, it is already "expanded" and
-	// we do not want to expand the sub-queries in its filters
-	// here because they are shared with the selectNode and the selectNode
-	// already cares of expanding the sub-queries.)
-	if _, isScan := s.source.plan.(*scanNode); !isScan {
-		if err := s.source.plan.expandPlan(); err != nil {
+	s.ordering = s.computeOrdering(s.source.plan.Ordering())
+
+	// Expand the sub-query plans in the local sub-expressions, if any.
+	// This must be done for filters after index selection and splitting
+	// the filter, since part of the filter may have landed in the source
+	// scanNode and will be expanded there.
+	if err := s.planner.expandSubqueryPlans(s.filter); err != nil {
+		return err
+	}
+	for _, e := range s.render {
+		if err := s.planner.expandSubqueryPlans(e); err != nil {
 			return err
 		}
 	}
 
-	s.ordering = s.computeOrdering(s.source.plan.Ordering())
-
-	return nil
+	// Expand the source node.
+	return s.source.plan.expandPlan()
 }
 
 // initFrom initializes the table node, given the parsed select expression
