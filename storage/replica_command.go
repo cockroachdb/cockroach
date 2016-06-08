@@ -2531,6 +2531,23 @@ func (r *Replica) ChangeReplicas(
 			return util.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
 		}
 
+		// Send a pre-emptive snapshot. Note that the replica to which this
+		// snapshot is addressed has not yet had its replica ID initialized; this
+		// is intentional, and serves to avoid the following race with the replica
+		// GC queue:
+		//
+		// - snapshot received, a replica is lazily created with the "real" replica ID
+		// - the replica is eligible for GC because it is not yet a member of the range
+		// - GC queue runs, creating a raft tombstone with the replica's ID
+		// - the replica is added to the range
+		// - lazy creation of the replica fails due to the raft tombstone
+		//
+		// Instead, the replica GC queue will create a tombstone with replica ID
+		// zero, which is never legitimately used, and thus never interferes with
+		// raft operations. Racing with the replica GC queue can still partially
+		// negate the benefits of pre-emptive snapshots, but that is a recoverable
+		// degradation, not a catastrophic failure.
+
 		snap, err := r.GetSnapshot()
 		if err != nil {
 			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
