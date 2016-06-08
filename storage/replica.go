@@ -2333,3 +2333,10 @@ func (r *Replica) maybeAddToSplitQueue() {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }
+
+// PendingCmdsLen returns the number of pending commands.
+func (r *Replica) PendingCmdsLen() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.mu.pendingCmds)
+}

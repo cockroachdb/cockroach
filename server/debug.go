@@ -102,6 +102,10 @@ table tr td {
 </td>
 </tr>
 <tr>
+<td>raft</td>
+<td><a href="/_status/raft">raft</a></td>
+</tr>
+<tr>
 <td>pprof</td>
 <td>
 <!-- cribbed from the /debug/pprof endpoint -->
