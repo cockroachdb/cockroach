@@ -53,16 +53,12 @@ func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
 	q := &replicaGCQueue{
 		db: db,
 	}
-	q.baseQueue = makeBaseQueue("replicaGC", q, gossip, replicaGCQueueMaxSize)
+	q.baseQueue = makeBaseQueue("replicaGC", q, gossip, queueConfig{
+		maxSize:              replicaGCQueueMaxSize,
+		needsLeaderLease:     false,
+		acceptsUnsplitRanges: true,
+	})
 	return q
-}
-
-func (*replicaGCQueue) needsLeaderLease() bool {
-	return false
-}
-
-func (*replicaGCQueue) acceptsUnsplitRanges() bool {
-	return true
 }
 
 // shouldQueue determines whether a replica should be queued for GC,

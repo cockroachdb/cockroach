@@ -48,16 +48,12 @@ func newSplitQueue(db *client.DB, gossip *gossip.Gossip) *splitQueue {
 	sq := &splitQueue{
 		db: db,
 	}
-	sq.baseQueue = makeBaseQueue("split", sq, gossip, splitQueueMaxSize)
+	sq.baseQueue = makeBaseQueue("split", sq, gossip, queueConfig{
+		maxSize:              splitQueueMaxSize,
+		needsLeaderLease:     true,
+		acceptsUnsplitRanges: true,
+	})
 	return sq
-}
-
-func (*splitQueue) needsLeaderLease() bool {
-	return true
-}
-
-func (*splitQueue) acceptsUnsplitRanges() bool {
-	return true
 }
 
 // shouldQueue determines whether a range should be queued for

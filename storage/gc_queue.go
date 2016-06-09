@@ -96,18 +96,12 @@ type gcQueue struct {
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue(gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = makeBaseQueue("gc", gcq, gossip, gcQueueMaxSize)
+	gcq.baseQueue = makeBaseQueue("gc", gcq, gossip, queueConfig{
+		maxSize:              gcQueueMaxSize,
+		needsLeaderLease:     true,
+		acceptsUnsplitRanges: false,
+	})
 	return gcq
-}
-
-func (*gcQueue) needsLeaderLease() bool {
-	return true
-}
-
-// acceptsUnsplitRanges is false because the proper GC
-// policy cannot be determined for ranges that span zone configs.
-func (*gcQueue) acceptsUnsplitRanges() bool {
-	return false
 }
 
 type pushFunc func(roachpb.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)

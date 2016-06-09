@@ -56,16 +56,12 @@ func newRaftLogQueue(db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
 	rlq := &raftLogQueue{
 		db: db,
 	}
-	rlq.baseQueue = makeBaseQueue("raftlog", rlq, gossip, raftLogQueueMaxSize)
+	rlq.baseQueue = makeBaseQueue("raftlog", rlq, gossip, queueConfig{
+		maxSize:              raftLogQueueMaxSize,
+		needsLeaderLease:     false,
+		acceptsUnsplitRanges: true,
+	})
 	return rlq
-}
-
-func (*raftLogQueue) needsLeaderLease() bool {
-	return false
-}
-
-func (*raftLogQueue) acceptsUnsplitRanges() bool {
-	return true
 }
 
 // getTruncatableIndexes returns the total number of stale raft log entries that
