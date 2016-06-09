@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
@@ -496,6 +497,11 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stop()
 
+	// Perform a scan to ensure that all the raft groups are initialized.
+	if _, err := ts.db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		t.Fatal(err)
+	}
+
 	var response serverpb.RangesResponse
 	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
 		t.Fatal(err)
@@ -504,6 +510,7 @@ func TestRangesResponse(t *testing.T) {
 		t.Errorf("didn't get any ranges")
 	}
 	for _, ri := range response.Ranges {
+
 		// Do some simple validation based on the fact that this is a
 		// single-node cluster.
 		if ri.RaftState != "StateLeader" {
