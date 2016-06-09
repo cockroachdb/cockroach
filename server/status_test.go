@@ -471,7 +471,7 @@ func TestMetricsRecording(t *testing.T) {
 		if err := checkTimeSeriesKey(now, "cr.store.livebytes.1"); err != nil {
 			return err
 		}
-		if err := checkTimeSeriesKey(now, "cr.node.sys.allocbytes.1"); err != nil {
+		if err := checkTimeSeriesKey(now, "cr.node.sys.go.allocbytes.1"); err != nil {
 			return err
 		}
 		return nil
