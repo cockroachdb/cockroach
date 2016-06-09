@@ -101,9 +101,9 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
 	ba.RangeID = rng.RangeID
-	replica := rng.GetReplica()
-	if replica == nil {
-		return nil, roachpb.NewErrorf("own replica missing in range")
+	replica, err := rng.GetReplica()
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	ba.Replica = *replica
 	br, pErr := db.store.Send(ctx, ba)

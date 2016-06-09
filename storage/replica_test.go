@@ -5709,7 +5709,10 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 	ba.Timestamp = tc.clock.Now()
 	ba.Add(&pArg)
 
-	replica := *tc.rng.GetReplica()
+	replica, err := tc.rng.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ch := func() chan roachpb.ResponseWithError {
 		tc.rng.mu.Lock()
 		defer tc.rng.mu.Unlock()
@@ -5718,7 +5721,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
 		cmd, err := tc.rng.prepareRaftCommandLocked(
 			context.WithValue(context.Background(), magicKey{}, "foo"),
-			makeIDKey(), replica, ba)
+			makeIDKey(), *replica, ba)
 		cmd.raftCmd.MaxLeaseIndex = preAssigned
 		tc.rng.mu.lastAssignedLeaseIndex = preAssigned
 		if err != nil {
@@ -5791,7 +5794,10 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	rng := tc.rng
-	replica := *rng.GetReplica()
+	replica, err := rng.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	const num = 10
 
@@ -5805,7 +5811,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, err := rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), replica, ba)
+			cmd, err := rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), *replica, ba)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -5844,7 +5850,10 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer tc.Stop()
 
 	const num = 10
-	replica := *tc.rng.GetReplica()
+	replica, err := tc.rng.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	type magicKey struct{}
 
@@ -5876,7 +5885,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, err := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), replica, ba)
+			cmd, err := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -5937,12 +5946,15 @@ func TestReplicaDoubleRefurbish(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Timestamp = tc.clock.Now()
 	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key("r")}})
-	replica := *tc.rng.GetReplica()
+	replica, err := tc.rng.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Make a Raft command; we'll set things up so that it will be considered
 	// for refurbishment multiple times.
 	tc.rng.mu.Lock()
-	cmd, err := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), replica, ba)
+	cmd, err := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), *replica, ba)
 	ch := cmd.done // must not use cmd outside of mutex
 	tc.rng.mu.Unlock()
 

@@ -2612,11 +2612,14 @@ func (r *Replica) ChangeReplicas(
 			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
 		}
 
-		fromReplica := *r.GetReplica()
+		fromReplica, err := r.GetReplica()
+		if err != nil {
+			return err
+		}
 
 		if err := r.store.ctx.Transport.Send(&RaftMessageRequest{
 			GroupID:     r.RangeID,
-			FromReplica: fromReplica,
+			FromReplica: *fromReplica,
 			ToReplica:   replica,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
