@@ -260,6 +260,13 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 	if len(intents) == 0 {
 		return
 	}
+	// Skip doing any cleaning up if the replica has been removed (including
+	// if it's been removed by the transaction that scheduled this cleanup).
+	// Doing anything with this replica is going to fail anyway.
+	_, err := r.GetReplica()
+	if err != nil {
+		return
+	}
 	now := r.store.Clock().Now()
 	ctx := r.context(context.TODO())
 	stopper := r.store.Stopper()

@@ -630,6 +630,12 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 				// If lease is currently held by another, redirect to holder.
 				return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 			}
+			// Check that this replica is still a member of the Raft group. If it's
+			// not, it shouldn't be proposing any commands (they'd fail to be applied).
+			// This is a weird way to check...
+			if _, err := r.GetReplica(); err != nil {
+				return roachpb.NewError(err)
+			}
 			if !inFlight && !timestamp.Less(lease.StartStasis.Add(
 				-int64(r.store.ctx.leaderLeaseRenewalDuration), 0)) {
 				if log.V(2) {
