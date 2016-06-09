@@ -223,6 +223,45 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 	return lease.TableDescriptor, nil
 }
 
+// getTableLeaseByID is a by-ID variant of getTableLease (i.e. uses same cache).
+func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescriptor, error) {
+	if log.V(2) {
+		log.Infof("planner acquiring lease on table ID %d", tableID)
+	}
+
+	// First, look to see if we already have a lease for this table -- including
+	// leases acquired via `getTableLease`.
+	var lease *LeaseState
+	for _, l := range p.leases {
+		if l.ID == tableID {
+			lease = l
+			if log.V(2) {
+				log.Infof("found lease in planner cache for table %d", tableID)
+			}
+			break
+		}
+	}
+
+	// If we didn't find a lease, acquire one.
+	if lease == nil {
+		var err error
+		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		if err != nil {
+			if err == errDescriptorNotFound {
+				// Transform the descriptor error into an error that references the
+				// table's ID.
+				return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
+			}
+			return nil, err
+		}
+		p.leases = append(p.leases, lease)
+		// If the lease we just acquired expires before the txn's deadline, reduce
+		// the deadline.
+		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: lease.Expiration().UnixNano()})
+	}
+	return &lease.TableDescriptor, nil
+}
+
 // getTableNames implements the SchemaAccessor interface.
 func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.QualifiedNames, error) {
 	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
