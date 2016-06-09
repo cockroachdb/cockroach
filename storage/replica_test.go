@@ -5720,7 +5720,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	checkReservations(t, 1)
 	b := tc.engine.NewBatch()
 	defer b.Close()
-	if _, err := firstRng.applySnapshot(b, snap); err != nil {
+	if err := firstRng.applySnapshot(b, snap); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Commit(); err != nil {
