@@ -291,3 +291,13 @@ func (p *planner) checkTestingVerifyMetadataOrDie(
 	}
 	p.testingVerifyMetadataFn = nil
 }
+
+func (p *planner) fillFKTableMap(m TablesByID) error {
+	var err error
+	for tableID := range m {
+		if m[tableID], err = p.getTableLeaseByID(tableID); err != nil {
+			return err
+		}
+	}
+	return nil
+}

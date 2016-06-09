@@ -47,11 +47,11 @@ const (
 // is essentially just returning a slice of IDs, but the empty map can be filled
 // in place and reused, avoiding a second allocation.
 func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByID {
-	var ret map[sqlbase.ID]*sqlbase.TableDescriptor
+	var ret TablesByID
 	for _, idx := range table.AllNonDropIndexes() {
 		if usage != CheckDeletes && idx.ForeignKey != nil {
 			if ret == nil {
-				ret = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+				ret = make(TablesByID)
 			}
 			ret[idx.ForeignKey.Table] = nil
 		}
@@ -59,7 +59,7 @@ func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByI
 			for _, idx := range table.AllNonDropIndexes() {
 				for _, ref := range idx.ReferencedBy {
 					if ret == nil {
-						ret = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+						ret = make(TablesByID)
 					}
 					ret[ref.Table] = nil
 				}
@@ -67,17 +67,6 @@ func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByI
 		}
 	}
 	return ret
-}
-
-func (p *planner) fillFKTableMap(m TablesByID) error {
-	var err error
-	for tableID := range m {
-		// TODO(dt): Get a lease manager here and use that.
-		if m[tableID], err = getTableDescFromID(p.txn, tableID); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
