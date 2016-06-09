@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -1157,65 +1156,4 @@ func Example_rebalancing() {
 	// 902 857 960 875 896 999 944 929 911 867 911 895 946 897 897 812 926 921 815 859
 	// 902 855 951 867 893 999 949 938 901 867 911 892 949 898 903 803 935 930 809 868
 	// Total bytes=909881714, ranges=1745
-}
-
-func TestRebalanceInterval(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	if defaultMinRebalanceInterval <= gossip.DefaultGossipStoresInterval {
-		t.Fatalf("defaultMinRebalanceInterval (%s) cannot be shorter than "+
-			"DefaultGossipStoresInterval (%s)", defaultMaxRebalanceInterval, gossip.DefaultGossipStoresInterval)
-	}
-
-	if defaultMaxRebalanceInterval < defaultMinRebalanceInterval {
-		t.Fatalf("defaultMaxRebalanceInterval (%s) < defaultMinRebalanceInterval (%s)",
-			defaultMinRebalanceInterval, defaultMaxRebalanceInterval)
-	}
-
-	stopper, g, _, a, manualClock := createTestAllocator()
-	defer stopper.Stop()
-
-	stores := []*roachpb.StoreDescriptor{
-		{
-			StoreID:  1,
-			Node:     roachpb.NodeDescriptor{NodeID: 1},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 100},
-		},
-		{
-			StoreID:  2,
-			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 1},
-		},
-	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
-
-	a.options.Deterministic = true
-	// Store currrent time before the first rebalance decision, to avoid flakiness
-	// for the nextRebalance checks below.
-	now := time.Unix(0, manualClock.UnixNano())
-
-	// The first ShouldRebalance call should always return true when there is an
-	// imbalance.
-	if a, e := a.ShouldRebalance(1), true; a != e {
-		t.Errorf("ShouldRebalance returned %t != expected %t", a, e)
-	}
-	a.UpdateNextRebalance()
-	backoff := a.nextRebalance.Sub(now)
-	if backoff < defaultMinRebalanceInterval {
-		t.Fatalf("nextRebalance interval (%s) < min (%s)", backoff, defaultMinRebalanceInterval)
-	}
-	if backoff > defaultMaxRebalanceInterval {
-		t.Fatalf("nextRebalance interval (%s) > max (%s)", backoff, defaultMaxRebalanceInterval)
-	}
-
-	// We just rebalanced, so another rebalance should not be allowed.
-	if a, e := a.ShouldRebalance(1), false; a != e {
-		t.Errorf("ShouldRebalance returned %t != expected %t", a, e)
-	}
-
-	// Simulate the rebalance interval passing.
-	manualClock.Increment(backoff.Nanoseconds())
-	if a, e := a.ShouldRebalance(1), true; a != e {
-		t.Errorf("ShouldRebalance returned %t != expected %t", a, e)
-	}
 }
