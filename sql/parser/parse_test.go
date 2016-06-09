@@ -606,8 +606,9 @@ func TestParse2(t *testing.T) {
 		{`SELECT '1'::INT`,
 			`SELECT CAST('1' AS INT)`},
 		// Shorthand type annotation.
-		{`SELECT '1'!INT`,
-			`SELECT ANNOTATE_TYPE('1', INT)`},
+		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
+		// {`SELECT '1'!INT`,
+		// 	`SELECT ANNOTATE_TYPE('1', INT)`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
 			`SELECT *, - (- 5)`},
