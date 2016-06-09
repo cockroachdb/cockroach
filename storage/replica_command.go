@@ -2273,7 +2273,11 @@ func (r *Replica) splitTrigger(
 				// Make sure that newRng hasn't been removed.
 				replica, err := r.store.GetReplica(newRng.RangeID)
 				if err != nil {
-					log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
+					if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+						log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
+					} else {
+						log.Infof("new replica %d unable to campaign: %s", r.mu.replicaID, err)
+					}
 					return
 				}
 				replica.mu.Lock()

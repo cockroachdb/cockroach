@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // mustGetInt decodes an int64 value from the bytes field of the receiver
@@ -1010,7 +1011,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			mtc.replicateRange(rangeID, 1)
 			store0 := mtc.stores[0]
 
-			// Make the split
+			// Make the split.
 			splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 			if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 				t.Fatal(err)
@@ -1024,13 +1025,33 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 				}
 			}
 
-			originalTerm := replica2.RaftStatus().Term
-			time.Sleep(100 * time.Millisecond)
-			term := replica2.RaftStatus().Term
-			if td.expectAdvance && term <= originalTerm {
-				t.Errorf("%d. raft term should have advanced", i)
-			} else if !td.expectAdvance && term > originalTerm {
-				t.Errorf("%d. raft term should not have advanced", i)
+			var latestTerm uint64
+			if td.expectAdvance {
+				util.SucceedsSoon(t, func() error {
+					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
+						if term := raftStatus.Term; term <= latestTerm {
+							return util.Errorf("%d: raft term has not yet advanced: %d", i, term)
+						} else if latestTerm == 0 {
+							latestTerm = term
+						}
+					} else {
+						return util.Errorf("%d: raft group is not yet initialized", i)
+					}
+					return nil
+				})
+			} else {
+				for start := timeutil.Now(); timeutil.Since(start) < time.Second; time.Sleep(10 * time.Millisecond) {
+					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
+						if term := raftStatus.Term; term > latestTerm {
+							if latestTerm == 0 {
+								latestTerm = term
+							} else {
+								t.Errorf("%d: raft term unexpectedly advanced: %d", i, term)
+								break
+							}
+						}
+					}
+				}
 			}
 		}()
 	}
