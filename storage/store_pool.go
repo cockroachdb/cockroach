@@ -18,7 +18,6 @@ package storage
 
 import (
 	"container/heap"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -167,11 +166,6 @@ func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Du
 	return sp
 }
 
-// Clock returns the storepool's clock.
-func (sp *StorePool) Clock() *hlc.Clock {
-	return sp.clock
-}
-
 // storeGossipUpdate is the gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
@@ -297,11 +291,6 @@ func (s *stat) update(x float64) {
 	// Update variable used to calculate running standard deviation. See: Knuth
 	// TAOCP, vol 2, 3rd ed, page 232.
 	s.s = s.s + (x-oldMean)*(x-s.mean)
-}
-
-// stddev returns the running standard deviation.
-func (s *stat) stddev() float64 {
-	return math.Sqrt(s.s / (s.n - 1))
 }
 
 // StoreList holds a list of store descriptors and associated count and used
