@@ -228,7 +228,7 @@ describe("metrics reducer", function() {
           assert.equal(mockMetricsState.inFlight, 1);
 
           if (successSent) {
-            return { status: 500 };
+            return { throws: new Error() };
           }
           successSent = true;
 

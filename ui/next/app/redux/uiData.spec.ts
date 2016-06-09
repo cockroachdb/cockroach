@@ -158,7 +158,7 @@ describe("UIData reducer", function() {
 
     it("correctly reacts to error during save", function() {
       fetchMock.mock("/_admin/v1/uidata", "post", () => {
-        return { status: 500 };
+        return { throws: new Error() };
       });
 
       let p = saveUIData(
@@ -211,7 +211,7 @@ describe("UIData reducer", function() {
 
     it("correctly reacts to error during load", function() {
       fetchMock.mock("^/_admin/v1/uidata" /* "^" allows prefix match */, "get", () => {
-        return { status: 500 };
+        return { throws: new Error() };
       });
 
       let p = loadUIData(uiKey1, uiKey2);
