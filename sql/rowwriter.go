@@ -124,6 +124,7 @@ type rowInserter struct {
 func makeRowInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
+	fkTables TablesByID,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs bool,
 ) (rowInserter, error) {
@@ -152,7 +153,7 @@ func makeRowInserter(
 
 	if checkFKs {
 		var err error
-		if ri.fks, err = makeFKInsertHelper(txn, tableDesc, ri.insertColIDtoRowIndex); err != nil {
+		if ri.fks, err = makeFKInsertHelper(txn, tableDesc, fkTables, ri.insertColIDtoRowIndex); err != nil {
 			return ri, err
 		}
 	}
@@ -288,6 +289,7 @@ const (
 func makeRowUpdater(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
+	fkTables TablesByID,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
@@ -366,12 +368,12 @@ func makeRowUpdater(
 		var err error
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
-		if ru.rd, err = makeRowDeleter(txn, tableDesc, tableDesc.Columns, skipFKs); err != nil {
+		if ru.rd, err = makeRowDeleter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
 			return rowUpdater{}, err
 		}
 		ru.fetchCols = ru.rd.fetchCols
 		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
-		if ru.ri, err = makeRowInserter(txn, tableDesc, tableDesc.Columns, skipFKs); err != nil {
+		if ru.ri, err = makeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
 			return rowUpdater{}, err
 		}
 	} else {
@@ -404,7 +406,7 @@ func makeRowUpdater(
 	}
 
 	var err error
-	if ru.fks, err = makeFKUpdateHelper(txn, tableDesc, ru.fetchColIDtoRowIndex); err != nil {
+	if ru.fks, err = makeFKUpdateHelper(txn, tableDesc, fkTables, ru.fetchColIDtoRowIndex); err != nil {
 		return rowUpdater{}, err
 	}
 	return ru, nil
@@ -578,6 +580,7 @@ type rowDeleter struct {
 func makeRowDeleter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
+	fkTables TablesByID,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs bool,
 ) (rowDeleter, error) {
@@ -622,7 +625,7 @@ func makeRowDeleter(
 	}
 	if checkFKs {
 		var err error
-		if rd.fks, err = makeFKDeleteHelper(txn, tableDesc, fetchColIDtoRowIndex); err != nil {
+		if rd.fks, err = makeFKDeleteHelper(txn, tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
 			return rowDeleter{}, nil
 		}
 	}

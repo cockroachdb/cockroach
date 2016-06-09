@@ -142,7 +142,11 @@ func (p *planner) Insert(
 		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
 	}
 
-	ri, err := makeRowInserter(p.txn, en.tableDesc, cols, checkFKs)
+	fkTables := TablesNeededForFKs(en.tableDesc, CheckInserts)
+	if err := p.fillFKTableMap(fkTables); err != nil {
+		return nil, err
+	}
+	ri, err := makeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +180,11 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			tw = &tableUpserter{ri: ri, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
+			fkTables := TablesNeededForFKs(en.tableDesc, CheckUpdates)
+			if err := p.fillFKTableMap(fkTables); err != nil {
+				return nil, err
+			}
+			tw = &tableUpserter{ri: ri, fkTables: fkTables, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
 		}
 	}
 
