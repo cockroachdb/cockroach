@@ -24,24 +24,87 @@ package status
 // #cgo linux LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <jemalloc/jemalloc.h>
+//
+// // See field definitions at:
+// // http://www.canonware.com/download/jemalloc/jemalloc-latest/doc/jemalloc.html#stats.allocated
+// typedef struct {
+//   size_t allocated;
+//   size_t active;
+//   size_t metadata;
+//   size_t resident;
+//   size_t mapped;
+//   size_t retained;
+// } JemallocStats;
+//
+// int jemalloc_get_stats(JemallocStats *stats) {
+//   // Update the statistics cached by mallctl.
+//   uint64_t epoch = 1;
+//   size_t sz = sizeof(epoch);
+//   mallctl("epoch", &epoch, &sz, &epoch, sz);
+//
+//   sz = sizeof(size_t);
+//   int err = mallctl("stats.allocated", &stats->allocated, &sz, NULL, 0);
+//   if (err != 0) {
+//     return err;
+//   }
+//   err = mallctl("stats.active", &stats->active, &sz, NULL, 0);
+//   if (err != 0) {
+//     return err;
+//   }
+//   err = mallctl("stats.metadata", &stats->metadata, &sz, NULL, 0);
+//   if (err != 0) {
+//     return err;
+//   }
+//   err = mallctl("stats.resident", &stats->resident, &sz, NULL, 0);
+//   if (err != 0) {
+//     return err;
+//   }
+//   err = mallctl("stats.mapped", &stats->mapped, &sz, NULL, 0);
+//   if (err != 0) {
+//     return err;
+//   }
+//   // stats.retained is introduced in 4.2.0.
+//   // err = mallctl("stats.retained", &stats->retained, &sz, NULL, 0);
+//   return err;
+// }
 import "C"
 
 import (
+	"fmt"
+
 	// This is explicit because this Go library does not export any Go symbols.
 	_ "github.com/cockroachdb/c-jemalloc"
 
 	"github.com/cockroachdb/cockroach/util/log"
+
+	"github.com/dustin/go-humanize"
 )
 
 func init() {
-	if logBuildStats != nil {
-		panic("logBuildStats is already set")
+	if getCgoMemStats != nil {
+		panic("getCgoMemStats is already set")
 	}
-	logBuildStats = logJemallocStats
+	getCgoMemStats = getJemallocStats
 }
 
-func logJemallocStats() {
+func getJemallocStats() (uint64, uint64, error) {
+	var js C.JemallocStats
+	if errCode := C.jemalloc_get_stats(&js); errCode != 0 {
+		return 0, 0, fmt.Errorf("error code %d", errCode)
+	}
+
+	if log.V(2) {
+		// Summary of jemalloc stats:
+		log.Infof("jemalloc stats: allocated: %s, active: %s, metadata: %s, resident: %s, mapped: %s",
+			humanize.IBytes(uint64(js.allocated)), humanize.IBytes(uint64(js.active)),
+			humanize.IBytes(uint64(js.metadata)), humanize.IBytes(uint64(js.resident)),
+			humanize.IBytes(uint64(js.mapped)))
+	}
+
 	if log.V(3) {
+		// Detailed jemalloc stats (very verbose, includes per-arena stats).
 		C.malloc_stats_print(nil, nil, nil)
 	}
+
+	return uint64(js.allocated), uint64(js.resident), nil
 }

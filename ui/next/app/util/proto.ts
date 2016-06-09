@@ -61,7 +61,7 @@ export namespace MetricConstants {
   // Node level metrics.
   export var userCPUPercent: string = "sys.cpu.user.percent";
   export var sysCPUPercent: string = "sys.cpu.sys.percent";
-  export var allocBytes: string = "sys.allocbytes";
+  export var allocBytes: string = "sys.go.allocbytes";
   export var sqlConns: string = "sql.conns";
   export var rss: string = "sys.rss";
 }
