@@ -112,8 +112,10 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
 
             <LineGraph title="Memory Usage" sources={sources}>
               <Axis format={ Bytes }>
-                <Metric name="cr.node.sys.allocbytes" title="Go In Use" />
-                <Metric name="cr.node.sys.sysbytes" title="Go Sys" />
+                <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
+                <Metric name="cr.node.sys.go.totalbytes" title="Go Total" />
+                <Metric name="cr.node.sys.cgo.allocbytes" title="Cgo Allocated" />
+                <Metric name="cr.node.sys.cgo.totalbytes" title="Cgo Total" />
                 <Metric name="cr.node.sys.rss" title="RSS" />
               </Axis>
             </LineGraph>
