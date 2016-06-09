@@ -292,7 +292,7 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 }
 
 // loadAppliedIndex retrieves the applied index from the supplied engine.
-func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
+func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool) (uint64, uint64, error) {
 	var appliedIndex uint64
 	if isInitialized {
 		appliedIndex = raftInitialLogIndex
@@ -302,25 +302,48 @@ func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized 
 	v, _, err := engine.MVCCGet(context.Background(), eng, keys.RaftAppliedIndexKey(rangeID),
 		roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if v != nil {
 		int64AppliedIndex, err := v.GetInt()
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		appliedIndex = uint64(int64AppliedIndex)
 	}
-	return appliedIndex, nil
+	// TODO(tschottdorf): code duplication.
+	var leaseAppliedIndex uint64
+	v, _, err = engine.MVCCGet(context.Background(), eng, keys.LeaseAppliedIndexKey(rangeID),
+		roachpb.ZeroTimestamp, true, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	if v != nil {
+		int64LeaseAppliedIndex, err := v.GetInt()
+		if err != nil {
+			return 0, 0, err
+		}
+		leaseAppliedIndex = uint64(int64LeaseAppliedIndex)
+	}
+
+	return appliedIndex, leaseAppliedIndex, nil
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, appliedIndex uint64) error {
+func setAppliedIndex(eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 
-	return engine.MVCCPut(context.Background(), eng, ms,
+	if err := engine.MVCCPut(context.Background(), eng, ms,
 		keys.RaftAppliedIndexKey(rangeID),
+		roachpb.ZeroTimestamp,
+		value,
+		nil /* txn */); err != nil {
+		return err
+	}
+	value.SetInt(int64(leaseAppliedIndex))
+	return engine.MVCCPut(context.Background(), eng, ms,
+		keys.LeaseAppliedIndexKey(rangeID),
 		roachpb.ZeroTimestamp,
 		value,
 		nil /* txn */)
@@ -491,7 +514,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, err := loadAppliedIndex(snap, rangeID, isInitialized)
+	appliedIndex, _, err := loadAppliedIndex(snap, rangeID, isInitialized)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -736,6 +759,11 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		return err
 	}
 
+	appliedIndex, leaseAppliedIndex, err := loadAppliedIndex(batch, rangeID, true /* initialized */)
+	if err != nil {
+		return err
+	}
+
 	batch.Defer(func() {
 		// Update the range and store stats.
 		r.store.metrics.subtractMVCCStats(r.stats.mvccStats)
@@ -746,7 +774,12 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		// As outlined above, last and applied index are the same after applying
 		// the snapshot.
 		r.mu.appliedIndex = snap.Metadata.Index
-		r.mu.lastIndex = snap.Metadata.Index
+		if appliedIndex != snap.Metadata.Index {
+			log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+				r.Desc().RangeID, appliedIndex, snap.Metadata.Index)
+		}
+		r.mu.lastIndex = appliedIndex
+		r.mu.leaseAppliedIndex = leaseAppliedIndex
 		r.mu.leaderLease = lease
 		r.mu.frozen = frozen
 		r.mu.gcThreshold = lastThreshold
