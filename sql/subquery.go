@@ -32,6 +32,8 @@ type subquery struct {
 	subquery       *parser.Subquery
 	execMode       subqueryExecMode
 	wantNormalized bool
+	expanded       bool
+	started        bool
 	plan           planNode
 	result         parser.Datum
 	err            error
@@ -196,13 +198,21 @@ func (v *subqueryPlanVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 		return false, expr
 	}
 	if sq, ok := expr.(*subquery); ok {
-		if v.doExpand {
+		if v.doExpand && !sq.expanded {
 			v.err = sq.plan.expandPlan()
+			sq.expanded = true
 		}
-		if v.err == nil && v.doStart {
+		if v.err == nil && v.doStart && !sq.started {
+			if !sq.expanded {
+				panic("subquery was not expanded properly")
+			}
 			v.err = sq.plan.Start()
+			sq.started = true
 		}
-		if v.err == nil && v.doEval {
+		if v.err == nil && v.doEval && sq.result == nil {
+			if !sq.expanded || !sq.started {
+				panic("subquery was not expanded or prepared properly")
+			}
 			sq.result, sq.err = sq.doEval()
 			if sq.err != nil {
 				v.err = sq.err
