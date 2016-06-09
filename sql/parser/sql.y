@@ -946,7 +946,7 @@ explainable_stmt:
 | insert_stmt
 | update_stmt
 | delete_stmt
-| explain_stmt
+| explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
   explain_option_name
@@ -2474,7 +2474,7 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $2.aliasClause()}
   }
-| joined_table
+| joined_table { /* SKIP DOC */ }
 | '(' joined_table ')' alias_clause { unimplemented() }
 
 // It may seem silly to separate joined_table from table_ref, but there is

@@ -4722,6 +4722,11 @@ sqldefault:
 		{
 			sqlVAL.union.val = sqlDollar[1].union.slct()
 		}
+	case 72:
+		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
+		//line sql.y:949
+		{ /* SKIP DOC */
+		}
 	case 73:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:953
@@ -6485,6 +6490,11 @@ sqldefault:
 		//line sql.y:2474
 		{
 			sqlVAL.union.val = &AliasedTableExpr{Expr: &Subquery{Select: sqlDollar[1].union.selectStmt()}, As: sqlDollar[2].union.aliasClause()}
+		}
+	case 375:
+		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
+		//line sql.y:2477
+		{ /* SKIP DOC */
 		}
 	case 376:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
