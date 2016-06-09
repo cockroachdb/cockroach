@@ -1404,27 +1404,47 @@ func (r *Replica) handleRaftReady() error {
 		return nil
 	}
 	rd := r.mu.raftGroup.Ready()
-	lastIndex := r.mu.lastIndex
+	lastIndex := r.mu.lastIndex // used for append below
 	r.mu.Unlock()
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
-	batch := r.store.Engine().NewBatch()
-	defer batch.Close()
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		var err error
-		if lastIndex, err = r.applySnapshot(batch, rd.Snapshot); err != nil {
+		// We use a separate batch to apply the snapshot since the Replica
+		// (and in particular the last index) is altered via Defer(), but we
+		// read it below. This also allows for more future optimization (such
+		// as using a Distinct() batch).
+		batch := r.store.Engine().NewBatch()
+		defer batch.Close()
+		if err := r.applySnapshot(batch, rd.Snapshot); err != nil {
 			return err
 		}
+		if err := batch.Commit(); err != nil {
+			return err
+		}
+		r.mu.Lock()
+		lastIndex = r.mu.lastIndex // update lastIndex for append below
+		r.mu.Unlock()
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
+
 	// We know that all of the writes from here forward will be to distinct keys.
 	writer := batch.Distinct()
 	if len(rd.Entries) > 0 {
-		// All of the entries are appended to distinct keys.
+		// All of the entries are appended to distinct keys, returning a new
+		// last index.
 		var err error
 		if lastIndex, err = r.append(writer, lastIndex, rd.Entries); err != nil {
 			return err
 		}
+		batch.Defer(func() {
+			// Update last index on commit.
+			r.mu.Lock()
+			r.mu.lastIndex = lastIndex
+			r.mu.Unlock()
+		})
+
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := r.setHardState(writer, rd.HardState); err != nil {
@@ -1434,9 +1454,6 @@ func (r *Replica) handleRaftReady() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
-	r.mu.Lock()
-	r.mu.lastIndex = lastIndex
-	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(msg)
