@@ -2273,7 +2273,7 @@ func (r *Replica) splitTrigger(
 				// Make sure that newRng hasn't been removed.
 				replica, err := r.store.GetReplica(newRng.RangeID)
 				if err != nil {
-					log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
+					log.Infof("new replica %d possibly removed before campaigning: %s", r.mu.replicaID, err)
 					return
 				}
 				replica.mu.Lock()
