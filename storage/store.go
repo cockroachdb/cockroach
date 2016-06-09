@@ -2395,9 +2395,15 @@ func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 // Store remains in the reported state.
 func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescriptor) {
 	newStoreRangeSet(s).Visit(func(r *Replica) bool {
-		desc := r.GetReplica()
-		if !r.IsInitialized() || desc == nil {
+		if !r.IsInitialized() {
 			return true
+		}
+		desc, err := r.GetReplica()
+		if err != nil {
+			if _, ok := err.(*errReplicaNotInRange); ok {
+				return true
+			}
+			log.Fatalf("unexpected error: %s", err)
 		}
 		r.mu.Lock()
 		if r.mu.state.frozen == collectFrozen {
