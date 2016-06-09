@@ -182,18 +182,18 @@ func typeCheckOverloadedExprs(
 	// Hold the resolved type expressions of the provided exprs, in order.
 	typedExprs := make([]TypedExpr, len(exprs))
 
-	// Split provided expressions into three groups:
-	// - Arguments
+	// Split the expressions into three groups of indexed expressions:
+	// - Placeholders
 	// - Numeric constants
 	// - All other Exprs
-	var resolvableExprs, constExprs, valExprs []indexedExpr
+	var resolvableExprs, constExprs, placeholderExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
 		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
-		case ctx.isUnresolvedArgument(expr):
-			valExprs = append(valExprs, idxExpr)
+		case ctx.isUnresolvedPlaceholder(expr):
+			placeholderExprs = append(placeholderExprs, idxExpr)
 		default:
 			resolvableExprs = append(resolvableExprs, idxExpr)
 		}
@@ -201,7 +201,7 @@ func typeCheckOverloadedExprs(
 
 	// defaultTypeCheck type checks the constant and placeholder expressions without a preference
 	// and adds them to the type checked slice.
-	defaultTypeCheck := func(errorOnArgs bool) error {
+	defaultTypeCheck := func(errorOnPlaceholders bool) error {
 		for _, expr := range constExprs {
 			typ, err := expr.e.TypeCheck(ctx, nil)
 			if err != nil {
@@ -209,8 +209,8 @@ func typeCheckOverloadedExprs(
 			}
 			typedExprs[expr.i] = typ
 		}
-		for _, expr := range valExprs {
-			if errorOnArgs {
+		for _, expr := range placeholderExprs {
+			if errorOnPlaceholders {
 				_, err := expr.e.(Placeholder).TypeCheck(ctx, nil)
 				return err
 			}
@@ -307,7 +307,7 @@ func typeCheckOverloadedExprs(
 				typedExprs[expr.i] = typ
 			}
 
-			for _, expr := range valExprs {
+			for _, expr := range placeholderExprs {
 				des := p.getAt(expr.i)
 				typ, err := expr.e.TypeCheck(ctx, des)
 				if err != nil {
@@ -420,9 +420,9 @@ func typeCheckOverloadedExprs(
 
 	// The fifth heuristic is to prefer candidates where all placeholders can be given the same type
 	// as all numeric constants and resolvable expressions. This is only possible if all numeric
-	//  constants and resolvable expressions were resolved homogeneously up to this point.
-	if homogeneousTyp != nil && len(valExprs) > 0 {
-		for _, expr := range valExprs {
+	// constants and resolvable expressions were resolved homogeneously up to this point.
+	if homogeneousTyp != nil && len(placeholderExprs) > 0 {
+		for _, expr := range placeholderExprs {
 			filterOverloads(func(o overloadImpl) bool {
 				return o.params().getAt(expr.i).TypeEqual(homogeneousTyp)
 			})

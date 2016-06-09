@@ -89,7 +89,7 @@ var NoTypePreference = Datum(nil)
 // the new typed expression tree, which additionally permits evaluation and type
 // introspection globally and on each sub-tree.
 //
-// While doing so, it will fold numeric constants and bind var argument names to
+// While doing so, it will fold numeric constants and bind placeholder names to
 // their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
 // tree.

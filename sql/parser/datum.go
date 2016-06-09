@@ -1321,7 +1321,7 @@ func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
 
 var _ VariableExpr = &DPlaceholder{}
 
-// DPlaceholder is the named bind var argument Datum.
+// DPlaceholder is the named placeholder Datum.
 type DPlaceholder struct {
 	name string
 	pmap *PlaceholderInfo
