@@ -2168,6 +2168,7 @@ func MVCCFindSplitKey(
 	rangeID roachpb.RangeID,
 	key,
 	endKey roachpb.RKey,
+	targetSize int64,
 	debugFn func(msg string, args ...interface{}),
 ) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
@@ -2194,8 +2195,6 @@ func MVCCFindSplitKey(
 	}
 
 	rangeSize := ms.KeyBytes + ms.ValBytes
-	targetSize := rangeSize / 2
-
 	logf("range size: %s, targetSize %s", humanize.IBytes(uint64(rangeSize)), humanize.IBytes(uint64(targetSize)))
 
 	sizeSoFar := int64(0)

@@ -144,63 +144,6 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugSplitKeyCmd = &cobra.Command{
-	Use:   "split-key [directory] [rangeid]",
-	Short: "Compute a split key for the given key range",
-	Long: `
-Runs MVCCFindSplitKey on the given key range and prints debug information
-and the obtained split key.
-`,
-	RunE: runDebugSplitKey,
-}
-
-func runDebugSplitKey(cmd *cobra.Command, args []string) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	if len(args) != 2 {
-		return errors.New("store and rangeID must be specified")
-	}
-
-	db, err := openStore(cmd, args[0], stopper)
-	if err != nil {
-		return err
-	}
-	rangeID, err := parseRangeID(args[1])
-	if err != nil {
-		return err
-	}
-
-	snap := db.NewSnapshot()
-	defer snap.Close()
-
-	var desc roachpb.RangeDescriptor
-	if err := storage.IterateRangeDescriptors(snap, func(descInside roachpb.RangeDescriptor) (bool, error) {
-		if descInside.RangeID == rangeID {
-			desc = descInside
-			return true, nil
-		}
-		return false, nil
-	}); err != nil {
-		return err
-	}
-
-	if desc.RangeID != rangeID {
-		return fmt.Errorf("range %d not found", rangeID)
-	}
-
-	if splitKey, err := engine.MVCCFindSplitKey(context.Background(), snap, rangeID,
-		desc.StartKey, desc.EndKey, func(msg string, args ...interface{}) {
-			fmt.Printf(msg+"\n", args...)
-		}); err != nil {
-		fmt.Println("No SplitKey found:", err)
-	} else {
-		fmt.Println("Computed SplitKey:", splitKey)
-	}
-
-	return nil
-}
-
 var debugRangeDescriptorsCmd = &cobra.Command{
 	Use:   "range-descriptors [directory]",
 	Short: "print all range descriptors in a store",
@@ -597,7 +540,6 @@ var debugCmds = []*cobra.Command{
 	debugRangeDescriptorsCmd,
 	debugRaftLogCmd,
 	debugGCCmd,
-	debugSplitKeyCmd,
 	debugCheckStoreCmd,
 	kvCmd,
 	rangeCmd,
