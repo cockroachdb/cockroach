@@ -266,10 +266,16 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 
 		updateCols := append(added, dropped...)
+		fkTables := TablesNeededForFKs(tableDesc, CheckUpdates)
+		for k := range fkTables {
+			if fkTables[k], err = getTableDescFromID(txn, k); err != nil {
+				return err
+			}
+		}
 		// TODO(dan): Tighten up the bound on the requestedCols parameter to
 		// makeRowUpdater.
 		ru, err := makeRowUpdater(
-			txn, tableDesc, updateCols, tableDesc.Columns, rowUpdaterOnlyColumns,
+			txn, tableDesc, fkTables, updateCols, tableDesc.Columns, rowUpdaterOnlyColumns,
 		)
 		if err != nil {
 			return err

@@ -21,17 +21,74 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 )
+
+// TablesByID maps table IDs to looked up descriptors.
+type TablesByID map[sqlbase.ID]*sqlbase.TableDescriptor
+
+// FKCheck indicates a kind of FK check (delete, insert, or both).
+type FKCheck int
+
+const (
+	// CheckDeletes checks if rows reference a changed value.
+	CheckDeletes FKCheck = iota
+	// CheckInserts checks if a new/changed value references an existing row.
+	CheckInserts
+	// CheckUpdates checks all references (CheckDeletes+CheckInserts).
+	CheckUpdates
+)
+
+// TablesNeededForFKs calculates the IDs of the additional TableDescriptors that
+// will be needed for FK checking delete and/or insert operations on `table`.
+//
+// NB: the returned map's values are *not* set -- higher level calling code, eg
+// in planner, should fill the map's values by acquiring leases. This function
+// is essentially just returning a slice of IDs, but the empty map can be filled
+// in place and reused, avoiding a second allocation.
+func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByID {
+	var ret map[sqlbase.ID]*sqlbase.TableDescriptor
+	for _, idx := range table.AllNonDropIndexes() {
+		if usage != CheckDeletes && idx.ForeignKey != nil {
+			if ret == nil {
+				ret = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+			}
+			ret[idx.ForeignKey.Table] = nil
+		}
+		if usage != CheckInserts {
+			for _, idx := range table.AllNonDropIndexes() {
+				for _, ref := range idx.ReferencedBy {
+					if ret == nil {
+						ret = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+					}
+					ret[ref.Table] = nil
+				}
+			}
+		}
+	}
+	return ret
+}
+
+func (p *planner) fillFKTableMap(m TablesByID) error {
+	var err error
+	for tableID := range m {
+		// TODO(dt): Get a lease manager here and use that.
+		if m[tableID], err = getTableDescFromID(p.txn, tableID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKInsertHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
 		if idx.ForeignKey != nil {
-			fk, err := makeBaseFKHelepr(txn, idx, idx.ForeignKey, colMap)
+			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap)
 			if err != nil {
 				return fks, err
 			}
@@ -73,12 +130,12 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
 		for _, ref := range idx.ReferencedBy {
-			fk, err := makeBaseFKHelepr(txn, idx, ref, colMap)
+			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
 			if err != nil {
 				return fks, err
 			}
@@ -124,14 +181,14 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error
-	if ret.inbound, err = makeFKDeleteHelper(txn, table, colMap); err != nil {
+	if ret.inbound, err = makeFKDeleteHelper(txn, table, otherTables, colMap); err != nil {
 		return ret, err
 	}
-	ret.outbound, err = makeFKInsertHelper(txn, table, colMap)
+	ret.outbound, err = makeFKInsertHelper(txn, table, otherTables, colMap)
 	return ret, err
 }
 
@@ -152,17 +209,17 @@ type baseFKHelper struct {
 	ids          map[sqlbase.ColumnID]int // col IDs
 }
 
-func makeBaseFKHelepr(
+func makeBaseFKHelper(
 	txn *client.Txn,
+	otherTables TablesByID,
 	writeIdx sqlbase.IndexDescriptor,
 	ref *sqlbase.TableAndIndexID,
 	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchPrefix: ref.IndexKeyPrefix()}
-	// TODO(dt): Get a lease manager here and use that.
-	searchTable, err := getTableDescFromID(txn, ref.Table)
-	if err != nil {
-		return b, err
+	searchTable, ok := otherTables[ref.Table]
+	if !ok {
+		return b, util.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchTable = searchTable
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
