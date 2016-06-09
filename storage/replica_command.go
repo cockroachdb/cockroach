@@ -1519,27 +1519,28 @@ func (r *Replica) LeaderLease(
 	}
 	r.mu.leaderLease = &args.Lease
 
-	if prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
-		// The lease is changing hands. Is this replica the new lease holder?
-		if r.mu.leaderLease.Replica.ReplicaID == r.mu.replicaID {
-			// If this replica is a new holder of the lease, update the low water
-			// mark of the timestamp cache. Note that clock offset scenarios are
-			// handled via a stasis period inherent in the lease which is documented
-			// in on the Lease struct.
-			log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
-				r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.tsCache.SetLowWater(prevLease.Expiration)
-		} else if r.mu.raftGroup.Status().RaftState == raft.StateLeader {
-			// If this replica is the raft leader but it is not the new lease
-			// holder, then try to transfer the raft leadership to match the
-			// lease.
-			log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
-				r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
-			r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+		if prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
+			// The lease is changing hands. Is this replica the new lease holder?
+			if r.mu.leaderLease.Replica.ReplicaID == r.mu.replicaID {
+				// If this replica is a new holder of the lease, update the low water
+				// mark of the timestamp cache. Note that clock offset scenarios are
+				// handled via a stasis period inherent in the lease which is documented
+				// in on the Lease struct.
+				log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
+					r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
+				r.mu.tsCache.SetLowWater(prevLease.Expiration)
+			} else if raftGroup.Status().RaftState == raft.StateLeader {
+				// If this replica is the raft leader but it is not the new lease
+				// holder, then try to transfer the raft leadership to match the
+				// lease.
+				log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
+					r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
+				raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+			}
 		}
-	}
-
-	return reply, nil
+		return nil
+	})
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies
@@ -2280,9 +2281,15 @@ func (r *Replica) splitTrigger(
 					}
 					return
 				}
-				replica.mu.Lock()
-				defer replica.mu.Unlock()
-				_ = replica.mu.raftGroup.Campaign()
+
+				if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
+					if err := raftGroup.Campaign(); err != nil {
+						log.Warning(err)
+					}
+					return nil
+				}); err != nil {
+					panic(err)
+				}
 			})
 		}
 	})
