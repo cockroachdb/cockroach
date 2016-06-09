@@ -160,7 +160,6 @@ module AdminViews {
                 .title("Memory")
             ).format(Utils.Format.Bytes).title("Memory Usage")
               .tooltip("The average memory in use across all nodes.")
-
           );
 
           this._addChart(

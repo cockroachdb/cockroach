@@ -234,7 +234,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
-              .tooltip("The total number of active SQL connections across all nodes.")            
+              .tooltip("The total number of active SQL connections across all nodes.")
           );
           this._addChart(
             this.activityAxes,
@@ -263,7 +263,7 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("livebytes"))
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes)
-                .tooltip('The amount of storage space used by live (non-historical) data across all nodes.')
+                .tooltip("The amount of storage space used by live (non-historical) data across all nodes.")
           );
 
           let latencySelectors: Selector[] = _.map(
@@ -354,7 +354,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The memory in use across all nodes, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS)."
+              .tooltip("The memory in use across all nodes, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
           );
           this._addChart(
             this.systemAxes,
@@ -476,7 +476,7 @@ module AdminViews {
             ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("GC Pause Time")
             .label("Milliseconds")
-            .tooltip("The average amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused."
+            .tooltip("The average amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused.")
           );
 
           this.exec = new Metrics.Executor(this._query);
@@ -804,7 +804,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
-              .tooltip("The total number of active SQL connections to this node.")                        
+              .tooltip("The total number of active SQL connections to this node.")
           );
           this._addChart(
             this.activityAxes,
@@ -837,7 +837,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes)
-                .tooltip('The amount of storage space used by live (non-historical) data on this node.')
+                .tooltip("The amount of storage space used by live (non-historical) data on this node.")
           );
 
           let latencySelectors: Selector[] = _.map(
@@ -853,7 +853,7 @@ module AdminViews {
             .format((v: number): string => d3.format(".1f")(Utils.Convert.NanoToMilli(v)))
             .title([m("", "Query Time"), m("small", "(Max Per Percentile)")])
             .label("Milliseconds")
-            .tooltip(`The latency between query requests and responses on this node over a 1 minute period.`)
+            .tooltip("The latency between query requests and responses on this node over a 1 minute period.")
           );
 
           // SQL charts
@@ -1083,7 +1083,7 @@ module AdminViews {
             ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("GC Pause Time")
             .label("Milliseconds")
-            .tooltip("The average amount of processor time used by Go’s garbage collector per second on this node. During garbage collection, application code execution is paused."
+            .tooltip("The average amount of processor time used by Go’s garbage collector per second on this node. During garbage collection, application code execution is paused.")
           );
         }
 
