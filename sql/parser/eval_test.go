@@ -381,13 +381,14 @@ func TestEval(t *testing.T) {
 		{`ANNOTATE_TYPE(123, decimal) + 1`, `124`},
 		{`ANNOTATE_TYPE(123.5, float) + 1`, `124.5`},
 		{`ANNOTATE_TYPE(123.5, decimal) + 1`, `124.5`},
-		{`123!int + 1`, `124`},
-		{`123!float + 1`, `124.0`},
-		{`(123 + 1)!int`, `124`},
-		{`(123 + 1)!float`, `124.0`},
 		{`ANNOTATE_TYPE(NULL, int)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, string)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, timestamp)`, `NULL`},
+		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
+		// {`123!int + 1`, `124`},
+		// {`123!float + 1`, `124.0`},
+		// {`(123 + 1)!int`, `124`},
+		// {`(123 + 1)!float`, `124.0`},
 		// Need two interval ops to verify the return type matches the return struct type.
 		{`'2010-09-28 12:00:00.1-04:00'::timestamptz - '0s'::interval - '0s'::interval`, `2010-09-28 16:00:00.1+00:00`},
 		{`'12h2m1s23ms'::interval + '1h'::interval`, `13h2m1.023s`},

@@ -659,7 +659,9 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %left      '~'
 %left      '[' ']'
 %left      '(' ')'
-%left      '!' TYPECAST
+// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
+// %left      '!' TYPECAST
+%left      TYPECAST
 %left      '.'
 // These might seem to be low-precedence, but actually they are not part
 // of the arithmetic hierarchy at all in their use as JOIN operators.
@@ -2974,10 +2976,11 @@ a_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
-| a_expr '!' typename
-  {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
-  }
+// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
+//| a_expr '!' typename
+//  {
+//    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+//  }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
   // These operators must be called out explicitly in order to make use of
@@ -3197,10 +3200,11 @@ b_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
-| b_expr '!' typename
-  {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
-  }
+// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
+//| b_expr '!' typename
+//  {
+//    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+//  }
 | '+' b_expr %prec UMINUS
   {
     $$.val = &UnaryExpr{Operator: UnaryPlus, Expr: $2.expr()}
