@@ -166,6 +166,11 @@ func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRaftAppliedIndexSuffix, nil)
 }
 
+// LeaseAppliedIndexKey returns a system-local key for a lease applied index.
+func LeaseAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, LocalLeaseAppliedIndexSuffix, nil)
+}
+
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRaftTruncatedStateSuffix, nil)

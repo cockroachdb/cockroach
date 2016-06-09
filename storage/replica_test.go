@@ -21,7 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -383,11 +385,11 @@ func setLeaderLease(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
-	pendingCmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
+	ch, _, err := r.proposeRaftCommand(r.context(context.Background()), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
-		err = (<-pendingCmd.done).Err.GoError()
+		err = (<-ch).Err.GoError()
 	}
 	return err
 }
@@ -979,12 +981,12 @@ func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.rng.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
-	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
+	ch, _, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
 		// Remove ambiguity about where the "replica not found" error comes from.
-		err = (<-pendingCmd.done).Err.GoError()
+		err = (<-ch).Err.GoError()
 	}
 	if !testutils.IsError(err, "replica not found") {
 		t.Errorf("unexpected error obtaining lease for invalid store: %v", err)
@@ -2883,11 +2885,11 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft replay) and
 		// also avoid updating the timestamp cache; verify WriteTooOldError.
 		ba.Timestamp = txn.OrigTimestamp
-		pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
+		ch, _, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
-		respWithErr := <-pendingCmd.done
+		respWithErr := <-ch
 		if _, ok := respWithErr.Err.GetDetail().(*roachpb.WriteTooOldError); !ok {
 			t.Fatalf("%d: expected WriteTooOldError; got %s", i, respWithErr.Err)
 		}
@@ -4011,7 +4013,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 91, SysCount: 2, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -4026,7 +4028,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 91, SysCount: 2, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -4035,7 +4037,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(&dArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 91, SysCount: 2, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 
@@ -5549,15 +5551,16 @@ func TestReplicaIDChangePending(t *testing.T) {
 	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error { return nil }
 	rng.mu.Unlock()
 
-	// Add a command to the pending list
+	// Add a command to the pending list.
+	magicTS := tc.clock.Now()
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
+	ba.Timestamp = magicTS
 	ba.Add(&roachpb.GetRequest{
 		Span: roachpb.Span{
 			Key: roachpb.Key("a"),
 		},
 	})
-	expectedCommand, err := rng.proposeRaftCommand(context.Background(), ba)
+	_, _, err := rng.proposeRaftCommand(context.Background(), ba)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5568,7 +5571,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
 	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error {
-		if p == expectedCommand {
+		if p.raftCmd.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
@@ -5584,6 +5587,283 @@ func TestReplicaIDChangePending(t *testing.T) {
 	default:
 		t.Fatal("command was not re-proposed")
 	}
+}
+
+// runWrongIndexTest runs a reproposal or refurbishment test, optionally
+// simulating an error during the renewal of the command. If repropose is
+// false, refurbishes instead.
+// If withErr is true, injects an error when the reproposal or refurbishment
+// takes place.
+func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals int32) {
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+
+	prefix := fmt.Sprintf("repropose=%t withErr=%t: ", repropose, withErr)
+	fatalf := func(msg string, args ...interface{}) {
+		t.Fatal(util.ErrorfSkipFrames(1, prefix+msg, args...))
+	}
+
+	type magicKey struct{}
+
+	var c int32 // updated atomically
+
+	tc.rng.mu.Lock()
+	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
+		if v := cmd.ctx.Value(magicKey{}); v != nil {
+			curAttempt := atomic.AddInt32(&c, 1)
+			if (repropose || curAttempt == 2) && withErr {
+				return errors.New("boom")
+			}
+		}
+		return defaultProposeRaftCommandLocked(tc.rng, cmd)
+	}
+	tc.rng.mu.Unlock()
+
+	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+		fatalf("%s", pErr)
+	}
+
+	pArg := putArgs(roachpb.Key("a"), []byte("asd"))
+	{
+		var ba roachpb.BatchRequest
+		ba.Add(&pArg)
+		ba.Timestamp = tc.clock.Now()
+		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	tc.rng.mu.Lock()
+	ai := tc.rng.mu.leaseAppliedIndex
+	tc.rng.mu.Unlock()
+
+	if ai < 1 {
+		t.Fatal("committed a batch, but still at lease index zero")
+	}
+
+	wrongIndex := ai - 1 // will chose this as MaxLeaseIndex
+
+	log.Infof("test begins")
+
+	var ba roachpb.BatchRequest
+	ba.Timestamp = tc.clock.Now()
+	ba.Add(&pArg)
+
+	replica := *tc.rng.GetReplica()
+	ch := func() chan roachpb.ResponseWithError {
+		tc.rng.mu.Lock()
+		defer tc.rng.mu.Unlock()
+		// Make a new command, but pretend it didn't increment the assignment
+		// counter. This leaks some implementation, but not too much.
+		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
+		cmd, err := tc.rng.prepareRaftCommandLocked(
+			context.WithValue(context.Background(), magicKey{}, "foo"),
+			makeIDKey(), replica, ba)
+		cmd.raftCmd.MaxLeaseIndex = preAssigned
+		tc.rng.mu.lastAssignedLeaseIndex = preAssigned
+		if err != nil {
+			fatalf("%s", err)
+		}
+		cmd.raftCmd.MaxLeaseIndex = wrongIndex
+		tc.rng.insertRaftCommandLocked(cmd)
+		if repropose {
+			if err := tc.rng.refreshPendingCmdsLocked(); err != nil {
+				fatalf("%s", err)
+			}
+		} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
+			fatalf("%s", err)
+		}
+		return cmd.done
+	}()
+	if rwe := <-ch; rwe.Err != nil != withErr ||
+		(withErr && !testutils.IsPError(rwe.Err, "boom")) {
+		fatalf("%s", rwe.Err)
+	}
+	if n := atomic.LoadInt32(&c); n != expProposals {
+		fatalf("expected %d proposals, got %d", expProposals, n)
+	}
+}
+
+// Making the test more fun for human eyes.
+const (
+	propose   = false
+	repropose = true
+	noErr     = false
+	withErr   = true
+)
+
+func TestReplicaRefurbishOnWrongIndex_ReproposeNoError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Set up a command at wrong index, but don't propose it but
+	// immediately call the repropose logic, which should refurbish it.
+	runWrongIndexTest(t, repropose, noErr, 1)
+}
+
+func TestReplicaRefurbishOnWrongIndex_ReproposeError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Like its NoError variant, but the reproposal errors out and is
+	// received by the client.
+	runWrongIndexTest(t, repropose, withErr, 1)
+}
+
+func TestReplicaRefurbishOnWrongIndex_ProposeNoError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Propose a command at a past index and let the application of the command
+	// refurbish it successfully.
+	runWrongIndexTest(t, propose, noErr, 2)
+}
+
+func TestReplicaRefurbishOnWrongIndex_ProposeError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Propose a command at a past index and let the application of the command
+	// refurbish it. Refurbishing fails; asserts that the client receives
+	// the error.
+	runWrongIndexTest(t, propose, withErr, 2)
+}
+
+// TestReplicaCancelRaftCommandProgress creates a number of Raft commands and
+// immediately abandons some of them, while proposing the remaining ones. It
+// then verifies that all the non-abandoned commands get applied (which would
+// not be the case if gaps in the applied index posed an issue).
+func TestReplicaCancelRaftCommandProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+	rng := tc.rng
+	replica := *rng.GetReplica()
+
+	const num = 10
+
+	var chs []chan roachpb.ResponseWithError
+
+	func() {
+		rng.mu.Lock()
+		defer rng.mu.Unlock()
+		for i := 0; i < num; i++ {
+			var ba roachpb.BatchRequest
+			ba.Timestamp = tc.clock.Now()
+			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
+				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
+			cmd, err := rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), replica, ba)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rng.insertRaftCommandLocked(cmd)
+			// We actually propose the command only if we don't
+			// cancel it to simulate the case in which Raft loses
+			// the command and it isn't reproposed due to the
+			// client abandoning it.
+			if rand.Intn(2) == 0 {
+				log.Infof("abandoning command %d", i)
+				delete(rng.mu.pendingCmds, cmd.idKey)
+			} else if err := rng.proposePendingCmdLocked(cmd); err != nil {
+				t.Fatal(err)
+			} else {
+
+				chs = append(chs, cmd.done)
+			}
+		}
+	}()
+
+	for _, ch := range chs {
+		if rwe := <-ch; rwe.Err != nil {
+			t.Fatal(rwe.Err)
+		}
+	}
+}
+
+// TestReplicaBurstPendingCommandsAndRepropose verifies that a burst of
+// proposed commands assigns a correct sequence of required indexes,
+// and then goes and checks that a reproposal (without prior proposal) results
+// in these commands applying at the computed indexes.
+func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+
+	const num = 10
+	replica := *tc.rng.GetReplica()
+
+	type magicKey struct{}
+
+	var seenCmds []int
+	tc.rng.mu.Lock()
+	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
+		if v := cmd.ctx.Value(magicKey{}); v != nil {
+			seenCmds = append(seenCmds, int(cmd.raftCmd.MaxLeaseIndex))
+		}
+		return defaultProposeRaftCommandLocked(tc.rng, cmd)
+	}
+	tc.rng.mu.Unlock()
+
+	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	expIndexes := make([]int, 0, num)
+	chs := func() []chan roachpb.ResponseWithError {
+		tc.rng.mu.Lock()
+		defer tc.rng.mu.Unlock()
+		chs := make([]chan roachpb.ResponseWithError, 0, num)
+
+		origIndexes := make([]int, 0, num)
+		for i := 0; i < num; i++ {
+			expIndexes = append(expIndexes, i+1)
+			ctx := context.WithValue(context.Background(), magicKey{}, "foo")
+			var ba roachpb.BatchRequest
+			ba.Timestamp = tc.clock.Now()
+			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
+				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
+			cmd, err := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), replica, ba)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.rng.insertRaftCommandLocked(cmd)
+		}
+
+		for _, p := range tc.rng.mu.pendingCmds {
+			if v := p.ctx.Value(magicKey{}); v != nil {
+				origIndexes = append(origIndexes, int(p.raftCmd.MaxLeaseIndex))
+			}
+		}
+
+		sort.Ints(origIndexes)
+
+		if !reflect.DeepEqual(expIndexes, origIndexes) {
+			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
+		}
+
+		if err := tc.rng.refreshPendingCmdsLocked(); err != nil {
+			t.Fatal(err)
+		}
+		return chs
+	}()
+	for _, ch := range chs {
+		if pErr := (<-ch).Err; pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	if !reflect.DeepEqual(seenCmds, expIndexes) {
+		t.Fatalf("expected indexes %v, got %v", expIndexes, seenCmds)
+	}
+
+	util.SucceedsSoon(t, func() error {
+		tc.rng.mu.Lock()
+		defer tc.rng.mu.Unlock()
+		nonePending := len(tc.rng.mu.pendingCmds) == 0
+		c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.leaseAppliedIndex)
+		if nonePending && c > 0 {
+			return fmt.Errorf("no pending cmds, but have required index offset %d", c)
+		}
+		if nonePending {
+			return nil
+		}
+		return errors.New("still pending commands")
+	})
 }
 
 // TestCommandTimeThreshold verifies that commands outside the replica GC
