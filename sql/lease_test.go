@@ -613,6 +613,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 // to use a table descriptor with an expired lease.
 func TestTxnObeysLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(vivek): #7031")
 	// Set the lease duration such that it expires quickly.
 	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
 	defer func() {

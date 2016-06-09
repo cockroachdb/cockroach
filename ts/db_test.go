@@ -319,7 +319,6 @@ func TestStoreTimeSeries(t *testing.T) {
 // TestPollSource verifies that polled data sources are called as expected.
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#3692")
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()
