@@ -73,6 +73,7 @@ func TestGetQuorumMatchedIndex(t *testing.T) {
 // indexes to be truncated.
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(bram): #7056")
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	if _, err := store.GetReplica(0); err == nil {
