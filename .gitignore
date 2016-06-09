@@ -16,6 +16,7 @@
 *.FATAL
 *.FATAL.*
 stderr.*
+npm-debug.log
 
 # Folders
 _obj
