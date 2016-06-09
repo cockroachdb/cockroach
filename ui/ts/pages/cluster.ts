@@ -153,13 +153,12 @@ module AdminViews {
               .tooltip("The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) across all nodes.")
           );
 
-          // TODO: get total/average memory from all machines
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_sysMetric("allocbytes"))
+              Metrics.Select.Avg(_sysMetric("rss"))
                 .title("Memory")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The average memory in use across all nodes.")
+              .tooltip("The memory in use across all nodes.")
 
           );
 

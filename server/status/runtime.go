@@ -32,8 +32,10 @@ import (
 const (
 	nameCgoCalls       = "cgocalls"
 	nameGoroutines     = "goroutines"
-	nameAllocBytes     = "allocbytes"
-	nameSysBytes       = "sysbytes"
+	nameGoAllocBytes   = "go.allocbytes"
+	nameGoTotalBytes   = "go.totalbytes"
+	nameCgoAllocBytes  = "cgo.allocbytes"
+	nameCgoTotalBytes  = "cgo.totalbytes"
 	nameGCCount        = "gc.count"
 	nameGCPauseNS      = "gc.pause.ns"
 	nameGCPausePercent = "gc.pause.percent"
@@ -44,9 +46,13 @@ const (
 	nameRSS            = "rss"
 )
 
-// logBuildStats is a function that logs build-specific stats. We will not necessarily
-// have implementations for all builds.
-var logBuildStats func()
+// getCgoMemStats is a function that fetches stats for the C++ portion of the code.
+// We will not necessarily have implementations for all builds, so check for nil first.
+// Returns the following:
+// allocated uint64: bytes allocated by application
+// total     uint64: total bytes requested from system
+// error           : any issues fetching stats. This should be a warning only.
+var getCgoMemStats func() (uint64, uint64, error)
 
 // RuntimeStatSampler is used to periodically sample the runtime environment
 // for useful statistics, performing some rudimentary calculations and storing
@@ -68,8 +74,10 @@ type RuntimeStatSampler struct {
 	// Metric gauges maintained by the sampler.
 	cgoCalls       *metric.Gauge
 	goroutines     *metric.Gauge
-	allocBytes     *metric.Gauge
-	sysBytes       *metric.Gauge
+	goAllocBytes   *metric.Gauge
+	goTotalBytes   *metric.Gauge
+	cgoAllocBytes  *metric.Gauge
+	cgoTotalBytes  *metric.Gauge
 	gcCount        *metric.Gauge
 	gcPauseNS      *metric.Gauge
 	gcPausePercent *metric.GaugeFloat64
@@ -88,8 +96,10 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		clock:          clock,
 		cgoCalls:       reg.Gauge(nameCgoCalls),
 		goroutines:     reg.Gauge(nameGoroutines),
-		allocBytes:     reg.Gauge(nameAllocBytes),
-		sysBytes:       reg.Gauge(nameSysBytes),
+		goAllocBytes:   reg.Gauge(nameGoAllocBytes),
+		goTotalBytes:   reg.Gauge(nameGoTotalBytes),
+		cgoAllocBytes:  reg.Gauge(nameCgoAllocBytes),
+		cgoTotalBytes:  reg.Gauge(nameCgoTotalBytes),
 		gcCount:        reg.Gauge(nameGCCount),
 		gcPauseNS:      reg.Gauge(nameGCPauseNS),
 		gcPausePercent: reg.GaugeFloat64(nameGCPausePercent),
@@ -123,6 +133,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 
 	// It might be useful to call ReadMemStats() more often, but it stops the
 	// world while collecting stats so shouldn't be called too often.
+	// NOTE: the MemStats fields do not get decremented when memory is released,
+	// to get accurate numbers, be sure to subtract. eg: ms.Sys - ms.HeapReleased for
+	// current memory reserved.
 	ms := runtime.MemStats{}
 	runtime.ReadMemStats(&ms)
 
@@ -153,24 +166,37 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.lastStime = newStime
 	rsr.lastPauseTime = ms.PauseTotalNs
 
+	var cgoAllocated, cgoTotal uint64
+	if getCgoMemStats != nil {
+		var err error
+		cgoAllocated, cgoTotal, err = getCgoMemStats()
+		if err != nil {
+			log.Warningf("problem fetching CGO memory stats: %s, CGO stats will be empty.", err)
+		}
+	}
+
+	goAllocated := ms.Alloc
+	goTotal := ms.Sys - ms.HeapReleased
+
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-	log.Infof("runtime stats: %s RSS, %d goroutines, %s active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-		humanize.IBytes(mem.Resident), numGoroutine, humanize.IBytes(ms.Alloc),
+	log.Infof("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, %s/%s CGO alloc/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+		humanize.IBytes(mem.Resident), numGoroutine,
+		humanize.IBytes(goAllocated), humanize.IBytes(ms.HeapIdle-ms.HeapReleased), humanize.IBytes(goTotal),
+		humanize.IBytes(cgoAllocated), humanize.IBytes(cgoTotal),
 		cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
 	if log.V(2) {
 		log.Infof("memstats: %+v", ms)
-	}
-	if logBuildStats != nil {
-		logBuildStats()
 	}
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC
 
 	rsr.cgoCalls.Update(numCgoCall)
 	rsr.goroutines.Update(int64(numGoroutine))
-	rsr.allocBytes.Update(int64(ms.Alloc))
-	rsr.sysBytes.Update(int64(ms.Sys))
+	rsr.goAllocBytes.Update(int64(goAllocated))
+	rsr.goTotalBytes.Update(int64(goTotal))
+	rsr.cgoAllocBytes.Update(int64(cgoAllocated))
+	rsr.cgoTotalBytes.Update(int64(cgoTotal))
 	rsr.gcCount.Update(int64(ms.NumGC))
 	rsr.gcPauseNS.Update(int64(ms.PauseTotalNs))
 	rsr.gcPausePercent.Update(pausePerc)
