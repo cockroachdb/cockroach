@@ -147,6 +147,17 @@ func (a AliasClause) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// AsOfClause represents an as of time.
+type AsOfClause struct {
+	Expr Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (a AsOfClause) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("AS OF SYSTEM TIME ")
+	FormatNode(buf, f, a.Expr)
+}
+
 // TableExprs represents a list of table expressions.
 type TableExprs []TableExpr
 
@@ -205,6 +216,7 @@ type AliasedTableExpr struct {
 	Expr  SimpleTableExpr
 	Hints *IndexHints
 	As    AliasClause
+	AsOf  AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -216,6 +228,10 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.As.Alias != "" {
 		buf.WriteString(" AS ")
 		FormatNode(buf, f, node.As)
+	}
+	if node.AsOf.Expr != nil {
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.AsOf)
 	}
 }
 

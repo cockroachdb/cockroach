@@ -249,7 +249,16 @@ func (n *scanNode) initTable(
 	scanVisibility scanVisibility,
 ) (string, error) {
 	var err error
-	n.desc, err = p.getTableLease(tableName)
+
+	if p.asOf {
+		desc, err := p.getTableDesc(tableName)
+		if err != nil {
+			return "", err
+		}
+		n.desc = *desc
+	} else {
+		n.desc, err = p.getTableLease(tableName)
+	}
 	if err != nil {
 		return "", err
 	}
