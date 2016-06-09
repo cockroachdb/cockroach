@@ -337,10 +337,14 @@ module AdminViews {
           this._addChart(
             this.systemAxes,
             Metrics.NewAxis(
-              Metrics.Select.Avg(_sysMetric("allocbytes"))
-                .title("Go In Use"),
-              Metrics.Select.Avg(_sysMetric("sysbytes"))
-                .title("Go Sys"),
+              Metrics.Select.Avg(_sysMetric("go.allocbytes"))
+                .title("Go Allocated"),
+              Metrics.Select.Avg(_sysMetric("go.totalbytes"))
+                .title("Go Total"),
+              Metrics.Select.Avg(_sysMetric("cgo.allocbytes"))
+                .title("Cgo Allocated"),
+              Metrics.Select.Avg(_sysMetric("cgo.totalbytes"))
+                .title("Cgo Total"),
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
@@ -905,12 +909,18 @@ module AdminViews {
           this._addChart(
             this.systemAxes,
             Metrics.NewAxis(
-              Metrics.Select.Avg(_sysMetric("allocbytes"))
+              Metrics.Select.Avg(_sysMetric("go.allocbytes"))
                 .sources([this._nodeId])
-                .title("Go In Use"),
-              Metrics.Select.Avg(_sysMetric("sysbytes"))
+                .title("Go Allocated"),
+              Metrics.Select.Avg(_sysMetric("go.totalbytes"))
                 .sources([this._nodeId])
-                .title("Go Sys"),
+                .title("Go Total"),
+              Metrics.Select.Avg(_sysMetric("cgo.allocbytes"))
+                .sources([this._nodeId])
+                .title("Cgo Allocated"),
+              Metrics.Select.Avg(_sysMetric("cgo.totalbytes"))
+                .sources([this._nodeId])
+                .title("Cgo Total"),
               Metrics.Select.Avg(_sysMetric("rss"))
                 .sources([this._nodeId])
                 .title("RSS")

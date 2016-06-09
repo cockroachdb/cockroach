@@ -110,7 +110,10 @@ module Models {
       // Node level metrics.
       export var userCPUPercent: string = "sys.cpu.user.percent";
       export var sysCPUPercent: string = "sys.cpu.sys.percent";
-      export var allocBytes: string = "sys.allocbytes";
+      export var goAllocBytes: string = "sys.go.allocbytes";
+      export var goTotalBytes: string = "sys.go.totalbytes";
+      export var cgoAllocBytes: string = "sys.cgo.allocbytes";
+      export var cgoTotalBytes: string = "sys.cgo.totalbytes";
       export var sqlConns: string = "sql.conns";
       export var rss: string = "sys.rss";
     }

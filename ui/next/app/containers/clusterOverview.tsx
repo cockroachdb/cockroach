@@ -98,9 +98,9 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
           </StackedAreaGraph>
 
           <LineGraph title="Memory Usage"
-                     tooltip="The average memory in use across all nodes.">
+                     tooltip="The memory in use across all nodes.">
             <Axis format={ Bytes }>
-              <Metric name="cr.node.sys.allocbytes" title="Memory" />
+              <Metric name="cr.node.sys.rss" title="Memory" />
             </Axis>
           </LineGraph>
         </GraphGroup>
