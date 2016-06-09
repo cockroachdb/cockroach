@@ -22,13 +22,10 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -43,14 +40,6 @@ const (
 	removeDeadReplicaPriority  float64 = 10000
 	addMissingReplicaPriority  float64 = 1000
 	removeExtraReplicaPriority float64 = 100
-
-	// defaultMinRebalanceInterval is the minimum interval that must elapse
-	// between replica rebalances. This should be slightly larger than
-	// server.gossipStoresInterval.
-	defaultMinRebalanceInterval = gossip.DefaultGossipStoresInterval + 5*time.Second
-	// defaultMaxRebalanceInterval is the maximum interval that could elapse
-	// between opportunities for replica rebalances.
-	defaultMaxRebalanceInterval = defaultMinRebalanceInterval * 3
 )
 
 // AllocatorAction enumerates the various replication adjustments that may be
@@ -134,11 +123,6 @@ type Allocator struct {
 	storePool *StorePool
 	randGen   allocatorRand
 	options   AllocatorOptions
-
-	minRebalanceInterval  time.Duration
-	maxRebalanceInterval  time.Duration
-	nextRebalance         time.Time
-	proposedNextRebalance time.Time
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -153,10 +137,6 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 		storePool: storePool,
 		options:   options,
 		randGen:   makeAllocatorRand(randSource),
-		minRebalanceInterval: envutil.EnvOrDefaultDuration("min_rebalance_interval",
-			defaultMinRebalanceInterval),
-		maxRebalanceInterval: envutil.EnvOrDefaultDuration("max_rebalance_interval",
-			defaultMaxRebalanceInterval),
 	}
 }
 
@@ -320,43 +300,10 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 
-	now := a.storePool.Clock().Now().GoTime()
-	if now.Before(a.nextRebalance) {
-		if log.V(2) {
-			log.Infof("ineligible to rebalance for %s", a.nextRebalance.Sub(now))
-		}
-		return false
-	}
-
 	sl, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
 
 	// ShouldRebalance is true if a suitable replacement can be found.
-	shouldRebalance := a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
-	if shouldRebalance {
-		// Store time for the next rebalance opportunity, so that we don't have to
-		// reconstruct the StoreList when updating nextRebalance later. The period
-		// of time between rebalances is inversely proportional to the standard
-		// deviation of the range counts. With the constant values below, the next
-		// rebalance will occur between 65 seconds and ~3 minutes after the current
-		// rebalance.
-		delta := a.minRebalanceInterval +
-			time.Second*time.Duration(.9/(.006*(sl.count.stddev()+1.2)))
-		if delta > a.maxRebalanceInterval {
-			delta = a.maxRebalanceInterval
-		}
-		a.proposedNextRebalance = now.Add(delta)
-	}
-	return shouldRebalance
-}
-
-// UpdateNextRebalance signals that because rebalance has just occurred, we
-// update the time at which the next rebalance can occur. This spreads out
-// rebalances to prevent excessive replica movement.
-func (a *Allocator) UpdateNextRebalance() {
-	a.nextRebalance = a.proposedNextRebalance
-	if log.V(2) {
-		log.Infof("next rebalance opportunity in %s", a.nextRebalance.Sub(a.storePool.Clock().Now().GoTime()))
-	}
+	return a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
 }
 
 // selectGood attempts to select a store from the supplied store list that it
