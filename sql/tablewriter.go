@@ -208,6 +208,7 @@ type tableUpserter struct {
 	// Set by init.
 	txn                   *client.Txn
 	tableDesc             *sqlbase.TableDescriptor
+	fkTables              TablesByID // for fk checks in update case
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
@@ -261,7 +262,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
 		tu.ru, err = makeRowUpdater(
-			txn, tu.tableDesc, tu.updateCols, requestedCols, rowUpdaterDefault,
+			txn, tu.tableDesc, tu.fkTables, tu.updateCols, requestedCols, rowUpdaterDefault,
 		)
 		if err != nil {
 			return err
