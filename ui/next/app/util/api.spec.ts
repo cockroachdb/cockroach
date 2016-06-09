@@ -403,4 +403,61 @@ describe("rest api", function() {
       });
     });
   });
+
+  describe("health request", function() {
+    let healthUrl = `^${api.API_PREFIX}/health`;
+
+    afterEach(fetchMock.restore);
+
+    it("correctly requests health", function () {
+      this.timeout(1000);
+      // Mock out the fetch query
+      fetchMock.mock(healthUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return {
+          sendAsJson: false,
+          body: new protos.cockroach.server.serverpb.HealthResponse().encodeJSON(),
+        };
+      });
+
+      return api.getHealth().then((result) => {
+        assert.lengthOf(fetchMock.calls(healthUrl), 1);
+        assert.deepEqual(result, new protos.cockroach.server.serverpb.HealthResponse());
+      });
+    });
+
+    it("correctly handles an error", function (done) {
+      this.timeout(1000);
+
+      // Mock out the fetch query, but return a 500 status code
+      fetchMock.mock(healthUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return { status: 500 };
+      });
+
+      api.getHealth({}).then((result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.isError(e));
+        done();
+      });
+    });
+
+    it("correctly times out", function (done) {
+      this.timeout(1000);
+      api.setFetchTimeout(0);
+      // Mock out the fetch query, but return a promise that's never resolved to test the timeout
+      fetchMock.mock(healthUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return new Promise<any>(() => { });
+      });
+
+      api.getHealth().then((result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
+        done();
+      });
+    });
+  });
 });

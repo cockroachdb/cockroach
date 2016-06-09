@@ -8,20 +8,15 @@
  * - Visualization Components
  *    - Graphs
  *      - Greyed-out display on error
- *    ! Events table
  *    - Cluster health indicator
  * ! Notification Banners
  *    - Help Us
- *    - Cluster Unreachable
  *    - Cockroach out of date
- * - Cluster Page
- *    - Events page
  * - Node Page
  *    ! Logs Page
- * ! HelpUs Page
- *    - Forms
  * ! HelpUs Modal
  * - Layout Footer
+ * ! HelpUs communication with CRL server
  *
  *
  * NICE TO HAVE:
@@ -63,6 +58,7 @@ import timeWindowReducer from "./redux/timewindow";
 import databaseInfoReducer from "./redux/databaseInfo";
 import eventsReducer from "./redux/events";
 import raftReducer from "./redux/raft";
+import healthReducer from "./redux/health";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -99,6 +95,7 @@ const store = createStore(
     databaseInfo: databaseInfoReducer,
     events: eventsReducer,
     raft: raftReducer,
+    health: healthReducer,
   }),
   compose(
     applyMiddleware(thunk),

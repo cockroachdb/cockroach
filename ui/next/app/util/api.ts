@@ -37,6 +37,9 @@ type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessa
 type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
+type HealthRequest = cockroach.server.serverpb.HealthRequest;
+type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
+
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
 
@@ -146,4 +149,9 @@ export function raftDebug(): Promise<RaftDebugResponseMessage> {
 // queryTimeSeries queries for time series data
 export function queryTimeSeries(req: TimeSeriesQueryRequestMessage): Promise<TimeSeriesQueryResponseMessage> {
   return Fetch(ts.TimeSeriesQueryResponse, `/ts/query`, req);
+}
+
+// getHealth gets health data
+export function getHealth(req: HealthRequest = {}): Promise<HealthResponseMessage> {
+  return Fetch(serverpb.HealthResponse, `${API_PREFIX}/health`);
 }
