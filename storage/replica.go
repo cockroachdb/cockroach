@@ -757,11 +757,26 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 	r.mu.desc = desc
 }
 
+type errReplicaNotInRaftGroup struct {
+	StoreID   roachpb.StoreID
+	RangeDesc roachpb.RangeDescriptor
+}
+
+func (e *errReplicaNotInRaftGroup) Error() string {
+	return fmt.Sprintf("Replica in store %d not found in RangeDescriptor %+v."+
+		"Maybe it's been removed from the Raft group already.", e.StoreID, e.RangeDesc)
+}
+
 // GetReplica returns the replica for this range from the range descriptor.
-// Returns nil if the replica is not found.
-func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
-	_, replica := r.Desc().FindReplica(r.store.StoreID())
-	return replica
+// Returns an errReplicaNotInRaftGroup if the replica is not found.
+func (r *Replica) GetReplica() (*roachpb.ReplicaDescriptor, error) {
+	rangeDesc := r.Desc()
+	_, replica := rangeDesc.FindReplica(r.store.StoreID())
+	if replica == nil {
+		return nil, &errReplicaNotInRaftGroup{
+			StoreID: r.store.StoreID(), RangeDesc: *rangeDesc}
+	}
+	return replica, nil
 }
 
 // ReplicaDescriptor returns information about the given member of

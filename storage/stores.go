@@ -205,7 +205,14 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 		}
 		if replica == nil {
 			rangeID = rng.RangeID
-			replica = rng.GetReplica()
+			replica, err = rng.GetReplica()
+			if err != nil {
+				if _, ok := err.(*errReplicaNotInRaftGroup); ok {
+					replica = nil
+				} else {
+					return 0, nil, err
+				}
+			}
 			continue
 		}
 		// Should never happen outside of tests.
