@@ -101,15 +101,6 @@ var (
 )
 
 type queueImpl interface {
-	// needsLeaderLease returns whether this queue requires the leader
-	// lease to operate on a replica.
-	needsLeaderLease() bool
-
-	// acceptsUnsplitRanges returns whether this queue can process
-	// ranges that need to be split due to zone config settings.
-	// Ranges are checked before calling shouldQueue and process.
-	acceptsUnsplitRanges() bool
-
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
 	shouldQueue(roachpb.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
@@ -151,6 +142,18 @@ func (l queueLog) Finish() {
 	l.traceLog.Finish()
 }
 
+type queueConfig struct {
+	// maxSize is the maximum number of replicas to queue.
+	maxSize int
+	// needsLeaderLease controls whether this queue requires the leader lease to
+	// operate on a replica.
+	needsLeaderLease bool
+	// acceptsUnsplitRanges controls whether this queue can process ranges that
+	// need to be split due to zone config settings. Ranges are checked before
+	// calling queueImpl.shouldQueue and queueImpl.process.
+	acceptsUnsplitRanges bool
+}
+
 // baseQueue is the base implementation of the replicaQueue interface.
 // Queue implementations should embed a baseQueue and implement queueImpl.
 //
@@ -172,9 +175,9 @@ type baseQueue struct {
 	// from the constructor function will return a queueImpl containing
 	// a pointer to a structure which is a copy of the one within which
 	// it is contained. DANGER.
-	impl     queueImpl
-	gossip   *gossip.Gossip
-	maxSize  int           // Maximum number of replicas to queue
+	impl   queueImpl
+	gossip *gossip.Gossip
+	queueConfig
 	incoming chan struct{} // Channel signaled when a new replica is added to the queue.
 	mu       struct {
 		sync.Locker                                  // Protects all variables in the mu struct
@@ -195,13 +198,13 @@ type baseQueue struct {
 // maxSize doesn't prevent new replicas from being added, it just
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
-func makeBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, maxSize int) baseQueue {
+func makeBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, cfg queueConfig) baseQueue {
 	bq := baseQueue{
-		name:     name,
-		impl:     impl,
-		gossip:   gossip,
-		maxSize:  maxSize,
-		incoming: make(chan struct{}, 1),
+		name:        name,
+		impl:        impl,
+		gossip:      gossip,
+		queueConfig: cfg,
+		incoming:    make(chan struct{}, 1),
 		eventLog: queueLog{
 			traceLog: trace.NewEventLog("queue", name),
 			prefix:   fmt.Sprintf("[%s] ", name),
@@ -263,7 +266,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	}
 
 	desc := repl.Desc()
-	if !bq.impl.acceptsUnsplitRanges() && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
+	if !bq.acceptsUnsplitRanges && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
@@ -404,7 +407,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	}
 
 	desc := repl.Desc()
-	if !bq.impl.acceptsUnsplitRanges() && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
+	if !bq.acceptsUnsplitRanges && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		bq.eventLog.VInfof(log.V(3), "%s: split needed; skipping", repl)
@@ -414,7 +417,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// If the queue requires a replica to have the range leader lease in
 	// order to be processed, check whether this replica has leader lease
 	// and renew or acquire if necessary.
-	if bq.impl.needsLeaderLease() {
+	if bq.needsLeaderLease {
 		sp := repl.store.Tracer().StartSpan(bq.name)
 		ctx := opentracing.ContextWithSpan(repl.context(context.Background()), sp)
 		defer sp.Finish()

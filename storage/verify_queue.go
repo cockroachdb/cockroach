@@ -48,16 +48,12 @@ type verifyQueue struct {
 // newVerifyQueue returns a new instance of verifyQueue.
 func newVerifyQueue(gossip *gossip.Gossip, countFn rangeCountFn) *verifyQueue {
 	vq := &verifyQueue{countFn: countFn}
-	vq.baseQueue = makeBaseQueue("verify", vq, gossip, verifyQueueMaxSize)
+	vq.baseQueue = makeBaseQueue("verify", vq, gossip, queueConfig{
+		maxSize:              verifyQueueMaxSize,
+		needsLeaderLease:     false,
+		acceptsUnsplitRanges: true,
+	})
 	return vq
-}
-
-func (*verifyQueue) needsLeaderLease() bool {
-	return false
-}
-
-func (*verifyQueue) acceptsUnsplitRanges() bool {
-	return true
 }
 
 // shouldQueue determines whether a range should be queued for

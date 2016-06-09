@@ -36,16 +36,12 @@ type replicaConsistencyQueue struct {
 // newReplicaConsistencyQueue returns a new instance of replicaConsistencyQueue.
 func newReplicaConsistencyQueue(gossip *gossip.Gossip) *replicaConsistencyQueue {
 	rcq := &replicaConsistencyQueue{}
-	rcq.baseQueue = makeBaseQueue("replica consistency checker", rcq, gossip, replicaConsistencyQueueSize)
+	rcq.baseQueue = makeBaseQueue("replica consistency checker", rcq, gossip, queueConfig{
+		maxSize:              replicaConsistencyQueueSize,
+		needsLeaderLease:     true,
+		acceptsUnsplitRanges: true,
+	})
 	return rcq
-}
-
-func (*replicaConsistencyQueue) needsLeaderLease() bool {
-	return true
-}
-
-func (*replicaConsistencyQueue) acceptsUnsplitRanges() bool {
-	return true
 }
 
 func (*replicaConsistencyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,

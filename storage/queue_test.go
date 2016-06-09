@@ -66,13 +66,9 @@ type testQueueImpl struct {
 	processed     int32
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
-	acceptUnsplit bool
 	pChan         chan struct{}
 	err           error // always returns this error on process
 }
-
-func (tq *testQueueImpl) needsLeaderLease() bool     { return false }
-func (tq *testQueueImpl) acceptsUnsplitRanges() bool { return tq.acceptUnsplit }
 
 func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
@@ -163,7 +159,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
 	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
 	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
 	if bq.Length() != 2 {
@@ -240,7 +236,7 @@ func TestBaseQueueAdd(t *testing.T) {
 			return false, 0.0
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, 1)
+	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 1})
 	bq.MaybeAdd(r, roachpb.ZeroTimestamp)
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
@@ -276,7 +272,7 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -327,7 +323,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 			return
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -387,10 +383,9 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 			atomic.AddInt32(&queued, 1)
 			return true, float64(r.RangeID)
 		},
-		acceptUnsplit: false,
 	}
 
-	bq := makeBaseQueue("test", testQueue, g, 2)
+	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -483,7 +478,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		err:   &testError{},
 	}
 	replicaCount := 10
-	bq := makeBaseQueue("test", testQueue, g, replicaCount)
+	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: replicaCount})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)

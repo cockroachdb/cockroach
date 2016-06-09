@@ -53,7 +53,11 @@ func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 		clock:      clock,
 		updateChan: make(chan struct{}, 1),
 	}
-	rq.baseQueue = makeBaseQueue("replicate", rq, g, replicateQueueMaxSize)
+	rq.baseQueue = makeBaseQueue("replicate", rq, g, queueConfig{
+		maxSize:              replicateQueueMaxSize,
+		needsLeaderLease:     true,
+		acceptsUnsplitRanges: false,
+	})
 
 	if g != nil { // gossip is nil for some unittests
 		// Register a gossip callback to signal queue that replicas in
@@ -67,16 +71,6 @@ func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 	}
 
 	return rq
-}
-
-func (*replicateQueue) needsLeaderLease() bool {
-	return true
-}
-
-// acceptsUnsplitRanges is false because the proper replication
-// policy cannot be determined for ranges that span zone configs.
-func (*replicateQueue) acceptsUnsplitRanges() bool {
-	return false
 }
 
 func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
