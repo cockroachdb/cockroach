@@ -234,6 +234,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
+              .tooltip("The total number of active SQL connections across all nodes.")
           );
           this._addChart(
             this.activityAxes,
@@ -245,6 +246,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
+              .tooltip("The average amount of SQL client network traffic in bytes per second across all nodes.")
           );
           this._addChart(
             this.activityAxes,
@@ -253,13 +255,16 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Queries/sec")
             ).format(d3.format(".1")).title("Queries Per Second")
+              .tooltip("The average number of SQL queries per second across all nodes.")
           );
           this._addChart(
             this.activityAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("livebytes"))
                 .title("Live Bytes")
-              ).format(Utils.Format.Bytes));
+              ).format(Utils.Format.Bytes)
+                .tooltip("The amount of storage space used by live (non-historical) data across all nodes.")
+          );
 
           let latencySelectors: Selector[] = _.map(
             this._quantiles,
@@ -286,6 +291,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Selects")
             ).format(d3.format(".1")).title("Reads")
+              .tooltip("The average number of SELECT statements per second across all nodes.")
            );
           this._addChart(
             this.sqlAxes,
@@ -300,6 +306,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Deletes")
             ).format(d3.format(".1")).title("Writes")
+              .tooltip("The average number of INSERT, UPDATE, and DELETE statements per second across all nodes.")
           );
           this._addChart(
             this.sqlAxes,
@@ -314,6 +321,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Aborts")
             ).format(d3.format(".1")).title("Transactions")
+              .tooltip("The average number of transactions committed, rolled back, or aborted per second across all nodes.")
           );
           this._addChart(
             this.sqlAxes,
@@ -322,6 +330,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("DDL Statements")
             ).format(d3.format(".1")).title("Schema Changes")
+              .tooltip("The average number of DDL statements per second across all nodes.")
           );
 
           // System resource graphs
@@ -333,6 +342,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
                 .title("CPU Sys %")
             ).format(d3.format(".2%")).title("CPU Usage").stacked(true)
+              .tooltip("The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) across all nodes.")
           );
           this._addChart(
             this.systemAxes,
@@ -348,6 +358,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
+              .tooltip("The memory in use across all nodes, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
           );
           this._addChart(
             this.systemAxes,
@@ -355,6 +366,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("goroutines"))
                 .title("goroutine count")
             ).format(d3.format(".1")).title("goroutine Count")
+              .tooltip("The number of Goroutines across all nodes. This count should rise and fall based on load.")
           );
           this._addChart(
             this.systemAxes,
@@ -363,6 +375,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
+              .tooltip("The average number of calls from Go to C per second across all nodes.")
           );
 
           // Graphs for internals, such as RocksDB
@@ -467,6 +480,7 @@ module AdminViews {
             ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("GC Pause Time")
             .label("Milliseconds")
+            .tooltip("The average amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused.")
           );
 
           this.exec = new Metrics.Executor(this._query);
@@ -794,6 +808,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
+              .tooltip("The total number of active SQL connections to this node.")
           );
           this._addChart(
             this.activityAxes,
@@ -807,6 +822,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
+              .tooltip("The average amount of SQL client network traffic per second on this node.")
           );
           this._addChart(
             this.activityAxes,
@@ -816,6 +832,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Queries/sec")
             ).format(d3.format(".1")).title("Queries Per Second")
+              .tooltip("The average number of SQL queries per second on this node.")
           );
           this._addChart(
             this.activityAxes,
@@ -823,7 +840,9 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("livebytes"))
                 .sources([this._nodeId])
                 .title("Live Bytes")
-              ).format(Utils.Format.Bytes));
+              ).format(Utils.Format.Bytes)
+                .tooltip("The amount of storage space used by live (non-historical) data on this node.")
+          );
 
           let latencySelectors: Selector[] = _.map(
             this._quantiles,
@@ -836,8 +855,9 @@ module AdminViews {
             this.activityAxes,
             Metrics.NewAxis.apply(this, latencySelectors)
             .format((v: number): string => d3.format(".1f")(Utils.Convert.NanoToMilli(v)))
-            .title("Query Time")
+            .title([m("", "Query Time"), m("small", "(Max Per Percentile)")])
             .label("Milliseconds")
+            .tooltip("The latency between query requests and responses on this node over a 1 minute period.")
           );
 
           // SQL charts
@@ -849,6 +869,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Selects")
             ).format(d3.format(".1")).title("Reads")
+              .tooltip("The average number of SELECT statements per second on this node.")
            );
           this._addChart(
             this.sqlAxes,
@@ -866,6 +887,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Deletes")
             ).format(d3.format(".1")).title("Writes")
+              .tooltip("The average number of INSERT, UPDATE, and DELETE statements per second on this node.")
           );
           this._addChart(
             this.sqlAxes,
@@ -883,6 +905,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Aborts")
             ).format(d3.format(".1")).title("Transactions")
+              .tooltip("The average number of transactions committed, rolled back, or aborted per second on this node.")
           );
           this._addChart(
             this.sqlAxes,
@@ -892,6 +915,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("DDL Statements")
             ).format(d3.format(".1")).title("Schema Changes")
+              .tooltip("The average number of DDL statements per second on this node.")
           );
 
           // System resource graphs
@@ -905,6 +929,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("CPU Sys %")
             ).format(d3.format(".2%")).title("CPU Usage").stacked(true)
+              .tooltip("The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) on this node.")
           );
           this._addChart(
             this.systemAxes,
@@ -925,6 +950,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
+              .tooltip("The memory in use on this node, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
           );
           this._addChart(
             this.systemAxes,
@@ -933,6 +959,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("goroutine count")
             ).format(d3.format(".1")).title("goroutine Count")
+              .tooltip("The number of Goroutines on this node. This count should rise and fall based on load.")
           );
           this._addChart(
             this.systemAxes,
@@ -942,6 +969,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("cgo Calls")
             ).format(d3.format(".1")).title("cgo Calls")
+              .tooltip("The average number of calls from Go to C per second on this node.")
           );
 
           // Graphs for internals, such as RocksDB
@@ -1065,6 +1093,7 @@ module AdminViews {
             ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("GC Pause Time")
             .label("Milliseconds")
+            .tooltip("The average amount of processor time used by Go’s garbage collector per second on this node. During garbage collection, application code execution is paused.")
           );
         }
 
