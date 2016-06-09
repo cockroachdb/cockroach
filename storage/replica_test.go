@@ -5500,14 +5500,31 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
 	}
 
-	// Wait for the snapshot to be generated and abandoned.
-	time.Sleep(100 * time.Millisecond)
-	tc.rng.mu.Lock()
-	defer tc.rng.mu.Unlock()
-	// The channel was closed without producing a result.
-	snap, ok := <-tc.rng.mu.snapshotChan
+	tc.rng.store.snapMu.Lock()
+	snapshotChan, ok := tc.rng.store.snapMu.snapshots[tc.rng.RangeID]
+	tc.rng.store.snapMu.Unlock()
+
 	if ok {
-		t.Fatalf("expected channel to be closed but got result: %v", snap)
+		snapRunning := func() bool {
+			tc.rng.store.snapMu.Lock()
+			_, ok := tc.rng.store.snapMu.snapshots[tc.rng.RangeID]
+			tc.rng.store.snapMu.Unlock()
+			return ok
+		}
+
+		// Wait for the snapshot to be generated and abandoned.
+		for ; snapRunning(); time.Sleep(10 * time.Millisecond) {
+		}
+
+		if snap, ok := <-snapshotChan; ok {
+			t.Fatalf("expected snapshot channel to be closed but got result: %v", snap)
+		}
+	} else {
+		tc.rng.mu.Lock()
+		tc.rng.store.snapMu.Lock()
+		defer tc.rng.mu.Unlock()
+		defer tc.rng.store.snapMu.Unlock()
+		t.Fatalf("expected snapshot channel for replica %d to exist but got %v instead", tc.rng.mu.replicaID, tc.rng.store.snapMu.snapshots)
 	}
 }
 
