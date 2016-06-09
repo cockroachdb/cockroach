@@ -789,11 +789,26 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 	r.mu.state.desc = desc
 }
 
+type errReplicaNotInRange struct {
+	StoreID   roachpb.StoreID
+	RangeDesc roachpb.RangeDescriptor
+}
+
+func (e *errReplicaNotInRange) Error() string {
+	return fmt.Sprintf("replica in store %d not found in RangeDescriptor %+v",
+		e.StoreID, e.RangeDesc)
+}
+
 // GetReplica returns the replica for this range from the range descriptor.
-// Returns nil if the replica is not found.
-func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
-	_, replica := r.Desc().FindReplica(r.store.StoreID())
-	return replica
+// Returns nil, *errReplicaNotInRange if the replica is not found.
+func (r *Replica) GetReplica() (*roachpb.ReplicaDescriptor, error) {
+	rangeDesc := r.Desc()
+	_, replica := rangeDesc.FindReplica(r.store.StoreID())
+	if replica == nil {
+		return nil, &errReplicaNotInRange{
+			StoreID: r.store.StoreID(), RangeDesc: *rangeDesc}
+	}
+	return replica, nil
 }
 
 // ReplicaDescriptor returns information about the given member of
