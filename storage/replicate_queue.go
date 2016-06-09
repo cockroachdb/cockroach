@@ -175,7 +175,6 @@ func (rq *replicateQueue) process(
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
-		rq.allocator.UpdateNextRebalance()
 	}
 
 	// Enqueue this replica again to see if there are more changes to be made.
