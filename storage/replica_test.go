@@ -2894,6 +2894,48 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 	}
 }
 
+// TestReplicaLaziness verifies that Raft Groups are brought up lazily.
+func TestReplicaLaziness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// testWithAction is a function that creates an uninitialized Raft group,
+	// calls the supplied function, and then tests that the Raft group is
+	// initialized.
+	testWithAction := func(action func() roachpb.Request) {
+		tc := testContext{bootstrapMode: bootstrapRangeOnly}
+		tc.Start(t)
+		defer tc.Stop()
+
+		if status := tc.rng.RaftStatus(); status != nil {
+			t.Fatalf("expected raft group to not be initialized, got RaftStatus() of %v", status)
+		}
+		var ba roachpb.BatchRequest
+		request := action()
+		ba.Add(request)
+		if _, pErr := tc.Sender().Send(tc.rng.context(context.Background()), ba); pErr != nil {
+			t.Fatalf("unexpected error: %s", pErr)
+		}
+
+		if tc.rng.RaftStatus() == nil {
+			t.Fatalf("expected raft group to be initialized")
+		}
+	}
+
+	testWithAction(func() roachpb.Request {
+		put := putArgs(roachpb.Key("a"), []byte("value"))
+		return &put
+	})
+
+	testWithAction(func() roachpb.Request {
+		get := getArgs(roachpb.Key("a"))
+		return &get
+	})
+
+	testWithAction(func() roachpb.Request {
+		scan := scanArgs(roachpb.KeyMin, roachpb.KeyMax)
+		return &scan
+	})
+}
+
 // TestReplayProtection verifies that transactional replays cannot
 // commit intents. The replay consists of an initial BeginTxn/Write
 // batch and ends with an EndTxn batch.
