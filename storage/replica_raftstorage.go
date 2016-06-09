@@ -626,11 +626,11 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 
 // applySnapshot updates the replica based on the given snapshot.
 // Returns the new last index.
-func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint64, error) {
+func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	rangeID := r.RangeID
@@ -655,7 +655,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
@@ -673,43 +673,43 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 			Timestamp: kv.Timestamp,
 		}
 		if err := batch.Put(mvccKey, kv.Value); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
 	logEntries := make([]raftpb.Entry, len(snapData.LogEntries))
 	for i, bytes := range snapData.LogEntries {
 		if err := logEntries[i].Unmarshal(bytes); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
 	// Write the snapshot's Raft log into the range.
 	if _, err := r.append(batch, 0, logEntries); err != nil {
-		return 0, err
+		return err
 	}
 
 	// Read the leader lease.
 	lease, err := loadLeaderLease(batch, desc.RangeID)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	frozen, err := loadFrozenStatus(batch, desc.RangeID)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	lastThreshold, err := loadGCThreshold(batch, desc.RangeID)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	// Load updated range stats. The local newStats variable will be assigned
 	// to r.stats after the batch commits.
 	newStats, err := newRangeStats(desc.RangeID, batch)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	// The next line sets the persisted last index to the last applied index.
@@ -721,7 +721,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 	// about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	if err := setLastIndex(batch, rangeID, snap.Metadata.Index); err != nil {
-		return 0, err
+		return err
 	}
 
 	batch.Defer(func() {
@@ -734,6 +734,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 		// As outlined above, last and applied index are the same after applying
 		// the snapshot.
 		r.mu.appliedIndex = snap.Metadata.Index
+		r.mu.lastIndex = snap.Metadata.Index
 		r.mu.leaderLease = lease
 		r.mu.frozen = frozen
 		r.mu.gcThreshold = lastThreshold
@@ -757,7 +758,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) (uint6
 			panic(err)
 		}
 	})
-	return snap.Metadata.Index, nil
+	return nil
 }
 
 // setHardState persists the raft HardState.
