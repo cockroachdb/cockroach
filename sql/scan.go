@@ -249,7 +249,23 @@ func (n *scanNode) initTable(
 	scanVisibility scanVisibility,
 ) (string, error) {
 	var err error
-	n.desc, err = p.getTableLease(tableName)
+
+	// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
+	// specified time, and never lease anything. The proto transaction already
+	// has its timestamps set correctly so getTableDesc will fetch with the
+	// correct timestamp.
+	if p.asOf {
+		desc, err := p.getTableDesc(tableName)
+		if err != nil {
+			return "", err
+		}
+		if desc == nil {
+			return "", sqlbase.NewUndefinedTableError(tableName.String())
+		}
+		n.desc = *desc
+	} else {
+		n.desc, err = p.getTableLease(tableName)
+	}
 	if err != nil {
 		return "", err
 	}
