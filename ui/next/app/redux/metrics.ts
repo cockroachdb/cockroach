@@ -1,5 +1,3 @@
-/// <reference path="../js/protos.d.ts" />
-
 /**
  * This module maintains the state of CockroachDB time series queries needed by
  * the web application. Cached query data is maintained separately for
