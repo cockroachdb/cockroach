@@ -59,11 +59,6 @@ export default function reducer(state: EventsState = new EventsState(), action: 
   }
 }
 
-interface WithID<T> {
-  id: string;
-  data?: T;
-}
-
 export function requestEvents(): Action {
   return {
     type: REQUEST,
