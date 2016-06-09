@@ -396,6 +396,7 @@ func TestScanError(t *testing.T) {
 		{`1.0x`, "invalid hexadecimal literal"},
 		{`0x0x`, "invalid hexadecimal literal"},
 		{`00x0x`, "invalid hexadecimal literal"},
+		{`08`, "could not make constant int from literal \"08\""},
 		{`$9223372036854775809`, "integer value out of range"},
 	}
 	for _, d := range testData {

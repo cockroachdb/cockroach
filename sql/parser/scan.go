@@ -548,7 +548,9 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		lval.id = FCONST
 		floatConst := constant.MakeFromLiteral(lval.str, token.FLOAT, 0)
 		if floatConst.Kind() == constant.Unknown {
-			panic(fmt.Sprintf("could not make constant float from literal %q", lval.str))
+			lval.id = ERROR
+			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
+			return
 		}
 		lval.union.val = &NumVal{Value: floatConst, OrigString: lval.str}
 	} else {
@@ -561,7 +563,9 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		lval.id = ICONST
 		intConst := constant.MakeFromLiteral(lval.str, token.INT, 0)
 		if intConst.Kind() == constant.Unknown {
-			panic(fmt.Sprintf("could not make constant int from literal %q", lval.str))
+			lval.id = ERROR
+			lval.str = fmt.Sprintf("could not make constant int from literal %q", lval.str)
+			return
 		}
 		lval.union.val = &NumVal{Value: intConst, OrigString: lval.str}
 	}
