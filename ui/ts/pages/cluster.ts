@@ -158,8 +158,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("Memory")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The memory in use across all nodes.")
-
+              .tooltip("The average memory in use across all nodes.")
           );
 
           this._addChart(
@@ -167,7 +166,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Connections")
             ).format(d3.format(".1")).title("SQL Connections")
-              .tooltip("The total number of active SQL connections to the cluster.")
+              .tooltip("The total number of active SQL connections across all nodes.")
           );
 
           this._addChart(
@@ -179,7 +178,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
-            .tooltip("The amount of network traffic sent to and from the SQL system, in bytes.")
+              .tooltip("The average amount of SQL client network traffic in bytes per second.")
           );
 
           this._addChart(
@@ -187,8 +186,8 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format(".1")).title("Reads Per Second")
-            .tooltip("The number of SELECT statements, averaged over a 10 second period.")
+            ).format(d3.format(".1")).title("Reads")
+            .tooltip("The average number of SELECT statements per second.")
           );
 
           this._addChart(
@@ -202,8 +201,8 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .nonNegativeRate()
                 .title("Delete")
-            ).format(d3.format(".1")).title("Writes Per Second")
-            .tooltip("The number of INSERT, UPDATE, and DELETE statements, averaged over a 10 second period.")
+            ).format(d3.format(".1")).title("Writes")
+            .tooltip("The average number of INSERT, UPDATE, and DELETE statements per second.")
           );
 
           this.exec = new Metrics.Executor(this._query);
