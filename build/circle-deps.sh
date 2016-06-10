@@ -78,6 +78,11 @@ if [ "${1-}" = "docker" ]; then
       cp -a ui/$i /uicache/$i
     done
 
+    # Install JSPM packages as a non-root user to work around
+    # https://github.com/jspm/jspm-cli/issues/1902.
+    useradd -m jspm
+    time su jspm -c 'make -C ui/next jspm.installed'
+
     # Fix permissions on the ui/typings directory and subdirectories
     # (they lack the execute permission for group/other).
     find /uicache/typings -type d | xargs chmod 0755

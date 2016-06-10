@@ -8,6 +8,7 @@ import * as sinon from "sinon";
 import * as protos from  "../js/protos";
 import { TextGraph, Axis, Metric } from "../components/graphs";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "./metricsDataProvider";
+import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "./metricsDataProvider";
 import { MetricsQuery } from "../redux/metrics";
 
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
@@ -37,23 +38,23 @@ function makeMetricsRequest(timeSpan: Long[], sources?: string[]) {
       {
         name: "test.metric.1",
         sources: sources,
-        downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
-        source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
-        derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
+        downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
       },
       {
         name: "test.metric.2",
         sources: sources,
-        downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
-        source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
-        derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
+        downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
       },
       {
         name: "test.metric.3",
         sources: sources,
-        downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
-        source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
-        derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
+        downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
       },
     ],
   });
