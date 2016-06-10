@@ -149,9 +149,7 @@ describe("metrics reducer", function() {
       mockMetricsState = undefined;
     });
 
-    afterEach(function () {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it ("correctly batches multiple calls", function () {
       this.timeout(1000);
