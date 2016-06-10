@@ -517,6 +517,14 @@ func (r *Replica) EndTransaction(
 			log.Errorf("Range %d transaction commit trigger fail: %s", r.RangeID, err)
 			return reply, nil, err
 		}
+		// If we've just remove the replica, don't return any intents from this
+		// method. Attempting to resolve the intents for this txn would fail, since
+		// the replica can't propose any more commands.
+		if crt := args.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+			if crt.ChangeType == roachpb.REMOVE_REPLICA {
+				externalIntents = externalIntents[:0]
+			}
+		}
 	}
 
 	// Note: there's no need to clear the abort cache state if we've
