@@ -98,9 +98,7 @@ describe("rest api", function() {
   });
 
   describe("databases request", function () {
-    afterEach(function () {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it("correctly requests info about all databases", function () {
       this.timeout(1000);
@@ -162,9 +160,7 @@ describe("rest api", function() {
 
     let dbName = "test";
 
-    afterEach(function () {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it("correctly requests info about a specific database", function () {
       this.timeout(1000);
@@ -230,9 +226,7 @@ describe("rest api", function() {
     let dbName = "testDB";
     let tableName = "testTable";
 
-    afterEach(function () {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it("correctly requests info about a specific table", function () {
       this.timeout(1000);
@@ -288,12 +282,10 @@ describe("rest api", function() {
 
   });
 
-  describe("events request", function () {
+  describe("events request", function() {
     let eventsUrl = `^${api.API_PREFIX}/events?`;
 
-    afterEach(function () {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it("correctly requests events", function () {
       this.timeout(1000);

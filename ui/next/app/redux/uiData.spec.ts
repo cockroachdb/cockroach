@@ -118,9 +118,7 @@ describe("UIData reducer", function() {
       state = reducer(undefined, { type: "unknown" });
     });
 
-    afterEach(function () {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it("correctly saves UIData", function() {
       fetchMock.mock("/_admin/v1/uidata", "post", (url: string, requestObj: RequestInit) => {
