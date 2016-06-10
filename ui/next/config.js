@@ -75,21 +75,21 @@ System.config({
     "protobufjs": "npm:protobufjs@5.0.1",
     "react": "npm:react@15.1.0",
     "react-dom": "npm:react-dom@15.1.0",
-    "react-paginate": "npm:react-paginate@2.0.0",
+    "react-paginate": "npm:react-paginate@2.0.1",
     "react-redux": "npm:react-redux@4.4.5",
     "react-router": "npm:react-router@2.4.1",
-    "react-router-redux": "npm:react-router-redux@4.0.4",
+    "react-router-redux": "npm:react-router-redux@4.0.5",
     "redux": "npm:redux@3.5.2",
     "redux-thunk": "npm:redux-thunk@2.1.0",
     "reselect": "npm:reselect@2.5.1",
-    "ts": "github:frankwallis/plugin-typescript@4.0.5",
-    "ts-runtime": "npm:babel-runtime@6.9.1",
+    "ts": "github:frankwallis/plugin-typescript@4.0.16",
+    "ts-runtime": "npm:babel-runtime@6.9.2",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "npm:whatwg-fetch@0.11.0",
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.1.0"
     },
-    "github:frankwallis/plugin-typescript@4.0.5": {
+    "github:frankwallis/plugin-typescript@4.0.16": {
       "typescript": "npm:typescript@1.8.10"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
@@ -122,7 +122,7 @@ System.config({
       "path-browserify": "npm:path-browserify@0.0.0"
     },
     "github:jspm/nodelibs-process@0.1.2": {
-      "process": "npm:process@0.11.3"
+      "process": "npm:process@0.11.4"
     },
     "github:jspm/nodelibs-stream@0.1.0": {
       "stream-browserify": "npm:stream-browserify@1.0.0"
@@ -159,8 +159,9 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "npm:util@0.10.3"
     },
-    "npm:babel-runtime@6.9.1": {
-      "core-js": "npm:core-js@2.4.0"
+    "npm:babel-runtime@6.9.2": {
+      "core-js": "npm:core-js@2.4.0",
+      "regenerator-runtime": "npm:regenerator-runtime@0.9.5"
     },
     "npm:brace-expansion@1.1.4": {
       "balanced-match": "npm:balanced-match@0.4.1",
@@ -353,7 +354,7 @@ System.config({
     "npm:process-nextick-args@1.0.7": {
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
-    "npm:process@0.11.3": {
+    "npm:process@0.11.4": {
       "assert": "github:jspm/nodelibs-assert@0.1.0"
     },
     "npm:promise@7.1.1": {
@@ -380,19 +381,16 @@ System.config({
     "npm:react-addons-create-fragment@15.0.2": {
       "react": "npm:react@15.1.0"
     },
-    "npm:react-dom@15.0.2": {
-      "react": "npm:react@15.1.0"
-    },
     "npm:react-dom@15.1.0": {
       "react": "npm:react@15.1.0"
     },
-    "npm:react-paginate@2.0.0": {
+    "npm:react-paginate@2.0.1": {
       "classnames": "npm:classnames@1.2.2",
       "fs": "github:jspm/nodelibs-fs@0.1.2",
       "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "react-addons-create-fragment": "npm:react-addons-create-fragment@15.0.2",
-      "react-dom": "npm:react-dom@15.0.2",
+      "react-dom": "npm:react-dom@15.1.0",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },
     "npm:react-redux@4.4.5": {
@@ -446,6 +444,10 @@ System.config({
       "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "symbol-observable": "npm:symbol-observable@0.2.4"
+    },
+    "npm:regenerator-runtime@0.9.5": {
+      "path": "github:jspm/nodelibs-path@0.1.0",
+      "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:stream-browserify@1.0.0": {
       "events": "github:jspm/nodelibs-events@0.1.1",
