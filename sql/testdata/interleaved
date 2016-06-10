@@ -1,0 +1,17 @@
+statement ok
+CREATE TABLE p (a INT PRIMARY KEY)
+
+statement error unimplemented: interleaving is not yet supported
+CREATE TABLE child (a INT PRIMARY KEY, b INT) INTERLEAVE IN PARENT p (a)
+
+statement error unimplemented: interleaving is not yet supported
+CREATE TABLE child (a INT PRIMARY KEY, b INT, INDEX (a, b) INTERLEAVE IN PARENT p (a))
+
+statement error unimplemented: interleaving is not yet supported
+CREATE TABLE child (a INT PRIMARY KEY, b INT, UNIQUE (a, b) INTERLEAVE IN PARENT p (a))
+
+statement ok
+CREATE TABLE child (a INT PRIMARY KEY, b INT)
+
+statement error unimplemented: interleaving is not yet supported
+CREATE INDEX on child (a, b) INTERLEAVE IN PARENT p (a)

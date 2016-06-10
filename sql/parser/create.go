@@ -85,7 +85,8 @@ type CreateIndex struct {
 	Columns     IndexElemList
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing NameList
+	Storing    NameList
+	Interleave *InterleaveDef
 }
 
 // Format implements the NodeFormatter interface.
@@ -106,6 +107,9 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 	if node.Storing != nil {
 		fmt.Fprintf(buf, " STORING (%s)", node.Storing)
+	}
+	if node.Interleave != nil {
+		FormatNode(buf, f, node.Interleave)
 	}
 }
 
@@ -351,9 +355,10 @@ func NameListToIndexElems(lst NameList) IndexElemList {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name    Name
-	Columns IndexElemList
-	Storing NameList
+	Name       Name
+	Columns    IndexElemList
+	Storing    NameList
+	Interleave *InterleaveDef
 }
 
 func (node *IndexTableDef) setName(name Name) {
@@ -374,6 +379,9 @@ func (node *IndexTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(" STORING (")
 		FormatNode(buf, f, node.Storing)
 		buf.WriteByte(')')
+	}
+	if node.Interleave != nil {
+		FormatNode(buf, f, node.Interleave)
 	}
 }
 
@@ -412,6 +420,9 @@ func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(" STORING (")
 		FormatNode(buf, f, node.Storing)
 		buf.WriteByte(')')
+	}
+	if node.Interleave != nil {
+		FormatNode(buf, f, node.Interleave)
 	}
 }
 
@@ -486,10 +497,37 @@ func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 }
 
+// InterleaveDef represents an interleave definition within a CREATE TABLE
+// or CREATE INDEX statement.
+type InterleaveDef struct {
+	Parent       *QualifiedName
+	Fields       []string
+	DropBehavior DropBehavior
+}
+
+// Format implements the NodeFormatter interface.
+func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" INTERLEAVE IN PARENT ")
+	FormatNode(buf, f, node.Parent)
+	buf.WriteString(" (")
+	for i, field := range node.Fields {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(field)
+	}
+	buf.WriteString(")")
+	if node.DropBehavior != DropDefault {
+		buf.WriteString(" ")
+		buf.WriteString(node.DropBehavior.String())
+	}
+}
+
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists bool
 	Table       *QualifiedName
+	Interleave  *InterleaveDef
 	Defs        TableDefs
 }
 
@@ -503,4 +541,7 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" (")
 	FormatNode(buf, f, node.Defs)
 	buf.WriteByte(')')
+	if node.Interleave != nil {
+		FormatNode(buf, f, node.Interleave)
+	}
 }
