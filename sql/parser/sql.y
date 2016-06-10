@@ -285,6 +285,9 @@ func (u *sqlSymUnion) famElems() FamilyElemList {
 func (u *sqlSymUnion) dropBehavior() DropBehavior {
     return u.val.(DropBehavior)
 }
+func (u *sqlSymUnion) interleave() *InterleaveDef {
+    return u.val.(*InterleaveDef)
+}
 
 %}
 
@@ -366,6 +369,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <empty> opt_encoding
 
 %type <TableDefs> opt_table_elem_list table_elem_list
+%type <*InterleaveDef> opt_interleave
 %type <empty> opt_all_clause
 %type <bool> distinct_clause
 %type <[]string> opt_column_list
@@ -562,7 +566,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %token <str>   HAVING HIGH HOUR
 
-%token <str>   IF IFNULL IN ILIKE
+%token <str>   IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -584,7 +588,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   OF OFF OFFSET ON ONLY OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
-%token <str>   PARTIAL PARTITION PLACING POSITION
+%token <str>   PARENT PARTIAL PARTITION PLACING POSITION
 %token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
@@ -1462,13 +1466,13 @@ for_grantee_clause:
 
 // CREATE TABLE relname
 create_table_stmt:
-  CREATE TABLE any_name '(' opt_table_elem_list ')'
+  CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
   {
-    $$.val = &CreateTable{Table: $3.qname(), IfNotExists: false, Defs: $5.tblDefs()}
+    $$.val = &CreateTable{Table: $3.qname(), IfNotExists: false, Interleave: $7.interleave(), Defs: $5.tblDefs()}
   }
-| CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
+| CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')' opt_interleave
   {
-    $$.val = &CreateTable{Table: $6.qname(), IfNotExists: true, Defs: $8.tblDefs()}
+    $$.val = &CreateTable{Table: $6.qname(), IfNotExists: true, Interleave: $10.interleave(), Defs: $8.tblDefs()}
   }
 
 opt_table_elem_list:
@@ -1498,6 +1502,21 @@ table_elem:
 | table_constraint
   {
     $$.val = $1.constraintDef()
+  }
+
+opt_interleave:
+  INTERLEAVE IN PARENT name '(' name_list ')' opt_drop_behavior
+  {
+    /* SKIP DOC */
+    $$.val = &InterleaveDef{
+        Parent: &QualifiedName{Base: Name($4)},
+        Fields: $6.strs(),
+        DropBehavior: $8.dropBehavior(),
+    }
+  }
+| /* EMPTY */
+  {
+    $$.val = (*InterleaveDef)(nil)
   }
 
 column_def:
@@ -1577,21 +1596,23 @@ col_qualification_elem:
  }
 
 index_def:
-  INDEX opt_name '(' index_params ')' opt_storing
+  INDEX opt_name '(' index_params ')' opt_storing opt_interleave
   {
     $$.val = &IndexTableDef{
       Name:    Name($2),
       Columns: $4.idxElems(),
       Storing: $6.strs(),
+      Interleave: $7.interleave(),
     }
   }
-| UNIQUE INDEX opt_name '(' index_params ')' opt_storing
+| UNIQUE INDEX opt_name '(' index_params ')' opt_storing opt_interleave
   {
     $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef {
         Name:    Name($3),
         Columns: $5.idxElems(),
         Storing: $7.strs(),
+        Interleave: $8.interleave(),
       },
     }
   }
@@ -1626,12 +1647,13 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' name_list ')' opt_storing
+| UNIQUE '(' name_list ')' opt_storing opt_interleave
   {
     $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
         Columns: NameListToIndexElems($3.strs()),
         Storing: $5.strs(),
+        Interleave: $6.interleave(),
       },
     }
   }
@@ -1733,7 +1755,7 @@ truncate_stmt:
 
 // CREATE INDEX
 create_index_stmt:
-  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
   {
     $$.val = &CreateIndex{
       Name:    Name($4),
@@ -1741,9 +1763,10 @@ create_index_stmt:
       Unique:  $2.bool(),
       Columns: $8.idxElems(),
       Storing: $10.strs(),
+      Interleave: $11.interleave(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing opt_interleave
   {
     $$.val = &CreateIndex{
       Name:        Name($7),
@@ -1752,6 +1775,7 @@ create_index_stmt:
       IfNotExists: true,
       Columns:     $11.idxElems(),
       Storing:     $13.strs(),
+      Interleave: $14.interleave(),
     }
   }
 
@@ -4373,6 +4397,7 @@ unreserved_keyword:
 | HOUR
 | INDEXES
 | INSERT
+| INTERLEAVE
 | ISOLATION
 | KEY
 | KEYS
@@ -4394,6 +4419,7 @@ unreserved_keyword:
 | OFF
 | ORDINALITY
 | OVER
+| PARENT
 | PARTIAL
 | PARTITION
 | PRECEDING
