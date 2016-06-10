@@ -1,13 +1,11 @@
 import { assert } from "chai";
-import * as proxyquire from "proxyquire";
 import { Dispatch } from "redux";
 import * as _ from "lodash";
+import * as fetchMock from "fetch-mock";
 
 import * as databases from "./databaseInfo";
 import * as protos from "../js/protos";
 import { Action } from "../interfaces/action";
-
-type DatabasesResponse = cockroach.server.serverpb.DatabasesResponse;
 
 type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
 type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
@@ -357,12 +355,6 @@ describe("databases reducers", function () {
   });
 
   describe("async action creators", function () {
-    let databasesMocked: {
-      refreshDatabases: () => (d: Dispatch, gs: () => any) => Promise<void>;
-      refreshDatabaseDetails: (db: string) => (d: Dispatch, gs: () => any) => Promise<void>;
-      refreshTableDetails: (db: string, table: string) => (d: Dispatch, gs: () => any) => Promise<void>;
-    };
-
     let state: { databaseInfo: databases.DatabaseInfoState; };
 
     describe("refresh databases", function () {
@@ -370,29 +362,25 @@ describe("databases reducers", function () {
         state.databaseInfo.databases = databases.databasesReducer(state.databaseInfo.databases, action);
       };
       let databaseList = ["db1", "db2"];
-      let response: DatabasesResponseMessage;
-      let error: Error;
+      let response = new protos.cockroach.server.serverpb.DatabasesResponse({ databases: databaseList });;
+
       beforeEach(function () {
         state = { databaseInfo: new databases.DatabaseInfoState() };
-        response = new protos.cockroach.server.serverpb.DatabasesResponse({ databases: databaseList });
       });
 
-      it("refreshes database list", function () {
-        function getDatabaseList(): Promise<DatabasesResponseMessage> {
-          return new Promise((resolve, reject) => {
-            assert.deepEqual(state.databaseInfo.databases, { inFlight: true, valid: false });
-            resolve(response);
-          });
-        }
+      afterEach(fetchMock.restore);
 
-        databasesMocked = proxyquire.load("./databaseInfo", {
-          "../util/api": {
-            getDatabaseList,
-          },
+      it("refreshes database list", function () {
+        fetchMock.mock("/_admin/v1/databases", "get", (url: string, requestObj: RequestInit) => {
+          assert.deepEqual(state.databaseInfo.databases, { inFlight: true, valid: false });
+
+          return {
+            sendAsJson: false,
+            body: response.encodeJSON(),
+          };
         });
 
-        return databasesMocked.refreshDatabases()(dispatch, () => state).then(() => {
-          assert.deepEqual(state.databaseInfo.databases.data.databases, databaseList );
+        return databases.refreshDatabases()(dispatch, () => state).then(() => {
           assert.deepEqual(state.databaseInfo.databases, {
             inFlight: false,
             valid: true,
@@ -403,21 +391,18 @@ describe("databases reducers", function () {
       });
 
       it("handles database list errors", function () {
-        error = new Error();
-        function getDatabaseList(): Promise<DatabasesResponseMessage> {
-          return new Promise((resolve, reject) => {
-            reject(error);
-          });
-        }
+        let error = new Error();
 
-        databasesMocked = proxyquire.load("./databaseInfo", {
-          "../util/api": {
-            getDatabaseList,
-          },
+        fetchMock.mock("/_admin/v1/databases", "get", (url: string, requestObj: RequestInit) => {
+          return { throws: error };
         });
 
-        return databasesMocked.refreshDatabases()(dispatch, () => state).then(() => {
-          assert.deepEqual(state.databaseInfo.databases, { valid: false, inFlight: false, lastError: error });
+        return databases.refreshDatabases()(dispatch, () => state).then(() => {
+          assert.deepEqual(state.databaseInfo.databases, {
+            valid: false,
+            inFlight: false,
+            lastError: error,
+          });
         });
       });
     });
@@ -444,25 +429,30 @@ describe("databases reducers", function () {
         state = { databaseInfo: new databases.DatabaseInfoState() };
       });
 
+      afterEach(fetchMock.restore);
+
       it("refreshes database details for different databases", function () {
+        let re = new RegExp("/_admin/v1/databases/(.+)");
+
         return Promise.all(_.map([DB1, DB2], (db: string) => {
           let response: DatabaseDetailsResponseMessage;
 
-          function getDatabaseDetails(req: DatabaseDetailsRequest): Promise<DatabaseDetailsResponseMessage> {
-            return new Promise((resolve, reject) => {
-              assert.deepEqual(state.databaseInfo.databaseDetails[req.database], { inFlight: true, valid: false });
-              response = new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[req.database]);
-              resolve(response);
-            });
-          }
+          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
+          (fetchMock as any).reMock(re, "get", (url: string, requestObj: RequestInit) => {
+            let database = url.match(re)[1];
 
-          databasesMocked = proxyquire.load("./databaseInfo", {
-            "../util/api": {
-              getDatabaseDetails,
-            },
+            assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
+
+            response = new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[database]);
+
+            return {
+              sendAsJson: false,
+              body: response.encodeJSON(),
+            };
           });
 
-          return databasesMocked.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
+          return databases.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
+            assert.deepEqual(new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[db]), response);
             assert.deepEqual(state.databaseInfo.databaseDetails[db].data, new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[db]));
             assert.deepEqual(state.databaseInfo.databaseDetails[db], {
               inFlight: false,
@@ -475,24 +465,20 @@ describe("databases reducers", function () {
       });
 
       it("handles database details errors", function () {
+        let error = new Error();
+        let re = new RegExp("/_admin/v1/databases/(.+)");
+
         return Promise.all(_.map([DB1, DB2], (db: string) => {
-          let error: Error;
+          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
+          (fetchMock as any).reMock(re, "get", (url: string, requestObj: RequestInit) => {
+            let database = url.match(re)[1];
 
-          function getDatabaseDetails(req: DatabaseDetailsRequest): Promise<DatabaseDetailsResponseMessage> {
-            return new Promise((resolve, reject) => {
-              assert.deepEqual(state.databaseInfo.databaseDetails[req.database], { inFlight: true, valid: false });
-              error = new Error();
-              reject(error);
-            });
-          }
+            assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
 
-          databasesMocked = proxyquire.load("./databaseInfo", {
-            "../util/api": {
-              getDatabaseDetails,
-            },
+            return { throws: error };
           });
 
-          return databasesMocked.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
+          return databases.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
             assert.deepEqual(state.databaseInfo.databaseDetails[db], {
               inFlight: false,
               valid: false,
@@ -501,7 +487,6 @@ describe("databases reducers", function () {
           });
         }));
       });
-
     });
 
     describe("refresh table details", function () {
@@ -538,35 +523,41 @@ describe("databases reducers", function () {
         table: string;
       }
 
-      let tableList = _.flatten(_.map(dbTables, (tables, db) => {
+      let tableList = _.flatMap(dbTables, (tables, db) => {
         return _.map(tables, (tableValue, table): TableID => {
           return { db, table };
         });
-      }));
+      });
 
       beforeEach(function () {
         state = { databaseInfo: new databases.DatabaseInfoState() };
       });
 
+      afterEach(fetchMock.restore);
+
       it("refreshes table details for different tables", function () {
+        let re = new RegExp("/_admin/v1/databases/(.+)/tables/(.+)")
+
         return Promise.all(_.map(tableList, (id: TableID) => {
-          let response: TableDetailsResponse;
+          let response: TableDetailsResponseMessage;
 
-          function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsResponseMessage> {
-            return new Promise((resolve, reject) => {
-              assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
-              response = new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[databases.generateTableID(req.database, req.table)]);
-              resolve(response);
-            });
-          }
+          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
+          (fetchMock as any).reMock(re, "get", (url: string, requestObj: RequestInit) => {
+            let result = url.match(re);
+            let database = result[1];
+            let table = result[2];
 
-          databasesMocked = proxyquire.load("./databaseInfo", {
-            "../util/api": {
-              getTableDetails,
-            },
+            assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
+
+            response = new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[databases.generateTableID(database, table)]);
+
+            return {
+              sendAsJson: false,
+              body: response.encodeJSON(),
+            };
           });
 
-          return databasesMocked.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
+          return databases.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
             let generatedID = databases.generateTableID(id.db, id.table);
             assert.deepEqual(state.databaseInfo.tableDetails[generatedID].data, new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[id.db][id.table]));
             assert.deepEqual(state.databaseInfo.tableDetails[generatedID], {
@@ -579,25 +570,18 @@ describe("databases reducers", function () {
         }));
       });
 
-      it("handles table details errors", function () {
+      it("handles table details errors", function() {
+        let error = new Error();
+
         return Promise.all(_.map(tableList, (id: TableID) => {
-          let error: Error;
+          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
+          (fetchMock as any).reMock(new RegExp("/_admin/v1/databases/.+/tables/.+"), "get", (url: string, requestObj: RequestInit) => {
+            assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
 
-          function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsResponseMessage> {
-            return new Promise((resolve, reject) => {
-              assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
-              error = new Error();
-              reject(error);
-            });
-          }
-
-          databasesMocked = proxyquire.load("./databaseInfo", {
-            "../util/api": {
-              getTableDetails,
-            },
+            return { throws: error };
           });
 
-          return databasesMocked.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
+          return databases.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
             let generatedID = databases.generateTableID(id.db, id.table);
             assert.deepEqual(state.databaseInfo.tableDetails[generatedID], {
               inFlight: false,
@@ -607,7 +591,6 @@ describe("databases reducers", function () {
           });
         }));
       });
-
     });
   });
 });
