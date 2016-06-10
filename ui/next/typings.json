@@ -26,7 +26,6 @@
     "nvd3": "registry:npm/nvd3#1.8.3+20160501004949",
     "object-assign": "registry:npm/object-assign#4.0.1+20160301180549",
     "protos-builders": "file:app/js/protos.d.ts",
-    "proxyquire": "registry:npm/proxyquire#1.0.0+20160211003958",
     "react-paginate": "file:local_typings/react-paginate.d.ts",
     "sinon": "registry:npm/sinon#1.16.0+20160427193336"
   }

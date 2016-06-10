@@ -378,7 +378,7 @@ System.config({
     "npm:query-string@3.0.3": {
       "strict-uri-encode": "npm:strict-uri-encode@1.1.0"
     },
-    "npm:react-addons-create-fragment@15.0.2": {
+    "npm:react-addons-create-fragment@15.1.0": {
       "react": "npm:react@15.1.0"
     },
     "npm:react-dom@15.1.0": {
@@ -389,7 +389,7 @@ System.config({
       "fs": "github:jspm/nodelibs-fs@0.1.2",
       "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react-addons-create-fragment": "npm:react-addons-create-fragment@15.0.2",
+      "react-addons-create-fragment": "npm:react-addons-create-fragment@15.1.0",
       "react-dom": "npm:react-dom@15.1.0",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },

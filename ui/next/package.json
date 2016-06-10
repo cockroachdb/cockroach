@@ -10,7 +10,6 @@
     "mocha": "^2.4.5",
     "proto2ts": "github:sintef-9012/Proto2TypeScript",
     "protobufjs": "^5.0.1",
-    "proxyquire": "^1.7.9",
     "react": "^15.0.1",
     "react-addons-test-utils": "^15.0.1",
     "react-dom": "^15.0.1",
