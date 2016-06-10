@@ -316,3 +316,28 @@ EXPLAIN(VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 3 select                          +x,unique
 4 render/filter  (x)@xyz          +x,unique
 5 scan           xyz@primary      +x,unique
+
+# This test checks that the double sub-query plan expansion caused by a
+# sub-expression being shared by two or more plan nodes does not
+# panic.
+statement ok
+CREATE TABLE tab4(col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT)
+
+statement ok
+INSERT INTO tab4 VALUES (1,1,1,1);
+
+statement ok
+CREATE INDEX idx_tab4_0 ON tab4 (col4,col0);
+
+query I
+SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
+----
+
+query ITT
+EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
+----
+0  index-join
+1  scan        tab4@idx_tab4_0 /#-/5.38/1
+2  scan        tab4@primary    -
+1  scan        tab4@primary
+2  scan        tab4@primary    -
