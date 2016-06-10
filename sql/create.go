@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/pkg/errors"
 )
 
@@ -148,6 +149,10 @@ func (n *createIndexNode) Start() error {
 		if n.n.IfNotExists {
 			return nil
 		}
+	}
+
+	if n.n.Interleave != nil {
+		return util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
 	}
 
 	indexDesc := sqlbase.IndexDescriptor{
@@ -285,6 +290,10 @@ func (n *createTableNode) Start() error {
 				fkTargets = append(fkTargets, modified)
 			}
 		}
+	}
+
+	if n.n.Interleave != nil {
+		return util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
 	}
 
 	created, err := n.p.createDescriptor(tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
