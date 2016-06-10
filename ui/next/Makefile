@@ -34,8 +34,8 @@ lint: npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: app/js/protos.js npm.installed typings.installed
-	mocha $(TS_ROOT)/'**/*.spec.ts*' --require ts-node/register
+test: app/js/protos.js npm.installed typings.installed jspm.installed
+	karma start
 
 npm.installed: package.json npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
@@ -48,7 +48,6 @@ typings.installed: generated/protos.d.ts typings.json npm.installed
 	touch $@
 
 jspm.installed: npm.installed
-	rm -rf $(JSPM_PACKAGES)/
 	jspm install
 	# jspm touches package.json, so we need to bump npm.installed's timestamp
 	# here to prevent endless pointless rebuilds. This `touch` will still result

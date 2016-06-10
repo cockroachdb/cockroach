@@ -87,6 +87,7 @@ docker run -i ${tty-} ${rm} \
   --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="PAGER=cat" \
+  --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-}" \
   --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX-0}" \
   --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL-1}" \
   "${image}:${version}" "$@"

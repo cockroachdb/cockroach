@@ -29,7 +29,7 @@ describe("metrics reducer", function() {
       assert.equal(metrics.fetchMetrics().type, metrics.FETCH);
     });
 
-    it("fetchMetrics() creates the correct action type.", function() {
+    it("fetchMetricsComplete() creates the correct action type.", function() {
       assert.equal(metrics.fetchMetricsComplete().type, metrics.FETCH_COMPLETE);
     });
   });

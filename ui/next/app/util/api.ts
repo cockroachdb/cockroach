@@ -4,8 +4,8 @@
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
 
-import "isomorphic-fetch";
 import * as _ from "lodash";
+import "whatwg-fetch";
 
 import * as protos from "../js/protos";
 
