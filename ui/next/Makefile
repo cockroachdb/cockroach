@@ -34,8 +34,8 @@ lint: npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: app/js/protos.js npm.installed typings.installed
-	mocha $(TS_ROOT)/'**/*.spec.ts*' --require ts-node/register
+test: app/js/protos.js npm.installed typings.installed jspm.installed
+	karma start
 
 npm.installed: package.json npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
