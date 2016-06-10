@@ -182,7 +182,7 @@ func SanitizeVarFreeExpr(expr parser.Expr, expectedType parser.Datum, context st
 func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: d.Nullable != parser.NotNull && !d.PrimaryKey,
+		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
 	var colDatumType parser.Datum
@@ -195,7 +195,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.Type.Width = int32(t.N)
 		colDatumType = parser.TypeInt
 		if t.IsSerial() {
-			if d.DefaultExpr != nil {
+			if d.DefaultExpr.Expr != nil {
 				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
 			}
 			s := (&parser.FuncExpr{Name: &parser.QualifiedName{Base: "unique_rowid"}}).String()
@@ -244,12 +244,12 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		}
 	}
 
-	if d.DefaultExpr != nil {
+	if d.DefaultExpr.Expr != nil {
 		// Verify the default expression type is compatible with the column type.
-		if err := SanitizeVarFreeExpr(d.DefaultExpr, colDatumType, "DEFAULT"); err != nil {
+		if err := SanitizeVarFreeExpr(d.DefaultExpr.Expr, colDatumType, "DEFAULT"); err != nil {
 			return nil, nil, err
 		}
-		s := d.DefaultExpr.String()
+		s := d.DefaultExpr.Expr.String()
 		col.DefaultExpr = &s
 	}
 

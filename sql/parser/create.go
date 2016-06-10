@@ -150,44 +150,69 @@ const (
 // ColumnTableDef represents a column definition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
-	Name        Name
-	Type        ColumnType
-	Nullable    Nullability
+	Name     Name
+	Type     ColumnType
+	Nullable struct {
+		Nullability    Nullability
+		ConstraintName string
+	}
 	PrimaryKey  bool
 	Unique      bool
-	DefaultExpr Expr
-	CheckExpr   Expr
-	References  struct {
-		Table *QualifiedName
-		Col   Name
+	DefaultExpr struct {
+		Expr           Expr
+		ConstraintName string
+	}
+	CheckExpr struct {
+		Expr           Expr
+		ConstraintName string
+	}
+	References struct {
+		Table          *QualifiedName
+		Col            Name
+		ConstraintName string
 	}
 }
 
 func newColumnTableDef(
-	name Name, typ ColumnType, qualifications []ColumnQualification,
+	name Name, typ ColumnType, qualifications []NamedColumnQualification,
 ) *ColumnTableDef {
 	d := &ColumnTableDef{
-		Name:     name,
-		Type:     typ,
-		Nullable: SilentNull,
+		Name: name,
+		Type: typ,
 	}
+	d.Nullable.Nullability = SilentNull
 	for _, c := range qualifications {
-		switch t := c.(type) {
+		switch t := c.Qualification.(type) {
 		case *ColumnDefault:
-			d.DefaultExpr = t.Expr
+			d.DefaultExpr.Expr = t.Expr
+			if c.Name != "" {
+				d.DefaultExpr.ConstraintName = c.Name
+			}
 		case NotNullConstraint:
-			d.Nullable = NotNull
+			d.Nullable.Nullability = NotNull
+			if c.Name != "" {
+				d.Nullable.ConstraintName = c.Name
+			}
 		case NullConstraint:
-			d.Nullable = Null
+			d.Nullable.Nullability = Null
+			if c.Name != "" {
+				d.Nullable.ConstraintName = c.Name
+			}
 		case PrimaryKeyConstraint:
 			d.PrimaryKey = true
 		case UniqueConstraint:
 			d.Unique = true
 		case *ColumnCheckConstraint:
-			d.CheckExpr = t.Expr
+			d.CheckExpr.Expr = t.Expr
+			if c.Name != "" {
+				d.CheckExpr.ConstraintName = c.Name
+			}
 		case *ColumnFKConstraint:
 			d.References.Table = t.Table
 			d.References.Col = t.Col
+			if c.Name != "" {
+				d.References.ConstraintName = c.Name
+			}
 		default:
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
@@ -203,7 +228,10 @@ func (node *ColumnTableDef) setName(name Name) {
 func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	fmt.Fprintf(buf, "%s ", node.Name)
 	FormatNode(buf, f, node.Type)
-	switch node.Nullable {
+	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
+		fmt.Fprintf(buf, " CONSTRAINT %s", node.Nullable.ConstraintName)
+	}
+	switch node.Nullable.Nullability {
 	case Null:
 		buf.WriteString(" NULL")
 	case NotNull:
@@ -214,16 +242,25 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else if node.Unique {
 		buf.WriteString(" UNIQUE")
 	}
-	if node.DefaultExpr != nil {
+	if node.DefaultExpr.Expr != nil {
+		if node.DefaultExpr.ConstraintName != "" {
+			fmt.Fprintf(buf, " CONSTRAINT %s", node.DefaultExpr.ConstraintName)
+		}
 		buf.WriteString(" DEFAULT ")
-		FormatNode(buf, f, node.DefaultExpr)
+		FormatNode(buf, f, node.DefaultExpr.Expr)
 	}
-	if node.CheckExpr != nil {
+	if node.CheckExpr.Expr != nil {
+		if node.CheckExpr.ConstraintName != "" {
+			fmt.Fprintf(buf, " CONSTRAINT %s", node.CheckExpr.ConstraintName)
+		}
 		buf.WriteString(" CHECK (")
-		FormatNode(buf, f, node.CheckExpr)
+		FormatNode(buf, f, node.CheckExpr.Expr)
 		buf.WriteByte(')')
 	}
 	if node.References.Table != nil {
+		if node.References.ConstraintName != "" {
+			fmt.Fprintf(buf, " CONSTRAINT %s", node.References.ConstraintName)
+		}
 		buf.WriteString(" REFERENCES ")
 		FormatNode(buf, f, node.References.Table)
 		if node.References.Col != "" {
@@ -233,6 +270,12 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		}
 	}
 
+}
+
+// NamedColumnQualification wraps a NamedColumnQualification with a name.
+type NamedColumnQualification struct {
+	Name          string
+	Qualification ColumnQualification
 }
 
 // ColumnQualification represents a constraint on a column.
