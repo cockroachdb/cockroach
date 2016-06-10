@@ -1382,16 +1382,15 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		return err
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
-	for _, union := range p.raftCmd.Cmd.Requests {
-		args := union.GetInner()
-		etr, ok := args.(*roachpb.EndTransactionRequest)
-		if !ok {
-			continue
-		}
-		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
-			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
-			// needs to understand it; it cannot simply be an opaque command.
-			log.Infof("raft: proposing %s %+v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
+	if union, ok := p.raftCmd.Cmd.GetArg(roachpb.EndTransaction); ok {
+		if crt := union.(*roachpb.EndTransactionRequest).
+			InternalCommitTrigger.
+			GetChangeReplicasTrigger(); crt != nil {
+			// EndTransactionRequest with a ChangeReplicasTrigger is special
+			// because raft needs to understand it; it cannot simply be an
+			// opaque command.
+			log.Infof("raft: proposing %s %+v for range %d", crt.ChangeType,
+				crt.Replica, p.raftCmd.RangeID)
 
 			ctx := ConfChangeContext{
 				CommandID: string(p.idKey),
