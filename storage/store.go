@@ -712,20 +712,22 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 	s.snapMu.snapshots = make(map[roachpb.RangeID]chan raftpb.Snapshot)
 
-	// Add range scanner and configure with queues.
-	s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
-	s.gcQueue = newGCQueue(s.ctx.Gossip)
-	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
-	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
-	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
-	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
+	if s.ctx.Gossip != nil {
+		// Add range scanner and configure with queues.
+		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+		s.gcQueue = newGCQueue(s.ctx.Gossip)
+		s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
+		s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
+		s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+		s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
+		s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
+		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
-	// Add consistency check scanner.
-	s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
-	s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
-	s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
+		// Add consistency check scanner.
+		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
+		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
+		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
+	}
 
 	return s
 }
@@ -815,13 +817,27 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// Add a closer for the various scanner queues, needed to properly clean up
 	// the event logs.
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.gcQueue.Close()
-		s.splitQueue.Close()
-		s.verifyQueue.Close()
-		s.replicateQueue.Close()
-		s.replicaGCQueue.Close()
-		s.raftLogQueue.Close()
-		s.replicaConsistencyQueue.Close()
+		if q := s.gcQueue; q != nil {
+			q.Close()
+		}
+		if q := s.splitQueue; q != nil {
+			q.Close()
+		}
+		if q := s.verifyQueue; q != nil {
+			q.Close()
+		}
+		if q := s.replicateQueue; q != nil {
+			q.Close()
+		}
+		if q := s.replicaGCQueue; q != nil {
+			q.Close()
+		}
+		if q := s.raftLogQueue; q != nil {
+			q.Close()
+		}
+		if q := s.replicaConsistencyQueue; q != nil {
+			q.Close()
+		}
 	}))
 
 	// Add the bookie to the store.
