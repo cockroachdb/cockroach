@@ -16,8 +16,8 @@
 
 // Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
-package cockroach.storage.engine;
-option go_package = "engine";
+package cockroach.storage.enginepb;
+option go_package = "enginepb";
 
 import "cockroach/roachpb/data.proto";
 import weak "gogoproto/gogo.proto";

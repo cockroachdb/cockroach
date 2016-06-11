@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -108,7 +109,7 @@ func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
 func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	goldMS := MVCCStats{
+	goldMS := enginepb.MVCCStats{
 		KeyBytes:        1,
 		KeyCount:        1,
 		ValBytes:        1,
@@ -127,7 +128,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 		t.Fatal(err) // prevent rot as fields are added
 	}
 
-	cmp := func(act, exp MVCCStats) {
+	cmp := func(act, exp enginepb.MVCCStats) {
 		f, l, _ := caller.Lookup(1)
 		if !reflect.DeepEqual(act, exp) {
 			t.Fatalf("%s:%d: wanted %+v back, got %+v", f, l, exp, act)
@@ -135,7 +136,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	}
 
 	ms := goldMS
-	zeroWithLU := MVCCStats{LastUpdateNanos: ms.LastUpdateNanos}
+	zeroWithLU := enginepb.MVCCStats{LastUpdateNanos: ms.LastUpdateNanos}
 
 	ms.Subtract(goldMS)
 	cmp(ms, zeroWithLU)
@@ -152,7 +153,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	cmp(ms, zeroWithLU)
 
 	// Run some checks for AgeTo.
-	goldDelta := MVCCStats{
+	goldDelta := enginepb.MVCCStats{
 		KeyBytes:        42,
 		IntentCount:     11,
 		LastUpdateNanos: 1e9 - 1000,
@@ -191,7 +192,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	cmp(delta, expDelta)
 
 	// Check that Add calls AgeTo appropriately.
-	mss := []MVCCStats{goldMS, goldMS}
+	mss := []enginepb.MVCCStats{goldMS, goldMS}
 
 	mss[0].LastUpdateNanos = 2E9 - 1
 	mss[1].LastUpdateNanos = 10E9 + 1
@@ -2547,7 +2548,7 @@ func TestFindSplitKey(t *testing.T) {
 	defer stopper.Stop()
 	engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
-	ms := &MVCCStats{}
+	ms := &enginepb.MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
 	// bytes, writing key #i to (encoded) key #i through the MVCC
 	// facility. Assuming that this translates roughly into same-length
@@ -2685,7 +2686,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		defer stopper.Stop()
 		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
-		ms := &MVCCStats{}
+		ms := &enginepb.MVCCStats{}
 		val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
 		for _, k := range test.keys {
 			if err := MVCCPut(context.Background(), engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
@@ -2779,7 +2780,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		defer stopper.Stop()
 		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
-		ms := &MVCCStats{}
+		ms := &enginepb.MVCCStats{}
 		var expKey roachpb.Key
 		for j, keySize := range test.keySizes {
 			key := roachpb.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
@@ -2818,7 +2819,7 @@ func encodedSize(msg proto.Message, t *testing.T) int64 {
 	return int64(len(data))
 }
 
-func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
+func verifyStats(debug string, ms, expMS *enginepb.MVCCStats, t *testing.T) {
 	if ms.LiveBytes != expMS.LiveBytes {
 		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
 	}
@@ -2869,7 +2870,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	ms := &MVCCStats{}
+	ms := &enginepb.MVCCStats{}
 
 	// Verify size of mvccVersionTimestampSize.
 	ts := makeTS(1*1E9, 0)
@@ -2888,7 +2889,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	vKeySize := mvccVersionTimestampSize
 	vValSize := int64(len(value.RawBytes))
 
-	expMS := MVCCStats{
+	expMS := enginepb.MVCCStats{
 		LiveBytes:       mKeySize + vKeySize + vValSize,
 		LiveCount:       1,
 		KeyBytes:        mKeySize + vKeySize,
@@ -2908,11 +2909,11 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCDelete(context.Background(), engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
-	m2ValSize := encodedSize(&MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: &txn.TxnMeta}, t)
+	m2ValSize := encodedSize(&enginepb.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: &txn.TxnMeta}, t)
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := int64(0)
 
-	expMS2 := MVCCStats{
+	expMS2 := enginepb.MVCCStats{
 		KeyBytes:        mKeySize + vKeySize + v2KeySize,
 		KeyCount:        1,
 		ValBytes:        m2ValSize + vValSize + v2ValSize,
@@ -2964,10 +2965,10 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	mKey2Size := int64(mvccKey(key2).EncodedSize())
-	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: &txn.TxnMeta}, t)
+	mVal2Size := encodedSize(&enginepb.MVCCMetadata{Timestamp: ts4, Txn: &txn.TxnMeta}, t)
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := int64(len(value2.RawBytes))
-	expMS3 := MVCCStats{
+	expMS3 := enginepb.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
 		ValBytes:    m2ValSize + vValSize + v2ValSize + mVal2Size + vVal2Size,
@@ -2996,7 +2997,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
-	expMS4 := MVCCStats{
+	expMS4 := enginepb.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
 		ValBytes:    vValSize + v2ValSize + mVal2Size + vVal2Size,
@@ -3028,7 +3029,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key2}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
-	expMS4 = MVCCStats{
+	expMS4 = enginepb.MVCCStats{
 		KeyBytes:        mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:        2,
 		ValBytes:        vValSize + v2ValSize + vVal2Size,
@@ -3065,7 +3066,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(mvccKey(txnKey).EncodedSize())
-	txnValSize := encodedSize(&MVCCMetadata{RawBytes: txnVal.RawBytes}, t)
+	txnValSize := encodedSize(&enginepb.MVCCMetadata{RawBytes: txnVal.RawBytes}, t)
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
 	expMS6.SysCount++
@@ -3084,7 +3085,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	ms := &MVCCStats{}
+	ms := &enginepb.MVCCStats{}
 
 	// Now, generate a random sequence of puts, deletes and resolves.
 	// Each put and delete may or may not involve a txn. Resolves may
@@ -3192,7 +3193,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	ms := &MVCCStats{}
+	ms := &enginepb.MVCCStats{}
 
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
@@ -3408,7 +3409,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 
 	// Check that the intent was not cleared.
 	metaKey := mvccKey(testKey1)
-	meta := &MVCCMetadata{}
+	meta := &enginepb.MVCCMetadata{}
 	ok, _, _, err := engine.GetProto(metaKey, meta)
 	if err != nil {
 		t.Fatal(err)
@@ -3503,7 +3504,7 @@ func BenchmarkMVCCStats(b *testing.B) {
 	defer stopper.Stop()
 	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
 
-	ms := MVCCStats{
+	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        1,
 		ValBytes:        1,

@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 )
 
 // A rangeStats encapsulates access to a range's stats. Range
@@ -34,8 +35,8 @@ import (
 // type are thread-safe.
 type rangeStats struct {
 	rangeID    roachpb.RangeID
-	sync.Mutex                  // Protects mvccStats
-	mvccStats  engine.MVCCStats // cached version of stat values
+	sync.Mutex                    // Protects mvccStats
+	mvccStats  enginepb.MVCCStats // cached version of stat values
 }
 
 // newRangeStats creates a new instance of rangeStats using the
@@ -67,7 +68,7 @@ func (rs *rangeStats) Replace(other *rangeStats) {
 }
 
 // GetMVCC returns a copy of the underlying MVCCStats.
-func (rs *rangeStats) GetMVCC() engine.MVCCStats {
+func (rs *rangeStats) GetMVCC() enginepb.MVCCStats {
 	rs.Lock()
 	defer rs.Unlock()
 	return rs.mvccStats
@@ -84,7 +85,7 @@ func (rs *rangeStats) GetSize() int64 {
 // MergeMVCCStats merges the results of an MVCC operation or series of MVCC
 // operations into the range's stats. Stats are stored to the underlying engine
 // and the rangeStats MVCCStats updated to reflect merged totals.
-func (rs *rangeStats) MergeMVCCStats(e engine.ReadWriter, ms engine.MVCCStats) error {
+func (rs *rangeStats) MergeMVCCStats(e engine.ReadWriter, ms enginepb.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.mvccStats.Add(ms)
@@ -92,7 +93,7 @@ func (rs *rangeStats) MergeMVCCStats(e engine.ReadWriter, ms engine.MVCCStats) e
 }
 
 // SetStats sets stats wholesale.
-func (rs *rangeStats) SetMVCCStats(e engine.ReadWriter, ms engine.MVCCStats) error {
+func (rs *rangeStats) SetMVCCStats(e engine.ReadWriter, ms enginepb.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.mvccStats = ms
@@ -132,15 +133,15 @@ func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 // be accounted for in its stats.
 func ComputeStatsForRange(
 	d *roachpb.RangeDescriptor, e engine.Reader, nowNanos int64,
-) (engine.MVCCStats, error) {
+) (enginepb.MVCCStats, error) {
 	iter := e.NewIterator(false)
 	defer iter.Close()
 
-	ms := engine.MVCCStats{}
+	ms := enginepb.MVCCStats{}
 	for _, r := range makeReplicatedKeyRanges(d) {
 		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
 		if err != nil {
-			return engine.MVCCStats{}, err
+			return enginepb.MVCCStats{}, err
 		}
 		ms.Add(msDelta)
 	}

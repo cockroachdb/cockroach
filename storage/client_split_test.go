@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -295,7 +296,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	var ms engine.MVCCStats
+	var ms enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +371,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	var left, right engine.MVCCStats
+	var left, right enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID, &left); err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +417,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	rng := store.LookupReplica(keyPrefix, nil)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
-	if err := verifyRangeStats(store.Engine(), rng.RangeID, engine.MVCCStats{LastUpdateNanos: manual.UnixNano()}); err != nil {
+	if err := verifyRangeStats(store.Engine(), rng.RangeID, enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -426,7 +427,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	var ms engine.MVCCStats
+	var ms enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +450,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	var msLeft, msRight engine.MVCCStats
+	var msLeft, msRight enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +460,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// The stats should be exactly equal when added.
-	expMS := engine.MVCCStats{
+	expMS := enginepb.MVCCStats{
 		LiveBytes:   msLeft.LiveBytes + msRight.LiveBytes,
 		KeyBytes:    msLeft.KeyBytes + msRight.KeyBytes,
 		ValBytes:    msLeft.ValBytes + msRight.ValBytes,
@@ -498,7 +499,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		var ms engine.MVCCStats
+		var ms enginepb.MVCCStats
 		if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID, &ms); err != nil {
 			t.Fatal(err)
 		}

@@ -25,7 +25,7 @@ import (
 	"github.com/google/btree"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -55,7 +55,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			RangeID: desc.RangeID,
 			stats: &rangeStats{
 				rangeID: desc.RangeID,
-				mvccStats: engine.MVCCStats{
+				mvccStats: enginepb.MVCCStats{
 					KeyBytes:  1,
 					ValBytes:  2,
 					KeyCount:  1,

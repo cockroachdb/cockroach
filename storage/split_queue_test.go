@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -79,7 +79,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), engine.MVCCStats{KeyBytes: test.bytes}); err != nil {
+		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), enginepb.MVCCStats{KeyBytes: test.bytes}); err != nil {
 			t.Fatal(err)
 		}
 		copy := *tc.rng.Desc()

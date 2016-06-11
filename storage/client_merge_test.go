@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -379,7 +380,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	writeRandomDataToRange(t, store, bDesc.RangeID, []byte("ccc"))
 
 	// Get the range stats for both ranges now that we have data.
-	var msA, msB engine.MVCCStats
+	var msA, msB enginepb.MVCCStats
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	if err := engine.MVCCGetRangeStats(context.Background(), snap, aDesc.RangeID, &msA); err != nil {
@@ -409,7 +410,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	var msMerged engine.MVCCStats
+	var msMerged enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngMerged.RangeID, &msMerged); err != nil {
 		t.Fatal(err)
 	}

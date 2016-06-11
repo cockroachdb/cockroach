@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -375,7 +376,7 @@ func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing
 	// Use parallelism if specified when test is run.
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			ms := MVCCStats{}
+			ms := enginepb.MVCCStats{}
 			ts.Logical++
 			err := MVCCMerge(context.Background(), eng, &ms, keys[rand.Intn(numKeys)], ts, *value)
 			if err != nil {
@@ -437,7 +438,7 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		dupEng, stopper := emk(b, locDirty)
 
 		b.StartTimer()
-		_, err := MVCCDeleteRange(context.Background(), dupEng, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
+		_, err := MVCCDeleteRange(context.Background(), dupEng, &enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -458,7 +459,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	b.SetBytes(rangeBytes)
 	b.ResetTimer()
 
-	var stats MVCCStats
+	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
 		iter := eng.NewIterator(false)

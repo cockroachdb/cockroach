@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -3696,7 +3697,7 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	txnPushee := txn.Clone()
 	txnPushee.Priority--
 	pa := pushTxnArgs(txn, &txnPushee, roachpb.PUSH_ABORT)
-	var ms engine.MVCCStats
+	var ms enginepb.MVCCStats
 	var ra roachpb.ResolveIntentRequest
 	var rra roachpb.ResolveIntentRangeRequest
 
@@ -4006,8 +4007,8 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats, t *testing.T) {
-	var ms engine.MVCCStats
+func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS enginepb.MVCCStats, t *testing.T) {
+	var ms enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -4036,7 +4037,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 83, SysCount: 2, LastUpdateNanos: 0}
+	expMS := enginepb.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 83, SysCount: 2, LastUpdateNanos: 0}
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
@@ -4055,7 +4056,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
+	expMS = enginepb.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -4070,7 +4071,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
+	expMS = enginepb.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -4079,7 +4080,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(&dArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
+	expMS = enginepb.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 
@@ -4884,7 +4885,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// there and verify that we can now load the data as expected.
 	v := roachpb.MakeValueFromString("foo")
 	util.SucceedsSoon(t, func() error {
-		if err := engine.MVCCPut(context.Background(), rng.store.Engine(), &engine.MVCCStats{},
+		if err := engine.MVCCPut(context.Background(), rng.store.Engine(), &enginepb.MVCCStats{},
 			keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {
 			return err
 		}
