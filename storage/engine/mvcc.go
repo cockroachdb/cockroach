@@ -664,7 +664,7 @@ func mvccGetInternal(
 		timestamp = meta.Timestamp.Prev()
 	}
 
-	ownIntent := meta.IsIntentOf(txn) // false if txn == nil
+	ownIntent := IsIntentOf(*meta, txn) // false if txn == nil
 	if !timestamp.Less(meta.Timestamp) && meta.Txn != nil && !ownIntent {
 		// Trying to read the last value, but it's another transaction's intent;
 		// the reader will have to act on this.

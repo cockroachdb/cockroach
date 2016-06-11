@@ -63,7 +63,7 @@ func MergeInternalTimeSeriesData(
 	if err := proto.Unmarshal(mergedBytes, &meta); err != nil {
 		return roachpb.InternalTimeSeriesData{}, err
 	}
-	mergedTS, err := meta.Value().GetTimeseries()
+	mergedTS, err := MakeValue(meta).GetTimeseries()
 	if err != nil {
 		return roachpb.InternalTimeSeriesData{}, err
 	}

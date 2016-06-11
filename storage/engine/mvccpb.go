@@ -93,7 +93,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 // the values that it records when the structure is initially stored. Specifically,
 // MVCCStats is stored on the RangeStats key, which means that its creation will
 // have an impact on system-local data size and key count.
-func (ms *MVCCStats) AccountForSelf(rangeID roachpb.RangeID) error {
+func AccountForSelf(ms *MVCCStats, rangeID roachpb.RangeID) error {
 	key := keys.RangeStatsKey(rangeID)
 	metaKey := MakeMVCCMetadataKey(key)
 
@@ -109,7 +109,7 @@ func (ms *MVCCStats) AccountForSelf(rangeID roachpb.RangeID) error {
 }
 
 // Value returns the inline value.
-func (meta MVCCMetadata) Value() roachpb.Value {
+func MakeValue(meta MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
 }
 
@@ -120,6 +120,6 @@ func (meta MVCCMetadata) IsInline() bool {
 
 // IsIntentOf returns true if the meta record is an intent of the supplied
 // transaction.
-func (meta MVCCMetadata) IsIntentOf(txn *roachpb.Transaction) bool {
+func IsIntentOf(meta MVCCMetadata, txn *roachpb.Transaction) bool {
 	return meta.Txn != nil && txn != nil && roachpb.TxnIDEqual(meta.Txn.ID, txn.ID)
 }

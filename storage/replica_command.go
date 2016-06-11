@@ -2158,10 +2158,10 @@ func (r *Replica) splitTrigger(
 	// Preserve stats for presplit range and begin computing stats delta
 	// for current transaction.
 	origStats := r.GetMVCCStats()
-	deltaMs := *ms
+	deltaMS := *ms
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
-	if err := deltaMs.AccountForSelf(split.NewDesc.RangeID); err != nil {
+	if err := engine.AccountForSelf(&deltaMS, split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to account for MVCCStats's own stats impact: %s", err)
 	}
 
@@ -2197,7 +2197,7 @@ func (r *Replica) splitTrigger(
 	}
 
 	// Initialize the new range's abort cache by copying the original's.
-	seqCount, err := r.abortCache.CopyInto(batch, &deltaMs, split.NewDesc.RangeID)
+	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy abort cache to new split range: %s", err)
@@ -2212,7 +2212,7 @@ func (r *Replica) splitTrigger(
 		return err
 	}
 
-	rightMs := deltaMs
+	rightMs := deltaMS
 	// Add in the original range's stats.
 	rightMs.Add(origStats)
 	// Remove stats from the left side of the split.
@@ -2239,7 +2239,7 @@ func (r *Replica) splitTrigger(
 		}
 
 		// Update store stats with difference in stats before and after split.
-		r.store.metrics.addMVCCStats(deltaMs)
+		r.store.metrics.addMVCCStats(deltaMS)
 
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an

@@ -244,7 +244,7 @@ func TestEngineBatch(t *testing.T) {
 			if !m.IsInline() {
 				return nil
 			}
-			valueBytes, err := m.Value().GetBytes()
+			valueBytes, err := MakeValue(*m).GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -299,7 +299,7 @@ func TestEngineBatch(t *testing.T) {
 				if err := iter.ValueProto(m); err != nil {
 					t.Fatal(err)
 				}
-				valueBytes, err := m.Value().GetBytes()
+				valueBytes, err := MakeValue(*m).GetBytes()
 				if err != nil {
 					t.Fatal(err)
 				}
