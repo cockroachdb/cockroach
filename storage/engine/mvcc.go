@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -84,7 +85,7 @@ func IsIntentOf(meta enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
 // of a timestamp.
 type MVCCKey struct {
 	Key       roachpb.Key
-	Timestamp roachpb.Timestamp
+	Timestamp hlc.Timestamp
 }
 
 // MakeMVCCMetadataKey creates an MVCCKey from a roachpb.Key.
@@ -95,7 +96,7 @@ func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
 // Next returns the next key.
 func (k MVCCKey) Next() MVCCKey {
 	ts := k.Timestamp.Prev()
-	if ts == roachpb.ZeroTimestamp {
+	if ts == hlc.ZeroTimestamp {
 		return MVCCKey{
 			Key: k.Key.Next(),
 		}
@@ -124,7 +125,7 @@ func (k MVCCKey) Equal(l MVCCKey) bool {
 
 // IsValue returns true iff the timestamp is non-zero.
 func (k MVCCKey) IsValue() bool {
-	return k.Timestamp != roachpb.ZeroTimestamp
+	return k.Timestamp != hlc.ZeroTimestamp
 }
 
 // EncodedSize returns the size of the MVCCKey when encoded.
@@ -416,7 +417,7 @@ func MVCCGetRangeStats(
 	rangeID roachpb.RangeID,
 	ms *enginepb.MVCCStats,
 ) error {
-	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), roachpb.ZeroTimestamp, true, nil, ms)
+	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, ms)
 	return err
 }
 
@@ -426,7 +427,7 @@ func MVCCSetRangeStats(ctx context.Context,
 	rangeID roachpb.RangeID,
 	ms *enginepb.MVCCStats,
 ) error {
-	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), roachpb.ZeroTimestamp, nil, ms)
+	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, nil, ms)
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
@@ -439,7 +440,7 @@ func MVCCGetProto(
 	ctx context.Context,
 	engine Reader,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 	msg proto.Message,
@@ -466,7 +467,7 @@ func MVCCPutProto(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	msg proto.Message,
 ) error {
@@ -527,7 +528,7 @@ func MVCCGet(
 	ctx context.Context,
 	engine Reader,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
@@ -541,7 +542,7 @@ func mvccGetUsingIter(
 	ctx context.Context,
 	iter Iterator,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
@@ -577,7 +578,7 @@ func MVCCGetAsTxn(
 	ctx context.Context,
 	engine Reader,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	txnMeta roachpb.TxnMeta,
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
@@ -662,7 +663,7 @@ func mvccGetInternal(
 	_ context.Context,
 	iter Iterator,
 	metaKey MVCCKey,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	allowedSafety valueSafety,
 	txn *roachpb.Transaction,
@@ -751,7 +752,7 @@ func mvccGetInternal(
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
-		if seekKey.Timestamp == roachpb.ZeroTimestamp {
+		if seekKey.Timestamp == hlc.ZeroTimestamp {
 			return nil, ignoredIntents, safeValue, nil
 		}
 	}
@@ -836,7 +837,7 @@ func (b *putBuffer) release() {
 // key metadata. The timestamp must be passed as a parameter; using
 // the Timestamp field on the value results in an error.
 //
-// If the timestamp is specified as roachpb.ZeroTimestamp, the value is
+// If the timestamp is specified as hlc.ZeroTimestamp, the value is
 // inlined instead of being written as a timestamp-versioned value. A
 // zero timestamp write to a key precludes a subsequent write using a
 // non-zero timestamp and vice versa. Inlined values require only a
@@ -848,7 +849,7 @@ func MVCCPut(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
@@ -867,7 +868,7 @@ func MVCCBlindPut(
 	engine Writer,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
@@ -881,7 +882,7 @@ func MVCCDelete(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 ) error {
 	iter := engine.NewIterator(true)
@@ -902,14 +903,14 @@ func mvccPutUsingIter(
 	iter Iterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(*roachpb.Value) ([]byte, error),
 ) error {
 	var rawBytes []byte
 	if valueFn == nil {
-		if value.Timestamp != roachpb.ZeroTimestamp {
+		if value.Timestamp != hlc.ZeroTimestamp {
 			return util.Errorf("cannot have timestamp set in value on Put")
 		}
 		rawBytes = value.RawBytes
@@ -938,7 +939,7 @@ func mvccPutInternal(
 	iter Iterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value []byte,
 	txn *roachpb.Transaction,
 	buf *putBuffer,
@@ -956,7 +957,7 @@ func mvccPutInternal(
 
 	// maybeGetValue returns either value (if valueFn is nil) or else
 	// the result of calling valueFn on the data read at readTS.
-	maybeGetValue := func(exists bool, readTS roachpb.Timestamp) ([]byte, error) {
+	maybeGetValue := func(exists bool, readTS hlc.Timestamp) ([]byte, error) {
 		// If a valueFn is specified, read existing value using the iter.
 		if valueFn == nil {
 			return value, nil
@@ -975,7 +976,7 @@ func mvccPutInternal(
 	}
 
 	// Verify we're not mixing inline and non-inline values.
-	putIsInline := timestamp.Equal(roachpb.ZeroTimestamp)
+	putIsInline := timestamp.Equal(hlc.ZeroTimestamp)
 	if ok && putIsInline != buf.meta.IsInline() {
 		return util.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
@@ -1131,7 +1132,7 @@ func MVCCIncrement(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
@@ -1173,7 +1174,7 @@ func MVCCConditionalPut(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
 	txn *roachpb.Transaction,
@@ -1194,7 +1195,7 @@ func MVCCBlindConditionalPut(
 	engine Writer,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
 	txn *roachpb.Transaction,
@@ -1208,7 +1209,7 @@ func mvccConditionalPutUsingIter(
 	iter Iterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
 	txn *roachpb.Transaction,
@@ -1242,7 +1243,7 @@ func MVCCInitPut(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
@@ -1280,7 +1281,7 @@ func MVCCMerge(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	value roachpb.Value,
 ) error {
 	if len(key) == 0 {
@@ -1294,7 +1295,7 @@ func MVCCMerge(
 	// Encode and merge the MVCC metadata with inlined value.
 	meta := &enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
-	if !timestamp.Equal(roachpb.ZeroTimestamp) {
+	if !timestamp.Equal(hlc.ZeroTimestamp) {
 		meta.MergeTimestamp = &timestamp
 	}
 	data, err := protoutil.Marshal(meta)
@@ -1319,7 +1320,7 @@ func MVCCDeleteRange(
 	key,
 	endKey roachpb.Key,
 	max int64,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, error) {
@@ -1345,7 +1346,7 @@ func MVCCDeleteRange(
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	_, err := MVCCIterate(ctx, engine, key, endKey, roachpb.MaxTimestamp, true, txn, false, f)
+	_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
 
 	iter.Close()
 	buf.release()
@@ -1430,7 +1431,7 @@ func mvccScanInternal(
 	key,
 	endKey roachpb.Key,
 	max int64,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 	reverse bool,
@@ -1459,7 +1460,7 @@ func MVCCScan(
 	key,
 	endKey roachpb.Key,
 	max int64,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, []roachpb.Intent, error) {
@@ -1475,7 +1476,7 @@ func MVCCReverseScan(
 	key,
 	endKey roachpb.Key,
 	max int64,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, []roachpb.Intent, error) {
@@ -1491,7 +1492,7 @@ func MVCCIterate(ctx context.Context,
 	engine Reader,
 	startKey,
 	endKey roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 	reverse bool,
@@ -1989,7 +1990,7 @@ func MVCCGarbageCollect(
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 ) error {
 	iter := engine.NewIterator(false)
 	defer iter.Close()

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/cockroachdb/pq"
@@ -119,7 +120,7 @@ func injectErrors(
 			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
 				magicVals.restartCounts[key]--
 				err := roachpb.NewReadWithinUncertaintyIntervalError(
-					roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)
+					hlc.ZeroTimestamp, hlc.ZeroTimestamp)
 				magicVals.failedValues[string(req.Value.RawBytes)] =
 					failureRecord{err, hdr.Txn}
 				return err

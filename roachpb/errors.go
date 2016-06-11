@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -466,7 +467,7 @@ func (*WriteTooOldError) canRestartTransaction() TransactionRestart {
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
 // The read and existing timestamps are purely informational and used for
 // formatting the error message.
-func NewReadWithinUncertaintyIntervalError(readTS, existingTS Timestamp) *ReadWithinUncertaintyIntervalError {
+func NewReadWithinUncertaintyIntervalError(readTS, existingTS hlc.Timestamp) *ReadWithinUncertaintyIntervalError {
 	return &ReadWithinUncertaintyIntervalError{
 		ReadTimestamp:     readTS,
 		ExistingTimestamp: existingTS,

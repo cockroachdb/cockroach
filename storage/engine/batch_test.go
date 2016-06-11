@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -616,11 +617,11 @@ func TestBatchBuilder(t *testing.T) {
 
 	testData := []struct {
 		key string
-		ts  roachpb.Timestamp
+		ts  hlc.Timestamp
 	}{
-		{"a", roachpb.Timestamp{}},
-		{"b", roachpb.Timestamp{WallTime: 1}},
-		{"c", roachpb.Timestamp{WallTime: 1, Logical: 1}},
+		{"a", hlc.Timestamp{}},
+		{"b", hlc.Timestamp{WallTime: 1}},
+		{"c", hlc.Timestamp{WallTime: 1, Logical: 1}},
 	}
 	for _, data := range testData {
 		key := MVCCKey{roachpb.Key(data.key), data.ts}
@@ -665,7 +666,7 @@ func TestBatchBuilderStress(t *testing.T) {
 			builder := &rocksDBBatchBuilder{}
 
 			for j := 0; j < count; j++ {
-				var ts roachpb.Timestamp
+				var ts hlc.Timestamp
 				if rng.Float32() <= 0.9 {
 					// Give 90% of keys timestamps.
 					ts.WallTime = rng.Int63()
