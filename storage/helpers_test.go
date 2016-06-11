@@ -24,20 +24,20 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 )
 
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
 // store).
-func (s *Store) ComputeMVCCStats() (engine.MVCCStats, error) {
-	var totalStats engine.MVCCStats
+func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
+	var totalStats enginepb.MVCCStats
 	var err error
 
 	visitor := newStoreRangeSet(s)
 	now := s.Clock().PhysicalNow()
 	visitor.Visit(func(r *Replica) bool {
-		var stats engine.MVCCStats
+		var stats enginepb.MVCCStats
 		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
 			return false

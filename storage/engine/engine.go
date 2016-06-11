@@ -22,6 +22,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
@@ -84,7 +85,7 @@ type Iterator interface {
 	// recomputed for the first range (i.e. the one with start key == KeyMin).
 	// The nowNanos arg specifies the wall time in nanoseconds since the
 	// epoch and is used to compute the total age of all intents.
-	ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error)
+	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
 }
 
 // Reader is the read interface to an engine's data.

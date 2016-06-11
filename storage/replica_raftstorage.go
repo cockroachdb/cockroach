@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -330,7 +331,7 @@ func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized 
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
+func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -129,13 +130,13 @@ func (sc *AbortCache) Iterate(
 
 func copySeqCache(
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	srcID, dstID roachpb.RangeID,
 	keyMin, keyMax engine.MVCCKey,
 ) (int, error) {
 	var scratch [64]byte
 	var count int
-	var meta engine.MVCCMetadata
+	var meta enginepb.MVCCMetadata
 	// TODO(spencer): look into making this an MVCCIteration and writing
 	// the values using MVCC so we can avoid the ugliness of updating
 	// the MVCCStats by hand below.
@@ -177,7 +178,7 @@ func copySeqCache(
 // On success, returns the number of entries (key-value pairs) copied.
 func (sc *AbortCache) CopyInto(
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	destRangeID roachpb.RangeID,
 ) (int, error) {
 	return copySeqCache(e, ms, sc.rangeID, destRangeID,
@@ -193,7 +194,7 @@ func (sc *AbortCache) CopyInto(
 func (sc *AbortCache) CopyFrom(
 	ctx context.Context,
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	originRangeID roachpb.RangeID,
 ) (int, error) {
 	originMin := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMin))
@@ -205,7 +206,7 @@ func (sc *AbortCache) CopyFrom(
 func (sc *AbortCache) Del(
 	ctx context.Context,
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	txnID *uuid.UUID,
 ) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
@@ -216,7 +217,7 @@ func (sc *AbortCache) Del(
 func (sc *AbortCache) Put(
 	ctx context.Context,
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	txnID *uuid.UUID,
 	entry *roachpb.AbortCacheEntry,
 ) error {

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/util"
@@ -379,7 +380,7 @@ func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t 
 		if l != 0 {
 			return fmt.Errorf("expected empty transactions map; got %d", l)
 		}
-		meta := &engine.MVCCMetadata{}
+		meta := &enginepb.MVCCMetadata{}
 		ok, _, _, err := eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
@@ -640,7 +641,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 		if !ok {
 			return nil
 		}
-		meta := &engine.MVCCMetadata{}
+		meta := &enginepb.MVCCMetadata{}
 		ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			t.Fatalf("error getting MVCC metadata: %s", err)

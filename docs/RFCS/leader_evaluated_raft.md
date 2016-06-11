@@ -91,7 +91,7 @@ Thus, we arrive at the following (proto-backed) candidate struct:
 # Pseudo-Go-Protobuf, all naming ad-hoc and TBD.
 
 message RaftCmd {
-  optional SomeMetadata # tbd (proposing replica, MVCCStats diff, ...)
+  optional SomeMetadata # tbd (proposing replica, enginepb.MVCCStats diff, ...)
   repeated oneof effect {
     # Applied in field and slice order.
     optional Writes writes = ...; # see MVCC section for Writes type
