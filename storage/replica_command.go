@@ -2198,7 +2198,7 @@ func (r *Replica) splitTrigger(
 	deltaMS := *ms
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
-	if err := deltaMS.AccountForSelf(split.NewDesc.RangeID); err != nil {
+	if err := engine.AccountForSelf(&deltaMS, split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to account for MVCCStats's own stats impact: %s", err)
 	}
 

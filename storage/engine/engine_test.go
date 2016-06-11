@@ -237,14 +237,14 @@ func TestEngineBatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m := &MVCCMetadata{}
-			if err := proto.Unmarshal(b, m); err != nil {
+			var m MVCCMetadata
+			if err := proto.Unmarshal(b, &m); err != nil {
 				t.Fatal(err)
 			}
 			if !m.IsInline() {
 				return nil
 			}
-			valueBytes, err := m.Value().GetBytes()
+			valueBytes, err := MakeValue(m).GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -295,11 +295,11 @@ func TestEngineBatch(t *testing.T) {
 			} else if !iter.Key().Equal(key) {
 				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
 			} else {
-				m := &MVCCMetadata{}
-				if err := iter.ValueProto(m); err != nil {
+				var m MVCCMetadata
+				if err := iter.ValueProto(&m); err != nil {
 					t.Fatal(err)
 				}
-				valueBytes, err := m.Value().GetBytes()
+				valueBytes, err := MakeValue(m).GetBytes()
 				if err != nil {
 					t.Fatal(err)
 				}
