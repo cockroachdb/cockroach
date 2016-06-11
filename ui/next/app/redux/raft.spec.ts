@@ -78,9 +78,7 @@ describe("raft reducer", function() {
       mockDebugState = new raft.RaftDebugState();
     });
 
-    afterEach(function() {
-      fetchMock.restore();
-    });
+    afterEach(fetchMock.restore);
 
     it("correctly responds to errors.", function() {
       this.timeout(1000);

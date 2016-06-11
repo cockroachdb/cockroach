@@ -498,9 +498,6 @@
     "filename-regex": {
       "version": "2.0.0"
     },
-    "fill-keys": {
-      "version": "1.0.2"
-    },
     "fill-range": {
       "version": "2.2.3"
     },
@@ -718,9 +715,6 @@
       "version": "2.1.0"
     },
     "is-obj": {
-      "version": "1.0.1"
-    },
-    "is-object": {
       "version": "1.0.1"
     },
     "is-plain-obj": {
@@ -1014,9 +1008,6 @@
     "make-error-cause": {
       "version": "1.1.0"
     },
-    "merge-descriptors": {
-      "version": "1.0.1"
-    },
     "micromatch": {
       "version": "2.3.8",
       "dependencies": {
@@ -1059,9 +1050,6 @@
           "version": "1.2.0"
         }
       }
-    },
-    "module-not-found-error": {
-      "version": "1.0.1"
     },
     "ms": {
       "version": "0.7.1"
@@ -1260,9 +1248,6 @@
           "version": "5.0.15"
         }
       }
-    },
-    "proxyquire": {
-      "version": "1.7.9"
     },
     "qs": {
       "version": "6.1.0"
@@ -1572,7 +1557,7 @@
       "version": "1.8.10"
     },
     "typings": {
-      "version": "1.0.4",
+      "version": "1.0.5",
       "dependencies": {
         "bluebird": {
           "version": "3.4.0"
