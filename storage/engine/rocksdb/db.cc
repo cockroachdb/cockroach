@@ -33,7 +33,7 @@
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/roachpb/data.pb.h"
 #include "cockroach/roachpb/internal.pb.h"
-#include "cockroach/storage/engine/mvcc.pb.h"
+#include "cockroach/storage/engine/enginepb/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
@@ -662,8 +662,8 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
   return true;
 }
 
-bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
-                 const cockroach::storage::engine::MVCCMetadata &right,
+bool MergeValues(cockroach::storage::enginepb::MVCCMetadata *left,
+                 const cockroach::storage::enginepb::MVCCMetadata &right,
                  bool full_merge, rocksdb::Logger* logger) {
   if (left->has_raw_bytes()) {
     if (!right.has_raw_bytes()) {
@@ -705,7 +705,7 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
 
 
 // MergeResult serializes the result MVCCMetadata value into a byte slice.
-DBStatus MergeResult(cockroach::storage::engine::MVCCMetadata* meta, DBString* result) {
+DBStatus MergeResult(cockroach::storage::enginepb::MVCCMetadata* meta, DBString* result) {
   // TODO(pmattis): Should recompute checksum here. Need a crc32
   // implementation and need to verify the checksumming is identical
   // to what is being done in Go. Zlib's crc32 should be sufficient.
@@ -744,7 +744,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     // corruption error will be returned, but likely only after the next
     // read of the key). In effect, there is no propagation of error
     // information to the client.
-    cockroach::storage::engine::MVCCMetadata meta;
+    cockroach::storage::enginepb::MVCCMetadata meta;
     if (existing_value != NULL) {
       if (!meta.ParseFromArray(existing_value->data(), existing_value->size())) {
         // Corrupted existing value.
@@ -771,7 +771,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const std::deque<rocksdb::Slice>& operand_list,
       std::string* new_value,
       rocksdb::Logger* logger) const {
-    cockroach::storage::engine::MVCCMetadata meta;
+    cockroach::storage::enginepb::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
       if (!MergeOne(&meta, operand_list[i], false, logger)) {
@@ -787,11 +787,11 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   }
 
  private:
-  bool MergeOne(cockroach::storage::engine::MVCCMetadata* meta,
+  bool MergeOne(cockroach::storage::enginepb::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
                 bool full_merge,
                 rocksdb::Logger* logger) const {
-    cockroach::storage::engine::MVCCMetadata operand_meta;
+    cockroach::storage::enginepb::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
@@ -1729,12 +1729,12 @@ DBStatus DBIterError(DBIterator* iter) {
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   new_value->len = 0;
 
-  cockroach::storage::engine::MVCCMetadata meta;
+  cockroach::storage::enginepb::MVCCMetadata meta;
   if (!meta.ParseFromArray(existing.data, existing.len)) {
     return ToDBString("corrupted existing value");
   }
 
-  cockroach::storage::engine::MVCCMetadata update_meta;
+  cockroach::storage::enginepb::MVCCMetadata update_meta;
   if (!update_meta.ParseFromArray(update.data, update.len)) {
     return ToDBString("corrupted update value");
   }
@@ -1767,7 +1767,7 @@ MVCCStatsResult MVCCComputeStats(
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
 
-  cockroach::storage::engine::MVCCMetadata meta;
+  cockroach::storage::enginepb::MVCCMetadata meta;
   std::string prev_key;
   bool first = false;
 

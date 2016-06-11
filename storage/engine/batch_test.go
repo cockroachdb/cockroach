@@ -26,6 +26,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -269,7 +270,7 @@ func TestBatchGet(t *testing.T) {
 }
 
 func compareMergedValues(t *testing.T, result, expected []byte) bool {
-	var resultV, expectedV MVCCMetadata
+	var resultV, expectedV enginepb.MVCCMetadata
 	if err := proto.Unmarshal(result, &resultV); err != nil {
 		t.Fatal(err)
 	}

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -84,7 +84,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 			// to inconsistent state.
 			tc.rng.mu.Lock()
 			defer tc.rng.mu.Unlock()
-			ms := engine.MVCCStats{KeyBytes: test.bytes}
+			ms := enginepb.MVCCStats{KeyBytes: test.bytes}
 			if err := setMVCCStats(tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
 				t.Fatal(err)
 			}

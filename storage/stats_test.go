@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -35,7 +36,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 	defer tc.Stop()
 
 	ms := tc.rng.GetMVCCStats()
-	if !reflect.DeepEqual(ms, engine.MVCCStats{}) {
+	if !reflect.DeepEqual(ms, enginepb.MVCCStats{}) {
 		t.Errorf("expected empty stats; got %+v", ms)
 	}
 }
@@ -45,7 +46,7 @@ func TestRangeStatsInit(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	ms := engine.MVCCStats{
+	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
 		ValBytes:        3,

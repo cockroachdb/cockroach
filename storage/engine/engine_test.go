@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -237,7 +238,7 @@ func TestEngineBatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m := &MVCCMetadata{}
+			m := &enginepb.MVCCMetadata{}
 			if err := proto.Unmarshal(b, m); err != nil {
 				t.Fatal(err)
 			}
@@ -295,7 +296,7 @@ func TestEngineBatch(t *testing.T) {
 			} else if !iter.Key().Equal(key) {
 				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
 			} else {
-				m := &MVCCMetadata{}
+				m := &enginepb.MVCCMetadata{}
 				if err := iter.ValueProto(m); err != nil {
 					t.Fatal(err)
 				}
@@ -442,7 +443,7 @@ func TestEngineMerge(t *testing.T) {
 				}
 			}
 			result, _ := engine.Get(tc.testKey)
-			var resultV, expectedV MVCCMetadata
+			var resultV, expectedV enginepb.MVCCMetadata
 			if err := proto.Unmarshal(result, &resultV); err != nil {
 				t.Fatal(err)
 			}

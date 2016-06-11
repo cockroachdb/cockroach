@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -174,7 +175,7 @@ func tryMeta(kv engine.MVCCKeyValue) (string, error) {
 }
 
 func maybeUnmarshalInline(v []byte, dest proto.Message) error {
-	var meta engine.MVCCMetadata
+	var meta enginepb.MVCCMetadata
 	if err := meta.Unmarshal(v); err != nil {
 		return err
 	}
