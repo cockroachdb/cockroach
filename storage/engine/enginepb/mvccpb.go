@@ -15,12 +15,7 @@
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package engine
-
-import (
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
-)
+package enginepb
 
 // Total returns the range size as the sum of the key and value
 // bytes. This includes all non-live keys and all versioned values.
@@ -116,37 +111,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.SysCount -= oms.SysCount
 }
 
-// AccountForSelf adjusts ms to account for the predicted impact it will have on
-// the values that it records when the structure is initially stored. Specifically,
-// MVCCStats is stored on the RangeStats key, which means that its creation will
-// have an impact on system-local data size and key count.
-func AccountForSelf(ms *MVCCStats, rangeID roachpb.RangeID) error {
-	key := keys.RangeStatsKey(rangeID)
-	metaKey := MakeMVCCMetadataKey(key)
-
-	// MVCCStats is stored inline, so compute MVCCMetadata accordingly.
-	value := roachpb.Value{}
-	if err := value.SetProto(ms); err != nil {
-		return err
-	}
-	meta := MVCCMetadata{RawBytes: value.RawBytes}
-
-	updateStatsForInline(ms, key, 0, 0, int64(metaKey.EncodedSize()), int64(meta.Size()))
-	return nil
-}
-
-// Value returns the inline value.
-func MakeValue(meta MVCCMetadata) roachpb.Value {
-	return roachpb.Value{RawBytes: meta.RawBytes}
-}
-
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
-}
-
-// IsIntentOf returns true if the meta record is an intent of the supplied
-// transaction.
-func IsIntentOf(meta MVCCMetadata, txn *roachpb.Transaction) bool {
-	return meta.Txn != nil && txn != nil && roachpb.TxnIDEqual(meta.Txn.ID, txn.ID)
 }

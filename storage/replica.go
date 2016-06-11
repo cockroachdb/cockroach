@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -190,7 +191,7 @@ type rangeState struct {
 	gcThreshold roachpb.Timestamp
 	// Whether the Replica is frozen.
 	frozen bool
-	ms     engine.MVCCStats
+	ms     enginepb.MVCCStats
 }
 
 func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (rangeState, error) {
@@ -487,7 +488,7 @@ func (r *Replica) IsFirstRange() bool {
 }
 
 func setFrozenStatus(
-	eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, frozen bool,
+	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, frozen bool,
 ) error {
 	var val roachpb.Value
 	val.SetBool(frozen)
@@ -507,15 +508,15 @@ func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) 
 	return val.GetBool()
 }
 
-func loadMVCCStats(eng engine.Reader, rangeID roachpb.RangeID) (engine.MVCCStats, error) {
-	var ms engine.MVCCStats
+func loadMVCCStats(eng engine.Reader, rangeID roachpb.RangeID) (enginepb.MVCCStats, error) {
+	var ms enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
-		return engine.MVCCStats{}, err
+		return enginepb.MVCCStats{}, err
 	}
 	return ms, nil
 }
 
-func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS engine.MVCCStats) error {
+func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb.MVCCStats) error {
 	return engine.MVCCSetRangeStats(context.Background(), eng, rangeID, &newMS)
 }
 
@@ -536,7 +537,7 @@ func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 }
 
 func setGCThreshold(
-	eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp,
+	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp,
 ) error {
 	return engine.MVCCPutProto(context.Background(), eng, ms,
 		keys.RangeLastGCKey(rangeID), roachpb.ZeroTimestamp, nil, threshold)
@@ -813,7 +814,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
-func (r *Replica) GetMVCCStats() engine.MVCCStats {
+func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.state.ms
@@ -1971,7 +1972,7 @@ func (r *Replica) applyRaftCommand(
 	// during command execution and any associated error.
 	var batch engine.Batch
 	var br *roachpb.BatchResponse
-	var ms engine.MVCCStats
+	var ms enginepb.MVCCStats
 	var intents []intentsWithArg
 	var rErr *roachpb.Error
 
@@ -2045,14 +2046,14 @@ func (r *Replica) applyRaftCommandInBatch(
 	idKey storagebase.CmdIDKey,
 	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-) (engine.Batch, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
 		r.assert5725(ba)
 		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
-			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil, pErr
+			return r.store.Engine().NewBatch(), enginepb.MVCCStats{}, nil, nil, pErr
 		}
 	}
 
@@ -2079,7 +2080,7 @@ func (r *Replica) applyRaftCommandInBatch(
 				// prepare for the failed sequence cache entry.
 				btch.Close()
 				btch = r.store.Engine().NewBatch()
-				ms = engine.MVCCStats{}
+				ms = enginepb.MVCCStats{}
 				// Restore the original txn's Writing bool if pErr specifies a transaction.
 				if txn := pErr.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
 					txn.Writing = wasWriting
@@ -2136,9 +2137,9 @@ type intentsWithArg struct {
 // txn is restored and it's re-executed as transactional.
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest) (
-	engine.Batch, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+	engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	batch := r.store.Engine().NewBatch()
-	ms := engine.MVCCStats{}
+	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn
 	// will require restart or retry, execute as normal.
 	if r.store.TestingKnobs().DisableOnePhaseCommits || !isOnePhaseCommit(ba) {
@@ -2165,7 +2166,7 @@ func (r *Replica) executeWriteBatch(
 			clonedTxn.Status = roachpb.ABORTED
 			batch.Close()
 			batch = r.store.Engine().NewBatch()
-			ms = engine.MVCCStats{}
+			ms = enginepb.MVCCStats{}
 		} else {
 			// Run commit trigger manually.
 			if err := r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn); err != nil {
@@ -2183,7 +2184,7 @@ func (r *Replica) executeWriteBatch(
 	// Otherwise, re-execute with the original, transactional batch.
 	batch.Close()
 	batch = r.store.Engine().NewBatch()
-	ms = engine.MVCCStats{}
+	ms = enginepb.MVCCStats{}
 	br, intents, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
 	return batch, ms, br, intents, pErr
 }
@@ -2287,7 +2288,7 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 
 func (r *Replica) executeBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey,
-	batch engine.ReadWriter, ms *engine.MVCCStats, ba roachpb.BatchRequest) (
+	batch engine.ReadWriter, ms *enginepb.MVCCStats, ba roachpb.BatchRequest) (
 	*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := ba.CreateReply()
 	var intents []intentsWithArg

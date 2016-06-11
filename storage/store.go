@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -510,7 +511,7 @@ type storeMetrics struct {
 	// better to convert the Gauges above into counters which are adjusted
 	// accordingly.
 	mu    sync.Mutex
-	stats engine.MVCCStats
+	stats enginepb.MVCCStats
 }
 
 func newStoreMetrics() *storeMetrics {
@@ -599,14 +600,14 @@ func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, available i
 	sm.availableRangeCount.Update(available)
 }
 
-func (sm *storeMetrics) addMVCCStats(stats engine.MVCCStats) {
+func (sm *storeMetrics) addMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.Add(stats)
 	sm.updateMVCCGaugesLocked()
 }
 
-func (sm *storeMetrics) subtractMVCCStats(stats engine.MVCCStats) {
+func (sm *storeMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.Subtract(stats)
@@ -1287,7 +1288,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	batch := s.engine.NewBatch()
-	ms := &engine.MVCCStats{}
+	ms := &enginepb.MVCCStats{}
 	now := s.ctx.Clock.Now()
 	ctx := context.Background()
 
@@ -1673,7 +1674,7 @@ func (s *Store) Registry() *metric.Registry {
 // MVCCStats returns the current MVCCStats accumulated for this store.
 // TODO(mrtracy): This should be removed as part of #4465, this is only needed
 // to support the current StatusSummary structures which will be changing.
-func (s *Store) MVCCStats() engine.MVCCStats {
+func (s *Store) MVCCStats() enginepb.MVCCStats {
 	s.metrics.mu.Lock()
 	defer s.metrics.mu.Unlock()
 	return s.metrics.stats

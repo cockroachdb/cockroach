@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -920,8 +921,8 @@ func TestSortRangeDescByAge(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
-	var ms engine.MVCCStats
+func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
+	var ms enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
 		return err
 	}
@@ -934,7 +935,7 @@ func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS engine.M
 }
 
 func verifyRecomputedStats(
-	eng engine.Reader, d *roachpb.RangeDescriptor, expMS engine.MVCCStats, nowNanos int64,
+	eng engine.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
 ) error {
 	if ms, err := storage.ComputeStatsForRange(d, eng, nowNanos); err != nil {
 		return err

@@ -19,6 +19,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 )
 
 // ComputeStatsForRange computes the stats for a given range by
@@ -26,15 +27,15 @@ import (
 // be accounted for in its stats.
 func ComputeStatsForRange(
 	d *roachpb.RangeDescriptor, e engine.Reader, nowNanos int64,
-) (engine.MVCCStats, error) {
+) (enginepb.MVCCStats, error) {
 	iter := e.NewIterator(false)
 	defer iter.Close()
 
-	ms := engine.MVCCStats{}
+	ms := enginepb.MVCCStats{}
 	for _, r := range makeReplicatedKeyRanges(d) {
 		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
 		if err != nil {
-			return engine.MVCCStats{}, err
+			return enginepb.MVCCStats{}, err
 		}
 		ms.Add(msDelta)
 	}

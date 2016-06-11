@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"golang.org/x/net/context"
 )
@@ -44,7 +45,7 @@ type treeContext struct {
 // of store.BootstrapRange.
 // TODO(tschottdorf): other RangeTree operations should also propagate a Context.
 func SetupRangeTree(
-	ctx context.Context, batch engine.Batch, ms *engine.MVCCStats,
+	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats,
 	timestamp roachpb.Timestamp, startKey roachpb.RKey,
 ) error {
 	tree := &RangeTree{

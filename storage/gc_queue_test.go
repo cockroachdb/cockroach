@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -129,7 +130,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// zero, this will translate into non live bytes.  Also write
 		// intent count. Note: the actual accounting on bytes is fictional
 		// in this test.
-		ms := engine.MVCCStats{
+		ms := enginepb.MVCCStats{
 			KeyBytes:        test.gcBytes,
 			IntentCount:     test.intentCount,
 			IntentAge:       test.intentAge * considerThreshold,
@@ -595,7 +596,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Iterate through all values to ensure intents have been fully resolved.
-	meta := &engine.MVCCMetadata{}
+	meta := &enginepb.MVCCMetadata{}
 	err := tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
 		engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
 			if !kv.Key.IsValue() {

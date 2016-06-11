@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -443,7 +444,7 @@ func RunGC(
 	processKeysAndValues := func() {
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
-			meta := &engine.MVCCMetadata{}
+			meta := &enginepb.MVCCMetadata{}
 			if err := proto.Unmarshal(vals[0], meta); err != nil {
 				log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
