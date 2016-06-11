@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -328,22 +328,22 @@ func parseHistories(histories []string, t *testing.T) [][]*cmd {
 
 // Easily accessible slices of transaction isolation variations.
 var (
-	bothIsolations   = []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT}
-	onlySerializable = []roachpb.IsolationType{roachpb.SERIALIZABLE}
-	onlySnapshot     = []roachpb.IsolationType{roachpb.SNAPSHOT}
+	bothIsolations   = []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT}
+	onlySerializable = []enginepb.IsolationType{enginepb.SERIALIZABLE}
+	onlySnapshot     = []enginepb.IsolationType{enginepb.SNAPSHOT}
 )
 
 // enumerateIsolations returns a slice enumerating all combinations of
 // isolation types across the transactions. The inner slice describes
 // the isolation type for each transaction. The outer slice contains
 // each possible combination of such transaction isolations.
-func enumerateIsolations(numTxns int, isolations []roachpb.IsolationType) [][]roachpb.IsolationType {
+func enumerateIsolations(numTxns int, isolations []enginepb.IsolationType) [][]enginepb.IsolationType {
 	// Use a count from 0 to pow(# isolations, numTxns)-1 and examine
 	// n-ary digits to get all possible combinations of txn isolations.
 	n := len(isolations)
-	result := [][]roachpb.IsolationType{}
+	result := [][]enginepb.IsolationType{}
 	for i := 0; i < int(math.Pow(float64(n), float64(numTxns))); i++ {
-		desc := make([]roachpb.IsolationType, numTxns)
+		desc := make([]enginepb.IsolationType, numTxns)
 		val := i
 		for j := 0; j < numTxns; j++ {
 			desc[j] = isolations[val%n]
@@ -356,9 +356,9 @@ func enumerateIsolations(numTxns int, isolations []roachpb.IsolationType) [][]ro
 
 func TestEnumerateIsolations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	SSI := roachpb.SERIALIZABLE
-	SI := roachpb.SNAPSHOT
-	expIsolations := [][]roachpb.IsolationType{
+	SSI := enginepb.SERIALIZABLE
+	SI := enginepb.SNAPSHOT
+	expIsolations := [][]enginepb.IsolationType{
 		{SSI, SSI, SSI},
 		{SI, SSI, SSI},
 		{SSI, SI, SSI},
@@ -372,7 +372,7 @@ func TestEnumerateIsolations(t *testing.T) {
 		t.Errorf("expected enumeration to match %s; got %s", expIsolations, enum)
 	}
 
-	expDegenerate := [][]roachpb.IsolationType{
+	expDegenerate := [][]enginepb.IsolationType{
 		{SSI, SSI, SSI},
 	}
 	if enum := enumerateIsolations(3, onlySerializable); !reflect.DeepEqual(enum, expDegenerate) {
@@ -528,7 +528,7 @@ func areHistoriesSymmetric(txns []string) bool {
 	return true
 }
 
-func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB, t *testing.T) {
+func (hv *historyVerifier) run(isolations []enginepb.IsolationType, db *client.DB, t *testing.T) {
 	log.Infof("verifying all possible histories for the %q anomaly", hv.name)
 	priorities := make([]int32, len(hv.txns))
 	for i := 0; i < len(hv.txns); i++ {
@@ -553,7 +553,7 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 }
 
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
-	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	isolations []enginepb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	if t.Failed() {
 		return errors.New("already failed")
 	}
@@ -636,13 +636,13 @@ func (hv *historyVerifier) runCmds(cmds []*cmd, historyIdx int, db *client.DB, t
 }
 
 func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
-	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	isolation enginepb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
 	err := db.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName(txnName, 0)
-		if isolation == roachpb.SNAPSHOT {
-			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if isolation == enginepb.SNAPSHOT {
+			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 		}
@@ -695,7 +695,7 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cm
 // and runs the verifier.
 func checkConcurrency(
 	name string,
-	isolations []roachpb.IsolationType,
+	isolations []enginepb.IsolationType,
 	txns []string,
 	verify *verifier,
 	t *testing.T,
@@ -908,19 +908,19 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	checkConcurrency("phantom delete", bothIsolations, []string{txn1, txn2}, verify, t)
 }
 
-func runWriteSkewTest(t *testing.T, iso roachpb.IsolationType) {
-	checks := make(map[roachpb.IsolationType]func(map[string]int64) error)
-	checks[roachpb.SERIALIZABLE] = func(env map[string]int64) error {
+func runWriteSkewTest(t *testing.T, iso enginepb.IsolationType) {
+	checks := make(map[enginepb.IsolationType]func(map[string]int64) error)
+	checks[enginepb.SERIALIZABLE] = func(env map[string]int64) error {
 		if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
 			return util.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
 		}
 		return nil
 	}
-	checks[roachpb.SNAPSHOT] = func(env map[string]int64) error {
+	checks[enginepb.SNAPSHOT] = func(env map[string]int64) error {
 		if env["A"] == 1 && env["B"] == 1 {
 			return nil
 		}
-		return checks[roachpb.SERIALIZABLE](env)
+		return checks[enginepb.SERIALIZABLE](env)
 	}
 
 	txn1 := "SC(A-C) W(A,A+B+1) C"
@@ -929,7 +929,7 @@ func runWriteSkewTest(t *testing.T, iso roachpb.IsolationType) {
 		history: "R(A) R(B)",
 		checkFn: checks[iso],
 	}
-	checkConcurrency("write skew", []roachpb.IsolationType{iso}, []string{txn1, txn2}, verify, t)
+	checkConcurrency("write skew", []enginepb.IsolationType{iso}, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBWriteSkewAnomaly verifies that SI suffers from the write
@@ -953,6 +953,6 @@ func runWriteSkewTest(t *testing.T, iso roachpb.IsolationType) {
 // history above) and may set A=1, B=1.
 func TestTxnDBWriteSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWriteSkewTest(t, roachpb.SERIALIZABLE)
-	runWriteSkewTest(t, roachpb.SNAPSHOT)
+	runWriteSkewTest(t, enginepb.SERIALIZABLE)
+	runWriteSkewTest(t, enginepb.SNAPSHOT)
 }

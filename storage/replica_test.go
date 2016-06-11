@@ -266,7 +266,7 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 }
 
 func newTransaction(name string, baseKey roachpb.Key, userPriority roachpb.UserPriority,
-	isolation roachpb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
+	isolation enginepb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
 	var offset int64
 	var now hlc.Timestamp
 	if clock != nil {
@@ -321,13 +321,13 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	for i, c := range testCases {
 		ba := roachpb.BatchRequest{Requests: c.bu}
 		if c.isTxn {
-			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, roachpb.SNAPSHOT, clock)
+			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, enginepb.SNAPSHOT, clock)
 			if c.isWTO {
 				ba.Txn.WriteTooOld = true
 			}
 			ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			if c.isTSOff {
-				ba.Txn.Isolation = roachpb.SERIALIZABLE
+				ba.Txn.Isolation = enginepb.SERIALIZABLE
 			}
 		}
 		if is1PC := isOnePhaseCommit(ba); is1PC != c.exp1PC {
@@ -433,7 +433,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	}
 
 	// Try an inconsistent read within a transaction.
-	txn := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.clock)
 
 	if _, err := tc.SendWrappedWith(roachpb.Header{
 		Txn:             txn,
@@ -1118,7 +1118,7 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1 /* userPriority */, enginepb.SERIALIZABLE, tc.clock)
 	h := roachpb.Header{Txn: txn}
 	req1 := putArgs(key, []byte("foo"))
 	req2, _ := endTxnArgs(txn, true /* commit */)
@@ -1163,7 +1163,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1 /* userPriority */, enginepb.SERIALIZABLE, tc.clock)
 	req1 := putArgs(key, nil)
 	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), nil, roachpb.Header{
 		Txn: txn,
@@ -2022,7 +2022,7 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 
 		// Start by laying down an intent to trip up future read or write to same key.
 		pArgs := putArgs(key, []byte("value"))
-		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 
 		_, pErr := tc.SendWrappedWith(roachpb.Header{
 			Txn: txn,
@@ -2062,7 +2062,7 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Test for both read & write attempts.
 	key := roachpb.Key("a")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 
 	// Start with a read to warm the timestamp cache.
 	gArgs := getArgs(key)
@@ -2120,7 +2120,7 @@ func TestReplicaAbortCacheReadError(t *testing.T) {
 	defer tc.Stop()
 
 	k := []byte("a")
-	txn := newTransaction("test", k, 10, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", k, 10, enginepb.SERIALIZABLE, tc.clock)
 	args := incrementArgs(k, 1)
 	txn.Sequence = 1
 
@@ -2156,7 +2156,7 @@ func TestReplicaAbortCacheStoredTxnRetryError(t *testing.T) {
 
 	key := []byte("a")
 	{
-		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 10, enginepb.SERIALIZABLE, tc.clock)
 		txn.Sequence = int32(1)
 		entry := roachpb.AbortCacheEntry{
 			Key:       txn.Key,
@@ -2178,7 +2178,7 @@ func TestReplicaAbortCacheStoredTxnRetryError(t *testing.T) {
 
 	// Try the same again, this time verifying that the Put will actually
 	// populate the cache appropriately.
-	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 10, enginepb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 321
 	args := incrementArgs(key, 1)
 	try := func() *roachpb.Error {
@@ -2223,8 +2223,8 @@ func TestTransactionRetryLeavesIntents(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
-	pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	pushee.Priority = 1
 	pusher.Priority = 2 // pusher will win
 
@@ -2265,7 +2265,7 @@ func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	txn := newTransaction("test", []byte("test"), 10, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", []byte("test"), 10, enginepb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 100
 	entry := roachpb.AbortCacheEntry{
 		Key:       txn.Key,
@@ -2295,7 +2295,7 @@ func TestEndTransactionDeadline(t *testing.T) {
 	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
-		txn := newTransaction("txn: "+strconv.Itoa(i), key, 1, roachpb.SERIALIZABLE, tc.clock)
+		txn := newTransaction("txn: "+strconv.Itoa(i), key, 1, enginepb.SERIALIZABLE, tc.clock)
 		put := putArgs(key, key)
 
 		_, header := beginTxnArgs(key, txn)
@@ -2360,7 +2360,7 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	bt, _ := beginTxnArgs(key, txn)
 	put := putArgs(key, []byte("value"))
 	et, etH := endTxnArgs(txn, true)
@@ -2386,7 +2386,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("foo")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	pArgs := putArgs(key, []byte("only here to make this a rw transaction"))
 	txn.Sequence++
 	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), roachpb.Header{
@@ -2426,7 +2426,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
-		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -2476,7 +2476,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 
 	key := roachpb.Key("a")
 	for _, commit := range []bool{true, false} {
-		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -2531,18 +2531,18 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 
 	testCases := []struct {
 		commit    bool
-		isolation roachpb.IsolationType
+		isolation enginepb.IsolationType
 		expErr    bool
 	}{
-		{true, roachpb.SERIALIZABLE, true},
-		{true, roachpb.SNAPSHOT, false},
-		{false, roachpb.SERIALIZABLE, false},
-		{false, roachpb.SNAPSHOT, false},
+		{true, enginepb.SERIALIZABLE, true},
+		{true, enginepb.SNAPSHOT, false},
+		{false, enginepb.SERIALIZABLE, false},
+		{false, enginepb.SNAPSHOT, false},
 	}
 	key := roachpb.Key("a")
 	for i, test := range testCases {
 		pushee := newTransaction("pushee", key, 1, test.isolation, tc.clock)
-		pusher := newTransaction("pusher", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("pusher", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		pushee.Priority = 1
 		pusher.Priority = 2 // pusher will win
 		_, btH := beginTxnArgs(key, pushee)
@@ -2593,7 +2593,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	defer tc.Stop()
 
 	key := []byte("a")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	_, btH := beginTxnArgs(key, txn)
 	put := putArgs(key, key)
 	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -2643,7 +2643,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 	regressTS := tc.clock.Now()
 	tc.manualClock.Set(1)
-	txn := newTransaction("test", roachpb.Key(""), 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", roachpb.Key(""), 1, enginepb.SERIALIZABLE, tc.clock)
 
 	doesNotExist := roachpb.TransactionStatus(-1)
 
@@ -2701,7 +2701,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	defer tc.Stop()
 
 	key := []byte("a")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	_, btH := beginTxnArgs(key, txn)
 	put := putArgs(key, key)
 	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -2709,7 +2709,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	}
 
 	// Abort the transaction by pushing it with a higher priority.
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	pusher.Priority = txn.Priority + 1 // will push successfully
 	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
 	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
@@ -2865,7 +2865,7 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 
 	// Send a batch with begin txn, put & end txn.
 	var ba roachpb.BatchRequest
@@ -2949,7 +2949,7 @@ func TestReplayProtection(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	for i, iso := range []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT} {
+	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
 		key := roachpb.Key(fmt.Sprintf("a-%d", i))
 		keyB := roachpb.Key(fmt.Sprintf("b-%d", i))
 		txn := newTransaction("test", key, 1, iso, tc.clock)
@@ -3066,7 +3066,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		// Intent inside and outside.
 		{[]roachpb.Span{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
 	} {
-		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(putKey, key)
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -3097,7 +3097,7 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 	// Split the range and create an intent at splitKey and key.
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	// These increments are not required, but testing feels safer when zero
 	// values are unexpected.
 	txn.Sequence++
@@ -3269,7 +3269,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			defer tc.Stop()
 
 			key := roachpb.Key("a")
-			txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+			txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 			bt, _ := beginTxnArgs(key, txn)
 			put := putArgs(key, []byte("value"))
 			et, etH := endTxnArgs(txn, commit)
@@ -3316,7 +3316,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	defer tc.Stop()
 	splitKey := roachpb.RKey("aa")
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
-	txn := newTransaction("name", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("name", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
 	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng,
 		[]roachpb.Intent{{
@@ -3346,13 +3346,13 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	// Run the actual meat of the test, which pushes the pushee and
 	// checks whether we get the correct behaviour as it touches the
 	// Range again.
-	run := func(abort bool, iso roachpb.IsolationType) {
+	run := func(abort bool, iso enginepb.IsolationType) {
 		tc := testContext{}
 		tc.Start(t)
 		defer tc.Stop()
 
 		pushee := newTransaction("test", key, 1, iso, tc.clock)
-		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		pusher.Priority = 2
 		pushee.Priority = 1 // pusher will win
 
@@ -3424,8 +3424,8 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	}
 
 	for _, abort := range []bool{false, true} {
-		run(abort, roachpb.SERIALIZABLE)
-		run(abort, roachpb.SNAPSHOT)
+		run(abort, enginepb.SERIALIZABLE)
+		run(abort, enginepb.SNAPSHOT)
 	}
 }
 
@@ -3475,8 +3475,8 @@ func TestPushTxnBadKey(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
-	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", roachpb.Key("b"), 1, enginepb.SERIALIZABLE, tc.clock)
 
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 	args.Key = pusher.Key
@@ -3502,8 +3502,8 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 
 	for i, status := range []roachpb.TransactionStatus{roachpb.COMMITTED, roachpb.ABORTED} {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		pusher.Priority = 1
 		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
@@ -3558,8 +3558,8 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		pushee.Priority = 1
 		pushee.Epoch = 12345
 		pusher.Priority = 2   // Pusher will win
@@ -3643,8 +3643,8 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, roachpb.SERIALIZABLE, tc.clock)
-		pusher := newTransaction("pusher", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, enginepb.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("pusher", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -3693,7 +3693,7 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	b := tc.engine.NewBatch()
 	defer b.Close()
 
-	txn := newTransaction("test", roachpb.Key("test"), 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", roachpb.Key("test"), 1, enginepb.SERIALIZABLE, tc.clock)
 	txnPushee := txn.Clone()
 	txnPushee.Priority--
 	pa := pushTxnArgs(txn, &txnPushee, roachpb.PUSH_ABORT)
@@ -3776,8 +3776,8 @@ func TestPushTxnPriorities(t *testing.T) {
 
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+		pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
 		pusher.Timestamp = test.pusherTS
@@ -3819,8 +3819,8 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
-	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", roachpb.Key("b"), 1, enginepb.SERIALIZABLE, tc.clock)
 	pusher.Priority = 2
 	pushee.Priority = 1 // pusher will win
 	pusher.Timestamp = hlc.Timestamp{WallTime: 50, Logical: 25}
@@ -3862,8 +3862,8 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
-	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", roachpb.Key("b"), 1, enginepb.SERIALIZABLE, tc.clock)
 	pusher.Priority = 1
 	pushee.Priority = 2 // pusher will lose
 	pusher.Timestamp = hlc.Timestamp{WallTime: 50, Logical: 0}
@@ -3906,8 +3906,8 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
-	pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	pushee.Priority = 1
 	pusher.Priority = 2 // pusher will win
 
@@ -3971,7 +3971,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 	defer tc.Stop()
 
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")}
-	txn := newTransaction("test", keys[0], 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", keys[0], 1, enginepb.SERIALIZABLE, tc.clock)
 
 	// Put two values transactionally.
 	for _, key := range keys {
@@ -4049,7 +4049,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn := newTransaction("test", pArgs.Key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", pArgs.Key, 1, enginepb.SERIALIZABLE, tc.clock)
 	txn.Priority = 123 // So we don't have random values messing with the byte counts on encoding
 	txn.ID = uuid
 
@@ -4457,7 +4457,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	// Officially begin the transaction. If not for this, the intent resolution
 	// machinery would simply remove the intent we write below, see #3020.
 	// We send directly to Replica throughout this test, so there's no danger
@@ -4562,7 +4562,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		{key: "h", expected: testRanges[1]},
 	}
 
-	txn := newTransaction("test", roachpb.Key{}, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
@@ -4623,7 +4623,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(intentRange.EndKey)), data)
-	txn2 := newTransaction("test", roachpb.Key{}, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn2 := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn2}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -4859,7 +4859,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// Create a transaction and write an intent to the system
 	// config span.
 	key := keys.SystemConfigSpan.Key
-	_, btH := beginTxnArgs(key, newTransaction("test", key, 1, roachpb.SERIALIZABLE, rng.store.Clock()))
+	_, btH := beginTxnArgs(key, newTransaction("test", key, 1, enginepb.SERIALIZABLE, rng.store.Clock()))
 	btH.Txn.Priority = 1 // low so it can be pushed
 	put := putArgs(key, []byte("foo"))
 	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -4869,7 +4869,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// Abort the transaction so that the async intent resolution caused
 	// by loading the system config span doesn't waste any time in
 	// clearing the intent.
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, rng.store.Clock())
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, rng.store.Clock())
 	pusher.Priority = 2 // will push successfully
 	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
 	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {

@@ -33,6 +33,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -692,7 +693,7 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
 func NewTransaction(name string, baseKey Key, userPriority UserPriority,
-	isolation IsolationType, now hlc.Timestamp, maxOffset int64) *Transaction {
+	isolation enginepb.IsolationType, now hlc.Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)
 	// Compute timestamp and max timestamp.
@@ -700,7 +701,7 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	max.WallTime += maxOffset
 
 	return &Transaction{
-		TxnMeta: TxnMeta{
+		TxnMeta: enginepb.TxnMeta{
 			Key:       baseKey,
 			ID:        uuid.NewV4(),
 			Isolation: isolation,
@@ -942,7 +943,7 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t rop=%t",
-		t.ID.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
+		t.ID.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush)
 	return buf.String()
 }

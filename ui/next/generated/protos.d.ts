@@ -2716,14 +2716,14 @@ export interface roachpbBuilder {
 	ChangeReplicasTrigger: roachpb.ChangeReplicasTriggerBuilder;
 	ModifiedSpanTrigger: roachpb.ModifiedSpanTriggerBuilder;
 	InternalCommitTrigger: roachpb.InternalCommitTriggerBuilder;
-	TxnMeta: roachpb.TxnMetaBuilder;
+	TxnMeta: enginepb.TxnMetaBuilder;
 	Transaction: roachpb.TransactionBuilder;
 	Intent: roachpb.IntentBuilder;
 	Lease: roachpb.LeaseBuilder;
 	AbortCacheEntry: roachpb.AbortCacheEntryBuilder;
 	ValueType: roachpb.ValueType;
 	ReplicaChangeType: roachpb.ReplicaChangeType;
-	IsolationType: roachpb.IsolationType;
+	IsolationType: enginepb.IsolationType;
 	TransactionStatus: roachpb.TransactionStatus;
 	
 }

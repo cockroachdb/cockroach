@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -136,7 +137,7 @@ func TestTruncate(t *testing.T) {
 			if len(ks[1]) > 0 {
 				goldenOriginal.Add(&roachpb.ResolveIntentRangeRequest{
 					Span:      roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
-					IntentTxn: roachpb.TxnMeta{ID: uuid.NewV4()},
+					IntentTxn: enginepb.TxnMeta{ID: uuid.NewV4()},
 				})
 			} else {
 				goldenOriginal.Add(&roachpb.GetRequest{

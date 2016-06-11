@@ -579,7 +579,7 @@ func MVCCGetAsTxn(
 	engine Reader,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	txnMeta roachpb.TxnMeta,
+	txnMeta enginepb.TxnMeta,
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
 		TxnMeta:       txnMeta,
@@ -814,7 +814,7 @@ func mvccGetInternal(
 type putBuffer struct {
 	meta    enginepb.MVCCMetadata
 	newMeta enginepb.MVCCMetadata
-	newTxn  roachpb.TxnMeta
+	newTxn  enginepb.TxnMeta
 }
 
 var putBufferPool = sync.Pool{
@@ -1077,7 +1077,7 @@ func mvccPutInternal(
 		}
 	}
 	{
-		var txnMeta *roachpb.TxnMeta
+		var txnMeta *enginepb.TxnMeta
 		if txn != nil {
 			txnMeta = &txn.TxnMeta
 		}

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -625,7 +626,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				}
 			store, mc, stopper := createTestStoreWithContext(t, &ctx)
 			defer stopper.Stop()
-			txn := newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+			txn := newTransaction("test", test.key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 			txn.MaxTimestamp = hlc.MaxTimestamp
 			pArgs := putArgs(test.key, []byte("value"))
 			h := roachpb.Header{
@@ -689,7 +690,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				defer stopper.Stop()
 				var txn *roachpb.Transaction
 				if useTxn {
-					txn = newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+					txn = newTransaction("test", test.key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 					txn.MaxTimestamp = hlc.MaxTimestamp
 				}
 				pArgs := putArgs(test.key, []byte("value"))
@@ -1026,7 +1027,7 @@ func TestStoreLongTxnStarvation(t *testing.T) {
 	setTestRetryOptions(store)
 	defer stopper.Stop()
 
-	for i, iso := range []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT} {
+	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
 		key := roachpb.Key(fmt.Sprintf("a-%d", i))
 		txn := newTransaction("test", key, 1, iso, store.ctx.Clock)
 		txn.Priority = math.MaxInt32
@@ -1100,8 +1101,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 	for i, resolvable := range []bool{true, false} {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
-		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
+		pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 		if resolvable {
 			pushee.Priority = 1
 			pusher.Priority = 2 // Pusher will win.
@@ -1158,8 +1159,8 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	defer stopper.Stop()
 
 	key := roachpb.Key("a")
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
-	pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
+	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 	pushee.Priority = 1
 	pusher.Priority = 2 // Pusher will win.
 
@@ -1192,20 +1193,20 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 	testCases := []struct {
 		resolvable bool
-		pusheeIso  roachpb.IsolationType
+		pusheeIso  enginepb.IsolationType
 	}{
 		// Resolvable is true, so we can read, but SERIALIZABLE means we can't commit.
-		{true, roachpb.SERIALIZABLE},
+		{true, enginepb.SERIALIZABLE},
 		// Pushee is SNAPSHOT, meaning we can commit.
-		{true, roachpb.SNAPSHOT},
+		{true, enginepb.SNAPSHOT},
 		// Resolvable is false and SERIALIZABLE so can't read.
-		{false, roachpb.SERIALIZABLE},
+		{false, enginepb.SERIALIZABLE},
 		// Resolvable is false, but SNAPSHOT means we can push it anyway, so can read.
-		{false, roachpb.SNAPSHOT},
+		{false, enginepb.SNAPSHOT},
 	}
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 		pushee := newTransaction("test", key, 1, test.pusheeIso, store.ctx.Clock)
 		if test.resolvable {
 			pushee.Priority = 1
@@ -1253,7 +1254,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 			minExpTS := pusher.Timestamp
 			minExpTS.Logical++
-			if test.pusheeIso == roachpb.SNAPSHOT {
+			if test.pusheeIso == enginepb.SNAPSHOT {
 				if cErr != nil {
 					t.Errorf("unexpected error on commit: %s", cErr)
 				}
@@ -1271,7 +1272,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// If isolation of pushee is SNAPSHOT, we can always push, so
 			// even a non-resolvable read will succeed. Otherwise, verify we
 			// receive a transaction retry error (because we max out retries).
-			if test.pusheeIso == roachpb.SNAPSHOT {
+			if test.pusheeIso == enginepb.SNAPSHOT {
 				if pErr != nil {
 					t.Errorf("expected read to succeed: %s", pErr)
 				} else if replyBytes, err := firstReply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
@@ -1308,7 +1309,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	}
 
 	// Lay down intent using the pushee's txn.
-	pushee := newTransaction("test", key, 1, roachpb.SNAPSHOT, store.ctx.Clock)
+	pushee := newTransaction("test", key, 1, enginepb.SNAPSHOT, store.ctx.Clock)
 	pushee.Priority = 2
 	h := roachpb.Header{Txn: pushee}
 	args.Value.SetBytes([]byte("value2"))
@@ -1318,7 +1319,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 
 	// Now, try to read value using the pusher's txn.
 	gArgs := getArgs(key)
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 	pusher.Priority = 1 // Pusher would lose based on priority.
 	h.Txn = pusher
 	if reply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &gArgs); pErr != nil {
@@ -1355,7 +1356,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	defer stopper.Stop()
 
 	key := roachpb.Key("a")
-	pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 	pushee.Priority = 0 // pushee should lose all conflicts
 
 	// First, lay down intent from pushee.
@@ -1465,8 +1466,8 @@ func TestStoreReadInconsistent(t *testing.T) {
 			priority = -1
 		}
 		args.Value.SetBytes([]byte("value2"))
-		txnA := newTransaction("testA", keyA, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
-		txnB := newTransaction("testB", keyB, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
+		txnA := newTransaction("testA", keyA, priority, enginepb.SERIALIZABLE, store.ctx.Clock)
+		txnB := newTransaction("testB", keyB, priority, enginepb.SERIALIZABLE, store.ctx.Clock)
 		for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 			args.Key = txn.Key
 			if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); pErr != nil {
@@ -1597,7 +1598,7 @@ func TestStoreScanIntents(t *testing.T) {
 				if !test.canPush {
 					priority = -math.MaxInt32
 				}
-				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
+				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, enginepb.SERIALIZABLE, store.ctx.Clock)
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
 			if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); pErr != nil {
@@ -1685,7 +1686,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer stopper.Stop()
 
 	// Lay down 10 intents to scan over.
-	txn := newTransaction("test", roachpb.Key("foo"), 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+	txn := newTransaction("test", roachpb.Key("foo"), 1, enginepb.SERIALIZABLE, store.ctx.Clock)
 	keys := []roachpb.Key{}
 	for j := 0; j < 10; j++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", j))
@@ -1732,7 +1733,7 @@ func TestStoreBadRequests(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, roachpb.SERIALIZABLE, store.ctx.Clock)
+	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, enginepb.SERIALIZABLE, store.ctx.Clock)
 
 	args1 := getArgs(roachpb.Key("a"))
 	args1.EndKey = roachpb.Key("b")
@@ -1753,13 +1754,13 @@ func TestStoreBadRequests(t *testing.T) {
 	tArgs1, _ := heartbeatArgs(txn)
 
 	tArgs2, tHeader2 := endTxnArgs(txn, false /* commit */)
-	tHeader2.Txn.Key = tHeader2.Txn.Key.Next()
+	tHeader2.Txn.Key = roachpb.Key(tHeader2.Txn.Key).Next()
 
 	tArgs3, tHeader3 := heartbeatArgs(txn)
-	tHeader3.Txn.Key = tHeader3.Txn.Key.Next()
+	tHeader3.Txn.Key = roachpb.Key(tHeader3.Txn.Key).Next()
 
 	tArgs4 := pushTxnArgs(txn, txn, roachpb.PUSH_ABORT)
-	tArgs4.PusheeTxn.Key = txn.Key.Next()
+	tArgs4.PusheeTxn.Key = roachpb.Key(txn.Key).Next()
 
 	testCases := []struct {
 		args   roachpb.Request
