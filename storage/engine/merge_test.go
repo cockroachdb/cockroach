@@ -299,7 +299,7 @@ func unmarshalTimeSeries(t testing.TB, b []byte) roachpb.InternalTimeSeriesData 
 	if err := proto.Unmarshal(b, &meta); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	valueTS, err := meta.Value().GetTimeseries()
+	valueTS, err := MakeValue(meta).GetTimeseries()
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}

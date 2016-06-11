@@ -1332,7 +1332,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 
 	// Set range stats.
-	if err := ms.AccountForSelf(desc.RangeID); err != nil {
+	if err := engine.AccountForSelf(ms, desc.RangeID); err != nil {
 		return err
 	}
 	if err := engine.MVCCSetRangeStats(ctx, batch, desc.RangeID, ms); err != nil {
