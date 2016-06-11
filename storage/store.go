@@ -446,8 +446,10 @@ type StoreTestingKnobs struct {
 	BadChecksumPanic func([]ReplicaSnapshotDiff)
 	// Disables the use of one phase commits.
 	DisableOnePhaseCommits bool
-	// Advance the clock before sending a batch request to a replica.
-	AdvanceClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// A hock to manipulate the clock before sending a batch request to a replica.
+	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
+	// we make TestServer take a ManualClock.
+	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -1731,8 +1733,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 
-	if s.ctx.TestingKnobs.AdvanceClockBeforeSend != nil {
-		s.ctx.TestingKnobs.AdvanceClockBeforeSend(s.ctx.Clock, ba)
+	if s.ctx.TestingKnobs.ClockBeforeSend != nil {
+		s.ctx.TestingKnobs.ClockBeforeSend(s.ctx.Clock, ba)
 	}
 
 	if s.Clock().MaxOffset() > 0 {

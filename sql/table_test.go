@@ -19,10 +19,14 @@ package sql
 import (
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -243,5 +247,54 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	err = desc.AllocateIDs()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+func TestIsLeaseExpiring(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	p := planner{}
+	mc := hlc.NewManualClock(0)
+	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano)}}
+	p.leases = make([]*LeaseState, 0)
+	txn := client.Txn{}
+	p.setTxn(&txn)
+
+	if p.isLeaseExpiring(nil) {
+		t.Error("expected false with nil input")
+	}
+
+	// Add a lease to the planner.
+	d := int64(LeaseDuration)
+	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
+	p.leases = append(p.leases, l1)
+	et := roachpb.Timestamp{WallTime: l1.Expiration().UnixNano()}
+	txn.UpdateDeadlineMaybe(et)
+
+	if p.isLeaseExpiring(l1) {
+		t.Error("expected false wih a non-expiring lease")
+	}
+	if !p.txn.GetDeadline().Equal(et) {
+		t.Errorf("expected deadline %s but got %s", et, p.txn.GetDeadline())
+	}
+
+	// Advance the clock so that l1 will be expired.
+	mc.Increment(d + 1)
+
+	// Add another lease.
+	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
+	p.leases = append(p.leases, l2)
+	if !p.isLeaseExpiring(l1) {
+		t.Error("expected true with an expiring lease")
+	}
+	et = roachpb.Timestamp{WallTime: l2.Expiration().UnixNano()}
+	txn.UpdateDeadlineMaybe(et)
+
+	if !(len(p.leases) == 1 && p.leases[0] == l2) {
+		t.Errorf("expected leases to contain %s but has %s", l2, p.leases)
+	}
+
+	if !p.txn.GetDeadline().Equal(et) {
+		t.Errorf("expected deadline %s, but got %s", et, p.txn.GetDeadline())
 	}
 }
