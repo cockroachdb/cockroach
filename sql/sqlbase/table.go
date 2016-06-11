@@ -1117,11 +1117,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
 		if v, ok := val.(*parser.DBool); ok {
-			if *v {
-				r.SetInt(1)
-			} else {
-				r.SetInt(0)
-			}
+			r.SetBool(bool(*v))
 			return r, nil
 		}
 	case ColumnType_INT:
@@ -1192,11 +1188,11 @@ func UnmarshalColumnValue(
 
 	switch kind {
 	case ColumnType_BOOL:
-		v, err := value.GetInt()
+		v, err := value.GetBool()
 		if err != nil {
 			return nil, err
 		}
-		return parser.MakeDBool(parser.DBool(v != 0)), nil
+		return parser.MakeDBool(parser.DBool(v)), nil
 	case ColumnType_INT:
 		v, err := value.GetInt()
 		if err != nil {

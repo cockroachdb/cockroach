@@ -469,12 +469,8 @@ func (r *Replica) IsFirstRange() bool {
 func setFrozenStatus(
 	eng engine.ReadWriter, ms *engine.MVCCStats, rangeID roachpb.RangeID, frozen bool,
 ) error {
-	var status int64
-	if frozen {
-		status = 1
-	}
 	var val roachpb.Value
-	val.SetInt(status)
+	val.SetBool(frozen)
 	return engine.MVCCPut(context.Background(), eng, ms,
 		keys.RangeFrozenStatusKey(rangeID), roachpb.ZeroTimestamp, val, nil)
 }
@@ -488,11 +484,7 @@ func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) 
 	if val == nil {
 		return false, nil
 	}
-	s, err := val.GetInt()
-	if err != nil {
-		return false, err
-	}
-	return s != 0, nil
+	return val.GetBool()
 }
 
 func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {

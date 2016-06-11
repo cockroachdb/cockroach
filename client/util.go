@@ -58,11 +58,7 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		return r, nil
 
 	case bool:
-		i := int64(0)
-		if t {
-			i = 1
-		}
-		r.SetInt(i)
+		r.SetBool(t)
 		return r, nil
 
 	case string:
@@ -102,11 +98,7 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 	// int").
 	switch v := reflect.ValueOf(v); v.Kind() {
 	case reflect.Bool:
-		i := int64(0)
-		if v.Bool() {
-			i = 1
-		}
-		r.SetInt(i)
+		r.SetBool(v.Bool())
 		return r, nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
