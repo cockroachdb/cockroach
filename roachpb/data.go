@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -188,91 +189,6 @@ func (k Key) Format(f fmt.State, verb rune) {
 	}
 }
 
-// Timestamp constant values.
-var (
-	// MaxTimestamp is the max value allowed for Timestamp.
-	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
-	// MinTimestamp is the min value allowed for Timestamp.
-	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
-	// ZeroTimestamp is an empty timestamp.
-	ZeroTimestamp = Timestamp{WallTime: 0, Logical: 0}
-)
-
-// Less compares two timestamps.
-func (t Timestamp) Less(s Timestamp) bool {
-	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
-}
-
-// Equal returns whether two timestamps are the same.
-func (t Timestamp) Equal(s Timestamp) bool {
-	return t.WallTime == s.WallTime && t.Logical == s.Logical
-}
-
-func (t Timestamp) String() string {
-	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
-}
-
-// Add returns a timestamp with the WallTime and Logical components increased.
-func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
-	return Timestamp{
-		WallTime: t.WallTime + wallTime,
-		Logical:  t.Logical + logical,
-	}
-}
-
-// Next returns the timestamp with the next later timestamp.
-func (t Timestamp) Next() Timestamp {
-	if t.Logical == math.MaxInt32 {
-		if t.WallTime == math.MaxInt64 {
-			panic("cannot take the next value to a max timestamp")
-		}
-		return Timestamp{
-			WallTime: t.WallTime + 1,
-		}
-	}
-	return Timestamp{
-		WallTime: t.WallTime,
-		Logical:  t.Logical + 1,
-	}
-}
-
-// Prev returns the next earliest timestamp.
-func (t Timestamp) Prev() Timestamp {
-	if t.Logical > 0 {
-		return Timestamp{
-			WallTime: t.WallTime,
-			Logical:  t.Logical - 1,
-		}
-	} else if t.WallTime > 0 {
-		return Timestamp{
-			WallTime: t.WallTime - 1,
-			Logical:  math.MaxInt32,
-		}
-	}
-	panic("cannot take the previous value to a zero timestamp")
-}
-
-// Forward updates the timestamp from the one given, if that moves it
-// forwards in time.
-func (t *Timestamp) Forward(s Timestamp) {
-	if t.Less(s) {
-		*t = s
-	}
-}
-
-// Backward updates the timestamp from the one given, if that moves it
-// backwards in time.
-func (t *Timestamp) Backward(s Timestamp) {
-	if s.Less(*t) {
-		*t = s
-	}
-}
-
-// GoTime converts the timestamp to a time.Time.
-func (t Timestamp) GoTime() time.Time {
-	return time.Unix(0, t.WallTime)
-}
-
 const (
 	checksumUninitialized = 0
 	checksumSize          = 4
@@ -360,7 +276,7 @@ func MakeValueFromBytes(bs []byte) Value {
 
 // MakeValueFromBytesAndTimestamp returns a value with bytes, timestamp and
 // tag set.
-func MakeValueFromBytesAndTimestamp(bs []byte, t Timestamp) Value {
+func MakeValueFromBytesAndTimestamp(bs []byte, t hlc.Timestamp) Value {
 	v := Value{Timestamp: t}
 	v.SetBytes(bs)
 	return v
@@ -776,7 +692,7 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
 func NewTransaction(name string, baseKey Key, userPriority UserPriority,
-	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
+	isolation IsolationType, now hlc.Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)
 	// Compute timestamp and max timestamp.
@@ -800,7 +716,7 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 
 // LastActive returns the last timestamp at which client activity definitely
 // occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
-func (t Transaction) LastActive() Timestamp {
+func (t Transaction) LastActive() hlc.Timestamp {
 	candidate := t.OrigTimestamp
 	if t.LastHeartbeat != nil && candidate.Less(*t.LastHeartbeat) {
 		candidate = *t.LastHeartbeat
@@ -818,7 +734,7 @@ func (t Transaction) Clone() Transaction {
 	}
 	mt := t.ObservedTimestamps
 	if mt != nil {
-		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		t.ObservedTimestamps = make(map[NodeID]hlc.Timestamp)
 		for k, v := range mt {
 			t.ObservedTimestamps[k] = v
 		}
@@ -938,7 +854,7 @@ func TxnIDEqual(a, b *uuid.UUID) bool {
 // incremented for an in-place restart. The timestamp of the
 // transaction on restart is set to the maximum of the transaction's
 // timestamp and the specified timestamp.
-func (t *Transaction) Restart(userPriority UserPriority, upgradePriority int32, timestamp Timestamp) {
+func (t *Transaction) Restart(userPriority UserPriority, upgradePriority int32, timestamp hlc.Timestamp) {
 	t.Epoch++
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
@@ -980,7 +896,7 @@ func (t *Transaction) Update(o *Transaction) {
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
 	if o.LastHeartbeat != nil {
 		if t.LastHeartbeat == nil {
-			t.LastHeartbeat = &Timestamp{}
+			t.LastHeartbeat = &hlc.Timestamp{}
 		}
 		t.LastHeartbeat.Forward(*o.LastHeartbeat)
 	}
@@ -1040,9 +956,9 @@ func (t *Transaction) ResetObservedTimestamps() {
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
-func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
+func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp) {
 	if t.ObservedTimestamps == nil {
-		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		t.ObservedTimestamps = make(map[NodeID]hlc.Timestamp)
 	}
 	if ts, ok := t.ObservedTimestamps[nodeID]; !ok || maxTS.Less(ts) {
 		t.ObservedTimestamps[nodeID] = maxTS
@@ -1053,7 +969,7 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 // given node's clock during the transaction. The returned boolean is false if
 // no observation about the requested node was found. Otherwise, MaxTimestamp
 // can be lowered to the returned timestamp when reading from nodeID.
-func (t Transaction) GetObservedTimestamp(nodeID NodeID) (Timestamp, bool) {
+func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
 	ts, ok := t.ObservedTimestamps[nodeID]
 	return ts, ok
 }
@@ -1068,7 +984,7 @@ func (l Lease) String() string {
 
 // Covers returns true if the given timestamp can be served by the Lease.
 // This is the case if the timestamp precedes the Lease's stasis period.
-func (l Lease) Covers(timestamp Timestamp) bool {
+func (l Lease) Covers(timestamp hlc.Timestamp) bool {
 	return timestamp.Less(l.StartStasis)
 }
 

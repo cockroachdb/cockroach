@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -106,7 +107,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	}
 
 	util.SucceedsSoon(t, func() error {
-		if _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
+		if _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, 0, hlc.MaxTimestamp, true, nil); err != nil {
 			return util.Errorf("failed to verify no dangling intents: %s", err)
 		}
 		return nil
@@ -208,7 +209,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	util.SucceedsSoon(t, func() error {
-		if _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
+		if _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, 0, hlc.MaxTimestamp, true, nil); err != nil {
 			return util.Errorf("failed to verify no dangling intents: %s", err)
 		}
 		return nil

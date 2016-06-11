@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -59,7 +60,7 @@ func newSplitQueue(db *client.DB, gossip *gossip.Gossip) *splitQueue {
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
-func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
+func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := rng.Desc()
@@ -85,7 +86,7 @@ func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 }
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
+func (sq *splitQueue) process(now hlc.Timestamp, rng *Replica,
 	sysCfg config.SystemConfig) error {
 	ctx := rng.context(context.TODO())
 

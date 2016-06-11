@@ -244,7 +244,7 @@ func TestSendNext_AllSlow(t *testing.T) {
 	doneChans[1] <- BatchCall{
 		Reply: &roachpb.BatchResponse{
 			BatchResponse_Header: roachpb.BatchResponse_Header{
-				Now: roachpb.Timestamp{Logical: 42},
+				Now: hlc.Timestamp{Logical: 42},
 			},
 		},
 		Err: nil,

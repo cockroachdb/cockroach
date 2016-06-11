@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -44,7 +43,7 @@ func ExampleNewClock() {
 	// Update the state of the hybrid clock.
 	s := c.Now()
 	time.Sleep(50 * time.Nanosecond)
-	t := roachpb.Timestamp{WallTime: UnixNano()}
+	t := Timestamp{WallTime: UnixNano()}
 	// The sanity checks below will usually never be triggered.
 
 	if s.Less(t) || !t.Less(s) {
@@ -62,7 +61,7 @@ func ExampleNewClock() {
 	fmt.Printf("The Unix Epoch is now approximately %dns old.\n", t.WallTime)
 }
 
-func TestLess(t *testing.T) {
+func TestHLCLess(t *testing.T) {
 	m := NewManualClock(0)
 	c := NewClock(m.UnixNano)
 	a := c.Timestamp()
@@ -81,7 +80,7 @@ func TestLess(t *testing.T) {
 	}
 }
 
-func TestEqual(t *testing.T) {
+func TestHLCEqual(t *testing.T) {
 	m := NewManualClock(0)
 	c := NewClock(m.UnixNano)
 	a := c.Timestamp()
@@ -100,9 +99,9 @@ func TestEqual(t *testing.T) {
 	}
 }
 
-// TestClock performs a complete test of all basic phenomena,
+// TestHLCClock performs a complete test of all basic phenomena,
 // including backward jumps in local physical time and clock offset.
-func TestClock(t *testing.T) {
+func TestHLCClock(t *testing.T) {
 	m := NewManualClock(0)
 	c := NewClock(m.UnixNano)
 	c.SetMaxOffset(1000)
@@ -111,26 +110,26 @@ func TestClock(t *testing.T) {
 		wallClock int64
 		event     Event
 		// If this is a receive event, this holds the "input" timestamp.
-		input *roachpb.Timestamp
+		input *Timestamp
 		// The expected timestamp generated from the input.
-		expected roachpb.Timestamp
+		expected Timestamp
 	}{
 		// A few valid steps to warm up.
-		{5, SEND, nil, roachpb.Timestamp{WallTime: 5, Logical: 0}},
-		{6, SEND, nil, roachpb.Timestamp{WallTime: 6, Logical: 0}},
-		{10, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 5}, roachpb.Timestamp{WallTime: 10, Logical: 6}},
+		{5, SEND, nil, Timestamp{WallTime: 5, Logical: 0}},
+		{6, SEND, nil, Timestamp{WallTime: 6, Logical: 0}},
+		{10, RECV, &Timestamp{WallTime: 10, Logical: 5}, Timestamp{WallTime: 10, Logical: 6}},
 		// Our clock mysteriously jumps back.
-		{7, SEND, nil, roachpb.Timestamp{WallTime: 10, Logical: 7}},
+		{7, SEND, nil, Timestamp{WallTime: 10, Logical: 7}},
 		// Wall clocks coincide, but the local logical clock wins.
-		{8, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 4}, roachpb.Timestamp{WallTime: 10, Logical: 8}},
+		{8, RECV, &Timestamp{WallTime: 10, Logical: 4}, Timestamp{WallTime: 10, Logical: 8}},
 		// Wall clocks coincide, but the remote logical clock wins.
-		{10, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 99}, roachpb.Timestamp{WallTime: 10, Logical: 100}},
+		{10, RECV, &Timestamp{WallTime: 10, Logical: 99}, Timestamp{WallTime: 10, Logical: 100}},
 		// The physical clock has caught up and takes over.
-		{11, RECV, &roachpb.Timestamp{WallTime: 10, Logical: 31}, roachpb.Timestamp{WallTime: 11, Logical: 0}},
-		{11, SEND, nil, roachpb.Timestamp{WallTime: 11, Logical: 1}},
+		{11, RECV, &Timestamp{WallTime: 10, Logical: 31}, Timestamp{WallTime: 11, Logical: 0}},
+		{11, SEND, nil, Timestamp{WallTime: 11, Logical: 1}},
 	}
 
-	var current roachpb.Timestamp
+	var current Timestamp
 	for i, step := range expectedHistory {
 		m.Set(step.wallClock)
 		switch step.event {
@@ -168,7 +167,7 @@ func TestExampleManualClock(t *testing.T) {
 	}
 }
 
-func TestMonotonicityCheck(t *testing.T) {
+func TestHLCMonotonicityCheck(t *testing.T) {
 	m := NewManualClock(100000)
 	c := NewClock(m.UnixNano)
 

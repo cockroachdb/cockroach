@@ -131,7 +131,7 @@ func TestTimestampCacheSetLowWater(t *testing.T) {
 	// Verify looking up key "a" returns the new low water mark ("a"'s timestamp).
 	for i, test := range []struct {
 		key   roachpb.Key
-		expTS roachpb.Timestamp
+		expTS hlc.Timestamp
 		expOK bool
 	}{
 		{roachpb.Key("a"), bTS, false},
@@ -278,32 +278,32 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 }
 
 type layeredIntervalTestCase struct {
-	actions   []func(tc *timestampCache, ts roachpb.Timestamp)
-	validator func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp)
+	actions   []func(tc *timestampCache, ts hlc.Timestamp)
+	validator func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp)
 }
 
 // layeredIntervalTestCase1 tests the left partial overlap and old containing
 // new cases for adding intervals to the interval cache when tested in order,
 // and tests the cases' inverses when tested in reverse.
 var layeredIntervalTestCase1 = layeredIntervalTestCase{
-	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts hlc.Timestamp){
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// No overlap forwards.
 			// Right partial overlap backwards.
 			tc.add(roachpb.Key("a"), roachpb.Key("bb"), ts, nil, true)
 		},
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// Left partial overlap forwards.
 			// New contains old backwards.
 			tc.add(roachpb.Key("b"), roachpb.Key("e"), ts, nil, true)
 		},
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// Old contains new forwards.
 			// No overlap backwards.
 			tc.add(roachpb.Key("c"), nil, ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp) {
 		abbTS := tss[0]
 		beTS := tss[1]
 		cTS := tss[2]
@@ -346,24 +346,24 @@ var layeredIntervalTestCase1 = layeredIntervalTestCase{
 // old cases for adding intervals to the interval cache when tested in order,
 // and tests the cases' inverses when tested in reverse.
 var layeredIntervalTestCase2 = layeredIntervalTestCase{
-	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts hlc.Timestamp){
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// No overlap forwards.
 			// Old contains new backwards.
 			tc.add(roachpb.Key("d"), roachpb.Key("f"), ts, nil, true)
 		},
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// New contains old forwards.
 			// Left partial overlap backwards.
 			tc.add(roachpb.Key("b"), roachpb.Key("f"), ts, nil, true)
 		},
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// Right partial overlap forwards.
 			// No overlap backwards.
 			tc.add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp) {
 		bfTS := tss[1]
 		acTS := tss[2]
 
@@ -399,19 +399,19 @@ var layeredIntervalTestCase2 = layeredIntervalTestCase{
 // for adding intervals to the interval cache when tested in order, and
 // tests a left partial overlap with a shared end when tested in reverse.
 var layeredIntervalTestCase3 = layeredIntervalTestCase{
-	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts hlc.Timestamp){
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// No overlap forwards.
 			// Right partial overlap backwards.
 			tc.add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
 		},
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// Left partial overlap forwards.
 			// No overlap backwards.
 			tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp) {
 		acTS := tss[0]
 		bcTS := tss[1]
 
@@ -441,19 +441,19 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 // for adding intervals to the interval cache when tested in order, and
 // tests a right partial overlap with a shared start when tested in reverse.
 var layeredIntervalTestCase4 = layeredIntervalTestCase{
-	actions: []func(tc *timestampCache, ts roachpb.Timestamp){
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+	actions: []func(tc *timestampCache, ts hlc.Timestamp){
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// No overlap forwards.
 			// Left partial overlap backwards.
 			tc.add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
 		},
-		func(tc *timestampCache, ts roachpb.Timestamp) {
+		func(tc *timestampCache, ts hlc.Timestamp) {
 			// Right partial overlap forwards.
 			// No overlap backwards.
 			tc.add(roachpb.Key("a"), roachpb.Key("b"), ts, nil, true)
 		},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []roachpb.Timestamp) {
+	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp) {
 		acTS := tss[0]
 		abTS := tss[1]
 
@@ -502,7 +502,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	} {
 		// Perform actions in order and validate.
 		tc.Clear(clock)
-		tss := make([]roachpb.Timestamp, len(testCase.actions))
+		tss := make([]hlc.Timestamp, len(testCase.actions))
 		for i := range testCase.actions {
 			tss[i] = clock.Now()
 		}

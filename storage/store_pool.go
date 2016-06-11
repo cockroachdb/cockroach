@@ -45,13 +45,13 @@ type storeDetail struct {
 	desc            *roachpb.StoreDescriptor
 	dead            bool
 	timesDied       int
-	foundDeadOn     roachpb.Timestamp
-	lastUpdatedTime roachpb.Timestamp // This is also the priority for the queue.
-	index           int               // index of the item in the heap, required for heap.Interface
+	foundDeadOn     hlc.Timestamp
+	lastUpdatedTime hlc.Timestamp // This is also the priority for the queue.
+	index           int           // index of the item in the heap, required for heap.Interface
 }
 
 // markDead sets the storeDetail to dead(inactive).
-func (sd *storeDetail) markDead(foundDeadOn roachpb.Timestamp) {
+func (sd *storeDetail) markDead(foundDeadOn hlc.Timestamp) {
 	sd.dead = true
 	sd.foundDeadOn = foundDeadOn
 	sd.timesDied++
@@ -64,7 +64,7 @@ func (sd *storeDetail) markDead(foundDeadOn roachpb.Timestamp) {
 
 // markAlive sets the storeDetail to alive(active) and saves the updated time
 // and descriptor.
-func (sd *storeDetail) markAlive(foundAliveOn roachpb.Timestamp, storeDesc *roachpb.StoreDescriptor) {
+func (sd *storeDetail) markAlive(foundAliveOn hlc.Timestamp, storeDesc *roachpb.StoreDescriptor) {
 	sd.desc = storeDesc
 	sd.dead = false
 	sd.lastUpdatedTime = foundAliveOn

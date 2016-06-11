@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -140,7 +141,7 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 	if ttl == 0 {
 		ttlStamp = math.MaxInt64
 	}
-	v := roachpb.MakeValueFromBytesAndTimestamp(val, roachpb.Timestamp{WallTime: now})
+	v := roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{WallTime: now})
 	return &Info{
 		Value:    v,
 		TTLStamp: ttlStamp,

@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -158,7 +159,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 			// Put a value so that the deletion below finds a value to seek
 			// to.
-			if err := MVCCPut(context.Background(), batch, nil, key, roachpb.ZeroTimestamp,
+			if err := MVCCPut(context.Background(), batch, nil, key, hlc.ZeroTimestamp,
 				roachpb.MakeValueFromString("x"), nil); err != nil {
 				t.Fatal(err)
 			}
@@ -166,7 +167,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// Seek the iterator to `key` and clear the value (but without
 			// telling the iterator about that).
 			if err := MVCCDelete(context.Background(), batch, nil, key,
-				roachpb.ZeroTimestamp, nil); err != nil {
+				hlc.ZeroTimestamp, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -178,7 +179,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// result back, we'll see the (newly deleted) value (due to the
 			// failure mode above).
 			if v, _, err := MVCCGet(context.Background(), batch, key,
-				roachpb.ZeroTimestamp, true, nil); err != nil {
+				hlc.ZeroTimestamp, true, nil); err != nil {
 				t.Fatal(err)
 			} else if v != nil {
 				t.Fatalf("expected no value, got %+v", v)

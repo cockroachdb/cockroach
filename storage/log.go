@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // TODO(mrtracy): All of this logic should probably be moved into the SQL
@@ -195,8 +196,8 @@ func (s *Store) logChange(txn *client.Txn, changeType roachpb.ReplicaChangeType,
 // assigned database timestamp. However, in the case of our tests log events
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
-func selectEventTimestamp(s *Store, input roachpb.Timestamp) time.Time {
-	if input == roachpb.ZeroTimestamp {
+func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
+	if input == hlc.ZeroTimestamp {
 		return s.Clock().PhysicalTime()
 	}
 	return input.GoTime()

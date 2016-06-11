@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -239,7 +240,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if _, err := client.SendWrapped(tds, nil, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
-	var delTS roachpb.Timestamp
+	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
 		reply, err := client.SendWrapped(tds, nil, put)

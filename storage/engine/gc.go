@@ -18,7 +18,7 @@ package engine
 
 import (
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -26,16 +26,16 @@ import (
 // policy allows either the union or intersection of maximum # of
 // versions and maximum age.
 type GarbageCollector struct {
-	Threshold roachpb.Timestamp
+	Threshold hlc.Timestamp
 	policy    config.GCPolicy
 }
 
 // MakeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
-func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) GarbageCollector {
+func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1E9
 	return GarbageCollector{
-		Threshold: roachpb.Timestamp{WallTime: now.WallTime - ttlNanos},
+		Threshold: hlc.Timestamp{WallTime: now.WallTime - ttlNanos},
 		policy:    policy,
 	}
 }
@@ -44,7 +44,7 @@ func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) Garbage
 // garbage collection policy for batches of values for the same key.
 // Returns the timestamp including, and after which, all values should
 // be garbage collected. If no values should be GC'd, returns
-// roachpb.ZeroTimestamp. keys must be in descending time order.
+// hlc.ZeroTimestamp. keys must be in descending time order.
 // Values deleted at or before the returned timestamp can be deleted without
 // invalidating any reads in the time interval (gc.expiration, \infinity).
 //
@@ -56,22 +56,22 @@ func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) Garbage
 // deleted. This would still allow for the tombstone bugs in #6227, so in
 // the future we will add checks that disallow writes before the last GC
 // expiration time.
-func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Timestamp {
+func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) hlc.Timestamp {
 	if gc.policy.TTLSeconds <= 0 {
-		return roachpb.ZeroTimestamp
+		return hlc.ZeroTimestamp
 	}
 	if len(keys) == 0 {
-		return roachpb.ZeroTimestamp
+		return hlc.ZeroTimestamp
 	}
 
 	// Loop over values. All should be MVCC versions.
 	var i int
 	var key MVCCKey
-	delTS := roachpb.ZeroTimestamp
+	delTS := hlc.ZeroTimestamp
 	for i, key = range keys {
 		if !key.IsValue() {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
-			return roachpb.ZeroTimestamp
+			return hlc.ZeroTimestamp
 		}
 		if gc.Threshold.Less(key.Timestamp) {
 			continue

@@ -85,8 +85,8 @@ func createTestDBWithContext(
 }
 
 // makeTS creates a new timestamp.
-func makeTS(walltime int64, logical int32) roachpb.Timestamp {
-	return roachpb.Timestamp{
+func makeTS(walltime int64, logical int32) hlc.Timestamp {
+	return hlc.Timestamp{
 		WallTime: walltime,
 		Logical:  logical,
 	}
@@ -177,7 +177,7 @@ func TestTxnInitialTimestamp(t *testing.T) {
 	txn := client.NewTxn(context.Background(), *s.DB)
 
 	// Request a specific timestamp.
-	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
+	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
 	txn.Proto.OrigTimestamp = refTimestamp
 
 	// Put request will create a new transaction.
@@ -307,7 +307,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	}
 
 	// Verify 3 heartbeats.
-	var heartbeatTS roachpb.Timestamp
+	var heartbeatTS hlc.Timestamp
 	for i := 0; i < 3; i++ {
 		util.SucceedsSoon(t, func() error {
 			txn, pErr := getTxn(sender, &initialTxn.Proto)
@@ -681,7 +681,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		pErr             *roachpb.Error
 		expEpoch         uint32
 		expPri           int32
-		expTS, expOrigTS roachpb.Timestamp
+		expTS, expOrigTS hlc.Timestamp
 		nodeSeen         bool
 	}{
 		{
@@ -697,7 +697,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// Timestamp moves ahead of the existing write.
 			pErr: func() *roachpb.Error {
 				pErr := roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp),
+					roachpb.NewReadWithinUncertaintyIntervalError(hlc.ZeroTimestamp, hlc.ZeroTimestamp),
 					&roachpb.Transaction{})
 				const nodeID = 1
 				pErr.GetTxn().UpdateObservedTimestamp(nodeID, plus10)

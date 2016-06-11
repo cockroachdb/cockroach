@@ -103,12 +103,12 @@ var (
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
-	shouldQueue(roachpb.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
+	shouldQueue(hlc.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it.
 	// TODO(nvanbenschoten) this should take a context.Context.
-	process(roachpb.Timestamp, *Replica, config.SystemConfig) error
+	process(hlc.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -257,7 +257,7 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // returned by bq.shouldQueue. If the queue is too full, the replica may
 // not be added, as the replica with the lowest priority will be
 // dropped.
-func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
+func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {

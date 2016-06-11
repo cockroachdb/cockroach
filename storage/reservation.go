@@ -29,7 +29,7 @@ import (
 // reservation map.
 type reservation struct {
 	roachpb.ReservationRequest
-	expireAt roachpb.Timestamp
+	expireAt hlc.Timestamp
 }
 
 // reservationQ is a queue for reservations. Since all new reservations have the

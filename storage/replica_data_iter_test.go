@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -60,12 +61,12 @@ func fakePrevKey(k []byte) roachpb.Key {
 // the key space. Returns a slice of the encoded keys of all created
 // data.
 func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
-	ts0 := roachpb.ZeroTimestamp
-	ts := roachpb.Timestamp{WallTime: 1}
+	ts0 := hlc.ZeroTimestamp
+	ts := hlc.Timestamp{WallTime: 1}
 	desc := r.Desc()
 	keyTSs := []struct {
 		key roachpb.Key
-		ts  roachpb.Timestamp
+		ts  hlc.Timestamp
 	}{
 		{keys.AbortCacheKey(r.RangeID, testTxnID), ts0},
 		{keys.AbortCacheKey(r.RangeID, testTxnID2), ts0},

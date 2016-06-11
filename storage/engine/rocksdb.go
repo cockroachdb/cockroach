@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -955,7 +956,7 @@ func cToGoKey(key C.DBKey) MVCCKey {
 
 	return MVCCKey{
 		Key: safeKey,
-		Timestamp: roachpb.Timestamp{
+		Timestamp: hlc.Timestamp{
 			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
 		},
@@ -965,7 +966,7 @@ func cToGoKey(key C.DBKey) MVCCKey {
 func cToUnsafeGoKey(key C.DBKey) MVCCKey {
 	return MVCCKey{
 		Key: cSliceToUnsafeGoBytes(key.key),
-		Timestamp: roachpb.Timestamp{
+		Timestamp: hlc.Timestamp{
 			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
 		},

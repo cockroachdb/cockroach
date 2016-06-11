@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -105,14 +106,14 @@ func newGCQueue(gossip *gossip.Gossip) *gcQueue {
 	return gcq
 }
 
-type pushFunc func(roachpb.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
+type pushFunc func(hlc.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
 type resolveFunc func([]roachpb.Intent, bool, bool) error
 
 // shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
+func (*gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
@@ -150,7 +151,7 @@ func processTransactionTable(
 	snap engine.Reader,
 	desc *roachpb.RangeDescriptor,
 	txnMap map[uuid.UUID]*roachpb.Transaction,
-	cutoff roachpb.Timestamp,
+	cutoff hlc.Timestamp,
 	infoMu *lockableGCInfo,
 	resolveIntents resolveFunc,
 ) ([]roachpb.GCRequest_GCKey, error) {
@@ -222,7 +223,7 @@ func processTransactionTable(
 	endKey := keys.TransactionKey(desc.EndKey.AsRawKey(), uuid.EmptyUUID)
 
 	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey,
-		roachpb.ZeroTimestamp, true /* consistent */, nil, /* txn */
+		hlc.ZeroTimestamp, true /* consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			return false, handleOne(kv)
 		})
@@ -242,7 +243,7 @@ func processAbortCache(
 	ctx context.Context,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
-	now roachpb.Timestamp,
+	now hlc.Timestamp,
 	minAge time.Duration,
 	infoMu *lockableGCInfo,
 	pushTxn pushFunc,
@@ -284,7 +285,7 @@ func processAbortCache(
 // 6) scan the abort cache table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
+func (gcq *gcQueue) process(now hlc.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) error {
 	ctx := repl.context(context.TODO())
 
@@ -299,7 +300,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	}
 
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
-		func(now roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
+		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(repl, now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) error {
@@ -336,7 +337,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 // GCInfo contains statistics and insights from a GC run.
 type GCInfo struct {
 	// Now is the timestamp used for age computations.
-	Now roachpb.Timestamp
+	Now hlc.Timestamp
 	// Policy is the policy used for this garbage collection cycle.
 	Policy config.GCPolicy
 	// Stats about the userspace key-values considered, namely the number of
@@ -365,7 +366,7 @@ type GCInfo struct {
 	// ResolveErrors is the number of successful intent resolutions.
 	ResolveSuccess int
 	// Threshold is the computed expiration timestamp. Equal to `Now - Policy`.
-	Threshold roachpb.Timestamp
+	Threshold hlc.Timestamp
 }
 
 type lockableGCInfo struct {
@@ -382,7 +383,7 @@ func RunGC(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	snap engine.Reader,
-	now roachpb.Timestamp,
+	now hlc.Timestamp,
 	policy config.GCPolicy,
 	pushTxn pushFunc,
 	resolveIntents resolveFunc,
@@ -409,7 +410,7 @@ func RunGC(
 			return realResolveIntents(intents, poison, wait)
 		}
 		realPushTxn := pushTxn
-		pushTxn = func(ts roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
+		pushTxn = func(ts hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			infoMu.Lock()
 			infoMu.PushTxn++
 			infoMu.Unlock()
@@ -466,7 +467,7 @@ func RunGC(
 					startIdx = 2
 				}
 				// See if any values may be GC'd.
-				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(roachpb.ZeroTimestamp) {
+				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(hlc.ZeroTimestamp) {
 					// TODO(spencer): need to split the requests up into
 					// multiple requests in the event that more than X keys
 					// are added to the request.
@@ -573,7 +574,7 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
+func pushTxn(repl *Replica, now hlc.Timestamp, txn *roachpb.Transaction,
 	typ roachpb.PushTxnType) {
 
 	// Attempt to push the transaction which created the intent.

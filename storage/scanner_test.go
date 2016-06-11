@@ -145,7 +145,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(rng *Replica, now roachpb.Timestamp) {
+func (tq *testQueue) MaybeAdd(rng *Replica, now hlc.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index == -1 {
