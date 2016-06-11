@@ -11,6 +11,7 @@ cmd github.com/kkaneda/returncheck
 cmd github.com/mibk/dupl
 cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
+cmd github.com/stripe/safesql
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
@@ -70,6 +71,7 @@ github.com/satori/go.uuid 879c5887cd475cd7864858769793b2ceb0d44feb
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
 github.com/spf13/cobra 1238ba19d24b0b9ceee2094e1cb31947d45c3e86
 github.com/spf13/pflag cb88ea77998c3f024757528e3305022ab50b43be
+github.com/stripe/safesql 452e37ed794488bd0d99676532f346e03cc6cd2c
 github.com/tebeka/go2xunit 22b8a642949a778695f67a22d39d4f4401740a08
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 89d9e62992539701a49a19c52ebb33e84cbbe80f
