@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -215,7 +216,7 @@ func TestKVDBTransaction(t *testing.T) {
 	value := []byte("value")
 	err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 

@@ -277,7 +277,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Increments are a good way of testing idempotency. Up here, we
 	// address them to the original range, then later to the one that
 	// contains the key.
-	txn := roachpb.NewTransaction("test", []byte("c"), 10, roachpb.SERIALIZABLE,
+	txn := roachpb.NewTransaction("test", []byte("c"), 10, enginepb.SERIALIZABLE,
 		store.Clock().Now(), 0)
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := *txn

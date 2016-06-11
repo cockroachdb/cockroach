@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -45,7 +46,7 @@ type Session struct {
 	planner planner
 
 	Location              *time.Location
-	DefaultIsolationLevel roachpb.IsolationType
+	DefaultIsolationLevel enginepb.IsolationType
 	Trace                 trace.Trace
 }
 

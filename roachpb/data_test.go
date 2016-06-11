@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -332,7 +333,7 @@ func TestTxnEqual(t *testing.T) {
 	}{
 		{nil, nil, true},
 		{&Transaction{}, nil, false},
-		{&Transaction{TxnMeta: TxnMeta{ID: uuid.NewV4()}}, &Transaction{TxnMeta: TxnMeta{ID: uuid.NewV4()}}, false},
+		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()}}, false},
 	}
 	for i, c := range tc {
 		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
@@ -367,8 +368,8 @@ func TestTransactionString(t *testing.T) {
 	}
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
-		TxnMeta: TxnMeta{
-			Isolation: SERIALIZABLE,
+		TxnMeta: enginepb.TxnMeta{
+			Isolation: enginepb.SERIALIZABLE,
 			Key:       Key("foo"),
 			ID:        txnID,
 			Epoch:     2,
@@ -437,8 +438,8 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 }
 
 var nonZeroTxn = Transaction{
-	TxnMeta: TxnMeta{
-		Isolation:  SNAPSHOT,
+	TxnMeta: enginepb.TxnMeta{
+		Isolation:  enginepb.SNAPSHOT,
 		Key:        Key("foo"),
 		ID:         uuid.NewV4(),
 		Epoch:      2,
@@ -475,7 +476,7 @@ func TestTransactionUpdate(t *testing.T) {
 	var txn3 Transaction
 	txn3.ID = uuid.NewV4()
 	txn3.Name = "carl"
-	txn3.Isolation = SNAPSHOT
+	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
 
 	if err := util.NoZeroField(txn3); err != nil {

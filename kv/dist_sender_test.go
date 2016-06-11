@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -478,7 +479,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 
 	txn := &roachpb.Transaction{
-		TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4()},
+		TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()},
 	}
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.
