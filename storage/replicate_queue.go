@@ -73,7 +73,7 @@ func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 	return rq
 }
 
-func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
+func (rq *replicateQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 
 	if repl.needsSplitBySize() {
@@ -103,7 +103,7 @@ func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 }
 
 func (rq *replicateQueue) process(
-	now roachpb.Timestamp,
+	now hlc.Timestamp,
 	repl *Replica,
 	sysCfg config.SystemConfig,
 ) error {

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -423,7 +424,7 @@ func TestOwnNodeCertain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	act := make(map[roachpb.NodeID]roachpb.Timestamp)
+	act := make(map[roachpb.NodeID]hlc.Timestamp)
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		for k, v := range ba.Txn.ObservedTimestamps {
@@ -436,18 +437,18 @@ func TestOwnNodeCertain(t *testing.T) {
 		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
-	expTS := roachpb.ZeroTimestamp.Add(1, 2)
+	expTS := hlc.ZeroTimestamp.Add(1, 2)
 	ds := NewDistSender(ctx, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
 	if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 		// MaxTimestamp is set very high so that all uncertainty updates have
 		// effect.
-		Txn: &roachpb.Transaction{OrigTimestamp: expTS, MaxTimestamp: roachpb.MaxTimestamp},
+		Txn: &roachpb.Transaction{OrigTimestamp: expTS, MaxTimestamp: hlc.MaxTimestamp},
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}
-	exp := map[roachpb.NodeID]roachpb.Timestamp{
+	exp := map[roachpb.NodeID]hlc.Timestamp{
 		expNodeID: expTS,
 	}
 	if !reflect.DeepEqual(exp, act) {
@@ -465,7 +466,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		reply := args.CreateReply()
 		txnClone := args.Txn.Clone()
 		reply.Txn = &txnClone
-		reply.Txn.Timestamp = roachpb.MaxTimestamp
+		reply.Txn.Timestamp = hlc.MaxTimestamp
 		return reply, nil
 	}
 
@@ -481,7 +482,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	}
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.
-	txn.UpdateObservedTimestamp(1, roachpb.MaxTimestamp)
+	txn.UpdateObservedTimestamp(1, hlc.MaxTimestamp)
 
 	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
 	if _, pErr := client.SendWrappedWith(ds, context.Background(), roachpb.Header{
@@ -490,7 +491,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if !txn.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	if !txn.Timestamp.Equal(hlc.ZeroTimestamp) {
 		t.Fatal("Transaction was mutated by DistSender")
 	}
 }
@@ -1042,7 +1043,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Prepare the test function
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	doCheck := func(sender client.Sender, fakeTime roachpb.Timestamp) {
+	doCheck := func(sender client.Sender, fakeTime hlc.Timestamp) {
 		ds.transportFactory = SenderTransportFactory(tracing.NewTracer(), sender)
 		_, err := client.SendWrapped(ds, nil, put)
 		if err != nil && err != expectedErr {

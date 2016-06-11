@@ -2209,7 +2209,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "roachpb.Timestamp",
+                            "type": "hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {

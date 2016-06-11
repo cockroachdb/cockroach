@@ -2707,7 +2707,7 @@ export interface roachpbBuilder {
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
 	StoreDescriptor: roachpb.StoreDescriptorBuilder;
 	Span: roachpb.SpanBuilder;
-	Timestamp: roachpb.TimestampBuilder;
+	Timestamp: hlc.TimestampBuilder;
 	Value: roachpb.ValueBuilder;
 	KeyValue: roachpb.KeyValueBuilder;
 	StoreIdent: roachpb.StoreIdentBuilder;
@@ -4044,11 +4044,11 @@ getAddresses?() : util.UnresolvedAddr[];
 
 
 
-timestamp?: roachpb.Timestamp;
+timestamp?: hlc.Timestamp;
 		
 
-getTimestamp?() : roachpb.Timestamp;
-		setTimestamp?(timestamp : roachpb.Timestamp): void;
+getTimestamp?() : hlc.Timestamp;
+		setTimestamp?(timestamp : hlc.Timestamp): void;
 		
 
 

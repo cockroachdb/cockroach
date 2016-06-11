@@ -20,6 +20,7 @@ option go_package = "gossip";
 
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/metadata.proto";
+import "cockroach/util/hlc/timestamp.proto";
 import "cockroach/util/unresolved_addr.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -29,7 +30,7 @@ message BootstrapInfo {
   // A map from node ID to address.
   repeated util.UnresolvedAddr addresses = 1 [(gogoproto.nullable) = false];
   // Timestamp at which the bootstrap info was written.
-  roachpb.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // Request is the request struct passed with the Gossip RPC.

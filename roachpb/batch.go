@@ -20,19 +20,21 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.OrigTimestamp. For non-transactional requests, if
 // no timestamp is specified, nowFn is used to create and set one.
-func (ba *BatchRequest) SetActiveTimestamp(nowFn func() Timestamp) error {
+func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	if ba.Txn == nil {
 		// When not transactional, allow empty timestamp and  use nowFn instead.
-		if ba.Timestamp.Equal(ZeroTimestamp) {
+		if ba.Timestamp.Equal(hlc.ZeroTimestamp) {
 			ba.Timestamp.Forward(nowFn())
 		}
-	} else if !ba.Timestamp.Equal(ZeroTimestamp) {
+	} else if !ba.Timestamp.Equal(hlc.ZeroTimestamp) {
 		return errors.New("transactional request must not set batch timestamp")
 	} else {
 		// Always use the original timestamp for reads and writes, even

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -99,7 +100,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer stopper.Stop()
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
-		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, roachpb.ZeroTimestamp, true, nil, false, f); err != nil {
+		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.ZeroTimestamp, true, nil, false, f); err != nil {
 			t.Fatal(err)
 		}
 	}

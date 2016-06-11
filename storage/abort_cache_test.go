@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -34,7 +35,7 @@ var (
 	testTxnID        *uuid.UUID
 	testTxnID2       *uuid.UUID
 	testTxnKey       = []byte("a")
-	testTxnTimestamp = roachpb.ZeroTimestamp.Add(123, 456)
+	testTxnTimestamp = hlc.ZeroTimestamp.Add(123, 456)
 	testTxnPriority  = int32(123)
 )
 

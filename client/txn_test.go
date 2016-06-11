@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -34,7 +35,7 @@ import (
 
 var (
 	testKey     = roachpb.Key("a")
-	testTS      = roachpb.Timestamp{WallTime: 1, Logical: 1}
+	testTS      = hlc.Timestamp{WallTime: 1, Logical: 1}
 	testPutResp = roachpb.PutResponse{}
 )
 
@@ -130,13 +131,13 @@ func TestInitPut(t *testing.T) {
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	makeTS := func(walltime int64, logical int32) roachpb.Timestamp {
-		return roachpb.ZeroTimestamp.Add(walltime, logical)
+	makeTS := func(walltime int64, logical int32) hlc.Timestamp {
+		return hlc.ZeroTimestamp.Add(walltime, logical)
 	}
 	ba := testPut()
 
 	testCases := []struct {
-		expRequestTS, responseTS roachpb.Timestamp
+		expRequestTS, responseTS hlc.Timestamp
 	}{
 		{makeTS(0, 0), makeTS(10, 0)},
 		{makeTS(10, 0), makeTS(10, 1)},
@@ -464,7 +465,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		err   error
 		retry bool // Expect retry?
 	}{
-		{roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp), true},
+		{roachpb.NewReadWithinUncertaintyIntervalError(hlc.ZeroTimestamp, hlc.ZeroTimestamp), true},
 		{&roachpb.TransactionAbortedError{}, true},
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},
@@ -535,7 +536,7 @@ func TestAbortedRetryPreservesTimestamp(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	// Request a client-defined timestamp.
-	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
+	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
 	execOpt := TxnExecOptions{AutoRetry: true, AutoCommit: true}
 	execOpt.MinInitialTimestamp = refTimestamp
 
@@ -559,7 +560,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		err   error
 		abort bool
 	}{
-		{roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp), true},
+		{roachpb.NewReadWithinUncertaintyIntervalError(hlc.ZeroTimestamp, hlc.ZeroTimestamp), true},
 		{&roachpb.TransactionAbortedError{}, false},
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},
@@ -663,7 +664,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	var execOpt TxnExecOptions
-	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
+	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
 	execOpt.MinInitialTimestamp = refTimestamp
 
 	txnClosure := func(txn *Txn, opt *TxnExecOptions) error {
@@ -779,7 +780,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 		t.Errorf("unexpected initial deadline: %s", txn.deadline)
 	}
 
-	deadline := roachpb.Timestamp{WallTime: 10, Logical: 1}
+	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
 	if !txn.UpdateDeadlineMaybe(deadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
@@ -787,7 +788,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 		t.Errorf("unexpected deadline: %s", txn.deadline)
 	}
 
-	futureDeadline := roachpb.Timestamp{WallTime: 11, Logical: 1}
+	futureDeadline := hlc.Timestamp{WallTime: 11, Logical: 1}
 	if txn.UpdateDeadlineMaybe(futureDeadline) {
 		t.Errorf("expected no update, but update happened")
 	}
@@ -795,7 +796,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 		t.Errorf("unexpected deadline: %s", txn.deadline)
 	}
 
-	pastDeadline := roachpb.Timestamp{WallTime: 9, Logical: 1}
+	pastDeadline := hlc.Timestamp{WallTime: 9, Logical: 1}
 	if !txn.UpdateDeadlineMaybe(pastDeadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}

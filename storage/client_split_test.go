@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -956,7 +957,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 	now := store.Clock().Now()
 	var wg sync.WaitGroup
 
-	ts := func(i int) roachpb.Timestamp {
+	ts := func(i int) hlc.Timestamp {
 		return now.Add(0, int32(1000+i))
 	}
 

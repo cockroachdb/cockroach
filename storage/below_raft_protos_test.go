@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -89,8 +90,8 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:             5531676819244041709,
 		populatedSum:         14781226418259198098,
 	},
-	reflect.TypeOf(&roachpb.Timestamp{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedTimestamp(r, false) },
+	reflect.TypeOf(&hlc.Timestamp{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message { return hlc.NewPopulatedTimestamp(r, false) },
 		emptySum:             5531676819244041709,
 		populatedSum:         10735653246768912584,
 	},

@@ -199,7 +199,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	if err := eng.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if value, _, err := engine.MVCCGet(context.Background(), eng, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil); err != nil {
+	if value, _, err := engine.MVCCGet(context.Background(), eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil); err != nil {
 		t.Fatal(err)
 	} else if value == nil {
 		t.Fatalf("unable to read store ident")
@@ -626,7 +626,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			store, mc, stopper := createTestStoreWithContext(t, &ctx)
 			defer stopper.Stop()
 			txn := newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
-			txn.MaxTimestamp = roachpb.MaxTimestamp
+			txn.MaxTimestamp = hlc.MaxTimestamp
 			pArgs := putArgs(test.key, []byte("value"))
 			h := roachpb.Header{
 				Txn:     txn,
@@ -659,7 +659,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				if pErr == nil {
 					t.Fatal("expected an error")
 				}
-				if pErr.Now == roachpb.ZeroTimestamp {
+				if pErr.Now == hlc.ZeroTimestamp {
 					t.Fatal("timestamp not annotated on error")
 				}
 			}},
@@ -668,7 +668,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				if pErr != nil {
 					t.Fatal(pErr)
 				}
-				if pReply.Now == roachpb.ZeroTimestamp {
+				if pReply.Now == hlc.ZeroTimestamp {
 					t.Fatal("timestamp not annotated on batch response")
 				}
 			}},
@@ -690,7 +690,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				var txn *roachpb.Transaction
 				if useTxn {
 					txn = newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
-					txn.MaxTimestamp = roachpb.MaxTimestamp
+					txn.MaxTimestamp = hlc.MaxTimestamp
 				}
 				pArgs := putArgs(test.key, []byte("value"))
 				ba := roachpb.BatchRequest{
@@ -1128,7 +1128,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			}
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
-			ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, roachpb.ZeroTimestamp, true, nil, &txn)
+			ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, hlc.ZeroTimestamp, true, nil, &txn)
 			if !ok || err != nil {
 				t.Fatalf("not found or err: %s", err)
 			}
@@ -1393,7 +1393,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Read pushee's txn.
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, roachpb.ZeroTimestamp, true, nil, &txn); !ok || err != nil {
+	if ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, hlc.ZeroTimestamp, true, nil, &txn); !ok || err != nil {
 		t.Fatalf("not found or err: %s", err)
 	}
 	if txn.Status != roachpb.ABORTED {
@@ -1807,7 +1807,7 @@ func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAdd(rng *Replica, t roachpb.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAdd(rng *Replica, t hlc.Timestamp) {
 	// Do nothing
 }
 
@@ -1973,7 +1973,7 @@ func TestStoreGCThreshold(t *testing.T) {
 	defer tc.Stop()
 	store := tc.store
 
-	assertThreshold := func(ts roachpb.Timestamp) {
+	assertThreshold := func(ts hlc.Timestamp) {
 		repl, err := store.GetReplica(1)
 		if err != nil {
 			t.Fatal(err)
@@ -1995,9 +1995,9 @@ func TestStoreGCThreshold(t *testing.T) {
 	}
 
 	// Threshold should start at zero.
-	assertThreshold(roachpb.Timestamp{})
+	assertThreshold(hlc.Timestamp{})
 
-	threshold := roachpb.Timestamp{
+	threshold := hlc.Timestamp{
 		WallTime: 2E9,
 	}
 

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -218,7 +219,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		p.leases = append(p.leases, lease)
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
-		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: lease.Expiration().UnixNano()})
+		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
 	return lease.TableDescriptor, nil
 }
@@ -257,7 +258,7 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		p.leases = append(p.leases, lease)
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
-		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: lease.Expiration().UnixNano()})
+		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
 	return &lease.TableDescriptor, nil
 }

@@ -62,7 +62,7 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
 type testQueueImpl struct {
-	shouldQueueFn func(roachpb.Timestamp, *Replica) (bool, float64)
+	shouldQueueFn func(hlc.Timestamp, *Replica) (bool, float64)
 	processed     int32
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
@@ -70,11 +70,11 @@ type testQueueImpl struct {
 	err           error // always returns this error on process
 }
 
-func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) error {
+func (tq *testQueueImpl) process(now hlc.Timestamp, r *Replica, _ config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
@@ -155,13 +155,13 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		r2: 2.0,
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
 	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
-	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -177,14 +177,14 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same range twice.
-	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -192,8 +192,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -208,10 +208,10 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
-	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
@@ -232,12 +232,12 @@ func TestBaseQueueAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return false, 0.0
 		},
 	}
 	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 1})
-	bq.MaybeAdd(r, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
 	}
@@ -266,7 +266,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	}
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.RangeID)
 			return
@@ -277,8 +277,8 @@ func TestBaseQueueProcess(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
 
-	bq.MaybeAdd(r1, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(r2, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if pc := atomic.LoadInt32(&testQueue.processed); pc != 0 {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
@@ -317,7 +317,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	}
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = 1.0
 			return
@@ -328,7 +328,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
 
-	bq.MaybeAdd(r, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	bq.MaybeRemove(r)
 
 	// Wake the queue
@@ -378,7 +378,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	var queued int32
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			// Always queue ranges if they make it past the base queue's logic.
 			atomic.AddInt32(&queued, 1)
 			return true, float64(r.RangeID)
@@ -406,8 +406,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
-	bq.MaybeAdd(neverSplits, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(willSplit, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
+	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(2) {
@@ -435,8 +435,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		t.Fatal("System config says range does not need to be split")
 	}
 
-	bq.MaybeAdd(neverSplits, roachpb.ZeroTimestamp)
-	bq.MaybeAdd(willSplit, roachpb.ZeroTimestamp)
+	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
+	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(3) {
@@ -469,7 +469,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
-		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.RangeID)
 			return
@@ -488,7 +488,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i)}); err != nil {
 			t.Fatal(err)
 		}
-		bq.MaybeAdd(r, roachpb.ZeroTimestamp)
+		bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	}
 
 	util.SucceedsSoon(t, func() error {
