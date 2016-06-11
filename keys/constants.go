@@ -24,6 +24,8 @@ import (
 )
 
 // Constants for system-reserved keys in the KV map.
+//
+// Note: preserve group-wise ordering when adding new constants.
 var (
 	// localPrefix is the prefix for keys which hold data local to a
 	// RocksDB instance, such as store and range-specific metadata which
@@ -92,14 +94,16 @@ var (
 	localRangeFrozenStatusSuffix = []byte("fzn-")
 	// localRangeLastGCSuffix is the suffix for the last GC.
 	localRangeLastGCSuffix = []byte("lgc-")
-	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
-	localRaftTombstoneSuffix = []byte("rftb")
 	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	LocalRaftAppliedIndexSuffix = []byte("rfta")
+	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
+	localRaftTombstoneSuffix = []byte("rftb")
 	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
 	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
 	localRangeLeaderLeaseSuffix = []byte("rll-")
+	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
+	LocalLeaseAppliedIndexSuffix = []byte("rlla")
 	// localRangeStatsSuffix is the suffix for range statistics.
 	localRangeStatsSuffix = []byte("stat")
 
