@@ -238,7 +238,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
+				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.clock)
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
@@ -252,7 +252,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs := putArgs(datum.key, []byte("value"))
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
+				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.clock)
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
@@ -464,7 +464,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
 		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.orig)).UnixNano)
-		txn := newTransaction("txn1", baseKey, 1, roachpb.SERIALIZABLE, txnClock)
+		txn := newTransaction("txn1", baseKey, 1, enginepb.SERIALIZABLE, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
@@ -560,8 +560,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	tc.manualClock.Set(now)
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-00000"), 1, roachpb.SERIALIZABLE, tc.clock),
-		newTransaction("txn2", roachpb.Key("1-00000"), 1, roachpb.SERIALIZABLE, tc.clock),
+		newTransaction("txn1", roachpb.Key("0-00000"), 1, enginepb.SERIALIZABLE, tc.clock),
+		newTransaction("txn2", roachpb.Key("1-00000"), 1, enginepb.SERIALIZABLE, tc.clock),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS

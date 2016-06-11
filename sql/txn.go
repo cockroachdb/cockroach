@@ -19,6 +19,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -52,9 +53,9 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 	case parser.UnspecifiedIsolation:
 		return nil
 	case parser.SnapshotIsolation:
-		return p.txn.SetIsolation(roachpb.SNAPSHOT)
+		return p.txn.SetIsolation(enginepb.SNAPSHOT)
 	case parser.SerializableIsolation:
-		return p.txn.SetIsolation(roachpb.SERIALIZABLE)
+		return p.txn.SetIsolation(enginepb.SERIALIZABLE)
 	default:
 		return util.Errorf("unknown isolation level: %s", level)
 	}

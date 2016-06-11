@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -37,8 +38,8 @@ func TestCloneProto(t *testing.T) {
 	}{
 		{&roachpb.StoreIdent{}, false},
 		{&roachpb.StoreIdent{ClusterID: uuid.MakeV4()}, true},
-		{&roachpb.TxnMeta{}, false},
-		{&roachpb.TxnMeta{ID: uuid.NewV4()}, true},
+		{&enginepb.TxnMeta{}, false},
+		{&enginepb.TxnMeta{ID: uuid.NewV4()}, true},
 		{&roachpb.Transaction{}, false},
 		{&config.ZoneConfig{RangeMinBytes: 123, RangeMaxBytes: 456}, false},
 	}

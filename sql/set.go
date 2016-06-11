@@ -23,9 +23,9 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 )
 
 // Set sets session variables.
@@ -103,9 +103,9 @@ func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
 	switch n.Isolation {
 	case parser.SerializableIsolation:
-		p.session.DefaultIsolationLevel = roachpb.SERIALIZABLE
+		p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
 	case parser.SnapshotIsolation:
-		p.session.DefaultIsolationLevel = roachpb.SNAPSHOT
+		p.session.DefaultIsolationLevel = enginepb.SNAPSHOT
 	default:
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Isolation)
 	}

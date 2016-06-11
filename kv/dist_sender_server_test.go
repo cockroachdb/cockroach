@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -59,7 +60,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// engine.
 	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
-	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, roachpb.SERIALIZABLE, now, 0)
+	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, enginepb.SERIALIZABLE, now, 0)
 	if err := engine.MVCCPutProto(context.Background(), s.Ctx.Engines[0], nil, key, now, txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
