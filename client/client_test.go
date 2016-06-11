@@ -834,7 +834,6 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 
 	// Use txn.Exec instead of db.Txn to disable auto retry.
 	txn := client.NewTxn(context.TODO(), *db)
-	txn.SetDebugName("", 1)
 	if err := txn.Exec(client.TxnExecOptions{AutoRetry: false, AutoCommit: true}, func(txn *client.Txn, _ *client.TxnExecOptions) error {
 		// Set deadline to sometime in the past.
 		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})

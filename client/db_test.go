@@ -387,6 +387,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "IsFinalized"}:            {},
 		key{txnType, "NewBatch"}:               {},
 		key{txnType, "Exec"}:                   {},
+		key{txnType, "GetDeadline"}:            {},
 		key{txnType, "ResetDeadline"}:          {},
 		key{txnType, "Run"}:                    {},
 		key{txnType, "SetDebugName"}:           {},

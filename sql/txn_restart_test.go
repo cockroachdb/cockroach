@@ -876,11 +876,15 @@ func TestTxnDeadline(t *testing.T) {
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
 		TestingCommandFilter: cmdFilters.runFilters,
-		AdvanceClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
+		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
+			if restartDone {
+				return
+			}
+
 			// Hack to advance the transaction timestamp on a transaction restart.
 			for _, union := range ba.Requests {
 				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
-					if bytes.Contains(req.Key, testKey) && !restartDone {
+					if bytes.Contains(req.Key, testKey) {
 						now := c.Now()
 						now.WallTime += int64(5 * sql.LeaseDuration)
 						c.Update(now)
@@ -898,8 +902,12 @@ func TestTxnDeadline(t *testing.T) {
 
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
+			if restartDone {
+				return nil
+			}
+
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !restartDone {
+				if bytes.Contains(req.Key, testKey) {
 					restartDone = true
 					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on rery.
 					txn := args.Hdr.Txn

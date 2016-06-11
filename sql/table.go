@@ -205,20 +205,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 	}
 
 	// If we didn't find a lease or a lease is about to expire, acquire one.
-	if lease != nil && !lease.hasSomeLifeLeft(p.leaseMgr.clock) {
-		// Remove the lease from p.leases.
-		leases := make([]*LeaseState, len(p.leases)-1)
-		for _, l := range p.leases {
-			if l != lease {
-				leases = append(leases, lease)
-			}
-		}
-		p.leases = leases
-		lease = nil
-		// Reset the deadline so that a new deadline will be set after the lease is acquired.
-		p.txn.ResetDeadline()
-	}
-	if lease == nil {
+	if lease == nil || p.isLeaseExpiring(lease) {
 		var err error
 		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
 		if err != nil {
@@ -256,8 +243,8 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		}
 	}
 
-	// If we didn't find a lease, acquire one.
-	if lease == nil {
+	// If we didn't find a lease or a lease is about to expire, acquire one.
+	if lease == nil || p.isLeaseExpiring(lease) {
 		var err error
 		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if err != nil {
@@ -274,6 +261,37 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
 	return &lease.TableDescriptor, nil
+}
+
+// isLeaseExpiring returns true if a lease is about to expire. The method also removes
+// the lease from the planner and resets the transaction deadline.
+func (p *planner) isLeaseExpiring(lease *LeaseState) bool {
+	if lease == nil || lease.hasSomeLifeLeft(p.leaseMgr.clock) {
+		return false
+	}
+
+	// Remove the lease from p.leases.
+	idx := -1
+	for i, l := range p.leases {
+		if l == lease {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		log.Warningf("lease (%s) not found", lease)
+		return false
+	}
+	p.leases[idx] = p.leases[len(p.leases)-1]
+	p.leases[len(p.leases)-1] = nil
+	p.leases = p.leases[:len(p.leases)-1]
+
+	// Reset the deadline so that a new deadline will be set after the lease is acquired.
+	p.txn.ResetDeadline()
+	for _, l := range p.leases {
+		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: l.Expiration().UnixNano()})
+	}
+	return true
 }
 
 // getTableNames implements the SchemaAccessor interface.

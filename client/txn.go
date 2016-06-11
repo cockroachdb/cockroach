@@ -429,6 +429,11 @@ func (txn *Txn) ResetDeadline() {
 	txn.deadline = nil
 }
 
+// GetDeadline returns the deadline. For testing.
+func (txn *Txn) GetDeadline() *roachpb.Timestamp {
+	return txn.deadline
+}
+
 // Rollback sends an EndTransactionRequest with Commit=false.
 // The txn's status is set to ABORTED in case of error. txn is
 // considered finalized and cannot be used to send any more commands.
