@@ -210,7 +210,7 @@ message Transaction {
   option (gogoproto.populate) = true;
 
   // The transaction metadata. These are persisted with every intent.
-  optional storage.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional storage.engine.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // A free-text identifier for debug purposes.
   optional string name = 2 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
@@ -258,7 +258,7 @@ message Transaction {
 // A Intent is a Span together with a Transaction metadata and its status.
 message Intent {
   optional Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
 }
 

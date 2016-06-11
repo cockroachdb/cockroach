@@ -1184,14 +1184,14 @@ class Transaction : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.storage.enginepb.TxnMeta meta = 1;
+  // optional .cockroach.storage.engine.enginepb.TxnMeta meta = 1;
   bool has_meta() const;
   void clear_meta();
   static const int kMetaFieldNumber = 1;
-  const ::cockroach::storage::enginepb::TxnMeta& meta() const;
-  ::cockroach::storage::enginepb::TxnMeta* mutable_meta();
-  ::cockroach::storage::enginepb::TxnMeta* release_meta();
-  void set_allocated_meta(::cockroach::storage::enginepb::TxnMeta* meta);
+  const ::cockroach::storage::engine::enginepb::TxnMeta& meta() const;
+  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_meta();
+  ::cockroach::storage::engine::enginepb::TxnMeta* release_meta();
+  void set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta);
 
   // optional string name = 2;
   bool has_name() const;
@@ -1305,7 +1305,7 @@ class Transaction : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::storage::enginepb::TxnMeta* meta_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
   ::google::protobuf::internal::ArenaStringPtr name_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
   ::cockroach::util::hlc::Timestamp* orig_timestamp_;
@@ -1408,14 +1408,14 @@ class Intent : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_span();
   void set_allocated_span(::cockroach::roachpb::Span* span);
 
-  // optional .cockroach.storage.enginepb.TxnMeta txn = 2;
+  // optional .cockroach.storage.engine.enginepb.TxnMeta txn = 2;
   bool has_txn() const;
   void clear_txn();
   static const int kTxnFieldNumber = 2;
-  const ::cockroach::storage::enginepb::TxnMeta& txn() const;
-  ::cockroach::storage::enginepb::TxnMeta* mutable_txn();
-  ::cockroach::storage::enginepb::TxnMeta* release_txn();
-  void set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn);
+  const ::cockroach::storage::engine::enginepb::TxnMeta& txn() const;
+  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_txn();
+  ::cockroach::storage::engine::enginepb::TxnMeta* release_txn();
+  void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
 
   // optional .cockroach.roachpb.TransactionStatus status = 3;
   bool has_status() const;
@@ -1437,7 +1437,7 @@ class Intent : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* span_;
-  ::cockroach::storage::enginepb::TxnMeta* txn_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
   int status_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
@@ -2662,7 +2662,7 @@ inline void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroa
 
 // Transaction
 
-// optional .cockroach.storage.enginepb.TxnMeta meta = 1;
+// optional .cockroach.storage.engine.enginepb.TxnMeta meta = 1;
 inline bool Transaction::has_meta() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -2673,29 +2673,29 @@ inline void Transaction::clear_has_meta() {
   _has_bits_[0] &= ~0x00000001u;
 }
 inline void Transaction::clear_meta() {
-  if (meta_ != NULL) meta_->::cockroach::storage::enginepb::TxnMeta::Clear();
+  if (meta_ != NULL) meta_->::cockroach::storage::engine::enginepb::TxnMeta::Clear();
   clear_has_meta();
 }
-inline const ::cockroach::storage::enginepb::TxnMeta& Transaction::meta() const {
+inline const ::cockroach::storage::engine::enginepb::TxnMeta& Transaction::meta() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.meta)
   return meta_ != NULL ? *meta_ : *default_instance_->meta_;
 }
-inline ::cockroach::storage::enginepb::TxnMeta* Transaction::mutable_meta() {
+inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::mutable_meta() {
   set_has_meta();
   if (meta_ == NULL) {
-    meta_ = new ::cockroach::storage::enginepb::TxnMeta;
+    meta_ = new ::cockroach::storage::engine::enginepb::TxnMeta;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.meta)
   return meta_;
 }
-inline ::cockroach::storage::enginepb::TxnMeta* Transaction::release_meta() {
+inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::release_meta() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.meta)
   clear_has_meta();
-  ::cockroach::storage::enginepb::TxnMeta* temp = meta_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* temp = meta_;
   meta_ = NULL;
   return temp;
 }
-inline void Transaction::set_allocated_meta(::cockroach::storage::enginepb::TxnMeta* meta) {
+inline void Transaction::set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta) {
   delete meta_;
   meta_ = meta;
   if (meta) {
@@ -3085,7 +3085,7 @@ inline void Intent::set_allocated_span(::cockroach::roachpb::Span* span) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.span)
 }
 
-// optional .cockroach.storage.enginepb.TxnMeta txn = 2;
+// optional .cockroach.storage.engine.enginepb.TxnMeta txn = 2;
 inline bool Intent::has_txn() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -3096,29 +3096,29 @@ inline void Intent::clear_has_txn() {
   _has_bits_[0] &= ~0x00000002u;
 }
 inline void Intent::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::storage::enginepb::TxnMeta::Clear();
+  if (txn_ != NULL) txn_->::cockroach::storage::engine::enginepb::TxnMeta::Clear();
   clear_has_txn();
 }
-inline const ::cockroach::storage::enginepb::TxnMeta& Intent::txn() const {
+inline const ::cockroach::storage::engine::enginepb::TxnMeta& Intent::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
-inline ::cockroach::storage::enginepb::TxnMeta* Intent::mutable_txn() {
+inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
-    txn_ = new ::cockroach::storage::enginepb::TxnMeta;
+    txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.txn)
   return txn_;
 }
-inline ::cockroach::storage::enginepb::TxnMeta* Intent::release_txn() {
+inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::release_txn() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.txn)
   clear_has_txn();
-  ::cockroach::storage::enginepb::TxnMeta* temp = txn_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* temp = txn_;
   txn_ = NULL;
   return temp;
 }
-inline void Intent::set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn) {
+inline void Intent::set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {

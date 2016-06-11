@@ -34,6 +34,7 @@
 
 namespace cockroach {
 namespace storage {
+namespace engine {
 namespace enginepb {
 
 // Internal implementation detail -- do not call these.
@@ -142,12 +143,12 @@ class TxnMeta : public ::google::protobuf::Message {
   ::std::string* release_id();
   void set_allocated_id(::std::string* id);
 
-  // optional .cockroach.storage.enginepb.IsolationType isolation = 2;
+  // optional .cockroach.storage.engine.enginepb.IsolationType isolation = 2;
   bool has_isolation() const;
   void clear_isolation();
   static const int kIsolationFieldNumber = 2;
-  ::cockroach::storage::enginepb::IsolationType isolation() const;
-  void set_isolation(::cockroach::storage::enginepb::IsolationType value);
+  ::cockroach::storage::engine::enginepb::IsolationType isolation() const;
+  void set_isolation(::cockroach::storage::engine::enginepb::IsolationType value);
 
   // optional bytes key = 3;
   bool has_key() const;
@@ -198,7 +199,7 @@ class TxnMeta : public ::google::protobuf::Message {
   ::google::protobuf::int32 batch_index() const;
   void set_batch_index(::google::protobuf::int32 value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.TxnMeta)
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TxnMeta)
  private:
   inline void set_has_id();
   inline void clear_has_id();
@@ -301,14 +302,14 @@ class MVCCMetadata : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.storage.enginepb.TxnMeta txn = 1;
+  // optional .cockroach.storage.engine.enginepb.TxnMeta txn = 1;
   bool has_txn() const;
   void clear_txn();
   static const int kTxnFieldNumber = 1;
-  const ::cockroach::storage::enginepb::TxnMeta& txn() const;
-  ::cockroach::storage::enginepb::TxnMeta* mutable_txn();
-  ::cockroach::storage::enginepb::TxnMeta* release_txn();
-  void set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn);
+  const ::cockroach::storage::engine::enginepb::TxnMeta& txn() const;
+  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_txn();
+  ::cockroach::storage::engine::enginepb::TxnMeta* release_txn();
+  void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
 
   // optional .cockroach.util.hlc.Timestamp timestamp = 2;
   bool has_timestamp() const;
@@ -361,7 +362,7 @@ class MVCCMetadata : public ::google::protobuf::Message {
   ::cockroach::util::hlc::Timestamp* release_merge_timestamp();
   void set_allocated_merge_timestamp(::cockroach::util::hlc::Timestamp* merge_timestamp);
 
-  // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.MVCCMetadata)
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCMetadata)
  private:
   inline void set_has_txn();
   inline void clear_has_txn();
@@ -381,7 +382,7 @@ class MVCCMetadata : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::storage::enginepb::TxnMeta* txn_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
@@ -552,7 +553,7 @@ class MVCCStats : public ::google::protobuf::Message {
   ::google::protobuf::int64 sys_count() const;
   void set_sys_count(::google::protobuf::int64 value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.MVCCStats)
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCStats)
  private:
   inline void set_has_last_update_nanos();
   inline void clear_has_last_update_nanos();
@@ -627,32 +628,32 @@ inline void TxnMeta::clear_id() {
   clear_has_id();
 }
 inline const ::std::string& TxnMeta::id() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.id)
   return id_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void TxnMeta::set_id(const ::std::string& value) {
   set_has_id();
   id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
 inline void TxnMeta::set_id(const char* value) {
   set_has_id();
   id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
 inline void TxnMeta::set_id(const void* value, size_t size) {
   set_has_id();
   id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
 inline ::std::string* TxnMeta::mutable_id() {
   set_has_id();
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.id)
   return id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* TxnMeta::release_id() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.id)
   clear_has_id();
   return id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -663,10 +664,10 @@ inline void TxnMeta::set_allocated_id(::std::string* id) {
     clear_has_id();
   }
   id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), id);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.TxnMeta.id)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
 
-// optional .cockroach.storage.enginepb.IsolationType isolation = 2;
+// optional .cockroach.storage.engine.enginepb.IsolationType isolation = 2;
 inline bool TxnMeta::has_isolation() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -680,15 +681,15 @@ inline void TxnMeta::clear_isolation() {
   isolation_ = 0;
   clear_has_isolation();
 }
-inline ::cockroach::storage::enginepb::IsolationType TxnMeta::isolation() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.isolation)
-  return static_cast< ::cockroach::storage::enginepb::IsolationType >(isolation_);
+inline ::cockroach::storage::engine::enginepb::IsolationType TxnMeta::isolation() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.isolation)
+  return static_cast< ::cockroach::storage::engine::enginepb::IsolationType >(isolation_);
 }
-inline void TxnMeta::set_isolation(::cockroach::storage::enginepb::IsolationType value) {
-  assert(::cockroach::storage::enginepb::IsolationType_IsValid(value));
+inline void TxnMeta::set_isolation(::cockroach::storage::engine::enginepb::IsolationType value) {
+  assert(::cockroach::storage::engine::enginepb::IsolationType_IsValid(value));
   set_has_isolation();
   isolation_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.isolation)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.isolation)
 }
 
 // optional bytes key = 3;
@@ -706,32 +707,32 @@ inline void TxnMeta::clear_key() {
   clear_has_key();
 }
 inline const ::std::string& TxnMeta::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.key)
   return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void TxnMeta::set_key(const ::std::string& value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
 inline void TxnMeta::set_key(const char* value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
 inline void TxnMeta::set_key(const void* value, size_t size) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
 inline ::std::string* TxnMeta::mutable_key() {
   set_has_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* TxnMeta::release_key() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -742,7 +743,7 @@ inline void TxnMeta::set_allocated_key(::std::string* key) {
     clear_has_key();
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.TxnMeta.key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
 
 // optional uint32 epoch = 4;
@@ -760,13 +761,13 @@ inline void TxnMeta::clear_epoch() {
   clear_has_epoch();
 }
 inline ::google::protobuf::uint32 TxnMeta::epoch() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.epoch)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.epoch)
   return epoch_;
 }
 inline void TxnMeta::set_epoch(::google::protobuf::uint32 value) {
   set_has_epoch();
   epoch_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.epoch)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.epoch)
 }
 
 // optional .cockroach.util.hlc.Timestamp timestamp = 5;
@@ -784,7 +785,7 @@ inline void TxnMeta::clear_timestamp() {
   clear_has_timestamp();
 }
 inline const ::cockroach::util::hlc::Timestamp& TxnMeta::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.timestamp)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
 inline ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_timestamp() {
@@ -792,11 +793,11 @@ inline ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_timestamp() {
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.TxnMeta.timestamp)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
   return timestamp_;
 }
 inline ::cockroach::util::hlc::Timestamp* TxnMeta::release_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.TxnMeta.timestamp)
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
   clear_has_timestamp();
   ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
@@ -810,7 +811,7 @@ inline void TxnMeta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* 
   } else {
     clear_has_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.TxnMeta.timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
 }
 
 // optional int32 priority = 6;
@@ -828,13 +829,13 @@ inline void TxnMeta::clear_priority() {
   clear_has_priority();
 }
 inline ::google::protobuf::int32 TxnMeta::priority() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.priority)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.priority)
   return priority_;
 }
 inline void TxnMeta::set_priority(::google::protobuf::int32 value) {
   set_has_priority();
   priority_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.priority)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.priority)
 }
 
 // optional int32 sequence = 7;
@@ -852,13 +853,13 @@ inline void TxnMeta::clear_sequence() {
   clear_has_sequence();
 }
 inline ::google::protobuf::int32 TxnMeta::sequence() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.sequence)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.sequence)
   return sequence_;
 }
 inline void TxnMeta::set_sequence(::google::protobuf::int32 value) {
   set_has_sequence();
   sequence_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.sequence)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.sequence)
 }
 
 // optional int32 batch_index = 8;
@@ -876,20 +877,20 @@ inline void TxnMeta::clear_batch_index() {
   clear_has_batch_index();
 }
 inline ::google::protobuf::int32 TxnMeta::batch_index() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.TxnMeta.batch_index)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
   return batch_index_;
 }
 inline void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
   set_has_batch_index();
   batch_index_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.TxnMeta.batch_index)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
 }
 
 // -------------------------------------------------------------------
 
 // MVCCMetadata
 
-// optional .cockroach.storage.enginepb.TxnMeta txn = 1;
+// optional .cockroach.storage.engine.enginepb.TxnMeta txn = 1;
 inline bool MVCCMetadata::has_txn() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -900,29 +901,29 @@ inline void MVCCMetadata::clear_has_txn() {
   _has_bits_[0] &= ~0x00000001u;
 }
 inline void MVCCMetadata::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::storage::enginepb::TxnMeta::Clear();
+  if (txn_ != NULL) txn_->::cockroach::storage::engine::enginepb::TxnMeta::Clear();
   clear_has_txn();
 }
-inline const ::cockroach::storage::enginepb::TxnMeta& MVCCMetadata::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.txn)
+inline const ::cockroach::storage::engine::enginepb::TxnMeta& MVCCMetadata::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
-inline ::cockroach::storage::enginepb::TxnMeta* MVCCMetadata::mutable_txn() {
+inline ::cockroach::storage::engine::enginepb::TxnMeta* MVCCMetadata::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
-    txn_ = new ::cockroach::storage::enginepb::TxnMeta;
+    txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.MVCCMetadata.txn)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.txn)
   return txn_;
 }
-inline ::cockroach::storage::enginepb::TxnMeta* MVCCMetadata::release_txn() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.MVCCMetadata.txn)
+inline ::cockroach::storage::engine::enginepb::TxnMeta* MVCCMetadata::release_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.txn)
   clear_has_txn();
-  ::cockroach::storage::enginepb::TxnMeta* temp = txn_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* temp = txn_;
   txn_ = NULL;
   return temp;
 }
-inline void MVCCMetadata::set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn) {
+inline void MVCCMetadata::set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -930,7 +931,7 @@ inline void MVCCMetadata::set_allocated_txn(::cockroach::storage::enginepb::TxnM
   } else {
     clear_has_txn();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.MVCCMetadata.txn)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.txn)
 }
 
 // optional .cockroach.util.hlc.Timestamp timestamp = 2;
@@ -948,7 +949,7 @@ inline void MVCCMetadata::clear_timestamp() {
   clear_has_timestamp();
 }
 inline const ::cockroach::util::hlc::Timestamp& MVCCMetadata::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.timestamp)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
 inline ::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_timestamp() {
@@ -956,11 +957,11 @@ inline ::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_timestamp() {
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.MVCCMetadata.timestamp)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_;
 }
 inline ::cockroach::util::hlc::Timestamp* MVCCMetadata::release_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.MVCCMetadata.timestamp)
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   clear_has_timestamp();
   ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
@@ -974,7 +975,7 @@ inline void MVCCMetadata::set_allocated_timestamp(::cockroach::util::hlc::Timest
   } else {
     clear_has_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.MVCCMetadata.timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
 }
 
 // optional bool deleted = 3;
@@ -992,13 +993,13 @@ inline void MVCCMetadata::clear_deleted() {
   clear_has_deleted();
 }
 inline bool MVCCMetadata::deleted() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.deleted)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.deleted)
   return deleted_;
 }
 inline void MVCCMetadata::set_deleted(bool value) {
   set_has_deleted();
   deleted_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCMetadata.deleted)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.deleted)
 }
 
 // optional int64 key_bytes = 4;
@@ -1016,13 +1017,13 @@ inline void MVCCMetadata::clear_key_bytes() {
   clear_has_key_bytes();
 }
 inline ::google::protobuf::int64 MVCCMetadata::key_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.key_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.key_bytes)
   return key_bytes_;
 }
 inline void MVCCMetadata::set_key_bytes(::google::protobuf::int64 value) {
   set_has_key_bytes();
   key_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCMetadata.key_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.key_bytes)
 }
 
 // optional int64 val_bytes = 5;
@@ -1040,13 +1041,13 @@ inline void MVCCMetadata::clear_val_bytes() {
   clear_has_val_bytes();
 }
 inline ::google::protobuf::int64 MVCCMetadata::val_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.val_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.val_bytes)
   return val_bytes_;
 }
 inline void MVCCMetadata::set_val_bytes(::google::protobuf::int64 value) {
   set_has_val_bytes();
   val_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCMetadata.val_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.val_bytes)
 }
 
 // optional bytes raw_bytes = 6;
@@ -1064,32 +1065,32 @@ inline void MVCCMetadata::clear_raw_bytes() {
   clear_has_raw_bytes();
 }
 inline const ::std::string& MVCCMetadata::raw_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
   return raw_bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void MVCCMetadata::set_raw_bytes(const ::std::string& value) {
   set_has_raw_bytes();
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 inline void MVCCMetadata::set_raw_bytes(const char* value) {
   set_has_raw_bytes();
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 inline void MVCCMetadata::set_raw_bytes(const void* value, size_t size) {
   set_has_raw_bytes();
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 inline ::std::string* MVCCMetadata::mutable_raw_bytes() {
   set_has_raw_bytes();
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
   return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* MVCCMetadata::release_raw_bytes() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
   clear_has_raw_bytes();
   return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -1100,7 +1101,7 @@ inline void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
     clear_has_raw_bytes();
   }
   raw_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), raw_bytes);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.MVCCMetadata.raw_bytes)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 
 // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
@@ -1118,7 +1119,7 @@ inline void MVCCMetadata::clear_merge_timestamp() {
   clear_has_merge_timestamp();
 }
 inline const ::cockroach::util::hlc::Timestamp& MVCCMetadata::merge_timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.merge_timestamp)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_ != NULL ? *merge_timestamp_ : *default_instance_->merge_timestamp_;
 }
 inline ::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_merge_timestamp() {
@@ -1126,11 +1127,11 @@ inline ::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_merge_timestamp(
   if (merge_timestamp_ == NULL) {
     merge_timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.enginepb.MVCCMetadata.merge_timestamp)
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_;
 }
 inline ::cockroach::util::hlc::Timestamp* MVCCMetadata::release_merge_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.enginepb.MVCCMetadata.merge_timestamp)
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   clear_has_merge_timestamp();
   ::cockroach::util::hlc::Timestamp* temp = merge_timestamp_;
   merge_timestamp_ = NULL;
@@ -1144,7 +1145,7 @@ inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::
   } else {
     clear_has_merge_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.MVCCMetadata.merge_timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
 }
 
 // -------------------------------------------------------------------
@@ -1166,13 +1167,13 @@ inline void MVCCStats::clear_last_update_nanos() {
   clear_has_last_update_nanos();
 }
 inline ::google::protobuf::int64 MVCCStats::last_update_nanos() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.last_update_nanos)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.last_update_nanos)
   return last_update_nanos_;
 }
 inline void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
   set_has_last_update_nanos();
   last_update_nanos_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.last_update_nanos)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.last_update_nanos)
 }
 
 // optional sfixed64 intent_age = 2;
@@ -1190,13 +1191,13 @@ inline void MVCCStats::clear_intent_age() {
   clear_has_intent_age();
 }
 inline ::google::protobuf::int64 MVCCStats::intent_age() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.intent_age)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.intent_age)
   return intent_age_;
 }
 inline void MVCCStats::set_intent_age(::google::protobuf::int64 value) {
   set_has_intent_age();
   intent_age_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.intent_age)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.intent_age)
 }
 
 // optional sfixed64 gc_bytes_age = 3;
@@ -1214,13 +1215,13 @@ inline void MVCCStats::clear_gc_bytes_age() {
   clear_has_gc_bytes_age();
 }
 inline ::google::protobuf::int64 MVCCStats::gc_bytes_age() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.gc_bytes_age)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.gc_bytes_age)
   return gc_bytes_age_;
 }
 inline void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
   set_has_gc_bytes_age();
   gc_bytes_age_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.gc_bytes_age)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.gc_bytes_age)
 }
 
 // optional sfixed64 live_bytes = 4;
@@ -1238,13 +1239,13 @@ inline void MVCCStats::clear_live_bytes() {
   clear_has_live_bytes();
 }
 inline ::google::protobuf::int64 MVCCStats::live_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.live_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.live_bytes)
   return live_bytes_;
 }
 inline void MVCCStats::set_live_bytes(::google::protobuf::int64 value) {
   set_has_live_bytes();
   live_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.live_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.live_bytes)
 }
 
 // optional sfixed64 live_count = 5;
@@ -1262,13 +1263,13 @@ inline void MVCCStats::clear_live_count() {
   clear_has_live_count();
 }
 inline ::google::protobuf::int64 MVCCStats::live_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.live_count)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.live_count)
   return live_count_;
 }
 inline void MVCCStats::set_live_count(::google::protobuf::int64 value) {
   set_has_live_count();
   live_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.live_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.live_count)
 }
 
 // optional sfixed64 key_bytes = 6;
@@ -1286,13 +1287,13 @@ inline void MVCCStats::clear_key_bytes() {
   clear_has_key_bytes();
 }
 inline ::google::protobuf::int64 MVCCStats::key_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.key_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.key_bytes)
   return key_bytes_;
 }
 inline void MVCCStats::set_key_bytes(::google::protobuf::int64 value) {
   set_has_key_bytes();
   key_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.key_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.key_bytes)
 }
 
 // optional sfixed64 key_count = 7;
@@ -1310,13 +1311,13 @@ inline void MVCCStats::clear_key_count() {
   clear_has_key_count();
 }
 inline ::google::protobuf::int64 MVCCStats::key_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.key_count)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.key_count)
   return key_count_;
 }
 inline void MVCCStats::set_key_count(::google::protobuf::int64 value) {
   set_has_key_count();
   key_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.key_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.key_count)
 }
 
 // optional sfixed64 val_bytes = 8;
@@ -1334,13 +1335,13 @@ inline void MVCCStats::clear_val_bytes() {
   clear_has_val_bytes();
 }
 inline ::google::protobuf::int64 MVCCStats::val_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.val_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.val_bytes)
   return val_bytes_;
 }
 inline void MVCCStats::set_val_bytes(::google::protobuf::int64 value) {
   set_has_val_bytes();
   val_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.val_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.val_bytes)
 }
 
 // optional sfixed64 val_count = 9;
@@ -1358,13 +1359,13 @@ inline void MVCCStats::clear_val_count() {
   clear_has_val_count();
 }
 inline ::google::protobuf::int64 MVCCStats::val_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.val_count)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.val_count)
   return val_count_;
 }
 inline void MVCCStats::set_val_count(::google::protobuf::int64 value) {
   set_has_val_count();
   val_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.val_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.val_count)
 }
 
 // optional sfixed64 intent_bytes = 10;
@@ -1382,13 +1383,13 @@ inline void MVCCStats::clear_intent_bytes() {
   clear_has_intent_bytes();
 }
 inline ::google::protobuf::int64 MVCCStats::intent_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.intent_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.intent_bytes)
   return intent_bytes_;
 }
 inline void MVCCStats::set_intent_bytes(::google::protobuf::int64 value) {
   set_has_intent_bytes();
   intent_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.intent_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.intent_bytes)
 }
 
 // optional sfixed64 intent_count = 11;
@@ -1406,13 +1407,13 @@ inline void MVCCStats::clear_intent_count() {
   clear_has_intent_count();
 }
 inline ::google::protobuf::int64 MVCCStats::intent_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.intent_count)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.intent_count)
   return intent_count_;
 }
 inline void MVCCStats::set_intent_count(::google::protobuf::int64 value) {
   set_has_intent_count();
   intent_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.intent_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.intent_count)
 }
 
 // optional sfixed64 sys_bytes = 12;
@@ -1430,13 +1431,13 @@ inline void MVCCStats::clear_sys_bytes() {
   clear_has_sys_bytes();
 }
 inline ::google::protobuf::int64 MVCCStats::sys_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.sys_bytes)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.sys_bytes)
   return sys_bytes_;
 }
 inline void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
   set_has_sys_bytes();
   sys_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.sys_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.sys_bytes)
 }
 
 // optional sfixed64 sys_count = 13;
@@ -1454,13 +1455,13 @@ inline void MVCCStats::clear_sys_count() {
   clear_has_sys_count();
 }
 inline ::google::protobuf::int64 MVCCStats::sys_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.sys_count)
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.sys_count)
   return sys_count_;
 }
 inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
   set_has_sys_count();
   sys_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.sys_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.sys_count)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -1472,6 +1473,7 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
 // @@protoc_insertion_point(namespace_scope)
 
 }  // namespace enginepb
+}  // namespace engine
 }  // namespace storage
 }  // namespace cockroach
 
@@ -1479,10 +1481,10 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
 namespace google {
 namespace protobuf {
 
-template <> struct is_proto_enum< ::cockroach::storage::enginepb::IsolationType> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::cockroach::storage::engine::enginepb::IsolationType> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::storage::enginepb::IsolationType>() {
-  return ::cockroach::storage::enginepb::IsolationType_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::storage::engine::enginepb::IsolationType>() {
+  return ::cockroach::storage::engine::enginepb::IsolationType_descriptor();
 }
 
 }  // namespace protobuf
