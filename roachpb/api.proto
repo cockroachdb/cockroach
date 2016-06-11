@@ -459,7 +459,7 @@ message PushTxnRequest {
   // the push transaction request. Note that this may not be the most
   // up-to-date value of the transaction record, but will be set or
   // merged as appropriate.
-  optional storage.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
   // PushTo is the timestamp just after which PusheeTxn is attempted to be
   // pushed. During conflict resolution, it should be set to the timestamp
   // of the its conflicting write.
@@ -498,7 +498,7 @@ message PushTxnResponse {
 message ResolveIntentRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intent is being resolved.
-  optional storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
   // Optionally poison the sequence cache for the transaction the intent's
@@ -519,7 +519,7 @@ message ResolveIntentResponse {
 message ResolveIntentRangeRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
-  optional storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
   // Optionally poison the sequence cache for the transaction on all ranges
