@@ -44,7 +44,7 @@ type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
  * importable module format (rather than its current design of declaring ambient
  * global objects).
  */
-const enum TimeSeriesQueryAggregator {
+export const enum TimeSeriesQueryAggregator {
   AVG = 1,
   SUM = 2,
   MAX = 3,
@@ -56,7 +56,7 @@ const enum TimeSeriesQueryAggregator {
  * query system, used to select an derivated function.
  * This must be kept manually in sync with the same enumeration in `generated/protos.d.ts`.
  */
-const enum TimeSeriesQueryDerivative {
+export const enum TimeSeriesQueryDerivative {
   NONE = 0,
   DERIVATIVE = 1,
   NON_NEGATIVE_DERIVATIVE = 2
