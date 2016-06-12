@@ -335,6 +335,14 @@ func TestSetGetChecked(t *testing.T) {
 		t.Errorf("set %f on a value and extracted it, expected %f back, but got %f", f, f, r)
 	}
 
+	b := true
+	v.SetBool(b)
+	if r, err := v.GetBool(); err != nil {
+		t.Fatal(err)
+	} else if b != r {
+		t.Errorf("set %t on a value and extracted it, expected %t back, but got %t", b, b, r)
+	}
+
 	i := int64(1)
 	v.SetInt(i)
 	if r, err := v.GetInt(); err != nil {
@@ -885,6 +893,15 @@ func BenchmarkValueSetFloat(b *testing.B) {
 	}
 }
 
+func BenchmarkValueSetBool(b *testing.B) {
+	v := Value{}
+	bo := true
+
+	for i := 0; i < b.N; i++ {
+		v.SetBool(bo)
+	}
+}
+
 func BenchmarkValueSetInt(b *testing.B) {
 	v := Value{}
 	in := int64(1)
@@ -953,6 +970,18 @@ func BenchmarkValueGetFloat(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		if _, err := v.GetFloat(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetBool(b *testing.B) {
+	v := Value{}
+	bo := true
+	v.SetBool(bo)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetBool(); err != nil {
 			b.Fatal(err)
 		}
 	}

@@ -566,6 +566,18 @@ func (v *Value) SetFloat(f float64) {
 	v.RawBytes = EncodeFloatValue(v.RawBytes, f)
 }
 
+// SetBool encodes the specified bool value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetBool(b bool) {
+	// 0 or 1 will always encode to a 1-byte long varint.
+	v.RawBytes = make([]byte, checksumSize, headerSize+1)
+	i := int64(0)
+	if b {
+		i = 1
+	}
+	v.RawBytes = EncodeIntValue(v.RawBytes, i)
+}
+
 // SetInt encodes the specified int64 value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetInt(i int64) {
@@ -642,6 +654,17 @@ func (v Value) GetBytes() ([]byte, error) {
 func (v Value) GetFloat() (float64, error) {
 	_, f, err := DecodeFloatValue(v.RawBytes[checksumSize:])
 	return f, err
+}
+
+// GetBool decodes a bool value from the bytes field of the receiver. If the
+// tag is not INT (the tag used for bool values) or the value cannot be decoded
+// an error will be returned.
+func (v Value) GetBool() (bool, error) {
+	_, i, err := DecodeIntValue(v.RawBytes[checksumSize:])
+	if err != nil {
+		return false, err
+	}
+	return i != 0, nil
 }
 
 // GetInt decodes an int64 value from the bytes field of the receiver. If the
