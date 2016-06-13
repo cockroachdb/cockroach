@@ -190,6 +190,10 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
+	if d.Nullable.ConstraintName != "" {
+		col.NullableConstraintName = string(d.Nullable.ConstraintName)
+	}
+
 	var colDatumType parser.Datum
 	switch t := d.Type.(type) {
 	case *parser.BoolColType:
@@ -258,7 +262,9 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		if p.AggregateInExpr(d.DefaultExpr.Expr) {
 			return nil, nil, fmt.Errorf("Aggregate functions are not allowed in DEFAULT expressions")
 		}
-
+		if d.DefaultExpr.ConstraintName != "" {
+			col.DefaultExprConstraintName = string(d.DefaultExpr.ConstraintName)
+		}
 		s := d.DefaultExpr.Expr.String()
 		col.DefaultExpr = &s
 	}
@@ -269,6 +275,9 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 			Unique:           true,
 			ColumnNames:      []string{string(d.Name)},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+		}
+		if d.UniqueConstraintName != "" {
+			idx.Name = string(d.UniqueConstraintName)
 		}
 	}
 

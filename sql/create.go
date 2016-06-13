@@ -223,7 +223,11 @@ func hoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
 			if col.CheckExpr.Expr != nil {
-				n.Defs = append(n.Defs, &parser.CheckConstraintTableDef{Expr: col.CheckExpr.Expr})
+				def := &parser.CheckConstraintTableDef{Expr: col.CheckExpr.Expr}
+				if col.CheckExpr.ConstraintName != "" {
+					def.Name = parser.Name(col.CheckExpr.ConstraintName)
+				}
+				n.Defs = append(n.Defs, def)
 				col.CheckExpr.Expr = nil
 			}
 		}
