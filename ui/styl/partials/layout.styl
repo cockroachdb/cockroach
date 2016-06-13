@@ -321,6 +321,9 @@ a.toggle
       &:first-child
         padding-top 0
 
+#banner
+  max-height 73px
+
 .banner
   width 100%
   background-color $secondary-blue
@@ -343,9 +346,9 @@ a.toggle
 
   // only show the first .banner
   // any .banner with a previous .banner as a sibling is hidden
-  & ~ &
-    height 0
-    opacity 0
+  // & ~ &
+  //   height 0
+  //   opacity 0
 
   button
     margin-left 15px

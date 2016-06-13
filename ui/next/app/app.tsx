@@ -10,11 +10,9 @@
  *      - Greyed-out display on error
  *    - Cluster health indicator
  * ! Notification Banners
- *    - Help Us
  *    - Cockroach out of date
  * - Node Page
  *    ! Logs Page
- * ! HelpUs Modal
  * - Layout Footer
  * ! HelpUs communication with CRL server
  *

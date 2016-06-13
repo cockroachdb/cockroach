@@ -14,13 +14,10 @@ export interface HelpUsProps {
  * Renders the main content of the help us page.
  */
 export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
+  state = new OptInAttributes();
+
   static title() {
     return <h2>Help Cockroach Labs</h2>;
-  }
-
-  constructor(props: any) {
-    super(props);
-    this.state = new OptInAttributes();
   }
 
   componentWillMount() {
@@ -97,8 +94,8 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
 
 let optinAttributes = (state: any): OptInAttributes => state && state.uiData && state.uiData.data && state.uiData.data[KEY_HELPUS];
 
-// Connect the EventsList class with our redux store.
-let eventsConnected = connect(
+// Connect the HelpUs class with our redux store.
+let helpusConnected = connect(
   (state, ownProps) => {
     return {
       optInAttributes: optinAttributes(state),
@@ -110,4 +107,4 @@ let eventsConnected = connect(
   }
 )(HelpUs);
 
-export default eventsConnected;
+export default helpusConnected;
