@@ -668,8 +668,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		return err
 	}
 
-	rangeID := r.RangeID
-
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
 
@@ -678,9 +676,9 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	r.mu.Unlock()
 
 	log.Infof("replica %d received snapshot for range %d at index %d. encoded size=%d, %d KV pairs, %d log entries",
-		replicaID, rangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
+		replicaID, desc.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %d applied snapshot for range %d in %s", replicaID, rangeID, timeutil.Since(start))
+		log.Infof("replica %d applied snapshot for range %d in %s", replicaID, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
@@ -742,7 +740,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 
 	// Load updated range stats. The local newStats variable will be assigned
 	// to r.stats after the batch commits.
-	newStats, err := newRangeStats(desc.RangeID, batch)
+	newMS, err := loadMVCCStats(batch, desc.RangeID)
 	if err != nil {
 		return err
 	}
@@ -755,20 +753,16 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	// performance implications are not likely to be drastic. If our feelings
 	// about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	if err := setLastIndex(batch, rangeID, snap.Metadata.Index); err != nil {
+	if err := setLastIndex(batch, desc.RangeID, snap.Metadata.Index); err != nil {
 		return err
 	}
 
-	appliedIndex, leaseAppliedIndex, err := loadAppliedIndex(batch, rangeID, true /* initialized */)
+	appliedIndex, leaseAppliedIndex, err := loadAppliedIndex(batch, desc.RangeID, true /* initialized */)
 	if err != nil {
 		return err
 	}
 
 	batch.Defer(func() {
-		// Update the range and store stats.
-		r.store.metrics.subtractMVCCStats(r.stats.mvccStats)
-		r.stats.Replace(newStats)
-		r.store.metrics.addMVCCStats(r.stats.mvccStats)
 
 		r.mu.Lock()
 		// As outlined above, last and applied index are the same after applying
@@ -783,6 +777,11 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		r.mu.state.leaderLease = lease
 		r.mu.state.frozen = frozen
 		r.mu.state.gcThreshold = lastThreshold
+
+		// Update the range and store stats.
+		r.store.metrics.subtractMVCCStats(r.mu.state.ms)
+		r.mu.state.ms = newMS
+		r.store.metrics.addMVCCStats(newMS)
 		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.
@@ -795,7 +794,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		}
 
 		// Fill the reservation if there was any one for this range.
-		r.store.bookie.Fill(rangeID)
+		r.store.bookie.Fill(desc.RangeID)
 
 		// Update the range descriptor. This is done last as this is the step that
 		// makes the Replica visible in the Store.
