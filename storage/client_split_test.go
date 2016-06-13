@@ -433,8 +433,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err := verifyRecomputedStats(snap, rng.Desc(), ms, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
-	inMemMS := rng.GetMVCCStats()
-	if inMemMS != ms {
+	if inMemMS := rng.GetMVCCStats(); inMemMS != ms {
 		t.Fatalf("in-memory and on-disk diverged:\n%+v\n!=\n%+v", inMemMS, ms)
 	}
 
