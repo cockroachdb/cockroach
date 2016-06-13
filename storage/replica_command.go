@@ -1439,7 +1439,7 @@ func (r *Replica) LeaderLease(
 	defer r.mu.Unlock()
 	var reply roachpb.LeaderLeaseResponse
 
-	prevLease := r.mu.state.leaderLease
+	prevLease := r.mu.state.lease
 	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
@@ -1517,12 +1517,12 @@ func (r *Replica) LeaderLease(
 	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
-	r.mu.state.leaderLease = &args.Lease
+	r.mu.state.lease = &args.Lease
 
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-		if prevLease.Replica.StoreID != r.mu.state.leaderLease.Replica.StoreID {
+		if prevLease.Replica.StoreID != r.mu.state.lease.Replica.StoreID {
 			// The lease is changing hands. Is this replica the new lease holder?
-			if r.mu.state.leaderLease.Replica.ReplicaID == r.mu.replicaID {
+			if r.mu.state.lease.Replica.ReplicaID == r.mu.replicaID {
 				// If this replica is a new holder of the lease, update the low water
 				// mark of the timestamp cache. Note that clock offset scenarios are
 				// handled via a stasis period inherent in the lease which is documented
@@ -1535,8 +1535,8 @@ func (r *Replica) LeaderLease(
 				// holder, then try to transfer the raft leadership to match the
 				// lease.
 				log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
-					r.RangeID, r.mu.replicaID, r.mu.state.leaderLease.Replica.ReplicaID)
-				raftGroup.TransferLeader(uint64(r.mu.state.leaderLease.Replica.ReplicaID))
+					r.RangeID, r.mu.replicaID, r.mu.state.lease.Replica.ReplicaID)
+				raftGroup.TransferLeader(uint64(r.mu.state.lease.Replica.ReplicaID))
 			}
 		}
 		return nil
