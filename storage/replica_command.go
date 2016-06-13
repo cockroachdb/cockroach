@@ -1061,13 +1061,13 @@ func (r *Replica) GC(
 	}
 
 	r.mu.Lock()
-	newThreshold := r.mu.gcThreshold
+	newThreshold := r.mu.state.gcThreshold
 	newThreshold.Forward(args.Threshold)
 	r.mu.Unlock()
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.gcThreshold = newThreshold
+		r.mu.state.gcThreshold = newThreshold
 		r.mu.Unlock()
 	})
 	return reply, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
@@ -1415,7 +1415,7 @@ func (r *Replica) TruncateLog(
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.truncatedState = tState
+		r.mu.state.truncatedState = tState
 		r.mu.Unlock()
 	})
 	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, tState)
@@ -1439,7 +1439,7 @@ func (r *Replica) LeaderLease(
 	defer r.mu.Unlock()
 	var reply roachpb.LeaderLeaseResponse
 
-	prevLease := r.mu.leaderLease
+	prevLease := r.mu.state.leaderLease
 	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
@@ -1464,7 +1464,7 @@ func (r *Replica) LeaderLease(
 	effectiveStart := args.Lease.Start
 
 	// Verify that requestion replica is part of the current replica set.
-	if idx, _ := r.mu.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+	if idx, _ := r.mu.state.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
 		return reply, rErr
 	}
@@ -1517,12 +1517,12 @@ func (r *Replica) LeaderLease(
 	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
-	r.mu.leaderLease = &args.Lease
+	r.mu.state.leaderLease = &args.Lease
 
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-		if prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
+		if prevLease.Replica.StoreID != r.mu.state.leaderLease.Replica.StoreID {
 			// The lease is changing hands. Is this replica the new lease holder?
-			if r.mu.leaderLease.Replica.ReplicaID == r.mu.replicaID {
+			if r.mu.state.leaderLease.Replica.ReplicaID == r.mu.replicaID {
 				// If this replica is a new holder of the lease, update the low water
 				// mark of the timestamp cache. Note that clock offset scenarios are
 				// handled via a stasis period inherent in the lease which is documented
@@ -1535,8 +1535,8 @@ func (r *Replica) LeaderLease(
 				// holder, then try to transfer the raft leadership to match the
 				// lease.
 				log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
-					r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
-				raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+					r.RangeID, r.mu.replicaID, r.mu.state.leaderLease.Replica.ReplicaID)
+				raftGroup.TransferLeader(uint64(r.mu.state.leaderLease.Replica.ReplicaID))
 			}
 		}
 		return nil
@@ -1695,7 +1695,7 @@ func (r *Replica) ComputeChecksum(
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
 	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	desc := *r.mu.desc
+	desc := *r.mu.state.desc
 	r.mu.Unlock()
 	snap := r.store.NewSnapshot()
 
@@ -1913,7 +1913,7 @@ func (r *Replica) ChangeFrozen(
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.frozen = args.Frozen
+		r.mu.state.frozen = args.Frozen
 		r.mu.Unlock()
 	})
 	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
