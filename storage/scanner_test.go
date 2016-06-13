@@ -53,16 +53,14 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		// Initialize the range stat so the scanner can use it.
 		rng := &Replica{
 			RangeID: desc.RangeID,
-			stats: &rangeStats{
-				rangeID: desc.RangeID,
-				mvccStats: engine.MVCCStats{
-					KeyBytes:  1,
-					ValBytes:  2,
-					KeyCount:  1,
-					LiveCount: 1,
-				},
-			},
 		}
+		rng.mu.state.ms = engine.MVCCStats{
+			KeyBytes:  1,
+			ValBytes:  2,
+			KeyCount:  1,
+			LiveCount: 1,
+		}
+
 		if err := rng.setDesc(desc); err != nil {
 			t.Fatal(err)
 		}
