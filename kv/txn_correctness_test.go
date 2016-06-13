@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -61,6 +62,14 @@ func setCorrectnessRetryOptions(stores *storage.Stores) {
 	}
 }
 
+type retryError struct {
+	txnIdx, cmdIdx int
+}
+
+func (re *retryError) Error() string {
+	return fmt.Sprintf("retry error at txn %d, cmd %d", re.txnIdx+1, re.cmdIdx)
+}
+
 // The following structs and methods provide a mechanism for verifying
 // the correctness of Cockroach's transaction model. They do this by
 // allowing transaction histories to be specified for concurrent txns
@@ -78,33 +87,46 @@ type cmd struct {
 	debug       string // optional debug string
 	txnIdx      int    // transaction index in the history
 	historyIdx  int    // this suffixes key so tests get unique keys
+	expRetry    bool   // true if we expect a retry
 	fn          func(
 		c *cmd, txn *client.Txn, t *testing.T) error // execution function
-	ch   chan struct{}    // channel for other commands to wait
-	prev <-chan struct{}  // channel this command must wait on before executing
+	ch   chan error       // channel for other commands to wait
+	prev *cmd             // this command must wait on previous command before executing
 	env  map[string]int64 // contains all previously read values
 }
 
-func (c *cmd) init(prevCmd *cmd) {
-	if prevCmd != nil {
-		c.prev = prevCmd.ch
-	} else {
-		c.prev = nil
-	}
-	c.ch = make(chan struct{}, 1)
+func (c *cmd) init(prev *cmd) {
+	c.prev = prev
+	c.ch = make(chan error, 1)
 	c.debug = ""
+}
+
+func (c *cmd) done(err error) {
+	c.ch <- err
+}
+
+func (c *cmd) clone() *cmd {
+	clone := *c
+	clone.ch = nil
+	clone.prev = nil
+	return &clone
 }
 
 func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 	if c.prev != nil {
-		<-c.prev
+		if log.V(2) {
+			log.Infof("%s waiting on %s", c, c.prev)
+		}
+		if err := <-c.prev.ch; err != nil {
+			return "", err
+		}
 	}
 	if log.V(2) {
 		log.Infof("executing %s", c)
 	}
 	err := c.fn(c, txn, t)
-	if c.ch != nil {
-		c.ch <- struct{}{}
+	if err == nil {
+		c.ch <- nil
 	}
 	if len(c.key) > 0 && len(c.endKey) > 0 {
 		return fmt.Sprintf("%s%%d.%%d(%s-%s)%s", c.name, c.key, c.endKey, c.debug), err
@@ -113,13 +135,6 @@ func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 		return fmt.Sprintf("%s%%d.%%d(%s)%s", c.name, c.key, c.debug), err
 	}
 	return fmt.Sprintf("%s%%d.%%d%s", c.name, c.debug), err
-}
-
-func (c *cmd) done() {
-	close(c.ch)
-	c.ch = nil
-	c.prev = nil
-	c.debug = ""
 }
 
 func (c *cmd) makeKey(key string) []byte {
@@ -138,13 +153,21 @@ func (c *cmd) getEndKey() []byte {
 }
 
 func (c *cmd) String() string {
+	var retryStr string
+	if c.expRetry {
+		retryStr = "[exp retry]"
+	}
 	if len(c.key) > 0 && len(c.endKey) > 0 {
-		return fmt.Sprintf("%s%d(%s-%s)", c.name, c.txnIdx, c.key, c.endKey)
+		if c.name == "W" {
+			return fmt.Sprintf("%s%d(%s,%s)%s", c.name, c.txnIdx+1, c.key, c.endKey, retryStr)
+		}
+		// c.name == "SC".
+		return fmt.Sprintf("%s%d(%s-%s)%s", c.name, c.txnIdx+1, c.key, c.endKey, retryStr)
 	}
 	if len(c.key) > 0 {
-		return fmt.Sprintf("%s%d(%s)", c.name, c.txnIdx, c.key)
+		return fmt.Sprintf("%s%d(%s)%s", c.name, c.txnIdx+1, c.key, retryStr)
 	}
-	return fmt.Sprintf("%s%d", c.name, c.txnIdx)
+	return fmt.Sprintf("%s%d%s", c.name, c.txnIdx+1, retryStr)
 }
 
 // readCmd reads a value from the db and stores it in the env.
@@ -313,7 +336,7 @@ func parseHistory(txnIdx int, history string, t *testing.T) []*cmd {
 func parseHistories(histories []string, t *testing.T) [][]*cmd {
 	var results [][]*cmd
 	for i, history := range histories {
-		results = append(results, parseHistory(i+1, history, t))
+		results = append(results, parseHistory(i, history, t))
 	}
 	return results
 }
@@ -407,16 +430,31 @@ func TestEnumeratePriorities(t *testing.T) {
 	}
 }
 
+// sampleHistories returns a random sub sample of histories up
+// to and including the specified sample percentage.
+func sampleHistories(enumHis [][]*cmd, samplePct float64) [][]*cmd {
+	if skip := int(1.0 / samplePct); skip > 1 {
+		// Randomize and sample.
+		perm := rand.Perm(len(enumHis))
+		newHis := [][]*cmd{}
+		for i := 0; i < len(enumHis); i += skip {
+			newHis = append(newHis, enumHis[perm[i]])
+		}
+		enumHis = newHis
+	}
+	return enumHis
+}
+
 // enumerateHistories returns a slice enumerating all combinations of
 // collated histories possible given the specified transactions. Each
 // input transaction is a slice of commands. The order of commands for
 // each transaction is stable, but the enumeration provides all
-// possible interleavings between transactions. If symmetric is true,
+// possible interleavings between transactions. If equal is true,
 // skips exactly N-1/N of the enumeration (where N=len(txns)).
-func enumerateHistories(txns [][]*cmd, symmetric bool) [][]*cmd {
+func enumerateHistories(txns [][]*cmd, equal bool) [][]*cmd {
 	var results [][]*cmd
 	numTxns := len(txns)
-	if symmetric {
+	if equal {
 		numTxns = 1
 	}
 	for i := 0; i < numTxns; i++ {
@@ -444,10 +482,10 @@ func TestEnumerateHistories(t *testing.T) {
 	for i, history := range enum {
 		enumStrs[i] = historyString(history)
 	}
-	enumSymmetric := enumerateHistories(txns, true)
-	enumSymmetricStrs := make([]string, len(enumSymmetric))
-	for i, history := range enumSymmetric {
-		enumSymmetricStrs[i] = historyString(history)
+	enumEqual := enumerateHistories(txns, true)
+	enumEqualStrs := make([]string, len(enumEqual))
+	for i, history := range enumEqual {
+		enumEqualStrs[i] = historyString(history)
 	}
 	expEnumStrs := []string{
 		"I1(A) C1 I2(A) C2",
@@ -457,7 +495,7 @@ func TestEnumerateHistories(t *testing.T) {
 		"I2(A) I1(A) C2 C1",
 		"I2(A) C2 I1(A) C1",
 	}
-	expEnumSymmetricStrs := []string{
+	expEnumEqualStrs := []string{
 		"I1(A) C1 I2(A) C2",
 		"I1(A) I2(A) C1 C2",
 		"I1(A) I2(A) C2 C1",
@@ -465,9 +503,102 @@ func TestEnumerateHistories(t *testing.T) {
 	if !reflect.DeepEqual(enumStrs, expEnumStrs) {
 		t.Errorf("expected enumeration to match %s; got %s", expEnumStrs, enumStrs)
 	}
-	if !reflect.DeepEqual(enumSymmetricStrs, expEnumSymmetricStrs) {
-		t.Errorf("expected symmetric enumeration to match %s; got %s", expEnumSymmetricStrs, enumSymmetricStrs)
+	if !reflect.DeepEqual(enumEqualStrs, expEnumEqualStrs) {
+		t.Errorf("expected equal enumeration to match %s; got %s", expEnumEqualStrs, enumEqualStrs)
 	}
+}
+
+// enumerateHistoriesAfterRetry returns a slice enumerating all
+// combinations of alternate histories starting after the command
+// indicated by the supplied retry error.
+func enumerateHistoriesAfterRetry(err *retryError, h []*cmd) [][]*cmd {
+	// First, capture the history up to and including the
+	// command which caused the retry error.
+	var retryH []*cmd
+	var cmds [][]*cmd
+	var foundRetry bool
+	for _, c := range h {
+		// Once we've recaptured the entire history up to the retry error,
+		// we add all commands to the txnMap. We also always add all
+		// commands which belong to the transaction which encountered the
+		// retry error, as those will need to be retried in full.
+		if foundRetry || err.txnIdx == c.txnIdx {
+			if c.txnIdx >= len(cmds) {
+				for i := len(cmds); i <= c.txnIdx; i++ {
+					cmds = append(cmds, []*cmd{})
+				}
+			}
+			cmds[c.txnIdx] = append(cmds[c.txnIdx], c)
+		}
+		if !foundRetry {
+			cloned := c.clone() // clone the command and set the expect retry flag
+			if err.txnIdx == c.txnIdx && err.cmdIdx+1 == len(cmds[c.txnIdx]) {
+				foundRetry = true
+				cloned.expRetry = true
+			}
+			retryH = append(retryH, cloned)
+		}
+	}
+
+	// Now, enumerate histories containing all commands remaining from non-
+	// retrying txns as well as the complete history of the retrying txn.
+	results := enumerateHistories(cmds, false)
+
+	// Prefix all histories with the retry history.
+	for i, h := range results {
+		results[i] = append(append([]*cmd(nil), retryH...), h...)
+	}
+
+	return results
+}
+
+func TestEnumerateHistoriesAfterRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	txns := parseHistories([]string{"R(A) W(B,A) C", "D(A) D(B) C"}, t)
+	enum := enumerateHistories(txns, false)
+	for i, e := range enum {
+		if log.V(1) {
+			log.Infof("enum(%d): %s", i, historyString(e))
+		}
+	}
+	testCases := []struct {
+		enumIdx     int
+		txnIdx      int
+		cmdIdx      int
+		expEnumStrs []string
+	}{
+		{16, 0, 1, []string{
+			"D2(A) D2(B) R1(A) W1(B,A)[exp retry] C2 R1(A) W1(B,A) C1",
+		}},
+		{4, 1, 0, []string{
+			"R1(A) D2(A)[exp retry] W1(B,A) C1 D2(A) D2(B) C2",
+			"R1(A) D2(A)[exp retry] W1(B,A) D2(A) C1 D2(B) C2",
+			"R1(A) D2(A)[exp retry] W1(B,A) D2(A) D2(B) C1 C2",
+			"R1(A) D2(A)[exp retry] W1(B,A) D2(A) D2(B) C2 C1",
+		}},
+	}
+
+	for i, c := range testCases {
+		retryErr := &retryError{txnIdx: c.txnIdx, cmdIdx: c.cmdIdx}
+		retryEnum := enumerateHistoriesAfterRetry(retryErr, enum[c.enumIdx])
+		enumStrs := make([]string, len(retryEnum))
+		for j, history := range retryEnum {
+			enumStrs[j] = historyString(history)
+		}
+		if !reflect.DeepEqual(enumStrs, c.expEnumStrs) {
+			t.Errorf("%d: expected enumeration to match %s; got %s", i, c.expEnumStrs, enumStrs)
+		}
+	}
+}
+
+// areHistoriesEqual returns whether all txn histories are the same.
+func areHistoriesEqual(txns []string) bool {
+	for i := 1; i < len(txns); i++ {
+		if txns[i] != txns[0] {
+			return false
+		}
+	}
+	return true
 }
 
 // verifier first executes the pre-history, which sets existing values
@@ -488,15 +619,21 @@ type verifier struct {
 // is compared to the expected history.
 type historyVerifier struct {
 	name           string
+	idx            int
 	txns           [][]*cmd
 	verify         *verifier
 	preHistoryCmds []*cmd
 	verifyCmds     []*cmd
-	symmetric      bool
+	equal          bool
 
-	sync.Mutex // protects actual slice of command outcomes.
-	actual     []string
-	wg         sync.WaitGroup
+	// retriedTxns keeps track of which transaction histories have retried
+	// so that we can avoid histories where endless retries occur.
+	retriedTxns map[int]struct{}
+
+	mu struct {
+		sync.Mutex
+		actual []string
+	}
 }
 
 func newHistoryVerifier(name string, txns []string, verify *verifier, t *testing.T) *historyVerifier {
@@ -506,18 +643,8 @@ func newHistoryVerifier(name string, txns []string, verify *verifier, t *testing
 		verify:         verify,
 		preHistoryCmds: parseHistory(0, verify.preHistory, t),
 		verifyCmds:     parseHistory(0, verify.history, t),
-		symmetric:      areHistoriesSymmetric(txns),
+		equal:          areHistoriesEqual(txns),
 	}
-}
-
-// areHistoriesSymmetric returns whether all txn histories are the same.
-func areHistoriesSymmetric(txns []string) bool {
-	for i := 1; i < len(txns); i++ {
-		if txns[i] != txns[0] {
-			return false
-		}
-	}
-	return true
 }
 
 func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB, t *testing.T) {
@@ -528,63 +655,119 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 	}
 	enumPri := enumeratePriorities(priorities)
 	enumIso := enumerateIsolations(len(hv.txns), isolations)
-	enumHis := enumerateHistories(hv.txns, hv.symmetric)
+	enumHis := enumerateHistories(hv.txns, hv.equal)
 
-	historyIdx := 1
 	for _, p := range enumPri {
 		for _, i := range enumIso {
 			for _, h := range enumHis {
-				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
-					t.Errorf("expected success, experienced %v", err)
+				hv.retriedTxns = map[int]struct{}{} // always reset the retried txns set
+				if err := hv.runHistoryWithRetry(p, i, h, db, t); err != nil {
+					t.Errorf("expected success, experienced %s", err)
 					return
 				}
-				historyIdx++
 			}
 		}
 	}
 }
 
-func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
+// runHistoryWithRetry intercepts retry errors. If one is encountered,
+// alternate histories are generated which all contain the exact
+// history prefix which encountered the error, but which recombine the
+// remaining commands with all of the commands from the retrying
+// history.
+//
+// This process continues recursively if there are further retries.
+func (hv *historyVerifier) runHistoryWithRetry(priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	if err := hv.runHistory(priorities, isolations, cmds, db, t); err != nil {
+		if log.V(1) {
+			log.Infof("got an error running history %s: %s", historyString(cmds), err)
+		}
+		retry, ok := err.(*retryError)
+		if !ok {
+			return err
+		}
+
+		if _, hasRetried := hv.retriedTxns[retry.txnIdx]; hasRetried {
+			if log.V(1) {
+				log.Infof("retried txn %d twice; skipping history", retry.txnIdx+1)
+			}
+			return nil
+		}
+		hv.retriedTxns[retry.txnIdx] = struct{}{}
+
+		// Randomly subsample 5% of histories for reduced execution time.
+		enumHis := sampleHistories(enumerateHistoriesAfterRetry(retry, cmds), 0.05)
+		for i, h := range enumHis {
+			if log.V(1) {
+				log.Infof("after retry, running alternate history %d of %d", i, len(enumHis))
+			}
+			if err := hv.runHistoryWithRetry(priorities, isolations, h, db, t); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (hv *historyVerifier) runHistory(priorities []int32,
+	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	hv.idx++
 	if t.Failed() {
 		return errors.New("already failed")
 	}
 	// Execute pre-history if applicable.
 	if hv.preHistoryCmds != nil {
-		if str, _, err := hv.runCmds(hv.preHistoryCmds, historyIdx, db, t); err != nil {
+		if str, _, err := hv.runCmds(hv.preHistoryCmds, db, t); err != nil {
 			t.Errorf("failed on execution of pre history %s: %s", str, err)
 			return err
 		}
 	}
 	plannedStr := historyString(cmds)
 	if log.V(1) {
-		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+		log.Infof("iso=%d pri=%d history=%s", isolations, priorities, plannedStr)
 	}
 
-	hv.actual = []string{}
-	hv.wg.Add(len(priorities))
+	hv.mu.actual = []string{}
 	txnMap := map[int][]*cmd{}
 	var prev *cmd
 	for _, c := range cmds {
-		c.historyIdx = historyIdx
+		c.historyIdx = hv.idx
 		txnMap[c.txnIdx] = append(txnMap[c.txnIdx], c)
 		c.init(prev)
 		prev = c
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(txnMap))
+	var retryErr *retryError
+
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
-			if err := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); err != nil {
-				t.Errorf("(%s): unexpected failure running %s: %v", cmds, cmds[i], err)
+			if err := hv.runTxn(i, priorities[i], isolations[i], txnCmds, db, t); err != nil {
+				if re, ok := err.(*retryError); !ok {
+					t.Errorf("(%s): unexpected failure: %s", cmds, err)
+				} else {
+					hv.mu.Lock()
+					retryErr = re
+					hv.mu.Unlock()
+				}
 			}
+			wg.Done()
 		}(i, txnCmds)
 	}
-	hv.wg.Wait()
+	wg.Wait()
+
+	// If we received a retry error, propagate it now.
+	if retryErr != nil {
+		return retryErr
+	}
 
 	// Construct string for actual history.
-	actualStr := strings.Join(hv.actual, " ")
+	actualStr := strings.Join(hv.mu.actual, " ")
 
 	// Verify history.
-	verifyStr, verifyEnv, err := hv.runCmds(hv.verifyCmds, historyIdx, db, t)
+	verifyStr, verifyEnv, err := hv.runCmds(hv.verifyCmds, db, t)
 	if err != nil {
 		t.Errorf("failed on execution of verification history %s: %s", verifyStr, err)
 		return err
@@ -592,22 +775,22 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	err = hv.verify.checkFn(verifyEnv)
 	if err == nil {
 		if log.V(1) {
-			log.Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
+			log.Infof("PASSED: iso=%d, pri=%d, history=%q", isolations, priorities, actualStr)
 		}
 	}
 	if err != nil {
-		t.Errorf("%d: iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s",
-			historyIdx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
+		t.Errorf("%d: iso=%d, pri=%d, history=%q: actual=%q, verify=%q: %s",
+			hv.idx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
 	}
 	return err
 }
 
-func (hv *historyVerifier) runCmds(cmds []*cmd, historyIdx int, db *client.DB, t *testing.T) (string, map[string]int64, error) {
+func (hv *historyVerifier) runCmds(cmds []*cmd, db *client.DB, t *testing.T) (string, map[string]int64, error) {
 	var strs []string
 	env := map[string]int64{}
 	err := db.Txn(func(txn *client.Txn) error {
 		for _, c := range cmds {
-			c.historyIdx = historyIdx
+			c.historyIdx = hv.idx
 			c.env = env
 			c.init(nil)
 			fmtStr, err := c.execute(txn, t)
@@ -624,8 +807,22 @@ func (hv *historyVerifier) runCmds(cmds []*cmd, historyIdx int, db *client.DB, t
 func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	var retry int
-	txnName := fmt.Sprintf("txn%d", txnIdx)
+	txnName := fmt.Sprintf("txn %d", txnIdx+1)
+	cmdIdx := -1
+
 	err := db.Txn(func(txn *client.Txn) error {
+		// If this is 2nd attempt, and a retry wasn't expected, return a
+		// retry error which results in further histories being enumerated.
+		if retry++; retry > 1 {
+			if !cmds[cmdIdx].expRetry {
+				// Propagate retry error to history execution to enumerate all
+				// histories where this txn retries at this command.
+				return &retryError{txnIdx: txnIdx, cmdIdx: cmdIdx}
+			}
+			// We're expecting a retry, so just send nil down the done channel.
+			cmds[cmdIdx].done(nil)
+		}
+
 		txn.SetDebugName(txnName, 0)
 		if isolation == roachpb.SNAPSHOT {
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
@@ -635,43 +832,37 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		txn.InternalSetPriority(priority)
 
 		env := map[string]int64{}
-		// TODO(spencer): restarts must create additional histories. They
-		// look like: given the current partial history and a restart on
-		// txn txnIdx, re-enumerate a set of all histories containing the
-		// remaining commands from extant txns and all commands from this
-		// restarted txn.
-
-		// If this is attempt > 1, reset cmds so no waits.
-		if retry++; retry == 2 {
-			for _, c := range cmds {
-				c.done()
-			}
-		}
-		if log.V(2) {
-			log.Infof("%s, retry=%d", txnName, retry)
-		}
-		for i := range cmds {
-			cmds[i].env = env
-			if err := hv.runCmd(txn, txnIdx, retry, i, cmds, t); err != nil {
+		for cmdIdx+1 < len(cmds) {
+			cmdIdx++
+			cmds[cmdIdx].env = env
+			_, err := hv.runCmd(txn, txnIdx, retry, cmds[cmdIdx], t)
+			if err != nil {
+				if log.V(1) {
+					log.Infof("%s: failed running %s: %s", txnName, cmds[cmdIdx], err)
+				}
 				return err
 			}
 		}
 		return nil
 	})
-	hv.wg.Done()
+	if err != nil {
+		for _, c := range cmds[cmdIdx:] {
+			c.done(err)
+		}
+	}
 	return err
 }
 
-func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
-	fmtStr, err := cmds[cmdIdx].execute(txn, t)
+func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry int, c *cmd, t *testing.T) (string, error) {
+	fmtStr, err := c.execute(txn, t)
+	cmdStr := fmt.Sprintf(fmtStr, txnIdx+1, retry)
+	hv.mu.Lock()
+	hv.mu.actual = append(hv.mu.actual, cmdStr)
+	hv.mu.Unlock()
 	if err != nil {
-		return err
+		return cmdStr, err
 	}
-	hv.Lock()
-	cmdStr := fmt.Sprintf(fmtStr, txnIdx, retry)
-	hv.actual = append(hv.actual, cmdStr)
-	hv.Unlock()
-	return nil
+	return cmdStr, nil
 }
 
 // checkConcurrency creates a history verifier, starts a new database
@@ -699,34 +890,35 @@ func checkConcurrency(
 //
 // Notation for planned histories:
 //   R(x) - read from key "x"
-//   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   SC(x-y) - scan values from keys "x"-"y"
 //   D(x) - delete key "x"
 //   DR(x-y) - delete range of keys "x"-"y"
 //   W(x,y[+z+...]) - writes sum of values y+z+... to x
+//   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   C - commit
 //
 // Notation for actual histories:
 //   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
-//   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
+//   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
 //   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
 //   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
-//   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
 //   Wn.m(x,y[+z+...]) - write sum of values y+z+... to x from txn "n" ("m"th retry)
+//   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
 //   Cn.m - commit of txn "n" ("m"th retry)
 
-// TestTxnDBInconsistentAnalysisAnomaly verifies that neither SI nor
-// SSI isolation are subject to the inconsistent analysis anomaly.
-// This anomaly is also known as dirty reads and is prevented by the
-// READ_COMMITTED ANSI isolation level.
+// TestTxnDBReadSkewAnomaly verifies that neither SI nor SSI isolation
+// are subject to the read skew anomaly, an example of a database
+// constraint violation known as inconsistent analysis (see
+// http://research.microsoft.com/pubs/69541/tr-95-51.pdf). This anomaly
+// is prevented by REPEATABLE_READ.
 //
-// With inconsistent analysis, there are two concurrent txns. One
+// With read skew, there are two concurrent txns. One
 // reads keys A & B, the other reads and then writes keys A & B. The
 // reader must not see intermediate results from the reader/writer.
 //
-// Inconsistent analysis would typically fail with a history such as:
+// Read skew would typically fail with a history such as:
 //    R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
-func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
+func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"
@@ -739,7 +931,7 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("inconsistent analysis", bothIsolations, []string{txn1, txn2}, verify, t)
+	checkConcurrency("read skew", bothIsolations, []string{txn1, txn2}, verify, t)
 }
 
 // TestTxnDBLostUpdateAnomaly verifies that neither SI nor SSI isolation
