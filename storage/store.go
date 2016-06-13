@@ -913,7 +913,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		var unfrozen int64    // updated atomically
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
 			r.mu.Lock()
-			frozen := r.mu.frozen
+			frozen := r.mu.state.frozen
 			r.mu.Unlock()
 			if !frozen {
 				return true
@@ -2382,7 +2382,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescrip
 			return true
 		}
 		r.mu.Lock()
-		if r.mu.frozen == collectFrozen {
+		if r.mu.state.frozen == collectFrozen {
 			descs = append(descs, *desc)
 		}
 		r.mu.Unlock()

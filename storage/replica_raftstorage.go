@@ -83,7 +83,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var cs raftpb.ConfState
 	// For uninitialized ranges, membership is unknown at this point.
 	if found || initialized {
-		for _, rep := range r.mu.desc.Replicas {
+		for _, rep := range r.mu.state.desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
 	}
@@ -236,15 +236,15 @@ func (r *Replica) LastIndex() (uint64, error) {
 // and the dummy entries that make up the starting point of an empty log.
 // raftTruncatedStateLocked requires that the replica lock be held.
 func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
-	if r.mu.truncatedState != nil {
-		return *r.mu.truncatedState, nil
+	if r.mu.state.truncatedState != nil {
+		return *r.mu.state.truncatedState, nil
 	}
 	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID, r.isInitializedLocked())
 	if err != nil {
 		return ts, err
 	}
 	if ts.Index != 0 {
-		r.mu.truncatedState = &ts
+		r.mu.state.truncatedState = &ts
 	}
 	return ts, nil
 }
@@ -432,7 +432,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
+		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.state.desc.StartKey)
 		if err != nil {
 			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
@@ -773,16 +773,16 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		r.mu.Lock()
 		// As outlined above, last and applied index are the same after applying
 		// the snapshot.
-		r.mu.appliedIndex = snap.Metadata.Index
+		r.mu.state.appliedIndex = snap.Metadata.Index
 		if appliedIndex != snap.Metadata.Index {
 			log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
 				r.Desc().RangeID, appliedIndex, snap.Metadata.Index)
 		}
 		r.mu.lastIndex = appliedIndex
-		r.mu.leaseAppliedIndex = leaseAppliedIndex
-		r.mu.leaderLease = lease
-		r.mu.frozen = frozen
-		r.mu.gcThreshold = lastThreshold
+		r.mu.state.leaseAppliedIndex = leaseAppliedIndex
+		r.mu.state.leaderLease = lease
+		r.mu.state.frozen = frozen
+		r.mu.state.gcThreshold = lastThreshold
 		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.
