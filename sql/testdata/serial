@@ -19,3 +19,14 @@ SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM serial
 
 statement error SERIAL column \"a\" cannot have a default value
 CREATE TABLE s1 (a SERIAL DEFAULT 7)
+
+statement ok
+CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
+
+statement ok
+INSERT INTO smallbig (c) VALUES (7), (7)
+
+query III
+SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM smallbig
+----
+2 2 1

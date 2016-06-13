@@ -57,13 +57,15 @@ func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Pre-allocated immutable integer column types.
 var (
-	intColTypeBit      = &IntColType{Name: "BIT"}
-	intColTypeInt      = &IntColType{Name: "INT"}
-	intColTypeInt64    = &IntColType{Name: "INT64"}
-	intColTypeInteger  = &IntColType{Name: "INTEGER"}
-	intColTypeSmallInt = &IntColType{Name: "SMALLINT"}
-	intColTypeBigInt   = &IntColType{Name: "BIGINT"}
-	intColTypeSerial   = &IntColType{Name: "SERIAL"}
+	intColTypeBit         = &IntColType{Name: "BIT"}
+	intColTypeInt         = &IntColType{Name: "INT"}
+	intColTypeInt64       = &IntColType{Name: "INT64"}
+	intColTypeInteger     = &IntColType{Name: "INTEGER"}
+	intColTypeSmallInt    = &IntColType{Name: "SMALLINT"}
+	intColTypeBigInt      = &IntColType{Name: "BIGINT"}
+	intColTypeSerial      = &IntColType{Name: "SERIAL"}
+	intColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
+	intColTypeBigSerial   = &IntColType{Name: "BIGSERIAL"}
 )
 
 func newIntBitType(n int) *IntColType {
@@ -90,7 +92,8 @@ func (node *IntColType) Format(buf *bytes.Buffer, f FmtFlags) {
 // IsSerial returns true when this column should be given a DEFAULT of a unique,
 // incrementing function.
 func (node *IntColType) IsSerial() bool {
-	return node.Name == intColTypeSerial.Name
+	return node.Name == intColTypeSerial.Name || node.Name == intColTypeSmallSerial.Name ||
+		node.Name == intColTypeBigSerial.Name
 }
 
 // Pre-allocated immutable float column types.
