@@ -507,9 +507,9 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
-// MakeFamilyKey returns the key for the family in the given row.
-func MakeFamilyKey(rowKey []byte, famID uint32) []byte {
-	key := append([]byte(nil), rowKey...)
+// MakeFamilyKey returns the key for the family in the given row by appending to
+// the passed key.
+func MakeFamilyKey(key []byte, famID uint32) []byte {
 	if famID == 0 {
 		return encoding.EncodeUvarintAscending(key, 0)
 	}
