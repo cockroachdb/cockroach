@@ -1240,6 +1240,7 @@
     },
     "jspm-github": {
       "version": "0.13.13",
+      "resolved": "git://github.com/tamird/github.git#769d6632131b0a2abd236031708e7352cac0417a",
       "dependencies": {
         "glob": {
           "version": "4.5.3"
