@@ -144,6 +144,12 @@ func (ms MVCCStats) GCBytes() int64 {
 	return ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 }
 
+// Total returns the range size as the sum of the key and value
+// bytes. This includes all non-live keys and all versioned values.
+func (ms MVCCStats) Total() int64 {
+	return ms.KeyBytes + ms.ValBytes
+}
+
 // AgeTo encapsulates the complexity of computing the increment in age
 // quantities contained in MVCCStats. Two MVCCStats structs only add and
 // subtract meaningfully if their LastUpdateNanos matches, so aging them to
@@ -203,6 +209,27 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.IntentCount -= oms.IntentCount
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
+}
+
+// AvgIntentAge returns the average age of outstanding intents,
+// based on current wall time specified via nowNanos.
+func (ms MVCCStats) AvgIntentAge(nowNanos int64) float64 {
+	if ms.IntentCount == 0 {
+		return 0
+	}
+	// Advance age by any elapsed time since last computed. Note that
+	// we operate on a copy.
+	ms.AgeTo(nowNanos)
+	return float64(ms.IntentAge) / float64(ms.IntentCount)
+}
+
+// GCByteAge returns the total age of outstanding gc'able
+// bytes, based on current wall time specified via nowNanos.
+// nowNanos is ignored if it's a past timestamp as seen by
+// rs.LastUpdateNanos.
+func (ms MVCCStats) GCByteAge(nowNanos int64) int64 {
+	ms.AgeTo(nowNanos) // we operate on a copy
+	return ms.GCBytesAge
 }
 
 // AccountForSelf adjusts ms to account for the predicted impact it will have on

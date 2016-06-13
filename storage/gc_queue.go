@@ -120,12 +120,13 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 		return
 	}
 
+	ms := repl.GetMVCCStats()
 	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
-	gcScore := float64(repl.stats.GetGCBytesAge(now.WallTime)) / float64(zone.GC.TTLSeconds) / float64(gcByteCountNormalization)
+	gcScore := float64(ms.GCByteAge(now.WallTime)) / float64(zone.GC.TTLSeconds) / float64(gcByteCountNormalization)
 
 	// Intent score. This computes the average age of outstanding intents
 	// and normalizes.
-	intentScore := repl.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
+	intentScore := ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
 	// Compute priority.
 	if gcScore >= considerThreshold {
