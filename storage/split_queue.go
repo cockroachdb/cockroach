@@ -77,7 +77,7 @@ func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 		return
 	}
 
-	if ratio := float64(rng.stats.GetSize()) / float64(zone.RangeMaxBytes); ratio > 1 {
+	if ratio := float64(rng.GetMVCCStats().Total()) / float64(zone.RangeMaxBytes); ratio > 1 {
 		priority += ratio
 		shouldQ = true
 	}
@@ -107,9 +107,10 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	if err != nil {
 		return err
 	}
+	size := rng.GetMVCCStats().Total()
 	// FIXME: why is this implementation not the same as the one above?
-	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
-		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
+	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
+		log.Infof("splitting %s size=%d max=%d", rng, size, zone.RangeMaxBytes)
 		if _, pErr := client.SendWrappedWith(rng, ctx, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{

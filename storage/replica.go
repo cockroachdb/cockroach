@@ -190,9 +190,6 @@ type Replica struct {
 	// RWMutex.
 	readOnlyCmdMu sync.RWMutex
 
-	// TODO(tschottdorf): belongs into `mu.state`.
-	stats *rangeStats // Range statistics
-
 	mu struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
@@ -218,6 +215,7 @@ type Replica struct {
 			gcThreshold roachpb.Timestamp
 			// Whether the Replica is frozen.
 			frozen bool
+			ms     engine.MVCCStats
 		}
 
 		// Counter used for assigning lease indexes for proposals.
@@ -325,12 +323,6 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 	}
 
 	r.maybeGossipSystemConfig()
-
-	var err error
-	if r.stats, err = newRangeStats(desc.RangeID, store.Engine()); err != nil {
-		return nil, err
-	}
-
 	return r, nil
 }
 
@@ -364,6 +356,10 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 	r.mu.state.gcThreshold, err = loadGCThreshold(r.store.Engine(), desc.RangeID)
+	if err != nil {
+		return err
+	}
+	r.mu.state.ms, err = loadMVCCStats(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
@@ -492,6 +488,18 @@ func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) 
 		return false, nil
 	}
 	return val.GetBool()
+}
+
+func loadMVCCStats(eng engine.Reader, rangeID roachpb.RangeID) (engine.MVCCStats, error) {
+	var ms engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
+		return engine.MVCCStats{}, err
+	}
+	return ms, nil
+}
+
+func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS engine.MVCCStats) error {
+	return engine.MVCCSetRangeStats(context.Background(), eng, rangeID, &newMS)
 }
 
 func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
@@ -789,7 +797,9 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
 func (r *Replica) GetMVCCStats() engine.MVCCStats {
-	return r.stats.GetMVCC()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.state.ms
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -1962,9 +1972,16 @@ func (r *Replica) applyRaftCommand(
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
-	// Flush the MVCC stats to the batch.
-	if err := r.stats.MergeMVCCStats(writer, ms); err != nil {
-		// TODO(tschottdorf): ReplicaCorruptionError.
+	// Flush the MVCC stats to the batch. Note that we need to grab the previous
+	// stats now, for they might've been changed during triggers due to side
+	// effects.
+	// TODO(tschottdorf): refactor that for clarity.
+	r.mu.Lock()
+	oldMS := r.mu.state.ms
+	r.mu.Unlock()
+	newMS := oldMS
+	newMS.Add(ms)
+	if err := setMVCCStats(writer, r.RangeID, newMS); err != nil {
 		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
 	// Update store-level MVCC stats with merged range stats.
@@ -1978,6 +1995,7 @@ func (r *Replica) applyRaftCommand(
 		// on disk.
 		r.mu.state.appliedIndex = index
 		r.mu.state.leaseAppliedIndex = leaseIndex
+		r.mu.state.ms = newMS
 		r.mu.Unlock()
 	}
 
@@ -2585,8 +2603,11 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 // needsSplitBySize returns true if the size of the range requires it
 // to be split.
 func (r *Replica) needsSplitBySize() bool {
-	maxBytes := r.GetMaxBytes()
-	return maxBytes > 0 && r.stats.GetSize() > maxBytes
+	r.mu.Lock()
+	maxBytes := r.mu.maxBytes
+	size := r.mu.state.ms.Total()
+	r.mu.Unlock()
+	return maxBytes > 0 && size > maxBytes
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range

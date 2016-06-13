@@ -433,6 +433,10 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err := verifyRecomputedStats(snap, rng.Desc(), ms, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
+	inMemMS := rng.GetMVCCStats()
+	if inMemMS != ms {
+		t.Fatalf("in-memory and on-disk diverged:\n%+v\n!=\n%+v", inMemMS, ms)
+	}
 
 	manual.Increment(100)
 
@@ -472,7 +476,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	ms.SysBytes, ms.SysCount = 0, 0
 	ms.LastUpdateNanos = 0
 	if expMS != ms {
-		t.Errorf("expected left and right ranges to equal original: %+v + %+v != %+v", msLeft, msRight, ms)
+		t.Errorf("expected left plus right ranges to equal original, but\n %+v\n+\n %+v\n!=\n %+v", msLeft, msRight, ms)
 	}
 
 	// Stats should both have the new timestamp.
