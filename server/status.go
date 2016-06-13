@@ -278,6 +278,7 @@ func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	writeJSONResponse(w, resp)
 }
@@ -329,6 +330,7 @@ func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps 
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	writeJSONResponse(w, resp)
 }
@@ -429,6 +431,7 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	writeJSONResponse(w, resp)
 }
@@ -547,6 +550,7 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	writeJSONResponse(w, resp)
 }
