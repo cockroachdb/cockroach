@@ -222,9 +222,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 func hoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
-			if col.CheckExpr != nil {
-				n.Defs = append(n.Defs, &parser.CheckConstraintTableDef{Expr: col.CheckExpr})
-				col.CheckExpr = nil
+			if col.CheckExpr.Expr != nil {
+				n.Defs = append(n.Defs, &parser.CheckConstraintTableDef{Expr: col.CheckExpr.Expr})
+				col.CheckExpr.Expr = nil
 			}
 		}
 	}

@@ -146,14 +146,20 @@ func (u *sqlSymUnion) tblDef() TableDef {
 func (u *sqlSymUnion) tblDefs() TableDefs {
     return u.val.(TableDefs)
 }
-func (u *sqlSymUnion) colQual() ColumnQualification {
+func (u *sqlSymUnion) colQual() NamedColumnQualification {
+    if colQual, ok := u.val.(NamedColumnQualification); ok {
+        return colQual
+    }
+    return NamedColumnQualification{}
+}
+func (u *sqlSymUnion) colQualElem() ColumnQualification {
     if colQual, ok := u.val.(ColumnQualification); ok {
         return colQual
     }
     return nil
 }
-func (u *sqlSymUnion) colQuals() []ColumnQualification {
-    return u.val.([]ColumnQualification)
+func (u *sqlSymUnion) colQuals() []NamedColumnQualification {
+    return u.val.([]NamedColumnQualification)
 }
 func (u *sqlSymUnion) colType() ColumnType {
     if colType, ok := u.val.(ColumnType); ok {
@@ -473,8 +479,9 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <ConstraintTableDef> table_constraint constraint_elem
 %type <TableDef> index_def
 %type <TableDef> family_def
-%type <[]ColumnQualification> col_qual_list
-%type <ColumnQualification> col_qualification col_qualification_elem
+%type <[]NamedColumnQualification> col_qual_list
+%type <NamedColumnQualification> col_qualification
+%type <ColumnQualification> col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 
 %type <Expr>  func_application func_expr_common_subexpr
@@ -1397,15 +1404,18 @@ col_qual_list:
   }
 | /* EMPTY */
   {
-    $$.val = []ColumnQualification(nil)
+    $$.val = []NamedColumnQualification(nil)
   }
 
 col_qualification:
   CONSTRAINT name col_qualification_elem
   {
-    $$.val = $3.colQual()
+    $$.val = NamedColumnQualification{Name: $2, Qualification: $3.colQualElem()}
   }
 | col_qualification_elem
+  {
+    $$.val = NamedColumnQualification{Qualification: $1.colQualElem()}
+  }
 | COLLATE any_name { unimplemented() }
 
 // DEFAULT NULL is already the default for Postgres. But define it here and
