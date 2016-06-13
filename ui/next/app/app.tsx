@@ -10,11 +10,9 @@
  *      - Greyed-out display on error
  *    - Cluster health indicator
  * ! Notification Banners
- *    - Help Us
  *    - Cockroach out of date
  * - Node Page
  *    ! Logs Page
- * ! HelpUs Modal
  * - Layout Footer
  * ! HelpUs communication with CRL server
  *
@@ -79,6 +77,9 @@ import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 
+import { setUISetting } from "./redux/ui";
+import { HELPUS_BANNER_DISMISSED_KEY } from "./containers/banner/helpusBanner";
+
 // TODO(mrtracy): Redux now provides official typings, and their Store
 // definition is generic. That would let us enforce that the store actually has
 // the shape of the AdminUIStore interface (defined in /interfaces/store.d.ts).
@@ -139,7 +140,7 @@ ReactDOM.render(
             <Route path=":table_name" component={ TableDetails } />
           </Route>
         </Route>
-        <Route path="help-us/reporting" component={ HelpUs } />
+        <Route path="help-us/reporting" component={ HelpUs } onEnter={() => store.dispatch(setUISetting(HELPUS_BANNER_DISMISSED_KEY, true))} />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />

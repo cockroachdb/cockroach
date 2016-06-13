@@ -223,5 +223,32 @@ describe("UIData reducer", function() {
         assert.equal(state.inFlight, 0);
       });
     });
+
+    it("handles missing keys", function () {
+      let missingKey = "missingKey";
+
+      let expectedURL = `/_admin/v1/uidata?keys=${missingKey}`;
+
+      fetchMock.mock(expectedURL, "get", function() {
+        assert.equal(state.inFlight, 1);
+
+        let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
+
+        return {
+          sendAsJson: false,
+          body: response.encodeJSON(),
+        };
+      });
+
+      let p = loadUIData(missingKey);
+
+      return p.then(() => {
+        assert.lengthOf(fetchMock.calls(expectedURL), 1);
+        assert.lengthOf(_.keys(state.data), 1);
+        assert.deepEqual(state.data[missingKey], undefined);
+        assert.isNull(state.error);
+        assert.equal(state.inFlight, 0);
+      });
+    });
   });
 });
