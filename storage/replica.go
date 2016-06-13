@@ -168,6 +168,65 @@ type replicaChecksum struct {
 	snapshot *roachpb.RaftSnapshotData
 }
 
+// state is the part of the Range Raft state machine which is cached in memory.
+// TODO(tschottdorf): unified method to update both in-mem and on-disk state,
+// similar to how loadState unifies restoring from storage.
+type state struct {
+	// Last index applied to the state machine.
+	appliedIndex uint64
+	// Highest lease index applied to the state machine.
+	leaseAppliedIndex uint64
+	// The Range descriptor.
+	// The pointer may change, but the referenced RangeDescriptor struct itself
+	// must be treated as immutable; it is leaked out of the lock.
+	//
+	// Changes of the descriptor should normally go through one of the
+	// (*Replica).setDesc* methods.
+	desc           *roachpb.RangeDescriptor
+	leaderLease    *roachpb.Lease
+	truncatedState *roachpb.RaftTruncatedState
+	// gcThreshold is the GC threshold of the replica. Reads and writes must
+	// not happen <= this time.
+	gcThreshold roachpb.Timestamp
+	// Whether the Replica is frozen.
+	frozen bool
+	ms     engine.MVCCStats
+}
+
+func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (state, error) {
+	var s state
+	// TODO(tschottdorf): figure out whether this is always synchronous with
+	// on-disk state (likely iffy during Split/ChangeReplica triggers).
+	s.desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	// Read the leader lease.
+	var err error
+	if s.leaderLease, err = loadLeaderLease(reader, desc.RangeID); err != nil {
+		return state{}, err
+	}
+
+	if s.frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
+		return state{}, err
+	}
+
+	if s.gcThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
+		return state{}, err
+	}
+
+	if s.appliedIndex, s.leaseAppliedIndex, err = loadAppliedIndex(
+		reader,
+		desc.RangeID,
+		desc.IsInitialized(),
+	); err != nil {
+		return state{}, err
+	}
+
+	if s.ms, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+		return state{}, err
+	}
+
+	return s, nil
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -194,30 +253,7 @@ type Replica struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
 		// The state of the Raft state machine.
-		state struct {
-			// Last index applied to the state machine.
-			appliedIndex uint64
-			// Highest lease index applied to the state machine.
-			leaseAppliedIndex uint64
-			// Range descriptor.
-			//
-			// The lock protects the pointer but the RangeDescriptor struct itself
-			// should be treated as immutable; a reference to it can be returned to
-			// a caller via Replica.Desc() and then used outside of the lock.
-			//
-			// Changes of the descriptor should normally go through one of the
-			// Replica.setDesc* methods.
-			desc           *roachpb.RangeDescriptor
-			leaderLease    *roachpb.Lease
-			truncatedState *roachpb.RaftTruncatedState
-			// gcThreshold is the GC threshold of the replica. Reads and writes must
-			// not happen <= this time.
-			gcThreshold roachpb.Timestamp
-			// Whether the Replica is frozen.
-			frozen bool
-			ms     engine.MVCCStats
-		}
-
+		state state
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
@@ -334,36 +370,17 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
-	r.setDescWithoutProcessUpdateLocked(desc)
 
 	var err error
-	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
-	if err != nil {
+
+	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
 		return err
 	}
 
-	r.mu.state.appliedIndex, r.mu.state.leaseAppliedIndex, err = loadAppliedIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
+	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID, desc.IsInitialized())
 	if err != nil {
 		return err
 	}
-
-	r.mu.state.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-	r.mu.state.frozen, err = loadFrozenStatus(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-	r.mu.state.gcThreshold, err = loadGCThreshold(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-	r.mu.state.ms, err = loadMVCCStats(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-
 	if r.isInitializedLocked() && replicaID != 0 {
 		return util.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
