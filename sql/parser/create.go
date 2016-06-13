@@ -154,22 +154,23 @@ type ColumnTableDef struct {
 	Type     ColumnType
 	Nullable struct {
 		Nullability    Nullability
-		ConstraintName string
+		ConstraintName Name
 	}
-	PrimaryKey  bool
-	Unique      bool
-	DefaultExpr struct {
+	PrimaryKey           bool
+	Unique               bool
+	UniqueConstraintName Name
+	DefaultExpr          struct {
 		Expr           Expr
-		ConstraintName string
+		ConstraintName Name
 	}
 	CheckExpr struct {
 		Expr           Expr
-		ConstraintName string
+		ConstraintName Name
 	}
 	References struct {
 		Table          *QualifiedName
 		Col            Name
-		ConstraintName string
+		ConstraintName Name
 	}
 }
 
@@ -200,8 +201,14 @@ func newColumnTableDef(
 			}
 		case PrimaryKeyConstraint:
 			d.PrimaryKey = true
+			if c.Name != "" {
+				d.UniqueConstraintName = c.Name
+			}
 		case UniqueConstraint:
 			d.Unique = true
+			if c.Name != "" {
+				d.UniqueConstraintName = c.Name
+			}
 		case *ColumnCheckConstraint:
 			d.CheckExpr.Expr = t.Expr
 			if c.Name != "" {
@@ -274,7 +281,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // NamedColumnQualification wraps a NamedColumnQualification with a name.
 type NamedColumnQualification struct {
-	Name          string
+	Name          Name
 	Qualification ColumnQualification
 }
 

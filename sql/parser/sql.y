@@ -1414,7 +1414,7 @@ col_qual_list:
 col_qualification:
   CONSTRAINT name col_qualification_elem
   {
-    $$.val = NamedColumnQualification{Name: $2, Qualification: $3.colQualElem()}
+    $$.val = NamedColumnQualification{Name: Name($2), Qualification: $3.colQualElem()}
   }
 | col_qualification_elem
   {
