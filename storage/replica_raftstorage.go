@@ -722,27 +722,16 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		return err
 	}
 
-	// Read the leader lease.
-	lease, err := loadLeaderLease(batch, desc.RangeID)
+	s, err := loadState(batch, &desc)
 	if err != nil {
 		return err
 	}
 
-	frozen, err := loadFrozenStatus(batch, desc.RangeID)
-	if err != nil {
-		return err
-	}
-
-	lastThreshold, err := loadGCThreshold(batch, desc.RangeID)
-	if err != nil {
-		return err
-	}
-
-	// Load updated range stats. The local newStats variable will be assigned
-	// to r.stats after the batch commits.
-	newMS, err := loadMVCCStats(batch, desc.RangeID)
-	if err != nil {
-		return err
+	// As outlined above, last and applied index are the same after applying
+	// the snapshot.
+	if s.appliedIndex != snap.Metadata.Index {
+		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+			s.desc.RangeID, s.appliedIndex, snap.Metadata.Index)
 	}
 
 	// The next line sets the persisted last index to the last applied index.
@@ -753,35 +742,14 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	// performance implications are not likely to be drastic. If our feelings
 	// about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	if err := setLastIndex(batch, desc.RangeID, snap.Metadata.Index); err != nil {
-		return err
-	}
-
-	appliedIndex, leaseAppliedIndex, err := loadAppliedIndex(batch, desc.RangeID, true /* initialized */)
-	if err != nil {
-		return err
-	}
 
 	batch.Defer(func() {
-
 		r.mu.Lock()
-		// As outlined above, last and applied index are the same after applying
-		// the snapshot.
-		r.mu.state.appliedIndex = snap.Metadata.Index
-		if appliedIndex != snap.Metadata.Index {
-			log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
-				r.Desc().RangeID, appliedIndex, snap.Metadata.Index)
-		}
-		r.mu.lastIndex = appliedIndex
-		r.mu.state.leaseAppliedIndex = leaseAppliedIndex
-		r.mu.state.leaderLease = lease
-		r.mu.state.frozen = frozen
-		r.mu.state.gcThreshold = lastThreshold
-
+		r.mu.lastIndex = s.appliedIndex
 		// Update the range and store stats.
 		r.store.metrics.subtractMVCCStats(r.mu.state.ms)
-		r.mu.state.ms = newMS
-		r.store.metrics.addMVCCStats(newMS)
+		r.store.metrics.addMVCCStats(s.ms)
+		r.mu.state = s
 		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.
