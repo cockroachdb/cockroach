@@ -33,7 +33,7 @@ type returningHelper struct {
 	exprs    []parser.TypedExpr
 	qvals    qvalMap
 	rowCount int
-	table    *tableInfo
+	source   *dataSourceInfo
 }
 
 func (p *planner) makeReturningHelper(
@@ -56,14 +56,12 @@ func (p *planner) makeReturningHelper(
 	}
 
 	rh.columns = make([]ResultColumn, 0, len(r))
-	rh.table = &tableInfo{
-		columns: makeResultColumns(tablecols),
-		alias:   alias,
-	}
+	info := makeSourceInfoForSingleTable(alias, makeResultColumns(tablecols))
+	rh.source = &info
 	rh.qvals = make(qvalMap)
 	rh.exprs = make([]parser.TypedExpr, 0, len(r))
 	for i, target := range r {
-		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.table, rh.qvals); err != nil {
+		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.source, rh.qvals); err != nil {
 			return returningHelper{}, err
 		} else if isStar {
 			rh.exprs = append(rh.exprs, typedExprs...)
@@ -81,7 +79,7 @@ func (p *planner) makeReturningHelper(
 			desired = desiredTypes[i]
 		}
 
-		typedExpr, err := rh.p.analyzeExpr(target.Expr, []*tableInfo{rh.table}, rh.qvals, desired, false, "")
+		typedExpr, err := rh.p.analyzeExpr(target.Expr, multiSourceInfo{rh.source}, rh.qvals, desired, false, "")
 		if err != nil {
 			return returningHelper{}, err
 		}
@@ -98,7 +96,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 		rh.rowCount++
 		return rowVals, nil
 	}
-	rh.qvals.populateQVals(rh.table, rowVals)
+	rh.qvals.populateQVals(rh.source, rowVals)
 	resRow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(&rh.p.evalCtx)
