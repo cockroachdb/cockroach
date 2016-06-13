@@ -216,7 +216,14 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 	// TODO(dan): This has gotten very similar to the loop in updateRow, see if
 	// they can be DRY'd. Ideally, this would also work for
 	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
-	for _, family := range ri.helper.tableDesc.Families {
+	for i, family := range ri.helper.tableDesc.Families {
+		if i > 0 {
+			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
+			// after the first, trim primaryIndexKey so nothing gets overwritten.
+			// TODO(dan): Instead of this, use something like engine.ChunkAllocator.
+			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
+		}
+
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
@@ -550,7 +557,7 @@ func (ru *rowUpdater) updateRow(
 	// TODO(dan): This has gotten very similar to the loop in insertRow, see if
 	// they can be DRY'd. Ideally, this would also work for
 	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
-	for _, family := range ru.helper.tableDesc.Families {
+	for i, family := range ru.helper.tableDesc.Families {
 		update := false
 		for _, colID := range family.ColumnIDs {
 			if _, ok := ru.updateColIDtoRowIndex[colID]; ok {
@@ -560,6 +567,13 @@ func (ru *rowUpdater) updateRow(
 		}
 		if !update {
 			continue
+		}
+
+		if i > 0 {
+			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
+			// after the first, trim primaryIndexKey so nothing gets overwritten.
+			// TODO(dan): Instead of this, use something like engine.ChunkAllocator.
+			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
 		}
 
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
