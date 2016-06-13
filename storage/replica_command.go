@@ -605,15 +605,15 @@ func (r *Replica) resolveLocalIntents(
 					externalIntents = append(externalIntents, intent)
 					return nil
 				}
-				resolveMs := ms
+				resolveMS := ms
 				if preMergeDesc != nil && !containsKey(*preMergeDesc, span.Key) {
 					// If this transaction included a merge and the intents
 					// are from the subsumed range, ignore the intent resolution
 					// stats, as they will already be accounted for during the
 					// merge trigger.
-					resolveMs = nil
+					resolveMS = nil
 				}
-				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMs, intent)
+				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -2158,10 +2158,10 @@ func (r *Replica) splitTrigger(
 	// Preserve stats for presplit range and begin computing stats delta
 	// for current transaction.
 	origStats := r.GetMVCCStats()
-	deltaMs := *ms
+	deltaMS := *ms
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
-	if err := deltaMs.AccountForSelf(split.NewDesc.RangeID); err != nil {
+	if err := deltaMS.AccountForSelf(split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to account for MVCCStats's own stats impact: %s", err)
 	}
 
@@ -2169,14 +2169,18 @@ func (r *Replica) splitTrigger(
 	// instead of having a constraint that the left side is smaller.
 
 	// Compute stats for updated range.
-	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
+	leftMS, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
 	log.Trace(ctx, "computed stats for old range")
-	if err := r.stats.SetMVCCStats(batch, leftMs); err != nil {
+
+	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
+	r.mu.Lock()
+	r.mu.state.ms = leftMS
+	r.mu.Unlock()
 
 	// Copy the last replica GC and verification timestamps. These
 	// values are unreplicated, which is why the MVCC stats are set to
@@ -2197,7 +2201,7 @@ func (r *Replica) splitTrigger(
 	}
 
 	// Initialize the new range's abort cache by copying the original's.
-	seqCount, err := r.abortCache.CopyInto(batch, &deltaMs, split.NewDesc.RangeID)
+	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy abort cache to new split range: %s", err)
@@ -2212,12 +2216,12 @@ func (r *Replica) splitTrigger(
 		return err
 	}
 
-	rightMs := deltaMs
+	rightMS := deltaMS
 	// Add in the original range's stats.
-	rightMs.Add(origStats)
+	rightMS.Add(origStats)
 	// Remove stats from the left side of the split.
-	rightMs.Subtract(leftMs)
-	if err = newRng.stats.SetMVCCStats(batch, rightMs); err != nil {
+	rightMS.Subtract(leftMS)
+	if err := setMVCCStats(batch, newRng.RangeID, rightMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 	log.Trace(ctx, "computed stats for new range")
@@ -2225,6 +2229,7 @@ func (r *Replica) splitTrigger(
 	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
 	newRng.mu.Lock()
+	newRng.mu.state.ms = rightMS
 	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
 	newRng.mu.Unlock()
 	r.mu.Unlock()
@@ -2239,7 +2244,7 @@ func (r *Replica) splitTrigger(
 		}
 
 		// Update store stats with difference in stats before and after split.
-		r.store.metrics.addMVCCStats(deltaMs)
+		r.store.metrics.addMVCCStats(deltaMS)
 
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
@@ -2430,20 +2435,20 @@ func (r *Replica) mergeTrigger(
 	}
 
 	// Compute stats for premerged range, including current transaction.
-	var mergedMs = r.GetMVCCStats()
-	mergedMs.Add(*ms)
+	var mergedMS = r.GetMVCCStats()
+	mergedMS.Add(*ms)
 
 	// Add in stats for right half of merge, excluding system-local stats, which
 	// will need to be recomputed.
-	var rightMs engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMs); err != nil {
+	var rightMS engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMS); err != nil {
 		return err
 	}
-	rightMs.SysBytes, rightMs.SysCount = 0, 0
-	mergedMs.Add(rightMs)
+	rightMS.SysBytes, rightMS.SysCount = 0, 0
+	mergedMS.Add(rightMS)
 
 	// Copy the subsumed range's abort cache to the subsuming one.
-	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMs, subsumedRangeID)
+	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, subsumedRangeID)
 	if err != nil {
 		return util.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
@@ -2465,10 +2470,10 @@ func (r *Replica) mergeTrigger(
 	if err != nil {
 		return util.Errorf("unable to compute subsumed range's local stats: %s", err)
 	}
-	mergedMs.Add(msRange)
+	mergedMS.Add(msRange)
 
-	// Set stats for updated range.
-	if err = r.stats.SetMVCCStats(batch, mergedMs); err != nil {
+	// Set stats for updated range (in-memory updated under lock below).
+	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -2477,6 +2482,7 @@ func (r *Replica) mergeTrigger(
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
 	r.mu.Lock()
+	r.mu.state.ms = mergedMS
 	r.mu.tsCache.Clear(r.store.Clock())
 	r.mu.Unlock()
 

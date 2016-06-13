@@ -884,7 +884,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 		// Add this range and its stats to our counter.
 		s.metrics.replicaCount.Inc(1)
-		s.metrics.addMVCCStats(rng.stats.GetMVCC())
+		s.metrics.addMVCCStats(rng.GetMVCCStats())
 		// TODO(bdarnell): lazily create raft groups to make the following comment true again.
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of

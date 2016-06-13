@@ -129,16 +129,23 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// zero, this will translate into non live bytes.  Also write
 		// intent count. Note: the actual accounting on bytes is fictional
 		// in this test.
-		stats := engine.MVCCStats{
+		ms := engine.MVCCStats{
 			KeyBytes:        test.gcBytes,
 			IntentCount:     test.intentCount,
 			IntentAge:       test.intentAge * considerThreshold,
 			GCBytesAge:      test.gcBytesAge * considerThreshold,
 			LastUpdateNanos: test.now.WallTime,
 		}
-		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
-			t.Fatal(err)
-		}
+		func() {
+			// Hold lock throughout to reduce chance of random commands
+			// leading to inconsistent state.
+			tc.rng.mu.Lock()
+			defer tc.rng.mu.Unlock()
+			if err := setMVCCStats(tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
+				t.Fatal(err)
+			}
+			tc.rng.mu.state.ms = ms
+		}()
 		shouldQ, priority := gcQ.shouldQueue(now, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
