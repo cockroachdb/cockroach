@@ -205,6 +205,7 @@ var keywords = map[string]int{
 	"STRING":            STRING,
 	"SUBSTRING":         SUBSTRING,
 	"SYMMETRIC":         SYMMETRIC,
+	"SYSTEM":            SYSTEM,
 	"TABLE":             TABLE,
 	"TABLES":            TABLES,
 	"TEXT":              TEXT,

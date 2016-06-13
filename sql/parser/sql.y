@@ -185,6 +185,9 @@ func (u *sqlSymUnion) retExprs() ReturningExprs {
 func (u *sqlSymUnion) aliasClause() AliasClause {
     return u.val.(AliasClause)
 }
+func (u *sqlSymUnion) asOfClause() AsOfClause {
+    return u.val.(AsOfClause)
+}
 func (u *sqlSymUnion) tblExpr() TableExpr {
     if tblExpr, ok := u.val.(TableExpr); ok {
         return tblExpr
@@ -442,6 +445,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <TableExpr> relation_expr_opt_alias
 %type <SelectExpr> target_elem
 %type <*UpdateExpr> single_set_clause
+%type <AsOfClause> opt_as_of_clause
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list
@@ -580,7 +584,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SQL
 %token <str>   START STRICT STRING STORING SUBSTRING
-%token <str>   SYMMETRIC
+%token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEXT THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
@@ -605,7 +609,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
 // NOT, at least with respect to their left-hand subexpression. WITH_LA is
 // needed to make the grammar LALR(1).
-%token     NOT_LA WITH_LA
+%token     NOT_LA WITH_LA AS_LA
 
 // Precedence: lowest to highest
 %nonassoc  SET                 // see relation_expr_opt_alias
@@ -2466,9 +2470,9 @@ opt_index_hints:
 
 // table_ref is where an alias clause can be attached.
 table_ref:
-  relation_expr opt_index_hints opt_alias_clause
+  relation_expr opt_index_hints opt_alias_clause opt_as_of_clause
   {
-    $$.val = &AliasedTableExpr{Expr: $1.qname(), Hints: $2.indexHints(), As: $3.aliasClause()}
+    $$.val = &AliasedTableExpr{Expr: $1.qname(), Hints: $2.indexHints(), As: $3.aliasClause(), AsOf: $4.asOfClause()}
   }
 | select_with_parens opt_alias_clause
   {
@@ -2540,6 +2544,16 @@ opt_alias_clause:
 | /* EMPTY */
   {
     $$.val = AliasClause{}
+  }
+
+opt_as_of_clause:
+  AS_LA OF SYSTEM TIME SCONST
+  {
+    $$.val = AsOfClause{Expr: &StrVal{s: $5}}
+  }
+| /* EMPTY */
+  {
+    $$.val = AsOfClause{}
   }
 
 join_type:
@@ -4266,6 +4280,7 @@ unreserved_keyword:
 | START
 | STORING
 | STRICT
+| SYSTEM
 | TABLES
 | TEXT
 | TRANSACTION
