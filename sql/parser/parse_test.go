@@ -71,6 +71,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING(3))`},
 		{`CREATE TABLE a (b FLOAT)`},
 		{`CREATE TABLE a (b SERIAL)`},
+		{`CREATE TABLE a (b SMALLSERIAL)`},
+		{`CREATE TABLE a (b BIGSERIAL)`},
 		{`CREATE TABLE a (b INT NULL)`},
 		{`CREATE TABLE a (b INT NOT NULL)`},
 		{`CREATE TABLE a (b INT PRIMARY KEY)`},

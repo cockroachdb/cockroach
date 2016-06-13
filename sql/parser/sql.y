@@ -520,7 +520,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
-%token <str>   BEGIN BETWEEN BIGINT BIT
+%token <str>   BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
 %token <str>   CASCADE CASE CAST CHAR
@@ -578,7 +578,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %token <str>   SAVEPOINT SEARCH SECOND SELECT
 %token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
-%token <str>   SIMILAR SIMPLE SMALLINT SNAPSHOT SOME SQL
+%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SQL
 %token <str>   START STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC
 
@@ -2688,6 +2688,14 @@ simple_typename:
   {
     $$.val = intColTypeSerial
   }
+| SMALLSERIAL
+  {
+    $$.val = intColTypeSmallSerial
+  }
+| BIGSERIAL
+  {
+    $$.val = intColTypeBigSerial
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -4289,6 +4297,7 @@ unreserved_keyword:
 col_name_keyword:
   BETWEEN
 | BIGINT
+| BIGSERIAL
 | BIT
 | BOOL
 | BOOLEAN
@@ -4323,6 +4332,7 @@ col_name_keyword:
 | ROW
 | SERIAL
 | SMALLINT
+| SMALLSERIAL
 | STRING
 | SUBSTRING
 | TIME
