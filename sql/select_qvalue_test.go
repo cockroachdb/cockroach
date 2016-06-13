@@ -32,8 +32,8 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 	sel := &selectNode{}
 	sel.qvals = make(qvalMap)
 	sel.source.plan = scan
-	sel.source.info.alias = desc.Name
-	sel.source.info.columns = scan.Columns()
+	sel.source.info.sourceColumns = scan.Columns()
+	sel.source.info.sourceTables = fillName(desc.Name, len(sel.source.info.sourceColumns))
 
 	return sel
 }

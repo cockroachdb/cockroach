@@ -108,14 +108,13 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				if err := qname.NormalizeColumnName(); err != nil {
 					return nil, err
 				}
-				if qname.Table() == "" || sqlbase.EqualName(s.source.info.alias, qname.Table()) {
-					qnameCol := sqlbase.NormalizeName(qname.Column())
-					for j, r := range s.render {
-						if qval, ok := r.(*qvalue); ok {
-							if sqlbase.NormalizeName(qval.colRef.get().Name) == qnameCol {
-								index = j
-								break
-							}
+				qnameCol := sqlbase.NormalizeName(qname.Column())
+				for j, r := range s.render {
+					if qval, ok := r.(*qvalue); ok {
+						if (qname.Table() == "" || sqlbase.EqualName(s.source.info.sourceTables[j], qname.Table())) &&
+							sqlbase.NormalizeName(qval.colRef.get().Name) == qnameCol {
+							index = j
+							break
 						}
 					}
 				}

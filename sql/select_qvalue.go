@@ -40,12 +40,12 @@ const invalidColIdx = -1
 
 // get dereferences the columnRef to the resultColumn.
 func (cr columnRef) get() ResultColumn {
-	return cr.table.columns[cr.colIdx]
+	return cr.table.sourceColumns[cr.colIdx]
 }
 
 type qvalResolver struct {
-	tables []*tableInfo
-	qvals  qvalMap
+	sources []*tableInfo
+	qvals   qvalMap
 }
 
 // findColumn looks up the column described by a QualifiedName. The qname will be normalized.
@@ -64,16 +64,16 @@ func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error
 	}
 
 	colName := sqlbase.NormalizeName(qname.Column())
-	for _, table := range qt.tables {
-		if qname.Base == "" || sqlbase.EqualName(table.alias, string(qname.Base)) {
-			for idx, col := range table.columns {
-				if sqlbase.NormalizeName(col.Name) == colName {
-					if ref.colIdx != invalidColIdx {
-						return ref, fmt.Errorf("column reference \"%s\" is ambiguous", qname)
-					}
-					ref.table = table
-					ref.colIdx = idx
+	for _, src := range qt.sources {
+		for idx, col := range src.sourceColumns {
+			table := src.sourceTables[idx]
+			if (qname.Base == "" || sqlbase.EqualName(table, string(qname.Base))) &&
+				sqlbase.NormalizeName(col.Name) == colName {
+				if ref.colIdx != invalidColIdx {
+					return ref, fmt.Errorf("column reference \"%s\" is ambiguous", qname)
 				}
+				ref.table = src
+				ref.colIdx = idx
 			}
 		}
 	}
@@ -242,8 +242,8 @@ func resolveQNames(
 	}
 	*v = qnameVisitor{
 		qt: qvalResolver{
-			tables: tables,
-			qvals:  qvals,
+			sources: tables,
+			qvals:   qvals,
 		},
 	}
 	expr, _ = parser.WalkExpr(v, expr)

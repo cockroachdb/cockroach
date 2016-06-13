@@ -9,7 +9,7 @@ EXPLAIN (PLAN, VERBOSE) SELECT 1
 ----
 Level  Type           Description Ordering
 0      select
-1      render/filter  (1)@
+1      render/filter  ("1") from ()
 2      empty           -
 
 query ITTT colnames
@@ -17,7 +17,7 @@ EXPLAIN (VERBOSE, PLAN) SELECT 1
 ----
 Level  Type           Description Ordering
 0      select
-1      render/filter  (1)@
+1      render/filter  ("1") from ()
 2      empty           -
 
 query ITTT colnames
@@ -69,5 +69,5 @@ Level  Type                  Description   Ordering
 1      sort                  +9,+Span Pos  +9,+Span Pos
 2      explain               trace
 3      select
-4      render/filter(debug)  (1)@
+4      render/filter(debug)  ("1") from ()
 5      empty                 -

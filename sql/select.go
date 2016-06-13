@@ -25,15 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// tableInfo contains the information for table used by a select statement. It can be an actual
-// table, or a "virtual table" which is the result of a subquery.
+// tableInfo describes the origin of columns visible to a select
+// statement.  It can describe either plain table(s) or virtual tables
+// that are the result of sub-queries or joins.
 type tableInfo struct {
-	// alias (if no alias is given and the source is a table, this is the table name)
-	alias string
+	// resultColumns which match the node.Columns() 1-to-1. However the
+	// column names might be different if the statement renames them
+	// using AS.
+	sourceColumns []ResultColumn
 
-	// resultColumns which match the node.Columns() 1-to-1. However the column names might be
-	// different if the statement renames them using AS.
-	columns []ResultColumn
+	// names of the source tables for each column.
+	sourceTables []string
 }
 
 // tableSource contains the tableInfo and planNode for a data source
@@ -204,14 +206,27 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "(")
+
+	buf.WriteByte('(')
 	for i, col := range s.columns {
 		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
+		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 	}
-	fmt.Fprintf(&buf, ")@%s", s.source.info.alias)
+	buf.WriteString(") from (")
+	for i, col := range s.source.info.sourceColumns {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		if col.hidden {
+			buf.WriteByte('*')
+		}
+		parser.Name(s.source.info.sourceTables[i]).Format(&buf, parser.FmtSimple)
+		buf.WriteByte('.')
+		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
+	}
+	buf.WriteByte(')')
 
 	name = "render/filter"
 	if s.explain != explainNone {
@@ -370,7 +385,7 @@ func (s *selectNode) expandPlan() error {
 		// Find the set of columns that we actually need values for. This is an
 		// optimization to avoid unmarshaling unnecessary values and is also
 		// used for index selection.
-		neededCols := make([]bool, len(s.source.info.columns))
+		neededCols := make([]bool, len(s.source.info.sourceColumns))
 		for i := range neededCols {
 			_, ok := s.qvals[columnRef{&s.source.info, i}]
 			neededCols[i] = ok
@@ -444,6 +459,7 @@ func (s *selectNode) initFrom(
 	p *planner, parsed *parser.SelectClause, scanVisibility scanVisibility,
 ) error {
 	from := parsed.From
+	var tableAlias string
 	var colAlias parser.NameList
 	var err error
 	switch len(from) {
@@ -460,7 +476,7 @@ func (s *selectNode) initFrom(
 		case *parser.QualifiedName:
 			// Usual case: a table.
 			scan := p.Scan()
-			s.source.info.alias, err = scan.initTable(p, expr, ate.Hints, scanVisibility)
+			tableAlias, err = scan.initTable(p, expr, ate.Hints, scanVisibility)
 			if err != nil {
 				return err
 			}
@@ -471,7 +487,6 @@ func (s *selectNode) initFrom(
 			if ate.As.Alias == "" {
 				return fmt.Errorf("subquery in FROM must have an alias")
 			}
-
 			s.source.plan, err = p.newPlan(expr.Select, nil, false)
 			if err != nil {
 				return err
@@ -483,7 +498,7 @@ func (s *selectNode) initFrom(
 
 		if ate.As.Alias != "" {
 			// If an alias was specified, use that.
-			s.source.info.alias = string(ate.As.Alias)
+			tableAlias = string(ate.As.Alias)
 		}
 		colAlias = ate.As.Cols
 	default:
@@ -491,22 +506,27 @@ func (s *selectNode) initFrom(
 			"are not yet supported: %s", from)
 	}
 
-	s.source.info.columns = s.source.plan.Columns()
+	s.source.info.sourceColumns = s.source.plan.Columns()
+	s.source.info.sourceTables = make([]string, len(s.source.info.sourceColumns))
+	for i := range s.source.info.sourceColumns {
+		s.source.info.sourceTables[i] = tableAlias
+	}
+
 	if len(colAlias) > 0 {
 		// Make a copy of the slice since we are about to modify the contents.
-		s.source.info.columns = append([]ResultColumn(nil), s.source.info.columns...)
+		s.source.info.sourceColumns = append([]ResultColumn(nil), s.source.info.sourceColumns...)
 
 		// The column aliases can only refer to explicit columns.
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
-			if colIdx >= len(s.source.info.columns) {
+			if colIdx >= len(s.source.info.sourceColumns) {
 				return util.Errorf(
 					"table \"%s\" has %d columns available but %d columns specified",
-					s.source.info.alias, aliasIdx, len(colAlias))
+					tableAlias, aliasIdx, len(colAlias))
 			}
-			if s.source.info.columns[colIdx].hidden {
+			if s.source.info.sourceColumns[colIdx].hidden {
 				continue
 			}
-			s.source.info.columns[colIdx].Name = string(colAlias[aliasIdx])
+			s.source.info.sourceColumns[colIdx].Name = string(colAlias[aliasIdx])
 			aliasIdx++
 		}
 	}
@@ -562,7 +582,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 // "*" into a list of columns. The qvalMap is updated to include all the relevant columns. A
 // ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
-	target parser.SelectExpr, table *tableInfo, qvals qvalMap,
+	target parser.SelectExpr, src *tableInfo, qvals qvalMap,
 ) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
 	qname, ok := target.Expr.(*parser.QualifiedName)
 	if !ok {
@@ -575,25 +595,27 @@ func checkRenderStar(
 		return false, nil, nil, nil
 	}
 
-	if table.alias == "" {
+	if len(src.sourceColumns) == 0 {
 		return false, nil, nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
 	}
+
 	if target.As != "" {
 		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
 	}
 
-	// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
-	if tableName := qname.Table(); tableName != "" && !sqlbase.EqualName(table.alias, tableName) {
-		return false, nil, nil, fmt.Errorf("table \"%s\" not found", tableName)
-	}
-
-	for idx, col := range table.columns {
+	tableName := qname.Table()
+	for idx, col := range src.sourceColumns {
 		if col.hidden {
 			continue
 		}
-		qval := qvals.getQVal(columnRef{table, idx})
-		columns = append(columns, ResultColumn{Name: col.Name, Typ: qval.datum})
-		exprs = append(exprs, qval)
+		if tableName == "" || sqlbase.EqualName(src.sourceTables[idx], tableName) {
+			qval := qvals.getQVal(columnRef{src, idx})
+			columns = append(columns, ResultColumn{Name: col.Name, Typ: qval.datum})
+			exprs = append(exprs, qval)
+		}
+	}
+	if len(exprs) == 0 {
+		return false, nil, nil, fmt.Errorf("table \"%s\" not found", tableName)
 	}
 	return true, columns, exprs, nil
 }

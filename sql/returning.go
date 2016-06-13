@@ -57,8 +57,8 @@ func (p *planner) makeReturningHelper(
 
 	rh.columns = make([]ResultColumn, 0, len(r))
 	rh.table = &tableInfo{
-		columns: makeResultColumns(tablecols),
-		alias:   alias,
+		sourceTables:  fillName(alias, len(tablecols)),
+		sourceColumns: makeResultColumns(tablecols),
 	}
 	rh.qvals = make(qvalMap)
 	rh.exprs = make([]parser.TypedExpr, 0, len(r))
