@@ -183,7 +183,7 @@ type state struct {
 	// Changes of the descriptor should normally go through one of the
 	// (*Replica).setDesc* methods.
 	desc           *roachpb.RangeDescriptor
-	leaderLease    *roachpb.Lease
+	lease          *roachpb.Lease
 	truncatedState *roachpb.RaftTruncatedState
 	// gcThreshold is the GC threshold of the replica. Reads and writes must
 	// not happen <= this time.
@@ -200,7 +200,7 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (state, erro
 	s.desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the leader lease.
 	var err error
-	if s.leaderLease, err = loadLeaderLease(reader, desc.RangeID); err != nil {
+	if s.lease, err = loadLease(reader, desc.RangeID); err != nil {
 		return state{}, err
 	}
 
@@ -519,7 +519,7 @@ func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS engine.M
 	return engine.MVCCSetRangeStats(context.Background(), eng, rangeID, &newMS)
 }
 
-func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
 	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
@@ -532,7 +532,7 @@ func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease
 func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.state.leaderLease, len(r.mu.llChans) > 0
+	return r.mu.state.lease, len(r.mu.llChans) > 0
 }
 
 func setGCThreshold(
@@ -1809,7 +1809,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	cmd := r.mu.pendingCmds[idKey]
 
 	isLeaseError := func() bool {
-		l, ba, origin := r.mu.state.leaderLease, raftCmd.Cmd, raftCmd.OriginReplica
+		l, ba, origin := r.mu.state.lease, raftCmd.Cmd, raftCmd.OriginReplica
 		if l.Replica != origin && !ba.IsLease() {
 			return true
 		}
@@ -1835,10 +1835,10 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	if isLeaseError() {
 		if log.V(1) {
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
-				raftCmd.OriginReplica, r.mu.state.leaderLease.Replica, raftCmd.Cmd)
+				raftCmd.OriginReplica, r.mu.state.lease.Replica, raftCmd.Cmd)
 		}
 		forcedErr = roachpb.NewError(r.newNotLeaderErrorLocked(
-			r.mu.state.leaderLease, raftCmd.OriginReplica.StoreID))
+			r.mu.state.lease, raftCmd.OriginReplica.StoreID))
 	}
 
 	if cmd != nil {
