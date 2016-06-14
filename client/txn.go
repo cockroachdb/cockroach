@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -74,7 +75,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 	} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = roachpb.Transaction{
-			TxnMeta: roachpb.TxnMeta{
+			TxnMeta: enginepb.TxnMeta{
 				Isolation: ts.Proto.Isolation,
 			},
 			Name: ts.Proto.Name,
@@ -150,7 +151,7 @@ func (txn *Txn) DebugName() string {
 // SetIsolation sets the transaction's isolation type. Transactions default to
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
-func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) error {
+func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 	if txn.retrying {
 		if txn.Proto.Isolation != isolation {
 			return util.Errorf("cannot change the isolation level of a retrying transaction")

@@ -23,6 +23,7 @@ declare module cockroach {
 		build: buildBuilder;
 		util: utilBuilder;
 		roachpb: roachpbBuilder;
+		storage: storageBuilder;
 		gossip: gossipBuilder;
 		ts: tsBuilder;
 		
@@ -2789,14 +2790,12 @@ export interface roachpbBuilder {
 	ChangeReplicasTrigger: roachpb.ChangeReplicasTriggerBuilder;
 	ModifiedSpanTrigger: roachpb.ModifiedSpanTriggerBuilder;
 	InternalCommitTrigger: roachpb.InternalCommitTriggerBuilder;
-	TxnMeta: roachpb.TxnMetaBuilder;
 	Transaction: roachpb.TransactionBuilder;
 	Intent: roachpb.IntentBuilder;
 	Lease: roachpb.LeaseBuilder;
 	AbortCacheEntry: roachpb.AbortCacheEntryBuilder;
 	ValueType: roachpb.ValueType;
 	ReplicaChangeType: roachpb.ReplicaChangeType;
-	IsolationType: roachpb.IsolationType;
 	TransactionStatus: roachpb.TransactionStatus;
 	
 }
@@ -3588,114 +3587,15 @@ export interface InternalCommitTriggerBuilder {
 
 declare module cockroach.roachpb {
 	
-	export interface TxnMeta {
-	
-		
-
-id?: ByteBuffer;
-		
-
-getId?() : ByteBuffer;
-		setId?(id : ByteBuffer): void;
-		
-
-
-
-isolation?: IsolationType;
-		
-
-getIsolation?() : IsolationType;
-		setIsolation?(isolation : IsolationType): void;
-		
-
-
-
-key?: ByteBuffer;
-		
-
-getKey?() : ByteBuffer;
-		setKey?(key : ByteBuffer): void;
-		
-
-
-
-epoch?: number;
-		
-
-getEpoch?() : number;
-		setEpoch?(epoch : number): void;
-		
-
-
-
-timestamp?: util.hlc.Timestamp;
-		
-
-getTimestamp?() : util.hlc.Timestamp;
-		setTimestamp?(timestamp : util.hlc.Timestamp): void;
-		
-
-
-
-priority?: number;
-		
-
-getPriority?() : number;
-		setPriority?(priority : number): void;
-		
-
-
-
-sequence?: number;
-		
-
-getSequence?() : number;
-		setSequence?(sequence : number): void;
-		
-
-
-
-batch_index?: number;
-		
-
-getBatchIndex?() : number;
-		setBatchIndex?(batchIndex : number): void;
-		
-
-
-
-}
-	
-	export interface TxnMetaMessage extends TxnMeta {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface TxnMetaBuilder {
-	new(data?: TxnMeta): TxnMetaMessage;
-	decode(buffer: ArrayBuffer) : TxnMetaMessage;
-	decode(buffer: ByteBuffer) : TxnMetaMessage;
-	decode64(buffer: string) : TxnMetaMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.roachpb {
-	
 	export interface Transaction {
 	
 		
 
-meta?: TxnMeta;
+meta?: storage.engine.enginepb.TxnMeta;
 		
 
-getMeta?() : TxnMeta;
-		setMeta?(meta : TxnMeta): void;
+getMeta?() : storage.engine.enginepb.TxnMeta;
+		setMeta?(meta : storage.engine.enginepb.TxnMeta): void;
 		
 
 
@@ -3826,11 +3726,11 @@ getSpan?() : Span;
 
 
 
-txn?: TxnMeta;
+txn?: storage.engine.enginepb.TxnMeta;
 		
 
-getTxn?() : TxnMeta;
-		setTxn?(txn : TxnMeta): void;
+getTxn?() : storage.engine.enginepb.TxnMeta;
+		setTxn?(txn : storage.engine.enginepb.TxnMeta): void;
 		
 
 
@@ -4009,14 +3909,6 @@ declare module cockroach.roachpb {
 }
 
 declare module cockroach.roachpb {
-	export const enum IsolationType {
-		SERIALIZABLE = 0,
-		SNAPSHOT = 1,
-		
-}
-}
-
-declare module cockroach.roachpb {
 	export const enum TransactionStatus {
 		PENDING = 0,
 		COMMITTED = 1,
@@ -4024,6 +3916,434 @@ declare module cockroach.roachpb {
 		
 }
 }
+
+
+declare module cockroach {
+	
+	export interface storage {
+	
+		
+
+}
+	
+	export interface storageMessage extends storage {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface storageBuilder {
+	new(data?: storage): storageMessage;
+	decode(buffer: ArrayBuffer) : storageMessage;
+	decode(buffer: ByteBuffer) : storageMessage;
+	decode64(buffer: string) : storageMessage;
+	engine: storage.engineBuilder;
+	
+}
+	
+}
+
+declare module cockroach.storage {
+	
+	export interface engine {
+	
+		
+
+}
+	
+	export interface engineMessage extends engine {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface engineBuilder {
+	new(data?: engine): engineMessage;
+	decode(buffer: ArrayBuffer) : engineMessage;
+	decode(buffer: ByteBuffer) : engineMessage;
+	decode64(buffer: string) : engineMessage;
+	enginepb: engine.enginepbBuilder;
+	
+}
+	
+}
+
+declare module cockroach.storage.engine {
+	
+	export interface enginepb {
+	
+		
+
+}
+	
+	export interface enginepbMessage extends enginepb {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface enginepbBuilder {
+	new(data?: enginepb): enginepbMessage;
+	decode(buffer: ArrayBuffer) : enginepbMessage;
+	decode(buffer: ByteBuffer) : enginepbMessage;
+	decode64(buffer: string) : enginepbMessage;
+	TxnMeta: enginepb.TxnMetaBuilder;
+	MVCCMetadata: enginepb.MVCCMetadataBuilder;
+	MVCCStats: enginepb.MVCCStatsBuilder;
+	IsolationType: enginepb.IsolationType;
+	
+}
+	
+}
+
+declare module cockroach.storage.engine.enginepb {
+	
+	export interface TxnMeta {
+	
+		
+
+id?: ByteBuffer;
+		
+
+getId?() : ByteBuffer;
+		setId?(id : ByteBuffer): void;
+		
+
+
+
+isolation?: IsolationType;
+		
+
+getIsolation?() : IsolationType;
+		setIsolation?(isolation : IsolationType): void;
+		
+
+
+
+key?: ByteBuffer;
+		
+
+getKey?() : ByteBuffer;
+		setKey?(key : ByteBuffer): void;
+		
+
+
+
+epoch?: number;
+		
+
+getEpoch?() : number;
+		setEpoch?(epoch : number): void;
+		
+
+
+
+timestamp?: util.hlc.Timestamp;
+		
+
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
+		
+
+
+
+priority?: number;
+		
+
+getPriority?() : number;
+		setPriority?(priority : number): void;
+		
+
+
+
+sequence?: number;
+		
+
+getSequence?() : number;
+		setSequence?(sequence : number): void;
+		
+
+
+
+batch_index?: number;
+		
+
+getBatchIndex?() : number;
+		setBatchIndex?(batchIndex : number): void;
+		
+
+
+
+}
+	
+	export interface TxnMetaMessage extends TxnMeta {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TxnMetaBuilder {
+	new(data?: TxnMeta): TxnMetaMessage;
+	decode(buffer: ArrayBuffer) : TxnMetaMessage;
+	decode(buffer: ByteBuffer) : TxnMetaMessage;
+	decode64(buffer: string) : TxnMetaMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.storage.engine.enginepb {
+	
+	export interface MVCCMetadata {
+	
+		
+
+txn?: TxnMeta;
+		
+
+getTxn?() : TxnMeta;
+		setTxn?(txn : TxnMeta): void;
+		
+
+
+
+timestamp?: util.hlc.Timestamp;
+		
+
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
+		
+
+
+
+deleted?: boolean;
+		
+
+getDeleted?() : boolean;
+		setDeleted?(deleted : boolean): void;
+		
+
+
+
+key_bytes?: Long;
+		
+
+getKeyBytes?() : Long;
+		setKeyBytes?(keyBytes : Long): void;
+		
+
+
+
+val_bytes?: Long;
+		
+
+getValBytes?() : Long;
+		setValBytes?(valBytes : Long): void;
+		
+
+
+
+raw_bytes?: ByteBuffer;
+		
+
+getRawBytes?() : ByteBuffer;
+		setRawBytes?(rawBytes : ByteBuffer): void;
+		
+
+
+
+merge_timestamp?: util.hlc.Timestamp;
+		
+
+getMergeTimestamp?() : util.hlc.Timestamp;
+		setMergeTimestamp?(mergeTimestamp : util.hlc.Timestamp): void;
+		
+
+
+
+}
+	
+	export interface MVCCMetadataMessage extends MVCCMetadata {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface MVCCMetadataBuilder {
+	new(data?: MVCCMetadata): MVCCMetadataMessage;
+	decode(buffer: ArrayBuffer) : MVCCMetadataMessage;
+	decode(buffer: ByteBuffer) : MVCCMetadataMessage;
+	decode64(buffer: string) : MVCCMetadataMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.storage.engine.enginepb {
+	
+	export interface MVCCStats {
+	
+		
+
+last_update_nanos?: Long;
+		
+
+getLastUpdateNanos?() : Long;
+		setLastUpdateNanos?(lastUpdateNanos : Long): void;
+		
+
+
+
+intent_age?: Long;
+		
+
+getIntentAge?() : Long;
+		setIntentAge?(intentAge : Long): void;
+		
+
+
+
+gc_bytes_age?: Long;
+		
+
+getGcBytesAge?() : Long;
+		setGcBytesAge?(gcBytesAge : Long): void;
+		
+
+
+
+live_bytes?: Long;
+		
+
+getLiveBytes?() : Long;
+		setLiveBytes?(liveBytes : Long): void;
+		
+
+
+
+live_count?: Long;
+		
+
+getLiveCount?() : Long;
+		setLiveCount?(liveCount : Long): void;
+		
+
+
+
+key_bytes?: Long;
+		
+
+getKeyBytes?() : Long;
+		setKeyBytes?(keyBytes : Long): void;
+		
+
+
+
+key_count?: Long;
+		
+
+getKeyCount?() : Long;
+		setKeyCount?(keyCount : Long): void;
+		
+
+
+
+val_bytes?: Long;
+		
+
+getValBytes?() : Long;
+		setValBytes?(valBytes : Long): void;
+		
+
+
+
+val_count?: Long;
+		
+
+getValCount?() : Long;
+		setValCount?(valCount : Long): void;
+		
+
+
+
+intent_bytes?: Long;
+		
+
+getIntentBytes?() : Long;
+		setIntentBytes?(intentBytes : Long): void;
+		
+
+
+
+intent_count?: Long;
+		
+
+getIntentCount?() : Long;
+		setIntentCount?(intentCount : Long): void;
+		
+
+
+
+sys_bytes?: Long;
+		
+
+getSysBytes?() : Long;
+		setSysBytes?(sysBytes : Long): void;
+		
+
+
+
+sys_count?: Long;
+		
+
+getSysCount?() : Long;
+		setSysCount?(sysCount : Long): void;
+		
+
+
+
+}
+	
+	export interface MVCCStatsMessage extends MVCCStats {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface MVCCStatsBuilder {
+	new(data?: MVCCStats): MVCCStatsMessage;
+	decode(buffer: ArrayBuffer) : MVCCStatsMessage;
+	decode(buffer: ByteBuffer) : MVCCStatsMessage;
+	decode64(buffer: string) : MVCCStatsMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.storage.engine.enginepb {
+	export const enum IsolationType {
+		SERIALIZABLE = 0,
+		SNAPSHOT = 1,
+		
+}
+}
+
+
 
 
 declare module cockroach {

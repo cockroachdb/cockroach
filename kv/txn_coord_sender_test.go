@@ -147,7 +147,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto.Isolation = roachpb.SNAPSHOT
+	txn.Proto.Isolation = enginepb.SNAPSHOT
 	txn.Proto.Name = "test txn"
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	if !bytes.Equal(txn.Proto.Key, key) {
 		t.Errorf("expected txn Key to match %q != %q", key, txn.Proto.Key)
 	}
-	if txn.Proto.Isolation != roachpb.SNAPSHOT {
+	if txn.Proto.Isolation != enginepb.SNAPSHOT {
 		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", txn.Proto.Isolation)
 	}
 }
@@ -183,7 +183,7 @@ func TestTxnInitialTimestamp(t *testing.T) {
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto.Isolation = roachpb.SNAPSHOT
+	txn.Proto.Isolation = enginepb.SNAPSHOT
 	txn.Proto.Name = "test txn"
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto.Isolation = roachpb.SNAPSHOT
+	txn.Proto.Isolation = enginepb.SNAPSHOT
 	txn.Proto.Priority = 11
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
@@ -405,7 +405,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
 		txn := client.NewTxn(context.Background(), *s.DB)
 		// Set to SNAPSHOT so that it can be pushed without restarting.
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
 		// Initialize the transaction.
@@ -715,7 +715,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// the next attempt.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
 				&roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: plus20, Priority: 10},
+					TxnMeta: enginepb.TxnMeta{Timestamp: plus20, Priority: 10},
 				}),
 			expPri: 10,
 		},
@@ -724,7 +724,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// Additionally, priority ratchets up to just below the pusher's.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 				PusheeTxn: roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
+					TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
 				},
 			},
 				&roachpb.Transaction{}),
@@ -737,7 +737,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On retry, restart with new epoch, timestamp and priority.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{},
 				&roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
+					TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
 				},
 			),
 			expEpoch:  1,
@@ -846,7 +846,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE,
+		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
 			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
 		txn.Writing = tc.writing
 		reply, pErr := client.SendWrappedWith(sender, nil, roachpb.Header{
@@ -933,7 +933,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	}{
 		{*roachpb.NewError(roachpb.NewTransactionRetryError()), "retry txn"},
 		{*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
-			TxnMeta: roachpb.TxnMeta{
+			TxnMeta: enginepb.TxnMeta{
 				ID: uuid.NewV4(),
 			}})), "failed to push"},
 		{*roachpb.NewErrorf("testError"), "testError"},
@@ -1135,7 +1135,7 @@ func TestTxnCommit(t *testing.T) {
 	if err := db.Txn(func(txn *client.Txn) error {
 		key := []byte("key-commit")
 
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
@@ -1190,7 +1190,7 @@ func TestTxnAbandonCount(t *testing.T) {
 	if err := db.Txn(func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
@@ -1227,7 +1227,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 	err := db.Txn(func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1266,7 +1266,7 @@ func TestTxnAbortCount(t *testing.T) {
 	if err := db.Txn(func(txn *client.Txn) error {
 		key := []byte("key-abort")
 
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
@@ -1331,7 +1331,7 @@ func TestTxnDurations(t *testing.T) {
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
 		if err := db.Txn(func(txn *client.Txn) error {
-			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 			if err := txn.Put(key, []byte("val")); err != nil {

@@ -605,7 +605,7 @@ func isEndTransactionTriggeringRetryError(headerTxn, currentTxn *roachpb.Transac
 	// If the isolation level is SERIALIZABLE, return a transaction
 	// retry error if the commit timestamp isn't equal to the txn
 	// timestamp.
-	if headerTxn.Isolation == roachpb.SERIALIZABLE && isTxnPushed {
+	if headerTxn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
 		return true
 	}
 
@@ -1261,7 +1261,7 @@ func (r *Replica) PushTxn(
 		// pusher always fails.
 		pusherWins = false
 	case args.PushType == roachpb.PUSH_TIMESTAMP &&
-		reply.PusheeTxn.Isolation == roachpb.SNAPSHOT:
+		reply.PusheeTxn.Isolation == enginepb.SNAPSHOT:
 		// Can always push a SNAPSHOT txn's timestamp.
 		reason = "pushee is SNAPSHOT"
 		pusherWins = true
@@ -1321,7 +1321,7 @@ func (r *Replica) PushTxn(
 // spuriously succeeding on this range.
 func (r *Replica) setAbortCache(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
-	txn roachpb.TxnMeta, poison bool,
+	txn enginepb.TxnMeta, poison bool,
 ) error {
 	if !poison {
 		return r.abortCache.Del(ctx, batch, ms, txn.ID)
