@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -1558,7 +1559,7 @@ func MVCCIterate(ctx context.Context,
 	// Gathers up all the intents from WriteIntentErrors. We only get those if
 	// the scan is consistent.
 	var wiErr error
-	var alloc ChunkAllocator
+	var alloc bufalloc.ByteAllocator
 
 	for {
 		metaKey, err := getMeta(iter, encEndKey, &buf.meta)
@@ -1570,7 +1571,7 @@ func MVCCIterate(ctx context.Context,
 			break
 		}
 
-		alloc, metaKey.Key = alloc.newChunk(metaKey.Key, 1)
+		alloc, metaKey.Key = alloc.Copy(metaKey.Key, 1)
 
 		// Indicate that we're fine with an unsafe Value.RawBytes being returned.
 		value, newIntents, valueSafety, err := mvccGetInternal(
@@ -1579,7 +1580,7 @@ func MVCCIterate(ctx context.Context,
 		if value != nil {
 			if valueSafety == unsafeValue {
 				// Copy the unsafe value into our allocation buffer.
-				alloc, value.RawBytes = alloc.newChunk(value.RawBytes, 0)
+				alloc, value.RawBytes = alloc.Copy(value.RawBytes, 0)
 			}
 			done, err := f(roachpb.KeyValue{Key: metaKey.Key, Value: *value})
 			if err != nil {
