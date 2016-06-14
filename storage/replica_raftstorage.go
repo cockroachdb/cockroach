@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -541,11 +542,11 @@ func snapshot(
 	// the sequence cache.
 	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
-	var alloc engine.ChunkAllocator
+	var alloc bufalloc.ByteAllocator
 	for ; iter.Valid(); iter.Next() {
 		var key engine.MVCCKey
 		var value []byte
-		alloc, key, value = alloc.IterKeyValue(iter.Iterator)
+		alloc, key, value = engine.AllocIterKeyValue(alloc, iter.Iterator)
 		snapData.KV = append(snapData.KV,
 			roachpb.RaftSnapshotData_KeyValue{
 				Key:       key.Key,
