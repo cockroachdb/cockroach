@@ -407,7 +407,9 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.pinned-usage"))
                 .title("Iterators"),
               Metrics.Select.Avg(_storeMetric("rocksdb.memtable.total-size"))
-                .title("Memtable")
+                .title("Memtable"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.table-readers-mem-estimate"))
+                .title("Index")
             ).format(Utils.Format.Bytes).title("Engine Memory Usage")
           );
           this._addChart(
@@ -1008,7 +1010,10 @@ module AdminViews {
                 .title("Iterators"),
               Metrics.Select.Avg(_storeMetric("rocksdb.memtable.total-size"))
                 .sources(this._storeIds)
-                .title("Memtable")
+                .title("Memtable"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.table-readers-mem-estimate"))
+                .sources(this._storeIds)
+                .title("Index")
             ).format(Utils.Format.Bytes).title("Engine Memory Usage")
           );
           this._addChart(

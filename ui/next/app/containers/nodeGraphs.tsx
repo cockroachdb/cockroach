@@ -150,6 +150,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
                 <Metric name="cr.store.rocksdb.block.cache.usage" title="Block Cache" />
                 <Metric name="cr.store.rocksdb.block.cache.pinned-usage" title="Iterators" />
                 <Metric name="cr.store.rocksdb.memtable.total-size" title="Memtable" />
+                <Metric name="cr.store.rocksdb.table-readers-mem-estimate" title="Index" />
               </Axis>
             </LineGraph>
 
