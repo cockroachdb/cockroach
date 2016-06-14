@@ -197,8 +197,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		}
 	}
 
-	// Wait for tasks to finish, in case the processLoop grabbed the event
-	// before ForceRaftLogScanAndProcess but is still working on it.
+	// Wait for any asynchronous tasks to finish.
 	stopper.Quiesce()
 
 	r.mu.Lock()
