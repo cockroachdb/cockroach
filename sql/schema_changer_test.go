@@ -961,28 +961,32 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
 	// Wait until all the mutations have been processed.
+	var rows *gosql.Rows
+	var cols []string
+	var err error
 	util.SucceedsSoon(t, func() error {
 		// Read table descriptor.
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
 			return util.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
+		// Ensure that sql is reading the latest table lease.
+		rows, err = sqlDB.Query(`SELECT * from t.test`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cols, err = rows.Columns()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cols) != 2 {
+			return util.Errorf("incorrect columns: %v", cols)
+		}
+		if cols[0] != "k" || cols[1] != "b" {
+			t.Fatalf("incorrect columns: %v", cols)
+		}
 		return nil
 	})
-
-	// Verify that t.test has the expected data.
-	rows, err := sqlDB.Query(`SELECT * from t.test`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cols, err := rows.Columns()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cols) != 2 || cols[0] != "k" || cols[1] != "b" {
-		t.Fatalf("incorrect columns: %v", cols)
-	}
 
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
