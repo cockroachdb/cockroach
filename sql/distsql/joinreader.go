@@ -64,7 +64,7 @@ func newJoinReader(
 	}
 
 	// Allow the input channel to buffer an entire batch.
-	jr.RowChannel.initWithBufSize(joinReaderBatchSize)
+	jr.RowChannel.InitWithBufSize(joinReaderBatchSize)
 
 	return jr, nil
 }
@@ -111,11 +111,11 @@ func (jr *joinReader) mainLoop() error {
 				}
 				break
 			}
-			if d.err != nil {
-				return d.err
+			if d.Err != nil {
+				return d.Err
 			}
 
-			key, err := jr.generateKey(d.row, &alloc, primaryKeyPrefix)
+			key, err := jr.generateKey(d.Row, &alloc, primaryKeyPrefix)
 			if err != nil {
 				return err
 			}

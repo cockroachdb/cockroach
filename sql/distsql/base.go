@@ -51,8 +51,8 @@ type processor interface {
 // local physical streams.
 type StreamMsg struct {
 	// Only one of these fields will be set.
-	row sqlbase.EncDatumRow
-	err error
+	Row sqlbase.EncDatumRow
+	Err error
 }
 
 // RowChannel is a thin layer over a StreamMsg channel, which can be used to
@@ -71,14 +71,16 @@ type RowChannel struct {
 
 var _ rowReceiver = &RowChannel{}
 
-func (rc *RowChannel) initWithBufSize(chanBufSize int) {
+// InitWithBufSize initializes the RowChannel with a given buffer size.
+func (rc *RowChannel) InitWithBufSize(chanBufSize int) {
 	rc.dataChan = make(chan StreamMsg, chanBufSize)
 	rc.C = rc.dataChan
 	atomic.StoreUint32(&rc.noMoreRows, 0)
 }
 
-func (rc *RowChannel) init() {
-	rc.initWithBufSize(rowChannelBufSize)
+// Init initializes the RowChannel with the default buffer size.
+func (rc *RowChannel) Init() {
+	rc.InitWithBufSize(rowChannelBufSize)
 }
 
 // PushRow is part of the rowReceiver interface.
@@ -87,14 +89,14 @@ func (rc *RowChannel) PushRow(row sqlbase.EncDatumRow) bool {
 		return false
 	}
 
-	rc.dataChan <- StreamMsg{row: row, err: nil}
+	rc.dataChan <- StreamMsg{Row: row, Err: nil}
 	return true
 }
 
 // Close is part of the rowReceiver interface.
 func (rc *RowChannel) Close(err error) {
 	if err != nil {
-		rc.dataChan <- StreamMsg{row: nil, err: err}
+		rc.dataChan <- StreamMsg{Row: nil, Err: err}
 	}
 	close(rc.dataChan)
 }
