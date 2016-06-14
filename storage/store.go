@@ -2237,14 +2237,19 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 // cacheReplicaDescriptorLocked adds the given replica descriptor to a cache
 // to be used by replicaDescriptorLocked.
 // cacheReplicaDescriptorLocked requires that the store lock is held.
-func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
-	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{groupID, replica.ReplicaID}); ok {
-		if old != replica {
-			log.Fatalf("%s replicaDescCache: clobbering %s with %s", s, old, replica)
+func (s *Store) cacheReplicaDescriptorLocked(
+	groupID roachpb.RangeID, rDesc roachpb.ReplicaDescriptor,
+) {
+	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{groupID, rDesc.ReplicaID}); ok {
+		if old != rDesc {
+			rpl, _ := s.getReplicaLocked(groupID)
+			log.Fatalf("store %d, range %d: clobbering %+v with %+v "+
+				"in replicaDescCache; have replica %+v", s.Ident.StoreID,
+				groupID, old, rDesc, rpl)
 		}
 		return
 	}
-	s.mu.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
+	s.mu.replicaDescCache.Add(replicaDescCacheKey{groupID, rDesc.ReplicaID}, rDesc)
 }
 
 // canApplySnapshot returns true if the snapshot can be applied to
