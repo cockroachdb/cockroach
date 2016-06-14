@@ -900,7 +900,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 		// Add this range and its stats to our counter.
 		s.metrics.replicaCount.Inc(1)
-		s.metrics.addMVCCStats(rng.stats.GetMVCC())
+		s.metrics.addMVCCStats(rng.GetMVCCStats())
 		// TODO(bdarnell): lazily create raft groups to make the following comment true again.
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
@@ -929,7 +929,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		var unfrozen int64    // updated atomically
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
 			r.mu.Lock()
-			frozen := r.mu.frozen
+			frozen := r.mu.state.frozen
 			r.mu.Unlock()
 			if !frozen {
 				return true
@@ -2398,7 +2398,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescrip
 			return true
 		}
 		r.mu.Lock()
-		if r.mu.frozen == collectFrozen {
+		if r.mu.state.frozen == collectFrozen {
 			descs = append(descs, *desc)
 		}
 		r.mu.Unlock()

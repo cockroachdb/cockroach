@@ -642,15 +642,15 @@ func (r *Replica) resolveLocalIntents(
 					externalIntents = append(externalIntents, intent)
 					return nil
 				}
-				resolveMs := ms
+				resolveMS := ms
 				if preMergeDesc != nil && !containsKey(*preMergeDesc, span.Key) {
 					// If this transaction included a merge and the intents
 					// are from the subsumed range, ignore the intent resolution
 					// stats, as they will already be accounted for during the
 					// merge trigger.
-					resolveMs = nil
+					resolveMS = nil
 				}
-				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMs, intent)
+				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -1098,13 +1098,13 @@ func (r *Replica) GC(
 	}
 
 	r.mu.Lock()
-	newThreshold := r.mu.gcThreshold
+	newThreshold := r.mu.state.gcThreshold
 	newThreshold.Forward(args.Threshold)
 	r.mu.Unlock()
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.gcThreshold = newThreshold
+		r.mu.state.gcThreshold = newThreshold
 		r.mu.Unlock()
 	})
 	return reply, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
@@ -1452,7 +1452,7 @@ func (r *Replica) TruncateLog(
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.truncatedState = tState
+		r.mu.state.truncatedState = tState
 		r.mu.Unlock()
 	})
 	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, tState)
@@ -1476,7 +1476,7 @@ func (r *Replica) LeaderLease(
 	defer r.mu.Unlock()
 	var reply roachpb.LeaderLeaseResponse
 
-	prevLease := r.mu.leaderLease
+	prevLease := r.mu.state.lease
 	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
@@ -1501,7 +1501,7 @@ func (r *Replica) LeaderLease(
 	effectiveStart := args.Lease.Start
 
 	// Verify that requestion replica is part of the current replica set.
-	if idx, _ := r.mu.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+	if idx, _ := r.mu.state.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
 		return reply, rErr
 	}
@@ -1554,12 +1554,12 @@ func (r *Replica) LeaderLease(
 	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
-	r.mu.leaderLease = &args.Lease
+	r.mu.state.lease = &args.Lease
 
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-		if prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
+		if prevLease.Replica.StoreID != r.mu.state.lease.Replica.StoreID {
 			// The lease is changing hands. Is this replica the new lease holder?
-			if r.mu.leaderLease.Replica.ReplicaID == r.mu.replicaID {
+			if r.mu.state.lease.Replica.ReplicaID == r.mu.replicaID {
 				// If this replica is a new holder of the lease, update the low water
 				// mark of the timestamp cache. Note that clock offset scenarios are
 				// handled via a stasis period inherent in the lease which is documented
@@ -1572,8 +1572,8 @@ func (r *Replica) LeaderLease(
 				// holder, then try to transfer the raft leadership to match the
 				// lease.
 				log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
-					r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
-				raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+					r.RangeID, r.mu.replicaID, r.mu.state.lease.Replica.ReplicaID)
+				raftGroup.TransferLeader(uint64(r.mu.state.lease.Replica.ReplicaID))
 			}
 		}
 		return nil
@@ -1732,7 +1732,7 @@ func (r *Replica) ComputeChecksum(
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
 	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	desc := *r.mu.desc
+	desc := *r.mu.state.desc
 	r.mu.Unlock()
 	snap := r.store.NewSnapshot()
 
@@ -1950,7 +1950,7 @@ func (r *Replica) ChangeFrozen(
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.frozen = args.Frozen
+		r.mu.state.frozen = args.Frozen
 		r.mu.Unlock()
 	})
 	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
@@ -2195,10 +2195,10 @@ func (r *Replica) splitTrigger(
 	// Preserve stats for presplit range and begin computing stats delta
 	// for current transaction.
 	origStats := r.GetMVCCStats()
-	deltaMs := *ms
+	deltaMS := *ms
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
-	if err := deltaMs.AccountForSelf(split.NewDesc.RangeID); err != nil {
+	if err := deltaMS.AccountForSelf(split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to account for MVCCStats's own stats impact: %s", err)
 	}
 
@@ -2206,14 +2206,18 @@ func (r *Replica) splitTrigger(
 	// instead of having a constraint that the left side is smaller.
 
 	// Compute stats for updated range.
-	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
+	leftMS, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
 	log.Trace(ctx, "computed stats for old range")
-	if err := r.stats.SetMVCCStats(batch, leftMs); err != nil {
+
+	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
+	r.mu.Lock()
+	r.mu.state.ms = leftMS
+	r.mu.Unlock()
 
 	// Copy the last replica GC and verification timestamps. These
 	// values are unreplicated, which is why the MVCC stats are set to
@@ -2234,7 +2238,7 @@ func (r *Replica) splitTrigger(
 	}
 
 	// Initialize the new range's abort cache by copying the original's.
-	seqCount, err := r.abortCache.CopyInto(batch, &deltaMs, split.NewDesc.RangeID)
+	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy abort cache to new split range: %s", err)
@@ -2249,12 +2253,12 @@ func (r *Replica) splitTrigger(
 		return err
 	}
 
-	rightMs := deltaMs
+	rightMS := deltaMS
 	// Add in the original range's stats.
-	rightMs.Add(origStats)
+	rightMS.Add(origStats)
 	// Remove stats from the left side of the split.
-	rightMs.Subtract(leftMs)
-	if err = newRng.stats.SetMVCCStats(batch, rightMs); err != nil {
+	rightMS.Subtract(leftMS)
+	if err := setMVCCStats(batch, newRng.RangeID, rightMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 	log.Trace(ctx, "computed stats for new range")
@@ -2262,6 +2266,7 @@ func (r *Replica) splitTrigger(
 	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
 	newRng.mu.Lock()
+	newRng.mu.state.ms = rightMS
 	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
 	newRng.mu.Unlock()
 	r.mu.Unlock()
@@ -2276,7 +2281,7 @@ func (r *Replica) splitTrigger(
 		}
 
 		// Update store stats with difference in stats before and after split.
-		r.store.metrics.addMVCCStats(deltaMs)
+		r.store.metrics.addMVCCStats(deltaMS)
 
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
@@ -2467,20 +2472,20 @@ func (r *Replica) mergeTrigger(
 	}
 
 	// Compute stats for premerged range, including current transaction.
-	var mergedMs = r.GetMVCCStats()
-	mergedMs.Add(*ms)
+	var mergedMS = r.GetMVCCStats()
+	mergedMS.Add(*ms)
 
 	// Add in stats for right half of merge, excluding system-local stats, which
 	// will need to be recomputed.
-	var rightMs engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMs); err != nil {
+	var rightMS engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMS); err != nil {
 		return err
 	}
-	rightMs.SysBytes, rightMs.SysCount = 0, 0
-	mergedMs.Add(rightMs)
+	rightMS.SysBytes, rightMS.SysCount = 0, 0
+	mergedMS.Add(rightMS)
 
 	// Copy the subsumed range's abort cache to the subsuming one.
-	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMs, subsumedRangeID)
+	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, subsumedRangeID)
 	if err != nil {
 		return util.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
@@ -2502,10 +2507,10 @@ func (r *Replica) mergeTrigger(
 	if err != nil {
 		return util.Errorf("unable to compute subsumed range's local stats: %s", err)
 	}
-	mergedMs.Add(msRange)
+	mergedMS.Add(msRange)
 
-	// Set stats for updated range.
-	if err = r.stats.SetMVCCStats(batch, mergedMs); err != nil {
+	// Set stats for updated range (in-memory updated under lock below).
+	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -2514,6 +2519,7 @@ func (r *Replica) mergeTrigger(
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
 	r.mu.Lock()
+	r.mu.state.ms = mergedMS
 	r.mu.tsCache.Clear(r.store.Clock())
 	r.mu.Unlock()
 

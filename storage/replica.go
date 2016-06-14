@@ -168,6 +168,65 @@ type replicaChecksum struct {
 	snapshot *roachpb.RaftSnapshotData
 }
 
+// rangeState is the part of the Range Raft state machine which is cached in
+// memory. TODO(tschottdorf): unified method to update both in-mem and on-disk
+// state, similar to how loadState unifies restoring from storage.
+type rangeState struct {
+	// Last index applied to the state machine.
+	appliedIndex uint64
+	// Highest lease index applied to the state machine.
+	leaseAppliedIndex uint64
+	// The Range descriptor.
+	// The pointer may change, but the referenced RangeDescriptor struct itself
+	// must be treated as immutable; it is leaked out of the lock.
+	//
+	// Changes of the descriptor should normally go through one of the
+	// (*Replica).setDesc* methods.
+	desc           *roachpb.RangeDescriptor
+	lease          *roachpb.Lease
+	truncatedState *roachpb.RaftTruncatedState
+	// gcThreshold is the GC threshold of the replica. Reads and writes must
+	// not happen <= this time.
+	gcThreshold roachpb.Timestamp
+	// Whether the Replica is frozen.
+	frozen bool
+	ms     engine.MVCCStats
+}
+
+func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (rangeState, error) {
+	var s rangeState
+	// TODO(tschottdorf): figure out whether this is always synchronous with
+	// on-disk state (likely iffy during Split/ChangeReplica triggers).
+	s.desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	// Read the leader lease.
+	var err error
+	if s.lease, err = loadLease(reader, desc.RangeID); err != nil {
+		return rangeState{}, err
+	}
+
+	if s.frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
+		return rangeState{}, err
+	}
+
+	if s.gcThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
+		return rangeState{}, err
+	}
+
+	if s.appliedIndex, s.leaseAppliedIndex, err = loadAppliedIndex(
+		reader,
+		desc.RangeID,
+		desc.IsInitialized(),
+	); err != nil {
+		return rangeState{}, err
+	}
+
+	if s.ms, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+		return rangeState{}, err
+	}
+
+	return s, nil
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -175,9 +234,9 @@ type replicaChecksum struct {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
+	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID      roachpb.RangeID // Should only be set by the constructor.
 	store        *Store
-	stats        *rangeStats // Range statistics
 	systemDBHash []byte      // sha1 hash of the system config @ last gossip
 	abortCache   *AbortCache // Avoids anomalous reads after abort
 
@@ -193,26 +252,14 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
-		// Last index applied to the state machine.
-		appliedIndex uint64
-		// Highest lease index applied to the state machine.
-		leaseAppliedIndex uint64
+		// The state of the Raft state machine.
+		state rangeState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
 		cmdQ *CommandQueue
-		// Range descriptor.
-		//
-		// The lock protects the pointer but the RangeDescriptor struct itself
-		// should be treated as immutable; a reference to it can be returned to
-		// a caller via Replica.Desc() and then used outside of the lock.
-		//
-		// Changes of the descriptor should normally go through one of the
-		// Replica.setDesc* methods.
-		desc *roachpb.RangeDescriptor
 		// Last index persisted to the raft log (not necessarily committed).
-		lastIndex   uint64
-		leaderLease *roachpb.Lease
+		lastIndex uint64
 		// Max bytes before split.
 		maxBytes int64
 		// pendingCmds stores the Raft in-flight commands which
@@ -224,12 +271,8 @@ type Replica struct {
 		pendingCmds       map[storagebase.CmdIDKey]*pendingCmd
 		internalRaftGroup *raft.RawNode
 		replicaID         roachpb.ReplicaID
-		truncatedState    *roachpb.RaftTruncatedState
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
-		// gcThreshold is the GC threshold of the replica. Reads and writes must
-		// not happen <= this time.
-		gcThreshold roachpb.Timestamp
 		// Slice of channels to send on after leader lease acquisition.
 		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -239,8 +282,6 @@ type Replica struct {
 
 		// Counts calls to Replica.tick()
 		ticks int
-		// Whether the Replica is frozen.
-		frozen bool
 	}
 }
 
@@ -250,7 +291,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(&raft.Config{
 			ID:            uint64(r.mu.replicaID),
-			Applied:       r.mu.appliedIndex,
+			Applied:       r.mu.state.appliedIndex,
 			ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
 			HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
 			Storage:       r,
@@ -281,7 +322,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		// could happen is both nodes ending up in candidate state, timing
 		// out and then voting again. This is expected to be an extremely
 		// rare event.
-		if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].ReplicaID == r.mu.replicaID {
+		if len(r.mu.state.desc.Replicas) == 1 && r.mu.state.desc.Replicas[0].ReplicaID == r.mu.replicaID {
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
@@ -318,12 +359,6 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 	}
 
 	r.maybeGossipSystemConfig()
-
-	var err error
-	if r.stats, err = newRangeStats(desc.RangeID, store.Engine()); err != nil {
-		return nil, err
-	}
-
 	return r, nil
 }
 
@@ -335,32 +370,17 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
-	r.setDescWithoutProcessUpdateLocked(desc)
 
 	var err error
-	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
-	if err != nil {
+
+	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
 		return err
 	}
 
-	r.mu.appliedIndex, r.mu.leaseAppliedIndex, err = loadAppliedIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
+	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID, desc.IsInitialized())
 	if err != nil {
 		return err
 	}
-
-	r.mu.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-	r.mu.frozen, err = loadFrozenStatus(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-	r.mu.gcThreshold, err = loadGCThreshold(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return err
-	}
-
 	if r.isInitializedLocked() && replicaID != 0 {
 		return util.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
@@ -487,7 +507,19 @@ func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) 
 	return val.GetBool()
 }
 
-func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+func loadMVCCStats(eng engine.Reader, rangeID roachpb.RangeID) (engine.MVCCStats, error) {
+	var ms engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
+		return engine.MVCCStats{}, err
+	}
+	return ms, nil
+}
+
+func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS engine.MVCCStats) error {
+	return engine.MVCCSetRangeStats(context.Background(), eng, rangeID, &newMS)
+}
+
+func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
 	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
@@ -500,7 +532,7 @@ func loadLeaderLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease
 func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.leaderLease, len(r.mu.llChans) > 0
+	return r.mu.state.lease, len(r.mu.llChans) > 0
 }
 
 func setGCThreshold(
@@ -527,7 +559,7 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 }
 
 func (r *Replica) newNotLeaderErrorLocked(l *roachpb.Lease, originStoreID roachpb.StoreID) error {
-	desc := r.mu.desc
+	desc := r.mu.state.desc
 	err := &roachpb.NotLeaderError{}
 	if l != nil && l.Replica.ReplicaID != 0 {
 		err.RangeID = r.RangeID
@@ -716,14 +748,14 @@ func (r *Replica) IsInitialized() bool {
 // to an incoming message but we are waiting for our initial snapshot.
 // isInitializedLocked requires that the replica lock is held.
 func (r *Replica) isInitializedLocked() bool {
-	return r.mu.desc.IsInitialized()
+	return r.mu.state.desc.IsInitialized()
 }
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.desc
+	return r.mu.state.desc
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -754,7 +786,7 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 		panic(fmt.Sprintf("range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID))
 	}
-	r.mu.desc = desc
+	r.mu.state.desc = desc
 }
 
 // GetReplica returns the replica for this range from the range descriptor.
@@ -770,7 +802,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	desc := r.mu.desc
+	desc := r.mu.state.desc
 	for _, repAddress := range desc.Replicas {
 		if repAddress.ReplicaID == replicaID {
 			return repAddress, nil
@@ -782,7 +814,9 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
 func (r *Replica) GetMVCCStats() engine.MVCCStats {
-	return r.stats.GetMVCC()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.state.ms
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -1333,8 +1367,8 @@ func (r *Replica) prepareRaftCommandLocked(
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
 ) (*pendingCmd, error) {
-	if r.mu.lastAssignedLeaseIndex < r.mu.leaseAppliedIndex {
-		r.mu.lastAssignedLeaseIndex = r.mu.leaseAppliedIndex
+	if r.mu.lastAssignedLeaseIndex < r.mu.state.leaseAppliedIndex {
+		r.mu.lastAssignedLeaseIndex = r.mu.state.leaseAppliedIndex
 	}
 	if !ba.IsLease() {
 		r.mu.lastAssignedLeaseIndex++
@@ -1384,7 +1418,7 @@ func (r *Replica) proposeRaftCommand(
 	chan roachpb.ResponseWithError, func() bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, replica := r.mu.desc.FindReplica(r.store.StoreID())
+	_, replica := r.mu.state.desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
@@ -1650,7 +1684,7 @@ func (r *Replica) refreshPendingCmdsLocked() error {
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
 	// applied.
-	maxWillRefurbish := r.mu.leaseAppliedIndex // indexes <= will be refurbished
+	maxWillRefurbish := r.mu.state.leaseAppliedIndex // indexes <= will be refurbished
 	origNum := len(r.mu.pendingCmds)
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.pendingCmds {
@@ -1666,7 +1700,7 @@ func (r *Replica) refreshPendingCmdsLocked() error {
 	}
 	if log.V(1) && origNum > 0 {
 		log.Infof("range %d: refurbished %d, reproposing %d commands after empty entry at %d (%d)",
-			r.mu.desc.RangeID, origNum-len(reproposals), len(reproposals), r.mu.appliedIndex, r.mu.leaseAppliedIndex)
+			r.mu.state.desc.RangeID, origNum-len(reproposals), len(reproposals), r.mu.state.appliedIndex, r.mu.state.leaseAppliedIndex)
 	}
 
 	// Reproposals are those commands which we weren't able to refurbish (since
@@ -1775,7 +1809,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	cmd := r.mu.pendingCmds[idKey]
 
 	isLeaseError := func() bool {
-		l, ba, origin := r.mu.leaderLease, raftCmd.Cmd, raftCmd.OriginReplica
+		l, ba, origin := r.mu.state.lease, raftCmd.Cmd, raftCmd.OriginReplica
 		if l.Replica != origin && !ba.IsLease() {
 			return true
 		}
@@ -1801,10 +1835,10 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	if isLeaseError() {
 		if log.V(1) {
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
-				raftCmd.OriginReplica, r.mu.leaderLease.Replica, raftCmd.Cmd)
+				raftCmd.OriginReplica, r.mu.state.lease.Replica, raftCmd.Cmd)
 		}
 		forcedErr = roachpb.NewError(r.newNotLeaderErrorLocked(
-			r.mu.leaderLease, raftCmd.OriginReplica.StoreID))
+			r.mu.state.lease, raftCmd.OriginReplica.StoreID))
 	}
 
 	if cmd != nil {
@@ -1812,14 +1846,14 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		ctx = cmd.ctx
 		delete(r.mu.pendingCmds, idKey)
 	}
-	leaseIndex := r.mu.leaseAppliedIndex
+	leaseIndex := r.mu.state.leaseAppliedIndex
 	if raftCmd.Cmd.IsLease() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by
 		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
 		// proposals are often replayed, so not making them update the counter
 		// makes sense from a testing perspective.
-	} else if r.mu.leaseAppliedIndex < raftCmd.MaxLeaseIndex {
+	} else if r.mu.state.leaseAppliedIndex < raftCmd.MaxLeaseIndex {
 		// The happy case: the command is applying at or ahead of the minimal
 		// permissible index. It's ok if it skips a few slots (as can happen
 		// during rearrangement); this command will apply, but later ones which
@@ -1916,11 +1950,11 @@ func (r *Replica) applyRaftCommand(
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
 	r.mu.Lock()
-	oldIndex := r.mu.appliedIndex
+	oldIndex := r.mu.state.appliedIndex
 	// When frozen, the Range only applies freeze-related requests. Overrides
 	// any forcedError.
-	if mayApply := !r.mu.frozen || ba.IsFreeze(); !mayApply {
-		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.desc))
+	if mayApply := !r.mu.state.frozen || ba.IsFreeze(); !mayApply {
+		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.desc))
 	}
 	r.mu.Unlock()
 
@@ -1955,9 +1989,16 @@ func (r *Replica) applyRaftCommand(
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
-	// Flush the MVCC stats to the batch.
-	if err := r.stats.MergeMVCCStats(writer, ms); err != nil {
-		// TODO(tschottdorf): ReplicaCorruptionError.
+	// Flush the MVCC stats to the batch. Note that we need to grab the previous
+	// stats now, for they might've been changed during triggers due to side
+	// effects.
+	// TODO(tschottdorf): refactor that for clarity.
+	r.mu.Lock()
+	oldMS := r.mu.state.ms
+	r.mu.Unlock()
+	newMS := oldMS
+	newMS.Add(ms)
+	if err := setMVCCStats(writer, r.RangeID, newMS); err != nil {
 		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
 	// Update store-level MVCC stats with merged range stats.
@@ -1969,8 +2010,9 @@ func (r *Replica) applyRaftCommand(
 		r.mu.Lock()
 		// Update cached appliedIndex if we were able to set the applied index
 		// on disk.
-		r.mu.appliedIndex = index
-		r.mu.leaseAppliedIndex = leaseIndex
+		r.mu.state.appliedIndex = index
+		r.mu.state.leaseAppliedIndex = leaseIndex
+		r.mu.state.ms = newMS
 		r.mu.Unlock()
 	}
 
@@ -2246,7 +2288,7 @@ func (r *Replica) executeBatch(
 	var intents []intentsWithArg
 
 	r.mu.Lock()
-	threshold := r.mu.gcThreshold
+	threshold := r.mu.state.gcThreshold
 	r.mu.Unlock()
 	if !threshold.Less(ba.Timestamp) {
 		return nil, nil, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
@@ -2578,8 +2620,11 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 // needsSplitBySize returns true if the size of the range requires it
 // to be split.
 func (r *Replica) needsSplitBySize() bool {
-	maxBytes := r.GetMaxBytes()
-	return maxBytes > 0 && r.stats.GetSize() > maxBytes
+	r.mu.Lock()
+	maxBytes := r.mu.maxBytes
+	size := r.mu.state.ms.Total()
+	r.mu.Unlock()
+	return maxBytes > 0 && size > maxBytes
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range

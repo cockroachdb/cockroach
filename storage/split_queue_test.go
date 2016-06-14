@@ -79,9 +79,18 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), engine.MVCCStats{KeyBytes: test.bytes}); err != nil {
-			t.Fatal(err)
-		}
+		func() {
+			// Hold lock throughout to reduce chance of random commands leading
+			// to inconsistent state.
+			tc.rng.mu.Lock()
+			defer tc.rng.mu.Unlock()
+			ms := engine.MVCCStats{KeyBytes: test.bytes}
+			if err := setMVCCStats(tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
+				t.Fatal(err)
+			}
+			tc.rng.mu.state.ms = ms
+		}()
+
 		copy := *tc.rng.Desc()
 		copy.StartKey = test.start
 		copy.EndKey = test.end

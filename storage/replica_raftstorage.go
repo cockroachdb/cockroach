@@ -83,7 +83,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var cs raftpb.ConfState
 	// For uninitialized ranges, membership is unknown at this point.
 	if found || initialized {
-		for _, rep := range r.mu.desc.Replicas {
+		for _, rep := range r.mu.state.desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
 	}
@@ -236,15 +236,15 @@ func (r *Replica) LastIndex() (uint64, error) {
 // and the dummy entries that make up the starting point of an empty log.
 // raftTruncatedStateLocked requires that the replica lock be held.
 func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
-	if r.mu.truncatedState != nil {
-		return *r.mu.truncatedState, nil
+	if r.mu.state.truncatedState != nil {
+		return *r.mu.state.truncatedState, nil
 	}
 	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID, r.isInitializedLocked())
 	if err != nil {
 		return ts, err
 	}
 	if ts.Index != 0 {
-		r.mu.truncatedState = &ts
+		r.mu.state.truncatedState = &ts
 	}
 	return ts, nil
 }
@@ -432,7 +432,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
+		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.state.desc.StartKey)
 		if err != nil {
 			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
@@ -668,8 +668,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		return err
 	}
 
-	rangeID := r.RangeID
-
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
 
@@ -678,9 +676,9 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	r.mu.Unlock()
 
 	log.Infof("replica %d received snapshot for range %d at index %d. encoded size=%d, %d KV pairs, %d log entries",
-		replicaID, rangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
+		replicaID, desc.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %d applied snapshot for range %d in %s", replicaID, rangeID, timeutil.Since(start))
+		log.Infof("replica %d applied snapshot for range %d in %s", replicaID, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
@@ -724,65 +722,32 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		return err
 	}
 
-	// Read the leader lease.
-	lease, err := loadLeaderLease(batch, desc.RangeID)
+	s, err := loadState(batch, &desc)
 	if err != nil {
 		return err
 	}
 
-	frozen, err := loadFrozenStatus(batch, desc.RangeID)
-	if err != nil {
-		return err
-	}
-
-	lastThreshold, err := loadGCThreshold(batch, desc.RangeID)
-	if err != nil {
-		return err
-	}
-
-	// Load updated range stats. The local newStats variable will be assigned
-	// to r.stats after the batch commits.
-	newStats, err := newRangeStats(desc.RangeID, batch)
-	if err != nil {
-		return err
-	}
-
-	// The next line sets the persisted last index to the last applied index.
-	// This is not a correctness issue, but means that we may have just
-	// transferred some entries we're about to re-request from the leader and
-	// overwrite.
-	// However, raft.MultiNode currently expects this behaviour, and the
-	// performance implications are not likely to be drastic. If our feelings
-	// about this ever change, we can add a LastIndex field to
-	// raftpb.SnapshotMetadata.
-	if err := setLastIndex(batch, rangeID, snap.Metadata.Index); err != nil {
-		return err
-	}
-
-	appliedIndex, leaseAppliedIndex, err := loadAppliedIndex(batch, rangeID, true /* initialized */)
-	if err != nil {
-		return err
+	// As outlined above, last and applied index are the same after applying
+	// the snapshot.
+	if s.appliedIndex != snap.Metadata.Index {
+		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+			s.desc.RangeID, s.appliedIndex, snap.Metadata.Index)
 	}
 
 	batch.Defer(func() {
-		// Update the range and store stats.
-		r.store.metrics.subtractMVCCStats(r.stats.mvccStats)
-		r.stats.Replace(newStats)
-		r.store.metrics.addMVCCStats(r.stats.mvccStats)
-
 		r.mu.Lock()
-		// As outlined above, last and applied index are the same after applying
-		// the snapshot.
-		r.mu.appliedIndex = snap.Metadata.Index
-		if appliedIndex != snap.Metadata.Index {
-			log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
-				r.Desc().RangeID, appliedIndex, snap.Metadata.Index)
-		}
-		r.mu.lastIndex = appliedIndex
-		r.mu.leaseAppliedIndex = leaseAppliedIndex
-		r.mu.leaderLease = lease
-		r.mu.frozen = frozen
-		r.mu.gcThreshold = lastThreshold
+		// We set the persisted last index to the last applied index. This is
+		// not a correctness issue, but means that we may have just transferred
+		// some entries we're about to re-request from the leader and overwrite.
+		// However, raft.MultiNode currently expects this behaviour, and the
+		// performance implications are not likely to be drastic. If our
+		// feelings about this ever change, we can add a LastIndex field to
+		// raftpb.SnapshotMetadata.
+		r.mu.lastIndex = s.appliedIndex
+		// Update the range and store stats.
+		r.store.metrics.subtractMVCCStats(r.mu.state.ms)
+		r.store.metrics.addMVCCStats(s.ms)
+		r.mu.state = s
 		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.
@@ -795,7 +760,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		}
 
 		// Fill the reservation if there was any one for this range.
-		r.store.bookie.Fill(rangeID)
+		r.store.bookie.Fill(desc.RangeID)
 
 		// Update the range descriptor. This is done last as this is the step that
 		// makes the Replica visible in the Store.
