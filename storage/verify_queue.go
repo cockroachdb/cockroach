@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,7 +60,7 @@ func newVerifyQueue(gossip *gossip.Gossip, countFn rangeCountFn) *verifyQueue {
 // verification scanning, and if so, at what priority. Returns true
 // for shouldQ in the event that it's been longer since the last scan
 // than the verification interval.
-func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
+func (*verifyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	_ config.SystemConfig) (shouldQ bool, priority float64) {
 
 	// Get last verification timestamp.
@@ -80,7 +80,7 @@ func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 // process iterates through all keys and values in a range. The very
 // act of scanning keys verifies on-disk checksums, as each block
 // checksum is checked on load.
-func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
+func (*verifyQueue) process(now hlc.Timestamp, rng *Replica,
 	_ config.SystemConfig) error {
 
 	snap := rng.store.Engine().NewSnapshot()

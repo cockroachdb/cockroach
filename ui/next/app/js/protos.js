@@ -1266,6 +1266,42 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             }
                         }
                     ]
+                },
+                {
+                    "name": "hlc",
+                    "fields": [],
+                    "options": {
+                        "go_package": "hlc"
+                    },
+                    "messages": [
+                        {
+                            "name": "Timestamp",
+                            "options": {
+                                "(gogoproto.goproto_stringer)": false,
+                                "(gogoproto.populate)": true
+                            },
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "wall_time",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "logical",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             ]
         },
@@ -1524,33 +1560,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
-                    "name": "Timestamp",
-                    "options": {
-                        "(gogoproto.goproto_stringer)": false,
-                        "(gogoproto.populate)": true
-                    },
-                    "fields": [
-                        {
-                            "rule": "optional",
-                            "type": "int64",
-                            "name": "wall_time",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "int32",
-                            "name": "logical",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        }
-                    ]
-                },
-                {
                     "name": "Value",
                     "fields": [
                         {
@@ -1561,7 +1570,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {
@@ -1778,87 +1787,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
-                    "name": "TxnMeta",
-                    "options": {
-                        "(gogoproto.populate)": true
-                    },
-                    "fields": [
-                        {
-                            "rule": "optional",
-                            "type": "bytes",
-                            "name": "id",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.customname)": "ID",
-                                "(gogoproto.customtype)": "github.com/cockroachdb/cockroach/util/uuid.UUID"
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "IsolationType",
-                            "name": "isolation",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "bytes",
-                            "name": "key",
-                            "id": 3,
-                            "options": {
-                                "(gogoproto.casttype)": "Key"
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "uint32",
-                            "name": "epoch",
-                            "id": 4,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "Timestamp",
-                            "name": "timestamp",
-                            "id": 5,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "int32",
-                            "name": "priority",
-                            "id": 6,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "int32",
-                            "name": "sequence",
-                            "id": 7,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "int32",
-                            "name": "batch_index",
-                            "id": 8,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        }
-                    ]
-                },
-                {
                     "name": "Transaction",
                     "options": {
                         "(gogoproto.goproto_stringer)": false,
@@ -1867,7 +1795,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     "fields": [
                         {
                             "rule": "optional",
-                            "type": "TxnMeta",
+                            "type": "storage.engine.enginepb.TxnMeta",
                             "name": "meta",
                             "id": 1,
                             "options": {
@@ -1895,13 +1823,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "last_heartbeat",
                             "id": 5
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "orig_timestamp",
                             "id": 6,
                             "options": {
@@ -1910,7 +1838,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "max_timestamp",
                             "id": 7,
                             "options": {
@@ -1919,7 +1847,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "map",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "keytype": "int32",
                             "name": "observed_timestamps",
                             "id": 8,
@@ -1981,7 +1909,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "TxnMeta",
+                            "type": "storage.engine.enginepb.TxnMeta",
                             "name": "txn",
                             "id": 2,
                             "options": {
@@ -2008,7 +1936,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     "fields": [
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "start",
                             "id": 1,
                             "options": {
@@ -2017,7 +1945,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "start_stasis",
                             "id": 4,
                             "options": {
@@ -2026,7 +1954,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "expiration",
                             "id": 2,
                             "options": {
@@ -2061,7 +1989,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {
@@ -2151,22 +2079,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     }
                 },
                 {
-                    "name": "IsolationType",
-                    "values": [
-                        {
-                            "name": "SERIALIZABLE",
-                            "id": 0
-                        },
-                        {
-                            "name": "SNAPSHOT",
-                            "id": 1
-                        }
-                    ],
-                    "options": {
-                        "(gogoproto.goproto_enum_prefix)": false
-                    }
-                },
-                {
                     "name": "TransactionStatus",
                     "values": [
                         {
@@ -2185,6 +2097,311 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     "options": {
                         "(gogoproto.goproto_enum_prefix)": false
                     }
+                }
+            ]
+        },
+        {
+            "name": "storage",
+            "fields": [],
+            "messages": [
+                {
+                    "name": "engine",
+                    "fields": [],
+                    "messages": [
+                        {
+                            "name": "enginepb",
+                            "fields": [],
+                            "options": {
+                                "go_package": "enginepb"
+                            },
+                            "messages": [
+                                {
+                                    "name": "TxnMeta",
+                                    "options": {
+                                        "(gogoproto.populate)": true
+                                    },
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "bytes",
+                                            "name": "id",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.customname)": "ID",
+                                                "(gogoproto.customtype)": "github.com/cockroachdb/cockroach/util/uuid.UUID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "IsolationType",
+                                            "name": "isolation",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bytes",
+                                            "name": "key",
+                                            "id": 3
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint32",
+                                            "name": "epoch",
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "util.hlc.Timestamp",
+                                            "name": "timestamp",
+                                            "id": 5,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "priority",
+                                            "id": 6,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "sequence",
+                                            "id": 7,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "batch_index",
+                                            "id": 8,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "MVCCMetadata",
+                                    "options": {
+                                        "(gogoproto.populate)": true
+                                    },
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "TxnMeta",
+                                            "name": "txn",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "util.hlc.Timestamp",
+                                            "name": "timestamp",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "deleted",
+                                            "id": 3,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "key_bytes",
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "val_bytes",
+                                            "id": 5,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bytes",
+                                            "name": "raw_bytes",
+                                            "id": 6
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "util.hlc.Timestamp",
+                                            "name": "merge_timestamp",
+                                            "id": 7
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "MVCCStats",
+                                    "options": {
+                                        "(gogoproto.populate)": true
+                                    },
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "last_update_nanos",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "intent_age",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "gc_bytes_age",
+                                            "id": 3,
+                                            "options": {
+                                                "(gogoproto.nullable)": false,
+                                                "(gogoproto.customname)": "GCBytesAge"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "live_bytes",
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "live_count",
+                                            "id": 5,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "key_bytes",
+                                            "id": 6,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "key_count",
+                                            "id": 7,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "val_bytes",
+                                            "id": 8,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "val_count",
+                                            "id": 9,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "intent_bytes",
+                                            "id": 10,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "intent_count",
+                                            "id": 11,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "sys_bytes",
+                                            "id": 12,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "sfixed64",
+                                            "name": "sys_count",
+                                            "id": 13,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "enums": [
+                                {
+                                    "name": "IsolationType",
+                                    "values": [
+                                        {
+                                            "name": "SERIALIZABLE",
+                                            "id": 0
+                                        },
+                                        {
+                                            "name": "SNAPSHOT",
+                                            "id": 1
+                                        }
+                                    ],
+                                    "options": {
+                                        "(gogoproto.goproto_enum_prefix)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             ]
         },
@@ -2209,7 +2426,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "roachpb.Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {

@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -83,7 +83,7 @@ var _ sort.Interface = byStoreDescID{}
 // interact with stores.
 type fakeStore struct {
 	storeID  roachpb.StoreID
-	stats    engine.MVCCStats
+	stats    enginepb.MVCCStats
 	desc     roachpb.StoreDescriptor
 	registry *metric.Registry
 }
@@ -96,7 +96,7 @@ func (fs fakeStore) Descriptor() (*roachpb.StoreDescriptor, error) {
 	return &fs.desc, nil
 }
 
-func (fs fakeStore) MVCCStats() engine.MVCCStats {
+func (fs fakeStore) MVCCStats() enginepb.MVCCStats {
 	return fs.stats
 }
 

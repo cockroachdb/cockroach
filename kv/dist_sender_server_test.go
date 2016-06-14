@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -59,7 +60,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// engine.
 	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
-	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, roachpb.SERIALIZABLE, now, 0)
+	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, enginepb.SERIALIZABLE, now, 0)
 	if err := engine.MVCCPutProto(context.Background(), s.Ctx.Engines[0], nil, key, now, txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +275,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// Write keys "a" and "b", the latter of which is the first key in the
 	// second range.
 	keys := [2]string{"a", "b"}
-	ts := [2]roachpb.Timestamp{}
+	ts := [2]hlc.Timestamp{}
 	for i, key := range keys {
 		b := &client.Batch{}
 		b.Put(key, "value")
@@ -530,7 +531,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
-					z := roachpb.ZeroTimestamp
+					z := hlc.ZeroTimestamp
 					pErr := roachpb.NewReadWithinUncertaintyIntervalError(z, z)
 					return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
 				}

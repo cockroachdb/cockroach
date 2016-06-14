@@ -22,9 +22,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -147,7 +147,7 @@ func (p *planner) setTxn(txn *client.Txn) {
 	} else {
 		p.evalCtx.SetTxnTimestamp(time.Time{})
 		p.evalCtx.SetStmtTimestamp(time.Time{})
-		p.evalCtx.SetClusterTimestamp(roachpb.ZeroTimestamp)
+		p.evalCtx.SetClusterTimestamp(hlc.ZeroTimestamp)
 	}
 }
 

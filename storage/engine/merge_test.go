@@ -26,6 +26,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -58,7 +59,7 @@ func mustMarshal(m proto.Message) []byte {
 
 func appender(s string) []byte {
 	val := roachpb.MakeValueFromString(s)
-	v := &MVCCMetadata{RawBytes: val.RawBytes}
+	v := &enginepb.MVCCMetadata{RawBytes: val.RawBytes}
 	return mustMarshal(v)
 }
 
@@ -67,7 +68,7 @@ func appender(s string) []byte {
 // stored in an MVCCMetadata object and marshalled to bytes.
 func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 	tsv := timeSeriesAsValue(start, duration, samples...)
-	return mustMarshal(&MVCCMetadata{RawBytes: tsv.RawBytes})
+	return mustMarshal(&enginepb.MVCCMetadata{RawBytes: tsv.RawBytes})
 }
 
 func timeSeriesAsValue(start int64, duration int64, samples ...tsSample) roachpb.Value {
@@ -152,7 +153,7 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{appender(""), appender(""), appender("")},
 		{nil, appender(""), appender("")},
-		{nil, nil, mustMarshal(&MVCCMetadata{RawBytes: []byte{}})},
+		{nil, nil, mustMarshal(&enginepb.MVCCMetadata{RawBytes: []byte{}})},
 		{appender("\n "), appender(" \t "), appender("\n  \t ")},
 		{appender("ქართული"), appender("\nKhartuli"), appender("ქართული\nKhartuli")},
 		{appender(gibber1), appender(gibber2), appender(gibber1 + gibber2)},
@@ -164,7 +165,7 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		var resultV, expectedV MVCCMetadata
+		var resultV, expectedV enginepb.MVCCMetadata
 		if err := proto.Unmarshal(result, &resultV); err != nil {
 			t.Fatal(err)
 		}
@@ -295,11 +296,11 @@ func TestGoMerge(t *testing.T) {
 // array. It is assumed that the time series value was originally marshalled as
 // a MVCCMetadata with an inline value.
 func unmarshalTimeSeries(t testing.TB, b []byte) roachpb.InternalTimeSeriesData {
-	var meta MVCCMetadata
+	var meta enginepb.MVCCMetadata
 	if err := proto.Unmarshal(b, &meta); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	valueTS, err := meta.Value().GetTimeseries()
+	valueTS, err := MakeValue(meta).GetTimeseries()
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}

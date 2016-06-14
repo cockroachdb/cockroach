@@ -33,8 +33,10 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -894,9 +896,9 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.value = state.value
 }
 
-func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error) {
+func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
-	ms := MVCCStats{}
+	ms := enginepb.MVCCStats{}
 	if err := statusToError(result.status); err != nil {
 		return ms, err
 	}
@@ -954,7 +956,7 @@ func cToGoKey(key C.DBKey) MVCCKey {
 
 	return MVCCKey{
 		Key: safeKey,
-		Timestamp: roachpb.Timestamp{
+		Timestamp: hlc.Timestamp{
 			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
 		},
@@ -964,7 +966,7 @@ func cToGoKey(key C.DBKey) MVCCKey {
 func cToUnsafeGoKey(key C.DBKey) MVCCKey {
 	return MVCCKey{
 		Key: cSliceToUnsafeGoBytes(key.key),
-		Timestamp: roachpb.Timestamp{
+		Timestamp: hlc.Timestamp{
 			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
 		},

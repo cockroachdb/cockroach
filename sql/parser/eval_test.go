@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 func TestEval(t *testing.T) {
@@ -569,7 +569,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 	ctx := &EvalContext{}
 	ctx.PrepareOnly = true
 	for _, d := range testData {
-		ts := roachpb.Timestamp{WallTime: d.walltime, Logical: d.logical}
+		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
 		ctx.SetClusterTimestamp(ts)
 		dec := ctx.GetClusterTimestamp()
 		final := dec.String()

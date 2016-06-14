@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 )
@@ -108,7 +109,7 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (*raftLogQueue) shouldQueue(
-	now roachpb.Timestamp, r *Replica, _ config.SystemConfig,
+	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	truncatableIndexes, _, err := getTruncatableIndexes(r)
 	if err != nil {
@@ -122,7 +123,7 @@ func (*raftLogQueue) shouldQueue(
 // process truncates the raft log of the range if the replica is the raft
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
-func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) error {
+func (rlq *raftLogQueue) process(now hlc.Timestamp, r *Replica, _ config.SystemConfig) error {
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(r)
 	if err != nil {
 		return err

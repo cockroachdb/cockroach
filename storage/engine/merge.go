@@ -20,6 +20,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
@@ -37,7 +38,7 @@ func MergeInternalTimeSeriesData(
 		if err := val.SetProto(&src); err != nil {
 			return roachpb.InternalTimeSeriesData{}, err
 		}
-		bytes, err := protoutil.Marshal(&MVCCMetadata{
+		bytes, err := protoutil.Marshal(&enginepb.MVCCMetadata{
 			RawBytes: val.RawBytes,
 		})
 		if err != nil {
@@ -59,11 +60,11 @@ func MergeInternalTimeSeriesData(
 	}
 
 	// Unmarshal merged bytes and extract the time series value within.
-	var meta MVCCMetadata
+	var meta enginepb.MVCCMetadata
 	if err := proto.Unmarshal(mergedBytes, &meta); err != nil {
 		return roachpb.InternalTimeSeriesData{}, err
 	}
-	mergedTS, err := meta.Value().GetTimeseries()
+	mergedTS, err := MakeValue(meta).GetTimeseries()
 	if err != nil {
 		return roachpb.InternalTimeSeriesData{}, err
 	}

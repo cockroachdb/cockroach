@@ -29,10 +29,19 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
+
+func makeTS(walltime int64, logical int32) hlc.Timestamp {
+	return hlc.Timestamp{
+		WallTime: walltime,
+		Logical:  logical,
+	}
+}
 
 // TestKeyNext tests that the method for creating lexicographic
 // successors to byte slices works as expected.
@@ -208,76 +217,6 @@ func TestKeyString(t *testing.T) {
 	}
 }
 
-func makeTS(walltime int64, logical int32) Timestamp {
-	return Timestamp{
-		WallTime: walltime,
-		Logical:  logical,
-	}
-}
-
-func TestLess(t *testing.T) {
-	a := Timestamp{}
-	b := Timestamp{}
-	if a.Less(b) || b.Less(a) {
-		t.Errorf("expected %+v == %+v", a, b)
-	}
-	b = makeTS(1, 0)
-	if !a.Less(b) {
-		t.Errorf("expected %+v < %+v", a, b)
-	}
-	a = makeTS(1, 1)
-	if !b.Less(a) {
-		t.Errorf("expected %+v < %+v", b, a)
-	}
-}
-
-func TestEqual(t *testing.T) {
-	a := Timestamp{}
-	b := Timestamp{}
-	if !a.Equal(b) {
-		t.Errorf("expected %+v == %+v", a, b)
-	}
-	b = makeTS(1, 0)
-	if a.Equal(b) {
-		t.Errorf("expected %+v < %+v", a, b)
-	}
-	a = makeTS(1, 1)
-	if b.Equal(a) {
-		t.Errorf("expected %+v < %+v", b, a)
-	}
-}
-
-func TestTimestampNext(t *testing.T) {
-	testCases := []struct {
-		ts, expNext Timestamp
-	}{
-		{makeTS(1, 2), makeTS(1, 3)},
-		{makeTS(1, math.MaxInt32-1), makeTS(1, math.MaxInt32)},
-		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
-		{makeTS(math.MaxInt32, math.MaxInt32), makeTS(math.MaxInt32+1, 0)},
-	}
-	for i, c := range testCases {
-		if next := c.ts.Next(); !next.Equal(c.expNext) {
-			t.Errorf("%d: expected %s; got %s", i, c.expNext, next)
-		}
-	}
-}
-
-func TestTimestampPrev(t *testing.T) {
-	testCases := []struct {
-		ts, expPrev Timestamp
-	}{
-		{makeTS(1, 2), makeTS(1, 1)},
-		{makeTS(1, 1), makeTS(1, 0)},
-		{makeTS(1, 0), makeTS(0, math.MaxInt32)},
-	}
-	for i, c := range testCases {
-		if prev := c.ts.Prev(); !prev.Equal(c.expPrev) {
-			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
-		}
-	}
-}
-
 func TestValueChecksumEmpty(t *testing.T) {
 	k := []byte("key")
 	v := Value{}
@@ -394,7 +333,7 @@ func TestTxnEqual(t *testing.T) {
 	}{
 		{nil, nil, true},
 		{&Transaction{}, nil, false},
-		{&Transaction{TxnMeta: TxnMeta{ID: uuid.NewV4()}}, &Transaction{TxnMeta: TxnMeta{ID: uuid.NewV4()}}, false},
+		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()}}, false},
 	}
 	for i, c := range tc {
 		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
@@ -429,8 +368,8 @@ func TestTransactionString(t *testing.T) {
 	}
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
-		TxnMeta: TxnMeta{
-			Isolation: SERIALIZABLE,
+		TxnMeta: enginepb.TxnMeta{
+			Isolation: enginepb.SERIALIZABLE,
 			Key:       Key("foo"),
 			ID:        txnID,
 			Epoch:     2,
@@ -467,9 +406,9 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
-	timestamps := make(map[NodeID]Timestamp, len(ids))
+	timestamps := make(map[NodeID]hlc.Timestamp, len(ids))
 	for i := 0; i < len(ids); i++ {
-		timestamps[NodeID(i)] = ZeroTimestamp.Add(rng.Int63(), 0)
+		timestamps[NodeID(i)] = hlc.ZeroTimestamp.Add(rng.Int63(), 0)
 	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
@@ -477,7 +416,7 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
 		txn.UpdateObservedTimestamp(nodeID, timestamps[nodeID])
-		txn.UpdateObservedTimestamp(nodeID, MaxTimestamp) // should be noop
+		txn.UpdateObservedTimestamp(nodeID, hlc.MaxTimestamp) // should be noop
 		if exp, act := i+1, len(txn.ObservedTimestamps); act != exp {
 			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.ObservedTimestamps)
 		}
@@ -491,7 +430,7 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 
 	var emptyTxn Transaction
-	ts := ZeroTimestamp.Add(1, 2)
+	ts := hlc.ZeroTimestamp.Add(1, 2)
 	emptyTxn.UpdateObservedTimestamp(NodeID(1), ts)
 	if actTS, _ := emptyTxn.GetObservedTimestamp(NodeID(1)); !actTS.Equal(ts) {
 		t.Fatalf("unexpected: %s (wanted %s)", actTS, ts)
@@ -499,8 +438,8 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 }
 
 var nonZeroTxn = Transaction{
-	TxnMeta: TxnMeta{
-		Isolation:  SNAPSHOT,
+	TxnMeta: enginepb.TxnMeta{
+		Isolation:  enginepb.SNAPSHOT,
 		Key:        Key("foo"),
 		ID:         uuid.NewV4(),
 		Epoch:      2,
@@ -511,10 +450,10 @@ var nonZeroTxn = Transaction{
 	},
 	Name:               "name",
 	Status:             COMMITTED,
-	LastHeartbeat:      &Timestamp{1, 2},
+	LastHeartbeat:      &hlc.Timestamp{WallTime: 1, Logical: 2},
 	OrigTimestamp:      makeTS(30, 31),
 	MaxTimestamp:       makeTS(40, 41),
-	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
+	ObservedTimestamps: map[NodeID]hlc.Timestamp{1: makeTS(1, 2)},
 	Writing:            true,
 	WriteTooOld:        true,
 	RetryOnPush:        true,
@@ -537,7 +476,7 @@ func TestTransactionUpdate(t *testing.T) {
 	var txn3 Transaction
 	txn3.ID = uuid.NewV4()
 	txn3.Name = "carl"
-	txn3.Isolation = SNAPSHOT
+	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
 
 	if err := util.NoZeroField(txn3); err != nil {
@@ -829,9 +768,9 @@ func TestRSpanIntersect(t *testing.T) {
 }
 
 func TestLeaseCovers(t *testing.T) {
-	mk := func(ds ...int64) (sl []Timestamp) {
+	mk := func(ds ...int64) (sl []hlc.Timestamp) {
 		for _, d := range ds {
-			sl = append(sl, ZeroTimestamp.Add(d, 0))
+			sl = append(sl, hlc.ZeroTimestamp.Add(d, 0))
 		}
 		return sl
 	}
@@ -841,7 +780,7 @@ func TestLeaseCovers(t *testing.T) {
 
 	for i, test := range []struct {
 		lease   Lease
-		in, out []Timestamp
+		in, out []hlc.Timestamp
 	}{
 		{
 			lease: Lease{

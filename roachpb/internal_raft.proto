@@ -20,6 +20,7 @@ option go_package = "roachpb";
 
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/metadata.proto";
+import "cockroach/util/hlc/timestamp.proto";
 import "etcd/raft/raftpb/raft.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -47,7 +48,7 @@ message RaftSnapshotData {
   message KeyValue {
     optional bytes key = 1;
     optional bytes value = 2;
-    optional Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   }
   // The latest RangeDescriptor
   optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];

@@ -26,7 +26,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -64,13 +65,13 @@ type fixture struct {
 }
 
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
-	reflect.TypeOf(&engine.MVCCMetadata{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return engine.NewPopulatedMVCCMetadata(r, false) },
+	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCMetadata(r, false) },
 		emptySum:             7551962144604783939,
 		populatedSum:         16635523155996652761,
 	},
-	reflect.TypeOf(&engine.MVCCStats{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return engine.NewPopulatedMVCCStats(r, false) },
+	reflect.TypeOf(&enginepb.MVCCStats{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCStats(r, false) },
 		emptySum:             12760152523270066584,
 		populatedSum:         17551055561102061772,
 	},
@@ -89,8 +90,8 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:             5531676819244041709,
 		populatedSum:         14781226418259198098,
 	},
-	reflect.TypeOf(&roachpb.Timestamp{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedTimestamp(r, false) },
+	reflect.TypeOf(&hlc.Timestamp{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message { return hlc.NewPopulatedTimestamp(r, false) },
 		emptySum:             5531676819244041709,
 		populatedSum:         10735653246768912584,
 	},

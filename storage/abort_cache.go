@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -98,7 +100,7 @@ func (sc *AbortCache) Get(
 
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	ok, err := engine.MVCCGetProto(ctx, e, key, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, entry)
+	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.ZeroTimestamp, true /* consistent */, nil /* txn */, entry)
 	return ok, err
 }
 
@@ -111,7 +113,7 @@ func (sc *AbortCache) Iterate(
 	e engine.Reader,
 	f func([]byte, *uuid.UUID, roachpb.AbortCacheEntry),
 ) {
-	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), roachpb.ZeroTimestamp,
+	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortCacheEntry
@@ -129,13 +131,13 @@ func (sc *AbortCache) Iterate(
 
 func copySeqCache(
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	srcID, dstID roachpb.RangeID,
 	keyMin, keyMax engine.MVCCKey,
 ) (int, error) {
 	var scratch [64]byte
 	var count int
-	var meta engine.MVCCMetadata
+	var meta enginepb.MVCCMetadata
 	// TODO(spencer): look into making this an MVCCIteration and writing
 	// the values using MVCC so we can avoid the ugliness of updating
 	// the MVCCStats by hand below.
@@ -153,7 +155,7 @@ func copySeqCache(
 			if err := proto.Unmarshal(kv.Value, &meta); err != nil {
 				return false, util.Errorf("could not decode mvcc metadata %s [% x]: %s", kv.Key, kv.Value, err)
 			}
-			value := meta.Value()
+			value := engine.MakeValue(meta)
 			value.ClearChecksum()
 			value.InitChecksum(key)
 			meta.RawBytes = value.RawBytes
@@ -177,7 +179,7 @@ func copySeqCache(
 // On success, returns the number of entries (key-value pairs) copied.
 func (sc *AbortCache) CopyInto(
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	destRangeID roachpb.RangeID,
 ) (int, error) {
 	return copySeqCache(e, ms, sc.rangeID, destRangeID,
@@ -193,7 +195,7 @@ func (sc *AbortCache) CopyInto(
 func (sc *AbortCache) CopyFrom(
 	ctx context.Context,
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	originRangeID roachpb.RangeID,
 ) (int, error) {
 	originMin := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMin))
@@ -205,18 +207,18 @@ func (sc *AbortCache) CopyFrom(
 func (sc *AbortCache) Del(
 	ctx context.Context,
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	txnID *uuid.UUID,
 ) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	return engine.MVCCDelete(ctx, e, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
+	return engine.MVCCDelete(ctx, e, ms, key, hlc.ZeroTimestamp, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
 func (sc *AbortCache) Put(
 	ctx context.Context,
 	e engine.ReadWriter,
-	ms *engine.MVCCStats,
+	ms *enginepb.MVCCStats,
 	txnID *uuid.UUID,
 	entry *roachpb.AbortCacheEntry,
 ) error {
@@ -224,7 +226,7 @@ func (sc *AbortCache) Put(
 		return errEmptyTxnID
 	}
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	return engine.MVCCPutProto(ctx, e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, entry)
+	return engine.MVCCPutProto(ctx, e, ms, key, hlc.ZeroTimestamp, nil /* txn */, entry)
 }
 
 func decodeAbortCacheMVCCKey(

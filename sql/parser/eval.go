@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -1192,7 +1193,7 @@ type EvalContext struct {
 	txnTimestamp time.Time
 	// The cluster timestamp. Needs to be stable for the lifetime of the
 	// transaction. Used for cluster_logical_timestamp().
-	clusterTimestamp roachpb.Timestamp
+	clusterTimestamp hlc.Timestamp
 	// Location references the *Location on the current Session.
 	Location **time.Location
 
@@ -1226,7 +1227,7 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly {
-		if ctx.clusterTimestamp == roachpb.ZeroTimestamp {
+		if ctx.clusterTimestamp == hlc.ZeroTimestamp {
 			panic("zero cluster timestamp in EvalContext")
 		}
 	}
@@ -1268,7 +1269,7 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 }
 
 // SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
-func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
+func (ctx *EvalContext) SetClusterTimestamp(ts hlc.Timestamp) {
 	ctx.clusterTimestamp = ts
 }
 

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -139,7 +140,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, _, err := engine.MVCCScan(context.Background(), store.Engine(), keys.MetaMin, keys.MetaMax, 0, roachpb.MaxTimestamp, true, nil)
+		kvs, _, err := engine.MVCCScan(context.Background(), store.Engine(), keys.MetaMin, keys.MetaMax, 0, hlc.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

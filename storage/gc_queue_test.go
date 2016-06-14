@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -38,8 +39,8 @@ import (
 )
 
 // makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos int64, logical int32) roachpb.Timestamp {
-	return roachpb.Timestamp{
+func makeTS(nanos int64, logical int32) hlc.Timestamp {
+	return hlc.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
 	}
@@ -80,7 +81,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		gcBytesAge  int64
 		intentCount int64
 		intentAge   int64
-		now         roachpb.Timestamp // at time of shouldQueue
+		now         hlc.Timestamp // at time of shouldQueue
 		shouldQ     bool
 		priority    float64
 	}{
@@ -115,11 +116,11 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// a later timestamp.
 
 		// One normalized unit of unaged gc'able bytes at time zero.
-		{ttl * bc, 0, 0, 0, roachpb.ZeroTimestamp, true, float64(now.WallTime) / (1E9 * considerThreshold)},
+		{ttl * bc, 0, 0, 0, hlc.ZeroTimestamp, true, float64(now.WallTime) / (1E9 * considerThreshold)},
 
 		// 2 intents aging from zero to now (which is exactly the intent age
 		// normalization).
-		{0, 0, 2, 0, roachpb.ZeroTimestamp, true, 1},
+		{0, 0, 2, 0, hlc.ZeroTimestamp, true, 1},
 	}
 
 	gcQ := newGCQueue(tc.gossip)
@@ -129,7 +130,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// zero, this will translate into non live bytes.  Also write
 		// intent count. Note: the actual accounting on bytes is fictional
 		// in this test.
-		ms := engine.MVCCStats{
+		ms := enginepb.MVCCStats{
 			KeyBytes:        test.gcBytes,
 			IntentCount:     test.intentCount,
 			IntentAge:       test.intentAge * considerThreshold,
@@ -187,7 +188,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	data := []struct {
 		key roachpb.Key
-		ts  roachpb.Timestamp
+		ts  hlc.Timestamp
 		del bool
 		txn bool
 	}{
@@ -237,7 +238,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
+				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.clock)
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
@@ -251,7 +252,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs := putArgs(datum.key, []byte("value"))
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, roachpb.SERIALIZABLE, tc.clock)
+				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.clock)
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
@@ -277,20 +278,20 @@ func TestGCQueueProcess(t *testing.T) {
 
 	expKVs := []struct {
 		key roachpb.Key
-		ts  roachpb.Timestamp
+		ts  hlc.Timestamp
 	}{
 		{key1, ts5},
 		{key1, ts2},
 		{key2, ts5},
 		{key2, ts2m1},
-		{key3, roachpb.ZeroTimestamp},
+		{key3, hlc.ZeroTimestamp},
 		{key3, ts5},
 		{key3, ts2},
 		{key4, ts2},
-		{key6, roachpb.ZeroTimestamp},
+		{key6, hlc.ZeroTimestamp},
 		{key6, ts5},
 		{key6, ts1},
-		{key7, roachpb.ZeroTimestamp},
+		{key7, hlc.ZeroTimestamp},
 		{key7, ts4},
 		{key7, ts2},
 		{key8, ts2},
@@ -463,19 +464,19 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
 		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.orig)).UnixNano)
-		txn := newTransaction("txn1", baseKey, 1, roachpb.SERIALIZABLE, txnClock)
+		txn := newTransaction("txn1", baseKey, 1, enginepb.SERIALIZABLE, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
-			txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(test.hb)}
+			txn.LastHeartbeat = &hlc.Timestamp{WallTime: int64(test.hb)}
 		}
 		// Set a high Timestamp to make sure it does not matter. Only
 		// OrigTimestamp (and heartbeat) are used for GC decisions.
-		txn.Timestamp.Forward(roachpb.MaxTimestamp)
+		txn.Timestamp.Forward(hlc.MaxTimestamp)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
-			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
+			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, hlc.ZeroTimestamp, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -500,7 +501,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, roachpb.ZeroTimestamp, true, nil, txn)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.ZeroTimestamp, true, nil, txn)
 			if err != nil {
 				return err
 			}
@@ -534,7 +535,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.EmptyUUID)
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.EmptyUUID)
 	var count int
-	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, roachpb.ZeroTimestamp,
+	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.ZeroTimestamp,
 		true, nil, false, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
@@ -559,8 +560,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	tc.manualClock.Set(now)
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-00000"), 1, roachpb.SERIALIZABLE, tc.clock),
-		newTransaction("txn2", roachpb.Key("1-00000"), 1, roachpb.SERIALIZABLE, tc.clock),
+		newTransaction("txn1", roachpb.Key("0-00000"), 1, enginepb.SERIALIZABLE, tc.clock),
+		newTransaction("txn2", roachpb.Key("1-00000"), 1, enginepb.SERIALIZABLE, tc.clock),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS
@@ -595,7 +596,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Iterate through all values to ensure intents have been fully resolved.
-	meta := &engine.MVCCMetadata{}
+	meta := &enginepb.MVCCMetadata{}
 	err := tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
 		engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
 			if !kv.Key.IsValue() {

@@ -29,7 +29,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -371,11 +373,11 @@ func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing
 
 	b.ResetTimer()
 
-	ts := roachpb.Timestamp{}
+	ts := hlc.Timestamp{}
 	// Use parallelism if specified when test is run.
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			ms := MVCCStats{}
+			ms := enginepb.MVCCStats{}
 			ts.Logical++
 			err := MVCCMerge(context.Background(), eng, &ms, keys[rand.Intn(numKeys)], ts, *value)
 			if err != nil {
@@ -386,7 +388,7 @@ func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing
 
 	// Read values out to force merge.
 	for _, key := range keys {
-		val, _, err := MVCCGet(context.Background(), eng, key, roachpb.ZeroTimestamp, true, nil)
+		val, _, err := MVCCGet(context.Background(), eng, key, hlc.ZeroTimestamp, true, nil)
 		if err != nil {
 			b.Fatal(err)
 		} else if val == nil {
@@ -437,7 +439,7 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		dupEng, stopper := emk(b, locDirty)
 
 		b.StartTimer()
-		_, err := MVCCDeleteRange(context.Background(), dupEng, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
+		_, err := MVCCDeleteRange(context.Background(), dupEng, &enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, hlc.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -458,7 +460,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	b.SetBytes(rangeBytes)
 	b.ResetTimer()
 
-	var stats MVCCStats
+	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
 		iter := eng.NewIterator(false)
@@ -479,7 +481,7 @@ func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 
 	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(r, 10))
-	zeroTS := roachpb.ZeroTimestamp
+	zeroTS := hlc.ZeroTimestamp
 	var blockNum int64
 
 	for i := 0; i < b.N; i++ {

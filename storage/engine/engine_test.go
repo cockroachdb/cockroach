@@ -28,6 +28,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -157,7 +159,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 			// Put a value so that the deletion below finds a value to seek
 			// to.
-			if err := MVCCPut(context.Background(), batch, nil, key, roachpb.ZeroTimestamp,
+			if err := MVCCPut(context.Background(), batch, nil, key, hlc.ZeroTimestamp,
 				roachpb.MakeValueFromString("x"), nil); err != nil {
 				t.Fatal(err)
 			}
@@ -165,7 +167,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// Seek the iterator to `key` and clear the value (but without
 			// telling the iterator about that).
 			if err := MVCCDelete(context.Background(), batch, nil, key,
-				roachpb.ZeroTimestamp, nil); err != nil {
+				hlc.ZeroTimestamp, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -177,7 +179,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// result back, we'll see the (newly deleted) value (due to the
 			// failure mode above).
 			if v, _, err := MVCCGet(context.Background(), batch, key,
-				roachpb.ZeroTimestamp, true, nil); err != nil {
+				hlc.ZeroTimestamp, true, nil); err != nil {
 				t.Fatal(err)
 			} else if v != nil {
 				t.Fatalf("expected no value, got %+v", v)
@@ -237,14 +239,14 @@ func TestEngineBatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m := &MVCCMetadata{}
-			if err := proto.Unmarshal(b, m); err != nil {
+			var m enginepb.MVCCMetadata
+			if err := proto.Unmarshal(b, &m); err != nil {
 				t.Fatal(err)
 			}
 			if !m.IsInline() {
 				return nil
 			}
-			valueBytes, err := m.Value().GetBytes()
+			valueBytes, err := MakeValue(m).GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -295,11 +297,11 @@ func TestEngineBatch(t *testing.T) {
 			} else if !iter.Key().Equal(key) {
 				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
 			} else {
-				m := &MVCCMetadata{}
-				if err := iter.ValueProto(m); err != nil {
+				var m enginepb.MVCCMetadata
+				if err := iter.ValueProto(&m); err != nil {
 					t.Fatal(err)
 				}
-				valueBytes, err := m.Value().GetBytes()
+				valueBytes, err := MakeValue(m).GetBytes()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -442,7 +444,7 @@ func TestEngineMerge(t *testing.T) {
 				}
 			}
 			result, _ := engine.Get(tc.testKey)
-			var resultV, expectedV MVCCMetadata
+			var resultV, expectedV enginepb.MVCCMetadata
 			if err := proto.Unmarshal(result, &resultV); err != nil {
 				t.Fatal(err)
 			}

@@ -30,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -75,7 +77,7 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 }
 
 func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
-	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
+	if kv.Key.Timestamp != hlc.ZeroTimestamp {
 		fmt.Printf("%s %q: ", kv.Key.Timestamp, kv.Key.Key)
 	} else {
 		fmt.Printf("%q: ", kv.Key.Key)
@@ -174,7 +176,7 @@ func tryMeta(kv engine.MVCCKeyValue) (string, error) {
 }
 
 func maybeUnmarshalInline(v []byte, dest proto.Message) error {
-	var meta engine.MVCCMetadata
+	var meta enginepb.MVCCMetadata
 	if err := meta.Unmarshal(v); err != nil {
 		return err
 	}
@@ -193,7 +195,7 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 }
 
 func tryAbort(kv engine.MVCCKeyValue) (string, error) {
-	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
+	if kv.Key.Timestamp != hlc.ZeroTimestamp {
 		return "", errors.New("not an abort cache key")
 	}
 	_, err := keys.DecodeAbortCacheKey(kv.Key.Key, nil)
@@ -375,7 +377,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var descs []roachpb.RangeDescriptor
 
-	if _, err := engine.MVCCIterate(context.Background(), db, start, end, roachpb.MaxTimestamp,
+	if _, err := engine.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
 		false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			var desc roachpb.RangeDescriptor
@@ -404,8 +406,8 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		_, info, err := storage.RunGC(context.Background(), &desc, snap, roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ roachpb.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
+		_, info, err := storage.RunGC(context.Background(), &desc, snap, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ hlc.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
 			}, func(_ []roachpb.Intent, _, _ bool) error { return nil })
 		if err != nil {
 			return err
@@ -461,7 +463,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 		return replicaInfo[rangeID]
 	}
 
-	if _, err := engine.MVCCIterate(context.Background(), db, start, end, roachpb.MaxTimestamp,
+	if _, err := engine.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
 		false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)

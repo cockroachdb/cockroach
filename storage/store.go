@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -510,7 +511,7 @@ type storeMetrics struct {
 	// better to convert the Gauges above into counters which are adjusted
 	// accordingly.
 	mu    sync.Mutex
-	stats engine.MVCCStats
+	stats enginepb.MVCCStats
 }
 
 func newStoreMetrics() *storeMetrics {
@@ -599,14 +600,14 @@ func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, available i
 	sm.availableRangeCount.Update(available)
 }
 
-func (sm *storeMetrics) addMVCCStats(stats engine.MVCCStats) {
+func (sm *storeMetrics) addMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.Add(stats)
 	sm.updateMVCCGaugesLocked()
 }
 
-func (sm *storeMetrics) subtractMVCCStats(stats engine.MVCCStats) {
+func (sm *storeMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.Subtract(stats)
@@ -805,7 +806,7 @@ func IterateRangeDescriptors(
 		return fn(desc)
 	}
 
-	_, err := engine.MVCCIterate(context.Background(), eng, start, end, roachpb.MaxTimestamp, false /* !consistent */, nil, /* txn */
+	_, err := engine.MVCCIterate(context.Background(), eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, kvToDesc)
 	return err
 }
@@ -851,7 +852,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -1180,7 +1181,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
 		}
@@ -1193,7 +1194,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		}
 		return util.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
-	err = engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &s.Ident)
+	err = engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
 	return err
 }
 
@@ -1287,7 +1288,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	batch := s.engine.NewBatch()
-	ms := &engine.MVCCStats{}
+	ms := &enginepb.MVCCStats{}
 	now := s.ctx.Clock.Now()
 	ctx := context.Background()
 
@@ -1296,10 +1297,10 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Replica GC & Verification timestamps.
-	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), hlc.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), hlc.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta2.
@@ -1332,7 +1333,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 
 	// Set range stats.
-	if err := ms.AccountForSelf(desc.RangeID); err != nil {
+	if err := engine.AccountForSelf(ms, desc.RangeID); err != nil {
 		return err
 	}
 	if err := engine.MVCCSetRangeStats(ctx, batch, desc.RangeID, ms); err != nil {
@@ -1607,7 +1608,7 @@ func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: desc.NextReplicaID,
 	}
-	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, roachpb.ZeroTimestamp, nil, tombstone); err != nil {
+	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
 		return err
 	}
 
@@ -1673,7 +1674,7 @@ func (s *Store) Registry() *metric.Registry {
 // MVCCStats returns the current MVCCStats accumulated for this store.
 // TODO(mrtracy): This should be removed as part of #4465, this is only needed
 // to support the current StatusSummary structures which will be changing.
-func (s *Store) MVCCStats() engine.MVCCStats {
+func (s *Store) MVCCStats() enginepb.MVCCStats {
 	s.metrics.mu.Lock()
 	defer s.metrics.mu.Unlock()
 	return s.metrics.stats
@@ -1927,7 +1928,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 //
 // The supplied transaction is updated with the results of the
 // "query" push if possible.
-func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
+func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
 	// Attempt to push the transaction which created the intent.
 	b := client.Batch{}
 	b.AddRawRequest(&roachpb.PushTxnRequest{
@@ -2177,7 +2178,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 	// would indicate that this is a stale message.
 	tombstoneKey := keys.RaftTombstoneKey(groupID)
 	var tombstone roachpb.RaftTombstone
-	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
+	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone); err != nil {
 		return nil, err
 	} else if ok {
 		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
@@ -2307,7 +2308,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 		return
 	}
 
-	timestamp := roachpb.Timestamp{WallTime: now}
+	timestamp := hlc.Timestamp{WallTime: now}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, rng := range s.mu.replicas {

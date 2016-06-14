@@ -23,8 +23,10 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -73,7 +75,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 	} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = roachpb.Transaction{
-			TxnMeta: roachpb.TxnMeta{
+			TxnMeta: enginepb.TxnMeta{
 				Isolation: ts.Proto.Isolation,
 			},
 			Name: ts.Proto.Name,
@@ -103,7 +105,7 @@ type Txn struct {
 	retrying            bool
 	// The txn has to be committed by this deadline. A nil value indicates no
 	// deadline.
-	deadline *roachpb.Timestamp
+	deadline *hlc.Timestamp
 	// see IsFinalized()
 	finalized bool
 }
@@ -149,7 +151,7 @@ func (txn *Txn) DebugName() string {
 // SetIsolation sets the transaction's isolation type. Transactions default to
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
-func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) error {
+func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 	if txn.retrying {
 		if txn.Proto.Isolation != isolation {
 			return util.Errorf("cannot change the isolation level of a retrying transaction")
@@ -414,7 +416,7 @@ func (txn *Txn) CommitOrCleanup() error {
 
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
-func (txn *Txn) UpdateDeadlineMaybe(deadline roachpb.Timestamp) bool {
+func (txn *Txn) UpdateDeadlineMaybe(deadline hlc.Timestamp) bool {
 	if txn.deadline == nil || deadline.Less(*txn.deadline) {
 		txn.deadline = &deadline
 		return true
@@ -431,14 +433,14 @@ func (txn *Txn) Rollback() error {
 	return err
 }
 
-func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
+func (txn *Txn) sendEndTxnReq(commit bool, deadline *hlc.Timestamp) error {
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
 	_, err := txn.send(ba)
 	return err.GoError()
 }
 
-func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachpb.Request {
+func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
 	req := &roachpb.EndTransactionRequest{
 		Commit:   commit,
 		Deadline: deadline,
@@ -467,7 +469,7 @@ type TxnExecOptions struct {
 	// responsibility of the client.
 	AutoCommit bool
 	// Minimum initial timestamp, if so desired by a higher level (e.g. sql.Executor).
-	MinInitialTimestamp roachpb.Timestamp
+	MinInitialTimestamp hlc.Timestamp
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -528,7 +530,7 @@ RetryLoop:
 			// If we're looking at a brand new transaction, then communicate
 			// what should be used as initial timestamp for the KV txn created
 			// by TxnCoordSender.
-			if txn.Proto.OrigTimestamp == roachpb.ZeroTimestamp {
+			if txn.Proto.OrigTimestamp == hlc.ZeroTimestamp {
 				txn.Proto.OrigTimestamp = opt.MinInitialTimestamp
 			}
 		}

@@ -36,8 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -160,20 +162,20 @@ func TestClientRetryNonTxn(t *testing.T) {
 
 	testCases := []struct {
 		args        roachpb.Request
-		isolation   roachpb.IsolationType
+		isolation   enginepb.IsolationType
 		canPush     bool
 		expAttempts int
 	}{
 		// Write/write conflicts.
-		{&roachpb.PutRequest{}, roachpb.SNAPSHOT, true, 2},
-		{&roachpb.PutRequest{}, roachpb.SERIALIZABLE, true, 2},
-		{&roachpb.PutRequest{}, roachpb.SNAPSHOT, false, 1},
-		{&roachpb.PutRequest{}, roachpb.SERIALIZABLE, false, 1},
+		{&roachpb.PutRequest{}, enginepb.SNAPSHOT, true, 2},
+		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, true, 2},
+		{&roachpb.PutRequest{}, enginepb.SNAPSHOT, false, 1},
+		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, false, 1},
 		// Read/write conflicts.
-		{&roachpb.GetRequest{}, roachpb.SNAPSHOT, true, 1},
-		{&roachpb.GetRequest{}, roachpb.SERIALIZABLE, true, 2},
-		{&roachpb.GetRequest{}, roachpb.SNAPSHOT, false, 1},
-		{&roachpb.GetRequest{}, roachpb.SERIALIZABLE, false, 1},
+		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, true, 1},
+		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 2},
+		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, false, 1},
+		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, false, 1},
 	}
 	// Lay down a write intent using a txn and attempt to write to same
 	// key. Try this twice--once with priorities which will allow the
@@ -194,8 +196,8 @@ func TestClientRetryNonTxn(t *testing.T) {
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
 		err := db.Txn(func(txn *client.Txn) error {
-			if test.isolation == roachpb.SNAPSHOT {
-				if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			if test.isolation == enginepb.SNAPSHOT {
+				if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 					return err
 				}
 			}
@@ -287,7 +289,7 @@ func TestClientRunTransaction(t *testing.T) {
 
 		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(func(txn *client.Txn) error {
-			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 
@@ -383,7 +385,7 @@ func TestClientGetAndPut(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
-	if gr.Value.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	if gr.Value.Timestamp.Equal(hlc.ZeroTimestamp) {
 		t.Fatalf("expected non-zero timestamp; got empty")
 	}
 }
@@ -405,7 +407,7 @@ func TestClientPutInline(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
-	if ts := gr.Value.Timestamp; !ts.Equal(roachpb.ZeroTimestamp) {
+	if ts := gr.Value.Timestamp; !ts.Equal(hlc.ZeroTimestamp) {
 		t.Fatalf("expected zero timestamp; got %s", ts)
 	}
 }
@@ -832,7 +834,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 
 	if err := db.Txn(func(txn *client.Txn) error {
 		// Set deadline to sometime in the past.
-		txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
+		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
 		_, err := txn.Get("k")
 		return err
 	}); !testutils.IsError(err, "read-only txn timestamp violates deadline") {

@@ -24,8 +24,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -40,12 +40,12 @@ func TestVerifyQueueShouldQueue(t *testing.T) {
 
 	// Put empty verification timestamp
 	key := keys.RangeLastVerificationTimestampKey(tc.rng.RangeID)
-	if err := engine.MVCCPutProto(context.Background(), tc.rng.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.Timestamp{}); err != nil {
+	if err := engine.MVCCPutProto(context.Background(), tc.rng.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &hlc.Timestamp{}); err != nil {
 		t.Fatal(err)
 	}
 
 	testCases := []struct {
-		now      roachpb.Timestamp
+		now      hlc.Timestamp
 		shouldQ  bool
 		priority float64
 	}{

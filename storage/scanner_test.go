@@ -25,7 +25,7 @@ import (
 	"github.com/google/btree"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -54,7 +54,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		rng := &Replica{
 			RangeID: desc.RangeID,
 		}
-		rng.mu.state.ms = engine.MVCCStats{
+		rng.mu.state.ms = enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
 			KeyCount:  1,
@@ -143,7 +143,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(rng *Replica, now roachpb.Timestamp) {
+func (tq *testQueue) MaybeAdd(rng *Replica, now hlc.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index == -1 {

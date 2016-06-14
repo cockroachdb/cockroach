@@ -130,7 +130,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// bound will be accepted and will cause the clock to advance.
 	for i := int64(0); i < 3; i++ {
 		incArgs := incrementArgs([]byte("a"), 5)
-		ts := roachpb.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
+		ts := hlc.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
 		if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -141,7 +141,7 @@ func TestRejectFutureCommand(t *testing.T) {
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs := incrementArgs([]byte("a"), 11)
-	ts := roachpb.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
+	ts := hlc.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
 	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}

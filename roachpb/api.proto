@@ -22,7 +22,9 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
+import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/util/tracing/span.proto";
+import "cockroach/util/hlc/timestamp.proto";
 import weak "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
@@ -264,7 +266,7 @@ message EndTransactionRequest {
   // False to abort and rollback.
   optional bool commit = 2 [(gogoproto.nullable) = false];
   // The deadline by which the transaction must commit, if present.
-  optional Timestamp deadline = 3;
+  optional util.hlc.Timestamp deadline = 3;
   // Optional commit triggers. Note that commit triggers are for
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
@@ -387,7 +389,7 @@ message RangeLookupResponse {
 // gossip protocol.
 message HeartbeatTxnRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Timestamp now = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 
 // A HeartbeatTxnResponse is the return value from the HeartbeatTxn()
@@ -405,11 +407,11 @@ message GCRequest {
 
   message GCKey {
     optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-    optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
-  optional Timestamp threshold = 4 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
 }
 
 // A GCResponse is the return value from the GC() method.
@@ -457,16 +459,16 @@ message PushTxnRequest {
   // the push transaction request. Note that this may not be the most
   // up-to-date value of the transaction record, but will be set or
   // merged as appropriate.
-  optional TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
   // PushTo is the timestamp just after which PusheeTxn is attempted to be
   // pushed. During conflict resolution, it should be set to the timestamp
   // of the its conflicting write.
-  optional Timestamp push_to = 4 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false];
   // Now holds the timestamp used to compare the last heartbeat of the pushee
   // against. This is necessary since the request header's timestamp does not
   // necessarily advance with the node clock across retries and hence cannot
   // detect abandoned transactions.
-  optional Timestamp now = 5 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
   // commit timestamp forward. Writers set this to PUSH_ABORT to request
   // that pushee_txn be aborted if possible. Inconsistent readers set
@@ -496,7 +498,7 @@ message PushTxnResponse {
 message ResolveIntentRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intent is being resolved.
-  optional TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
   // Optionally poison the sequence cache for the transaction the intent's
@@ -517,7 +519,7 @@ message ResolveIntentResponse {
 message ResolveIntentRangeRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
-  optional TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
   // Optionally poison the sequence cache for the transaction on all ranges
@@ -707,7 +709,7 @@ message Header {
   // timestamp specifies time at which read or writes should be
   // performed. If the timestamp is set to zero value, its value
   // is initialized to the wall time of the receiving node.
-  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   // replica specifies the destination of the request.
   optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
@@ -773,7 +775,7 @@ message BatchResponse {
     // timestamp is set only for non-transactional responses and denotes the
     // highest timestamp at which a command from the batch executed. At the
     // time of writing, it is used solely for informational purposes and tests.
-    optional Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
@@ -783,7 +785,7 @@ message BatchResponse {
     repeated bytes collected_spans = 4;
     // now is the current time at the node sending the response,
     // which can be used by the receiver to update its local HLC.
-    optional Timestamp now = 5 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
