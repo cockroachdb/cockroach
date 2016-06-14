@@ -168,10 +168,10 @@ type replicaChecksum struct {
 	snapshot *roachpb.RaftSnapshotData
 }
 
-// state is the part of the Range Raft state machine which is cached in memory.
-// TODO(tschottdorf): unified method to update both in-mem and on-disk state,
-// similar to how loadState unifies restoring from storage.
-type state struct {
+// rangeState is the part of the Range Raft state machine which is cached in
+// memory. TODO(tschottdorf): unified method to update both in-mem and on-disk
+// state, similar to how loadState unifies restoring from storage.
+type rangeState struct {
 	// Last index applied to the state machine.
 	appliedIndex uint64
 	// Highest lease index applied to the state machine.
@@ -193,23 +193,23 @@ type state struct {
 	ms     engine.MVCCStats
 }
 
-func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (state, error) {
-	var s state
+func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (rangeState, error) {
+	var s rangeState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the leader lease.
 	var err error
 	if s.lease, err = loadLease(reader, desc.RangeID); err != nil {
-		return state{}, err
+		return rangeState{}, err
 	}
 
 	if s.frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
-		return state{}, err
+		return rangeState{}, err
 	}
 
 	if s.gcThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
-		return state{}, err
+		return rangeState{}, err
 	}
 
 	if s.appliedIndex, s.leaseAppliedIndex, err = loadAppliedIndex(
@@ -217,11 +217,11 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (state, erro
 		desc.RangeID,
 		desc.IsInitialized(),
 	); err != nil {
-		return state{}, err
+		return rangeState{}, err
 	}
 
 	if s.ms, err = loadMVCCStats(reader, desc.RangeID); err != nil {
-		return state{}, err
+		return rangeState{}, err
 	}
 
 	return s, nil
@@ -234,7 +234,7 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (state, erro
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	// TODO(tschottdorf): Duplicates r.mu.stats.desc.RangeID; revisit that.
+	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID      roachpb.RangeID // Should only be set by the constructor.
 	store        *Store
 	systemDBHash []byte      // sha1 hash of the system config @ last gossip
@@ -253,7 +253,7 @@ type Replica struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
 		// The state of the Raft state machine.
-		state state
+		state rangeState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
