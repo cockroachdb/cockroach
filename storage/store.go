@@ -435,6 +435,10 @@ type StoreTestingKnobs struct {
 	BadChecksumPanic func([]ReplicaSnapshotDiff)
 	// Disables the use of one phase commits.
 	DisableOnePhaseCommits bool
+	// TransferTransferBlockedOnExtensionEvent, if set, is called when
+	// replica.TransferLease() encounters an in-progress lease extension.
+	// nextLeader is the replica that we're trying to transfer the lease to.
+	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}

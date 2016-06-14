@@ -39,7 +39,8 @@ type pendingLeaseRequest struct {
 	// If empty, then no request is in progress.
 	llChans []chan *roachpb.Error
 	// nextLease is the pending LeaderLease request, if any. It can be used to
-	// figure out if we're in the process of extending our own lease.
+	// figure out if we're in the process of extending our own lease, or
+	// transferring it to another replica.
 	nextLease roachpb.Lease
 }
 
@@ -54,15 +55,18 @@ func (p *pendingLeaseRequest) RequestPending() *roachpb.Lease {
 }
 
 // InitOrJoinRequest executes a LeaderLease command asynchronously and returns a
-// promise for the result. If there's already a request in progress, we check
-// that the request is asking for a lease for the same replica as the one this
-// call wants to crown lease holder. If so, we join in waiting the results of
-// that request. If not, an error is immediately returned.
+// channel on which the result will be posted. If there's already a request in
+// progress, we join join in waiting the results of that request.
+// It is an error to call InitOrJoinRequest() while a request is in progress
+// naming another replica as lease holder.
 //
 // replica is used to schedule and execute async work (proposing a LeaderLease
 // command). replica.mu is locked when delivering results, so calls from the
 // replica happen either before or after a result for a pending request has
 // happened.
+//
+// transfer needs to be set if the request represents a lease transfer (as
+// opposed to an extension, or acquiring the lease when there's no leader).
 //
 // Note: Once this function gets a context to be used for cancellation, instead
 // of replica.store.Stopper().ShouldDrain(), care will be needed for cancelling
@@ -72,21 +76,22 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	timestamp hlc.Timestamp,
 	startKey roachpb.Key,
+	transfer bool,
 ) <-chan *roachpb.Error {
-	llChan := make(chan *roachpb.Error, 1)
 	if nextLease := p.RequestPending(); nextLease != nil {
 		if nextLease.Replica.ReplicaID == nextLeaseHolder.ReplicaID {
 			// Join a pending request asking for the same replica to become lease
 			// holder.
-			p.llChans = append(p.llChans, llChan)
-			return llChan
+			return p.JoinRequest()
 		}
+		llChan := make(chan *roachpb.Error, 1)
 		// We can't join the request in progress.
 		llChan <- roachpb.NewErrorf("request for different replica in progress "+
 			"(requesting: %+v, in progress: %+v)",
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID)
 		return llChan
 	}
+	llChan := make(chan *roachpb.Error, 1)
 	// No request in progress. Let's propose a LeaderLease command asynchronously.
 	// TODO(tschottdorf): get duration from configuration, either as a
 	// config flag or, later, dynamically adjusted.
@@ -102,6 +107,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Expiration:  expiration,
 			Replica:     nextLeaseHolder,
 		},
+		Transfer: transfer,
 	}
 	if !replica.store.Stopper().RunAsyncTask(func() {
 		// Propose a LeaderLease command and wait for it to apply.
@@ -163,18 +169,65 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	return llChan
 }
 
+// JoinRequest adds one more waited to the currently pending request.
+// It is the caller's responsibility to ensure that there is a pending request,
+// and that the request is compatible with whatever the caller is currently
+// wanting to do.
+func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
+	llChan := make(chan *roachpb.Error, 1)
+	p.llChans = append(p.llChans, llChan)
+	return llChan
+}
+
+// TransferInProgress returns true if the replica cannot propose a Raft command with the
+// given timestamp because its LeaderLease is being transferred away. If the
+// first result is true, a lease indicating the next leader is also returned.
+//
+// It is assumed that the replica owning this pendingLeaseRequest owns the
+// LeaderLease.
+//
+// replicaID is the ID of the parent replica.
+func (p *pendingLeaseRequest) TransferInProgress(
+	timestamp hlc.Timestamp,
+	replicaID roachpb.ReplicaID,
+) (bool, *roachpb.Lease) {
+	if nextLease := p.RequestPending(); nextLease != nil {
+		// Is the lease being transferred? (as opposed to just extended)
+		if replicaID != nextLease.Replica.ReplicaID {
+			// Does the requested timestamp fall in the next lease's time?
+			if nextLease.Start.Less(timestamp) {
+				return true, nextLease
+			}
+		}
+	}
+	return false, nil
+}
+
 // requestLeaseLocked executes a request to obtain or extend a lease
-// asynchronously and returns a promise for the result. If there's already a
-// request in progress, we join in waiting the results of that request. Unless
-// an error is returned, the obtained lease will be valid for a time interval
-// containing the requested timestamp.
+// asynchronously and returns a channel on which the result will be posted. If
+// there's already a request in progress, we join in waiting for the results of
+// that request. Unless an error is returned, the obtained lease will be valid
+// for a time interval containing the requested timestamp.
+// If a transfer is in progress, a NotLeaderError is returned on the chan
+// directing to the transferee.
 func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Error {
 	// Propose a Raft command to get a lease for this replica.
-	desc := r.mu.state.Desc
-	_, replica := desc.FindReplica(r.store.StoreID())
-	if replica == nil {
+	replica, err := r.getReplicaLocked()
+	if err != nil {
 		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+		if _, ok := err.(*errReplicaNotInRange); ok {
+			llChan <- roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+		} else {
+			llChan <- roachpb.NewError(err)
+		}
+		return llChan
+	}
+	transfer, pendingLease := r.mu.pendingLeaseRequest.TransferInProgress(
+		timestamp, replica.ReplicaID)
+	if transfer {
+		llChan := make(chan *roachpb.Error, 1)
+		llChan <- roachpb.NewError(
+			r.newNotLeaderError(pendingLease, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	if r.store.IsDrainingLeadership() {
@@ -184,5 +237,68 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		r, *replica, timestamp, desc.StartKey.AsRawKey())
+		r, *replica, timestamp, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+}
+
+// TransferLeaderLease transfers the LeaderLease to another replica. Only the
+// current holder of the LeaderLease can do a transfer, because it needs to stop
+// serving reads after sending the transfer command. If it wouldn't stop serving
+// reads immediately, it would potentially serve reads with timestamps greater
+// than the start timestamp of the new (transferred) lease.
+// The method waits for any in-progress lease extension to be done, and it also
+// blocks until the transfer is done.
+//
+// TODO(andrei): figure out how to persist the "not serving" state across node
+// restarts.
+func (r *Replica) TransferLeaderLease(
+	nextLeader roachpb.ReplicaDescriptor,
+) error {
+	var transfer <-chan *roachpb.Error
+	// Loop while there's an extension in progress.
+	for {
+		// See if there's an extension in progress that we have to wait for.
+		// If there isn't, request a transfer.
+		extension, err := func() (<-chan *roachpb.Error, error) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			lease := r.mu.state.Lease
+			if !lease.OwnedBy(r.store.StoreID()) {
+				return nil, r.newNotLeaderError(lease, r.store.StoreID(), r.Desc())
+			}
+			nextLease := r.mu.pendingLeaseRequest.RequestPending()
+			if nextLease != nil && nextLease.Replica != nextLeader {
+				replica, err := r.getReplicaLocked()
+				if err != nil {
+					return nil, err
+				}
+				if nextLease.Replica == *replica {
+					// There's an extension in progress. Let's wait for it to succeed and
+					// try again.
+					return r.mu.pendingLeaseRequest.JoinRequest(), nil
+				}
+				// Another transfer is in progress, and it's not transferring to the
+				// same replica we'd like.
+				return nil, r.newNotLeaderError(nextLease, r.store.StoreID(), r.mu.state.Desc)
+			}
+			// No extension in progress.
+			nextLeaseBegin := r.store.Clock().Now()
+			transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
+				r, nextLeader, nextLeaseBegin,
+				r.mu.state.Desc.StartKey.AsRawKey(), true /* transfer */)
+			return nil, nil
+		}()
+		if err != nil {
+			return err
+		}
+		if extension == nil {
+			return (<-transfer).GoError()
+		}
+		// Wait for the in-progress extension without holding the mutex.
+		if extension != nil {
+			if r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent != nil {
+				r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent(nextLeader)
+			}
+			<-extension
+		}
+	}
 }

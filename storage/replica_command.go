@@ -1479,7 +1479,6 @@ func (r *Replica) LeaderLease(
 	var reply roachpb.LeaderLeaseResponse
 
 	prevLease := r.mu.state.Lease
-	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
 		Requested: args.Lease,
@@ -1534,20 +1533,19 @@ func (r *Replica) LeaderLease(
 			rErr.Message = "extension moved start timestamp backwards"
 			return reply, rErr
 		}
-		// TODO(tschottdorf): We could allow shortening existing leases, which
-		// could be used to effect a faster lease handoff. This needs to be
-		// properly implemented though (the leader must not shorten the lease
-		// when it has already served commands at higher timestamps), so this
-		// is forbidden now but can be re-enabled when we properly implement
-		// it.
-		// TODO(tschottdorf): Unfortunately, dealing out an error on shortening
-		// leads to spurious test failures in the case of two lease requests
-		// from the same node racing and the one with the earlier expiration
-		// coming in last. So we just ignore any shortening instead.
 		args.Lease.Expiration.Forward(prevLease.Expiration)
 	} else if effectiveStart.Less(prevLease.Expiration) {
-		rErr.Message = "requested lease overlaps previous lease"
-		return reply, rErr
+		if !args.Transfer {
+			rErr.Message = "requested lease overlaps previous lease"
+			return reply, rErr
+		}
+
+		if log.V(2) {
+			log.Infof("[range %s] Lease transfer. prev lease: %+v, new lease: %+v "+
+				"old expiration: %s, new start: %s (%s)",
+				r.RangeID, prevLease, args.Lease, prevLease.Expiration, args.Lease.Start,
+				effectiveStart)
+		}
 	}
 
 	args.Lease.Start = effectiveStart

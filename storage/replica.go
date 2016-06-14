@@ -576,6 +576,24 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 					return nil, roachpb.NewError(
 						r.newNotLeaderError(lease, r.store.StoreID(), r.mu.state.Desc))
 				}
+				// Check that we're not in the process of transferring the lease away.
+				// TODO(andrei): This only needs to be checked for read commands?
+				// TODO(andrei): If the lease is being transferred, consider returning a new
+				// error type so the client backs off until the transfer is completed.
+				replicaDesc, err := r.getReplicaLocked()
+				if err != nil {
+					if _, ok := err.(*errReplicaNotInRange); ok {
+						return nil, roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+					}
+					return nil, roachpb.NewError(err)
+				}
+				transfer, pendingLease := r.mu.pendingLeaseRequest.TransferInProgress(
+					timestamp, replicaDesc.ReplicaID)
+				if transfer {
+					return nil, roachpb.NewError(
+						r.newNotLeaderError(pendingLease, r.store.StoreID(), r.mu.state.Desc))
+				}
+
 				// Should we extend the lease?
 				if (r.mu.pendingLeaseRequest.RequestPending() == nil) &&
 					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.leaderLeaseRenewalDuration), 0)) {
@@ -699,7 +717,16 @@ func (e *errReplicaNotInRange) Error() string {
 // Returns nil, *errReplicaNotInRange if the replica is not found. No other
 // errors are returned.
 func (r *Replica) GetReplica() (*roachpb.ReplicaDescriptor, error) {
-	rangeDesc := r.Desc()
+	return r.getReplicaInternal(r.Desc())
+}
+
+// getReplicaLocked is like getReplica, but assumes that r.mu is held.
+func (r *Replica) getReplicaLocked() (*roachpb.ReplicaDescriptor, error) {
+	return r.getReplicaInternal(r.mu.state.Desc)
+}
+
+func (r *Replica) getReplicaInternal(rangeDesc *roachpb.RangeDescriptor,
+) (*roachpb.ReplicaDescriptor, error) {
 	_, replica := rangeDesc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return nil, &errReplicaNotInRange{
