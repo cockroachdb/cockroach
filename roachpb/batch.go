@@ -234,6 +234,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		merge              int
 		truncateLog        int
 		lease              int
+		leaseTransfer      int
 		reverseScan        int
 		computeChecksum    int
 		verifyChecksum     int
@@ -285,6 +286,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.truncateLog++
 		case *RequestLeaseRequest:
 			counts.lease++
+		case *LeaseTransferRequest:
+			counts.leaseTransfer++
 		case *ReverseScanRequest:
 			counts.reverseScan++
 		case *ComputeChecksumRequest:
@@ -324,6 +327,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		merge              []MergeResponse
 		truncateLog        []TruncateLogResponse
 		lease              []RequestLeaseResponse
+		leaseTransfer      []RequestLeaseResponse
 		reverseScan        []ReverseScanResponse
 		computeChecksum    []ComputeChecksumResponse
 		verifyChecksum     []VerifyChecksumResponse
@@ -439,6 +443,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.lease = make([]RequestLeaseResponse, counts.lease)
 			}
 			reply, bufs.lease = &bufs.lease[0], bufs.lease[1:]
+		case *LeaseTransferRequest:
+			if bufs.leaseTransfer == nil {
+				bufs.leaseTransfer = make([]RequestLeaseResponse, counts.leaseTransfer)
+			}
+			reply, bufs.leaseTransfer = &bufs.leaseTransfer[0], bufs.leaseTransfer[1:]
 		case *ReverseScanRequest:
 			if bufs.reverseScan == nil {
 				bufs.reverseScan = make([]ReverseScanResponse, counts.reverseScan)

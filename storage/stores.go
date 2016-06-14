@@ -208,7 +208,7 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			rangeID = rng.RangeID
 			repDesc, err = rng.GetReplicaDescriptor()
 			if err != nil {
-				if _, ok := err.(*errReplicaNotInRange); !ok {
+				if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
 					return 0, roachpb.ReplicaDescriptor{}, err
 				}
 			} else {
