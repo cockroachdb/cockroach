@@ -48,7 +48,10 @@ import (
 // #include "rocksdb/db.h"
 import "C"
 
-const minMemtableBudget = 1 << 20 // 1 MB
+const (
+	minMemtableBudget = 1 << 20  // 1 MB
+	blockSize         = 32 << 10 // 32KB (default is 4KB)
+)
 
 func init() {
 	rocksdb.Logger = log.Infof
@@ -144,6 +147,7 @@ func (r *RocksDB) Open() error {
 		C.DBOptions{
 			cache_size:      C.uint64_t(r.cacheSize),
 			memtable_budget: C.uint64_t(r.memtableBudget),
+			block_size:      C.uint64_t(blockSize),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 		})

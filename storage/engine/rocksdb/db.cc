@@ -1335,6 +1335,10 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
       rocksdb::NewBloomFilterPolicy(10, false /* !block_based */));
   table_options.format_version = 2;
 
+  // Increasing block_size decreases memory usage at the cost of
+  // increased write amplification.
+  table_options.block_size = db_opts.block_size;
+
   rocksdb::ColumnFamilyOptions cf_options;
   cf_options.OptimizeLevelStyleCompaction(db_opts.memtable_budget);
   // OptimizeLevelStyleCompaction sets no-compression for L0 and
