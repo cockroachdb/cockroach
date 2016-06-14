@@ -41,6 +41,7 @@ type AggregateFunc interface {
 
 var _ Visitor = &IsAggregateVisitor{}
 
+// IsAggregateVisitor checks if walked expressions contain aggregate functions.
 type IsAggregateVisitor struct {
 	Aggregated bool
 }

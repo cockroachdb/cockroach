@@ -10,6 +10,10 @@ CREATE TABLE t (a INT PRIMARY KEY DEFAULT (SELECT 1))
 statement error DEFAULT expression .* may not contain variable sub-expressions
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
 
+# Aggregate function calls in CHECK are not ok.
+statement error Aggregate functions are not allowed in DEFAULT expressions
+CREATE TABLE bad (a INT DEFAULT COUNT(1))
+
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY DEFAULT 42,

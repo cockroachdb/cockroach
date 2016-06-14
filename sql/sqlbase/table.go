@@ -129,6 +129,11 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				return desc, err
 			}
 
+			var p parser.Parser
+			if p.AggregateInExpr(expr) {
+				return desc, fmt.Errorf("Aggregate functions are not allowed in CHECK expressions")
+			}
+
 			check := &TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
 			if len(d.Name) > 0 {
 				check.Name = string(d.Name)
@@ -249,6 +254,11 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		if err := SanitizeVarFreeExpr(d.DefaultExpr.Expr, colDatumType, "DEFAULT"); err != nil {
 			return nil, nil, err
 		}
+		var p parser.Parser
+		if p.AggregateInExpr(d.DefaultExpr.Expr) {
+			return nil, nil, fmt.Errorf("Aggregate functions are not allowed in DEFAULT expressions")
+		}
+
 		s := d.DefaultExpr.Expr.String()
 		col.DefaultExpr = &s
 	}
