@@ -64,6 +64,10 @@ import (
 // Check that Stores implements the RangeDescriptorDB interface.
 var _ kv.RangeDescriptorDB = &storage.Stores{}
 
+// rg1 returns a wrapping sender that changes all requests to range 0 to
+// requests to range 1.
+// This function is DEPRECATED. Send your requests to the right range by
+// properly initializing the request header.
 func rg1(s *storage.Store) client.Sender {
 	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 		if ba.RangeID == 0 {
@@ -709,6 +713,10 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
 		if err != nil {
 			m.t.Fatal(err)
+		}
+
+		if dest >= len(m.stores) {
+			log.Fatalf("store index %d out of range; there's only %d of them", dest, len(m.stores))
 		}
 
 		if err := rep.ChangeReplicas(roachpb.ADD_REPLICA,
