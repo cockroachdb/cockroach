@@ -370,3 +370,11 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 		return nil, fmt.Errorf("invalid table glob: %s", expr)
 	}
 }
+
+func fillName(name string, n int) []string {
+	ret := make([]string, n)
+	for i := 0; i < n; i++ {
+		ret[i] = name
+	}
+	return ret
+}

@@ -88,10 +88,13 @@ func (p *planner) makeUpsertHelper(
 		}
 	}
 
-	table := &tableInfo{alias: tableDesc.Name, columns: makeResultColumns(tableDesc.Columns)}
+	table := &tableInfo{
+		sourceTables:  fillName(tableDesc.Name, len(tableDesc.Columns)),
+		sourceColumns: makeResultColumns(tableDesc.Columns),
+	}
 	excludedAliasTable := &tableInfo{
-		alias:   upsertExcludedTable,
-		columns: makeResultColumns(insertCols),
+		sourceTables:  fillName(upsertExcludedTable, len(insertCols)),
+		sourceColumns: makeResultColumns(insertCols),
 	}
 	tables := []*tableInfo{table, excludedAliasTable}
 

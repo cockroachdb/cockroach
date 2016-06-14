@@ -35,7 +35,8 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 	c.qvals = make(qvalMap)
 	c.cols = tableDesc.Columns
 	table := tableInfo{
-		columns: makeResultColumns(tableDesc.Columns),
+		sourceTables:  fillName(tableDesc.Name, len(tableDesc.Columns)),
+		sourceColumns: makeResultColumns(tableDesc.Columns),
 	}
 
 	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))

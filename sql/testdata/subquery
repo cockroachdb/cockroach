@@ -310,12 +310,12 @@ true
 query ITTT
 EXPLAIN(VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 ----
-0 select                          +x,unique
-1 render/filter  (x)@xyz          +x,unique
-2 scan           xyz@primary  -   +x,unique
-3 select                          +x,unique
-4 render/filter  (x)@xyz          +x,unique
-5 scan           xyz@primary      +x,unique
+0 select                                        +x,unique
+1 render/filter  (x) from (xyz.x, xyz.y, xyz.z) +x,unique
+2 scan           xyz@primary  -                 +x,unique
+3 select                                        +x,unique
+4 render/filter  (x) from (xyz.x, xyz.y, xyz.z) +x,unique
+5 scan           xyz@primary                    +x,unique
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
