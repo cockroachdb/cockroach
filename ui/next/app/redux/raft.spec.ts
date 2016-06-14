@@ -91,7 +91,7 @@ describe("raft reducer", function() {
           assert.isTrue(mockDebugState.inFlight);
 
           if (successSent) {
-            return { status: 500 };
+            return { throws: new Error() };
           }
           successSent = true;
           return {
