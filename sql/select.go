@@ -455,6 +455,10 @@ func (s *selectNode) initFrom(
 		if !ok {
 			return util.UnimplementedWithIssueErrorf(2970, "unsupported FROM type %T", from[0])
 		}
+		// AS OF expressions should be handled by the executor.
+		if ate.AsOf.Expr != nil && !p.asOf {
+			return fmt.Errorf("unexpected AS OF SYSTEM TIME")
+		}
 
 		switch expr := ate.Expr.(type) {
 		case *parser.QualifiedName:

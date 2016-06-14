@@ -52,6 +52,11 @@ type planner struct {
 
 	parser parser.Parser
 
+	// If set, this is an AS OF SYSTEM TIME query. This flag is used in layers
+	// below the executor to modify the behavior of the SELECT. For example the
+	// table descriptor is not leased, only fetched at the correct time.
+	asOf bool
+
 	// Avoid allocations by embedding commonly used visitors.
 	isAggregateVisitor          isAggregateVisitor
 	subqueryVisitor             subqueryVisitor
