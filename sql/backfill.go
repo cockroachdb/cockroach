@@ -276,8 +276,11 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 		// TODO(dan): Tighten up the bound on the requestedCols parameter to
 		// makeRowUpdater.
+		requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(added))
+		requestedCols = append(requestedCols, tableDesc.Columns...)
+		requestedCols = append(requestedCols, added...)
 		ru, err := makeRowUpdater(
-			txn, tableDesc, fkTables, updateCols, tableDesc.Columns, rowUpdaterOnlyColumns,
+			txn, tableDesc, fkTables, updateCols, requestedCols, rowUpdaterOnlyColumns,
 		)
 		if err != nil {
 			return err
@@ -312,6 +315,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 
 		indexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID)
+		oldValues := make(parser.DTuple, len(ru.fetchCols))
 		updateValues := make(parser.DTuple, len(updateCols))
 
 		writeBatch := &client.Batch{}
@@ -345,7 +349,11 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 				updateValues[i+len(added)] = parser.DNull
 			}
 
-			if _, err := ru.updateRow(writeBatch, row, updateValues); err != nil {
+			copy(oldValues, row)
+			for j := len(row); j < len(oldValues); j++ {
+				oldValues[j] = parser.DNull
+			}
+			if _, err := ru.updateRow(writeBatch, oldValues, updateValues); err != nil {
 				return err
 			}
 		}

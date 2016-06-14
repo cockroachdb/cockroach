@@ -143,8 +143,8 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), "a")
-	col1Key := keys.MakeColumnKey(append([]byte(nil), rowKey...), 1)
-	col2Key := keys.MakeColumnKey(append([]byte(nil), rowKey...), 2)
+	col1Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1)
+	col2Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2)
 
 	// We don't care about the value, so just store any old thing.
 	if err := store.DB().Put(col1Key, "column 1"); err != nil {

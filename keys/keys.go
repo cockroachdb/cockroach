@@ -507,11 +507,14 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
-// MakeColumnKey returns the key for the column in the given row.
-func MakeColumnKey(rowKey []byte, colID uint32) []byte {
-	key := append([]byte(nil), rowKey...)
+// MakeFamilyKey returns the key for the family in the given row by appending to
+// the passed key.
+func MakeFamilyKey(key []byte, famID uint32) []byte {
+	if famID == 0 {
+		return encoding.EncodeUvarintAscending(key, 0)
+	}
 	size := len(key)
-	key = encoding.EncodeUvarintAscending(key, uint64(colID))
+	key = encoding.EncodeUvarintAscending(key, uint64(famID))
 	// Note that we assume that `len(key)-size` will always be encoded to a
 	// single byte by EncodeUvarint. This is currently always true because the
 	// varint encoding will encode 1-9 bytes.
@@ -520,6 +523,8 @@ func MakeColumnKey(rowKey []byte, colID uint32) []byte {
 
 // MakeNonColumnKey creates a non-column key for a row by appending a 0 column
 // ID suffix size to rowKey.
+// TODO(dan): Delete this in favor of MakeFamilyKey(0) once the allocation
+// differences are addressed.
 func MakeNonColumnKey(rowKey []byte) []byte {
 	return encoding.EncodeUvarintAscending(rowKey, 0)
 }
