@@ -477,6 +477,9 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 		ticker := time.NewTicker(purgatoryReportInterval)
 		for {
 			select {
+			case <-stopper.ShouldStop():
+				return
+
 			case <-bq.impl.purgatoryChan():
 				// Remove all items from purgatory into a copied slice.
 				bq.mu.Lock()
@@ -502,6 +505,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 					return
 				}
 				bq.mu.Unlock()
+
 			case <-ticker.C:
 				// Report purgatory status.
 				bq.mu.Lock()
@@ -513,8 +517,6 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 				for errStr, count := range errMap {
 					bq.eventLog.Errorf("%d replicas failing with %q", count, errStr)
 				}
-			case <-stopper.ShouldStop():
-				return
 			}
 		}
 	})

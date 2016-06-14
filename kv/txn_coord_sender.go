@@ -599,6 +599,8 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
+		case <-tc.stopper.ShouldDrain():
+			return
 		case <-tickChan:
 			if !tc.heartbeat(ctx, txnID) {
 				return
@@ -613,8 +615,6 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 			// then heartbeat loop ignores the timeout check and this case is
 			// responsible for client timeouts.
 			tc.tryAsyncAbort(txnID)
-			return
-		case <-tc.stopper.ShouldDrain():
 			return
 		}
 	}
