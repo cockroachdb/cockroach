@@ -22,11 +22,9 @@
 #include <google/protobuf/arena.h>
 #include <google/protobuf/arenastring.h>
 #include <google/protobuf/generated_message_util.h>
-#include <google/protobuf/metadata.h>
-#include <google/protobuf/message.h>
+#include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
-#include <google/protobuf/unknown_field_set.h>
 #include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
@@ -42,7 +40,7 @@ class UnresolvedAddr;
 
 // ===================================================================
 
-class UnresolvedAddr : public ::google::protobuf::Message {
+class UnresolvedAddr : public ::google::protobuf::MessageLite {
  public:
   UnresolvedAddr();
   virtual ~UnresolvedAddr();
@@ -54,16 +52,27 @@ class UnresolvedAddr : public ::google::protobuf::Message {
     return *this;
   }
 
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
+  inline const ::std::string& unknown_fields() const {
+    return _unknown_fields_.GetNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
 
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
+  inline ::std::string* mutable_unknown_fields() {
+    return _unknown_fields_.MutableNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
 
-  static const ::google::protobuf::Descriptor* descriptor();
   static const UnresolvedAddr& default_instance();
+
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  // Returns the internal default instance pointer. This function can
+  // return NULL thus should not be used by the user. This is intended
+  // for Protobuf internal code. Please use default_instance() declared
+  // above instead.
+  static inline const UnresolvedAddr* internal_default_instance() {
+    return default_instance_;
+  }
+  #endif
 
   void Swap(UnresolvedAddr* other);
 
@@ -72,8 +81,7 @@ class UnresolvedAddr : public ::google::protobuf::Message {
   inline UnresolvedAddr* New() const { return New(NULL); }
 
   UnresolvedAddr* New(::google::protobuf::Arena* arena) const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from);
   void CopyFrom(const UnresolvedAddr& from);
   void MergeFrom(const UnresolvedAddr& from);
   void Clear();
@@ -84,7 +92,7 @@ class UnresolvedAddr : public ::google::protobuf::Message {
       ::google::protobuf::io::CodedInputStream* input);
   void SerializeWithCachedSizes(
       ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  void DiscardUnknownFields();
   int GetCachedSize() const { return _cached_size_; }
   private:
   void SharedCtor();
@@ -93,14 +101,14 @@ class UnresolvedAddr : public ::google::protobuf::Message {
   void InternalSwap(UnresolvedAddr* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return _internal_metadata_.arena();
+    return _arena_ptr_;
   }
-  inline void* MaybeArenaPtr() const {
-    return _internal_metadata_.raw_arena_ptr();
+  inline ::google::protobuf::Arena* MaybeArenaPtr() const {
+    return _arena_ptr_;
   }
   public:
 
-  ::google::protobuf::Metadata GetMetadata() const;
+  ::std::string GetTypeName() const;
 
   // nested types ----------------------------------------------------
 
@@ -137,12 +145,18 @@ class UnresolvedAddr : public ::google::protobuf::Message {
   inline void set_has_address_field();
   inline void clear_has_address_field();
 
-  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
+  ::google::protobuf::Arena* _arena_ptr_;
+
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr network_field_;
   ::google::protobuf::internal::ArenaStringPtr address_field_;
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  friend void  protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto_impl();
+  #else
   friend void  protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto();
+  #endif
   friend void protobuf_AssignDesc_cockroach_2futil_2funresolved_5faddr_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2futil_2funresolved_5faddr_2eproto();
 

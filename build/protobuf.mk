@@ -89,8 +89,8 @@ $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PRO
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(NATIVE_ROOT) $(CPP_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(NATIVE_ROOT) $(GOGOPROTO_PROTO)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(GOGOPROTO_PROTO)
 	@# For c++, protoc generates a directory structure mirroring the package
 	@# structure (and these directories must be in the include path), but cgo can
 	@# only compile a single directory so we symlink the generated pb.cc files
@@ -101,4 +101,4 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
 
 $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ORG_ROOT) $(ENGINE_CPP_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(ORG_ROOT) $(ENGINE_CPP_PROTOS)
