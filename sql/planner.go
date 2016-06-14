@@ -53,7 +53,6 @@ type planner struct {
 	parser parser.Parser
 
 	// Avoid allocations by embedding commonly used visitors.
-	isAggregateVisitor          isAggregateVisitor
 	subqueryVisitor             subqueryVisitor
 	subqueryPlanVisitor         subqueryPlanVisitor
 	collectSubqueryPlansVisitor collectSubqueryPlansVisitor

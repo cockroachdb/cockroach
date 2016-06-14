@@ -50,7 +50,7 @@ func (p *planner) makeReturningHelper(
 	}
 
 	for _, e := range r {
-		if p.aggregateInExpr(e.Expr) {
+		if p.parser.AggregateInExpr(e.Expr) {
 			return rh, fmt.Errorf("aggregate functions are not allowed in RETURNING")
 		}
 	}
