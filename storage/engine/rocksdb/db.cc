@@ -351,7 +351,7 @@ void SetTag(std::string *val, cockroach::roachpb::ValueType tag) {
   (*val)[kTagPos] = tag;
 }
 
-bool ParseProtoFromValue(const std::string &val, google::protobuf::Message *msg) {
+bool ParseProtoFromValue(const std::string &val, google::protobuf::MessageLite *msg) {
   if (val.size() < kHeaderSize) {
     return false;
   }
@@ -359,7 +359,7 @@ bool ParseProtoFromValue(const std::string &val, google::protobuf::Message *msg)
   return msg->ParseFromArray(d.data(), d.size());
 }
 
-void SerializeProtoToValue(std::string *val, const google::protobuf::Message &msg) {
+void SerializeProtoToValue(std::string *val, const google::protobuf::MessageLite &msg) {
   val->resize(kHeaderSize);
   std::fill(val->begin(), val->end(), 0);
   SetTag(val, cockroach::roachpb::BYTES);

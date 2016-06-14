@@ -11,41 +11,9 @@
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/generated_message_reflection.h>
-#include <google/protobuf/reflection_ops.h>
-#include <google/protobuf/wire_format.h>
 // @@protoc_insertion_point(includes)
 
 namespace gogoproto {
-
-namespace {
-
-
-}  // namespace
-
-
-void protobuf_AssignDesc_gogoproto_2fgogo_2eproto() {
-  protobuf_AddDesc_gogoproto_2fgogo_2eproto();
-  const ::google::protobuf::FileDescriptor* file =
-    ::google::protobuf::DescriptorPool::generated_pool()->FindFileByName(
-      "gogoproto/gogo.proto");
-  GOOGLE_CHECK(file != NULL);
-}
-
-namespace {
-
-GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_AssignDescriptors_once_);
-inline void protobuf_AssignDescriptorsOnce() {
-  ::google::protobuf::GoogleOnceInit(&protobuf_AssignDescriptors_once_,
-                 &protobuf_AssignDesc_gogoproto_2fgogo_2eproto);
-}
-
-void protobuf_RegisterTypes(const ::std::string&) {
-  protobuf_AssignDescriptorsOnce();
-}
-
-}  // namespace
 
 void protobuf_ShutdownFile_gogoproto_2fgogo_2eproto() {
 }
@@ -57,100 +25,6 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   ::google::protobuf::protobuf_AddDesc_google_2fprotobuf_2fdescriptor_2eproto();
-  ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
-    "\n\024gogoproto/gogo.proto\022\tgogoproto\032 googl"
-    "e/protobuf/descriptor.proto:;\n\023goproto_e"
-    "num_prefix\022\034.google.protobuf.EnumOptions"
-    "\030\261\344\003 \001(\010:=\n\025goproto_enum_stringer\022\034.goog"
-    "le.protobuf.EnumOptions\030\305\344\003 \001(\010:5\n\renum_"
-    "stringer\022\034.google.protobuf.EnumOptions\030\306"
-    "\344\003 \001(\010:7\n\017enum_customname\022\034.google.proto"
-    "buf.EnumOptions\030\307\344\003 \001(\t:A\n\024enumvalue_cus"
-    "tomname\022!.google.protobuf.EnumValueOptio"
-    "ns\030\321\203\004 \001(\t:;\n\023goproto_getters_all\022\034.goog"
-    "le.protobuf.FileOptions\030\231\354\003 \001(\010:\?\n\027gopro"
-    "to_enum_prefix_all\022\034.google.protobuf.Fil"
-    "eOptions\030\232\354\003 \001(\010:<\n\024goproto_stringer_all"
-    "\022\034.google.protobuf.FileOptions\030\233\354\003 \001(\010:9"
-    "\n\021verbose_equal_all\022\034.google.protobuf.Fi"
-    "leOptions\030\234\354\003 \001(\010:0\n\010face_all\022\034.google.p"
-    "rotobuf.FileOptions\030\235\354\003 \001(\010:4\n\014gostring_"
-    "all\022\034.google.protobuf.FileOptions\030\236\354\003 \001("
-    "\010:4\n\014populate_all\022\034.google.protobuf.File"
-    "Options\030\237\354\003 \001(\010:4\n\014stringer_all\022\034.google"
-    ".protobuf.FileOptions\030\240\354\003 \001(\010:3\n\013onlyone"
-    "_all\022\034.google.protobuf.FileOptions\030\241\354\003 \001"
-    "(\010:1\n\tequal_all\022\034.google.protobuf.FileOp"
-    "tions\030\245\354\003 \001(\010:7\n\017description_all\022\034.googl"
-    "e.protobuf.FileOptions\030\246\354\003 \001(\010:3\n\013testge"
-    "n_all\022\034.google.protobuf.FileOptions\030\247\354\003 "
-    "\001(\010:4\n\014benchgen_all\022\034.google.protobuf.Fi"
-    "leOptions\030\250\354\003 \001(\010:5\n\rmarshaler_all\022\034.goo"
-    "gle.protobuf.FileOptions\030\251\354\003 \001(\010:7\n\017unma"
-    "rshaler_all\022\034.google.protobuf.FileOption"
-    "s\030\252\354\003 \001(\010:<\n\024stable_marshaler_all\022\034.goog"
-    "le.protobuf.FileOptions\030\253\354\003 \001(\010:1\n\tsizer"
-    "_all\022\034.google.protobuf.FileOptions\030\254\354\003 \001"
-    "(\010:A\n\031goproto_enum_stringer_all\022\034.google"
-    ".protobuf.FileOptions\030\255\354\003 \001(\010:9\n\021enum_st"
-    "ringer_all\022\034.google.protobuf.FileOptions"
-    "\030\256\354\003 \001(\010:<\n\024unsafe_marshaler_all\022\034.googl"
-    "e.protobuf.FileOptions\030\257\354\003 \001(\010:>\n\026unsafe"
-    "_unmarshaler_all\022\034.google.protobuf.FileO"
-    "ptions\030\260\354\003 \001(\010:B\n\032goproto_extensions_map"
-    "_all\022\034.google.protobuf.FileOptions\030\261\354\003 \001"
-    "(\010:@\n\030goproto_unrecognized_all\022\034.google."
-    "protobuf.FileOptions\030\262\354\003 \001(\010:8\n\020gogoprot"
-    "o_import\022\034.google.protobuf.FileOptions\030\263"
-    "\354\003 \001(\010:6\n\016protosizer_all\022\034.google.protob"
-    "uf.FileOptions\030\264\354\003 \001(\010:3\n\013compare_all\022\034."
-    "google.protobuf.FileOptions\030\265\354\003 \001(\010::\n\017g"
-    "oproto_getters\022\037.google.protobuf.Message"
-    "Options\030\201\364\003 \001(\010:;\n\020goproto_stringer\022\037.go"
-    "ogle.protobuf.MessageOptions\030\203\364\003 \001(\010:8\n\r"
-    "verbose_equal\022\037.google.protobuf.MessageO"
-    "ptions\030\204\364\003 \001(\010:/\n\004face\022\037.google.protobuf"
-    ".MessageOptions\030\205\364\003 \001(\010:3\n\010gostring\022\037.go"
-    "ogle.protobuf.MessageOptions\030\206\364\003 \001(\010:3\n\010"
-    "populate\022\037.google.protobuf.MessageOption"
-    "s\030\207\364\003 \001(\010:3\n\010stringer\022\037.google.protobuf."
-    "MessageOptions\030\300\213\004 \001(\010:2\n\007onlyone\022\037.goog"
-    "le.protobuf.MessageOptions\030\211\364\003 \001(\010:0\n\005eq"
-    "ual\022\037.google.protobuf.MessageOptions\030\215\364\003"
-    " \001(\010:6\n\013description\022\037.google.protobuf.Me"
-    "ssageOptions\030\216\364\003 \001(\010:2\n\007testgen\022\037.google"
-    ".protobuf.MessageOptions\030\217\364\003 \001(\010:3\n\010benc"
-    "hgen\022\037.google.protobuf.MessageOptions\030\220\364"
-    "\003 \001(\010:4\n\tmarshaler\022\037.google.protobuf.Mes"
-    "sageOptions\030\221\364\003 \001(\010:6\n\013unmarshaler\022\037.goo"
-    "gle.protobuf.MessageOptions\030\222\364\003 \001(\010:;\n\020s"
-    "table_marshaler\022\037.google.protobuf.Messag"
-    "eOptions\030\223\364\003 \001(\010:0\n\005sizer\022\037.google.proto"
-    "buf.MessageOptions\030\224\364\003 \001(\010:;\n\020unsafe_mar"
-    "shaler\022\037.google.protobuf.MessageOptions\030"
-    "\227\364\003 \001(\010:=\n\022unsafe_unmarshaler\022\037.google.p"
-    "rotobuf.MessageOptions\030\230\364\003 \001(\010:A\n\026goprot"
-    "o_extensions_map\022\037.google.protobuf.Messa"
-    "geOptions\030\231\364\003 \001(\010:\?\n\024goproto_unrecognize"
-    "d\022\037.google.protobuf.MessageOptions\030\232\364\003 \001"
-    "(\010:5\n\nprotosizer\022\037.google.protobuf.Messa"
-    "geOptions\030\234\364\003 \001(\010:2\n\007compare\022\037.google.pr"
-    "otobuf.MessageOptions\030\235\364\003 \001(\010:1\n\010nullabl"
-    "e\022\035.google.protobuf.FieldOptions\030\351\373\003 \001(\010"
-    ":.\n\005embed\022\035.google.protobuf.FieldOptions"
-    "\030\352\373\003 \001(\010:3\n\ncustomtype\022\035.google.protobuf"
-    ".FieldOptions\030\353\373\003 \001(\t:3\n\ncustomname\022\035.go"
-    "ogle.protobuf.FieldOptions\030\354\373\003 \001(\t:0\n\007js"
-    "ontag\022\035.google.protobuf.FieldOptions\030\355\373\003"
-    " \001(\t:1\n\010moretags\022\035.google.protobuf.Field"
-    "Options\030\356\373\003 \001(\t:1\n\010casttype\022\035.google.pro"
-    "tobuf.FieldOptions\030\357\373\003 \001(\t:0\n\007castkey\022\035."
-    "google.protobuf.FieldOptions\030\360\373\003 \001(\t:2\n\t"
-    "castvalue\022\035.google.protobuf.FieldOptions"
-    "\030\361\373\003 \001(\tB!\n\023com.google.protobufB\nGoGoPro"
-    "tos", 3603);
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
-    "gogoproto/gogo.proto", &protobuf_RegisterTypes);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::EnumOptions::default_instance(),
     62001, 8, false, false);
