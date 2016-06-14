@@ -58,7 +58,7 @@ const (
 	// https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
 	BaseFormatVersion
 	// FamilyFormatVersion corresponds to the encoding described in
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_groups.md
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_families.md
 	FamilyFormatVersion
 )
 
