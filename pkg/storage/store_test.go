@@ -2143,7 +2143,9 @@ func TestStoreChangeFrozen(t *testing.T) {
 
 func TestStoreNoConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	cfg := TestStoreConfig(nil)
+	cfg.concurrentSnapshotLimit = 1
+	store, stopper := createTestStoreWithConfig(t, &cfg)
 	defer stopper.Stop()
 
 	if !store.AcquireRaftSnapshot() {
