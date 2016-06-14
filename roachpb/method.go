@@ -103,6 +103,8 @@ const (
 	TruncateLog
 	// RequestLease requests a range lease for a replica.
 	RequestLease
+	// LeaseTransfer transfers the range lease from a lease holder to a new one.
+	LeaseTransfer
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
 	// VerifyChecksum verifies the checksum computed through an earlier
