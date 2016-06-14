@@ -6,7 +6,7 @@
 	- A C++ compiler that supports C++11 (GCC 4.9+ and clang 3.6+ are
 	  known to work). On Mac OS X, Xcode should suffice.
 	- A [Go environment](http://golang.org/doc/code.html) with a
-	  64-bit version of Go 1.6. You can download the
+	  64-bit version of Go 1.6.2. You can download the
 	  [Go binary](https://golang.org/dl/) directly from the official
 	  site. On OS X, you can also use [homebrew](http://brew.sh):
 	  `brew install go`. Be sure to set the `$GOPATH` and `$PATH`
