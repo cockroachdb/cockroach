@@ -456,3 +456,83 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		}
 	}
 }
+
+func TestRangeLeadershipTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Skipf("!!!")
+	mtc := startMultiTestContext(t, 6)
+
+	leftKey := roachpb.Key("a")
+	rightKey := roachpb.Key("z")
+
+	// First, do a couple of writes; we'll use these to determine when
+	// the dust has settled.
+	incArgs := incrementArgs(leftKey, 1)
+	if _, pErr := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	incArgs = incrementArgs(rightKey, 2)
+	if _, pErr := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Split the system range from the rest of the keyspace.
+	splitArgs := adminSplitArgs(roachpb.KeyMin, keys.SystemMax)
+	if _, pErr := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Get the left range's ID. This is currently 2, but using
+	// LookupReplica is more future-proof (and see below for
+	// rightRangeID).
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
+
+	// Replicate the left range onto nodes 1-3.
+	mtc.replicateRange(rangeID, 1, 2, 3)
+
+	// is this needed?
+	mtc.waitForValues(leftKey, []int64{1, 1, 1, 1, 0, 0})
+	mtc.waitForValues(rightKey, []int64{2, 2, 2, 2, 0, 0})
+
+	replica0 := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+	replica1 := mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+	gArgs := getArgs(leftKey)
+	replicaDesc, err := replica0.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, pErr := client.SendWrappedWith(
+		mtc.senders[0], nil, roachpb.Header{Replica: *replicaDesc}, &gArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Move leadership to store 1.
+	newLeaderDesc, err := replica1.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pErr := replica0.TransferLeaderLease(*newLeaderDesc); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Check that no reads are served in the stasis perios.
+	replicaDesc, err = replica0.GetReplica()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, pErr := client.SendWrappedWith(
+		mtc.senders[0], nil, roachpb.Header{Replica: *replicaDesc}, &gArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	// !!! do I need to look at the send reply?
+
+	/*
+		* else if replyBytes, pErr := reply.(*roachpb.GetResponse).Value.GetBytes(); pErr != nil {
+			t.Fatal(pErr)
+		} else if !bytes.Equal(replyBytes, content) {
+			t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
+		}
+	*/
+
+	// Check that after the statis, the replica on store 1 is the leader.
+}

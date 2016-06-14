@@ -580,6 +580,14 @@ message TruncateLogResponse {
 message LeaderLeaseRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Lease lease = 2[(gogoproto.nullable) = false];
+  // If set, this request represents a lease transfer (as opposed to an
+  // extension, or acquiring the lease when there's no leader).
+  // Transfers need to be explicitly marked so that we can reject leadership
+  // requests when multiple nodes are racing to get the leadership at the same
+  // time; only a node that's presently the leader can initiate a transfer
+  // (after entering a stasis mode), so we must not accept spurious transfers
+  // due to races.
+  optional bool transfer = 3[(gogoproto.nullable) = false];
 }
 
 // A LeaderLeaseResponse is the response to a LeaderLease()

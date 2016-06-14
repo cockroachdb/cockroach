@@ -20,6 +20,8 @@
 package storage
 
 import (
+	"time"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -38,7 +40,8 @@ type pendingLeaderLeaseRequest struct {
 	// If empty, then no request is in progress.
 	llChans []chan *roachpb.Error
 	// nextLease is the pending LeaderLease request, if any. It can be used to
-	// figure out if we're in the process of extending our own lease.
+	// figure out if we're in the process of extending our own lease, or
+	// transferring it to another replica.
 	nextLease roachpb.Lease
 }
 
@@ -62,11 +65,14 @@ func (p *pendingLeaderLeaseRequest) RequestPending() *roachpb.Lease {
 // command). replica.mu is locked when delivering results, so calls from the
 // replica happen either before or after a result for a pending request has
 // happened.
+// transfer needs to be set if the request represents a lease transfer (as
+// opposed to an extension, or acquiring the lease when there's no leader).
 func (p *pendingLeaderLeaseRequest) InitOrJoinRequest(
 	replica *Replica,
 	nextLeader roachpb.ReplicaDescriptor,
 	timestamp roachpb.Timestamp,
 	startKey roachpb.Key,
+	transfer bool,
 ) <-chan *roachpb.Error {
 	llChan := make(chan *roachpb.Error, 1)
 	if nextLease := p.RequestPending(); nextLease != nil {
@@ -84,7 +90,7 @@ func (p *pendingLeaderLeaseRequest) InitOrJoinRequest(
 	// TODO(tschottdorf): get duration from configuration, either as a
 	// config flag or, later, dynamically adjusted.
 	startStasis := timestamp.Add(int64(replica.store.ctx.leaderLeaseActiveDuration), 0)
-	expiration := startStasis.Add(int64(replica.store.Clock().MaxOffset()), 0)
+	expiration := startStasis.Add(int64(replica.leaseTransferStasisDuration()), 0)
 	leaseReq := roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
 			Key: startKey,
@@ -95,6 +101,7 @@ func (p *pendingLeaderLeaseRequest) InitOrJoinRequest(
 			Expiration:  expiration,
 			Replica:     nextLeader,
 		},
+		Transfer: transfer,
 	}
 	if !replica.store.Stopper().RunAsyncTask(func() {
 		pErr := replica.executeLeaderLeaseCommand(leaseReq, timestamp, startKey)
@@ -128,6 +135,33 @@ func (p *pendingLeaderLeaseRequest) InitOrJoinRequest(
 	return llChan
 }
 
+// InTransferStasis returns true if the replica cannot propose a Raft command with the
+// given timestamp because its LeaderLease is in the stasis period induced by a
+// lease transfer. If the first result is true, a lease indicating the next
+// leader is also returned.
+//
+// It is assumed that the replica owning this pendingLeaderLeaseRequest owns the
+// LeaderLease.
+//
+// replicaID is the ID of the owning replica.
+func (p *pendingLeaderLeaseRequest) InTransferStasis(
+	timestamp roachpb.Timestamp,
+	replicaID roachpb.ReplicaID,
+	leaseTransferStasisDuration time.Duration,
+) (bool, *roachpb.Lease) {
+	if nextLease := p.RequestPending(); nextLease != nil {
+		// Is the lease being transferred? (as opposed to just extended)
+		if replicaID != nextLease.Replica.ReplicaID {
+			// Does the requested timestamp fall in the transfer's stasis period?
+			stasisStart := nextLease.Start.Add(-leaseTransferStasisDuration.Nanoseconds(), 0)
+			if stasisStart.Less(timestamp) {
+				return true, nextLease
+			}
+		}
+	}
+	return false, nil
+}
+
 func (r *Replica) getOrExtendLeaderLeaseLocked(timestamp roachpb.Timestamp) <-chan *roachpb.Error {
 	// Propose a Raft command to get a leader lease for this replica.
 	desc := r.mu.desc
@@ -144,7 +178,47 @@ func (r *Replica) getOrExtendLeaderLeaseLocked(timestamp roachpb.Timestamp) <-ch
 		return llChan
 	}
 	return r.mu.pendingLeaderLeaseRequest.InitOrJoinRequest(
-		r, *replica, timestamp, desc.StartKey.AsRawKey())
+		r, *replica, timestamp, desc.StartKey.AsRawKey(), false /* transfer */)
+}
+
+// TransferLeaderLease transfers the LeaderLease to another replica. Only the
+// current holder of the LeaderLease can do a transfer.
+// TransferLeaderLease blocks until the transfer is done.
+//
+// Upon a transfer, the current leader enters a stasis period to avoid the
+// "single-register linearizability failure" described in
+// https://github.com/cockroachdb/cockroach/blob/ce67233/roachpb/data.proto#L329
+// The next lease will begin after the stasis period is over.
+func (r *Replica) TransferLeaderLease(
+	nextLeader roachpb.ReplicaDescriptor,
+) *roachpb.Error {
+	r.mu.Lock()
+
+	lease := r.mu.leaderLease
+	if !lease.OwnedBy(r.store.StoreID()) {
+		r.mu.Unlock()
+		return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID(), r.Desc()))
+	}
+	// !!! do I need to check r.store.IsDrainingLeadership() ?
+	nextLeaseBegin := r.store.Clock().Now().Add(r.leaseTransferStasisDuration().Nanoseconds(), 0)
+
+	// This will err if there's already an extension or transfer in progress.
+	future := r.mu.pendingLeaderLeaseRequest.InitOrJoinRequest(
+		r, nextLeader, nextLeaseBegin, r.mu.desc.StartKey.AsRawKey(), true /* transfer */)
+
+	r.mu.Unlock()
+	return <-future
+}
+
+// leaseTransferStasisDuration returns the duration of the stasis period that
+// a leader must observe after intiating a lease transfer. If the lease
+// transferred starts at t, the current leader cannot serve reads with timestamp
+// > t - r.leaseTransferStasisDuration().
+// That interval constitutes a period of unavailability (nobody'll serve reads
+// with those timestamps) that's necessary for preventing the linearizability
+// violation described in the Lease proto.
+func (r *Replica) leaseTransferStasisDuration() time.Duration {
+	return r.store.Clock().MaxOffset()
 }
 
 // executeLeaderLeaseCommand proposes a LeaderLeader and waits for its

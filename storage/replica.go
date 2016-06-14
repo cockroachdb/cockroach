@@ -537,9 +537,10 @@ func (r *Replica) newNotLeaderError(
 }
 
 // checkLeaseLocked checks that the replica owns the lease at the specified
-// timestamp.
+// timestamp and that it can use it for serving.
 // It returns true if the current lease covers the timestamp, false if it
-// doesn't. If the lease is not owned, a NotLeaderError is returned.
+// doesn't. If the lease is not owned, or is in a transfer stasis period, a
+// NotLeaderError is returned.
 // The lease is also extended if owned and almost expiring.
 func (r *Replica) checkLeaseLocked(timestamp roachpb.Timestamp) (bool, *roachpb.Error) {
 	lease := r.mu.leaderLease
@@ -549,6 +550,23 @@ func (r *Replica) checkLeaseLocked(timestamp roachpb.Timestamp) (bool, *roachpb.
 	if !lease.OwnedBy(r.store.StoreID()) {
 		// If lease is currently held by another, redirect to holder.
 		return true, roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID(), r.mu.desc))
+	}
+	// Check that we're not in the process of transferring the lease away
+	// (more exactly, we're not in the stasis period imposed by that process).
+	// TODO(andrei): This only needs to be checked for read commands?
+	// TODO(andrei): If the lease is in stasis because it's being transferred,
+	// consider returning a new error type so the client backs off until the
+	// transfer is completed.
+	replicaDesc, err := r.getReplicaLocked()
+	if err != nil {
+		return false, roachpb.NewError(err)
+	}
+	replicaID := replicaDesc.ReplicaID
+	inStasis, redirectLease := r.mu.pendingLeaderLeaseRequest.InTransferStasis(
+		timestamp, replicaID, r.leaseTransferStasisDuration())
+	if inStasis {
+		return true, roachpb.NewError(
+			r.newNotLeaderError(redirectLease, r.store.StoreID(), r.mu.desc))
 	}
 	// Should we extend the lease?
 	if (r.mu.pendingLeaderLeaseRequest.RequestPending() == nil) &&
