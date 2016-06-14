@@ -361,7 +361,7 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 	appendSplitKeys := func(startID, endID uint32) {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			key = keys.MakeNonColumnKey(keys.MakeTablePrefix(id))
+			key = keys.MakeRowSentinelKey(keys.MakeTablePrefix(id))
 			// Skip if this ID matches the startKey passed to ComputeSplitKeys.
 			if !startKey.Less(key) {
 				continue

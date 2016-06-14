@@ -86,7 +86,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
-	key := keys.MakeNonColumnKey(append([]byte(nil), keys.UserTableDataMin...))
+	key := keys.MakeRowSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
 	args := adminSplitArgs(key, key)
 	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
@@ -407,7 +407,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
-	keyPrefix = keys.MakeNonColumnKey(keyPrefix)
+	keyPrefix = keys.MakeRowSentinelKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
 	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -442,7 +442,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = append(midKey, []byte("Z")...)
-	midKey = keys.MakeNonColumnKey(midKey)
+	midKey = keys.MakeRowSentinelKey(midKey)
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rng.RangeID,
@@ -510,7 +510,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 			return
 		}
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
-		key = keys.MakeNonColumnKey(key)
+		key = keys.MakeRowSentinelKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		_, pErr := client.SendWrappedWith(store, nil, roachpb.Header{
@@ -1086,7 +1086,7 @@ func writeRandomDataToRange(t testing.TB, store *storage.Store, rangeID roachpb.
 	for i := 0; i < 100; i++ {
 		key := append([]byte(nil), keyPrefix...)
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		key = keys.MakeNonColumnKey(key)
+		key = keys.MakeRowSentinelKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{

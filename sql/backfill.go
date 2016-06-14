@@ -332,21 +332,21 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			curIndexKey, _, err = sqlbase.EncodeIndexKey(
 				&tableDesc.PrimaryIndex, colIDtoRowIndex, row, indexKeyPrefix)
 
-			for i, col := range added {
-				if defaultExprs == nil || defaultExprs[i] == nil {
-					updateValues[i] = parser.DNull
+			for j, col := range added {
+				if defaultExprs == nil || defaultExprs[j] == nil {
+					updateValues[j] = parser.DNull
 				} else {
-					updateValues[i], err = defaultExprs[i].Eval(evalCtx)
+					updateValues[j], err = defaultExprs[j].Eval(evalCtx)
 					if err != nil {
 						return err
 					}
 				}
-				if !col.Nullable && updateValues[i].Compare(parser.DNull) == 0 {
+				if !col.Nullable && updateValues[j].Compare(parser.DNull) == 0 {
 					return sqlbase.NewNonNullViolationError(col.Name)
 				}
 			}
-			for i := range dropped {
-				updateValues[i+len(added)] = parser.DNull
+			for j := range dropped {
+				updateValues[j+len(added)] = parser.DNull
 			}
 
 			copy(oldValues, row)
