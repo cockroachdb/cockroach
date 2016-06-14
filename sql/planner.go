@@ -58,7 +58,6 @@ type planner struct {
 	asOf bool
 
 	// Avoid allocations by embedding commonly used visitors.
-	isAggregateVisitor          isAggregateVisitor
 	subqueryVisitor             subqueryVisitor
 	subqueryPlanVisitor         subqueryPlanVisitor
 	collectSubqueryPlansVisitor collectSubqueryPlansVisitor

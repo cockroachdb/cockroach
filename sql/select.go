@@ -554,7 +554,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 
 	// Make sure there are no aggregation functions in the filter (after subqueries have been
 	// expanded).
-	if s.planner.aggregateInExpr(s.filter) {
+	if s.planner.parser.AggregateInExpr(s.filter) {
 		return fmt.Errorf("aggregate functions are not allowed in WHERE")
 	}
 

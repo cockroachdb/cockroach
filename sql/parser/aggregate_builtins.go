@@ -39,6 +39,64 @@ type AggregateFunc interface {
 	Result() (Datum, error)
 }
 
+var _ Visitor = &IsAggregateVisitor{}
+
+// IsAggregateVisitor checks if walked expressions contain aggregate functions.
+type IsAggregateVisitor struct {
+	Aggregated bool
+}
+
+// VisitPre satisfies the Visitor interface.
+func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	case *FuncExpr:
+		if _, ok := Aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+			v.Aggregated = true
+			return false, expr
+		}
+	case *Subquery:
+		return false, expr
+	}
+
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (*IsAggregateVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// Reset clear the IsAggregateVisitor's internal state.
+func (v *IsAggregateVisitor) Reset() {
+	v.Aggregated = false
+}
+
+// AggregateInExpr determines if an Expr contains an aggregate function.
+func (p *Parser) AggregateInExpr(expr Expr) bool {
+	if expr != nil {
+		defer p.isAggregateVisitor.Reset()
+		WalkExprConst(&p.isAggregateVisitor, expr)
+		if p.isAggregateVisitor.Aggregated {
+			return true
+		}
+	}
+	return false
+}
+
+// IsAggregate determines if SelectClause contains an aggregate function.
+func (p *Parser) IsAggregate(n *SelectClause) bool {
+	if n.Having != nil || len(n.GroupBy) > 0 {
+		return true
+	}
+
+	defer p.isAggregateVisitor.Reset()
+	for _, target := range n.Exprs {
+		WalkExprConst(&p.isAggregateVisitor, target.Expr)
+		if p.isAggregateVisitor.Aggregated {
+			return true
+		}
+	}
+	return false
+}
+
 // Aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
