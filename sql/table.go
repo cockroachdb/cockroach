@@ -204,7 +204,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		}
 	}
 
-	// If we didn't find a lease or a lease is about to expire, acquire one.
+	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || p.isLeaseExpiring(lease) {
 		var err error
 		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
@@ -243,7 +243,7 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		}
 	}
 
-	// If we didn't find a lease or a lease is about to expire, acquire one.
+	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || p.isLeaseExpiring(lease) {
 		var err error
 		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
