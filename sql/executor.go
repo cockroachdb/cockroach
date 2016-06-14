@@ -404,19 +404,35 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		// this iteration. If we need to create an implicit txn, only one statement
 		// can be consumed.
 		stmtsToExec := stmts
+		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
+		// to it each retry.
+		var protoTS *hlc.Timestamp
 		// We can AutoRetry the next batch of statements if we're in a clean state
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
+			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
+				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
+				// it will raise an error later on.
+				protoTS, err = isAsOf(planMaker, stmtsToExec[0], execOpt.MinInitialTimestamp)
+				if err != nil {
+					res.ResultList = append(res.ResultList, Result{Err: err})
+					return res
+				}
+				if protoTS != nil {
+					planMaker.asOf = true
+					defer func() {
+						planMaker.asOf = false
+					}()
+				}
 			}
 			txnState.reset(ctx, e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
-			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
 			txnState.sqlTimestamp = e.ctx.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
@@ -441,6 +457,19 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
 			}
 			txnState.txn = txn
+
+			if protoTS != nil {
+				txnState.txn.Proto.Timestamp = *protoTS
+				txnState.txn.Proto.OrigTimestamp = *protoTS
+				txnState.txn.Proto.MaxTimestamp = *protoTS
+				// The deadline-checking code checks that the `Timestamp` field of the proto
+				// hasn't exceeded the deadline. Since we set the Timestamp field above each
+				// retry, it won't ever exceed the deadline, and thus setting the deadline
+				// here is not strictly needed. However, it doesn't do anything incorrect
+				// and it will possibly find problems if things change in the future, so it
+				// is left in.
+				txnState.txn.UpdateDeadlineMaybe(*protoTS)
+			}
 
 			var err error
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
@@ -1146,4 +1175,54 @@ func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
 		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
 	}
 	return cols
+}
+
+// isAsOf analyzes a select statement to bypass the logic in newPlan(),
+// since that requires the transaction to be started already. If the returned
+// timestamp is not nil, it is the timestamp to which a transaction should
+// be set.
+func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+	s, ok := stmt.(*parser.Select)
+	if !ok {
+		return nil, nil
+	}
+	sc, ok := s.Select.(*parser.SelectClause)
+	if !ok {
+		return nil, nil
+	}
+	if len(sc.From) != 1 {
+		return nil, nil
+	}
+	ate, ok := sc.From[0].(*parser.AliasedTableExpr)
+	if !ok {
+		return nil, nil
+	}
+	if ate.AsOf.Expr == nil {
+		return nil, nil
+	}
+	te, err := ate.AsOf.Expr.TypeCheck(nil, parser.TypeString)
+	if err != nil {
+		return nil, err
+	}
+	d, err := te.Eval(&planMaker.evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	ds, ok := d.(*parser.DString)
+	if !ok {
+		return nil, fmt.Errorf("AS OF SYSTEM TIME expected string, got %s", ds.Type())
+	}
+	// Allow nanosecond precision because the timestamp is only used by the
+	// system and won't be returned to the user over pgwire.
+	dt, err := parser.ParseDTimestamp(string(*ds), planMaker.session.Location, time.Nanosecond)
+	if err != nil {
+		return nil, err
+	}
+	ts := hlc.Timestamp{
+		WallTime: dt.Time.UnixNano(),
+	}
+	if max.Less(ts) {
+		return nil, fmt.Errorf("cannot specify timestamp in the future")
+	}
+	return &ts, nil
 }
