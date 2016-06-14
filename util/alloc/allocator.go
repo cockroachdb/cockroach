@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package engine
+package alloc
 
 // ChunkAllocator provides chunk allocation of []byte, amortizing the overhead
 // of each allocation. Because the underlying storage for the slices is shared,
@@ -41,27 +41,25 @@ func (a ChunkAllocator) reserve(n int) ChunkAllocator {
 	return make([]byte, 0, allocSize)
 }
 
-// newChunk allocates a new chunk of memory, initializing it from src. extra
+// Alloc allocates a new chunk of memory with the specified length. extraCap
 // indicates additional zero bytes that will be present in the returned []byte,
 // but not part of the length.
-func (a ChunkAllocator) newChunk(src []byte, extra int) (ChunkAllocator, []byte) {
-	n := len(src)
-	if cap(a)-len(a) < n+extra {
-		a = a.reserve(n + extra)
+func (a ChunkAllocator) Alloc(n int, extraCap int) (ChunkAllocator, []byte) {
+	if cap(a)-len(a) < n+extraCap {
+		a = a.reserve(n + extraCap)
 	}
 	p := len(a)
-	r := a[p : p+n : p+n+extra]
-	a = a[:p+n+extra]
-	copy(r, src)
+	r := a[p : p+n : p+n+extraCap]
+	a = a[:p+n+extraCap]
 	return a, r
 }
 
-// IterKeyValue returns iter.Key() and iter.Value() with the underlying storage
-// allocated from the receiver.
-func (a ChunkAllocator) IterKeyValue(iter Iterator) (ChunkAllocator, MVCCKey, []byte) {
-	key := iter.unsafeKey()
-	a, key.Key = a.newChunk(key.Key, 0)
-	value := iter.unsafeValue()
-	a, value = a.newChunk(value, 0)
-	return a, key, value
+// AllocAndCopy allocates a new chunk of memory, initializing it from src.
+// extraCap indicates additional zero bytes that will be present in the returned
+// []byte, but not part of the length.
+func (a ChunkAllocator) AllocAndCopy(src []byte, extraCap int) (ChunkAllocator, []byte) {
+	var alloc []byte
+	a, alloc = a.Alloc(len(src), extraCap)
+	copy(alloc, src)
+	return a, alloc
 }
