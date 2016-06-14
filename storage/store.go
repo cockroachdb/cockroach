@@ -738,7 +738,7 @@ func (s *Store) DrainLeadership(drain bool) error {
 		var err error
 		now := s.Clock().Now()
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
-			if lease, inflight := r.getLeaderLease(); inflight ||
+			if lease, nextLease := r.getLeaderLease(); (nextLease != nil) ||
 				(lease.OwnedBy(s.StoreID()) && lease.Covers(now)) {
 
 				err = fmt.Errorf("replica %s still has an active lease", r)
