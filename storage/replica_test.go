@@ -5925,6 +5925,69 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	})
 }
 
+// TestReplicaDoubleRefurbish exercises a code path in which a command is seen
+// fit for refurbishment, but has already been refurbished earlier (with that
+// command being in-flight). See #7185.
+func TestReplicaDoubleRefurbish(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+
+	var ba roachpb.BatchRequest
+	ba.Timestamp = tc.clock.Now()
+	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key("r")}})
+	replica := *tc.rng.GetReplica()
+
+	// Make a Raft command; we'll set things up so that it will be considered
+	// for refurbishment multiple times.
+	tc.rng.mu.Lock()
+	cmd, err := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), replica, ba)
+	ch := cmd.done // must not use cmd outside of mutex
+	tc.rng.mu.Unlock()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	{
+		// Send some random request to advance the lease applied counter to
+		// make `cmd` refurbish when we put it into Raft.
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.clock.Now()
+		pArgs := putArgs(roachpb.Key("foo"), []byte("bar"))
+		ba.Add(&pArgs)
+		if _, pErr := tc.rng.Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	const num = 10
+	func() {
+		tc.rng.mu.Lock()
+		defer tc.rng.mu.Unlock()
+		// Insert the command and propose it ten times. Before the commit
+		// which introduced this test, the first application would repropose,
+		// and the second would decide to not repropose, but accidentally send
+		// the error to the client, so that the successful refurbishment would
+		// be the second result received by the client.
+		tc.rng.insertRaftCommandLocked(cmd)
+		for i := 0; i < num; i++ {
+			if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}()
+
+	var i int
+	for resp := range ch {
+		i++
+		if i != 1 {
+			t.Fatalf("received more than one response on the done channel: %+v", resp)
+		}
+	}
+}
+
 // TestCommandTimeThreshold verifies that commands outside the replica GC
 // threshold fail.
 func TestCommandTimeThreshold(t *testing.T) {

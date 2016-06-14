@@ -1894,6 +1894,10 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 				// in the first place, leads to less legible code here). This code
 				// path is rare.
 				r.insertRaftCommandLocked(cmd)
+				// The client should get the actual execution, not this one. We
+				// keep the context (which is fine since the client will only
+				// finish it when the "real" incarnation applies).
+				cmd = nil
 			}
 		}
 		if forcedErr == nil {
@@ -1924,6 +1928,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 
 	if cmd != nil {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: err}
+		close(cmd.done)
 	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(context.TODO()), "error executing raft command: %s", err)
 	}
