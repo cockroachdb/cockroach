@@ -18,6 +18,7 @@ package storage
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -73,6 +74,8 @@ type replicaScanner struct {
 	completedScan *sync.Cond
 	count         int64
 	total         time.Duration
+	// Some tests in this package disable scanning.
+	disabled int32 // updated atomically
 }
 
 // newReplicaScanner creates a new replica scanner with the provided loop intervals,
@@ -164,6 +167,9 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 			if repl == nil {
 				return false
 			}
+			if atomic.LoadInt32(&rs.disabled) == 1 {
+				return false
+			}
 
 			return !stopper.RunTask(func() {
 				// Try adding replica to all queues.
@@ -172,7 +178,8 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 				}
 			})
 		case repl := <-rs.removed:
-			// Remove replica from all queues as applicable.
+			// Remove replica from all queues as applicable. Note that we still
+			// process removals while disabled.
 			for _, q := range rs.queues {
 				q.MaybeRemove(repl)
 			}
