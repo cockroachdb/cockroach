@@ -238,6 +238,8 @@ type Replica struct {
 		cmdQ *CommandQueue
 		// Last index persisted to the raft log (not necessarily committed).
 		lastIndex uint64
+		// pendingLeaseRequest is used to coalesce LeaderLease requests.
+		pendingLeaseRequest pendingLeaseRequest
 		// Max bytes before split.
 		maxBytes int64
 		// pendingCmds stores the Raft in-flight commands which
@@ -251,8 +253,6 @@ type Replica struct {
 		replicaID         roachpb.ReplicaID
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
-		// Slice of channels to send on after leader lease acquisition.
-		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
 		proposeRaftCommandFn func(*pendingCmd) error
 		// Computed checksum at a snapshot UUID.
@@ -511,12 +511,13 @@ func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, erro
 	return lease, nil
 }
 
-// getLeaderLease returns the current leader lease and a boolean which
-// indicates whether there is already an inflight lease request.
-func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
+// getLeaderLease returns the current leader lease and the pending next leader
+// lease, if any lease acquisition or transfer initiated by this replica is in
+// process (nil otherwise).
+func (r *Replica) getLeaderLease() (*roachpb.Lease, *roachpb.Lease) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.state.Lease, len(r.mu.llChans) > 0
+	return r.mu.state.Lease, r.mu.pendingLeaseRequest.RequestPending()
 }
 
 func setGCThreshold(
@@ -535,36 +536,25 @@ func loadGCThreshold(eng engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp,
 
 // newNotLeaderError returns a NotLeaderError initialized with the
 // replica for the holder (if any) of the given lease.
-// r.mu must not be held.
-func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.StoreID) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.newNotLeaderErrorLocked(l, originStoreID)
-}
-
-func (r *Replica) newNotLeaderErrorLocked(l *roachpb.Lease, originStoreID roachpb.StoreID) error {
-	desc := r.mu.state.Desc
+func (r *Replica) newNotLeaderError(
+	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
+) error {
 	err := &roachpb.NotLeaderError{}
 	if l != nil && l.Replica.ReplicaID != 0 {
 		err.RangeID = r.RangeID
-		_, err.Replica = desc.FindReplica(originStoreID)
-		_, err.Leader = desc.FindReplica(l.Replica.StoreID)
+		_, err.Replica = rangeDesc.FindReplica(originStoreID)
+		_, err.Leader = rangeDesc.FindReplica(l.Replica.StoreID)
 	}
 	return err
 }
 
-// redirectOnOrAcquireLeaderLease checks whether this replica has the
-// leader lease at the specified timestamp. If it does, returns
-// success. If another replica currently holds the lease, redirects by
-// returning NotLeaderError. If the lease is expired, a renewal is
-// synchronously requested. This method uses the leader lease mutex
-// to guarantee only one request to grant the lease is pending.
-// Leases are eagerly renewed when a request with a timestamp close to
-// the beginning of the stasis period is served.
-//
-// TODO(spencer): implement threshold regrants to avoid latency in
-//  the presence of read or write pressure sufficiently close to the
-//  current lease's expiration.
+// redirectOnOrAcquireLeaderLease checks whether this replica has the leader
+// lease at the current timestamp. If it does, returns success. If another
+// replica currently holds the lease, redirects by returning NotLeaderError. If
+// the lease is expired, a renewal is synchronously requested. This method uses
+// the pendingLeaseRequest structure to guarantee only one request to
+// grant the lease is pending. Leases are eagerly renewed when a request with a
+// timestamp close to the beginning of the stasis period is served.
 //
 // TODO(spencer): for write commands, don't wait while requesting
 //  the leader lease. If the lease acquisition fails, the write cmd
@@ -576,31 +566,45 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
 		timestamp := r.store.Clock().Now()
-		if lease, inFlight := r.getLeaderLease(); lease.Covers(timestamp) {
-			if !lease.OwnedBy(r.store.StoreID()) {
-				// If lease is currently held by another, redirect to holder.
-				return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
-			}
-			if !inFlight && !timestamp.Less(lease.StartStasis.Add(
-				-int64(r.store.ctx.leaderLeaseRenewalDuration), 0)) {
-				if log.V(2) {
-					log.Warningf("extending lease %s at %s", lease, timestamp)
+		llChan, pErr := func() (<-chan *roachpb.Error, *roachpb.Error) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			lease := r.mu.state.Lease
+			if lease.Covers(timestamp) {
+				if !lease.OwnedBy(r.store.StoreID()) {
+					// If lease is currently held by another, redirect to holder.
+					return nil, roachpb.NewError(
+						r.newNotLeaderError(lease, r.store.StoreID(), r.mu.state.Desc))
 				}
-				// We had an active lease to begin with, but we want to trigger
-				// a lease extension. We don't need to wait for that extension
-				// to go through and simply ignore the returned channel (which
-				// is buffered).
-				r.requestLeaderLease(timestamp)
+				// Should we extend the lease?
+				if (r.mu.pendingLeaseRequest.RequestPending() == nil) &&
+					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.leaderLeaseRenewalDuration), 0)) {
+					if log.V(2) {
+						log.Warningf("extending lease %s at %s", lease, timestamp)
+					}
+					// We had an active lease to begin with, but we want to trigger
+					// a lease extension. We don't need to wait for that extension
+					// to go through and simply ignore the returned channel (which
+					// is buffered).
+					_ = r.requestLeaseLocked(timestamp)
+				}
+				// Return a nil chan to signal that we have a valid lease.
+				return nil, nil
 			}
+			log.Trace(ctx, fmt.Sprintf("request range lease (attempt #%d)", attempt))
+
+			// No active lease: Request renewal if a renewal is not already pending.
+			return r.requestLeaseLocked(timestamp), nil
+		}()
+		if pErr != nil {
+			return pErr
+		}
+		if llChan == nil {
+			// We own a covering lease.
 			return nil
 		}
 
-		log.Trace(ctx, fmt.Sprintf("request leader lease (attempt #%d)", attempt))
-
-		// Otherwise, no active lease: Request renewal if a renewal is not already pending.
-		llChan := r.requestLeaderLease(timestamp)
-
-		// Wait for the leader lease to finish, or the context to expire.
+		// Wait for the range lease to finish, or the context to expire.
 		select {
 		case pErr := <-llChan:
 			if pErr != nil {
@@ -612,7 +616,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 					if !lease.Covers(r.store.Clock().Now()) {
 						lease = nil
 					}
-					return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
+					return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID(), r.Desc()))
 				}
 				return pErr
 			}
@@ -620,7 +624,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 		case <-ctx.Done():
 		case <-r.store.Stopper().ShouldStop():
 		}
-		return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
+		return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID(), r.Desc()))
 	}
 }
 
@@ -1757,8 +1761,8 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
 				raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd)
 		}
-		forcedErr = roachpb.NewError(r.newNotLeaderErrorLocked(
-			r.mu.state.Lease, raftCmd.OriginReplica.StoreID))
+		forcedErr = roachpb.NewError(r.newNotLeaderError(
+			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
 	}
 
 	if cmd != nil {
