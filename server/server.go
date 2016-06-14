@@ -175,12 +175,20 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
+	// Set up the DistSQL server
+	distSQLCtx := distsql.ServerContext{
+		DB: s.db,
+	}
+	s.distSQLServer = distsql.NewServer(distSQLCtx)
+	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
+
 	// Set up Executor
 	eCtx := sql.ExecutorContext{
 		DB:           s.db,
 		Gossip:       s.gossip,
 		LeaseManager: s.leaseMgr,
 		Clock:        s.clock,
+		DistSQLSrv:   s.distSQLServer,
 	}
 	if ctx.TestingKnobs.SQLExecutor != nil {
 		eCtx.TestingKnobs = ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
@@ -192,12 +200,6 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, sqlRegistry)
 
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, sqlRegistry)
-
-	distSQLCtx := distsql.ServerContext{
-		DB: s.db,
-	}
-	s.distSQLServer = distsql.NewServer(distSQLCtx)
-	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
