@@ -48,7 +48,7 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < snapSize/(keySize+valSize); i++ {
-		key := keys.MakeNonColumnKey(randutil.RandBytes(src, keySize))
+		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
 		val := randutil.RandBytes(src, valSize)
 		pArgs := putArgs(key, val)
 		if _, pErr := client.SendWrappedWith(rep, nil, roachpb.Header{

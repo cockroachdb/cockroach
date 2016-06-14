@@ -507,10 +507,14 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
+// SentinelFamilyID indicates that MakeFamilyKey should make a sentinel key.
+const SentinelFamilyID = 0
+
 // MakeFamilyKey returns the key for the family in the given row by appending to
-// the passed key.
+// the passed key. If SentinelFamilyID is passed, a sentinel key (which is the
+// first key in a sql table row) is returned.
 func MakeFamilyKey(key []byte, famID uint32) []byte {
-	if famID == 0 {
+	if famID == SentinelFamilyID {
 		return encoding.EncodeUvarintAscending(key, 0)
 	}
 	size := len(key)
@@ -521,12 +525,9 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
-// MakeNonColumnKey creates a non-column key for a row by appending a 0 column
-// ID suffix size to rowKey.
-// TODO(dan): Delete this in favor of MakeFamilyKey(0) once the allocation
-// differences are addressed.
-func MakeNonColumnKey(rowKey []byte) []byte {
-	return encoding.EncodeUvarintAscending(rowKey, 0)
+// MakeRowSentinelKey creates the first key in a sql table row.
+func MakeRowSentinelKey(key []byte) []byte {
+	return MakeFamilyKey(key, SentinelFamilyID)
 }
 
 // MakeSplitKey transforms an SQL table key such that it is a valid split key

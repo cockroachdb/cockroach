@@ -310,7 +310,7 @@ func TestComputeSplits(t *testing.T) {
 		// Convert ints to actual keys.
 		expected := []roachpb.RKey{}
 		for _, s := range tc.splits {
-			expected = append(expected, keys.MakeNonColumnKey(keys.MakeTablePrefix(s)))
+			expected = append(expected, keys.MakeRowSentinelKey(keys.MakeTablePrefix(s)))
 		}
 		if !reflect.DeepEqual(splits, expected) {
 			t.Errorf("#%d: bad splits:\ngot: %v\nexpected: %v", tcNum, splits, expected)

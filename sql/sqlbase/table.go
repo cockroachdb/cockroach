@@ -1000,7 +1000,7 @@ func EncodeSecondaryIndex(
 
 	// Index keys are considered "sentinel" keys in that they do not have a
 	// column ID suffix.
-	entry.Key = keys.MakeNonColumnKey(entry.Key)
+	entry.Key = keys.MakeRowSentinelKey(entry.Key)
 
 	if secondaryIndex.Unique {
 		// Note that a unique secondary index that contains a NULL column value
