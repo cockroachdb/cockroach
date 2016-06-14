@@ -152,6 +152,10 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		resp := reply.(*roachpb.LeaderLeaseResponse)
 		*resp, err = r.LeaderLease(ctx, batch, ms, h, *tArgs)
 		r.store.metrics.leaseRequestComplete(err)
+	case *roachpb.LeaseTransferRequest:
+		resp := reply.(*roachpb.LeaderLeaseResponse)
+		*resp, err = r.LeaseTransfer(ctx, batch, ms, h, *tArgs)
+		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
 		*resp, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
@@ -1476,10 +1480,8 @@ func (r *Replica) LeaderLease(
 	defer r.maybeGossipSystemConfig()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var reply roachpb.LeaderLeaseResponse
 
 	prevLease := r.mu.state.Lease
-	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
 		Requested: args.Lease,
@@ -1495,7 +1497,7 @@ func (r *Replica) LeaderLease(
 	if l := args.Lease; !l.Start.Less(l.StartStasis) ||
 		l.Expiration.Less(l.StartStasis) {
 		// This amounts to a bug.
-		return reply, util.Errorf("illegal lease interval: [%s, %s, %s]",
+		return roachpb.LeaderLeaseResponse{}, util.Errorf("illegal lease interval: [%s, %s, %s]",
 			l.Start, l.StartStasis, l.Expiration)
 	}
 
@@ -1505,7 +1507,7 @@ func (r *Replica) LeaderLease(
 	// Verify that requestion replica is part of the current replica set.
 	if idx, _ := r.mu.state.Desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
-		return reply, rErr
+		return roachpb.LeaderLeaseResponse{}, rErr
 	}
 
 	// Wind the start timestamp back as far towards the previous lease as we
@@ -1532,31 +1534,56 @@ func (r *Replica) LeaderLease(
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
 			rErr.Message = "extension moved start timestamp backwards"
-			return reply, rErr
+			return roachpb.LeaderLeaseResponse{}, rErr
 		}
-		// TODO(tschottdorf): We could allow shortening existing leases, which
-		// could be used to effect a faster lease handoff. This needs to be
-		// properly implemented though (the leader must not shorten the lease
-		// when it has already served commands at higher timestamps), so this
-		// is forbidden now but can be re-enabled when we properly implement
-		// it.
-		// TODO(tschottdorf): Unfortunately, dealing out an error on shortening
-		// leads to spurious test failures in the case of two lease requests
-		// from the same node racing and the one with the earlier expiration
-		// coming in last. So we just ignore any shortening instead.
 		args.Lease.Expiration.Forward(prevLease.Expiration)
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
-		return reply, rErr
+		return roachpb.LeaderLeaseResponse{}, rErr
 	}
-
 	args.Lease.Start = effectiveStart
+	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
+}
 
+// LeaseTransfer sets the lease holder for the range.
+// Unlike LeaderLease(), the new lease is allowed to overlap the old one.
+func (r *Replica) LeaseTransfer(
+	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
+	h roachpb.Header, args roachpb.LeaseTransferRequest,
+) (roachpb.LeaderLeaseResponse, error) {
+	// maybeGossipSystemConfig cannot be called while the replica is locked,
+	// so we defer it here so it is called once the replica lock is released.
+	defer r.maybeGossipSystemConfig()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if log.V(2) {
+		prevLease := r.mu.state.Lease
+		log.Infof("[range %s] Lease transfer. prev lease: %+v, new lease: %+v "+
+			"old expiration: %s, new start: %s",
+			r.RangeID, prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
+	}
+	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
+}
+
+// applyNewLeaseLocked applies a new lease: the timestamp's cache low water mark
+// is updated if needed; Raft leadership is transferred if needed.
+//
+// The new lease might be a lease for a range that didn't previously have an
+// active lease, might be an extension or a lease transfer.
+//
+// r.mu needs to be locked.
+func (r *Replica) applyNewLeaseLocked(
+	ctx context.Context, batch engine.ReadWriter,
+	ms *enginepb.MVCCStats, lease roachpb.Lease) (
+	roachpb.LeaderLeaseResponse, error,
+) {
+	var reply roachpb.LeaderLeaseResponse
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), hlc.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), hlc.ZeroTimestamp, nil, &lease); err != nil {
 		return reply, err
 	}
-	r.mu.state.Lease = &args.Lease
+	prevLease := r.mu.state.Lease
+	r.mu.state.Lease = &lease
 
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
@@ -1567,7 +1594,7 @@ func (r *Replica) LeaderLease(
 				// handled via a stasis period inherent in the lease which is documented
 				// in on the Lease struct.
 				log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
-					r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
+					r.RangeID, lease, prevLease, r.store.Clock().PhysicalTime())
 				r.mu.tsCache.SetLowWater(prevLease.Expiration)
 			} else if raftGroup.Status().RaftState == raft.StateLeader {
 				// If this replica is the raft leader but it is not the new lease

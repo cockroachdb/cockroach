@@ -47,6 +47,7 @@ func (t Timestamp) String() string {
 }
 
 // Add returns a timestamp with the WallTime and Logical components increased.
+// Arguments are expressed in nanos.
 func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	return Timestamp{
 		WallTime: t.WallTime + wallTime,
