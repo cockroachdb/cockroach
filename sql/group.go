@@ -33,7 +33,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := p.isAggregate(n); !isAggregate {
+	if isAggregate := p.parser.IsAggregate(n); !isAggregate {
 		return nil, nil
 	}
 
@@ -45,7 +45,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range groupBy {
-		if p.aggregateInExpr(groupBy[i]) {
+		if p.parser.AggregateInExpr(groupBy[i]) {
 			return nil, fmt.Errorf("aggregate functions are not allowed in GROUP BY")
 		}
 
@@ -467,7 +467,7 @@ type extractAggregatesVisitor struct {
 
 	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
 	groupedCopy         *extractAggregatesVisitor
-	subAggregateVisitor isAggregateVisitor
+	subAggregateVisitor parser.IsAggregateVisitor
 	err                 error
 }
 
@@ -498,9 +498,9 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				panic(fmt.Sprintf("%s has %d arguments (expected 1)", t.Name.Base, len(t.Exprs)))
 			}
 
-			defer v.subAggregateVisitor.reset()
+			defer v.subAggregateVisitor.Reset()
 			parser.WalkExprConst(&v.subAggregateVisitor, t.Exprs[0])
-			if v.subAggregateVisitor.aggregated {
+			if v.subAggregateVisitor.Aggregated {
 				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
 				return false, expr
 			}
@@ -564,58 +564,6 @@ func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) (parser.Ty
 		return nil, v.err
 	}
 	return expr.(parser.TypedExpr), nil
-}
-
-var _ parser.Visitor = &isAggregateVisitor{}
-
-type isAggregateVisitor struct {
-	aggregated bool
-}
-
-func (v *isAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	switch t := expr.(type) {
-	case *parser.FuncExpr:
-		if _, ok := parser.Aggregates[strings.ToLower(string(t.Name.Base))]; ok {
-			v.aggregated = true
-			return false, expr
-		}
-	case *parser.Subquery:
-		return false, expr
-	}
-
-	return true, expr
-}
-
-func (*isAggregateVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
-
-func (v *isAggregateVisitor) reset() {
-	v.aggregated = false
-}
-
-func (p *planner) aggregateInExpr(expr parser.Expr) bool {
-	if expr != nil {
-		defer p.isAggregateVisitor.reset()
-		parser.WalkExprConst(&p.isAggregateVisitor, expr)
-		if p.isAggregateVisitor.aggregated {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *planner) isAggregate(n *parser.SelectClause) bool {
-	if n.Having != nil || len(n.GroupBy) > 0 {
-		return true
-	}
-
-	defer p.isAggregateVisitor.reset()
-	for _, target := range n.Exprs {
-		parser.WalkExprConst(&p.isAggregateVisitor, target.Expr)
-		if p.isAggregateVisitor.aggregated {
-			return true
-		}
-	}
-	return false
 }
 
 var _ parser.TypedExpr = &aggregateFuncHolder{}

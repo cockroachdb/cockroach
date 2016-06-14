@@ -69,7 +69,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 		tupleBuf = tupleBuf[numCols:]
 
 		for i, expr := range tuple.Exprs {
-			if p.aggregateInExpr(expr) {
+			if p.parser.AggregateInExpr(expr) {
 				return nil, fmt.Errorf("aggregate functions are not allowed in VALUES")
 			}
 
