@@ -519,6 +519,22 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 					return nil, roachpb.NewError(
 						r.newNotLeaderError(lease, r.store.StoreID(), r.mu.state.Desc))
 				}
+				// Check that we're not in the process of transferring the lease away.
+				// If we are transferring the lease away, we can't serve reads or
+				// propose Raft commands - see comments on TransferLeaderLease.
+				// TODO(andrei): If the lease is being transferred, consider returning a
+				// new error type so the client backs off until the transfer is
+				// completed.
+				repDesc, err := r.getReplicaDescriptorLocked()
+				if err != nil {
+					return nil, roachpb.NewError(err)
+				}
+				transferLease := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+				if transferLease != nil {
+					return nil, roachpb.NewError(
+						r.newNotLeaderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
+				}
+
 				// Should we extend the lease?
 				if (r.mu.pendingLeaseRequest.RequestPending() == nil) &&
 					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.leaderLeaseRenewalDuration), 0)) {
@@ -628,28 +644,22 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 	r.mu.state.Desc = desc
 }
 
-type errReplicaNotInRange struct {
-	StoreID   roachpb.StoreID
-	RangeDesc roachpb.RangeDescriptor
-}
-
-func (e *errReplicaNotInRange) Error() string {
-	return fmt.Sprintf("replica in store %d not found in RangeDescriptor %+v",
-		e.StoreID, e.RangeDesc)
-}
-
 // GetReplicaDescriptor returns the replica for this range from the range
-// descriptor. Returns an errReplicaNotInRange if the replica is not found.
+// descriptor. Returns an *RangeNotFoundError if the replica is not found.
 // No other errors are returned.
 func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
-	rangeDesc := r.Desc()
-	if repDesc, ok := rangeDesc.GetReplicaDescriptor(r.store.StoreID()); ok {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.getReplicaDescriptorLocked()
+}
+
+// getReplicaLocked is like getReplica, but assumes that r.mu is held.
+func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error) {
+	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+	if ok {
 		return repDesc, nil
 	}
-	return roachpb.ReplicaDescriptor{}, &errReplicaNotInRange{
-		RangeDesc: *rangeDesc,
-		StoreID:   r.store.StoreID(),
-	}
+	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.

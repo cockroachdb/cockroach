@@ -564,21 +564,6 @@ func TestReplicaLeaderLease(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	one := hlc.ZeroTimestamp.Add(1, 0)
-
-	for _, lease := range []roachpb.Lease{
-		{StartStasis: one},
-		{Start: one, StartStasis: one},
-		{Expiration: one, StartStasis: one.Next()},
-	} {
-		if _, err := tc.rng.LeaderLease(context.Background(), tc.store.Engine(), nil,
-			roachpb.Header{}, roachpb.LeaderLeaseRequest{
-				Lease: lease,
-			}); !testutils.IsError(err, "illegal lease interval") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	}
-
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
@@ -590,6 +575,21 @@ func TestReplicaLeaderLease(t *testing.T) {
 	rngDesc := tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+
+	// Test that leases with invalid times are rejected.
+	// Start leases at a point that avoids overlapping with the existing lease.
+	one := hlc.ZeroTimestamp.Add(time.Second.Nanoseconds(), 0)
+	for _, lease := range []roachpb.Lease{
+		{Start: one, StartStasis: one},
+		{Start: one, StartStasis: one.Next(), Expiration: one},
+	} {
+		if _, err := tc.rng.LeaderLease(context.Background(), tc.store.Engine(), nil,
+			roachpb.Header{}, roachpb.LeaderLeaseRequest{
+				Lease: lease,
+			}); !testutils.IsError(err, "illegal lease interval") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
 
 	if held, _ := hasLease(tc.rng, tc.clock.Now()); !held {
 		t.Errorf("expected lease on range start")
