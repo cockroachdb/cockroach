@@ -52,7 +52,7 @@ type cacheRequest struct {
 	writes    []roachpb.Span
 	txn       roachpb.Span
 	txnID     *uuid.UUID
-	timestamp roachpb.Timestamp
+	timestamp hlc.Timestamp
 	// Used to distinguish requests with identical timestamps. For actual
 	// requests, the uniqueID value is >0. When probing the btree for requests
 	// later than a particular timestamp a value of 0 is used.
@@ -94,7 +94,7 @@ func (cr *cacheRequest) numSpans() int {
 // the current system time plus the maximum clock offset.
 type timestampCache struct {
 	rCache, wCache   *cache.IntervalCache
-	lowWater, latest roachpb.Timestamp
+	lowWater, latest hlc.Timestamp
 
 	// The requests tree contains cacheRequest entries keyed by timestamp. A
 	// request is "expanded" (i.e. the read/write spans are added to the
@@ -117,7 +117,7 @@ type timestampCache struct {
 
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
-	timestamp roachpb.Timestamp
+	timestamp hlc.Timestamp
 	txnID     *uuid.UUID // Nil for no transaction
 }
 
@@ -170,7 +170,7 @@ func (tc *timestampCache) len() int {
 
 // SetLowWater sets the cache's low water mark, which is the minimum
 // value the cache will return from calls to GetMax().
-func (tc *timestampCache) SetLowWater(lowWater roachpb.Timestamp) {
+func (tc *timestampCache) SetLowWater(lowWater hlc.Timestamp) {
 	if tc.lowWater.Less(lowWater) {
 		tc.lowWater = lowWater
 	}
@@ -183,7 +183,7 @@ func (tc *timestampCache) SetLowWater(lowWater roachpb.Timestamp) {
 // timestamp; false to update the write timestamp cache.
 func (tc *timestampCache) add(
 	start, end roachpb.Key,
-	timestamp roachpb.Timestamp,
+	timestamp hlc.Timestamp,
 	txnID *uuid.UUID,
 	readTSCache bool,
 ) {
@@ -372,7 +372,7 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 
 // ExpandRequests expands any request that is newer than the specified
 // timestamp.
-func (tc *timestampCache) ExpandRequests(timestamp roachpb.Timestamp) {
+func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
 	// Find all of the requests that have a timestamp greater than or equal to
 	// the specified timestamp. Note that we can't delete the requests during the
 	// btree iteration.
@@ -414,7 +414,7 @@ func (tc *timestampCache) ExpandRequests(timestamp roachpb.Timestamp) {
 // the cache, the low water timestamp is returned for the read
 // timestamps. Also returns an "ok" bool, indicating whether an
 // explicit match of the interval was found in the cache.
-func (tc *timestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (roachpb.Timestamp, bool) {
+func (tc *timestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (hlc.Timestamp, bool) {
 	return tc.getMax(start, end, txnID, true)
 }
 
@@ -432,11 +432,11 @@ func (tc *timestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (
 // forced to increment it. This allows timestamps from the same txn
 // to be ignored because the write would instead get the low water
 // timestamp.
-func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) (roachpb.Timestamp, bool) {
+func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) (hlc.Timestamp, bool) {
 	return tc.getMax(start, end, txnID, false)
 }
 
-func (tc *timestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) (roachpb.Timestamp, bool) {
+func (tc *timestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) (hlc.Timestamp, bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}

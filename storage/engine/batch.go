@@ -16,7 +16,7 @@
 
 package engine
 
-import "github.com/cockroachdb/cockroach/roachpb"
+import "github.com/cockroachdb/cockroach/util/hlc"
 
 const (
 	batchTypeDeletion byte = 0x0
@@ -142,7 +142,7 @@ func putUint64(b []byte, v uint64) {
 func (b *rocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
 	length := 1 + len(key.Key)
 	timestampLength := 0
-	if key.Timestamp != roachpb.ZeroTimestamp {
+	if key.Timestamp != hlc.ZeroTimestamp {
 		timestampLength = 1 + 8
 		if key.Timestamp.Logical != 0 {
 			timestampLength += 4

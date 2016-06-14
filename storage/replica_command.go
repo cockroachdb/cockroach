@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -196,7 +197,7 @@ func (r *Replica) Put(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats, h roachpb.Header, args roachpb.PutRequest,
 ) (roachpb.PutResponse, error) {
 	var reply roachpb.PutResponse
-	ts := roachpb.ZeroTimestamp
+	ts := hlc.ZeroTimestamp
 	if !args.Inline {
 		ts = h.Timestamp
 	}
@@ -379,7 +380,7 @@ func (r *Replica) BeginTransaction(
 
 	// Verify transaction does not already exist.
 	txn := roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, roachpb.ZeroTimestamp, true, nil, &txn)
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &txn)
 	if err != nil {
 		return reply, err
 	}
@@ -416,7 +417,7 @@ func (r *Replica) BeginTransaction(
 
 	// Write the txn record.
 	reply.Txn.Writing = true
-	return reply, engine.MVCCPutProto(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil, reply.Txn)
+	return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, reply.Txn)
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
@@ -437,7 +438,7 @@ func (r *Replica) EndTransaction(
 	// Fetch existing transaction.
 	reply.Txn = &roachpb.Transaction{}
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn,
+		ctx, batch, key, hlc.ZeroTimestamp, true, nil, reply.Txn,
 	); err != nil {
 		return reply, nil, err
 	} else if !ok {
@@ -580,7 +581,7 @@ func (r *Replica) EndTransaction(
 
 // isEndTransactionExceedingDeadline returns true if the transaction
 // exceeded its deadline.
-func isEndTransactionExceedingDeadline(t roachpb.Timestamp, args roachpb.EndTransactionRequest) bool {
+func isEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransactionRequest) bool {
 	return args.Deadline != nil && args.Deadline.Less(t)
 }
 
@@ -691,13 +692,13 @@ func updateTxnWithExternalIntents(
 		if log.V(2) {
 			log.Infof("auto-gc'ed %s (%d intents)", txn.ID.Short(), len(args.IntentSpans))
 		}
-		return engine.MVCCDelete(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
+		return engine.MVCCDelete(ctx, batch, ms, key, hlc.ZeroTimestamp, nil /* txn */)
 	}
 	txn.Intents = make([]roachpb.Span, len(externalIntents))
 	for i := range externalIntents {
 		txn.Intents[i] = externalIntents[i].Span
 	}
-	return engine.MVCCPutProto(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, txn)
+	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil /* txn */, txn)
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
@@ -1047,7 +1048,7 @@ func (r *Replica) HeartbeatTxn(
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(ctx, batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
+	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &txn); err != nil {
 		return reply, err
 	} else if !ok {
 		// If no existing transaction record was found, skip heartbeat.
@@ -1059,10 +1060,10 @@ func (r *Replica) HeartbeatTxn(
 
 	if txn.Status == roachpb.PENDING {
 		if txn.LastHeartbeat == nil {
-			txn.LastHeartbeat = &roachpb.Timestamp{}
+			txn.LastHeartbeat = &hlc.Timestamp{}
 		}
 		txn.LastHeartbeat.Forward(args.Now)
-		if err := engine.MVCCPutProto(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil, &txn); err != nil {
+		if err := engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err
 		}
 	}
@@ -1163,7 +1164,7 @@ func (r *Replica) PushTxn(
 	if h.Txn != nil {
 		return reply, errTransactionUnsupported
 	}
-	if args.Now.Equal(roachpb.ZeroTimestamp) {
+	if args.Now.Equal(hlc.ZeroTimestamp) {
 		return reply, util.Errorf("the field Now must be provided")
 	}
 
@@ -1174,7 +1175,7 @@ func (r *Replica) PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	existTxn := &roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, roachpb.ZeroTimestamp,
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, existTxn)
 	if err != nil {
 		return reply, err
@@ -1215,7 +1216,7 @@ func (r *Replica) PushTxn(
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		return reply, engine.MVCCPutProto(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
+		return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
 	reply.PusheeTxn = existTxn.Clone()
@@ -1308,7 +1309,7 @@ func (r *Replica) PushTxn(
 	}
 
 	// Persist the pushed transaction using zero timestamp for inline value.
-	if err := engine.MVCCPutProto(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn); err != nil {
 		return reply, err
 	}
 	return reply, nil
@@ -1456,7 +1457,7 @@ func (r *Replica) TruncateLog(
 		r.mu.state.truncatedState = tState
 		r.mu.Unlock()
 	})
-	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, tState)
+	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
 }
 
 // LeaderLease sets the leader lease for this range. The command fails
@@ -1486,7 +1487,7 @@ func (r *Replica) LeaderLease(
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	if args.Lease.StartStasis.Equal(roachpb.ZeroTimestamp) {
+	if args.Lease.StartStasis.Equal(hlc.ZeroTimestamp) {
 		args.Lease.StartStasis = args.Lease.Expiration
 	}
 
@@ -1552,7 +1553,7 @@ func (r *Replica) LeaderLease(
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), hlc.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	r.mu.state.lease = &args.Lease
@@ -1963,7 +1964,7 @@ type ReplicaSnapshotDiff struct {
 	// Leader is set to true of this k:v pair is only present on the leader.
 	Leader    bool
 	Key       roachpb.Key
-	Timestamp roachpb.Timestamp
+	Timestamp hlc.Timestamp
 	Value     []byte
 }
 
@@ -2179,7 +2180,7 @@ func (r *Replica) AdminSplit(
 // the stats for the updated range and infers the rest by subtracting from the
 // original stats.
 func (r *Replica) splitTrigger(
-	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats, split *roachpb.SplitTrigger, ts roachpb.Timestamp,
+	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats, split *roachpb.SplitTrigger, ts hlc.Timestamp,
 ) error {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
@@ -2227,14 +2228,14 @@ func (r *Replica) splitTrigger(
 	if err != nil {
 		return util.Errorf("unable to fetch last replica GC timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &replicaGCTS); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
 		return util.Errorf("unable to copy last replica GC timestamp: %s", err)
 	}
 	verifyTS, err := r.getLastVerificationTimestamp()
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
@@ -2454,7 +2455,7 @@ func (r *Replica) AdminMerge(
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
 func (r *Replica) mergeTrigger(
-	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats, merge *roachpb.MergeTrigger, ts roachpb.Timestamp,
+	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats, merge *roachpb.MergeTrigger, ts hlc.Timestamp,
 ) error {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
@@ -2495,7 +2496,7 @@ func (r *Replica) mergeTrigger(
 	// keep track of stats here, because we already set the right range's
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(subsumedRangeID)
-	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, roachpb.ZeroTimestamp, nil, false); err != nil {
+	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, hlc.ZeroTimestamp, nil, false); err != nil {
 		return util.Errorf("cannot remove range metadata %s", err)
 	}
 

@@ -25,7 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -51,7 +50,7 @@ type Clock struct {
 	// Clock contains a mutex used to lock the below
 	// fields while methods operate on them.
 	sync.Mutex
-	state roachpb.Timestamp
+	state Timestamp
 	// MaxOffset specifies how far ahead of the physical
 	// clock (and cluster time) the wall time can be.
 	// See SetMaxOffset.
@@ -139,7 +138,7 @@ func (c *Clock) MaxOffset() time.Duration {
 
 // Timestamp returns a copy of the clock's current timestamp,
 // without performing a clock adjustment.
-func (c *Clock) Timestamp() roachpb.Timestamp {
+func (c *Clock) Timestamp() Timestamp {
 	c.Lock()
 	defer c.Unlock()
 	return c.timestamp()
@@ -147,8 +146,8 @@ func (c *Clock) Timestamp() roachpb.Timestamp {
 
 // timestamp returns the state as a timestamp, without
 // a lock on the clock's state, for internal usage.
-func (c *Clock) timestamp() roachpb.Timestamp {
-	return roachpb.Timestamp{
+func (c *Clock) timestamp() Timestamp {
+	return Timestamp{
 		WallTime: c.state.WallTime,
 		Logical:  c.state.Logical,
 	}
@@ -176,7 +175,7 @@ func (c *Clock) getPhysicalClock() int64 {
 // of the distributed network. This is the counterpart
 // of Update, which is passed a timestamp received from
 // another member of the distributed network.
-func (c *Clock) Now() roachpb.Timestamp {
+func (c *Clock) Now() Timestamp {
 	c.Lock()
 	defer c.Unlock()
 
@@ -215,7 +214,7 @@ func (c *Clock) PhysicalTime() time.Time {
 // in which case the state of the clock will not have been
 // altered.
 // To timestamp events of local origin, use Now instead.
-func (c *Clock) Update(rt roachpb.Timestamp) roachpb.Timestamp {
+func (c *Clock) Update(rt Timestamp) Timestamp {
 	c.Lock()
 	defer c.Unlock()
 	physicalClock := c.getPhysicalClock()

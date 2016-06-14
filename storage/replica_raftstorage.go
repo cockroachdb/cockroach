@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -55,7 +56,7 @@ var _ raft.Storage = (*Replica)(nil)
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), keys.RaftHardStateKey(r.RangeID),
-		roachpb.ZeroTimestamp, true, nil, &hs)
+		hlc.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
@@ -189,7 +190,7 @@ func iterateEntries(
 		context.Background(), e,
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
-		roachpb.ZeroTimestamp,
+		hlc.ZeroTimestamp,
 		true,  /* consistent */
 		nil,   /* txn */
 		false, /* !reverse */
@@ -255,7 +256,7 @@ func raftTruncatedState(
 ) (roachpb.RaftTruncatedState, error) {
 	ts := roachpb.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
-		roachpb.ZeroTimestamp, true, nil, &ts)
+		hlc.ZeroTimestamp, true, nil, &ts)
 	if err != nil {
 		return ts, err
 	}
@@ -301,7 +302,7 @@ func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized 
 		appliedIndex = 0
 	}
 	v, _, err := engine.MVCCGet(context.Background(), eng, keys.RaftAppliedIndexKey(rangeID),
-		roachpb.ZeroTimestamp, true, nil)
+		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -315,7 +316,7 @@ func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized 
 	// TODO(tschottdorf): code duplication.
 	var leaseAppliedIndex uint64
 	v, _, err = engine.MVCCGet(context.Background(), eng, keys.LeaseAppliedIndexKey(rangeID),
-		roachpb.ZeroTimestamp, true, nil)
+		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -337,7 +338,7 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 
 	if err := engine.MVCCPut(context.Background(), eng, ms,
 		keys.RaftAppliedIndexKey(rangeID),
-		roachpb.ZeroTimestamp,
+		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */); err != nil {
 		return err
@@ -345,7 +346,7 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCPut(context.Background(), eng, ms,
 		keys.LeaseAppliedIndexKey(rangeID),
-		roachpb.ZeroTimestamp,
+		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */)
 }
@@ -355,7 +356,7 @@ func loadLastIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized boo
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(context.Background(), eng,
 		keys.RaftLastIndexKey(rangeID),
-		roachpb.ZeroTimestamp, true /* consistent */, nil)
+		hlc.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -384,7 +385,7 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 	value.SetInt(int64(lastIndex))
 
 	return engine.MVCCPut(context.Background(), eng, nil, keys.RaftLastIndexKey(rangeID),
-		roachpb.ZeroTimestamp,
+		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */)
 }
@@ -525,7 +526,7 @@ func snapshot(
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := engine.MVCCGetProto(context.Background(), snap, keys.RangeDescriptorKey(startKey),
-		roachpb.MaxTimestamp, false /* !consistent */, nil, &desc)
+		hlc.MaxTimestamp, false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
 	}
@@ -608,7 +609,7 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries 
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKey(r.RangeID, ent.Index)
-		if err := engine.MVCCPutProto(context.Background(), batch, nil, key, roachpb.ZeroTimestamp, nil, ent); err != nil {
+		if err := engine.MVCCPutProto(context.Background(), batch, nil, key, hlc.ZeroTimestamp, nil, ent); err != nil {
 			return 0, err
 		}
 	}
@@ -616,7 +617,7 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries 
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(context.Background(), batch, nil,
-			keys.RaftLogKey(r.RangeID, i), roachpb.ZeroTimestamp, nil)
+			keys.RaftLogKey(r.RangeID, i), hlc.ZeroTimestamp, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -775,7 +776,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 // setHardState persists the raft HardState.
 func (r *Replica) setHardState(batch engine.ReadWriter, st raftpb.HardState) error {
 	return engine.MVCCPutProto(context.Background(), batch, nil, keys.RaftHardStateKey(r.RangeID),
-		roachpb.ZeroTimestamp, nil, &st)
+		hlc.ZeroTimestamp, nil, &st)
 }
 
 // Raft commands are encoded with a 1-byte version (currently 0), an 8-byte ID,

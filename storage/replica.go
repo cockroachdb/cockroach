@@ -188,7 +188,7 @@ type rangeState struct {
 	truncatedState *roachpb.RaftTruncatedState
 	// gcThreshold is the GC threshold of the replica. Reads and writes must
 	// not happen <= this time.
-	gcThreshold roachpb.Timestamp
+	gcThreshold hlc.Timestamp
 	// Whether the Replica is frozen.
 	frozen bool
 	ms     enginepb.MVCCStats
@@ -493,12 +493,12 @@ func setFrozenStatus(
 	var val roachpb.Value
 	val.SetBool(frozen)
 	return engine.MVCCPut(context.Background(), eng, ms,
-		keys.RangeFrozenStatusKey(rangeID), roachpb.ZeroTimestamp, val, nil)
+		keys.RangeFrozenStatusKey(rangeID), hlc.ZeroTimestamp, val, nil)
 }
 
 func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) {
 	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeFrozenStatusKey(rangeID),
-		roachpb.ZeroTimestamp, true, nil)
+		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return false, err
 	}
@@ -522,7 +522,7 @@ func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb
 
 func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
+	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), hlc.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil
@@ -537,16 +537,16 @@ func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 }
 
 func setGCThreshold(
-	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, threshold *roachpb.Timestamp,
+	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, threshold *hlc.Timestamp,
 ) error {
 	return engine.MVCCPutProto(context.Background(), eng, ms,
-		keys.RangeLastGCKey(rangeID), roachpb.ZeroTimestamp, nil, threshold)
+		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
 
-func loadGCThreshold(eng engine.Reader, rangeID roachpb.RangeID) (roachpb.Timestamp, error) {
-	var t roachpb.Timestamp
+func loadGCThreshold(eng engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
+	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLastGCKey(rangeID),
-		roachpb.ZeroTimestamp, true, nil, &t)
+		hlc.ZeroTimestamp, true, nil, &t)
 	return t, err
 }
 
@@ -574,7 +574,7 @@ func (r *Replica) newNotLeaderErrorLocked(l *roachpb.Lease, originStoreID roachp
 // lease for this replica. Unless an error is returned, the obtained
 // lease will be valid for a time interval containing the requested
 // timestamp. Only a single lease request may be pending at a time.
-func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachpb.Error {
+func (r *Replica) requestLeaderLease(timestamp hlc.Timestamp) <-chan *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -856,36 +856,36 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 
 // getLastReplicaGCTimestamp reads the timestamp at which the replica was
 // last checked for garbage collection.
-func (r *Replica) getLastReplicaGCTimestamp() (roachpb.Timestamp, error) {
+func (r *Replica) getLastReplicaGCTimestamp() (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	timestamp := hlc.Timestamp{}
+	_, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
-		return roachpb.ZeroTimestamp, err
+		return hlc.ZeroTimestamp, err
 	}
 	return timestamp, nil
 }
 
-func (r *Replica) setLastReplicaGCTimestamp(timestamp roachpb.Timestamp) error {
+func (r *Replica) setLastReplicaGCTimestamp(timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
 }
 
 // getLastVerificationTimestamp reads the timestamp at which the replica's
 // data was last verified.
-func (r *Replica) getLastVerificationTimestamp() (roachpb.Timestamp, error) {
+func (r *Replica) getLastVerificationTimestamp() (hlc.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	timestamp := hlc.Timestamp{}
+	_, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
-		return roachpb.ZeroTimestamp, err
+		return hlc.ZeroTimestamp, err
 	}
 	return timestamp, nil
 }
 
-func (r *Replica) setLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
+func (r *Replica) setLastVerificationTimestamp(timestamp hlc.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
@@ -1024,7 +1024,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	//   This isn't just unittests (which would require revamping the test
 	//   context sender), but also some of the scanner queues place batches
 	//   directly into the local range they're servicing.
-	if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	if ba.Timestamp.Equal(hlc.ZeroTimestamp) {
 		if ba.Txn != nil {
 			// TODO(tschottdorf): see if this is already done somewhere else.
 			ba.Timestamp = ba.Txn.OrigTimestamp
@@ -1453,7 +1453,7 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 }
 
 func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
-	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
+	if p.raftCmd.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return util.Errorf("can't propose Raft command with zero timestamp")
 	}
 

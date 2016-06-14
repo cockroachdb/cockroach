@@ -478,7 +478,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 		// The initial timestamp may be communicated by a higher layer.
 		// If so, use that. Otherwise make up a new one.
 		timestamp := ba.Txn.OrigTimestamp
-		if timestamp == roachpb.ZeroTimestamp {
+		if timestamp == hlc.ZeroTimestamp {
 			timestamp = tc.clock.Now()
 		}
 		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -274,7 +275,7 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
-			ts := roachpb.Timestamp{WallTime: int64(j)}
+			ts := hlc.Timestamp{WallTime: int64(j)}
 			batch.Put(MVCCKey{key, ts}, value)
 		}
 		batch.Finish()

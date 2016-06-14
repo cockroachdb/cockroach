@@ -23,10 +23,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // EventLogType represents an event type that can be recorded in the event log.
@@ -123,8 +123,8 @@ VALUES(
 // assigned database timestamp. However, in the case of our tests log events
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
-func (ev EventLogger) selectEventTimestamp(input roachpb.Timestamp) time.Time {
-	if input == roachpb.ZeroTimestamp {
+func (ev EventLogger) selectEventTimestamp(input hlc.Timestamp) time.Time {
+	if input == hlc.ZeroTimestamp {
 		return ev.LeaseManager.clock.PhysicalTime()
 	}
 	return input.GoTime()

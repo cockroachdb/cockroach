@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -44,13 +45,13 @@ func newReplicaConsistencyQueue(gossip *gossip.Gossip) *replicaConsistencyQueue 
 	return rcq
 }
 
-func (*replicaConsistencyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
+func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	_ config.SystemConfig) (bool, float64) {
 	return true, 1.0
 }
 
 // process() is called on every range for which this node is a leader.
-func (q *replicaConsistencyQueue) process(_ roachpb.Timestamp, rng *Replica, _ config.SystemConfig) error {
+func (q *replicaConsistencyQueue) process(_ hlc.Timestamp, rng *Replica, _ config.SystemConfig) error {
 	req := roachpb.CheckConsistencyRequest{}
 	_, pErr := rng.CheckConsistency(req, rng.Desc())
 	if pErr != nil {

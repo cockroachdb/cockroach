@@ -2628,6 +2628,7 @@ export interface utilBuilder {
 	decode(buffer: ByteBuffer) : utilMessage;
 	decode64(buffer: string) : utilMessage;
 	UnresolvedAddr: util.UnresolvedAddrBuilder;
+	hlc: util.hlcBuilder;
 	
 }
 	
@@ -2678,6 +2679,79 @@ export interface UnresolvedAddrBuilder {
 }
 
 
+declare module cockroach.util {
+	
+	export interface hlc {
+	
+		
+
+}
+	
+	export interface hlcMessage extends hlc {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface hlcBuilder {
+	new(data?: hlc): hlcMessage;
+	decode(buffer: ArrayBuffer) : hlcMessage;
+	decode(buffer: ByteBuffer) : hlcMessage;
+	decode64(buffer: string) : hlcMessage;
+	Timestamp: hlc.TimestampBuilder;
+	
+}
+	
+}
+
+declare module cockroach.util.hlc {
+	
+	export interface Timestamp {
+	
+		
+
+wall_time?: Long;
+		
+
+getWallTime?() : Long;
+		setWallTime?(wallTime : Long): void;
+		
+
+
+
+logical?: number;
+		
+
+getLogical?() : number;
+		setLogical?(logical : number): void;
+		
+
+
+
+}
+	
+	export interface TimestampMessage extends Timestamp {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimestampBuilder {
+	new(data?: Timestamp): TimestampMessage;
+	decode(buffer: ArrayBuffer) : TimestampMessage;
+	decode(buffer: ByteBuffer) : TimestampMessage;
+	decode64(buffer: string) : TimestampMessage;
+	
+}
+	
+}
+
+
+
 
 declare module cockroach {
 	
@@ -2707,7 +2781,6 @@ export interface roachpbBuilder {
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
 	StoreDescriptor: roachpb.StoreDescriptorBuilder;
 	Span: roachpb.SpanBuilder;
-	Timestamp: roachpb.TimestampBuilder;
 	Value: roachpb.ValueBuilder;
 	KeyValue: roachpb.KeyValueBuilder;
 	StoreIdent: roachpb.StoreIdentBuilder;
@@ -3110,51 +3183,6 @@ export interface SpanBuilder {
 
 declare module cockroach.roachpb {
 	
-	export interface Timestamp {
-	
-		
-
-wall_time?: Long;
-		
-
-getWallTime?() : Long;
-		setWallTime?(wallTime : Long): void;
-		
-
-
-
-logical?: number;
-		
-
-getLogical?() : number;
-		setLogical?(logical : number): void;
-		
-
-
-
-}
-	
-	export interface TimestampMessage extends Timestamp {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface TimestampBuilder {
-	new(data?: Timestamp): TimestampMessage;
-	decode(buffer: ArrayBuffer) : TimestampMessage;
-	decode(buffer: ByteBuffer) : TimestampMessage;
-	decode64(buffer: string) : TimestampMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.roachpb {
-	
 	export interface Value {
 	
 		
@@ -3168,11 +3196,11 @@ getRawBytes?() : ByteBuffer;
 
 
 
-timestamp?: Timestamp;
+timestamp?: util.hlc.Timestamp;
 		
 
-getTimestamp?() : Timestamp;
-		setTimestamp?(timestamp : Timestamp): void;
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
 		
 
 
@@ -3600,11 +3628,11 @@ getEpoch?() : number;
 
 
 
-timestamp?: Timestamp;
+timestamp?: util.hlc.Timestamp;
 		
 
-getTimestamp?() : Timestamp;
-		setTimestamp?(timestamp : Timestamp): void;
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
 		
 
 
@@ -3690,38 +3718,38 @@ getStatus?() : TransactionStatus;
 
 
 
-last_heartbeat?: Timestamp;
+last_heartbeat?: util.hlc.Timestamp;
 		
 
-getLastHeartbeat?() : Timestamp;
-		setLastHeartbeat?(lastHeartbeat : Timestamp): void;
-		
-
-
-
-orig_timestamp?: Timestamp;
-		
-
-getOrigTimestamp?() : Timestamp;
-		setOrigTimestamp?(origTimestamp : Timestamp): void;
+getLastHeartbeat?() : util.hlc.Timestamp;
+		setLastHeartbeat?(lastHeartbeat : util.hlc.Timestamp): void;
 		
 
 
 
-max_timestamp?: Timestamp;
+orig_timestamp?: util.hlc.Timestamp;
 		
 
-getMaxTimestamp?() : Timestamp;
-		setMaxTimestamp?(maxTimestamp : Timestamp): void;
+getOrigTimestamp?() : util.hlc.Timestamp;
+		setOrigTimestamp?(origTimestamp : util.hlc.Timestamp): void;
 		
 
 
 
-observed_timestamps?: ProtoBufMap<number, Timestamp>;
+max_timestamp?: util.hlc.Timestamp;
 		
 
-getObservedTimestamps?() : ProtoBufMap<number, Timestamp>;
-		setObservedTimestamps?(observedTimestamps : ProtoBufMap<number, Timestamp>): void;
+getMaxTimestamp?() : util.hlc.Timestamp;
+		setMaxTimestamp?(maxTimestamp : util.hlc.Timestamp): void;
+		
+
+
+
+observed_timestamps?: ProtoBufMap<number, util.hlc.Timestamp>;
+		
+
+getObservedTimestamps?() : ProtoBufMap<number, util.hlc.Timestamp>;
+		setObservedTimestamps?(observedTimestamps : ProtoBufMap<number, util.hlc.Timestamp>): void;
 		
 
 
@@ -3843,29 +3871,29 @@ declare module cockroach.roachpb {
 	
 		
 
-start?: Timestamp;
+start?: util.hlc.Timestamp;
 		
 
-getStart?() : Timestamp;
-		setStart?(start : Timestamp): void;
-		
-
-
-
-start_stasis?: Timestamp;
-		
-
-getStartStasis?() : Timestamp;
-		setStartStasis?(startStasis : Timestamp): void;
+getStart?() : util.hlc.Timestamp;
+		setStart?(start : util.hlc.Timestamp): void;
 		
 
 
 
-expiration?: Timestamp;
+start_stasis?: util.hlc.Timestamp;
 		
 
-getExpiration?() : Timestamp;
-		setExpiration?(expiration : Timestamp): void;
+getStartStasis?() : util.hlc.Timestamp;
+		setStartStasis?(startStasis : util.hlc.Timestamp): void;
+		
+
+
+
+expiration?: util.hlc.Timestamp;
+		
+
+getExpiration?() : util.hlc.Timestamp;
+		setExpiration?(expiration : util.hlc.Timestamp): void;
 		
 
 
@@ -3915,11 +3943,11 @@ getKey?() : ByteBuffer;
 
 
 
-timestamp?: Timestamp;
+timestamp?: util.hlc.Timestamp;
 		
 
-getTimestamp?() : Timestamp;
-		setTimestamp?(timestamp : Timestamp): void;
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
 		
 
 
@@ -4044,11 +4072,11 @@ getAddresses?() : util.UnresolvedAddr[];
 
 
 
-timestamp?: roachpb.Timestamp;
+timestamp?: util.hlc.Timestamp;
 		
 
-getTimestamp?() : roachpb.Timestamp;
-		setTimestamp?(timestamp : roachpb.Timestamp): void;
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
 		
 
 

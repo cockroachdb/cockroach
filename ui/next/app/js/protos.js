@@ -1266,6 +1266,42 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             }
                         }
                     ]
+                },
+                {
+                    "name": "hlc",
+                    "fields": [],
+                    "options": {
+                        "go_package": "hlc"
+                    },
+                    "messages": [
+                        {
+                            "name": "Timestamp",
+                            "options": {
+                                "(gogoproto.goproto_stringer)": false,
+                                "(gogoproto.populate)": true
+                            },
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "wall_time",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "logical",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             ]
         },
@@ -1524,33 +1560,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
-                    "name": "Timestamp",
-                    "options": {
-                        "(gogoproto.goproto_stringer)": false,
-                        "(gogoproto.populate)": true
-                    },
-                    "fields": [
-                        {
-                            "rule": "optional",
-                            "type": "int64",
-                            "name": "wall_time",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "int32",
-                            "name": "logical",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        }
-                    ]
-                },
-                {
                     "name": "Value",
                     "fields": [
                         {
@@ -1561,7 +1570,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {
@@ -1822,7 +1831,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 5,
                             "options": {
@@ -1895,13 +1904,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "last_heartbeat",
                             "id": 5
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "orig_timestamp",
                             "id": 6,
                             "options": {
@@ -1910,7 +1919,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "max_timestamp",
                             "id": 7,
                             "options": {
@@ -1919,7 +1928,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "map",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "keytype": "int32",
                             "name": "observed_timestamps",
                             "id": 8,
@@ -2008,7 +2017,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     "fields": [
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "start",
                             "id": 1,
                             "options": {
@@ -2017,7 +2026,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "start_stasis",
                             "id": 4,
                             "options": {
@@ -2026,7 +2035,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "expiration",
                             "id": 2,
                             "options": {
@@ -2061,7 +2070,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {
@@ -2209,7 +2218,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         },
                         {
                             "rule": "optional",
-                            "type": "roachpb.Timestamp",
+                            "type": "util.hlc.Timestamp",
                             "name": "timestamp",
                             "id": 2,
                             "options": {

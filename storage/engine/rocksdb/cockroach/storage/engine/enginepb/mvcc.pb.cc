@@ -37,6 +37,7 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
 
 #endif
   ::cockroach::roachpb::protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
+  ::cockroach::util::hlc::protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto();
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   MVCCMetadata::default_instance_ = new MVCCMetadata();
   MVCCStats::default_instance_ = new MVCCStats();
@@ -101,16 +102,16 @@ void MVCCMetadata::InitAsDefaultInstance() {
   txn_ = const_cast< ::cockroach::roachpb::TxnMeta*>(&::cockroach::roachpb::TxnMeta::default_instance());
 #endif
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(
-      ::cockroach::roachpb::Timestamp::internal_default_instance());
+  timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 #else
-  timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
+  timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
 #endif
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  merge_timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(
-      ::cockroach::roachpb::Timestamp::internal_default_instance());
+  merge_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 #else
-  merge_timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
+  merge_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
 #endif
 }
 
@@ -205,14 +206,14 @@ void MVCCMetadata::Clear() {
       if (txn_ != NULL) txn_->::cockroach::roachpb::TxnMeta::Clear();
     }
     if (has_timestamp()) {
-      if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
+      if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
     }
     deleted_ = false;
     if (has_raw_bytes()) {
       raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
     if (has_merge_timestamp()) {
-      if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+      if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::util::hlc::Timestamp::Clear();
     }
   }
 
@@ -251,7 +252,7 @@ bool MVCCMetadata::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.Timestamp timestamp = 2;
+      // optional .cockroach.util.hlc.Timestamp timestamp = 2;
       case 2: {
         if (tag == 18) {
          parse_timestamp:
@@ -322,7 +323,7 @@ bool MVCCMetadata::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.Timestamp merge_timestamp = 7;
+      // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
       case 7: {
         if (tag == 58) {
          parse_merge_timestamp:
@@ -366,7 +367,7 @@ void MVCCMetadata::SerializeWithCachedSizes(
       1, *this->txn_, output);
   }
 
-  // optional .cockroach.roachpb.Timestamp timestamp = 2;
+  // optional .cockroach.util.hlc.Timestamp timestamp = 2;
   if (has_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, *this->timestamp_, output);
@@ -393,7 +394,7 @@ void MVCCMetadata::SerializeWithCachedSizes(
       6, this->raw_bytes(), output);
   }
 
-  // optional .cockroach.roachpb.Timestamp merge_timestamp = 7;
+  // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
   if (has_merge_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       7, *this->merge_timestamp_, output);
@@ -416,7 +417,7 @@ int MVCCMetadata::ByteSize() const {
           *this->txn_);
     }
 
-    // optional .cockroach.roachpb.Timestamp timestamp = 2;
+    // optional .cockroach.util.hlc.Timestamp timestamp = 2;
     if (has_timestamp()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -449,7 +450,7 @@ int MVCCMetadata::ByteSize() const {
           this->raw_bytes());
     }
 
-    // optional .cockroach.roachpb.Timestamp merge_timestamp = 7;
+    // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
     if (has_merge_timestamp()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -478,7 +479,7 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
       mutable_txn()->::cockroach::roachpb::TxnMeta::MergeFrom(from.txn());
     }
     if (from.has_timestamp()) {
-      mutable_timestamp()->::cockroach::roachpb::Timestamp::MergeFrom(from.timestamp());
+      mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
     }
     if (from.has_deleted()) {
       set_deleted(from.deleted());
@@ -494,7 +495,7 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
       raw_bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.raw_bytes_);
     }
     if (from.has_merge_timestamp()) {
-      mutable_merge_timestamp()->::cockroach::roachpb::Timestamp::MergeFrom(from.merge_timestamp());
+      mutable_merge_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.merge_timestamp());
     }
   }
   if (!from.unknown_fields().empty()) {
@@ -586,7 +587,7 @@ void MVCCMetadata::set_allocated_txn(::cockroach::roachpb::TxnMeta* txn) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.txn)
 }
 
-// optional .cockroach.roachpb.Timestamp timestamp = 2;
+// optional .cockroach.util.hlc.Timestamp timestamp = 2;
 bool MVCCMetadata::has_timestamp() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -597,10 +598,10 @@ void MVCCMetadata::clear_has_timestamp() {
   _has_bits_[0] &= ~0x00000002u;
 }
 void MVCCMetadata::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
   clear_has_timestamp();
 }
-const ::cockroach::roachpb::Timestamp& MVCCMetadata::timestamp() const {
+const ::cockroach::util::hlc::Timestamp& MVCCMetadata::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   return timestamp_ != NULL ? *timestamp_ : *default_instance().timestamp_;
@@ -608,22 +609,22 @@ const ::cockroach::roachpb::Timestamp& MVCCMetadata::timestamp() const {
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 #endif
 }
-::cockroach::roachpb::Timestamp* MVCCMetadata::mutable_timestamp() {
+::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::roachpb::Timestamp;
+    timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_;
 }
-::cockroach::roachpb::Timestamp* MVCCMetadata::release_timestamp() {
+::cockroach::util::hlc::Timestamp* MVCCMetadata::release_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   clear_has_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = timestamp_;
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
-void MVCCMetadata::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void MVCCMetadata::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -760,7 +761,7 @@ void MVCCMetadata::clear_raw_bytes() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 
-// optional .cockroach.roachpb.Timestamp merge_timestamp = 7;
+// optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
 bool MVCCMetadata::has_merge_timestamp() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -771,10 +772,10 @@ void MVCCMetadata::clear_has_merge_timestamp() {
   _has_bits_[0] &= ~0x00000040u;
 }
 void MVCCMetadata::clear_merge_timestamp() {
-  if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::util::hlc::Timestamp::Clear();
   clear_has_merge_timestamp();
 }
-const ::cockroach::roachpb::Timestamp& MVCCMetadata::merge_timestamp() const {
+const ::cockroach::util::hlc::Timestamp& MVCCMetadata::merge_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   return merge_timestamp_ != NULL ? *merge_timestamp_ : *default_instance().merge_timestamp_;
@@ -782,22 +783,22 @@ const ::cockroach::roachpb::Timestamp& MVCCMetadata::merge_timestamp() const {
   return merge_timestamp_ != NULL ? *merge_timestamp_ : *default_instance_->merge_timestamp_;
 #endif
 }
-::cockroach::roachpb::Timestamp* MVCCMetadata::mutable_merge_timestamp() {
+::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_merge_timestamp() {
   set_has_merge_timestamp();
   if (merge_timestamp_ == NULL) {
-    merge_timestamp_ = new ::cockroach::roachpb::Timestamp;
+    merge_timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_;
 }
-::cockroach::roachpb::Timestamp* MVCCMetadata::release_merge_timestamp() {
+::cockroach::util::hlc::Timestamp* MVCCMetadata::release_merge_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   clear_has_merge_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = merge_timestamp_;
+  ::cockroach::util::hlc::Timestamp* temp = merge_timestamp_;
   merge_timestamp_ = NULL;
   return temp;
 }
-void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::roachpb::Timestamp* merge_timestamp) {
+void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::Timestamp* merge_timestamp) {
   delete merge_timestamp_;
   merge_timestamp_ = merge_timestamp;
   if (merge_timestamp) {
