@@ -395,13 +395,10 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	rangeID := r.RangeID
 
-	r.store.snapMu.Lock()
-	defer r.store.snapMu.Unlock()
-
 	// If a snapshot is in progress, see if it's ready.
-	if pendingSnapshotChan, ok := r.store.snapMu.snapshots[rangeID]; ok {
+	if r.mu.snapshotChan != nil {
 		select {
-		case snapData, ok := <-pendingSnapshotChan:
+		case snapData, ok := <-r.mu.snapshotChan:
 			if ok {
 				return snapData, nil
 			}
@@ -413,8 +410,8 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		}
 	}
 
-	// See if too many snapshots are already running for this store.
-	if len(r.store.snapMu.snapshots) >= r.store.ctx.concurrentSnapshotLimit {
+	// See if there is already a snapshot running for this store.
+	if !r.store.AcquireRaftSnapshot() {
 		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
@@ -423,14 +420,10 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	ch := make(chan (raftpb.Snapshot))
 
 	if r.store.Stopper().RunAsyncTask(func() {
-		defer func() {
-			r.store.snapMu.Lock()
-			delete(r.store.snapMu.snapshots, rangeID)
-			r.store.snapMu.Unlock()
-			close(ch)
-		}()
+		defer close(ch)
 		snap := r.store.NewSnapshot()
 		defer snap.Close()
+		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
@@ -446,14 +439,14 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			}
 		}
 	}) {
-		r.store.snapMu.snapshots[rangeID] = ch
+		r.mu.snapshotChan = ch
 	} else {
-		close(ch)
+		r.store.ReleaseRaftSnapshot()
 	}
 
 	if r.store.ctx.BlockingSnapshotDuration > 0 {
 		select {
-		case snap, ok := <-ch:
+		case snap, ok := <-r.mu.snapshotChan:
 			if ok {
 				return snap, nil
 			}
@@ -475,16 +468,15 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 	for retry := retry.Start(retryOptions); retry.Next(); {
 		r.mu.Lock()
 		snap, err := r.Snapshot()
+		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
-			r.store.snapMu.Lock()
-			snapshotChan, ok := r.store.snapMu.snapshots[r.RangeID]
-			r.store.snapMu.Unlock()
-			if !ok {
+			if snapshotChan == nil {
 				// The call to Snapshot() didn't start an async process due to
 				// rate limiting. Try again later.
 				continue
 			}
+			var ok bool
 			snap, ok = <-snapshotChan
 			if ok {
 				return snap, nil
