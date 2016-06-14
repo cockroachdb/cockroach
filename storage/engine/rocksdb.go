@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -48,7 +49,10 @@ import (
 // #include "rocksdb/db.h"
 import "C"
 
-const minMemtableBudget = 1 << 20 // 1 MB
+const (
+	minMemtableBudget = 1 << 20 // 1 MB
+	defaultBlockSize  = 2 << 10 // 32KB (rocksdb default is 4KB)
+)
 
 func init() {
 	rocksdb.Logger = log.Infof
@@ -144,6 +148,7 @@ func (r *RocksDB) Open() error {
 		C.DBOptions{
 			cache_size:      C.uint64_t(r.cacheSize),
 			memtable_budget: C.uint64_t(r.memtableBudget),
+			block_size:      C.uint64_t(envutil.EnvOrDefaultBytes("rocksdb_block_size", defaultBlockSize)),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 		})
