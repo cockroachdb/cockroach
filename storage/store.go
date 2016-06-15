@@ -435,7 +435,7 @@ type StoreTestingKnobs struct {
 	BadChecksumPanic func([]ReplicaSnapshotDiff)
 	// Disables the use of one phase commits.
 	DisableOnePhaseCommits bool
-	// A hock to manipulate the clock before sending a batch request to a replica.
+	// A hack to manipulate the clock before sending a batch request to a replica.
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
