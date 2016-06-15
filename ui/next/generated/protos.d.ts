@@ -1664,6 +1664,15 @@ getPendingCmds?() : number;
 
 
 
+state?: storage.storagebase.RangeInfo;
+		
+
+getState?() : storage.storagebase.RangeInfo;
+		setState?(state : storage.storagebase.RangeInfo): void;
+		
+
+
+
 }
 	
 	export interface RangeInfoMessage extends RangeInfo {
@@ -2794,6 +2803,9 @@ export interface roachpbBuilder {
 	Intent: roachpb.IntentBuilder;
 	Lease: roachpb.LeaseBuilder;
 	AbortCacheEntry: roachpb.AbortCacheEntryBuilder;
+	RaftTruncatedState: roachpb.RaftTruncatedStateBuilder;
+	RaftTombstone: roachpb.RaftTombstoneBuilder;
+	RaftSnapshotData: roachpb.RaftSnapshotDataBuilder;
 	ValueType: roachpb.ValueType;
 	ReplicaChangeType: roachpb.ReplicaChangeType;
 	TransactionStatus: roachpb.TransactionStatus;
@@ -3883,6 +3895,196 @@ export interface AbortCacheEntryBuilder {
 
 
 declare module cockroach.roachpb {
+	
+	export interface RaftTruncatedState {
+	
+		
+
+index?: Long;
+		
+
+getIndex?() : Long;
+		setIndex?(index : Long): void;
+		
+
+
+
+term?: Long;
+		
+
+getTerm?() : Long;
+		setTerm?(term : Long): void;
+		
+
+
+
+}
+	
+	export interface RaftTruncatedStateMessage extends RaftTruncatedState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftTruncatedStateBuilder {
+	new(data?: RaftTruncatedState): RaftTruncatedStateMessage;
+	decode(buffer: ArrayBuffer) : RaftTruncatedStateMessage;
+	decode(buffer: ByteBuffer) : RaftTruncatedStateMessage;
+	decode64(buffer: string) : RaftTruncatedStateMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.roachpb {
+	
+	export interface RaftTombstone {
+	
+		
+
+next_replica_id?: number;
+		
+
+getNextReplicaId?() : number;
+		setNextReplicaId?(nextReplicaId : number): void;
+		
+
+
+
+}
+	
+	export interface RaftTombstoneMessage extends RaftTombstone {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftTombstoneBuilder {
+	new(data?: RaftTombstone): RaftTombstoneMessage;
+	decode(buffer: ArrayBuffer) : RaftTombstoneMessage;
+	decode(buffer: ByteBuffer) : RaftTombstoneMessage;
+	decode64(buffer: string) : RaftTombstoneMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.roachpb {
+	
+	export interface RaftSnapshotData {
+	
+		
+
+range_descriptor?: RangeDescriptor;
+		
+
+getRangeDescriptor?() : RangeDescriptor;
+		setRangeDescriptor?(rangeDescriptor : RangeDescriptor): void;
+		
+
+
+
+KV?: RaftSnapshotData.KeyValue[];
+		
+
+getKV?() : RaftSnapshotData.KeyValue[];
+		setKV?(kV : RaftSnapshotData.KeyValue[]): void;
+		
+
+
+
+log_entries?: ByteBuffer[];
+		
+
+getLogEntries?() : ByteBuffer[];
+		setLogEntries?(logEntries : ByteBuffer[]): void;
+		
+
+
+
+}
+	
+	export interface RaftSnapshotDataMessage extends RaftSnapshotData {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftSnapshotDataBuilder {
+	new(data?: RaftSnapshotData): RaftSnapshotDataMessage;
+	decode(buffer: ArrayBuffer) : RaftSnapshotDataMessage;
+	decode(buffer: ByteBuffer) : RaftSnapshotDataMessage;
+	decode64(buffer: string) : RaftSnapshotDataMessage;
+	KeyValue: RaftSnapshotData.KeyValueBuilder;
+	
+}
+	
+}
+
+declare module cockroach.roachpb.RaftSnapshotData {
+	
+	export interface KeyValue {
+	
+		
+
+key?: ByteBuffer;
+		
+
+getKey?() : ByteBuffer;
+		setKey?(key : ByteBuffer): void;
+		
+
+
+
+value?: ByteBuffer;
+		
+
+getValue?() : ByteBuffer;
+		setValue?(value : ByteBuffer): void;
+		
+
+
+
+timestamp?: util.hlc.Timestamp;
+		
+
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
+		
+
+
+
+}
+	
+	export interface KeyValueMessage extends KeyValue {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface KeyValueBuilder {
+	new(data?: KeyValue): KeyValueMessage;
+	decode(buffer: ArrayBuffer) : KeyValueMessage;
+	decode(buffer: ByteBuffer) : KeyValueMessage;
+	decode64(buffer: string) : KeyValueMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.roachpb {
 	export const enum ValueType {
 		UNKNOWN = 0,
 		NULL = 7,
@@ -3940,6 +4142,7 @@ export interface storageBuilder {
 	decode(buffer: ByteBuffer) : storageMessage;
 	decode64(buffer: string) : storageMessage;
 	engine: storage.engineBuilder;
+	storagebase: storage.storagebaseBuilder;
 	
 }
 	
@@ -4341,6 +4544,179 @@ declare module cockroach.storage.engine.enginepb {
 		SNAPSHOT = 1,
 		
 }
+}
+
+
+
+declare module cockroach.storage {
+	
+	export interface storagebase {
+	
+		
+
+}
+	
+	export interface storagebaseMessage extends storagebase {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface storagebaseBuilder {
+	new(data?: storagebase): storagebaseMessage;
+	decode(buffer: ArrayBuffer) : storagebaseMessage;
+	decode(buffer: ByteBuffer) : storagebaseMessage;
+	decode64(buffer: string) : storagebaseMessage;
+	RangeState: storagebase.RangeStateBuilder;
+	RangeInfo: storagebase.RangeInfoBuilder;
+	
+}
+	
+}
+
+declare module cockroach.storage.storagebase {
+	
+	export interface RangeState {
+	
+		
+
+raftAppliedIndex?: Long;
+		
+
+getRaftAppliedIndex?() : Long;
+		setRaftAppliedIndex?(raftAppliedIndex : Long): void;
+		
+
+
+
+leaseAppliedIndex?: Long;
+		
+
+getLeaseAppliedIndex?() : Long;
+		setLeaseAppliedIndex?(leaseAppliedIndex : Long): void;
+		
+
+
+
+desc?: roachpb.RangeDescriptor;
+		
+
+getDesc?() : roachpb.RangeDescriptor;
+		setDesc?(desc : roachpb.RangeDescriptor): void;
+		
+
+
+
+lease?: roachpb.Lease;
+		
+
+getLease?() : roachpb.Lease;
+		setLease?(lease : roachpb.Lease): void;
+		
+
+
+
+truncatedState?: roachpb.RaftTruncatedState;
+		
+
+getTruncatedState?() : roachpb.RaftTruncatedState;
+		setTruncatedState?(truncatedState : roachpb.RaftTruncatedState): void;
+		
+
+
+
+gcThreshold?: util.hlc.Timestamp;
+		
+
+getGcThreshold?() : util.hlc.Timestamp;
+		setGcThreshold?(gcThreshold : util.hlc.Timestamp): void;
+		
+
+
+
+stats?: engine.enginepb.MVCCStats;
+		
+
+getStats?() : engine.enginepb.MVCCStats;
+		setStats?(stats : engine.enginepb.MVCCStats): void;
+		
+
+
+
+frozen?: boolean;
+		
+
+getFrozen?() : boolean;
+		setFrozen?(frozen : boolean): void;
+		
+
+
+
+}
+	
+	export interface RangeStateMessage extends RangeState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeStateBuilder {
+	new(data?: RangeState): RangeStateMessage;
+	decode(buffer: ArrayBuffer) : RangeStateMessage;
+	decode(buffer: ByteBuffer) : RangeStateMessage;
+	decode64(buffer: string) : RangeStateMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.storage.storagebase {
+	
+	export interface RangeInfo {
+	
+		
+
+state?: RangeState;
+		
+
+getState?() : RangeState;
+		setState?(state : RangeState): void;
+		
+
+
+
+lastIndex?: Long;
+		
+
+getLastIndex?() : Long;
+		setLastIndex?(lastIndex : Long): void;
+		
+
+
+
+}
+	
+	export interface RangeInfoMessage extends RangeInfo {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeInfoBuilder {
+	new(data?: RangeInfo): RangeInfoMessage;
+	decode(buffer: ArrayBuffer) : RangeInfoMessage;
+	decode(buffer: ByteBuffer) : RangeInfoMessage;
+	decode64(buffer: string) : RangeInfoMessage;
+	
+}
+	
 }
 
 

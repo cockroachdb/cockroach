@@ -898,6 +898,16 @@ func (r *Replica) RaftStatus() *raft.Status {
 	return nil
 }
 
+// State returns a copy of the internal state of the Replica, along with some
+// auxiliary information.
+func (r *Replica) State() storagebase.RangeInfo {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var ri storagebase.RangeInfo
+	ri.RangeState = *(protoutil.Clone(&r.mu.state)).(*storagebase.RangeState)
+	return ri
+}
+
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
