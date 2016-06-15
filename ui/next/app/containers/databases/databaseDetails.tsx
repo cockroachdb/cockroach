@@ -143,9 +143,9 @@ interface DatabaseMainData {
  */
 interface DatabaseMainActions {
   // Call if the user indicates they wish to change the sort of the table data.
-  setUISetting(key: string, value: any): void;
+  setUISetting: typeof setUISetting;
   // Call when the data needs to be refreshed.
-  refreshDatabaseDetails(id: string): void;
+  refreshDatabaseDetails: typeof refreshDatabaseDetails;
 }
 
 /**

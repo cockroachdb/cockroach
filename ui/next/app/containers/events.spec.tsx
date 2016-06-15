@@ -7,10 +7,12 @@ import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";
 import { EventList, EventRow } from "./events";
+import { refreshEvents } from "../redux/events";
 
 type Event = cockroach.server.serverpb.EventsResponse.Event;
+type RefreshEvents = typeof refreshEvents;
 
-function makeEventList(events: Event[], refreshEvents: () => void) {
+function makeEventList(events: Event[], refreshEvents: RefreshEvents) {
   return shallow(<EventList events={events} refreshEvents={refreshEvents}></EventList>);
 }
 
