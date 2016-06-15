@@ -22,7 +22,7 @@ import "cockroach/build/info.proto";
 import "cockroach/gossip/gossip.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/server/status/status.proto";
-import "cockroach/storage/storagebase/range.proto";
+import "cockroach/storage/storagebase/state.proto";
 import "cockroach/util/unresolved_addr.proto";
 
 import weak "gogoproto/gogo.proto";
