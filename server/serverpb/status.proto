@@ -22,6 +22,7 @@ import "cockroach/build/info.proto";
 import "cockroach/gossip/gossip.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/server/status/status.proto";
+import "cockroach/storage/storagebase/range.proto";
 import "cockroach/util/unresolved_addr.proto";
 
 import weak "gogoproto/gogo.proto";
@@ -55,6 +56,7 @@ message RangeInfo {
   string raft_state = 2;
   // pending_cmds is the number of pendingCmds on the range.
   int32 pending_cmds = 3;
+  storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {
