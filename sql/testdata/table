@@ -186,6 +186,12 @@ test.users CREATE TABLE "test.users"
   CONSTRAINT "primary" PRIMARY KEY (id),
   INDEX foo (name),
   UNIQUE INDEX bar (id, name),
+  FAMILY "primary" (id),
+  FAMILY fam_2_name (name),
+  FAMILY fam_3_title (title),
+  FAMILY fam_4_nickname (nickname),
+  FAMILY fam_5_username (username),
+  FAMILY fam_6_email (email),
   CHECK (LENGTH(nickname) < LENGTH(name)),
   CHECK (LENGTH(nickname) < 10)
 )
@@ -219,6 +225,12 @@ test.named_constraints  CREATE TABLE "test.named_constraints" (
                         INDEX foo (name),
                         UNIQUE INDEX uq2 (username),
                         UNIQUE INDEX bar (id, name),
+                        FAMILY "primary" (id),
+                        FAMILY fam_2_name (name),
+                        FAMILY fam_3_title (title),
+                        FAMILY fam_4_nickname (nickname),
+                        FAMILY fam_5_username (username),
+                        FAMILY fam_6_email (email),
                         CONSTRAINT ck2 CHECK (LENGTH(nickname) < LENGTH(name)),
                         CONSTRAINT ck1 CHECK (LENGTH(nickname) < 10)
                         )

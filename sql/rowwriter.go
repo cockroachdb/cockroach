@@ -247,11 +247,6 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
-			if family.ID == 0 {
-				// TODO(dan): Delete this once column families can be created that are
-				// not backward compatible with the old format.
-				return errors.Errorf("family is not backward compatible: %v", family)
-			}
 
 			idx, ok := ri.insertColIDtoRowIndex[family.DefaultColumnID]
 			if !ok {
@@ -300,6 +295,9 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 				continue
 			}
 
+			if lastColID > col.ID {
+				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
+			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
 			ri.valueBuf, err = sqlbase.EncodeTableValue(ri.valueBuf, colIDDiff, values[idx])
@@ -309,11 +307,6 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 		}
 
 		if family.ID == 0 || len(ri.valueBuf) > 0 {
-			// TODO(dan): Delete this check once column families can be created that
-			// are not backward compatible with the old format.
-			if family.ID == 0 && len(ri.valueBuf) > 0 {
-				return errors.Errorf("family is not backward compatible: %v", family)
-			}
 			ri.value.SetTuple(ri.valueBuf)
 			putFn(b, &ri.key, &ri.value, &ri.value)
 		}
@@ -479,6 +472,22 @@ func makeRowUpdater(
 				return rowUpdater{}, err
 			}
 		}
+		for _, fam := range tableDesc.Families {
+			familyBeingUpdated := false
+			for _, colID := range fam.ColumnIDs {
+				if _, ok := ru.updateColIDtoRowIndex[colID]; ok {
+					familyBeingUpdated = true
+					break
+				}
+			}
+			if familyBeingUpdated {
+				for _, colID := range fam.ColumnIDs {
+					if err := maybeAddCol(colID); err != nil {
+						return rowUpdater{}, err
+					}
+				}
+			}
+		}
 		for _, index := range indexes {
 			for _, colID := range index.ColumnIDs {
 				if err := maybeAddCol(colID); err != nil {
@@ -605,11 +614,6 @@ func (ru *rowUpdater) updateRow(
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
-			if family.ID == 0 {
-				// TODO(dan): Delete this once column families can be created that are
-				// not backward compatible with the old format.
-				return nil, errors.Errorf("family is not backward compatible: %v", family)
-			}
 
 			idx, ok := ru.updateColIDtoRowIndex[family.DefaultColumnID]
 			if !ok {
@@ -654,7 +658,11 @@ func (ru *rowUpdater) updateRow(
 				continue
 			}
 
+			if lastColID > col.ID {
+				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
+			}
 			colIDDiff := col.ID - lastColID
+			lastColID = col.ID
 			ru.valueBuf, err = sqlbase.EncodeTableValue(ru.valueBuf, colIDDiff, ru.newValues[idx])
 			if err != nil {
 				return nil, err
@@ -670,11 +678,6 @@ func (ru *rowUpdater) updateRow(
 
 			b.Del(&ru.key)
 		} else {
-			// TODO(dan): Delete this check once column families can be created that
-			// are not backward compatible with the old format.
-			if family.ID == 0 && len(ru.valueBuf) > 0 {
-				return nil, errors.Errorf("family is not backward compatible: %v", family)
-			}
 			ru.value.SetTuple(ru.valueBuf)
 			if log.V(2) {
 				log.Infof("Put %s -> %v", ru.key, &ru.value)
