@@ -138,17 +138,18 @@ func valueSort(numCols int, values []string) {
 }
 
 type logicQuery struct {
-	pos             string
-	sql             string
-	colNames        bool
-	colTypes        string
-	label           string
-	sorter          logicSorter
-	expectErrCode   string
-	expectErr       string
-	expectedValues  int
-	expectedHash    string
-	expectedResults []string
+	pos                string
+	sql                string
+	colNames           bool
+	colTypes           string
+	label              string
+	sorter             logicSorter
+	expectErrCode      string
+	expectErr          string
+	expectedValues     int
+	expectedHash       string
+	expectedResults    []string
+	expectedResultsRaw []string
 }
 
 // logicTest executes the test cases specified in a file. The file format is
@@ -421,6 +422,7 @@ func (t *logicTest) processTestFile(path string) error {
 						query.expectedHash = m[2]
 					} else {
 						for {
+							query.expectedResultsRaw = append(query.expectedResultsRaw, s.Text())
 							results := strings.Fields(s.Text())
 							if len(results) == 0 {
 								break
@@ -589,6 +591,7 @@ func (t *logicTest) execQuery(query logicQuery) {
 	}
 
 	var results []string
+	var resultLines [][]string
 	if query.colNames {
 		for _, col := range cols {
 			// We split column names on whitespace and append a separate "result"
@@ -596,8 +599,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 			// containing whitespace.
 			results = append(results, strings.Fields(col)...)
 		}
+		resultLines = append(resultLines, cols)
 	}
 	for rows.Next() {
+		var resultLine []string
 		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
 		}
@@ -640,11 +645,15 @@ func (t *logicTest) execQuery(query logicQuery) {
 				// We split string results on whitespace and append a separate result
 				// for each string. A bit unusual, but otherwise we can't match strings
 				// containing whitespace.
-				results = append(results, strings.Fields(fmt.Sprint(val))...)
+				valStr := fmt.Sprint(val)
+				results = append(results, strings.Fields(valStr)...)
+				resultLine = append(resultLine, valStr)
 			} else {
 				results = append(results, "NULL")
+				resultLine = append(resultLine, "NULL")
 			}
 		}
+		resultLines = append(resultLines, resultLine)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
@@ -675,25 +684,15 @@ func (t *logicTest) execQuery(query logicQuery) {
 		var buf bytes.Buffer
 		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 
-		fmt.Fprintf(tw, "%s: expected:\n", query.pos)
-		for i := 0; i < len(query.expectedResults); i += len(cols) {
-			end := i + len(cols)
-			if end > len(query.expectedResults) {
-				end = len(query.expectedResults)
-			}
-			for _, value := range query.expectedResults[i:end] {
-				fmt.Fprintf(tw, "%q\t", value)
-			}
-			fmt.Fprint(tw, "\n")
+		fmt.Fprintf(&buf, "%s: \nexpected:\n", query.pos)
+		for _, expectedResultRaw := range query.expectedResultsRaw {
+			fmt.Fprintf(tw, "    %s\n", expectedResultRaw)
 		}
-		fmt.Fprint(tw, "but found:\n")
-		for i := 0; i < len(results); i += len(cols) {
-			end := i + len(cols)
-			if end > len(results) {
-				end = len(results)
-			}
-			for _, value := range results[i:end] {
-				fmt.Fprintf(tw, "%q\t", value)
+		fmt.Fprint(&buf, "but found:\n")
+		for _, resultLine := range resultLines {
+			fmt.Fprint(tw, "    ")
+			for _, value := range resultLine {
+				fmt.Fprintf(tw, "%s\t", value)
 			}
 			fmt.Fprint(tw, "\n")
 		}
