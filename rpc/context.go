@@ -167,7 +167,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 		ctx.conns.cache[target] = conn
 
-		ctx.Stopper.RunTask(func() {
+		if !ctx.Stopper.RunTask(func() {
 			ctx.Stopper.RunWorker(func() {
 				if err := ctx.runHeartbeat(conn, target); err != nil && !grpcutil.IsClosedConnection(err) {
 					log.Error(err)
@@ -176,7 +176,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 				ctx.removeConn(target, conn)
 				ctx.conns.Unlock()
 			})
-		})
+		}) {
+			ctx.removeConn(target, conn)
+		}
 	}
 	return conn, err
 }
