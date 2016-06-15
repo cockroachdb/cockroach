@@ -309,7 +309,8 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			err = c.wr.Flush()
 
 		default:
-			err = c.sendInternalError(fmt.Sprintf("unrecognized client message type %s", typ))
+			err = c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
+				fmt.Sprintf("unrecognized client message type %s", typ))
 		}
 		if err != nil {
 			return err
