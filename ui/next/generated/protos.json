@@ -622,6 +622,15 @@
                                     "type": "int32",
                                     "name": "pending_cmds",
                                     "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "storage.storagebase.RangeInfo",
+                                    "name": "state",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
@@ -2005,6 +2014,106 @@
                             }
                         }
                     ]
+                },
+                {
+                    "name": "RaftTruncatedState",
+                    "options": {
+                        "(gogoproto.populate)": true
+                    },
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "index",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "term",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "RaftTombstone",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "next_replica_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "NextReplicaID",
+                                "(gogoproto.casttype)": "ReplicaID"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "RaftSnapshotData",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "RangeDescriptor",
+                            "name": "range_descriptor",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "KeyValue",
+                            "name": "KV",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "KV"
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "bytes",
+                            "name": "log_entries",
+                            "id": 3
+                        }
+                    ],
+                    "messages": [
+                        {
+                            "name": "KeyValue",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "bytes",
+                                    "name": "key",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "bytes",
+                                    "name": "value",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
+                                    "name": "timestamp",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             ],
             "enums": [
@@ -2397,6 +2506,96 @@
                                     "options": {
                                         "(gogoproto.goproto_enum_prefix)": false
                                     }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "storagebase",
+                    "fields": [],
+                    "options": {
+                        "go_package": "storagebase"
+                    },
+                    "messages": [
+                        {
+                            "name": "RangeState",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "raftAppliedIndex",
+                                    "id": 4
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "leaseAppliedIndex",
+                                    "id": 5
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "roachpb.RangeDescriptor",
+                                    "name": "desc",
+                                    "id": 6
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "roachpb.Lease",
+                                    "name": "lease",
+                                    "id": 7
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "roachpb.RaftTruncatedState",
+                                    "name": "truncatedState",
+                                    "id": 8
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
+                                    "name": "gcThreshold",
+                                    "id": 9,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.customname)": "GCThreshold"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "engine.enginepb.MVCCStats",
+                                    "name": "stats",
+                                    "id": 10,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "bool",
+                                    "name": "frozen",
+                                    "id": 11
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RangeInfo",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "RangeState",
+                                    "name": "state",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.embed)": true
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "lastIndex",
+                                    "id": 2
                                 }
                             ]
                         }

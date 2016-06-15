@@ -669,10 +669,13 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 					// the most interesting bit for now.
 					raftState = status.RaftState.String()
 				}
+				state := rep.State()
+				state.Desc = nil // already have a pretty desc
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
 					Desc:        PrettifyRangeDescriptor(desc),
 					RaftState:   raftState,
 					PendingCmds: int32(rep.PendingCmdsLen()),
+					State:       state,
 				})
 				return false, nil
 			})
