@@ -294,7 +294,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	// Mark one store dead and one store declined.
 	sp.mu.Lock()
 	sp.mu.stores[deadStore.StoreID].markDead(sp.clock.Now())
-	sp.mu.stores[declinedStore.StoreID].reservationDeclinedOn = sp.clock.Now().GoTime().Add(time.Hour)
+	sp.mu.stores[declinedStore.StoreID].unavailableUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.mu.Unlock()
 
 	if err := verifyStoreList(sp, required, []int{

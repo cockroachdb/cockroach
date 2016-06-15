@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -43,23 +44,29 @@ const (
 	// prevents the store pool from marking stores as dead.
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
 
-	// timeoutForDeclinedReservations is the amount of time to not consider the
-	// store available for up-replication after a reservation was declined.
-	timeoutForDeclinedReservations = 10 * time.Second
+	// defaultFailedReservationsTimeout is the amount of time to consider the
+	// store unavailable for up-replication after a failed reservation call.
+	defaultFailedReservationsTimeout = 5 * time.Second
 
-	// rpcTimeout is used for the rpc calls to Reserve on other nodes. It is
-	// set quite small as this may block calls to ChangeReplicas.
-	rpcTimeout = 1 * time.Second
+	// defaultDeclinedReservationsTimeout is the amount of time to consider the
+	// store unavailable for up-replication after a reservation was declined.
+	defaultDeclinedReservationsTimeout = 1 * time.Second
+
+	// defaultReserveRPCTimeout is used for the rpc calls to Reserve on other
+	// nodes. It should be short as this may block calls to ChangeReplicas.
+	defaultReserveRPCTimeout = 1 * time.Second
 )
 
 type storeDetail struct {
-	desc                  *roachpb.StoreDescriptor
-	dead                  bool
-	timesDied             int
-	foundDeadOn           hlc.Timestamp
-	reservationDeclinedOn time.Time     // The last time a reservation was declined.
-	lastUpdatedTime       hlc.Timestamp // This is also the priority for the queue.
-	index                 int           // index of the item in the heap, required for heap.Interface
+	desc        *roachpb.StoreDescriptor
+	dead        bool
+	timesDied   int
+	foundDeadOn hlc.Timestamp
+	// unavailableUntil is when an unavailable store can be considered available
+	// again due to a failed or declined Reserve RPC.
+	unavailableUntil time.Time
+	lastUpdatedTime  hlc.Timestamp // This is also the priority for the queue.
+	index            int           // index of the item in the heap, required for heap.Interface
 }
 
 // markDead sets the storeDetail to dead(inactive).
@@ -102,8 +109,7 @@ func (sd *storeDetail) match(now time.Time, required roachpb.Attributes) storeMa
 	}
 	// The store must not have a recent declined reservation to be considered
 	// available for matching.
-	if sd.reservationDeclinedOn.Add(timeoutForDeclinedReservations).After(now) ||
-		!required.IsSubset(*sd.desc.CombinedAttrs()) {
+	if sd.unavailableUntil.After(now) || !required.IsSubset(*sd.desc.CombinedAttrs()) {
 		return storeMatchAlive
 	}
 	return storeMatchMatched
@@ -176,11 +182,14 @@ func (pq *storePoolPQ) dequeue() *storeDetail {
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
-	clock               *hlc.Clock
-	timeUntilStoreDead  time.Duration
-	rpcContext          *rpc.Context
-	reservationsEnabled bool
-	mu                  struct {
+	clock                       *hlc.Clock
+	timeUntilStoreDead          time.Duration
+	rpcContext                  *rpc.Context
+	reservationsEnabled         bool
+	failedReservationsTimeout   time.Duration
+	declinedReservationsTimeout time.Duration
+	reserveRPCTimeout           time.Duration
+	mu                          struct {
 		sync.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
 		// pointers are used so that data can be kept in sync.
@@ -204,13 +213,17 @@ func NewStorePool(
 		timeUntilStoreDead:  timeUntilStoreDead,
 		rpcContext:          rpcContext,
 		reservationsEnabled: reservationsEnabled,
+		failedReservationsTimeout: envutil.EnvOrDefaultDuration("failed_reservation_timeout",
+			defaultFailedReservationsTimeout),
+		declinedReservationsTimeout: envutil.EnvOrDefaultDuration("declined_reservation_timeout",
+			defaultDeclinedReservationsTimeout),
+		reserveRPCTimeout: envutil.EnvOrDefaultDuration("reserve_rpc_timeout",
+			defaultReserveRPCTimeout),
 	}
 	sp.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	heap.Init(&sp.mu.queue)
-
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
-
 	sp.start(stopper)
 
 	return sp
@@ -405,7 +418,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 // based on the toStoreID. It returns an error if the reservation was not
 // successfully booked. When unsuccessful, the store is marked as having a
 // declined reservation so it will not be considered for up-replication or
-// rebalancing until after timeoutForDeclinedReservations has passed.
+// rebalancing until after the configured timeout period has passed.
 // TODO(bram): consider moving the nodeID to the store pool during
 // NewStorePool.
 func (sp *StorePool) reserve(
@@ -417,8 +430,6 @@ func (sp *StorePool) reserve(
 	if !sp.reservationsEnabled {
 		return nil
 	}
-	// We don't want to hold the lock for the rpc call, so make copies of all
-	// needed values to avoid the chance of any funny business.
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	detail, ok := sp.mu.stores[toStoreID]
@@ -442,21 +453,37 @@ func (sp *StorePool) reserve(
 		RangeID:     rangeID,
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), rpcTimeout)
+	if log.V(2) {
+		log.Infof("proposing new reservation:%+v", req)
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), sp.reserveRPCTimeout)
 	defer cancel()
 	resp, err := client.Reserve(ctxWithTimeout, req)
 
 	// If a reservation is declined, be it due to an error or because it was
 	// rejected, we mark the store detail as having been rejected so it won't
-	// be considered for other checks until after timeoutForDeclinedReservations
-	// has expired.
+	// be considered as a candidate for new replicas until after the configured
+	// timeout period has passed.
 	if err != nil {
-		detail.reservationDeclinedOn = sp.clock.Now().GoTime()
+		detail.unavailableUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
+		if log.V(2) {
+			log.Infof("reservation failed, store:%s will be unavailable for %s until %s",
+				toStoreID, sp.failedReservationsTimeout, detail.unavailableUntil)
+		}
 		return fmt.Errorf("reservation failed:%+v due to error:%s", req, err)
 	}
 	if !resp.Reserved {
-		detail.reservationDeclinedOn = sp.clock.Now().GoTime()
+		detail.unavailableUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
+		if log.V(2) {
+			log.Infof("reservation failed, store:%s will be unavailable for %s until %s",
+				toStoreID, sp.declinedReservationsTimeout, detail.unavailableUntil)
+		}
 		return fmt.Errorf("reservation declined:%+v", req)
+	}
+
+	if log.V(2) {
+		log.Infof("reservation was approved:%+v", req)
 	}
 	return nil
 }

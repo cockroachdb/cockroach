@@ -2418,7 +2418,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescrip
 // Reserve requests a reservation from the store's bookie.
 func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
 	if s.metrics.capacity.Value() == 0 {
-		// On startup, it takes some time before compute metrics is run. When
+		// On startup, it takes some time before ComputeMetrics is run. When
 		// this happens, it means the store will reject any incoming
 		// reservations. To avoid this, if there is no capacity information yet
 		// we can force a call to ComputeMetrics.
