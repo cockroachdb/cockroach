@@ -253,6 +253,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		descriptor, err := mr.mu.stores[storeID].Descriptor()
 		if err != nil {
 			log.Errorf("Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			continue
 		}
 
 		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, StoreStatus{
