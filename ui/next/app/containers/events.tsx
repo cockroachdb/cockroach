@@ -64,7 +64,7 @@ export class EventRow extends React.Component<EventRowProps, {}> {
 
 export interface EventListProps {
   events: Event[];
-  refreshEvents: () => void;
+  refreshEvents: typeof refreshEvents;
 };
 
 export class EventList extends React.Component<EventListProps, {}> {

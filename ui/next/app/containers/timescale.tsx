@@ -10,7 +10,7 @@ import * as timewindow from "../redux/timewindow";
 interface TimeScaleSelectorProps {
   currentScale: timewindow.TimeScale;
   availableScales: timewindow.TimeScaleCollection;
-  setTimeScale: (ts: timewindow.TimeScale) => void;
+  setTimeScale: typeof timewindow.setTimeScale;
 }
 
 interface TimeScaleSelectorState {

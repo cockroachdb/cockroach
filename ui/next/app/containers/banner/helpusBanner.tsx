@@ -15,9 +15,9 @@ class HelpusBannerProps {
   attributes: OptInAttributes;
   attributesLoaded: boolean;
   dismissed: boolean = false;
-  loadUIData: (...keys: string[]) => void;
-  saveUIData: (...values: KeyValue[]) => void;
-  setUISetting: (key: string, value: any) => void;
+  loadUIData: typeof loadUIData;
+  saveUIData: typeof saveUIData;
+  setUISetting: typeof setUISetting;
 }
 
 class HelpusBanner extends React.Component<HelpusBannerProps, {}> {

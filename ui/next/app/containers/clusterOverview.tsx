@@ -20,7 +20,7 @@ interface ClusterMainProps {
     availableCapacity: number;
     bytesUsed: number;
   };
-  refreshNodes(): void;
+  refreshNodes: typeof refreshNodes;
 }
 
 /**
