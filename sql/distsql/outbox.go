@@ -106,9 +106,9 @@ loop:
 				err = m.flush(true, nil)
 				break loop
 			}
-			err = d.err
+			err = d.Err
 			if err == nil {
-				err = m.addRow(d.row)
+				err = m.addRow(d.Row)
 			}
 			if err != nil {
 				// Try to flush to send out the error, but ignore any
@@ -139,7 +139,7 @@ loop:
 func (m *outbox) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	m.wg = wg
-	m.RowChannel.init()
+	m.RowChannel.Init()
 	m.flushTicker = time.NewTicker(outboxFlushPeriod)
 	go m.mainLoop()
 }
