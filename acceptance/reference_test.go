@@ -43,22 +43,25 @@ $bin start &
 sleep 1
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
 $bin sql -e "CREATE DATABASE old"
-$bin sql -d old -e "CREATE TABLE testing (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
-$bin sql -d old -e "INSERT INTO testing values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
-$bin sql -d old -e "INSERT INTO testing values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > old.everything
+$bin sql -d old -e "CREATE TABLE testing_old (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
+$bin sql -d old -e "INSERT INTO testing_old values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
+$bin sql -d old -e "INSERT INTO testing_old values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > old.everything
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach
 $bin start --background
 echo "Read data written by reference version using new binary"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > new.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 
 echo "Add a row with the new binary and render the updated data before shutting down."
-$bin sql -d old -e "INSERT INTO testing values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > new.everything
+$bin sql -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > new.everything
+$bin sql -d old -e "CREATE TABLE testing_new (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
+$bin sql -d old -e "INSERT INTO testing_new values (4, false, '!!', decimal '1.14159', 1.14159, NOW(), interval '4h')"
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" >> new.everything
 $bin quit
 # Let it close its listening sockets.
 sleep 1
@@ -75,9 +78,9 @@ bin=/%s/cockroach
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
-$bin start &
-sleep 1
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing" > old.everything
+$bin start --background
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 $bin quit && wait
@@ -87,7 +90,11 @@ $bin quit && wait
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
-# TODO(dan): Once we have a version that's only forward compatible, test the failure message.
+$bin start &
+sleep 1
+# grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 2, but this client only supports version 1"
+$bin quit && wait
 `
 	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
 }

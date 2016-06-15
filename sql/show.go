@@ -152,6 +152,18 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			storing,
 		)
 	}
+	for _, fam := range desc.Families {
+		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
+		for i, colID := range fam.ColumnIDs {
+			if _, err := desc.FindActiveColumnByID(colID); err == nil {
+				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
+			}
+		}
+		fmt.Fprintf(&buf, ",\n\tFAMILY %s (%s)",
+			quoteNames(fam.Name),
+			quoteNames(activeColumnNames...),
+		)
+	}
 
 	for _, e := range desc.Checks {
 		fmt.Fprintf(&buf, ",\n\t")

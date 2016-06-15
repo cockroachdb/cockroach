@@ -42,7 +42,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	}
 	desc.Name = p.Table.Table()
 	desc.ParentID = parentID
-	desc.FormatVersion = BaseFormatVersion
+	desc.FormatVersion = FamilyFormatVersion
 	// We don't use version 0.
 	desc.Version = 1
 
@@ -139,6 +139,17 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				check.Name = string(d.Name)
 			}
 			desc.Checks = append(desc.Checks, check)
+
+		case *parser.FamilyTableDef:
+			names := make([]string, len(d.Columns))
+			for i, col := range d.Columns {
+				names[i] = string(col.Column)
+			}
+			fam := ColumnFamilyDescriptor{
+				Name:        string(d.Name),
+				ColumnNames: names,
+			}
+			desc.AddFamily(fam)
 
 		default:
 			return desc, util.Errorf("unsupported table def: %T", def)

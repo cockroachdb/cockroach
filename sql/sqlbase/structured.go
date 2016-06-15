@@ -250,9 +250,9 @@ func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 	return indexes
 }
 
-func generatedFamilyName(columnNames []string) string {
+func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 	var buf bytes.Buffer
-	buf.WriteString(`fam`)
+	fmt.Fprintf(&buf, "fam_%d", familyID)
 	for _, n := range columnNames {
 		buf.WriteString(`_`)
 		buf.WriteString(n)
@@ -286,7 +286,7 @@ func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
 		colNames := []string{col.Name}
 		family := ColumnFamilyDescriptor{
 			ID:              FamilyID(col.ID),
-			Name:            generatedFamilyName(colNames),
+			Name:            generatedFamilyName(FamilyID(col.ID), colNames),
 			ColumnNames:     colNames,
 			ColumnIDs:       []ColumnID{col.ID},
 			DefaultColumnID: col.ID,
@@ -306,8 +306,7 @@ func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
 		}
 	}
 
-	// TODO(dan): Set desc.FormatVersion = FamilyFormatVersion once the tests are
-	// updated to handle forward-only changes.
+	desc.FormatVersion = FamilyFormatVersion
 
 	return true
 }
@@ -486,7 +485,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 
 	for i, family := range desc.Families {
 		if len(family.Name) == 0 {
-			family.Name = generatedFamilyName(family.ColumnNames)
+			family.Name = generatedFamilyName(family.ID, family.ColumnNames)
 		}
 
 		if family.DefaultColumnID == 0 {
@@ -730,6 +729,11 @@ func (desc *TableDescriptor) Validate() error {
 // AddColumn adds a column to the table.
 func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 	desc.Columns = append(desc.Columns, col)
+}
+
+// AddFamily adds a family to the table.
+func (desc *TableDescriptor) AddFamily(fam ColumnFamilyDescriptor) {
+	desc.Families = append(desc.Families, fam)
 }
 
 // AddIndex adds an index to the table.
