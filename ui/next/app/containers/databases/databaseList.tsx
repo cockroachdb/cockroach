@@ -80,9 +80,9 @@ interface DatabasesMainData {
  */
 interface DatabasesMainActions {
   // Call if the user indicates they wish to change the sort of the table data.
-  setUISetting(key: string, value: any): void;
+  setUISetting: typeof setUISetting;
 
-  refreshDatabases(): void;
+  refreshDatabases: typeof refreshDatabases;
 }
 
 /**

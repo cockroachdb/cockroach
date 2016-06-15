@@ -8,9 +8,9 @@ import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
 
 export interface HelpUsProps {
   optInAttributes: OptInAttributes;
-  loadUIData: (...keys: string[]) => void;
-  saveUIData: (...values: KeyValue[]) => void;
-  setUISetting: (key: string, value: any) => void;
+  loadUIData: typeof loadUIData;
+  saveUIData: typeof saveUIData;
+  setUISetting: typeof setUISetting;
 }
 
 /**
