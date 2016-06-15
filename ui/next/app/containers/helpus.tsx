@@ -3,28 +3,29 @@ import * as React from "react";
 import _ = require("lodash");
 import { connect } from "react-redux";
 import { KEY_HELPUS, OptInAttributes, KeyValue, loadUIData, saveUIData } from "../redux/uiData";
+import { setUISetting } from "../redux/ui";
+import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
 
 export interface HelpUsProps {
   optInAttributes: OptInAttributes;
   loadUIData: (...keys: string[]) => void;
   saveUIData: (...values: KeyValue[]) => void;
+  setUISetting: (key: string, value: any) => void;
 }
 
 /**
  * Renders the main content of the help us page.
  */
 export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
+  state = new OptInAttributes();
+
   static title() {
     return <h2>Help Cockroach Labs</h2>;
   }
 
-  constructor(props: any) {
-    super(props);
-    this.state = new OptInAttributes();
-  }
-
   componentWillMount() {
     this.props.loadUIData(KEY_HELPUS);
+    this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
   }
 
   componentWillReceiveProps(props: HelpUsProps) {
@@ -97,8 +98,8 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
 
 let optinAttributes = (state: any): OptInAttributes => state && state.uiData && state.uiData.data && state.uiData.data[KEY_HELPUS];
 
-// Connect the EventsList class with our redux store.
-let eventsConnected = connect(
+// Connect the HelpUs class with our redux store.
+let helpusConnected = connect(
   (state, ownProps) => {
     return {
       optInAttributes: optinAttributes(state),
@@ -107,7 +108,8 @@ let eventsConnected = connect(
   {
     loadUIData,
     saveUIData,
+    setUISetting,
   }
 )(HelpUs);
 
-export default eventsConnected;
+export default helpusConnected;
