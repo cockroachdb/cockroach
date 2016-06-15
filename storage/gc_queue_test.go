@@ -145,7 +145,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 			if err := setMVCCStats(tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
 				t.Fatal(err)
 			}
-			tc.rng.mu.state.ms = ms
+			tc.rng.mu.state.Stats = ms
 		}()
 		shouldQ, priority := gcQ.shouldQueue(now, tc.rng, cfg)
 		if shouldQ != test.shouldQ {

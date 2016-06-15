@@ -1100,13 +1100,13 @@ func (r *Replica) GC(
 	}
 
 	r.mu.Lock()
-	newThreshold := r.mu.state.gcThreshold
+	newThreshold := r.mu.state.GCThreshold
 	newThreshold.Forward(args.Threshold)
 	r.mu.Unlock()
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.state.gcThreshold = newThreshold
+		r.mu.state.GCThreshold = newThreshold
 		r.mu.Unlock()
 	})
 	return reply, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
@@ -1454,7 +1454,7 @@ func (r *Replica) TruncateLog(
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.state.truncatedState = tState
+		r.mu.state.TruncatedState = tState
 		r.mu.Unlock()
 	})
 	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
@@ -1478,7 +1478,7 @@ func (r *Replica) LeaderLease(
 	defer r.mu.Unlock()
 	var reply roachpb.LeaderLeaseResponse
 
-	prevLease := r.mu.state.lease
+	prevLease := r.mu.state.Lease
 	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
@@ -1503,7 +1503,7 @@ func (r *Replica) LeaderLease(
 	effectiveStart := args.Lease.Start
 
 	// Verify that requestion replica is part of the current replica set.
-	if idx, _ := r.mu.state.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+	if idx, _ := r.mu.state.Desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
 		return reply, rErr
 	}
@@ -1556,12 +1556,12 @@ func (r *Replica) LeaderLease(
 	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), hlc.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
-	r.mu.state.lease = &args.Lease
+	r.mu.state.Lease = &args.Lease
 
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-		if prevLease.Replica.StoreID != r.mu.state.lease.Replica.StoreID {
+		if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
 			// The lease is changing hands. Is this replica the new lease holder?
-			if r.mu.state.lease.Replica.ReplicaID == r.mu.replicaID {
+			if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {
 				// If this replica is a new holder of the lease, update the low water
 				// mark of the timestamp cache. Note that clock offset scenarios are
 				// handled via a stasis period inherent in the lease which is documented
@@ -1574,8 +1574,8 @@ func (r *Replica) LeaderLease(
 				// holder, then try to transfer the raft leadership to match the
 				// lease.
 				log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
-					r.RangeID, r.mu.replicaID, r.mu.state.lease.Replica.ReplicaID)
-				raftGroup.TransferLeader(uint64(r.mu.state.lease.Replica.ReplicaID))
+					r.RangeID, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
+				raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
 			}
 		}
 		return nil
@@ -1734,7 +1734,7 @@ func (r *Replica) ComputeChecksum(
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
 	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	desc := *r.mu.state.desc
+	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 	snap := r.store.NewSnapshot()
 
@@ -1952,7 +1952,7 @@ func (r *Replica) ChangeFrozen(
 
 	batch.(engine.Batch).Defer(func() {
 		r.mu.Lock()
-		r.mu.state.frozen = args.Frozen
+		r.mu.state.Frozen = args.Frozen
 		r.mu.Unlock()
 	})
 	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
@@ -2218,7 +2218,7 @@ func (r *Replica) splitTrigger(
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 	r.mu.Lock()
-	r.mu.state.ms = leftMS
+	r.mu.state.Stats = leftMS
 	r.mu.Unlock()
 
 	// Copy the last replica GC and verification timestamps. These
@@ -2268,7 +2268,7 @@ func (r *Replica) splitTrigger(
 	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
 	newRng.mu.Lock()
-	newRng.mu.state.ms = rightMS
+	newRng.mu.state.Stats = rightMS
 	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
 	newRng.mu.Unlock()
 	r.mu.Unlock()
@@ -2521,7 +2521,7 @@ func (r *Replica) mergeTrigger(
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
 	r.mu.Lock()
-	r.mu.state.ms = mergedMS
+	r.mu.state.Stats = mergedMS
 	r.mu.tsCache.Clear(r.store.Clock())
 	r.mu.Unlock()
 
