@@ -1,18 +1,14 @@
-# NPM node modules
+# NPM
 node_modules
 npm.installed
 
-# Bower components
-bower_components
-bower.installed
+# JSPM
+jspm_packages
+jspm.installed
 
-# Typescript definitions
+# Typings
 typings
 typings.installed
 
 # Generated intermediates
-/build
-/index.html
-
-# Generated proto json/typescript/javascript
-/generated
+build/

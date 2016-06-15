@@ -29,8 +29,9 @@ dependencies:
     - build/circle-deps.sh:
         parallel: true
   cache_directories:
+    - ~/.jspm
+    - ~/.npm
     - ~/builder
-    - ~/uicache
 
 test:
   override:
