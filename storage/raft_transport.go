@@ -192,8 +192,18 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 		return
 	}
 	client := NewMultiRaftClient(conn)
+
+	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+	defer func() {
+		// After pending Raft requests have finished, cancel the Context to free
+		// gRPC resources.
+		wg.Wait()
+		if log.V(1) {
+			log.Infof("cancelling context")
+		}
+		cancel()
+	}()
 	if log.V(1) {
 		log.Infof("establishing Raft transport stream to node %d at %s", nodeID, addr)
 	}
@@ -255,9 +265,11 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
+			wg.Add(1)
 			if req.Message.Type == raftpb.MsgSnap {
 				t.rpcContext.Stopper.RunAsyncTask(func() {
 					err := snapStream.Send(req)
+					wg.Done()
 					if err != nil {
 						log.Errorf("failed to send Raft snapshot to node %d at %s: %s", nodeID, addr, err)
 					} else if log.V(1) {
@@ -266,7 +278,9 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 					t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}
 				})
 			} else {
-				if err := restStream.Send(req); err != nil {
+				err := restStream.Send(req)
+				wg.Done()
+				if err != nil {
 					log.Error(err)
 					return
 				}
