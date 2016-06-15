@@ -10,7 +10,7 @@ import { EventList, EventRow } from "./events";
 
 type Event = cockroach.server.serverpb.EventsResponse.Event;
 
-function makeEventList(events: Event[], refreshEvents: () => void) {
+function makeEventList(events: Event[], refreshEvents: () => any) {
   return shallow(<EventList events={events} refreshEvents={refreshEvents}></EventList>);
 }
 

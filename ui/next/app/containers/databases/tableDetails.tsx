@@ -251,9 +251,9 @@ interface TableMainData {
  */
 interface TableMainActions {
   // Call if the user indicates they wish to change the sort of any table data.
-  setUISetting(key: string, value: any): void;
+  setUISetting: typeof setUISetting;
   // Refresh the table data
-  refreshTableDetails(database: string, table: string): void;
+  refreshTableDetails: typeof refreshTableDetails;
 }
 
 // params from the route for the table name and database name

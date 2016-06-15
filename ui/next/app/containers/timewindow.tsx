@@ -10,7 +10,7 @@ interface TimeWindowManagerProps {
   // The current timewindow redux state.
   timeWindow: timewindow.TimeWindowState;
   // Callback function used to set a new time window.
-  setTimeWindow: (tw: timewindow.TimeWindow) => void;
+  setTimeWindow: typeof timewindow.setTimeWindow;
   // Optional override method to obtain the current time. Used for tests.
   now?: () => moment.Moment;
 }

@@ -11,7 +11,7 @@ import { Bytes, Percentage } from "../util/format";
 
 interface NodeOverviewProps extends RouteComponentProps<any, any> {
   node: NodeStatus;
-  refreshNodes(): void;
+  refreshNodes: typeof refreshNodes;
 }
 
 /**
