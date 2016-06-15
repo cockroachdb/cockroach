@@ -153,16 +153,18 @@ export function loadUIData(...keys: string[]) {
     dispatch(fetchUIData());
 
     return getUIData({ keys }).then((response) => {
-      response.getKeyValues().forEach((val, key) => {
+      let keyValues = response.getKeyValues();
+
+      _.each(keys, (key) => {
         // Responses from the server return values as ByteBuffer objects, which
         // represent stringified JSON objects.
-        let decoded: Object;
-        let bb = val.getValue();
-        let str = bb.readString(bb.limit - bb.offset);
+        let bb = keyValues.has(key) && keyValues.get(key).getValue();
+        let str = bb && bb.readString(bb.limit - bb.offset);
         if (str) {
-          decoded = JSON.parse(str);
+          dispatch(setUIDataKey(key, JSON.parse(str)));
+        } else {
+          dispatch(setUIDataKey(key, undefined));
         }
-        dispatch(setUIDataKey(key, decoded));
       });
     }).catch((error) => {
       dispatch(errorUIData(error));
