@@ -34,7 +34,9 @@ type SrcCtx struct {
 	Function string
 }
 
-func makeSrcCtx(depth int) SrcCtx {
+// MakeSrcCtx creates a SrcCtx value with contextual information about the
+// caller at the requested depth.
+func MakeSrcCtx(depth int) SrcCtx {
 	f, l, fun := caller.Lookup(depth + 1)
 	return SrcCtx{File: f, Line: l, Function: fun}
 }
@@ -65,7 +67,7 @@ const (
 
 // NewRetryError creates a ErrRetry.
 func NewRetryError(cause error) error {
-	return &ErrRetry{ctx: makeSrcCtx(1), msg: fmt.Sprintf("%s %v", txnRetryMsgPrefix, cause)}
+	return &ErrRetry{ctx: MakeSrcCtx(1), msg: fmt.Sprintf("%s %v", txnRetryMsgPrefix, cause)}
 }
 
 // ErrRetry means that the transaction can be retried. It signals to the user
@@ -92,7 +94,7 @@ func (e *ErrRetry) SrcContext() SrcCtx {
 
 // NewTransactionAbortedError creates a new ErrTransactionAborted.
 func NewTransactionAbortedError(customMsg string) error {
-	return &ErrTransactionAborted{ctx: makeSrcCtx(1), CustomMsg: customMsg}
+	return &ErrTransactionAborted{ctx: MakeSrcCtx(1), CustomMsg: customMsg}
 }
 
 // ErrTransactionAborted represents an error for trying to run a command in the
@@ -122,7 +124,7 @@ func (e *ErrTransactionAborted) SrcContext() SrcCtx {
 
 // NewTransactionCommittedError creates a new ErrTransactionCommitted.
 func NewTransactionCommittedError() error {
-	return &ErrTransactionCommitted{ctx: makeSrcCtx(1)}
+	return &ErrTransactionCommitted{ctx: MakeSrcCtx(1)}
 }
 
 // ErrTransactionCommitted signals that the SQL txn is in the COMMIT_WAIT state
@@ -147,7 +149,7 @@ func (e *ErrTransactionCommitted) SrcContext() SrcCtx {
 
 // NewNonNullViolationError creates a new ErrNonNullViolation.
 func NewNonNullViolationError(columnName string) error {
-	return &ErrNonNullViolation{ctx: makeSrcCtx(1), columnName: columnName}
+	return &ErrNonNullViolation{ctx: MakeSrcCtx(1), columnName: columnName}
 }
 
 // ErrNonNullViolation represents a violation of a non-NULL constraint.
@@ -176,7 +178,7 @@ func NewUniquenessConstraintViolationError(
 	index *IndexDescriptor, vals []parser.Datum,
 ) error {
 	return &ErrUniquenessConstraintViolation{
-		ctx:   makeSrcCtx(1),
+		ctx:   MakeSrcCtx(1),
 		index: index,
 		vals:  vals,
 	}
@@ -213,7 +215,7 @@ func (e *ErrUniquenessConstraintViolation) SrcContext() SrcCtx {
 
 // NewUndefinedTableError creates a new ErrUndefinedTable.
 func NewUndefinedTableError(name string) error {
-	return &ErrUndefinedTable{ctx: makeSrcCtx(1), name: name}
+	return &ErrUndefinedTable{ctx: MakeSrcCtx(1), name: name}
 }
 
 // ErrUndefinedTable represents a missing database table.
@@ -238,7 +240,7 @@ func (e *ErrUndefinedTable) SrcContext() SrcCtx {
 
 // NewUndefinedDatabaseError creates a new ErrUndefinedDatabase.
 func NewUndefinedDatabaseError(name string) error {
-	return &ErrUndefinedDatabase{ctx: makeSrcCtx(1), name: name}
+	return &ErrUndefinedDatabase{ctx: MakeSrcCtx(1), name: name}
 }
 
 // ErrUndefinedDatabase represents a missing database error.
