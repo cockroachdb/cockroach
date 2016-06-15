@@ -358,7 +358,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The memory in use across all nodes, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
+              .tooltip("The memory in use across all nodes, broken down by memory currently allocated by the Go layer (Go Allocated), total memory managed by the Go allocator (Go Total), memory currently allocated by the C layer (Cgo), total memory managed by the C allocator (Cgo Total), and total memory used by all CockroachDB nodes (RSS).")
           );
           this._addChart(
             this.systemAxes,
@@ -950,7 +950,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The memory in use on this node, broken down by CockroachDB Go allocations, the Go Runtime, and the total memory used by CockroachDB, including the key-value layer (RSS).")
+              .tooltip("The memory in use on this node, broken down by memory currently allocated by the Go layer (Go Allocated), total memory managed by the Go allocator (Go Total), memory currently allocated by the C layer (Cgo), total memory managed by the C allocator (Cgo Total), and total memory used by this CockroachDB node (RSS).")
           );
           this._addChart(
             this.systemAxes,
