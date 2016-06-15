@@ -851,6 +851,16 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
+// FindFamilyByID finds the family with specified ID.
+func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescriptor, error) {
+	for i, f := range desc.Families {
+		if f.ID == id {
+			return &desc.Families[i], nil
+		}
+	}
+	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
+}
+
 // FindIndexByName finds the index with the specified name. It returns
 // DescriptorStatus for the index, and an index into either the indexes
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
