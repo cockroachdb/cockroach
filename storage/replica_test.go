@@ -4343,7 +4343,7 @@ func TestAppliedIndex(t *testing.T) {
 		}
 
 		tc.rng.mu.Lock()
-		newAppliedIndex := tc.rng.mu.state.appliedIndex
+		newAppliedIndex := tc.rng.mu.state.RaftAppliedIndex
 		tc.rng.mu.Unlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
@@ -5680,7 +5680,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 	}
 
 	tc.rng.mu.Lock()
-	ai := tc.rng.mu.state.leaseAppliedIndex
+	ai := tc.rng.mu.state.LeaseAppliedIndex
 	tc.rng.mu.Unlock()
 
 	if ai < 1 {
@@ -5909,7 +5909,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		tc.rng.mu.Lock()
 		defer tc.rng.mu.Unlock()
 		nonePending := len(tc.rng.mu.pendingCmds) == 0
-		c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.state.leaseAppliedIndex)
+		c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.state.LeaseAppliedIndex)
 		if nonePending && c > 0 {
 			return fmt.Errorf("no pending cmds, but have required index offset %d", c)
 		}
