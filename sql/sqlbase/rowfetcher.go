@@ -20,6 +20,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -78,6 +79,7 @@ type RowFetcher struct {
 	implicitVals     []parser.Datum // the implicit values for unique indexes
 	indexKey         []byte         // the index key of the current row
 	row              parser.DTuple
+	prettyValueBuf   bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
 	kv    client.KeyValue
@@ -270,35 +272,24 @@ func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 	}
 
 	if !rf.isSecondaryIndex && len(remaining) > 0 {
-		_, colID, err := encoding.DecodeUvarintAscending(remaining)
+		_, familyID, err := encoding.DecodeUvarintAscending(remaining)
 		if err != nil {
 			return "", "", err
 		}
 
-		idx, ok := rf.colIdxMap[ColumnID(colID)]
-		if ok && (debugStrings || rf.valNeededForCol[idx]) {
-			if debugStrings {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.cols[idx].Name)
-			}
-			kind := rf.cols[idx].Type.Kind
-			value, err := UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
-			if err != nil {
-				return "", "", err
-			}
-			prettyValue = value.String()
-			if rf.row[idx] != nil {
-				panic(fmt.Sprintf("duplicate value for column %d", idx))
-			}
-			rf.row[idx] = value
-			if log.V(3) {
-				log.Infof("Scan %s -> %v", kv.Key, value)
-			}
-		} else {
-			// No need to unmarshal the column value. Either the column was part of
-			// the index key or it isn't needed.
-			if log.V(3) {
-				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colID)
-			}
+		family, err := rf.desc.FindFamilyByID(FamilyID(familyID))
+		if err != nil {
+			return "", "", err
+		}
+
+		switch kv.Value.GetTag() {
+		case roachpb.ValueType_TUPLE:
+			prettyKey, prettyValue, err = rf.processValueTuple(family, kv, debugStrings, prettyKey)
+		default:
+			prettyKey, prettyValue, err = rf.processValueSingle(family, kv, debugStrings, prettyKey)
+		}
+		if err != nil {
+			return "", "", err
 		}
 	} else {
 		if rf.implicitVals != nil {
@@ -332,6 +323,111 @@ func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 		prettyValue = parser.DNull.String()
 	}
 
+	return prettyKey, prettyValue, nil
+}
+
+func (rf *RowFetcher) processValueSingle(
+	family *ColumnFamilyDescriptor, kv client.KeyValue, debugStrings bool, prettyKeyPrefix string,
+) (prettyKey string, prettyValue string, err error) {
+	prettyKey = prettyKeyPrefix
+
+	colID := family.DefaultColumnID
+	if colID == 0 {
+		return "", "", util.Errorf("single entry value with no default column id")
+	}
+
+	idx, ok := rf.colIdxMap[colID]
+	if ok && (debugStrings || rf.valNeededForCol[idx]) {
+		if debugStrings {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
+		}
+		kind := rf.cols[idx].Type.Kind
+		value, err := UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
+		if err != nil {
+			return "", "", err
+		}
+		if debugStrings {
+			prettyValue = value.String()
+		}
+		if rf.row[idx] != nil {
+			panic(fmt.Sprintf("duplicate value for column %d", idx))
+		}
+		rf.row[idx] = value
+		if log.V(3) {
+			log.Infof("Scan %s -> %v", kv.Key, value)
+		}
+	} else {
+		// No need to unmarshal the column value. Either the column was part of
+		// the index key or it isn't needed.
+		if log.V(3) {
+			log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colID)
+		}
+	}
+
+	return prettyKey, prettyValue, nil
+}
+
+func (rf *RowFetcher) processValueTuple(
+	family *ColumnFamilyDescriptor, kv client.KeyValue, debugStrings bool, prettyKeyPrefix string,
+) (prettyKey string, prettyValue string, err error) {
+	prettyKey = prettyKeyPrefix
+	if debugStrings {
+		rf.prettyValueBuf.Reset()
+	}
+
+	tupleBytes, err := kv.Value.GetTuple()
+	if err != nil {
+		return "", "", err
+	}
+
+	var colIDRaw int64
+	var value parser.Datum
+	for len(tupleBytes) > 0 {
+		tupleBytes, _, colIDRaw, err = encoding.DecodeNonsortingVarint(tupleBytes)
+		if err != nil {
+			return "", "", err
+		}
+		if colIDRaw < 0 || colIDRaw > math.MaxUint32 {
+			return "", "", util.Errorf("invalid column-id: %d", colIDRaw)
+		}
+		idx, ok := rf.colIdxMap[ColumnID(colIDRaw)]
+		if !ok || !rf.valNeededForCol[idx] {
+			// This column wasn't requested, so read its length and skip it.
+			i, err := roachpb.PeekValueLength(tupleBytes)
+			if err != nil {
+				return "", "", err
+			}
+			tupleBytes = tupleBytes[i:]
+			if log.V(3) {
+				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colIDRaw)
+			}
+			continue
+		}
+
+		if debugStrings {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
+		}
+
+		kind := rf.cols[idx].Type.Kind.ToDatumType()
+		value, tupleBytes, err = DecodeTableValue(&rf.alloc, kind, tupleBytes)
+		if err != nil {
+			return "", "", err
+		}
+		if debugStrings {
+			fmt.Fprintf(&rf.prettyValueBuf, "/%v", value)
+		}
+		if rf.row[idx] != nil {
+			panic(fmt.Sprintf("duplicate value for column %d", idx))
+		}
+		rf.row[idx] = value
+		if log.V(3) {
+			log.Infof("Scan %d -> %v", idx, value)
+		}
+	}
+
+	if debugStrings {
+		prettyValue = rf.prettyValueBuf.String()
+	}
 	return prettyKey, prettyValue, nil
 }
 

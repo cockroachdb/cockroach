@@ -732,6 +732,11 @@ func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 	desc.Columns = append(desc.Columns, col)
 }
 
+// AddFamily adds a family to the table.
+func (desc *TableDescriptor) AddFamily(fam ColumnFamilyDescriptor) {
+	desc.Families = append(desc.Families, fam)
+}
+
 // AddIndex adds an index to the table.
 func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 	if primary {
@@ -849,6 +854,16 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
+// FindFamilyByID finds the family with specified ID.
+func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescriptor, error) {
+	for i, f := range desc.Families {
+		if f.ID == id {
+			return &desc.Families[i], nil
+		}
+	}
+	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
 
 // FindIndexByName finds the index with the specified name. It returns
