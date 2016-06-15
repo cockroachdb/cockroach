@@ -86,7 +86,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var cs raftpb.ConfState
 	// For uninitialized ranges, membership is unknown at this point.
 	if found || initialized {
-		for _, rep := range r.mu.state.desc.Replicas {
+		for _, rep := range r.mu.state.Desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
 	}
@@ -239,15 +239,15 @@ func (r *Replica) LastIndex() (uint64, error) {
 // and the dummy entries that make up the starting point of an empty log.
 // raftTruncatedStateLocked requires that the replica lock be held.
 func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
-	if r.mu.state.truncatedState != nil {
-		return *r.mu.state.truncatedState, nil
+	if r.mu.state.TruncatedState != nil {
+		return *r.mu.state.TruncatedState, nil
 	}
 	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID, r.isInitializedLocked())
 	if err != nil {
 		return ts, err
 	}
 	if ts.Index != 0 {
-		r.mu.state.truncatedState = &ts
+		r.mu.state.TruncatedState = &ts
 	}
 	return ts, nil
 }
@@ -428,7 +428,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.state.desc.StartKey)
+		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.state.Desc.StartKey)
 		if err != nil {
 			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
@@ -724,9 +724,9 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot.
-	if s.appliedIndex != snap.Metadata.Index {
+	if s.RaftAppliedIndex != snap.Metadata.Index {
 		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
-			s.desc.RangeID, s.appliedIndex, snap.Metadata.Index)
+			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
 	batch.Defer(func() {
@@ -738,10 +738,10 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		// performance implications are not likely to be drastic. If our
 		// feelings about this ever change, we can add a LastIndex field to
 		// raftpb.SnapshotMetadata.
-		r.mu.lastIndex = s.appliedIndex
+		r.mu.lastIndex = s.RaftAppliedIndex
 		// Update the range and store stats.
-		r.store.metrics.subtractMVCCStats(r.mu.state.ms)
-		r.store.metrics.addMVCCStats(s.ms)
+		r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
+		r.store.metrics.addMVCCStats(s.Stats)
 		r.mu.state = s
 		r.mu.Unlock()
 

@@ -169,60 +169,37 @@ type replicaChecksum struct {
 	snapshot *roachpb.RaftSnapshotData
 }
 
-// rangeState is the part of the Range Raft state machine which is cached in
-// memory. TODO(tschottdorf): unified method to update both in-mem and on-disk
+// TODO(tschottdorf): unified method to update both in-mem and on-disk
 // state, similar to how loadState unifies restoring from storage.
-type rangeState struct {
-	// Last index applied to the state machine.
-	appliedIndex uint64
-	// Highest lease index applied to the state machine.
-	leaseAppliedIndex uint64
-	// The Range descriptor.
-	// The pointer may change, but the referenced RangeDescriptor struct itself
-	// must be treated as immutable; it is leaked out of the lock.
-	//
-	// Changes of the descriptor should normally go through one of the
-	// (*Replica).setDesc* methods.
-	desc           *roachpb.RangeDescriptor
-	lease          *roachpb.Lease
-	truncatedState *roachpb.RaftTruncatedState
-	// gcThreshold is the GC threshold of the replica. Reads and writes must
-	// not happen <= this time.
-	gcThreshold hlc.Timestamp
-	// Whether the Replica is frozen.
-	frozen bool
-	ms     enginepb.MVCCStats
-}
-
-func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (rangeState, error) {
-	var s rangeState
+func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase.RangeState, error) {
+	var s storagebase.RangeState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
-	s.desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the leader lease.
 	var err error
-	if s.lease, err = loadLease(reader, desc.RangeID); err != nil {
-		return rangeState{}, err
+	if s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
+		return storagebase.RangeState{}, err
 	}
 
-	if s.frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
-		return rangeState{}, err
+	if s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
+		return storagebase.RangeState{}, err
 	}
 
-	if s.gcThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
-		return rangeState{}, err
+	if s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
+		return storagebase.RangeState{}, err
 	}
 
-	if s.appliedIndex, s.leaseAppliedIndex, err = loadAppliedIndex(
+	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
 		reader,
 		desc.RangeID,
 		desc.IsInitialized(),
 	); err != nil {
-		return rangeState{}, err
+		return storagebase.RangeState{}, err
 	}
 
-	if s.ms, err = loadMVCCStats(reader, desc.RangeID); err != nil {
-		return rangeState{}, err
+	if s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+		return storagebase.RangeState{}, err
 	}
 
 	return s, nil
@@ -254,7 +231,7 @@ type Replica struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
 		// The state of the Raft state machine.
-		state rangeState
+		state storagebase.RangeState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
@@ -298,7 +275,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(&raft.Config{
 			ID:            uint64(r.mu.replicaID),
-			Applied:       r.mu.state.appliedIndex,
+			Applied:       r.mu.state.RaftAppliedIndex,
 			ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
 			HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
 			Storage:       r,
@@ -329,7 +306,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		// could happen is both nodes ending up in candidate state, timing
 		// out and then voting again. This is expected to be an extremely
 		// rare event.
-		if len(r.mu.state.desc.Replicas) == 1 && r.mu.state.desc.Replicas[0].ReplicaID == r.mu.replicaID {
+		if len(r.mu.state.Desc.Replicas) == 1 && r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID {
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
@@ -539,7 +516,7 @@ func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, erro
 func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.state.lease, len(r.mu.llChans) > 0
+	return r.mu.state.Lease, len(r.mu.llChans) > 0
 }
 
 func setGCThreshold(
@@ -566,7 +543,7 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 }
 
 func (r *Replica) newNotLeaderErrorLocked(l *roachpb.Lease, originStoreID roachpb.StoreID) error {
-	desc := r.mu.state.desc
+	desc := r.mu.state.Desc
 	err := &roachpb.NotLeaderError{}
 	if l != nil && l.Replica.ReplicaID != 0 {
 		err.RangeID = r.RangeID
@@ -755,14 +732,14 @@ func (r *Replica) IsInitialized() bool {
 // to an incoming message but we are waiting for our initial snapshot.
 // isInitializedLocked requires that the replica lock is held.
 func (r *Replica) isInitializedLocked() bool {
-	return r.mu.state.desc.IsInitialized()
+	return r.mu.state.Desc.IsInitialized()
 }
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.state.desc
+	return r.mu.state.Desc
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -793,7 +770,7 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 		panic(fmt.Sprintf("range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID))
 	}
-	r.mu.state.desc = desc
+	r.mu.state.Desc = desc
 }
 
 type errReplicaNotInRange struct {
@@ -825,7 +802,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	desc := r.mu.state.desc
+	desc := r.mu.state.Desc
 	for _, repAddress := range desc.Replicas {
 		if repAddress.ReplicaID == replicaID {
 			return repAddress, nil
@@ -839,7 +816,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.state.ms
+	return r.mu.state.Stats
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -1390,8 +1367,8 @@ func (r *Replica) prepareRaftCommandLocked(
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
 ) (*pendingCmd, error) {
-	if r.mu.lastAssignedLeaseIndex < r.mu.state.leaseAppliedIndex {
-		r.mu.lastAssignedLeaseIndex = r.mu.state.leaseAppliedIndex
+	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
+		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
 	if !ba.IsLease() {
 		r.mu.lastAssignedLeaseIndex++
@@ -1441,7 +1418,7 @@ func (r *Replica) proposeRaftCommand(
 	chan roachpb.ResponseWithError, func() bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, replica := r.mu.state.desc.FindReplica(r.store.StoreID())
+	_, replica := r.mu.state.Desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
@@ -1707,7 +1684,7 @@ func (r *Replica) refreshPendingCmdsLocked() error {
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
 	// applied.
-	maxWillRefurbish := r.mu.state.leaseAppliedIndex // indexes <= will be refurbished
+	maxWillRefurbish := r.mu.state.LeaseAppliedIndex // indexes <= will be refurbished
 	origNum := len(r.mu.pendingCmds)
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.pendingCmds {
@@ -1723,7 +1700,7 @@ func (r *Replica) refreshPendingCmdsLocked() error {
 	}
 	if log.V(1) && origNum > 0 {
 		log.Infof("range %d: refurbished %d, reproposing %d commands after empty entry at %d (%d)",
-			r.mu.state.desc.RangeID, origNum-len(reproposals), len(reproposals), r.mu.state.appliedIndex, r.mu.state.leaseAppliedIndex)
+			r.mu.state.Desc.RangeID, origNum-len(reproposals), len(reproposals), r.mu.state.RaftAppliedIndex, r.mu.state.LeaseAppliedIndex)
 	}
 
 	// Reproposals are those commands which we weren't able to refurbish (since
@@ -1832,7 +1809,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	cmd := r.mu.pendingCmds[idKey]
 
 	isLeaseError := func() bool {
-		l, ba, origin := r.mu.state.lease, raftCmd.Cmd, raftCmd.OriginReplica
+		l, ba, origin := r.mu.state.Lease, raftCmd.Cmd, raftCmd.OriginReplica
 		if l.Replica != origin && !ba.IsLease() {
 			return true
 		}
@@ -1858,10 +1835,10 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	if isLeaseError() {
 		if log.V(1) {
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
-				raftCmd.OriginReplica, r.mu.state.lease.Replica, raftCmd.Cmd)
+				raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd)
 		}
 		forcedErr = roachpb.NewError(r.newNotLeaderErrorLocked(
-			r.mu.state.lease, raftCmd.OriginReplica.StoreID))
+			r.mu.state.Lease, raftCmd.OriginReplica.StoreID))
 	}
 
 	if cmd != nil {
@@ -1869,14 +1846,14 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		ctx = cmd.ctx
 		delete(r.mu.pendingCmds, idKey)
 	}
-	leaseIndex := r.mu.state.leaseAppliedIndex
+	leaseIndex := r.mu.state.LeaseAppliedIndex
 	if raftCmd.Cmd.IsLease() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by
 		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
 		// proposals are often replayed, so not making them update the counter
 		// makes sense from a testing perspective.
-	} else if r.mu.state.leaseAppliedIndex < raftCmd.MaxLeaseIndex {
+	} else if r.mu.state.LeaseAppliedIndex < raftCmd.MaxLeaseIndex {
 		// The happy case: the command is applying at or ahead of the minimal
 		// permissible index. It's ok if it skips a few slots (as can happen
 		// during rearrangement); this command will apply, but later ones which
@@ -1978,11 +1955,11 @@ func (r *Replica) applyRaftCommand(
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
 	r.mu.Lock()
-	oldIndex := r.mu.state.appliedIndex
+	oldIndex := r.mu.state.RaftAppliedIndex
 	// When frozen, the Range only applies freeze-related requests. Overrides
 	// any forcedError.
-	if mayApply := !r.mu.state.frozen || ba.IsFreeze(); !mayApply {
-		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.desc))
+	if mayApply := !r.mu.state.Frozen || ba.IsFreeze(); !mayApply {
+		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.Desc))
 	}
 	r.mu.Unlock()
 
@@ -2022,7 +1999,7 @@ func (r *Replica) applyRaftCommand(
 	// effects.
 	// TODO(tschottdorf): refactor that for clarity.
 	r.mu.Lock()
-	oldMS := r.mu.state.ms
+	oldMS := r.mu.state.Stats
 	r.mu.Unlock()
 	newMS := oldMS
 	newMS.Add(ms)
@@ -2038,9 +2015,9 @@ func (r *Replica) applyRaftCommand(
 		r.mu.Lock()
 		// Update cached appliedIndex if we were able to set the applied index
 		// on disk.
-		r.mu.state.appliedIndex = index
-		r.mu.state.leaseAppliedIndex = leaseIndex
-		r.mu.state.ms = newMS
+		r.mu.state.RaftAppliedIndex = index
+		r.mu.state.LeaseAppliedIndex = leaseIndex
+		r.mu.state.Stats = newMS
 		r.mu.Unlock()
 	}
 
@@ -2316,7 +2293,7 @@ func (r *Replica) executeBatch(
 	var intents []intentsWithArg
 
 	r.mu.Lock()
-	threshold := r.mu.state.gcThreshold
+	threshold := r.mu.state.GCThreshold
 	r.mu.Unlock()
 	if !threshold.Less(ba.Timestamp) {
 		return nil, nil, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
@@ -2650,7 +2627,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 func (r *Replica) needsSplitBySize() bool {
 	r.mu.Lock()
 	maxBytes := r.mu.maxBytes
-	size := r.mu.state.ms.Total()
+	size := r.mu.state.Stats.Total()
 	r.mu.Unlock()
 	return maxBytes > 0 && size > maxBytes
 }
