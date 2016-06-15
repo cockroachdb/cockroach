@@ -52,3 +52,9 @@ message RangeState {
   storage.engine.enginepb.MVCCStats stats = 10 [(gogoproto.nullable) = false];
   bool frozen = 11;
 }
+
+message RangeInfo {
+  RangeState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The highest (and last) index in the Raft log.
+  uint64 lastIndex = 2;
+}
