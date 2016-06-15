@@ -190,9 +190,9 @@ interface NodesMainData {
  */
 interface NodesMainActions {
   // Call if the nodes statuses are stale and need to be refreshed.
-  refreshNodes(): void;
+  refreshNodes: typeof refreshNodes;
   // Call if the user indicates they wish to change the sort of the table data.
-  setUISetting(key: string, value: any): void;
+  setUISetting: typeof setUISetting;
 }
 
 /**
