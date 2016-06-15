@@ -523,6 +523,9 @@ func TestRangesResponse(t *testing.T) {
 		if len(ri.Desc.Replicas) != 1 || ri.Desc.Replicas[0] != expReplica {
 			t.Errorf("unexpected replica list %+v", ri.Desc.Replicas)
 		}
+		if ri.State.Lease == nil {
+			t.Error("expected a nontrivial Lease")
+		}
 	}
 }
 
