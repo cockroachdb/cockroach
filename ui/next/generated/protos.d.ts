@@ -4569,7 +4569,7 @@ export interface storagebaseBuilder {
 	decode(buffer: ArrayBuffer) : storagebaseMessage;
 	decode(buffer: ByteBuffer) : storagebaseMessage;
 	decode64(buffer: string) : storagebaseMessage;
-	RangeState: storagebase.RangeStateBuilder;
+	ReplicaState: storagebase.ReplicaStateBuilder;
 	RangeInfo: storagebase.RangeInfoBuilder;
 	
 }
@@ -4578,11 +4578,11 @@ export interface storagebaseBuilder {
 
 declare module cockroach.storage.storagebase {
 	
-	export interface RangeState {
+	export interface ReplicaState {
 	
 		
 
-raftAppliedIndex?: Long;
+raft_applied_index?: Long;
 		
 
 getRaftAppliedIndex?() : Long;
@@ -4591,7 +4591,7 @@ getRaftAppliedIndex?() : Long;
 
 
 
-leaseAppliedIndex?: Long;
+lease_applied_index?: Long;
 		
 
 getLeaseAppliedIndex?() : Long;
@@ -4618,7 +4618,7 @@ getLease?() : roachpb.Lease;
 
 
 
-truncatedState?: roachpb.RaftTruncatedState;
+truncated_state?: roachpb.RaftTruncatedState;
 		
 
 getTruncatedState?() : roachpb.RaftTruncatedState;
@@ -4627,7 +4627,7 @@ getTruncatedState?() : roachpb.RaftTruncatedState;
 
 
 
-gcThreshold?: util.hlc.Timestamp;
+gc_threshold?: util.hlc.Timestamp;
 		
 
 getGcThreshold?() : util.hlc.Timestamp;
@@ -4656,7 +4656,7 @@ getFrozen?() : boolean;
 
 }
 	
-	export interface RangeStateMessage extends RangeState {
+	export interface ReplicaStateMessage extends ReplicaState {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
 	encodeJSON(): string;
@@ -4664,11 +4664,11 @@ getFrozen?() : boolean;
 	toString(): string;
 }
 
-export interface RangeStateBuilder {
-	new(data?: RangeState): RangeStateMessage;
-	decode(buffer: ArrayBuffer) : RangeStateMessage;
-	decode(buffer: ByteBuffer) : RangeStateMessage;
-	decode64(buffer: string) : RangeStateMessage;
+export interface ReplicaStateBuilder {
+	new(data?: ReplicaState): ReplicaStateMessage;
+	decode(buffer: ArrayBuffer) : ReplicaStateMessage;
+	decode(buffer: ByteBuffer) : ReplicaStateMessage;
+	decode64(buffer: string) : ReplicaStateMessage;
 	
 }
 	
@@ -4681,11 +4681,11 @@ declare module cockroach.storage.storagebase {
 	
 		
 
-state?: RangeState;
+state?: ReplicaState;
 		
 
-getState?() : RangeState;
-		setState?(state : RangeState): void;
+getState?() : ReplicaState;
+		setState?(state : ReplicaState): void;
 		
 
 

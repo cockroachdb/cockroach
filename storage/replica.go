@@ -171,23 +171,23 @@ type replicaChecksum struct {
 
 // TODO(tschottdorf): unified method to update both in-mem and on-disk
 // state, similar to how loadState unifies restoring from storage.
-func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase.RangeState, error) {
-	var s storagebase.RangeState
+func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase.ReplicaState, error) {
+	var s storagebase.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the leader lease.
 	var err error
 	if s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
-		return storagebase.RangeState{}, err
+		return storagebase.ReplicaState{}, err
 	}
 
 	if s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
-		return storagebase.RangeState{}, err
+		return storagebase.ReplicaState{}, err
 	}
 
 	if s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
-		return storagebase.RangeState{}, err
+		return storagebase.ReplicaState{}, err
 	}
 
 	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
@@ -195,11 +195,11 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase
 		desc.RangeID,
 		desc.IsInitialized(),
 	); err != nil {
-		return storagebase.RangeState{}, err
+		return storagebase.ReplicaState{}, err
 	}
 
 	if s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
-		return storagebase.RangeState{}, err
+		return storagebase.ReplicaState{}, err
 	}
 
 	return s, nil
@@ -231,7 +231,7 @@ type Replica struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
 		// The state of the Raft state machine.
-		state storagebase.RangeState
+		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
@@ -904,7 +904,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var ri storagebase.RangeInfo
-	ri.RangeState = *(protoutil.Clone(&r.mu.state)).(*storagebase.RangeState)
+	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	return ri
 }
 
