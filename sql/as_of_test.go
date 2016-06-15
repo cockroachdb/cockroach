@@ -42,6 +42,7 @@ func TestAsOfTime(t *testing.T) {
 
 	const val1 = 1
 	const val2 = 2
+	const query = "SELECT a FROM d.t AS OF SYSTEM TIME '%s' WHERE a > $1"
 
 	var i int
 	var tm, now time.Time
@@ -53,7 +54,7 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	tsEmpty := tm.Format(time.RFC3339Nano)
-	if _, err := db.Query(fmt.Sprintf("SELECT a FROM d.t AS OF SYSTEM TIME '%s'", tsEmpty)); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query(fmt.Sprintf(query, tsEmpty), 0); !testutils.IsError(err, `pq: database "d" does not exist`) {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -64,7 +65,7 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	tsDBExists := tm.Format(time.RFC3339Nano)
-	if _, err := db.Query(fmt.Sprintf("SELECT a FROM d.t AS OF SYSTEM TIME '%s'", tsDBExists)); !testutils.IsError(err, `pq: table "d.t" does not exist`) {
+	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: table "d.t" does not exist`) {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -75,7 +76,7 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	tsTableExists := tm.Format(time.RFC3339Nano)
-	if err := db.QueryRow(fmt.Sprintf("SELECT a FROM d.t AS OF SYSTEM TIME '%s'", tsTableExists)).Scan(&i); !testutils.IsError(err, "sql: no rows in result set") {
+	if err := db.QueryRow(fmt.Sprintf(query, tsTableExists), 0).Scan(&i); !testutils.IsError(err, "sql: no rows in result set") {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -136,7 +137,7 @@ func TestAsOfTime(t *testing.T) {
 	if _, err := db.Exec("ALTER TABLE d.t DROP COLUMN a"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(fmt.Sprintf("SELECT a FROM d.t AS OF SYSTEM TIME '%s'", tsVal1)).Scan(&i); err != nil {
+	if err := db.QueryRow(fmt.Sprintf(query, tsVal1), 0).Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != val1 {
 		t.Fatalf("expected %v, got %v", val1, i)

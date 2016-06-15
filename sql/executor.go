@@ -304,6 +304,10 @@ func (e *Executor) Prepare(
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
+	protoTS, err := isAsOf(&session.planner, stmt, e.ctx.Clock.Now())
+	if err != nil {
+		return nil, err
+	}
 
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.SetTypes(pinfo)
@@ -315,6 +319,15 @@ func (e *Executor) Prepare(
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
+
+	if protoTS != nil {
+		session.planner.asOf = true
+		defer func() {
+			session.planner.asOf = false
+		}()
+
+		setTxnTimestamps(txn, *protoTS)
+	}
 
 	plan, err := session.planner.prepare(stmt)
 	if err != nil {
@@ -464,16 +477,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			txnState.txn = txn
 
 			if protoTS != nil {
-				txnState.txn.Proto.Timestamp = *protoTS
-				txnState.txn.Proto.OrigTimestamp = *protoTS
-				txnState.txn.Proto.MaxTimestamp = *protoTS
-				// The deadline-checking code checks that the `Timestamp` field of the proto
-				// hasn't exceeded the deadline. Since we set the Timestamp field above each
-				// retry, it won't ever exceed the deadline, and thus setting the deadline
-				// here is not strictly needed. However, it doesn't do anything incorrect
-				// and it will possibly find problems if things change in the future, so it
-				// is left in.
-				txnState.txn.UpdateDeadlineMaybe(*protoTS)
+				setTxnTimestamps(txnState.txn, *protoTS)
 			}
 
 			var err error
@@ -1236,4 +1240,19 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 		return nil, fmt.Errorf("cannot specify timestamp in the future")
 	}
 	return &ts, nil
+}
+
+// setTxnTimestamps sets the transaction's proto timestamps and deadline
+// to ts. This is for use with AS OF queries, and should be called in the
+// retry block (except in the case of prepare which doesn't use retry). The
+// deadline-checking code checks that the `Timestamp` field of the proto
+// hasn't exceeded the deadline. Since we set the Timestamp field each retry,
+// it won't ever exceed the deadline, and thus setting the deadline here is
+// not strictly needed. However, it doesn't do anything incorrect and it will
+// possibly find problems if things change in the future, so it is left in.
+func setTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
+	txn.Proto.Timestamp = ts
+	txn.Proto.OrigTimestamp = ts
+	txn.Proto.MaxTimestamp = ts
+	txn.UpdateDeadlineMaybe(ts)
 }
