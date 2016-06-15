@@ -56,8 +56,6 @@ if [ -t 0 ]; then
   tty="--tty"
 fi
 
-uicache_dir="uicache"
-
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 
@@ -83,7 +81,8 @@ docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/pkg:/go/pkg" \
   --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
   --volume="${gopath0}/bin/linux_amd64:/go/bin" \
-  --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
+  --volume="${HOME}/.jspm:/root/.jspm" \
+  --volume="${HOME}/.npm:/root/.npm" \
   --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="PAGER=cat" \

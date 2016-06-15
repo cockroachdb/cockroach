@@ -1,4 +1,4 @@
-# Copyright 2015 The Cockroach Authors.
+# Copyright 2016 The Cockroach Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,142 +16,101 @@
 
 # NOTE: for some reason bash is necessary for updating the PATH to work
 # See http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile
-SHELL            := /bin/bash
-
+SHELL = /bin/bash
 # Update the path to prefer binstubs over globals
-PATH                 := node_modules/.bin:$(PATH)
+PATH := $(shell npm bin):$(PATH)
 
-REPO_ROOT            := $(realpath ..)
-ORG_ROOT             := $(REPO_ROOT)/..
-GITHUB_ROOT          := $(ORG_ROOT)/..
-BOWER_COMPONENTS     := bower_components
-NODE_MODULES         := node_modules
-TYPINGS              := typings
-TS_ROOT              := ts
-STYL_ROOT            := styl
-TEST_ROOT            := ts/test
-GENERATED_ROOT       := generated
+REPO_ROOT   = $(realpath ..)
+ORG_ROOT    = $(REPO_ROOT)/..
+GITHUB_ROOT = $(ORG_ROOT)/..
 
 # Ensure we only have one entry in GOPATH
-GOPATH := $(GITHUB_ROOT)/../..
+GOPATH = $(GITHUB_ROOT)/../..
 #                        ^  ^~ GOPATH
 #                        |~ GOPATH/src
 
-GOPATH_BIN := $(GOPATH)/bin
+GOPATH_BIN = $(GOPATH)/bin
+GO_BINDATA = $(GOPATH_BIN)/go-bindata
 
-GO_BINDATA := $(GOPATH_BIN)/go-bindata
+NODE_MODULES  = node_modules
+JSPM_PACKAGES = jspm_packages
+TYPINGS       = typings
+TS_ROOT       = app
+STYL_ROOT     = styl
 
-TYPESCRIPT_TARGET       := build/app.js
-TEST_TARGET             := build/test.js
-CSS_TARGET              := build/app.css
-CSS_DEBUG_TARGET        := build/app_debug.css
-REMOTE_DEPS             := npm.installed bower.installed typings.installed
-INDEX                   := index.html
-GOBINDATA_FONTS         := ./fonts/
-GOBINDATA_ASSETS        := ./assets/
-GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
-GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
-GOBINDATA_SOURCES       := $(NODE_MODULES)/lodash/lodash.min.js \
-                           $(BOWER_COMPONENTS)/d3/d3.min.js \
-                           $(BOWER_COMPONENTS)/long/src/long.js \
-                           $(BOWER_COMPONENTS)/mithriljs/mithril.js \
-                           $(BOWER_COMPONENTS)/moment/min/moment.min.js \
-                           $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.min.js \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.js \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.css \
-                           $(GOBINDATA_FONTS) \
-                           $(GOBINDATA_ASSETS) \
-                           favicon.ico \
-                           apple-touch-icon.png
-GOBINDATA_DEBUG_SOURCES := $(NODE_MODULES)/lodash/lodash.js \
-                           $(BOWER_COMPONENTS)/d3/d3.js \
-                           $(BOWER_COMPONENTS)/long/src/long.js \
-                           $(BOWER_COMPONENTS)/mithriljs/mithril.js \
-                           $(BOWER_COMPONENTS)/moment/moment.js \
-                           $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.js \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.js \
-                           $(BOWER_COMPONENTS)/nvd3/build/nv.d3.css \
-                           $(GOBINDATA_FONTS) \
-                           $(GOBINDATA_ASSETS) \
-                           favicon.ico \
-                           apple-touch-icon.png
-GOBINDATA_TARGET        := ./embedded.go
-GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
+GOBINDATA_FONTS  = fonts
+GOBINDATA_ASSETS = assets
+CSS_TARGET       = build/app.css
+JSPM_TARGET      = build/app.js
+GOBINDATA_TARGET = embedded.go
 
 .PHONY: all
-all: lint $(GOBINDATA_TARGET) $(TEST_TARGET)
-	rm -f $(GOBINDATA_DEBUG_TARGET)
+all: app/js/protos.js lint test $(GOBINDATA_TARGET)
 
 .PHONY: lint
-lint: npm.installed
+lint: npm.installed typings.installed
 	stylint -c .stylintrc $(STYL_ROOT)
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
+	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
-.PHONY: debug
-debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
-	rm -f $(GOBINDATA_TARGET)
+.PHONY: test
+test: app/js/protos.js npm.installed typings.installed jspm.installed
+	karma start
 
-.PHONY: next
-next: $(CSS_TARGET)
-	make -C next
+.PHONY: watch
+watch: npm.installed
+	gulp watch
 
-bower.installed: bower.json npm.installed
-	rm -rf $(BOWER_COMPONENTS)/
-	bower install --config.interactive=false --allow-root
-	touch $@
+GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png index.html
 
-npm.installed: npm-shrinkwrap.json
-	# TODO(tamird): DRY this with `clean`?
-	rm -rf $(BOWER_COMPONENTS)/ $(NODE_MODULES)/ $(TYPINGS)/
-	npm install --progress=false
-	touch $@
-
-typings.installed: typings.json npm.installed
-	rm -rf $(TYPINGS)/
-	typings install
-	touch $@
-
-$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	tsc -p $(TS_ROOT)
-
-$(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	tsc -p $(TEST_ROOT)
-
-$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	stylus $(STYL_ROOT)/app.styl \
-	       --compress \
-	       --include-css \
-	       --use nib \
-	       --out $@
-
-$(CSS_DEBUG_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
-	stylus $(STYL_ROOT)/app.styl \
-	       --include-css \
-	       --use nib \
-	       --out $@
-
-$(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
-	rm -f $(INDEX)
-	cp release/$(INDEX) $(INDEX)
-	chmod a-w $(INDEX)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_SOURCES)
+$(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_SOURCES)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
 	goimports -w $@
 
-$(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX)
-	rm -f $(INDEX)
-	cp debug/$(INDEX) $(INDEX)
-	chmod a-w $(INDEX)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEBUG_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+$(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
+	jspm bundle-sfx app/app build/app.js
+
+# TODO(tamird/matt/max): write a systemjs stylus plugin.
+$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed
+	stylus $(STYL_ROOT)/app.styl \
+	       --include-css \
+	       --use nib \
+	       --out $@
+
+npm.installed: package.json npm-shrinkwrap.json
+	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
+	npm install --no-progress
+	touch $@
+
+typings.installed: generated/protos.d.ts typings.json npm.installed
+	typings install
+	typings prune
+	touch $@
+
+jspm.installed: npm.installed
+	jspm install
+	# jspm touches package.json, so we need to bump npm.installed's timestamp
+	# here to prevent endless pointless rebuilds. This `touch` will still result
+	# in a spurious `typings install`, but that's extremely fast compared to `npm
+	# install`.
+	touch npm.installed
+	touch $@
+
+UI_PROTOS = $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto $(REPO_ROOT)/server/status/status.proto $(REPO_ROOT)/ts/tspb/timeseries.proto
+
+PBJS_ARGS = --path $(ORG_ROOT) $(UI_PROTOS)
+
+app/js/protos.js: npm.installed $(UI_PROTOS)
 	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' >> $@
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	pbjs -t commonjs $(PBJS_ARGS) >> $@
 
-watch: debug
-	gulp watch
+generated/protos.json: npm.installed $(UI_PROTOS)
+	pbjs $(PBJS_ARGS) > $@
 
-.PHONY: clean
-clean:
-	rm -f $(REMOTE_DEPS) $(INDEX)
-	rm -rf $(BOWER_COMPONENTS) $(NODE_MODULES) $(TYPINGS) build generated
+generated/protos.d.ts: generated/protos.json
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	proto2ts --file generated/protos.json >> $@
