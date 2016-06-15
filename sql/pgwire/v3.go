@@ -186,6 +186,19 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 	return args, nil
 }
 
+// statusReportParams is a static mapping from run-time parameters to their respective
+// hard-coded values, each of which is to be returned as part of the status report
+// during connection initialization.
+var statusReportParams = map[string]string{
+	"client_encoding": "UTF8",
+	"DateStyle":       "ISO",
+	// The latest version of the docs that was consulted during the development
+	// of this package. We specify this version to avoid having to support old
+	// code paths which various client tools fall back to if they can't
+	// determine that the server is new enough.
+	"server_version": "9.5.0",
+}
+
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -200,19 +213,10 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err
 	}
-	for key, value := range map[string]string{
-		"client_encoding": "UTF8",
-		"DateStyle":       "ISO",
-		// The latest version of the docs that was consulted during the development
-		// of this package. We specify this version to avoid having to support old
-		// code paths which various client tools fall back to if they can't
-		// determine that the server is new enough.
-		"server_version": "9.5.0",
-	} {
+	for key, value := range statusReportParams {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
-		for _, str := range [...]string{key, value} {
-			c.writeBuf.writeTerminatedString(str)
-		}
+		c.writeBuf.writeTerminatedString(key)
+		c.writeBuf.writeTerminatedString(value)
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
 			return err
 		}
