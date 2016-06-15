@@ -152,9 +152,10 @@ func initMemProfile(dir string) {
 
 	go func() {
 		t := time.NewTicker(memProfileInterval)
+		defer t.Stop()
+
 		for {
 			<-t.C
-			defer t.Stop()
 
 			func() {
 				const format = "2006-01-02T15_04_05.999"
@@ -181,6 +182,60 @@ func initMemProfile(dir string) {
 					return
 				}
 			}()
+		}
+	}()
+}
+
+func initCPUProfile(dir string) {
+	cpuProfileInterval := envutil.EnvOrDefaultDuration("cpuprof_interval", -1)
+	if cpuProfileInterval < 0 {
+		return
+	}
+	if min := time.Second; cpuProfileInterval < min {
+		log.Infof("fixing excessively small cpu profiling interval: %s -> %s",
+			cpuProfileInterval, min)
+		cpuProfileInterval = min
+	}
+
+	go func() {
+		t := time.NewTicker(cpuProfileInterval)
+		defer t.Stop()
+
+		var currentProfile *os.File
+		defer func() {
+			if currentProfile != nil {
+				pprof.StopCPUProfile()
+				currentProfile.Close()
+			}
+		}()
+
+		for {
+			func() {
+				const format = "2006-01-02T15_04_05.999"
+				suffix := timeutil.Now().Add(cpuProfileInterval).Format(format)
+				f, err := os.Create(filepath.Join(dir, "cpuprof."+suffix))
+				if err != nil {
+					log.Warningf("error creating go cpu file %s", err)
+					return
+				}
+
+				// Stop the current profile if it exists.
+				if currentProfile != nil {
+					pprof.StopCPUProfile()
+					currentProfile.Close()
+					currentProfile = nil
+				}
+
+				// Start the new profile.
+				if err := pprof.StartCPUProfile(f); err != nil {
+					log.Warningf("unable to start cpu profile: %v", err)
+					f.Close()
+					return
+				}
+				currentProfile = f
+			}()
+
+			<-t.C
 		}
 	}()
 }
@@ -228,6 +283,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	log.Infof(info.Short())
 
 	initMemProfile(f.Value.String())
+	initCPUProfile(f.Value.String())
 
 	// Default user for servers.
 	serverCtx.User = security.NodeUser
