@@ -58,6 +58,7 @@ var (
 type Builtin struct {
 	Types      typeList
 	ReturnType Datum
+	category   string
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
 	// e.g.: random(), clock_timestamp(). Some functions like now()
@@ -74,6 +75,20 @@ func (b Builtin) params() typeList {
 
 func (b Builtin) returnType() Datum {
 	return b.ReturnType
+}
+
+// Category is used to categorize a function (for documentation purposes).
+func (b Builtin) Category() string {
+	if b.category != "" {
+		return b.category
+	}
+	if types, ok := b.Types.(ArgTypes); ok && len(types) == 1 {
+		return strings.ToUpper(types[0].Type())
+	}
+	if b.ReturnType != nil {
+		return strings.ToUpper(b.ReturnType.Type())
+	}
+	return ""
 }
 
 // Builtins contains the built-in functions indexed by name.
@@ -451,6 +466,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeBytes,
+			category:   "ID Generation",
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return NewDBytes(generateUniqueBytes(ctx.NodeID)), nil
@@ -462,6 +478,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeInt,
+			category:   "ID Generation",
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return NewDInt(generateUniqueInt(ctx.NodeID)), nil
@@ -939,6 +956,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeString,
+			category:   "System Info",
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(build.GetInfo().Short()), nil
 			},
@@ -1023,6 +1041,7 @@ var substringImpls = []Builtin{
 var uuidV4Impl = Builtin{
 	Types:      ArgTypes{},
 	ReturnType: TypeBytes,
+	category:   "ID Generation",
 	impure:     true,
 	fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 		return NewDBytes(DBytes(uuid.NewV4().GetBytes())), nil
