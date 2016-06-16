@@ -204,7 +204,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		v3conn := makeV3Conn(conn, s.executor, s.metrics, sessionArgs)
 		defer v3conn.finish()
 		if argsErr != nil {
-			return v3conn.sendInternalError(err.Error())
+			return v3conn.sendInternalError(argsErr.Error())
 		}
 		if errSSLRequired {
 			return v3conn.sendInternalError(ErrSSLRequired)
