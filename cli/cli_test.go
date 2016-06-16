@@ -58,6 +58,9 @@ func newCLITest() cliTest {
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
 	baseCtx.InitDefaults()
+	cliCtx.InitCLIDefaults()
+
+	fmt.Fprintf(os.Stderr, "WOO %q", cliCtx.prettyFmt)
 
 	osStderr = os.Stdout
 
@@ -725,22 +728,26 @@ func Example_user() {
 	defer c.stop()
 
 	c.Run("user ls")
+	c.Run("user ls --pretty")
 	c.Run("user set foo --password=bar")
 	// Don't use get, since the output of hashedPassword is random.
 	// c.Run("user get foo")
-	c.Run("user ls")
+	c.Run("user ls --pretty")
 	c.Run("user rm foo")
-	c.Run("user ls")
+	c.Run("user ls --pretty")
 
 	// Output:
 	// user ls
+	// 0 rows
+	// username
+	// user ls --pretty
 	// +----------+
 	// | username |
 	// +----------+
 	// +----------+
 	// user set foo --password=bar
 	// INSERT 1
-	// user ls
+	// user ls --pretty
 	// +----------+
 	// | username |
 	// +----------+
@@ -748,7 +755,7 @@ func Example_user() {
 	// +----------+
 	// user rm foo
 	// DELETE 1
-	// user ls
+	// user ls --pretty
 	// +----------+
 	// | username |
 	// +----------+
@@ -844,10 +851,15 @@ func Example_node() {
 	}
 
 	c.Run("node ls")
+	c.Run("node ls --pretty")
 	c.Run("node status 10000")
 
 	// Output:
 	// node ls
+	// 1 row
+	// id
+	// 1
+	// node ls --pretty
 	// +----+
 	// | id |
 	// +----+
@@ -897,13 +909,13 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatalf("couldn't write stats summaries: %s", err)
 	}
 
-	out, err := c.RunWithCapture("node status 1")
+	out, err := c.RunWithCapture("node status 1 --pretty")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status")
+	out, err = c.RunWithCapture("node status --pretty")
 	if err != nil {
 		t.Fatal(err)
 	}

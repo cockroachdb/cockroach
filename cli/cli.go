@@ -23,6 +23,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/build"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +61,15 @@ var cockroachCmd = &cobra.Command{
 	Long: `CockroachDB command-line interface and server.`,
 }
 
+// isInteractive indicates whether both stdin and stdout refer to the
+// terminal.
+var isInteractive bool
+
 func init() {
+
+	isInteractive = isatty.IsTerminal(os.Stdout.Fd()) &&
+		isatty.IsTerminal(os.Stdin.Fd())
+
 	cockroachCmd.AddCommand(
 		startCmd,
 		certCmd,
