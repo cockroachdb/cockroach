@@ -460,4 +460,61 @@ describe("rest api", function() {
       });
     });
   });
+
+  describe("cluster request", function() {
+    let clusterUrl = `${api.API_PREFIX}/cluster`;
+    let clusterID = "12345abcde";
+
+    afterEach(fetchMock.restore);
+
+    it("correctly requests cluster info", function () {
+      this.timeout(1000);
+      fetchMock.mock(clusterUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return {
+          sendAsJson: false,
+          body: new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: clusterID }).toArrayBuffer(),
+        };
+      });
+
+      return api.getCluster().then((result) => {
+        assert.lengthOf(fetchMock.calls(clusterUrl), 1);
+        assert.deepEqual(result.cluster_id, clusterID);
+      });
+    });
+
+    it("correctly handles an error", function (done) {
+      this.timeout(1000);
+
+      // Mock out the fetch query, but return an error
+      fetchMock.mock(clusterUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return { throws: new Error() };
+      });
+
+      api.getCluster().then((result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.isError(e));
+        done();
+      });
+    });
+
+    it("correctly times out", function (done) {
+      this.timeout(1000);
+      api.setFetchTimeout(0);
+      // Mock out the fetch query, but return a promise that's never resolved to test the timeout
+      fetchMock.mock(clusterUrl, "get", (url: string, requestObj: RequestInit) => {
+        assert.isUndefined(requestObj.body);
+        return new Promise<any>(() => { });
+      });
+
+      api.getCluster().then((result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
+        done();
+      });
+    });
+  });
 });
