@@ -33,10 +33,7 @@ import (
 const joinReaderBatchSize = 100
 
 type joinReader struct {
-	// RowChannel implements the rowReceiver interface.
-	// We use the incoming rows to generate keys for row lookups, and produce
-	// the corresponding results to the output in order.
-	RowChannel
+	input rowSource
 
 	readerBase
 
@@ -46,9 +43,14 @@ type joinReader struct {
 var _ processor = &joinReader{}
 
 func newJoinReader(
-	spec *JoinReaderSpec, txn *client.Txn, output rowReceiver, evalCtx *parser.EvalContext,
+	spec *JoinReaderSpec,
+	txn *client.Txn,
+	input rowSource,
+	output rowReceiver,
+	evalCtx *parser.EvalContext,
 ) (*joinReader, error) {
 	jr := &joinReader{
+		input:  input,
 		output: output,
 	}
 
@@ -62,9 +64,6 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-
-	// Allow the input channel to buffer an entire batch.
-	jr.RowChannel.InitWithBufSize(joinReaderBatchSize)
 
 	return jr, nil
 }
@@ -104,18 +103,17 @@ func (jr *joinReader) mainLoop() error {
 		// a soft limit (perhaps send the batch out if we don't get a result
 		// within a certain amount of time).
 		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
-			d, ok := <-jr.RowChannel.C
-			if !ok {
+			row, err := jr.input.NextRow()
+			if err != nil {
+				return err
+			}
+			if row == nil {
 				if len(spans) == 0 {
 					return nil
 				}
 				break
 			}
-			if d.Err != nil {
-				return d.Err
-			}
-
-			key, err := jr.generateKey(d.Row, &alloc, primaryKeyPrefix)
+			key, err := jr.generateKey(row, &alloc, primaryKeyPrefix)
 			if err != nil {
 				return err
 			}

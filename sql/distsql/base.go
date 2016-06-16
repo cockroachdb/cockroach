@@ -39,6 +39,10 @@ type rowReceiver interface {
 	Close(err error)
 }
 
+type rowSource interface {
+	NextRow() (sqlbase.EncDatumRow, error)
+}
+
 // processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
 type processor interface {
@@ -70,6 +74,7 @@ type RowChannel struct {
 }
 
 var _ rowReceiver = &RowChannel{}
+var _ rowSource = &RowChannel{}
 
 // InitWithBufSize initializes the RowChannel with a given buffer size.
 func (rc *RowChannel) InitWithBufSize(chanBufSize int) {
@@ -101,8 +106,66 @@ func (rc *RowChannel) Close(err error) {
 	close(rc.dataChan)
 }
 
+// NextRow is part of the rowSource interface.
+func (rc *RowChannel) NextRow() (sqlbase.EncDatumRow, error) {
+	d, ok := <-rc.C
+	if !ok {
+		// No more rows.
+		return nil, nil
+	}
+	if d.Err != nil {
+		return nil, d.Err
+	}
+	return d.Row, nil
+}
+
 // NoMoreRows causes future PushRow calls to return false. The caller should
 // still drain the channel to make sure the sender is not blocked.
 func (rc *RowChannel) NoMoreRows() {
 	atomic.StoreUint32(&rc.noMoreRows, 1)
+}
+
+// RowBuffer is an implementation of rowReceiver that buffers (accumulates)
+// results in memory, as well as an implementation of rowSender that returns
+// rows from a row buffer.
+type RowBuffer struct {
+	rows sqlbase.EncDatumRows
+	err  error
+
+	// closed is used when the RowBuffer is used as a rowReceiver; it is set to
+	// true when the sender calls Close.
+	closed bool
+
+	// done is used when the RowBuffer is used as a rowSource; it is set to true
+	// when the receiver read all the rows.
+	done bool
+}
+
+var _ rowReceiver = &RowBuffer{}
+
+// PushRow is part of the rowReceiver interface.
+func (tr *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
+	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
+	tr.rows = append(tr.rows, rowCopy)
+	return true
+}
+
+// Close is part of the rowReceiver interface.
+func (tr *RowBuffer) Close(err error) {
+	tr.err = err
+	tr.closed = true
+}
+
+// NextRow is part of the rowSource interface.
+func (tr *RowBuffer) NextRow() (sqlbase.EncDatumRow, error) {
+	if tr.err != nil {
+		return nil, tr.err
+	}
+	if len(tr.rows) == 0 {
+		tr.done = true
+		return nil, nil
+	}
+	row := tr.rows[0]
+	tr.rows = tr.rows[1:]
+	return row, nil
 }

@@ -96,3 +96,11 @@ func (f *Flow) Start() {
 func (f *Flow) Wait() {
 	f.waitGroup.Wait()
 }
+
+// RunSync runs the processors in the flow in order (serially), in the same
+// context (no goroutines are spawned).
+func (f *Flow) RunSync() {
+	for _, p := range f.processors {
+		p.Run(nil)
+	}
+}

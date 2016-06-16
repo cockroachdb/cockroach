@@ -30,27 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// testingReceiver is an implementation of rowReceiver that accumulates
-// results which we can later verify.
-type testingReceiver struct {
-	rows   sqlbase.EncDatumRows
-	closed bool
-	err    error
-}
-
-var _ rowReceiver = &testingReceiver{}
-
-func (tr *testingReceiver) PushRow(row sqlbase.EncDatumRow) bool {
-	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
-	tr.rows = append(tr.rows, rowCopy)
-	return true
-}
-
-func (tr *testingReceiver) Close(err error) {
-	tr.err = err
-	tr.closed = true
-}
-
 func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -127,7 +106,7 @@ func TestTableReader(t *testing.T) {
 
 		txn := client.NewTxn(context.Background(), *kvDB)
 
-		out := &testingReceiver{}
+		out := &RowBuffer{}
 		tr, err := newTableReader(&ts, txn, out, &parser.EvalContext{})
 		if err != nil {
 			t.Fatal(err)

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // distSQLNode is a planNode that receives results from a distsql flow (through
@@ -38,12 +37,14 @@ type distSQLNode struct {
 	colMapping []uint32
 
 	flow *distsql.Flow
-	c    distsql.RowChannel
 
 	values parser.DTuple
 	alloc  sqlbase.DatumAlloc
 
-	flowStarted bool
+	// rowBuf accumulates the results of the flow.
+	rowBuf distsql.RowBuffer
+
+	ranFlow bool
 }
 
 var _ planNode = &distSQLNode{}
@@ -78,33 +79,28 @@ func newDistSQLNode(
 		colMapping: colMapping,
 		values:     make(parser.DTuple, len(columns)),
 	}
-	n.c.Init()
 	return n
 }
 
 func (n *distSQLNode) Next() (bool, error) {
-	if !n.flowStarted {
-		n.flow.Start()
-		n.flowStarted = true
+	if !n.ranFlow {
+		n.flow.RunSync()
+		n.ranFlow = true
 	}
-	d, ok := <-n.c.C
-	if !ok {
-		// No more data
+	row, err := n.rowBuf.NextRow()
+	if err != nil {
+		return false, err
+	}
+	if row == nil {
 		return false, nil
 	}
-	if d.Err != nil {
-		return false, d.Err
-	}
-	if len(d.Row) != len(n.colMapping) {
-		return false, util.Errorf("row length %d, expected %d", len(d.Row), len(n.colMapping))
-	}
-	for i := range d.Row {
+	for i := range row {
 		col := n.colMapping[i]
-		err := d.Row[i].Decode(&n.alloc)
+		err := row[i].Decode(&n.alloc)
 		if err != nil {
 			return false, err
 		}
-		n.values[col] = d.Row[i].Datum
+		n.values[col] = row[i].Datum
 	}
 	return true, nil
 }
@@ -188,7 +184,7 @@ func scanNodeToDistSQL(n *scanNode) (*distSQLNode, error) {
 	dn := newDistSQLNode(n.resultColumns, tr.OutputColumns, n.ordering)
 
 	srv := n.p.execCtx.DistSQLSrv
-	flow, err := srv.SetupSimpleFlow(context.Background(), req, &dn.c)
+	flow, err := srv.SetupSimpleFlow(context.Background(), req, &dn.rowBuf)
 	if err != nil {
 		return nil, err
 	}
