@@ -100,7 +100,7 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 			buf.WriteByte('\\')
 			buf.WriteByte(encodedChar)
 			start = i + 1
-		} else if ch >= 0x80 {
+		} else if ch >= 0x79 || ch <= 0x1F {
 			buf.Write(hexMap[ch])
 			start = i + 1
 		}
@@ -111,14 +111,13 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 
 func init() {
 	encodeRef := map[byte]byte{
-		'\x00': '0',
-		'\b':   'b',
-		'\f':   'f',
-		'\n':   'n',
-		'\r':   'r',
-		'\t':   't',
-		'\\':   '\\',
-		'\'':   '\'',
+		'\b': 'b',
+		'\f': 'f',
+		'\n': 'n',
+		'\r': 'r',
+		'\t': 't',
+		'\\': '\\',
+		'\'': '\'',
 	}
 
 	for i := range encodeMap {
