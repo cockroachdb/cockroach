@@ -55,9 +55,11 @@ const (
 
 // StartTestServerWithContext starts an in-memory test server.
 // ctx can be nil, in which case a default context will be created.
-func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
+func StartTestServerWithContext(t util.Tester, ctx *Context, startParams StartParams) TestServer {
 	s := TestServer{Ctx: ctx}
-	if err := s.Start(); err != nil {
+	var err error
+	err = s.StartWithStopper(nil, startParams)
+	if err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
 		} else {
@@ -69,7 +71,7 @@ func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
 
 // StartTestServer starts an in-memory test server.
 func StartTestServer(t util.Tester) TestServer {
-	return StartTestServerWithContext(t, nil)
+	return StartTestServerWithContext(t, nil, StartParams{Nodes: 1})
 }
 
 // StartTestServerJoining starts an in-memory test server that attempts to join `other`.
@@ -152,6 +154,48 @@ type TestServer struct {
 	StoresPerNode int
 }
 
+// StartParams are knobs that determine the properties of a testserver when it initializes.
+type StartParams struct {
+	Nodes int
+}
+
+// A MultinodeTestCluster is an array of in-memory nodes connected to each other.
+type MultinodeTestCluster struct {
+	Servers []TestServer
+}
+
+// WaitForFullReplication waits until all of the nodes in the cluster have the
+// same number of replicas.
+func (tc *MultinodeTestCluster) WaitForFullReplication() error {
+	// TODO (WillHaack): Optimize sleep time.
+	for notReplicated := true; notReplicated; time.Sleep(100 * time.Millisecond) {
+		notReplicated = false
+		var numReplicas int
+		err := tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			numReplicas = s.ReplicaCount()
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		for _, server := range tc.Servers {
+			err := server.Stores().VisitStores(func(s *storage.Store) error {
+				if numReplicas != s.ReplicaCount() {
+					notReplicated = true
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if notReplicated {
+				break
+			}
+		}
+	}
+	return nil
+}
+
 // Stopper returns the embedded server's Stopper.
 func (ts *TestServer) Stopper() *stop.Stopper {
 	return ts.stopper
@@ -203,12 +247,12 @@ func (ts *TestServer) DB() *client.DB {
 // TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
-	return ts.StartWithStopper(nil)
+	return ts.StartWithStopper(nil, StartParams{Nodes: 1})
 }
 
 // StartWithStopper is the same as Start, but allows passing a stopper
 // explicitly.
-func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
+func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, StartParams StartParams) error {
 	if ts.Ctx == nil {
 		ctx := MakeTestContext()
 		ts.Ctx = &ctx
@@ -221,7 +265,9 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	// Change the replication requirements so we don't get log spam about ranges
 	// not being replicated enough.
 	cfg := config.DefaultZoneConfig()
-	cfg.ReplicaAttrs = []roachpb.Attributes{{}}
+
+	cfg.ReplicaAttrs = make([]roachpb.Attributes, StartParams.Nodes)
+
 	fn := config.TestingSetDefaultZoneConfig(cfg)
 	stopper.AddCloser(stop.CloserFn(fn))
 
