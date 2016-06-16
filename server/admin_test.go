@@ -436,6 +436,29 @@ CREATE TABLE test.tbl (
 	if a, e := resp.RangeCount, int64(1); a != e {
 		t.Fatalf("# of ranges %d != expected %d", a, e)
 	}
+
+	// Verify Create Table Statement.
+	{
+		const (
+			showCreateTableQuery = "SHOW CREATE TABLE test.tbl"
+			createTableCol       = "CreateTable"
+		)
+
+		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, showCreateTableQuery, nil)
+		if res.ResultList[0].Err != nil {
+			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.ResultList[0].Err)
+		}
+
+		scanner := makeResultScanner(res.ResultList[0].Columns)
+		var createStmt string
+		if err := scanner.Scan(res.ResultList[0].Rows[0], createTableCol, &createStmt); err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := resp.CreateTableStatement, createStmt; a != e {
+			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
+		}
+	}
 }
 
 func TestAdminAPIUsers(t *testing.T) {
