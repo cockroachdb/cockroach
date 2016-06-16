@@ -954,6 +954,9 @@ explainable_stmt:
   {
     $$.val = $1.slct()
   }
+| create_stmt
+| drop_stmt
+| alter_table_stmt
 | insert_stmt
 | update_stmt
 | delete_stmt
