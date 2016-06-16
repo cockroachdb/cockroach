@@ -57,6 +57,8 @@ import databaseInfoReducer from "./redux/databaseInfo";
 import eventsReducer from "./redux/events";
 import raftReducer from "./redux/raft";
 import healthReducer from "./redux/health";
+import versionReducer from "./redux/version";
+import clusterReducer from "./redux/cluster";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -94,6 +96,8 @@ const store = createStore(
     events: eventsReducer,
     raft: raftReducer,
     health: healthReducer,
+    version: versionReducer,
+    cluster: clusterReducer,
   }),
   compose(
     applyMiddleware(thunk),
