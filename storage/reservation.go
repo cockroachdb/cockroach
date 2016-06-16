@@ -19,10 +19,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+)
+
+const (
+	// defaultMaxReservations is the number of concurrent reservations allowed.
+	defaultMaxReservations = 5
+	// defaultMaxReservedBytes is the total number of bytes that can be
+	// reserved, by all active reservations, at any time.
+	defaultMaxReservedBytes = 250 << 20 // 250 MiB
 )
 
 // reservation is an item in both the reservationQ and the used in bookie's
@@ -64,36 +73,34 @@ func (pq *reservationQ) dequeue() *reservation {
 
 // bookie contains a store's replica reservations.
 type bookie struct {
-	clock              *hlc.Clock
-	reservationTimeout time.Duration // How long each reservation is held.
-	maxReservations    int
-	maxReservedBytes   int64
-	metrics            *storeMetrics
-	mu                 struct {
+	clock   *hlc.Clock
+	metrics *storeMetrics
+	mu      struct {
 		sync.Mutex                                             // Protects all values within the mu struct.
 		queue                 reservationQ                     // Queue used to handle expiring of reservations.
 		reservationsByRangeID map[roachpb.RangeID]*reservation // All active reservations
 		size                  int64                            // Total bytes required for all reservations.
+		reservationTimeout    time.Duration                    // How long each reservation is held.
+		maxReservations       int                              // Maximum number of allowed reservations.
+		maxReservedBytes      int64                            // Maximum bytes allowed for all reservations combined.
 	}
 }
 
 // newBookie creates a reservations system and starts its timeout queue.
 func newBookie(
 	clock *hlc.Clock,
-	reservationTimeout time.Duration,
-	maxReservations int,
-	maxReservedBytes int64,
 	stopper *stop.Stopper,
 	metrics *storeMetrics,
 ) *bookie {
 	b := &bookie{
-		clock:              clock,
-		reservationTimeout: reservationTimeout,
-		maxReservations:    maxReservations,
-		maxReservedBytes:   maxReservedBytes,
-		metrics:            metrics,
+		clock:   clock,
+		metrics: metrics,
 	}
 	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]*reservation)
+	b.mu.reservationTimeout = envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip)
+	b.mu.maxReservations = envutil.EnvOrDefaultInt("max_reservations", defaultMaxReservations)
+	b.mu.maxReservedBytes = envutil.EnvOrDefaultBytes("max_reserved_bytes", defaultMaxReservedBytes)
+
 	b.start(stopper)
 	return b
 }
@@ -125,10 +132,10 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	}
 
 	// Do we have too many current reservations?
-	if len(b.mu.reservationsByRangeID) > b.maxReservations {
+	if len(b.mu.reservationsByRangeID) > b.mu.maxReservations {
 		if log.V(1) {
 			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
-				req, len(b.mu.reservationsByRangeID), b.maxReservations)
+				req, len(b.mu.reservationsByRangeID), b.mu.maxReservations)
 		}
 		return roachpb.ReservationResponse{Reserved: false}
 	}
@@ -147,17 +154,17 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	}
 
 	// Do we have enough reserved space free for the reservation?
-	if b.mu.size+req.RangeSize > b.maxReservedBytes {
+	if b.mu.size+req.RangeSize > b.mu.maxReservedBytes {
 		if log.V(1) {
 			log.Infof("could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
-				req, req.RangeSize, b.mu.size, b.maxReservations)
+				req, req.RangeSize, b.mu.size, b.mu.maxReservations)
 		}
 		return roachpb.ReservationResponse{Reserved: false}
 	}
 
 	newReservation := &reservation{
 		ReservationRequest: req,
-		expireAt:           b.clock.Now().Add(b.reservationTimeout.Nanoseconds(), 0),
+		expireAt:           b.clock.Now().Add(b.mu.reservationTimeout.Nanoseconds(), 0),
 	}
 
 	b.mu.reservationsByRangeID[req.RangeID] = newReservation
@@ -224,7 +231,7 @@ func (b *bookie) start(stopper *stop.Stopper) {
 			nextExpiration := b.mu.queue.peek()
 			if nextExpiration == nil {
 				// No reservations to expire.
-				timeout = b.reservationTimeout
+				timeout = b.mu.reservationTimeout
 			} else {
 				now := b.clock.Now()
 				if now.GoTime().After(nextExpiration.expireAt.GoTime()) {
