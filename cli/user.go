@@ -49,7 +49,7 @@ func runGetUser(cmd *cobra.Command, args []string) {
 	}
 	defer conn.Close()
 	err = runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`SELECT * FROM system.users WHERE username=$1`, args[0]), true)
+		makeQuery(`SELECT * FROM system.users WHERE username=$1`, args[0]), cliCtx.prettyFmt)
 	if err != nil {
 		panic(err)
 	}
@@ -77,7 +77,7 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 	}
 	defer conn.Close()
 	err = runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`SELECT username FROM system.users`), true)
+		makeQuery(`SELECT username FROM system.users`), cliCtx.prettyFmt)
 	if err != nil {
 		panic(err)
 	}
@@ -105,7 +105,7 @@ func runRmUser(cmd *cobra.Command, args []string) {
 	}
 	defer conn.Close()
 	err = runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`DELETE FROM system.users WHERE username=$1`, args[0]), true)
+		makeQuery(`DELETE FROM system.users WHERE username=$1`, args[0]), cliCtx.prettyFmt)
 	if err != nil {
 		panic(err)
 	}
@@ -177,7 +177,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	defer conn.Close()
 	// TODO(marc): switch to UPSERT.
 	err = runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed), true)
+		makeQuery(`INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed), cliCtx.prettyFmt)
 	if err != nil {
 		panic(err)
 	}
