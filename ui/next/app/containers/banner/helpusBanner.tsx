@@ -6,7 +6,7 @@ import { createSelector } from "reselect";
 import _ = require("lodash");
 
 import Banner from "./banner";
-import { KEY_HELPUS, OptInAttributes, KeyValue, loadUIData, saveUIData } from "../../redux/uiData";
+import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData } from "../../redux/uiData";
 import { setUISetting } from "../../redux/ui";
 
 export let HELPUS_BANNER_DISMISSED_KEY = "banner/helpusBanner/DISMISSED";
@@ -15,9 +15,9 @@ class HelpusBannerProps {
   attributes: OptInAttributes;
   attributesLoaded: boolean;
   dismissed: boolean = false;
-  loadUIData: (...keys: string[]) => void;
-  saveUIData: (...values: KeyValue[]) => void;
-  setUISetting: (key: string, value: any) => void;
+  loadUIData: typeof loadUIData;
+  saveUIData: typeof saveUIData;
+  setUISetting: typeof setUISetting;
 }
 
 class HelpusBanner extends React.Component<HelpusBannerProps, {}> {

@@ -6,7 +6,7 @@ import { refreshHealth, HealthState } from "../../redux/health";
 
 class DisconnectedBannerProps {
   health: HealthState;
-  refreshHealth: () => void;
+  refreshHealth: typeof refreshHealth;
 }
 
 class DisconnectedBannerState {

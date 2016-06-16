@@ -29,7 +29,7 @@ interface RangesMainData {
  */
 interface RangesMainActions {
   // Call if the ranges statuses are stale and need to be refreshed.
-  refreshRaft(): void;
+  refreshRaft: typeof refreshRaft;
 }
 
 interface RangesMainState {
