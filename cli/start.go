@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/serverpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -240,6 +241,39 @@ func initCPUProfile(dir string) {
 	}()
 }
 
+func initCheckpointing(engines []engine.Engine) {
+	checkpointInterval := envutil.EnvOrDefaultDuration("checkpoint_interval", -1)
+	if checkpointInterval < 0 {
+		return
+	}
+	if min := 10 * time.Second; checkpointInterval < min {
+		log.Infof("fixing excessively small checkpointing interval: %s -> %s",
+			checkpointInterval, min)
+		checkpointInterval = min
+	}
+
+	go func() {
+		t := time.NewTicker(checkpointInterval)
+		defer t.Stop()
+
+		for {
+			<-t.C
+
+			const format = "2006-01-02T15_04_05"
+			dir := timeutil.Now().Format(format)
+			start := timeutil.Now()
+			for _, e := range engines {
+				// Note that when dir is relative (as it is here) it is appended to the
+				// engine's data directory.
+				if err := e.Checkpoint(dir); err != nil {
+					log.Warning(err)
+				}
+			}
+			log.Infof("created checkpoint %s: %.1fms", dir, timeutil.Since(start).Seconds()*1000)
+		}
+	}()
+}
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -311,6 +345,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	if err := s.Start(); err != nil {
 		return fmt.Errorf("cockroach server exited with error: %s", err)
 	}
+
+	initCheckpointing(serverCtx.Engines)
 
 	pgURL, err := serverCtx.PGURL(connUser)
 	if err != nil {
