@@ -905,6 +905,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	defer r.mu.Unlock()
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
+	ri.LastIndex = r.mu.lastIndex
 	return ri
 }
 

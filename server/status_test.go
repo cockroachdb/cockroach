@@ -526,6 +526,9 @@ func TestRangesResponse(t *testing.T) {
 		if ri.State.Lease == nil {
 			t.Error("expected a nontrivial Lease")
 		}
+		if ri.State.LastIndex == 0 {
+			t.Error("expected positive LastIndex")
+		}
 	}
 }
 
