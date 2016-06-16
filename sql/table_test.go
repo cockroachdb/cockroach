@@ -250,7 +250,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	}
 }
 
-func TestRemoveExpiringLease(t *testing.T) {
+func TestRemoveLeaseIfExpiring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := planner{}
@@ -260,7 +260,7 @@ func TestRemoveExpiringLease(t *testing.T) {
 	txn := client.Txn{}
 	p.setTxn(&txn)
 
-	if p.removeExpiringLease(nil) {
+	if p.removeLeaseIfExpiring(nil) {
 		t.Error("expected false with nil input")
 	}
 
@@ -271,7 +271,7 @@ func TestRemoveExpiringLease(t *testing.T) {
 	et := roachpb.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
-	if p.removeExpiringLease(l1) {
+	if p.removeLeaseIfExpiring(l1) {
 		t.Error("expected false wih a non-expiring lease")
 	}
 	if !p.txn.GetDeadline().Equal(et) {
@@ -284,7 +284,7 @@ func TestRemoveExpiringLease(t *testing.T) {
 	// Add another lease.
 	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
 	p.leases = append(p.leases, l2)
-	if !p.removeExpiringLease(l1) {
+	if !p.removeLeaseIfExpiring(l1) {
 		t.Error("expected true with an expiring lease")
 	}
 	et = roachpb.Timestamp{WallTime: l2.Expiration().UnixNano()}

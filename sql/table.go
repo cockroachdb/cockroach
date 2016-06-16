@@ -205,7 +205,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 	}
 
 	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || p.removeExpiringLease(lease) {
+	if lease == nil || p.removeLeaseIfExpiring(lease) {
 		var err error
 		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
 		if err != nil {
@@ -244,7 +244,7 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 	}
 
 	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || p.removeExpiringLease(lease) {
+	if lease == nil || p.removeLeaseIfExpiring(lease) {
 		var err error
 		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if err != nil {
@@ -263,9 +263,9 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 	return &lease.TableDescriptor, nil
 }
 
-// removeExpiringLease removes a lease if it is about to expire (and
-// returns true). The method also resets the transaction deadline.
-func (p *planner) removeExpiringLease(lease *LeaseState) bool {
+// removeLeaseIfExpiring removes a lease and returns true if it is about to expire.
+// The method also resets the transaction deadline.
+func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 	if lease == nil || lease.hasSomeLifeLeft(p.leaseMgr.clock) {
 		return false
 	}
@@ -285,6 +285,10 @@ func (p *planner) removeExpiringLease(lease *LeaseState) bool {
 	p.leases[idx] = p.leases[len(p.leases)-1]
 	p.leases[len(p.leases)-1] = nil
 	p.leases = p.leases[:len(p.leases)-1]
+
+	if err := p.leaseMgr.Release(lease); err != nil {
+		log.Warning(err)
+	}
 
 	// Reset the deadline so that a new deadline will be set after the lease is acquired.
 	p.txn.ResetDeadline()
