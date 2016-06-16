@@ -405,6 +405,15 @@ getRangeCount?() : Long;
 
 
 
+create_table_statement?: string;
+		
+
+getCreateTableStatement?() : string;
+		setCreateTableStatement?(createTableStatement : string): void;
+		
+
+
+
 }
 	
 	export interface TableDetailsResponseMessage extends TableDetailsResponse {

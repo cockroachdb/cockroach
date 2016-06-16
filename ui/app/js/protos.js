@@ -130,6 +130,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "int64",
                                     "name": "range_count",
                                     "id": 4
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "create_table_statement",
+                                    "id": 5
                                 }
                             ],
                             "messages": [
