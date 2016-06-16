@@ -325,7 +325,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 
-	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID, desc.IsInitialized())
+	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
@@ -1483,7 +1483,7 @@ func (r *Replica) handleRaftReady() error {
 
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := r.setHardState(writer, rd.HardState); err != nil {
+		if err := setHardState(writer, r.RangeID, rd.HardState); err != nil {
 			return err
 		}
 	}
