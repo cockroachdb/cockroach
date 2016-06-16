@@ -6098,7 +6098,9 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc.store.metrics.available.Update(maxReservedBytes)
+	tc.store.bookie.mu.Lock()
+	tc.store.metrics.available.Update(tc.store.bookie.mu.maxReservedBytes)
+	tc.store.bookie.mu.Unlock()
 
 	// Note that this is an artificial scenario in which we're adding a
 	// reservation for a replica that is already on the range. This test is
