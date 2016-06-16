@@ -94,7 +94,7 @@ install:
 # PKG is expanded and all packages are built and moved to their directory.
 # If STATIC=1, tests are statically linked.
 # eg: to statically build the sql tests, run:
-#   make testbuild PKG=./sql STATIC=1
+#   make STATIC=1 testbuild PKG=./sql
 .PHONY: testbuild
 testbuild: GOFLAGS += -c
 testbuild:
