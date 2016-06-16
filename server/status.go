@@ -574,7 +574,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 			continue
 		}
 		for _, rng := range ranges.Ranges {
-			rangeID := rng.Desc.RangeID
+			rangeID := rng.State.Desc.RangeID
 			status, ok := resp.Ranges[rangeID]
 			if !ok {
 				status = serverpb.RaftRangeStatus{
@@ -592,7 +592,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 	// Check for errors.
 	for i, rng := range resp.Ranges {
 		for j, node := range rng.Nodes {
-			desc := node.Range.Desc
+			desc := node.Range.State.Desc
 			// Check for whether replica should be GCed.
 			containsNode := false
 			for _, replica := range desc.Replicas {
@@ -608,7 +608,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 
 			// Check for replica descs not matching.
 			if j > 0 {
-				prevDesc := rng.Nodes[j-1].Range.Desc
+				prevDesc := rng.Nodes[j-1].Range.Span
 				if !reflect.DeepEqual(&desc, &prevDesc) {
 					prevNodeID := rng.Nodes[j-1].NodeID
 					rng.Errors = append(rng.Errors, serverpb.RaftRangeError{
@@ -620,18 +620,6 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 		}
 	}
 	return &resp, nil
-}
-
-// PrettifyRangeDescriptor converts a roachpb.RangeDescriptor into a version
-// with string encoded keys for better readability.
-func PrettifyRangeDescriptor(rng roachpb.RangeDescriptor) serverpb.PrettyRangeDescriptor {
-	return serverpb.PrettyRangeDescriptor{
-		RangeID:       rng.RangeID,
-		StartKey:      rng.StartKey.String(),
-		EndKey:        rng.EndKey.String(),
-		Replicas:      rng.Replicas,
-		NextReplicaID: rng.NextReplicaID,
-	}
 }
 
 // Ranges returns range info for the server specified
@@ -670,12 +658,13 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 					raftState = status.RaftState.String()
 				}
 				state := rep.State()
-				state.Desc = nil // already have a pretty desc
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
-					Desc:        PrettifyRangeDescriptor(desc),
-					RaftState:   raftState,
-					PendingCmds: int32(rep.PendingCmdsLen()),
-					State:       state,
+					Span: serverpb.PrettySpan{
+						StartKey: desc.StartKey.String(),
+						EndKey:   desc.EndKey.String(),
+					},
+					RaftState: raftState,
+					State:     state,
 				})
 				return false, nil
 			})

@@ -52,7 +52,7 @@
 		RaftRangeStatus
 		RaftDebugRequest
 		RaftDebugResponse
-		PrettyRangeDescriptor
+		PrettySpan
 */
 package serverpb
 

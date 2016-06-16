@@ -121,7 +121,7 @@ export interface serverpbBuilder {
 	RaftRangeStatus: serverpb.RaftRangeStatusBuilder;
 	RaftDebugRequest: serverpb.RaftDebugRequestBuilder;
 	RaftDebugResponse: serverpb.RaftDebugResponseBuilder;
-	PrettyRangeDescriptor: serverpb.PrettyRangeDescriptorBuilder;
+	PrettySpan: serverpb.PrettySpanBuilder;
 	DrainMode: serverpb.DrainMode;
 	
 }
@@ -1637,11 +1637,11 @@ declare module cockroach.server.serverpb {
 	
 		
 
-desc?: PrettyRangeDescriptor;
+span?: PrettySpan;
 		
 
-getDesc?() : PrettyRangeDescriptor;
-		setDesc?(desc : PrettyRangeDescriptor): void;
+getSpan?() : PrettySpan;
+		setSpan?(span : PrettySpan): void;
 		
 
 
@@ -1651,15 +1651,6 @@ raft_state?: string;
 
 getRaftState?() : string;
 		setRaftState?(raftState : string): void;
-		
-
-
-
-pending_cmds?: number;
-		
-
-getPendingCmds?() : number;
-		setPendingCmds?(pendingCmds : number): void;
 		
 
 
@@ -2272,18 +2263,9 @@ export interface RaftDebugResponseBuilder {
 
 declare module cockroach.server.serverpb {
 	
-	export interface PrettyRangeDescriptor {
+	export interface PrettySpan {
 	
 		
-
-range_id?: Long;
-		
-
-getRangeId?() : Long;
-		setRangeId?(rangeId : Long): void;
-		
-
-
 
 start_key?: string;
 		
@@ -2303,27 +2285,9 @@ getEndKey?() : string;
 
 
 
-replicas?: roachpb.ReplicaDescriptor[];
-		
-
-getReplicas?() : roachpb.ReplicaDescriptor[];
-		setReplicas?(replicas : roachpb.ReplicaDescriptor[]): void;
-		
-
-
-
-next_replica_id?: number;
-		
-
-getNextReplicaId?() : number;
-		setNextReplicaId?(nextReplicaId : number): void;
-		
-
-
-
 }
 	
-	export interface PrettyRangeDescriptorMessage extends PrettyRangeDescriptor {
+	export interface PrettySpanMessage extends PrettySpan {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
 	encodeJSON(): string;
@@ -2331,11 +2295,11 @@ getNextReplicaId?() : number;
 	toString(): string;
 }
 
-export interface PrettyRangeDescriptorBuilder {
-	new(data?: PrettyRangeDescriptor): PrettyRangeDescriptorMessage;
-	decode(buffer: ArrayBuffer) : PrettyRangeDescriptorMessage;
-	decode(buffer: ByteBuffer) : PrettyRangeDescriptorMessage;
-	decode64(buffer: string) : PrettyRangeDescriptorMessage;
+export interface PrettySpanBuilder {
+	new(data?: PrettySpan): PrettySpanMessage;
+	decode(buffer: ArrayBuffer) : PrettySpanMessage;
+	decode(buffer: ByteBuffer) : PrettySpanMessage;
+	decode64(buffer: string) : PrettySpanMessage;
 	
 }
 	
@@ -4569,7 +4533,7 @@ export interface storagebaseBuilder {
 	decode(buffer: ArrayBuffer) : storagebaseMessage;
 	decode(buffer: ByteBuffer) : storagebaseMessage;
 	decode64(buffer: string) : storagebaseMessage;
-	RangeState: storagebase.RangeStateBuilder;
+	ReplicaState: storagebase.ReplicaStateBuilder;
 	RangeInfo: storagebase.RangeInfoBuilder;
 	
 }
@@ -4578,11 +4542,11 @@ export interface storagebaseBuilder {
 
 declare module cockroach.storage.storagebase {
 	
-	export interface RangeState {
+	export interface ReplicaState {
 	
 		
 
-raftAppliedIndex?: Long;
+raft_applied_index?: Long;
 		
 
 getRaftAppliedIndex?() : Long;
@@ -4591,7 +4555,7 @@ getRaftAppliedIndex?() : Long;
 
 
 
-leaseAppliedIndex?: Long;
+lease_applied_index?: Long;
 		
 
 getLeaseAppliedIndex?() : Long;
@@ -4618,7 +4582,7 @@ getLease?() : roachpb.Lease;
 
 
 
-truncatedState?: roachpb.RaftTruncatedState;
+truncated_state?: roachpb.RaftTruncatedState;
 		
 
 getTruncatedState?() : roachpb.RaftTruncatedState;
@@ -4627,7 +4591,7 @@ getTruncatedState?() : roachpb.RaftTruncatedState;
 
 
 
-gcThreshold?: util.hlc.Timestamp;
+gc_threshold?: util.hlc.Timestamp;
 		
 
 getGcThreshold?() : util.hlc.Timestamp;
@@ -4656,7 +4620,7 @@ getFrozen?() : boolean;
 
 }
 	
-	export interface RangeStateMessage extends RangeState {
+	export interface ReplicaStateMessage extends ReplicaState {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
 	encodeJSON(): string;
@@ -4664,11 +4628,11 @@ getFrozen?() : boolean;
 	toString(): string;
 }
 
-export interface RangeStateBuilder {
-	new(data?: RangeState): RangeStateMessage;
-	decode(buffer: ArrayBuffer) : RangeStateMessage;
-	decode(buffer: ByteBuffer) : RangeStateMessage;
-	decode64(buffer: string) : RangeStateMessage;
+export interface ReplicaStateBuilder {
+	new(data?: ReplicaState): ReplicaStateMessage;
+	decode(buffer: ArrayBuffer) : ReplicaStateMessage;
+	decode(buffer: ByteBuffer) : ReplicaStateMessage;
+	decode64(buffer: string) : ReplicaStateMessage;
 	
 }
 	
@@ -4681,11 +4645,11 @@ declare module cockroach.storage.storagebase {
 	
 		
 
-state?: RangeState;
+state?: ReplicaState;
 		
 
-getState?() : RangeState;
-		setState?(state : RangeState): void;
+getState?() : ReplicaState;
+		setState?(state : ReplicaState): void;
 		
 
 
@@ -4695,6 +4659,15 @@ lastIndex?: Long;
 
 getLastIndex?() : Long;
 		setLastIndex?(lastIndex : Long): void;
+		
+
+
+
+num_pending?: Long;
+		
+
+getNumPending?() : Long;
+		setNumPending?(numPending : Long): void;
 		
 
 

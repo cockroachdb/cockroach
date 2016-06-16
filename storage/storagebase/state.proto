@@ -26,35 +26,36 @@ import "cockroach/util/hlc/timestamp.proto";
 
 import weak "gogoproto/gogo.proto";
 
-// RangeState is the part of the Range Raft state machine which is cached in
-// memory and which is manipulated exclusively through consensus.
-message RangeState {
+// ReplicaState is the part of the Range Raft state machine which is cached
+// in memory and which is manipulated exclusively through consensus.
+message ReplicaState {
   // The highest (and last) index applied to the state machine.
-  uint64 raftAppliedIndex = 4;
+  uint64 raft_applied_index = 1;
   // The highest (and last) lease index applied to the state machine.
-  uint64 leaseAppliedIndex = 5;
+  uint64 lease_applied_index = 2;
   // The Range descriptor.
   // The pointer may change, but the referenced RangeDescriptor struct itself
   // must be treated as immutable; it is leaked out of the lock.
   //
   // Changes of the descriptor should normally go through one of the
   // (*Replica).setDesc* methods.
-  roachpb.RangeDescriptor desc = 6;
+  roachpb.RangeDescriptor desc = 3;
   // The latest lease holder, if any.
-  roachpb.Lease lease = 7;
+  roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
-  roachpb.RaftTruncatedState truncatedState = 8;
+  roachpb.RaftTruncatedState truncated_state = 5;
   // gcThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
-  util.hlc.Timestamp gcThreshold = 9 [(gogoproto.nullable) = false,
+  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "GCThreshold"];
-  storage.engine.enginepb.MVCCStats stats = 10 [(gogoproto.nullable) = false];
-  bool frozen = 11;
+  storage.engine.enginepb.MVCCStats stats = 7 [(gogoproto.nullable) = false];
+  bool frozen = 8;
 }
 
 message RangeInfo {
-  RangeState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The highest (and last) index in the Raft log.
   uint64 lastIndex = 2;
+  uint64 num_pending = 3;
 }

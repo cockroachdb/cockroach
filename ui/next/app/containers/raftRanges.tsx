@@ -164,15 +164,15 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         // Render each replica into a cell
         range.value.nodes.forEach((node) => {
           let nodeRange = node.range;
-          let replicaNodeIDs = nodeRange.desc.replicas.map((replica) => replica.node_id.toString());
+          let replicaNodeIDs = nodeRange.state.state.desc.replicas.map((replica) => replica.node_id.toString());
           let index = nodeIDIndex[node.node_id];
           let cell = <td key={index}>
             {(this.state.showState) ? <div>State: {nodeRange.raft_state}</div> : ""}
             {(this.state.showReplicas) ? <div>
               <div>Replica On: {replicaNodeIDs.join(", ")}</div>
-              <div>Next Replica ID: {nodeRange.desc.next_replica_id}</div>
+              <div>Next Replica ID: {nodeRange.state.state.desc.next_replica_id}</div>
             </div> : ""}
-            {(this.state.showPending) ? <div>Pending Command Count: {nodeRange.pending_cmds || 0}</div> : ""}
+            {(this.state.showPending) ? <div>Pending Command Count: {nodeRange.state.state.num_pending || 0}</div> : ""}
           </td>;
           row[index] = cell;
         });

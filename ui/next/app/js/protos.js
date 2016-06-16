@@ -605,8 +605,8 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "fields": [
                                 {
                                     "rule": "optional",
-                                    "type": "PrettyRangeDescriptor",
-                                    "name": "desc",
+                                    "type": "PrettySpan",
+                                    "name": "span",
                                     "id": 1,
                                     "options": {
                                         "(gogoproto.nullable)": false
@@ -617,12 +617,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "string",
                                     "name": "raft_state",
                                     "id": 2
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int32",
-                                    "name": "pending_cmds",
-                                    "id": 3
                                 },
                                 {
                                     "rule": "optional",
@@ -862,48 +856,19 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
-                            "name": "PrettyRangeDescriptor",
+                            "name": "PrettySpan",
                             "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "range_id",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.customname)": "RangeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
-                                    }
-                                },
                                 {
                                     "rule": "optional",
                                     "type": "string",
                                     "name": "start_key",
-                                    "id": 2
+                                    "id": 1
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "string",
                                     "name": "end_key",
-                                    "id": 3
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "roachpb.ReplicaDescriptor",
-                                    "name": "replicas",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int32",
-                                    "name": "next_replica_id",
-                                    "id": 5,
-                                    "options": {
-                                        "(gogoproto.customname)": "NextReplicaID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.ReplicaID"
-                                    }
+                                    "id": 2
                                 }
                             ]
                         }
@@ -2520,43 +2485,43 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     },
                     "messages": [
                         {
-                            "name": "RangeState",
+                            "name": "ReplicaState",
                             "fields": [
                                 {
                                     "rule": "optional",
                                     "type": "uint64",
-                                    "name": "raftAppliedIndex",
-                                    "id": 4
+                                    "name": "raft_applied_index",
+                                    "id": 1
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "uint64",
-                                    "name": "leaseAppliedIndex",
-                                    "id": 5
+                                    "name": "lease_applied_index",
+                                    "id": 2
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "roachpb.RangeDescriptor",
                                     "name": "desc",
-                                    "id": 6
+                                    "id": 3
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "roachpb.Lease",
                                     "name": "lease",
-                                    "id": 7
+                                    "id": 4
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "roachpb.RaftTruncatedState",
-                                    "name": "truncatedState",
-                                    "id": 8
+                                    "name": "truncated_state",
+                                    "id": 5
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "util.hlc.Timestamp",
-                                    "name": "gcThreshold",
-                                    "id": 9,
+                                    "name": "gc_threshold",
+                                    "id": 6,
                                     "options": {
                                         "(gogoproto.nullable)": false,
                                         "(gogoproto.customname)": "GCThreshold"
@@ -2566,7 +2531,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "rule": "optional",
                                     "type": "engine.enginepb.MVCCStats",
                                     "name": "stats",
-                                    "id": 10,
+                                    "id": 7,
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
@@ -2575,7 +2540,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "rule": "optional",
                                     "type": "bool",
                                     "name": "frozen",
-                                    "id": 11
+                                    "id": 8
                                 }
                             ]
                         },
@@ -2584,7 +2549,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "fields": [
                                 {
                                     "rule": "optional",
-                                    "type": "RangeState",
+                                    "type": "ReplicaState",
                                     "name": "state",
                                     "id": 1,
                                     "options": {
@@ -2597,6 +2562,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "uint64",
                                     "name": "lastIndex",
                                     "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "num_pending",
+                                    "id": 3
                                 }
                             ]
                         }
