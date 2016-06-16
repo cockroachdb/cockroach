@@ -220,7 +220,7 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	// Change the replication requirements so we don't get log spam about ranges
 	// not being replicated enough.
 	cfg := config.DefaultZoneConfig()
-	cfg.ReplicaAttrs = []roachpb.Attributes{{}}
+	cfg.ReplicaAttrs = []roachpb.Attributes{{}, {}, {}}
 	fn := config.TestingSetDefaultZoneConfig(cfg)
 	stopper.AddCloser(stop.CloserFn(fn))
 
