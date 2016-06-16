@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: David Taylor (david@cockroachlabs.com)
+// Author: William Haack (will@cockroachlabs.com)
 
 package sql_test
 
@@ -20,7 +21,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -82,7 +85,30 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		}
 	}
 
+	waitForReplication(servers)
 	return conns, f
+}
+
+// Waits until at least one of the joining nodes has at least one replication.
+// NOTE: the StoreID of each server's store must be the index of the server in
+// the servers array + 1. This will occur naturally if servers are indexed in
+// the order they were created. 1
+func waitForReplication(servers []server.TestServer) {
+	notReplicated := true
+	for notReplicated {
+		noneReplicated := true
+		for i, server := range servers {
+			store, _ := server.Stores().GetStore(roachpb.StoreID(i + 1))
+			if store != nil {
+				if store.ReplicaCount() >= 1 && noneReplicated {
+					noneReplicated = false
+				} else if store.ReplicaCount() >= 1 {
+					notReplicated = false
+				}
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 // NB(davidt): until `SetupMultinodeTestCluster` actually returns a cluster
@@ -95,6 +121,7 @@ func TestMultinodeCockroach(t *testing.T) {
 	conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
 	defer cleanup()
 
+	// This command will hang because it takes 1 min before any sql statements can be executed.
 	if _, err := conns[0].Exec(`CREATE TABLE testing (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
