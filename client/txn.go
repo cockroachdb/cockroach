@@ -668,7 +668,12 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline.
 		if endTxnRequest.Deadline != nil {
-			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
+			t := txn.Proto.Timestamp
+			if t.Equal(roachpb.ZeroTimestamp) {
+				// Update the timstamp as BatchRequest.SetActiveTimestamp does.
+				t = txn.Proto.OrigTimestamp
+			}
+			if endTxnRequest.Deadline.Less(t) {
 				return nil, roachpb.NewErrorf(
 					"read-only txn timestamp violates deadline: %s < %s",
 					endTxnRequest.Deadline,
