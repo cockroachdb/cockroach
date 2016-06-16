@@ -764,6 +764,9 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 
 // getLastReplicaGCTimestamp reads the timestamp at which the replica was
 // last checked for garbage collection.
+//
+// TODO(tschottdorf): we may want to phase this out in favor of using
+// gcThreshold.
 func (r *Replica) getLastReplicaGCTimestamp() (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	timestamp := hlc.Timestamp{}
