@@ -101,6 +101,8 @@ func newBookie(
 // Reserve a new replica. Reservations can be rejected due to having too many
 // outstanding reservations already or not having enough free disk space.
 // Accepted reservations return a ReservationResponse with Reserved set to true.
+// TODO(bram): consider changing the reservation logs to v2 if they are causing
+// too much spam.
 func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -126,10 +128,8 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 
 	// Do we have too many current reservations?
 	if len(b.mu.reservationsByRangeID) > b.maxReservations {
-		if log.V(2) {
-			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
-				req, len(b.mu.reservationsByRangeID), b.maxReservations)
-		}
+		log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
+			req, len(b.mu.reservationsByRangeID), b.maxReservations)
 		return roachpb.ReservationResponse{Reserved: false}
 	}
 
@@ -139,19 +139,15 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	// Store `available` in case it changes between if and log.
 	available := b.metrics.available.Value()
 	if b.mu.size+(req.RangeSize*2) > available {
-		if log.V(2) {
-			log.Infof("could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
-				req, req.RangeSize, b.mu.size, available)
-		}
+		log.Infof("could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
+			req, req.RangeSize, b.mu.size, available)
 		return roachpb.ReservationResponse{Reserved: false}
 	}
 
 	// Do we have enough reserved space free for the reservation?
 	if b.mu.size+req.RangeSize > b.maxReservedBytes {
-		if log.V(2) {
-			log.Infof("could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
-				req, req.RangeSize, b.mu.size, b.maxReservations)
-		}
+		log.Infof("could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
+			req, req.RangeSize, b.mu.size, b.maxReservations)
 		return roachpb.ReservationResponse{Reserved: false}
 	}
 
@@ -168,9 +164,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	b.metrics.reservedReplicaCount.Inc(1)
 	b.metrics.reserved.Inc(req.RangeSize)
 
-	if log.V(2) {
-		log.Infof("new reservation added: %+v", newReservation)
-	}
+	log.Infof("new reservation added: %+v", newReservation)
 
 	return roachpb.ReservationResponse{Reserved: true}
 }
