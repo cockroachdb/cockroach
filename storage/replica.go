@@ -169,42 +169,6 @@ type replicaChecksum struct {
 	snapshot *roachpb.RaftSnapshotData
 }
 
-// TODO(tschottdorf): unified method to update both in-mem and on-disk
-// state, similar to how loadState unifies restoring from storage.
-func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase.ReplicaState, error) {
-	var s storagebase.ReplicaState
-	// TODO(tschottdorf): figure out whether this is always synchronous with
-	// on-disk state (likely iffy during Split/ChangeReplica triggers).
-	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
-	// Read the leader lease.
-	var err error
-	if s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
-		reader,
-		desc.RangeID,
-		desc.IsInitialized(),
-	); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	return s, nil
-}
-
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -470,68 +434,10 @@ func (r *Replica) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, roachpb.RKeyMin)
 }
 
-func setFrozenStatus(
-	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, frozen bool,
-) error {
-	var val roachpb.Value
-	val.SetBool(frozen)
-	return engine.MVCCPut(context.Background(), eng, ms,
-		keys.RangeFrozenStatusKey(rangeID), hlc.ZeroTimestamp, val, nil)
-}
-
-func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) {
-	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeFrozenStatusKey(rangeID),
-		hlc.ZeroTimestamp, true, nil)
-	if err != nil {
-		return false, err
-	}
-	if val == nil {
-		return false, nil
-	}
-	return val.GetBool()
-}
-
-func loadMVCCStats(eng engine.Reader, rangeID roachpb.RangeID) (enginepb.MVCCStats, error) {
-	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	return ms, nil
-}
-
-func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb.MVCCStats) error {
-	return engine.MVCCSetRangeStats(context.Background(), eng, rangeID, &newMS)
-}
-
-func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
-	lease := &roachpb.Lease{}
-	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), hlc.ZeroTimestamp, true, nil, lease); err != nil {
-		return nil, err
-	}
-	return lease, nil
-}
-
-// getLeaderLease returns the current leader lease and the pending next leader
-// lease, if any lease acquisition or transfer initiated by this replica is in
-// process (nil otherwise).
 func (r *Replica) getLeaderLease() (*roachpb.Lease, *roachpb.Lease) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.state.Lease, r.mu.pendingLeaseRequest.RequestPending()
-}
-
-func setGCThreshold(
-	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, threshold *hlc.Timestamp,
-) error {
-	return engine.MVCCPutProto(context.Background(), eng, ms,
-		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
-}
-
-func loadGCThreshold(eng engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
-	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLastGCKey(rangeID),
-		hlc.ZeroTimestamp, true, nil, &t)
-	return t, err
 }
 
 // newNotLeaderError returns a NotLeaderError initialized with the
