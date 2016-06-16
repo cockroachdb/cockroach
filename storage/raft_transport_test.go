@@ -115,8 +115,15 @@ func TestSendAndReceive(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		transport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
-		transports[nodeID] = transport
+		transports[nodeID] = storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
+		// This channel is nominally unbuffered, but it is also normally serviced
+		// by the raft goroutine. Since we don't have that goroutine in this test,
+		// we must buffer the channel to prevent snapshots from blocking while we
+		// iterate through the recipients in an order that may differ from the
+		// sending order.
+		sendersPerNode := storesPerNode
+		recipientsPerSender := numNodes * storesPerNode
+		transports[nodeID].SnapshotStatusChan = make(chan storage.RaftSnapshotStatus, sendersPerNode*recipientsPerSender)
 
 		for storeIndex := 0; storeIndex < storesPerNode; storeIndex++ {
 			storeID := nextStoreID
@@ -124,9 +131,9 @@ func TestSendAndReceive(t *testing.T) {
 
 			storeNodes[storeID] = nodeID
 
-			channel := newChannelServer(numNodes*storesPerNode*len(messageTypes), 0)
-			transport.Listen(storeID, channel.RaftMessage)
-			channels[storeID] = channel
+			sendersPerRecipient := numNodes * storesPerNode
+			channels[storeID] = newChannelServer(sendersPerRecipient*len(messageTypes), 0)
+			transports[nodeID].Listen(storeID, channels[storeID].RaftMessage)
 		}
 	}
 
