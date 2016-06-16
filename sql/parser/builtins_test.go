@@ -17,16 +17,16 @@ package parser
 import "testing"
 
 func TestCategory(t *testing.T) {
-	if expected, actual := "STRING", Builtins["lower"][0].Category(); expected != actual {
+	if expected, actual := categoryString, Builtins["lower"][0].Category(); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := "STRING", Builtins["length"][0].Category(); expected != actual {
+	if expected, actual := categoryString, Builtins["length"][0].Category(); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := "TIMESTAMP", Builtins["now"][0].Category(); expected != actual {
+	if expected, actual := categoryDateAndTime, Builtins["now"][0].Category(); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := "System Info", Builtins["version"][0].Category(); expected != actual {
+	if expected, actual := categorySystemInfo, Builtins["version"][0].Category(); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
 }
