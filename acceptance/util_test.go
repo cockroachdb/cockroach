@@ -54,12 +54,17 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
+var flagCockroachBinary = flag.String("cockroach-binary", "", "path to custom CockroachDB binary to use")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
 var stopper = make(chan struct{})
 
-func farmer(t *testing.T) *terrafarm.Farmer {
+// prefixRE is extracted from a Terraform error message regarding invalid
+// resource names.
+var prefixRE = regexp.MustCompile("^(?:[a-z](?:[-a-z0-9]{0,50}[a-z0-9])?)$")
+
+func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	if !*flagRemote {
 		t.Skip("running in docker mode")
 	}
@@ -77,16 +82,22 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 	if !filepath.IsAbs(logDir) {
 		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
 	}
-	stores := "ssd=data0"
+	stores := "--store=data0"
 	for j := 1; j < *flagStores; j++ {
-		stores += ",ssd=data" + strconv.Itoa(j)
+		stores += " --store=data" + strconv.Itoa(j)
+	}
+	if !prefixRE.MatchString(prefix) {
+		t.Fatalf("farmer prefix must match regex %s", prefixRE)
 	}
 	f := &terrafarm.Farmer{
-		Output:  os.Stderr,
-		Cwd:     *flagCwd,
-		LogDir:  logDir,
-		KeyName: *flagKeyName,
-		Stores:  stores,
+		Output:    os.Stderr,
+		Cwd:       *flagCwd,
+		LogDir:    logDir,
+		KeyName:   *flagKeyName,
+		Stores:    stores,
+		Prefix:    prefix,
+		StateFile: prefix + ".tfstate",
+		AddVars:   make(map[string]string),
 	}
 	log.Infof("logging to %s", logDir)
 	return f
@@ -187,7 +198,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 		completed = true
 		return l
 	}
-	f := farmer(t)
+	f := farmer(t, "acceptance")
 	c = f
 	if err := f.Resize(*flagNodes, 0); err != nil {
 		t.Fatal(err)

@@ -35,7 +35,7 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 		}
 		_ = p.Close() // no input
 	}
-	f.logf("%s %s\n", cmd, strings.Join(args, " "))
+	f.logf("+ %s %s\n", cmd, strings.Join(args, " "))
 	o, err := c.StdoutPipe()
 	if err != nil {
 		return "", "", err
@@ -61,10 +61,9 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 		}
 	}()
 
-	if err := c.Start(); err != nil {
+	if err := c.Run(); err != nil {
 		return "", "", err
 	}
-	err = c.Wait()
 	return outBuf.String(), errBuf.String(), err
 }
 
@@ -77,7 +76,12 @@ func (f *Farmer) runErr(cmd string, args ...string) error {
 }
 
 func (f *Farmer) appendDefaults(args []string) []string {
-	return append(args, "-no-color", "--var=key_name="+f.KeyName)
+	return append(
+		args,
+		"-no-color",
+		"-var=key_name="+f.KeyName,
+		"-state="+f.StateFile,
+		"-var=prefix="+f.Prefix)
 }
 
 func (f *Farmer) apply(args ...string) error {
@@ -90,7 +94,7 @@ func (f *Farmer) apply(args ...string) error {
 }
 
 func (f *Farmer) output(key string) []string {
-	o, _, err := f.run("terraform", "output", key, "-no-color")
+	o, _, err := f.run("terraform", "output", "-state="+f.StateFile, "-no-color", key)
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		f.logf("%s", err)
 		return nil
