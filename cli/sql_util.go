@@ -303,6 +303,8 @@ func printQueryOutput(
 			table.Append(row)
 		}
 		table.Render()
+		nRows := len(allRows)
+		fmt.Fprintf(w, "(%d row%s)\n", nRows, util.Pluralize(int64(nRows)))
 	} else {
 		if len(cols) == 0 {
 			// No result selected, inform the user.
