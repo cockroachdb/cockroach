@@ -19,10 +19,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+)
+
+const (
+	// defaultMaxReservations is the number of concurrent reservations allowed.
+	defaultMaxReservations = 5
+	// defaultMaxReservedBytes is the total number of bytes that can be
+	// reserved, by all active reservations, at any time.
+	defaultMaxReservedBytes = 250 << 20 // 250 MiB
 )
 
 // reservation is an item in both the reservationQ and the used in bookie's
@@ -65,10 +74,10 @@ func (pq *reservationQ) dequeue() *reservation {
 // bookie contains a store's replica reservations.
 type bookie struct {
 	clock              *hlc.Clock
-	reservationTimeout time.Duration // How long each reservation is held.
-	maxReservations    int
-	maxReservedBytes   int64
 	metrics            *storeMetrics
+	reservationTimeout time.Duration // How long each reservation is held.
+	maxReservations    int           // Maximum number of allowed reservations.
+	maxReservedBytes   int64         // Maximum bytes allowed for all reservations combined.
 	mu                 struct {
 		sync.Mutex                                             // Protects all values within the mu struct.
 		queue                 reservationQ                     // Queue used to handle expiring of reservations.
@@ -80,18 +89,15 @@ type bookie struct {
 // newBookie creates a reservations system and starts its timeout queue.
 func newBookie(
 	clock *hlc.Clock,
-	reservationTimeout time.Duration,
-	maxReservations int,
-	maxReservedBytes int64,
 	stopper *stop.Stopper,
 	metrics *storeMetrics,
 ) *bookie {
 	b := &bookie{
 		clock:              clock,
-		reservationTimeout: reservationTimeout,
-		maxReservations:    maxReservations,
-		maxReservedBytes:   maxReservedBytes,
 		metrics:            metrics,
+		reservationTimeout: envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip),
+		maxReservations:    envutil.EnvOrDefaultInt("max_reservations", defaultMaxReservations),
+		maxReservedBytes:   envutil.EnvOrDefaultBytes("max_reserved_bytes", defaultMaxReservedBytes),
 	}
 	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]*reservation)
 	b.start(stopper)
@@ -125,7 +131,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	}
 
 	// Do we have too many current reservations?
-	if len(b.mu.reservationsByRangeID) > b.maxReservations {
+	if len(b.mu.reservationsByRangeID) >= b.maxReservations {
 		if log.V(1) {
 			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
 				req, len(b.mu.reservationsByRangeID), b.maxReservations)
@@ -150,7 +156,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	if b.mu.size+req.RangeSize > b.maxReservedBytes {
 		if log.V(1) {
 			log.Infof("could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
-				req, req.RangeSize, b.mu.size, b.maxReservations)
+				req, req.RangeSize, b.mu.size, b.maxReservedBytes)
 		}
 		return roachpb.ReservationResponse{Reserved: false}
 	}
