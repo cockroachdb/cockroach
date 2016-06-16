@@ -32,8 +32,10 @@ statement ok
 INSERT INTO t(a) VALUES (1)
 
 # Commit will send an EndTransaction which will result in a retry error.
-statement error retry txn.*
+statement error pgcode 40001 retry txn.*
 COMMIT
 
-statement ok
-ROLLBACK
+# Check that the connection is usable after the failed COMMIT.
+query I
+SELECT * FROM t
+----

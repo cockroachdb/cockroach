@@ -409,8 +409,8 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 	return isRetryableErr(err)
 }
 
-// abortTxn writes to a key (with retries) and as a side effect aborts a txn
-// that had an intent on that key.
+// abortTxn writes to a key and as a side effect aborts a txn that had an intent
+// on that key.
 // This cannot be done as an injected error, since we want the pusher to clean
 // up the intents of the pushee.
 // This function needs to be called from tests that set
@@ -555,7 +555,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // Test that if there's an error on COMMIT that needs to be reported to the user
 // the txn will be rolled back. As opposed to an error on a COMMIT in an auto-retry
 // txn, where we retry the txn (not tested here).
-func TestErrorOnCommit(t *testing.T) {
+func TestErrorOnCommitResultsInRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := server.MakeTestContext()
@@ -582,7 +582,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	abortTxn(t, sqlDB, 0)
 
 	if err = tx.Commit(); err == nil {
-		t.Fatal("expected commit to fail")
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Check that there's no error reading and we don't see any rows.
@@ -597,6 +597,72 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatalf("found unexpected row: %d %s", k, v)
 	}
 	rows.Close()
+}
+
+// Test that a COMMIT getting an error, retryable or not, leaves the txn
+// finalized and not in Aborted/RestartWait (i.e. COMMIT, like ROLLBACK, is
+// always final).
+func TestCommitFinalizesTxnOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, &ctx)
+	defer cleanup(server, sqlDB)
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+	// We need to do everything on one connection as we'll want to observe the
+	// connection state after a COMMIT.
+	sqlDB.SetMaxOpenConns(1)
+
+	// Set up error injection that causes retries.
+	magicVals := createFilterVals(nil, nil)
+	magicVals.endTxnRestartCounts = map[string]int{
+		"boulanger": 1000, // restart many times, for all the tests below
+	}
+	defer cmdFilters.AppendFilter(
+		func(args storagebase.FilterArgs) *roachpb.Error {
+			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
+				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+			}
+			return nil
+		}, false)()
+
+	// We're going to test both errors that would leave the transaction in the
+	// RestartWait state and errors that would leave the transaction in Aborted,
+	// if they were to happen on any other statement than COMMIT.
+	// We do that by always injecting a retryable error at COMMIT, but once in a
+	// txn that had a "retry intent" (SAVEPOINT cockroach_restart), and once in a
+	// txn without it.
+	testCases := []struct {
+		retryIntent bool
+	}{
+		{false},
+		{true},
+	}
+	for _, tc := range testCases {
+		if _, err := sqlDB.Exec("BEGIN;"); err != nil {
+			t.Fatal(err)
+		}
+		if tc.retryIntent {
+			if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart;"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := sqlDB.Exec("INSERT INTO t.test (k, v) VALUES (0, 'boulanger');"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec("COMMIT;"); !testutils.IsError(err, "pq: restart transaction") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Check that we can start another txn on the (one and only) connection.
+		if _, err := sqlDB.Exec("BEGIN;END;"); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // TestRollbackToSavepointStatement tests that issuing a RESTART outside of a
@@ -698,13 +764,13 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 	magicVals.endTxnRestartCounts = map[string]int{
 		"boulanger": 1,
 	}
-	cmdFilters.AppendFilter(
+	defer cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
-		}, false)
+		}, false)()
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -747,6 +813,8 @@ func TestNonRetryableError(t *testing.T) {
 		}, false)
 	defer cleanupFilter()
 
+	// We need to do everything on one connection as we'll want to observe the
+	// connection state after a COMMIT.
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
