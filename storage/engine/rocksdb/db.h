@@ -62,6 +62,7 @@ typedef struct {
   uint64_t cache_size;
   uint64_t memtable_budget;
   uint64_t block_size;
+  uint64_t wal_ttl_seconds;
   bool allow_os_buffer;
   bool logging_enabled;
 } DBOptions;

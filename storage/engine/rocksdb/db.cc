@@ -1350,6 +1350,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   rocksdb::Options options(rocksdb::DBOptions(), cf_options);
   options.allow_os_buffer = db_opts.allow_os_buffer;
+  options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));

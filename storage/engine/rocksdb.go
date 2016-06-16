@@ -151,6 +151,7 @@ func (r *RocksDB) Open() error {
 			cache_size:      C.uint64_t(r.cacheSize),
 			memtable_budget: C.uint64_t(r.memtableBudget),
 			block_size:      C.uint64_t(envutil.EnvOrDefaultBytes("rocksdb_block_size", defaultBlockSize)),
+			wal_ttl_seconds: C.uint64_t(envutil.EnvOrDefaultDuration("rocksdb_wal_ttl", 0).Seconds()),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 		})
