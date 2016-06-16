@@ -303,6 +303,11 @@ func printQueryOutput(
 			table.Append(row)
 		}
 		table.Render()
+		plural := ""
+		if len(allRows) != 1 {
+			plural = "s"
+		}
+		fmt.Fprintf(w, "(%d row%s)\n", len(allRows), plural)
 	} else {
 		if len(cols) == 0 {
 			// No result selected, inform the user.
