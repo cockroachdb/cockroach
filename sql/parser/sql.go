@@ -5315,7 +5315,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1419
 		{
-			sqlVAL.union.val = NamedColumnQualification{Name: sqlDollar[2].str, Qualification: sqlDollar[3].union.colQualElem()}
+			sqlVAL.union.val = NamedColumnQualification{Name: Name(sqlDollar[2].str), Qualification: sqlDollar[3].union.colQualElem()}
 		}
 	case 179:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

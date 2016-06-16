@@ -117,12 +117,18 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		}
 		buf.WriteString("\n\t")
 		fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
+		if col.NullableConstraintName != "" {
+			fmt.Fprintf(&buf, " CONSTRAINT %s", col.NullableConstraintName)
+		}
 		if col.Nullable {
 			buf.WriteString(" NULL")
 		} else {
 			buf.WriteString(" NOT NULL")
 		}
 		if col.DefaultExpr != nil {
+			if col.DefaultExprConstraintName != "" {
+				fmt.Fprintf(&buf, " CONSTRAINT %s", col.DefaultExprConstraintName)
+			}
 			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
 		}
 		if desc.PrimaryIndex.ColumnIDs[0] == col.ID {
