@@ -604,8 +604,8 @@
                             "fields": [
                                 {
                                     "rule": "optional",
-                                    "type": "PrettyRangeDescriptor",
-                                    "name": "desc",
+                                    "type": "PrettySpan",
+                                    "name": "span",
                                     "id": 1,
                                     "options": {
                                         "(gogoproto.nullable)": false
@@ -861,48 +861,19 @@
                             ]
                         },
                         {
-                            "name": "PrettyRangeDescriptor",
+                            "name": "PrettySpan",
                             "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "range_id",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.customname)": "RangeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
-                                    }
-                                },
                                 {
                                     "rule": "optional",
                                     "type": "string",
                                     "name": "start_key",
-                                    "id": 2
+                                    "id": 1
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "string",
                                     "name": "end_key",
-                                    "id": 3
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "roachpb.ReplicaDescriptor",
-                                    "name": "replicas",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int32",
-                                    "name": "next_replica_id",
-                                    "id": 5,
-                                    "options": {
-                                        "(gogoproto.customname)": "NextReplicaID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.ReplicaID"
-                                    }
+                                    "id": 2
                                 }
                             ]
                         }

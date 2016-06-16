@@ -520,8 +520,8 @@ func TestRangesResponse(t *testing.T) {
 			StoreID:   1,
 			ReplicaID: 1,
 		}
-		if len(ri.Desc.Replicas) != 1 || ri.Desc.Replicas[0] != expReplica {
-			t.Errorf("unexpected replica list %+v", ri.Desc.Replicas)
+		if len(ri.State.Desc.Replicas) != 1 || ri.State.Desc.Replicas[0] != expReplica {
+			t.Errorf("unexpected replica list %+v", ri.State.Desc.Replicas)
 		}
 		if ri.State.Lease == nil {
 			t.Error("expected a nontrivial Lease")

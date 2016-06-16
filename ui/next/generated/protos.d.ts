@@ -121,7 +121,7 @@ export interface serverpbBuilder {
 	RaftRangeStatus: serverpb.RaftRangeStatusBuilder;
 	RaftDebugRequest: serverpb.RaftDebugRequestBuilder;
 	RaftDebugResponse: serverpb.RaftDebugResponseBuilder;
-	PrettyRangeDescriptor: serverpb.PrettyRangeDescriptorBuilder;
+	PrettySpan: serverpb.PrettySpanBuilder;
 	DrainMode: serverpb.DrainMode;
 	
 }
@@ -1637,11 +1637,11 @@ declare module cockroach.server.serverpb {
 	
 		
 
-desc?: PrettyRangeDescriptor;
+span?: PrettySpan;
 		
 
-getDesc?() : PrettyRangeDescriptor;
-		setDesc?(desc : PrettyRangeDescriptor): void;
+getSpan?() : PrettySpan;
+		setSpan?(span : PrettySpan): void;
 		
 
 
@@ -2272,18 +2272,9 @@ export interface RaftDebugResponseBuilder {
 
 declare module cockroach.server.serverpb {
 	
-	export interface PrettyRangeDescriptor {
+	export interface PrettySpan {
 	
 		
-
-range_id?: Long;
-		
-
-getRangeId?() : Long;
-		setRangeId?(rangeId : Long): void;
-		
-
-
 
 start_key?: string;
 		
@@ -2303,27 +2294,9 @@ getEndKey?() : string;
 
 
 
-replicas?: roachpb.ReplicaDescriptor[];
-		
-
-getReplicas?() : roachpb.ReplicaDescriptor[];
-		setReplicas?(replicas : roachpb.ReplicaDescriptor[]): void;
-		
-
-
-
-next_replica_id?: number;
-		
-
-getNextReplicaId?() : number;
-		setNextReplicaId?(nextReplicaId : number): void;
-		
-
-
-
 }
 	
-	export interface PrettyRangeDescriptorMessage extends PrettyRangeDescriptor {
+	export interface PrettySpanMessage extends PrettySpan {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
 	encodeJSON(): string;
@@ -2331,11 +2304,11 @@ getNextReplicaId?() : number;
 	toString(): string;
 }
 
-export interface PrettyRangeDescriptorBuilder {
-	new(data?: PrettyRangeDescriptor): PrettyRangeDescriptorMessage;
-	decode(buffer: ArrayBuffer) : PrettyRangeDescriptorMessage;
-	decode(buffer: ByteBuffer) : PrettyRangeDescriptorMessage;
-	decode64(buffer: string) : PrettyRangeDescriptorMessage;
+export interface PrettySpanBuilder {
+	new(data?: PrettySpan): PrettySpanMessage;
+	decode(buffer: ArrayBuffer) : PrettySpanMessage;
+	decode(buffer: ByteBuffer) : PrettySpanMessage;
+	decode64(buffer: string) : PrettySpanMessage;
 	
 }
 	

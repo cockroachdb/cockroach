@@ -20,7 +20,6 @@ option go_package = "serverpb";
 
 import "cockroach/build/info.proto";
 import "cockroach/gossip/gossip.proto";
-import "cockroach/roachpb/metadata.proto";
 import "cockroach/server/status/status.proto";
 import "cockroach/storage/storagebase/state.proto";
 import "cockroach/util/unresolved_addr.proto";
@@ -52,7 +51,7 @@ message NodeRequest {
 }
 
 message RangeInfo {
-  PrettyRangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  PrettySpan span = 1 [(gogoproto.nullable) = false];
   string raft_state = 2;
   // pending_cmds is the number of pendingCmds on the range.
   int32 pending_cmds = 3;
@@ -168,15 +167,8 @@ service Status {
 }
 
 
-// PrettyRangeDescriptor is identical to roachpb.RangeDescriptor except the
-// start and end keys are encoded as strings instead of bytes. This needs to be
-// kept in sync with roachpb.RangeDescriptor.
-message PrettyRangeDescriptor {
-  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
-  string start_key = 2;
-  string end_key = 3;
-  repeated roachpb.ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
-  int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.ReplicaID"];
+// PrettySpan holds a pretty-printed key range.
+message PrettySpan {
+  string start_key = 1;
+  string end_key = 2;
 }
