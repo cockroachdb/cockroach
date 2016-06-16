@@ -60,6 +60,14 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase
 		return storagebase.ReplicaState{}, err
 	}
 
+	// The truncated state should not be optional (i.e. the pointer is
+	// pointless), but it is and the migration is not worth it.
+	truncState, err := loadTruncatedState(reader, desc.RangeID)
+	if err != nil {
+		return storagebase.ReplicaState{}, err
+	}
+	s.TruncatedState = &truncState
+
 	return s, nil
 }
 
@@ -70,6 +78,28 @@ func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, erro
 		return nil, err
 	}
 	return lease, nil
+}
+
+func loadTruncatedState(
+	eng engine.Reader, rangeID roachpb.RangeID,
+) (roachpb.RaftTruncatedState, error) {
+	var truncState roachpb.RaftTruncatedState
+	if _, err := engine.MVCCGetProto(context.Background(), eng,
+		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, true,
+		nil, &truncState); err != nil {
+		return roachpb.RaftTruncatedState{}, err
+	}
+	return truncState, nil
+}
+
+func setTruncatedState(
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	truncState roachpb.RaftTruncatedState,
+) error {
+	return engine.MVCCPutProto(context.Background(), eng, ms,
+		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
 }
 
 func setGCThreshold(
