@@ -19,10 +19,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+)
+
+const (
+	// defaultMaxReservations is the number of concurrent reservations that are
+	// allowed at once.
+	defaultMaxReservations = 5
+	// defaultMaxReservedBytes is the total number of bytes that can be
+	// reserved, by all active reservations, at any time.
+	defaultMaxReservedBytes = 250 * (1 << 20) // 250 MiB
 )
 
 // reservation is an item in both the reservationQ and the used in bookie's
@@ -65,7 +75,7 @@ func (pq *reservationQ) dequeue() *reservation {
 // bookie contains a store's replica reservations.
 type bookie struct {
 	clock              *hlc.Clock
-	reservationTimeout time.Duration // How long each reservation is held.
+	reservationTimeout time.Duration // How long each reservation is held. Defaults to ttlStoreGossip.
 	maxReservations    int
 	maxReservedBytes   int64
 	metrics            *storeMetrics
@@ -80,17 +90,14 @@ type bookie struct {
 // newBookie creates a reservations system and starts its timeout queue.
 func newBookie(
 	clock *hlc.Clock,
-	reservationTimeout time.Duration,
-	maxReservations int,
-	maxReservedBytes int64,
 	stopper *stop.Stopper,
 	metrics *storeMetrics,
 ) *bookie {
 	b := &bookie{
 		clock:              clock,
-		reservationTimeout: reservationTimeout,
-		maxReservations:    maxReservations,
-		maxReservedBytes:   maxReservedBytes,
+		reservationTimeout: envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip),
+		maxReservations:    envutil.EnvOrDefaultInt("max_reservations", defaultMaxReservations),
+		maxReservedBytes:   envutil.EnvOrDefaultBytes("max_reserved_bytes", defaultMaxReservedBytes),
 		metrics:            metrics,
 	}
 	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]*reservation)

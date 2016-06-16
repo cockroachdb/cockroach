@@ -27,16 +27,13 @@ import (
 )
 
 // createTestBookie creates a new bookie, stopper and manual clock for testing.
-func createTestBookie(
-	reservationTimeout time.Duration,
-	maxReservations int,
-	maxReservedBytes int64,
-) (*stop.Stopper, *hlc.ManualClock, *bookie) {
+func createTestBookie(reservationTimeout time.Duration) (*stop.Stopper, *hlc.ManualClock, *bookie) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	b := newBookie(clock, reservationTimeout, maxReservations, maxReservedBytes, stopper,
-		newStoreMetrics())
+	b := newBookie(clock, stopper, newStoreMetrics())
+	b.maxReservations = 20
+	b.reservationTimeout = reservationTimeout
 	b.metrics.available.Update(100000)
 	return stopper, mc, b
 }
@@ -62,7 +59,7 @@ func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedB
 // correctly.
 func TestBookieReserve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, b := createTestBookie(time.Hour, 20, 20*maxReservedBytes)
+	stopper, _, b := createTestBookie(time.Hour)
 	defer stopper.Stop()
 
 	testCases := []struct {
@@ -227,7 +224,7 @@ func expireNextReservation(t *testing.T, mc *hlc.ManualClock, b *bookie, expireC
 // correctly expiring any unfilled reservations in a number of different cases.
 func TestReservationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, mc, b := createTestBookie(time.Microsecond, 20, 20*maxReservedBytes)
+	stopper, mc, b := createTestBookie(time.Microsecond)
 	defer stopper.Stop()
 
 	bytesPerReservation := int64(100)
