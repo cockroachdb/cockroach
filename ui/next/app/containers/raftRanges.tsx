@@ -172,7 +172,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
               <div>Replica On: {replicaNodeIDs.join(", ")}</div>
               <div>Next Replica ID: {nodeRange.state.state.desc.next_replica_id}</div>
             </div> : ""}
-            {(this.state.showPending) ? <div>Pending Command Count: {nodeRange.pending_cmds || 0}</div> : ""}
+            {(this.state.showPending) ? <div>Pending Command Count: {nodeRange.state.state.num_pending || 0}</div> : ""}
           </td>;
           row[index] = cell;
         });

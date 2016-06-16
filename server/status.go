@@ -664,9 +664,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 						EndKey:   desc.EndKey.String(),
 					},
 					RaftState: raftState,
-					// TODO(tschottdorf): fold into RangeInfo.
-					PendingCmds: int32(rep.PendingCmdsLen()),
-					State:       state,
+					State:     state,
 				})
 				return false, nil
 			})

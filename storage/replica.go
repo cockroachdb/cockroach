@@ -906,6 +906,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
+	ri.NumPending = uint64(len(r.mu.pendingCmds))
 	return ri
 }
 
@@ -2659,11 +2660,4 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
-}
-
-// PendingCmdsLen returns the number of pending commands.
-func (r *Replica) PendingCmdsLen() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.mu.pendingCmds)
 }

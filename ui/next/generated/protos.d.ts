@@ -1655,15 +1655,6 @@ getRaftState?() : string;
 
 
 
-pending_cmds?: number;
-		
-
-getPendingCmds?() : number;
-		setPendingCmds?(pendingCmds : number): void;
-		
-
-
-
 state?: storage.storagebase.RangeInfo;
 		
 
@@ -4668,6 +4659,15 @@ lastIndex?: Long;
 
 getLastIndex?() : Long;
 		setLastIndex?(lastIndex : Long): void;
+		
+
+
+
+num_pending?: Long;
+		
+
+getNumPending?() : Long;
+		setNumPending?(numPending : Long): void;
 		
 
 

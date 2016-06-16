@@ -57,4 +57,5 @@ message RangeInfo {
   ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The highest (and last) index in the Raft log.
   uint64 lastIndex = 2;
+  uint64 num_pending = 3;
 }

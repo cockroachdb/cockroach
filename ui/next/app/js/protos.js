@@ -620,12 +620,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 },
                                 {
                                     "rule": "optional",
-                                    "type": "int32",
-                                    "name": "pending_cmds",
-                                    "id": 3
-                                },
-                                {
-                                    "rule": "optional",
                                     "type": "storage.storagebase.RangeInfo",
                                     "name": "state",
                                     "id": 4,
@@ -2568,6 +2562,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "uint64",
                                     "name": "lastIndex",
                                     "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "num_pending",
+                                    "id": 3
                                 }
                             ]
                         }
