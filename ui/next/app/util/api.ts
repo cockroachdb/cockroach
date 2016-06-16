@@ -37,8 +37,9 @@ type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessa
 type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
-type HealthRequest = cockroach.server.serverpb.HealthRequest;
 type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
+
+type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
@@ -53,7 +54,7 @@ export function setFetchTimeout(v: number) {
 
 // Inspired by https://github.com/github/fetch/issues/175
 // wraps a promise in a timeout
-function timeout<T>(promise: Promise<T>): Promise<T> {
+export function timeout<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     setTimeout(() => reject(new Error(`Promise timed out after ${TIMEOUT} ms`)), TIMEOUT);
     promise.then(resolve, reject);
@@ -111,7 +112,7 @@ export function propsToQueryString(props: any) {
  */
 
 // getDatabaseList gets a list of all database names
-export function getDatabaseList(req: DatabasesRequest = {}): Promise<DatabasesResponseMessage> {
+export function getDatabaseList(): Promise<DatabasesResponseMessage> {
   return Fetch(serverpb.DatabasesResponse, `${API_PREFIX}/databases`);
 }
 
@@ -158,6 +159,11 @@ export function queryTimeSeries(req: TimeSeriesQueryRequestMessage): Promise<Tim
 }
 
 // getHealth gets health data
-export function getHealth(req: HealthRequest = {}): Promise<HealthResponseMessage> {
+export function getHealth(): Promise<HealthResponseMessage> {
   return Fetch(serverpb.HealthResponse, `${API_PREFIX}/health`);
+}
+
+// getCluster gets info about the cluster
+export function getCluster(): Promise<ClusterResponseMessage> {
+  return Fetch(serverpb.ClusterResponse, `${API_PREFIX}/cluster`);
 }
