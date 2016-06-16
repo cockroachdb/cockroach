@@ -309,7 +309,8 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			err = c.wr.Flush()
 
 		default:
-			err = c.sendInternalError(fmt.Sprintf("unrecognized client message type %s", typ))
+			err = c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
+				fmt.Sprintf("unrecognized client message type %s", typ))
 		}
 		if err != nil {
 			return err
@@ -688,7 +689,7 @@ func (c *v3Conn) sendError(err error) error {
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendErrorWithCode(pgerror.CodeInternalError, sqlbase.SrcCtx{}, errToSend)
+	return c.sendErrorWithCode(pgerror.CodeInternalError, sqlbase.MakeSrcCtx(1), errToSend)
 }
 
 // errCode is a postgres error code, plus our extensions.
