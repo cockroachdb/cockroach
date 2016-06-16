@@ -52,8 +52,8 @@ import (
 import "C"
 
 const (
-	minMemtableBudget = 1 << 20 // 1 MB
-	defaultBlockSize  = 2 << 10 // 32KB (rocksdb default is 4KB)
+	minMemtableBudget = 1 << 20  // 1 MB
+	defaultBlockSize  = 32 << 10 // 32KB (rocksdb default is 4KB)
 )
 
 func init() {
