@@ -39,16 +39,25 @@ func (s *statementsValue) Set(value string) error {
 	return nil
 }
 
-type sqlContext struct {
+type cliContext struct {
 	// Embed the base context.
 	*base.Context
-
-	// execStmts is a list of statements to execute.
-	execStmts statementsValue
 
 	// prettyFmt indicates whether tables should be pretty-formatted in
 	// the output during non-interactive execution.
 	prettyFmt bool
+}
+
+func (ctx *cliContext) InitCLIDefaults() {
+	ctx.prettyFmt = false
+}
+
+type sqlContext struct {
+	// Embed the cli context.
+	*cliContext
+
+	// execStmts is a list of statements to execute.
+	execStmts statementsValue
 }
 
 type debugContext struct {

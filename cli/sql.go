@@ -30,7 +30,6 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -222,9 +221,6 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 func runInteractive(conn *sqlConn) (exitErr error) {
 	fullPrompt, continuePrompt := preparePrompts(conn.url)
 
-	isInteractive := isatty.IsTerminal(os.Stdout.Fd()) &&
-		isatty.IsTerminal(os.Stdin.Fd())
-
 	if isInteractive {
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
@@ -297,7 +293,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			addHistory(strings.Join(stmt, " "))
 		}
 
-		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), true); exitErr != nil {
+		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), cliCtx.prettyFmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
 
@@ -333,7 +329,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts, sqlCtx.prettyFmt)
+		return runStatements(conn, sqlCtx.execStmts, cliCtx.prettyFmt)
 	}
 	return runInteractive(conn)
 }
