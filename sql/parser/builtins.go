@@ -86,7 +86,7 @@ func (b Builtin) returnType() Datum {
 	return b.ReturnType
 }
 
-func categoryizeType(t Datum) string {
+func categorizeType(t Datum) string {
 	switch t {
 	case TypeDate, TypeInterval, TypeTimestamp, TypeTimestampTZ:
 		return categoryDateAndTime
@@ -105,10 +105,10 @@ func (b Builtin) Category() string {
 		return b.category
 	}
 	if types, ok := b.Types.(ArgTypes); ok && len(types) == 1 {
-		return categoryizeType(types[0])
+		return categorizeType(types[0])
 	}
 	if b.ReturnType != nil {
-		return categoryizeType(b.ReturnType)
+		return categorizeType(b.ReturnType)
 	}
 	return ""
 }
@@ -1178,7 +1178,7 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) Bui
 	return Builtin{
 		Types:      ArgTypes{TypeString, TypeString},
 		ReturnType: returnType,
-		category:   categoryizeType(TypeString),
+		category:   categorizeType(TypeString),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DString)), string(*args[1].(*DString)))
 		},
