@@ -29,6 +29,9 @@ export class OptInAttributes {
   updates: boolean = null; // Did the user sign up for product/feature updates
 }
 
+// version check key
+export const VERSION_DISMISSED_KEY = "version_dismissed";
+
 /**
  * UIDataSet maintains the current values of fields that are persisted to the
  * server as UIData. Fields are maintained in this collection as untyped
