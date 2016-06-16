@@ -45,7 +45,8 @@ var undoFreezeCluster bool
 
 var serverCtx = server.MakeContext()
 var baseCtx = serverCtx.Context
-var sqlCtx = sqlContext{Context: baseCtx}
+var cliCtx = cliContext{Context: baseCtx}
+var sqlCtx = sqlContext{cliContext: &cliCtx}
 var debugCtx debugContext
 
 var cacheSize *bytesValue
@@ -440,12 +441,16 @@ func init() {
 		f.StringVar(&baseCtx.SSLCA, cliflags.CACertName, envutil.EnvOrDefaultString(cliflags.CACertName, baseCtx.SSLCA), usageEnv(cliflags.CACertName))
 		f.StringVar(&baseCtx.SSLCert, cliflags.CertName, envutil.EnvOrDefaultString(cliflags.CertName, baseCtx.SSLCert), usageEnv(cliflags.CertName))
 		f.StringVar(&baseCtx.SSLCertKey, cliflags.KeyName, envutil.EnvOrDefaultString(cliflags.KeyName, baseCtx.SSLCertKey), usageEnv(cliflags.KeyName))
+
+		// By default, client commands print their output as
+		// pretty-formatted tables on terminals, and TSV when redirected
+		// to a file. The user can override with --pretty.
+		f.BoolVar(&cliCtx.prettyFmt, cliflags.PrettyName, isInteractive, usageNoEnv(cliflags.PrettyName))
 	}
 
 	{
 		f := sqlShellCmd.Flags()
 		f.VarP(&sqlCtx.execStmts, cliflags.ExecuteName, "e", usageNoEnv(cliflags.ExecuteName))
-		f.BoolVar(&sqlCtx.prettyFmt, cliflags.PrettyName, false, usageNoEnv(cliflags.PrettyName))
 	}
 	{
 		f := freezeClusterCmd.PersistentFlags()

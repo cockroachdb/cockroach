@@ -388,7 +388,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`DELETE FROM system.zones WHERE id=$1`, id), true); err != nil {
+		makeQuery(`DELETE FROM system.zones WHERE id=$1`, id), cliCtx.prettyFmt); err != nil {
 		return err
 	}
 	return conn.Exec(`COMMIT`, nil)
@@ -486,10 +486,10 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	id := path[len(path)-1]
 	if id == zoneID {
 		err = runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`UPDATE system.zones SET config = $2 WHERE id = $1`, id, buf), true)
+			makeQuery(`UPDATE system.zones SET config = $2 WHERE id = $1`, id, buf), cliCtx.prettyFmt)
 	} else {
 		err = runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf), true)
+			makeQuery(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf), cliCtx.prettyFmt)
 	}
 	if err != nil {
 		return err
