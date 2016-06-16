@@ -29,16 +29,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // A Farmer sets up and manipulates a test cluster via terraform.
 type Farmer struct {
-	Output         io.Writer
-	Cwd, LogDir    string
-	KeyName        string
-	Stores         string
+	Output      io.Writer
+	Cwd, LogDir string
+	KeyName     string
+	Stores      string
+	// Prefix will be prepended all names of resources created by Terraform.
+	Prefix string
+	// StateFile is the file (under `Cwd`) in which Terraform will stores its
+	// state.
+	StateFile string
+	// AddVars are additional Terraform variables to be set during calls to Add.
+	AddVars        map[string]string
 	nodes, writers []string
 }
 
@@ -85,9 +93,12 @@ func (f *Farmer) NumWriters() int {
 func (f *Farmer) Add(nodes, writers int) error {
 	nodes += f.NumNodes()
 	writers += f.NumWriters()
-	args := []string{fmt.Sprintf("--var=num_instances=%d", nodes),
-		fmt.Sprintf("--var=stores=%s", f.Stores),
-		fmt.Sprintf("--var=example_block_writer_instances=%d", writers)}
+	args := []string{fmt.Sprintf("-var=num_instances=%d", nodes),
+		fmt.Sprintf("-var=stores=%s", f.Stores),
+		fmt.Sprintf("-var=example_block_writer_instances=%d", writers)}
+	for v, val := range f.AddVars {
+		args = append(args, fmt.Sprintf("-var=%s=%s", v, val))
+	}
 
 	if nodes == 0 && writers == 0 {
 		return f.runErr("terraform", f.appendDefaults(append([]string{"destroy", "--force"}, args...))...)
@@ -170,7 +181,8 @@ func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 
 // PGUrl returns a URL string for the given node postgres server.
 func (f *Farmer) PGUrl(i int) string {
-	panic("unimplemented")
+	host := f.Nodes()[i-1]
+	return fmt.Sprintf("postgresql://%s@%s:26257/system?sslmode=disable", security.RootUser, host)
 }
 
 // InternalIP returns the address used for inter-node communication.
@@ -275,4 +287,34 @@ func (f *Farmer) logf(format string, args ...interface{}) {
 	if f.Output != nil {
 		fmt.Fprintf(f.Output, format, args...)
 	}
+}
+
+// StartCockroach starts CockroachDB on all nodes.
+func (f *Farmer) StartCockroach() error {
+	for _, node := range f.Nodes() {
+		if _, _, err := f.execSupervisor(node, "start cockroach"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// StopCockroach stops CockroachDB on all nodes.
+func (f *Farmer) StopCockroach() error {
+	for _, node := range f.Nodes() {
+		if _, _, err := f.execSupervisor(node, "stop cockroach"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SSHCockroachNodes executes the given command on all CockroachDB nodes.
+func (f *Farmer) SSHCockroachNodes(cmd string) error {
+	for _, node := range f.Nodes() {
+		if _, _, err := f.ssh(node, f.defaultKeyFile(), cmd); err != nil {
+			return err
+		}
+	}
+	return nil
 }
