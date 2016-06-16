@@ -72,8 +72,9 @@ type RaftTransport struct {
 
 	mu struct {
 		sync.Mutex
-		handlers map[roachpb.StoreID]raftMessageHandler
-		queues   map[roachpb.NodeID]chan *RaftMessageRequest
+		handlers   map[roachpb.StoreID]raftMessageHandler
+		msgQueues  map[roachpb.NodeID]chan *RaftMessageRequest
+		snapQueues map[roachpb.NodeID]chan *RaftMessageRequest
 	}
 }
 
@@ -92,7 +93,8 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
-	t.mu.queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
+	t.mu.msgQueues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
+	t.mu.snapQueues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -159,9 +161,9 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 // TODO(tschottdorf) should let raft know if the node is down;
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
-func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
+func (t *RaftTransport) processQueue(queues map[roachpb.NodeID]chan *RaftMessageRequest, nodeID roachpb.NodeID) {
 	t.mu.Lock()
-	ch, ok := t.mu.queues[nodeID]
+	ch, ok := queues[nodeID]
 	t.mu.Unlock()
 	if !ok {
 		return
@@ -169,7 +171,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 	// Clean-up when the loop below shuts down.
 	defer func() {
 		t.mu.Lock()
-		delete(t.mu.queues, nodeID)
+		delete(queues, nodeID)
 		t.mu.Unlock()
 	}()
 
@@ -193,54 +195,32 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 	}
 	client := NewMultiRaftClient(conn)
 
-	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
-	defer func() {
-		// After pending Raft requests have finished, cancel the Context to free
-		// gRPC resources.
-		wg.Wait()
-		if log.V(1) {
-			log.Infof("closing Raft transport stream to node %d at %s due to return", nodeID, addr)
-		}
-		cancel()
-	}()
+	defer cancel()
+
 	if log.V(1) {
 		log.Infof("establishing Raft transport stream to node %d at %s", nodeID, addr)
 	}
-	// We start two streams; one will be used for snapshots, the other for all
-	// other traffic. This is done to prevent snapshots from blocking other
-	// traffic.
-	streams := make([]MultiRaft_RaftMessageClient, 2)
-	for i := range streams {
-		stream, err := client.RaftMessage(ctx)
-		if err != nil {
-			if log.V(1) {
-				log.Errorf("failed to establish Raft transport stream to node %d at %s: %s", nodeID, addr, err)
-			}
-			return
+
+	stream, err := client.RaftMessage(ctx)
+	if err != nil {
+		if log.V(1) {
+			log.Errorf("failed to establish Raft transport stream to node %d at %s: %s", nodeID, addr, err)
 		}
-		streams[i] = stream
+		return
 	}
 
-	errCh := make(chan error, len(streams))
+	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
 	t.rpcContext.Stopper.RunTask(func() {
-		for i := range streams {
-			// Avoid closing over a `range` binding.
-			stream := streams[i]
-
-			t.rpcContext.Stopper.RunWorker(func() {
-				// NB: only one error will ever be read from this channel. That's fine,
-				// given that the channel is buffered to the maximum number of errors
-				// that will be written to it.
-				errCh <- stream.RecvMsg(new(RaftMessageResponse))
-			})
-		}
+		t.rpcContext.Stopper.RunWorker(func() {
+			// NB: only one error will ever be read from this channel. That's fine,
+			// given that the channel is buffered to the maximum number of errors
+			// that will be written to it.
+			errCh <- stream.RecvMsg(new(RaftMessageResponse))
+		})
 	})
-
-	snapStream := streams[0]
-	restStream := streams[1]
 
 	var raftIdleTimer timeutil.Timer
 	defer raftIdleTimer.Stop()
@@ -248,11 +228,14 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
+			if log.V(1) {
+				log.Infof("closing Raft transport stream to node %d at %s due to shutdown", nodeID, addr)
+			}
 			return
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true
 			if log.V(1) {
-				log.Infof("closing Raft transport to %d at %s due to inactivity", nodeID, addr)
+				log.Infof("closing Raft transport stream to node %d at %s due to inactivity", nodeID, addr)
 			}
 			return
 		case err := <-errCh:
@@ -265,23 +248,12 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
+			if err := stream.Send(req); err != nil {
+				log.Errorf("closing Raft transport stream to node %d at %s due to error: %s", nodeID, addr, err)
+				return
+			}
 			if req.Message.Type == raftpb.MsgSnap {
-				wg.Add(1)
-				t.rpcContext.Stopper.RunAsyncTask(func() {
-					err := snapStream.Send(req)
-					wg.Done()
-					if err != nil {
-						log.Errorf("failed to send Raft snapshot to node %d at %s: %s", nodeID, addr, err)
-					} else if log.V(1) {
-						log.Infof("successfully sent a Raft snapshot to node %d at %s", nodeID, addr)
-					}
-					t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}
-				})
-			} else {
-				if err := restStream.Send(req); err != nil {
-					log.Error(err)
-					return
-				}
+				t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}
 			}
 		}
 	}
@@ -289,17 +261,22 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 
 // Send a message to the recipient specified in the request.
 func (t *RaftTransport) Send(req *RaftMessageRequest) error {
+	queues := t.mu.msgQueues
+	if req.Message.Type == raftpb.MsgSnap {
+		queues = t.mu.snapQueues
+	}
+
 	isRunning := true
 	t.mu.Lock()
-	ch, ok := t.mu.queues[req.ToReplica.NodeID]
+	ch, ok := queues[req.ToReplica.NodeID]
 	if !ok {
 		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
-		t.mu.queues[req.ToReplica.NodeID] = ch
+		queues[req.ToReplica.NodeID] = ch
 
 		// Starting workers in a task prevents data races during shutdown.
 		isRunning = t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
-				t.processQueue(req.ToReplica.NodeID)
+				t.processQueue(queues, req.ToReplica.NodeID)
 			})
 		})
 	}
