@@ -2247,9 +2247,7 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
-	// Add the new split replica to the store. This step atomically
-	// updates the EndKey of the updated replica and also adds the
-	// new replica to the store's replica map.
+	// Create the new Replica representing the right side of the split.
 	newRng, err := NewReplica(&split.NewDesc, r.store, 0)
 	if err != nil {
 		return err
@@ -2277,6 +2275,9 @@ func (r *Replica) splitTrigger(
 	// Note: you must not use the trace inside of this defer since it may
 	// run after the trace has already completed.
 	batch.Defer(func() {
+		// Add the new split replica to the store. This step atomically
+		// updates the EndKey of the updated replica and also adds the
+		// new replica to the store's replica map.
 		if err := r.store.SplitRange(r, newRng); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update Store after split: %s", err)
