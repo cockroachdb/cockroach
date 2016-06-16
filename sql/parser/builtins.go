@@ -54,6 +54,12 @@ var (
 	errLogOfZero         = errors.New("cannot take logarithm of zero")
 )
 
+const (
+	CategoryIDGeneration = "ID Generation"
+	CategorySystemInfo   = "System Info"
+	CategoryDateAndTime  = "Date and Time"
+)
+
 // Builtin is a built-in function.
 type Builtin struct {
 	Types      typeList
@@ -77,16 +83,25 @@ func (b Builtin) returnType() Datum {
 	return b.ReturnType
 }
 
+func categoryizeType(t Datum) string {
+	switch t {
+	case TypeTimestamp, TypeDate, TypeInterval:
+		return CategoryDateAndTime
+	default:
+		return strings.ToUpper(t.Type())
+	}
+}
+
 // Category is used to categorize a function (for documentation purposes).
 func (b Builtin) Category() string {
 	if b.category != "" {
 		return b.category
 	}
 	if types, ok := b.Types.(ArgTypes); ok && len(types) == 1 {
-		return strings.ToUpper(types[0].Type())
+		return categoryizeType(types[0])
 	}
 	if b.ReturnType != nil {
-		return strings.ToUpper(b.ReturnType.Type())
+		return categoryizeType(b.ReturnType)
 	}
 	return ""
 }
@@ -466,7 +481,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeBytes,
-			category:   "ID Generation",
+			category:   CategoryIDGeneration,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return NewDBytes(generateUniqueBytes(ctx.NodeID)), nil
@@ -478,7 +493,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeInt,
-			category:   "ID Generation",
+			category:   CategoryIDGeneration,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return NewDInt(generateUniqueInt(ctx.NodeID)), nil
@@ -558,6 +573,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeDecimal,
+			category:   CategoryDateAndTime,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
@@ -580,6 +596,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeTimestamp},
 			ReturnType: TypeInt,
+			category:   CategoryDateAndTime,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
 				fromTime := *args[1].(*DTimestamp)
@@ -649,6 +666,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeString},
 			ReturnType: TypeTimestamp,
+			category:   CategoryDateAndTime,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				s := string(*args[0].(*DString))
 				return ParseDTimestamp(s, ctx.GetLocation(), time.Nanosecond)
@@ -956,7 +974,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeString,
-			category:   "System Info",
+			category:   CategorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(build.GetInfo().Short()), nil
 			},
@@ -1041,7 +1059,7 @@ var substringImpls = []Builtin{
 var uuidV4Impl = Builtin{
 	Types:      ArgTypes{},
 	ReturnType: TypeBytes,
-	category:   "ID Generation",
+	category:   CategoryIDGeneration,
 	impure:     true,
 	fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 		return NewDBytes(DBytes(uuid.NewV4().GetBytes())), nil
@@ -1151,6 +1169,7 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) Bui
 	return Builtin{
 		Types:      ArgTypes{TypeString, TypeString},
 		ReturnType: returnType,
+		category:   categoryizeType(TypeString),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DString)), string(*args[1].(*DString)))
 		},
