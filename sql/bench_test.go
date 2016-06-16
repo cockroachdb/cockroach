@@ -13,12 +13,14 @@
 // permissions and limitations under the License.
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: William Haack (will@cockroachlabs.com)
 
 package sql_test
 
 import (
 	"bytes"
 	gosql "database/sql"
+	"flag"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -33,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 	_ "github.com/cockroachdb/pq"
 )
+
+var skipMultinode = flag.Bool("multinode", false, "Flag to determine whether or not to run multinode sql benchmark tests")
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
@@ -54,6 +58,21 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	}
 
 	f(b, db)
+}
+
+func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+	defer tracing.Disable()()
+	conns, cleanup := SetupMultinodeTestCluster(b, 3, "bench")
+	defer cleanup()
+
+	f(b, conns[0])
+}
+
+func checkMultinodeFlag(b *testing.B) {
+	flag.Parse()
+	if !*skipMultinode {
+		b.Skip()
+	}
 }
 
 func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
@@ -122,6 +141,11 @@ func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {
 
 func BenchmarkSelect1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkSelect1)
+}
+
+func BenchmarkSelect1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkSelect1)
 }
 
 func BenchmarkSelect1_Postgres(b *testing.B) {
@@ -197,6 +221,11 @@ func BenchmarkSelect2_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkSelect2)
 }
 
+func BenchmarkSelect2Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkSelect2)
+}
+
 func BenchmarkSelect2_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkSelect2)
 }
@@ -216,6 +245,11 @@ func runBenchmarkSelect3(b *testing.B, db *gosql.DB) {
 
 func BenchmarkSelect3_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkSelect3)
+}
+
+func BenchmarkSelect3Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkSelect3)
 }
 
 func BenchmarkSelect3_Postgres(b *testing.B) {
@@ -281,12 +315,22 @@ func BenchmarkInsert1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkInsert1)
 }
 
+func BenchmarkInsert1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkInsert1)
+}
+
 func BenchmarkInsert1_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkInsert1)
 }
 
 func BenchmarkInsert10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkInsert10)
+}
+
+func BenchmarkInsert10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkInsert10)
 }
 
 func BenchmarkInsert10_Postgres(b *testing.B) {
@@ -297,12 +341,22 @@ func BenchmarkInsert100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkInsert100)
 }
 
+func BenchmarkInsert100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkInsert100)
+}
+
 func BenchmarkInsert100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkInsert100)
 }
 
 func BenchmarkInsert1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkInsert1000)
+}
+
+func BenchmarkInsert1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkInsert1000)
 }
 
 func BenchmarkInsert1000_Postgres(b *testing.B) {
@@ -377,12 +431,22 @@ func BenchmarkUpdate1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpdate1)
 }
 
+func BenchmarkUpdate1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpdate1)
+}
+
 func BenchmarkUpdate1_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkUpdate1)
 }
 
 func BenchmarkUpdate10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpdate10)
+}
+
+func BenchmarkUpdate10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpdate10)
 }
 
 func BenchmarkUpdate10_Postgres(b *testing.B) {
@@ -393,12 +457,22 @@ func BenchmarkUpdate100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpdate100)
 }
 
+func BenchmarkUpdate100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpdate100)
+}
+
 func BenchmarkUpdate100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkUpdate100)
 }
 
 func BenchmarkUpdate1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpdate1000)
+}
+
+func BenchmarkUpdate1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpdate1000)
 }
 
 func BenchmarkUpdate1000_Postgres(b *testing.B) {
@@ -476,16 +550,36 @@ func BenchmarkUpsert1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpsert1)
 }
 
+func BenchmarkUpsert1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpsert1)
+}
+
 func BenchmarkUpsert10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpsert10)
+}
+
+func BenchmarkUpsert10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpsert10)
 }
 
 func BenchmarkUpsert100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpsert100)
 }
 
+func BenchmarkUpsert100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpsert100)
+}
+
 func BenchmarkUpsert1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpsert1000)
+}
+
+func BenchmarkUpsert1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkUpsert1000)
 }
 
 // runBenchmarkDelete benchmarks deleting count rows from a table.
@@ -555,12 +649,22 @@ func BenchmarkDelete1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkDelete1)
 }
 
+func BenchmarkDelete1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkDelete1)
+}
+
 func BenchmarkDelete1_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkDelete1)
 }
 
 func BenchmarkDelete10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkDelete10)
+}
+
+func BenchmarkDelete10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkDelete10)
 }
 
 func BenchmarkDelete10_Postgres(b *testing.B) {
@@ -571,12 +675,22 @@ func BenchmarkDelete100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkDelete100)
 }
 
+func BenchmarkDelete100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkDelete100)
+}
+
 func BenchmarkDelete100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkDelete100)
 }
 
 func BenchmarkDelete1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkDelete1000)
+}
+
+func BenchmarkDelete1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, runBenchmarkDelete1000)
 }
 
 func BenchmarkDelete1000_Postgres(b *testing.B) {
@@ -642,12 +756,22 @@ func BenchmarkScan1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1, 0) })
 }
 
+func BenchmarkScan1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1, 0) })
+}
+
 func BenchmarkScan1_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1, 0) })
 }
 
 func BenchmarkScan10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10, 0) })
+}
+
+func BenchmarkScan10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10, 0) })
 }
 
 func BenchmarkScan10_Postgres(b *testing.B) {
@@ -658,12 +782,22 @@ func BenchmarkScan100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 100, 0) })
 }
 
+func BenchmarkScan100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 100, 0) })
+}
+
 func BenchmarkScan100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 100, 0) })
 }
 
 func BenchmarkScan1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 0) })
+}
+
+func BenchmarkScan1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 0) })
 }
 
 func BenchmarkScan1000_Postgres(b *testing.B) {
@@ -674,12 +808,22 @@ func BenchmarkScan10000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10000, 0) })
 }
 
+func BenchmarkScan10000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10000, 0) })
+}
+
 func BenchmarkScan10000_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10000, 0) })
 }
 
 func BenchmarkScan1000Limit1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 1) })
+}
+
+func BenchmarkScan1000Limit1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 1) })
 }
 
 func BenchmarkScan1000Limit1_Postgres(b *testing.B) {
@@ -690,12 +834,22 @@ func BenchmarkScan1000Limit10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 10) })
 }
 
+func BenchmarkScan1000Limit10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 10) })
+}
+
 func BenchmarkScan1000Limit10_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 10) })
 }
 
 func BenchmarkScan1000Limit100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 100) })
+}
+
+func BenchmarkScan1000Limit100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 100) })
 }
 
 func BenchmarkScan1000Limit100_Postgres(b *testing.B) {
@@ -763,6 +917,11 @@ func BenchmarkScan10000FilterLimit1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, filterLimitBenchFn(1))
 }
 
+func BenchmarkScan10000FilterLimit1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, filterLimitBenchFn(1))
+}
+
 func BenchmarkScan10000FilterLimit1_Postgres(b *testing.B) {
 	benchmarkPostgres(b, filterLimitBenchFn(1))
 }
@@ -771,12 +930,22 @@ func BenchmarkScan10000FilterLimit10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, filterLimitBenchFn(10))
 }
 
+func BenchmarkScan10000FilterLimit10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, filterLimitBenchFn(10))
+}
+
 func BenchmarkScan10000FilterLimit10_Postgres(b *testing.B) {
 	benchmarkPostgres(b, filterLimitBenchFn(10))
 }
 
 func BenchmarkScan10000FilterLimit50_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, filterLimitBenchFn(50))
+}
+
+func BenchmarkScan10000FilterLimit50Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, filterLimitBenchFn(50))
 }
 
 func BenchmarkScan10000FilterLimit50_Postgres(b *testing.B) {
@@ -842,8 +1011,13 @@ func runBenchmarkOrderBy(b *testing.B, db *gosql.DB, count int, limit int, disti
 	}
 }
 
-func BenchmarkSort100000Limit10_Cockroach(b *testing.B) {
+func BenchmarkSort100000Limit10M_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
+}
+
+func BenchmarkSort100000Limit10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
 }
 
 func BenchmarkSort100000Limit10_Postgres(b *testing.B) {
@@ -852,6 +1026,11 @@ func BenchmarkSort100000Limit10_Postgres(b *testing.B) {
 
 func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
+}
+
+func BenchmarkSort100000Limit10DistinctMultinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
 }
 
 func BenchmarkSort100000Limit10Distinct_Postgres(b *testing.B) {
@@ -906,16 +1085,36 @@ func BenchmarkTrackChoices1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1) })
 }
 
+func BenchmarkTrackChoices1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1) })
+}
+
 func BenchmarkTrackChoices10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 10) })
+}
+
+func BenchmarkTrackChoices10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 10) })
 }
 
 func BenchmarkTrackChoices100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
 }
 
+func BenchmarkTrackChoices100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
+}
+
 func BenchmarkTrackChoices1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
+}
+
+func BenchmarkTrackChoices1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
 }
 
 func BenchmarkTrackChoices1_Postgres(b *testing.B) {
@@ -1001,12 +1200,27 @@ func BenchmarkInsertDistinct1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 1) })
 }
 
+func BenchmarkInsertDistinct1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 1) })
+}
+
 func BenchmarkInsertDistinct10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 10) })
 }
 
+func BenchmarkInsertDistinct10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 10) })
+}
+
 func BenchmarkInsertDistinct100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
+}
+
+func BenchmarkInsertDistinct100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
 }
 
 // runBenchmarkWideTable measures performance on a table with a large number of
@@ -1092,14 +1306,34 @@ func BenchmarkWideTable1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1) })
 }
 
+func BenchmarkWideTable1Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1) })
+}
+
 func BenchmarkWideTable10_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 10) })
+}
+
+func BenchmarkWideTable10Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 10) })
 }
 
 func BenchmarkWideTable100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 100) })
 }
 
+func BenchmarkWideTable100Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 100) })
+}
+
 func BenchmarkWideTable1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1000) })
+}
+
+func BenchmarkWideTable1000Multinode_Cockroach(b *testing.B) {
+	checkMultinodeFlag(b)
+	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1000) })
 }
