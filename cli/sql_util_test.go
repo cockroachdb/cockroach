@@ -87,6 +87,7 @@ SET
 | name     | STRING | false | NULL    |
 | id       | INT    | true  | NULL    |
 +----------+--------+-------+---------+
+(3 rows)
 `
 
 	if a, e := b.String(), expected[1:]; a != e {
@@ -106,6 +107,7 @@ SET
 +----------+------------+----+
 |        1 | descriptor |  3 |
 +----------+------------+----+
+(1 row)
 `
 	if a, e := b.String(), expected[1:]; a != e {
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
@@ -124,16 +126,19 @@ SET
 +---+
 | 1 |
 +---+
+(1 row)
 +---+---+
 | 2 | 3 |
 +---+---+
 | 2 | 3 |
 +---+---+
+(1 row)
 +---------+
 | 'hello' |
 +---------+
 | hello   |
 +---------+
+(1 row)
 `
 
 	if a, e := b.String(), expected[1:]; a != e {

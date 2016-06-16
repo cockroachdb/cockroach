@@ -700,6 +700,7 @@ func Example_sql_escape() {
 	// | a   b         c␤               | tabs                           |
 	// | 12  123123213 12313            |                                |
 	// +--------------------------------+--------------------------------+
+	// (10 rows)
 	// sql --pretty -e show columns from t.u
 	// +----------+------+-------+----------------+
 	// |  Field   | Type | Null  |    Default     |
@@ -712,12 +713,14 @@ func Example_sql_escape() {
 	// | ܈85      | INT  | true  | NULL           |
 	// | rowid    | INT  | false | unique_rowid() |
 	// +----------+------+-------+----------------+
+	// (6 rows)
 	// sql --pretty -e select * from t.u
 	// +------+------+------------+-------+-----+
 	// | "foo | \foo | "foo\nbar" | κόσμε | ܈85 |
 	// +------+------+------------+-------+-----+
 	// |    0 |    0 |          0 |     0 |   0 |
 	// +------+------+------------+-------+-----+
+	// (1 row)
 }
 
 func Example_user() {
@@ -738,6 +741,7 @@ func Example_user() {
 	// | username |
 	// +----------+
 	// +----------+
+	// (0 rows)
 	// user set foo --password=bar
 	// INSERT 1
 	// user ls
@@ -746,6 +750,7 @@ func Example_user() {
 	// +----------+
 	// | foo      |
 	// +----------+
+	// (1 row)
 	// user rm foo
 	// DELETE 1
 	// user ls
@@ -753,6 +758,7 @@ func Example_user() {
 	// | username |
 	// +----------+
 	// +----------+
+	// (0 rows)
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
@@ -853,6 +859,7 @@ func Example_node() {
 	// +----+
 	// |  1 |
 	// +----+
+	// (1 row)
 	// node status 10000
 	// Error: node 10000 doesn't exist
 }
