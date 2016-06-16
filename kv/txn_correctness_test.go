@@ -902,7 +902,7 @@ func checkConcurrency(
 //   SC(x-y) - scan values from keys "x"-"y"
 //   D(x) - delete key "x"
 //   DR(x-y) - delete range of keys "x"-"y"
-//   W(x,y[+z+...]) - writes sum of values y+z+... to x
+//   W(x,y+z+...) - writes sum of values y+z+... to x
 //   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   C - commit
 //
@@ -911,7 +911,7 @@ func checkConcurrency(
 //   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
 //   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
 //   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
-//   Wn.m(x,y[+z+...]) - write sum of values y+z+... to x from txn "n" ("m"th retry)
+//   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
 //   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
 //   Cn.m - commit of txn "n" ("m"th retry)
 
