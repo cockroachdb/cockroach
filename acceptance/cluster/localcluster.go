@@ -454,6 +454,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--key=/certs/node.key",
 		"--host=" + node.nodeStr,
 		"--alsologtostderr=INFO",
+		"--verbosity=1",
 	}
 
 	for _, store := range node.stores {
