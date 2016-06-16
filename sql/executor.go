@@ -501,10 +501,11 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 
 		res.ResultList = append(res.ResultList, results...)
 		// Now make sense of the state we got into and update txnState.
-		if txnState.State == RestartWait && txnState.commitSeen {
-			// A COMMIT got a retriable error. Too bad, this txn is toast. After we
-			// return a result for COMMIT (with the COMMIT pgwire tag), the user can't
-			// send any more commands.
+		if (txnState.State == RestartWait || txnState.State == Aborted) &&
+			txnState.commitSeen {
+			// A COMMIT got an error (retryable or not). Too bad, this txn is toast.
+			// After we return a result for COMMIT (with the COMMIT pgwire tag), the
+			// user can't send any more commands.
 			e.txnAbortCount.Inc(1)
 			txn.CleanupOnError(err)
 			txnState.resetStateAndTxn(NoTxn)
@@ -958,6 +959,11 @@ func commitSQLTransaction(
 	err := txnState.txn.Commit()
 	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
 	if err != nil {
+		// Errors on COMMIT need special handling, as COMMIT needs to finalize the
+		// transaction (it can't leave it in Aborted or RestartWait). Except if it's
+		// an auto-retry txn, in which case we do want to leave it in RestartWait
+		// here. We ignore all of this here and do regular cleanup. A higher layer
+		// handles closing the txn if the auto-retry doesn't get rid of the error.
 		txnState.updateStateAndCleanupOnErr(err, e)
 		result.Err = err
 	} else {
