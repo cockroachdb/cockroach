@@ -17,6 +17,8 @@
 package parser
 
 import (
+	"bytes"
+	"fmt"
 	"go/constant"
 	"reflect"
 	"testing"
@@ -1105,6 +1107,44 @@ func BenchmarkParse(b *testing.B) {
 		}
 		if _, ok := st[1].(*Update); !ok {
 			b.Fatalf("unexpected statement type: %T", st[1])
+		}
+	}
+}
+
+func TestEncodeSQLBytes(t *testing.T) {
+	// Test all single-byte combinations.
+	for i := 0; i < 256; i++ {
+		s := string([]byte{byte(i)})
+		var buf bytes.Buffer
+		encodeSQLBytes(&buf, s)
+		sql := fmt.Sprintf("SELECT %s", buf.String())
+		stmts, err := parseTraditional(sql)
+		if err != nil {
+			t.Errorf("%s: expected success, but found %s", sql, err)
+			continue
+		}
+		stmt := stmts.String()
+		if sql != stmt {
+			t.Errorf("expected %s, but found %s", sql, stmt)
+		}
+	}
+
+	// Test all multi-bytes combinations.
+	for i := 0; i < 256; i++ {
+		for j := 0; j < 256; j++ {
+			s := string([]byte{byte(i), byte(j)})
+			var buf bytes.Buffer
+			encodeSQLBytes(&buf, s)
+			sql := fmt.Sprintf("SELECT %s", buf.String())
+			stmts, err := parseTraditional(sql)
+			if err != nil {
+				t.Errorf("%s: expected success, but found %s", sql, err)
+				continue
+			}
+			stmt := stmts.String()
+			if sql != stmt {
+				t.Errorf("expected %s, but found %s", sql, stmt)
+			}
 		}
 	}
 }
