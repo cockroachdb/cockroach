@@ -30,6 +30,7 @@
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
+#include "rocksdb/utilities/checkpoint.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/roachpb/data.pb.h"
 #include "cockroach/roachpb/internal.pb.h"
@@ -1405,6 +1406,16 @@ DBStatus DBFlush(DBEngine* db) {
 
 DBStatus DBCompact(DBEngine* db) {
   return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), NULL, NULL));
+}
+
+DBStatus DBCheckpoint(DBEngine* db, DBSlice dir) {
+  rocksdb::Checkpoint* cp = nullptr;
+  rocksdb::Status status = rocksdb::Checkpoint::Create(db->rep, &cp);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  std::unique_ptr<rocksdb::Checkpoint> cp_deleter(cp);
+  return ToDBStatus(cp->CreateCheckpoint(ToString(dir)));
 }
 
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
