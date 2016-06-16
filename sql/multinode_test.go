@@ -13,11 +13,13 @@
 // permissions and limitations under the License.
 //
 // Author: David Taylor (david@cockroachlabs.com)
+// Author: William Haack (will@cockroachlabs.com)
 
 package sql_test
 
 import (
 	gosql "database/sql"
+	"flag"
 	"fmt"
 	"testing"
 
@@ -28,27 +30,23 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
+var multinode = flag.Bool("multinode", false, "specifies whether or not to run multinode tests")
+
 // Starts up a cluster made of up `nodes` in-memory testing servers,
 // creates database `name and returns open gosql.DB connections to each
 // node (to the named db), as well as a cleanup func that stops and
 // cleans up all nodes and connections.
-// TODO(davidt): Change zone config to actually add replication.
-// TODO(davidt): Ensure that ranges are actually replicated before returning.
-// Until these TODOs are resolved, the cluster returned is not particularly
-// useful for benchmarking, as without replication overhead it is the same as
-// single-node operation, except without the local-call optimization for the
-// additional nodes.
-func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.DB, func()) {
+func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (server.MultinodeTestCluster, []*gosql.DB, func()) {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
-	var servers []server.TestServer
-	first := server.StartTestServer(t)
-	servers = append(servers, first)
-	for i := 1; i < nodes; i++ {
-		servers = append(servers, server.StartTestServerJoining(t, first))
-	}
 
+	servers := make([]server.TestServer, nodes)
+	servers[0] = server.StartTestServerWithContext(t, nil, nodes)
+	for i := range servers[1:] {
+		servers[i+1] = server.StartTestServerJoining(t, servers[0])
+	}
+	testCluster := server.MultinodeTestCluster{Servers: servers}
 	var conns []*gosql.DB
 	var closes []func() error
 	var cleanups []func()
@@ -82,19 +80,20 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		}
 	}
 
-	return conns, f
+	return testCluster, conns, f
 }
 
-// NB(davidt): until `SetupMultinodeTestCluster` actually returns a cluster
-// with replication configured, this is only testing adding nodes to a cluster
-// and then their ability to serve SQL by talking to a remote, single-node KV.
 func TestMultinodeCockroach(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer tracing.Disable()()
+	if !*multinode {
+		t.Skip()
+	}
 
-	t.Skip("#7450")
-
-	conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
+	testCluster, conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
+	if err := testCluster.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
 	defer cleanup()
 
 	if _, err := conns[0].Exec(`CREATE TABLE testing (k INT PRIMARY KEY, v INT)`); err != nil {

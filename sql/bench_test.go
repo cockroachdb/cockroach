@@ -36,6 +36,14 @@ import (
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
+	if *multinode {
+		benchmarkMultinodeCockroach(b, f)
+	} else {
+		benchmarkSingleNodeCockroach(b, f)
+	}
+}
+
+func benchmarkSingleNodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
@@ -54,6 +62,15 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	}
 
 	f(b, db)
+}
+
+func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+	testCluster, conns, cleanup := SetupMultinodeTestCluster(b, 3, "bench")
+	if err := testCluster.WaitForFullReplication(); err != nil {
+		b.Fatal(err)
+	}
+	defer cleanup()
+	f(b, conns[0])
 }
 
 func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
