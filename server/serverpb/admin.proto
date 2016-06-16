@@ -118,6 +118,10 @@ message TableDetailsResponse {
   // range_count is the size of the table in ranges. This provides a rough
   // estimate of the storage requirements for the table.
   int64 range_count = 4;
+  // create_table_statement is the output of "SHOW CREATE TABLE" for this table;
+  // it is a SQL statement that would re-create the table's current schema if
+  // executed.
+  string create_table_statement = 5;
 }
 
 // UsersRequest requests a list of users.
