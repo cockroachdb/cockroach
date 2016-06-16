@@ -71,3 +71,48 @@ Level  Type                  Description   Ordering
 3      select
 4      render/filter(debug)  (1)@
 5      empty                 -
+
+# Ensure that all relevant statement types can be explained
+query ITT
+EXPLAIN CREATE DATABASE foo
+----
+0 create database
+
+query ITT
+EXPLAIN CREATE TABLE foo (x INT)
+----
+0 create table
+
+statement ok
+CREATE TABLE foo (x INT)
+
+query ITT
+EXPLAIN CREATE INDEX a ON foo(x)
+----
+0 create index
+
+statement ok
+CREATE DATABASE foo
+
+query ITT
+EXPLAIN DROP DATABASE foo
+----
+0 drop database
+
+statement ok
+CREATE INDEX a ON foo(x)
+
+query ITT
+EXPLAIN DROP INDEX foo@a
+----
+0 drop index
+
+query ITT
+EXPLAIN ALTER TABLE foo ADD COLUMN y INT
+----
+0 alter table
+
+query ITT
+EXPLAIN DROP TABLE foo
+----
+0 drop table
