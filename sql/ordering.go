@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -84,7 +85,7 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns []ResultColumn) {
 		if columns == nil || i >= len(columns) {
 			fmt.Fprintf(buf, "%d", i)
 		} else {
-			buf.WriteString(columns[i].Name)
+			parser.Name(columns[i].Name).Format(buf, parser.FmtSimple)
 		}
 	}
 
@@ -101,7 +102,7 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns []ResultColumn) {
 		if columns == nil || o.colIdx >= len(columns) {
 			fmt.Fprintf(buf, "%d", o.colIdx)
 		} else {
-			buf.WriteString(columns[o.colIdx].Name)
+			parser.Name(columns[o.colIdx].Name).Format(buf, parser.FmtSimple)
 		}
 	}
 
