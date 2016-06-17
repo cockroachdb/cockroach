@@ -22,7 +22,8 @@ import (
 )
 
 type fmtFlags struct {
-	showTypes bool
+	showTypes        bool
+	showTableAliases bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -32,6 +33,10 @@ type FmtFlags *fmtFlags
 // a straightforward representation, ideally using SQL
 // syntax that makes prettyprint+parse idempotent.
 var FmtSimple FmtFlags = &fmtFlags{showTypes: false}
+
+// FmtQualify instructs the pretty-printer to qualify qnames with the
+// table name.
+var FmtQualify FmtFlags = &fmtFlags{showTableAliases: true}
 
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.

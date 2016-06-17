@@ -2491,8 +2491,14 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $2.aliasClause()}
   }
-| joined_table { /* SKIP DOC */ }
-| '(' joined_table ')' alias_clause { unimplemented() }
+| joined_table
+  {
+    $$.val = $1.tblExpr()
+  }
+| '(' joined_table ')' alias_clause
+  {
+   $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), As: $4.aliasClause()}
+  }
 
 // It may seem silly to separate joined_table from table_ref, but there is
 // method in SQL's madness: if you don't do it this way you get reduce- reduce

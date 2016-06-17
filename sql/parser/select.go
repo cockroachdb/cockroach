@@ -213,7 +213,7 @@ func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
 // AliasedTableExpr represents a table expression coupled with an optional
 // alias.
 type AliasedTableExpr struct {
-	Expr  SimpleTableExpr
+	Expr  TableExpr
 	Hints *IndexHints
 	As    AliasClause
 	AsOf  AsOfClause
@@ -235,14 +235,8 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// SimpleTableExpr represents a simple table expression.
-type SimpleTableExpr interface {
-	NodeFormatter
-	simpleTableExpr()
-}
-
-func (QualifiedName) simpleTableExpr() {}
-func (*Subquery) simpleTableExpr()     {}
+func (QualifiedName) tableExpr() {}
+func (*Subquery) tableExpr()     {}
 
 // ParenTableExpr represents a parenthesized TableExpr.
 type ParenTableExpr struct {

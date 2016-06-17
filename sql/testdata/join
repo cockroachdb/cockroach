@@ -1,0 +1,297 @@
+statement ok
+CREATE TABLE foo (x INT); INSERT INTO foo(x) VALUES (44), (42), (NULL), (1)
+
+query II colnames
+SELECT * FROM foo AS a(x) CROSS JOIN foo AS b(y)
+----
+   x     y
+  44    44
+  44    42
+  44  NULL
+  44     1
+  42    44
+  42    42
+  42  NULL
+  42     1
+NULL    44
+NULL    42
+NULL  NULL
+NULL     1
+   1    44
+   1    42
+   1  NULL
+   1     1
+
+query II colnames
+SELECT * FROM foo AS a(x) JOIN foo AS b(y) ON a.x = b.y
+----
+ x  y
+44 44
+42 42
+ 1  1
+
+query I colnames
+SELECT * FROM foo AS a JOIN foo as b USING(x)
+----
+ x
+44
+42
+ 1
+
+query II colnames
+SELECT * FROM foo AS a(x) LEFT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+   x     y
+  44    44
+  42    42
+NULL  NULL
+   1     1
+
+query I colnames
+SELECT * FROM foo AS a LEFT OUTER JOIN foo AS b USING(x)
+----
+   x
+  44
+  42
+NULL
+   1
+
+query II colnames
+SELECT * FROM foo AS a(x) RIGHT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+   x     y
+  44    44
+  42    42
+NULL  NULL
+   1     1
+
+query I colnames
+SELECT * FROM foo AS a RIGHT OUTER JOIN foo AS b USING(x)
+----
+   x
+  44
+  42
+NULL
+   1
+
+statement ok
+CREATE TABLE foob (x INT); INSERT INTO foob(x) VALUES (43),(42),(16)
+
+query II colnames
+SELECT * FROM foo AS a FULL OUTER JOIN foob AS b ON a.x = b.x ORDER BY a.x,b.x
+----
+x    x
+NULL NULL
+NULL 16
+NULL 43
+1    NULL
+42   42
+44   NULL
+
+query I colnames
+SELECT * FROM foo AS a FULL OUTER JOIN foob AS b USING(x) ORDER BY x
+----
+x
+NULL
+1
+16
+42
+43
+44
+
+statement ok
+CREATE TABLE empty (x INT)
+
+query II
+SELECT * FROM foo AS a(x) CROSS JOIN empty AS b(y)
+----
+
+query II
+SELECT * FROM empty AS a CROSS JOIN foo AS b
+----
+
+query II
+SELECT * FROM foo AS a(x) JOIN empty AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM foo AS a JOIN empty AS b USING(x)
+----
+
+query II
+SELECT * FROM empty AS a(x) JOIN foo AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM empty AS a JOIN foo AS b USING(x)
+----
+
+query II colnames
+SELECT * FROM foo AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+x    y
+44   NULL
+42   NULL
+NULL NULL
+1    NULL
+
+query I colnames
+SELECT * FROM foo AS a LEFT OUTER JOIN empty AS b USING(x)
+----
+x
+44
+42
+NULL
+1
+
+query II
+SELECT * FROM empty AS a(x) LEFT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM empty AS a LEFT OUTER JOIN foo AS b USING(x)
+----
+
+query II
+SELECT * FROM foo AS a(x) RIGHT OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM foo AS a RIGHT OUTER JOIN empty AS b USING(x)
+----
+
+query II colnames
+SELECT * FROM empty AS a(x) FULL OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+x    y
+NULL 44
+NULL 42
+NULL NULL
+NULL 1
+
+query I colnames
+SELECT * FROM empty AS a FULL OUTER JOIN foo AS b USING(x)
+----
+x
+44
+42
+NULL
+1
+
+query II colnames
+SELECT * FROM foo AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+x    y
+44   NULL
+42   NULL
+NULL NULL
+1    NULL
+
+query I colnames
+SELECT * FROM foo AS a FULL OUTER JOIN empty AS b USING(x)
+----
+x
+44
+42
+NULL
+1
+
+query II colnames
+SELECT * FROM empty AS a(x) FULL OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+x    y
+NULL 44
+NULL 42
+NULL NULL
+NULL 1
+
+query I colnames
+SELECT * FROM empty AS a FULL OUTER JOIN foo AS b USING(x)
+----
+x
+44
+42
+NULL
+1
+
+statement ok
+CREATE TABLE foo2 (x INT, y INT); INSERT INTO foo2(x, y) VALUES (44,51), (42,52), (NULL,53), (1,54)
+
+# Check column orders and names.
+query IIIIII colnames
+SELECT * FROM (foo CROSS JOIN foo2 JOIN foo AS a(b) ON a.b=foo2.x JOIN foo2 AS c(d,e) ON a.b=c.d AND c.d=foo.x) LIMIT 1
+----
+x  x  y  b  d  e
+44 44 51 44 44 51
+
+# Check EXPLAIN.
+query ITT
+EXPLAIN SELECT * FROM (foo CROSS JOIN foo2 JOIN foo AS a(b) ON a.b=foo2.x JOIN foo2 AS c(d,e) ON a.b=c.d AND c.d=foo.x) LIMIT 1
+----
+0  limit  count: 1
+1  join   INNER ON (a.b = c.d) AND (c.d = foo.x)
+2  join   INNER ON a.b = foo2.x
+3  join   CROSS
+4  scan   foo@primary (max 1 row)
+4  scan   foo2@primary
+3  scan   foo@primary
+2  scan   foo2@primary
+
+# Check sub-queries in ON conditions.
+query III colnames
+SELECT * FROM foo JOIN foo2 ON foo2.x = foo.x AND foo.x IN (SELECT x FROM foo2 WHERE y > 52)
+----
+x    x    y
+1    1    54
+
+# Check sub-queries as data sources.
+query I colnames
+SELECT * FROM foo JOIN (VALUES (1),(2),(3)) AS a(x) USING(x)
+----
+x
+1
+
+query I colnames
+SELECT * FROM foo JOIN (SELECT x + 2 AS x FROM foo) USING(x)
+----
+x
+44
+
+# Check that a single column can have multiple table aliases.
+query IIII colnames
+SELECT * FROM (foo2 AS a JOIN foo2 AS b USING(x) JOIN foo2 AS c USING(x)) LIMIT 1
+----
+x  y  y  y
+44 51 51 51
+
+query IIIIII colnames
+SELECT a.x, b.x, c.x, a.y, b.y, c.y FROM (foo2 AS a JOIN foo2 AS b USING(x) JOIN foo2 AS c USING(x))
+----
+x    x    x    y  y  y
+44   44   44   51 51 51
+42   42   42   52 52 52
+1    1    1    54 54 54
+
+query error column.*in USING clause does not exist
+SELECT * FROM (foo AS a JOIN foo AS b USING(y))
+
+query error column.*appears more than once in USING clause
+SELECT * FROM (foo AS a JOIN foo AS b USING(x, x))
+
+statement ok
+CREATE TABLE nofoo (x TEXT);
+
+query error JOIN/USING types.*cannot be matched
+SELECT * FROM (foo AS a JOIN nofoo AS b USING(x))
+
+query error table name.*specified more than once
+SELECT * FROM (foo JOIN foo USING(x))
+
+query error table name.*specified more than once
+SELECT * FROM (foo JOIN foo2 USING(x) JOIN foo USING(x))
+
+query error column reference.*is ambiguous
+SELECT * FROM (foo AS a JOIN foo AS b ON x > 32)
+
+query error qualified name.*not found
+SELECT * FROM (foo AS a JOIN foo AS b ON a.y > y)
