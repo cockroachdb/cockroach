@@ -99,7 +99,7 @@ EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
 Level  Type     Description
 0      distinct
-1      sort     +y + z
+1      sort     +"y + z"
 2      scan     xyz@foo -
 
 query I

@@ -20,13 +20,13 @@ EXPLAIN SELECT * FROM t
 Level  Type  Description
 0      scan  t@primary
 
-query ITTT colnames
+query ITTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-Level  Type   Description Ordering
-0      select                    +k,unique
-1      render/filter (k, v)@t    +k,unique
-2      scan          t@primary   +k,unique
+Level  Type          Description      Columns Ordering
+0      select                         (k, v)  +k,unique
+1      render/filter from (t.k, t.v)  (k, v)  +k,unique
+2      scan          t@primary        (k, v)  +k,unique
 
 query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -71,13 +71,13 @@ Level  Type     Description
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
-query ITTT colnames
+query ITTTT colnames
 EXPLAIN(VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-Level Type          Description   Ordering
-0     select                      +b
-1     sort          +b            +b
-2     render/filter (a, b)@tc     =a
-3     index-join                  =a,+rowid,unique
-4     scan          tc@c /10-/11  =a,+rowid,unique
-4     scan          tc@primary    +rowid,unique
+Level Type          Description                   Columns               Ordering
+0     select                                      (a, b)                +b
+1     sort          +b                            (a, b)                +b
+2     render/filter from (tc.a, tc.b, *tc.rowid)  (a, b)                =a
+3     index-join                                  (a, b, rowid[hidden]) =a,+rowid,unique
+4     scan          tc@c /10-/11                  (a, b, rowid[hidden]) =a,+rowid,unique
+4     scan          tc@primary                    (a, b, rowid[hidden]) +rowid,unique
