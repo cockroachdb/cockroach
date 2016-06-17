@@ -75,15 +75,10 @@ func TestTimestampRoundtrip(t *testing.T) {
 	CET := time.FixedZone("Europe/Paris", 0)
 	EST := time.FixedZone("America/New_York", 0)
 
-	if actual := parse(formatTs(ts, time.UTC)); !ts.Equal(actual) {
-		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
-	}
-
-	if actual := parse(formatTs(ts, CET)); !ts.Equal(actual) {
-		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
-	}
-	if actual := parse(formatTs(ts, EST)); !ts.Equal(actual) {
-		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
+	for _, tz := range []*time.Location{time.UTC, CET, EST} {
+		if actual := parse(pq.FormatTimestamp(ts.In(tz))); !ts.Equal(actual) {
+			t.Fatalf("[%s]: timestamp did not roundtrip got [%s] expected [%s]", tz, actual, ts)
+		}
 	}
 }
 

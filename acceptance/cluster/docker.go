@@ -211,7 +211,7 @@ func (c *Container) Unpause() error {
 
 // Restart restarts a running container.
 // Container will be killed after 'timeout' seconds if it fails to stop.
-func (c *Container) Restart(timeout time.Duration) error {
+func (c *Container) Restart(timeout *time.Duration) error {
 	var exp []string
 	if ci, err := c.Inspect(); err != nil {
 		return err
@@ -226,7 +226,7 @@ func (c *Container) Restart(timeout time.Duration) error {
 }
 
 // Stop a running container.
-func (c *Container) Stop(timeout time.Duration) error {
+func (c *Container) Stop(timeout *time.Duration) error {
 	if err := c.cluster.client.ContainerStop(context.Background(), c.id, timeout); err != nil {
 		return err
 	}
