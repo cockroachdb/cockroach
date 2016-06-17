@@ -46,7 +46,7 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		t.Fatal("invalid cluster size: ", nodes)
 	}
 	var servers []server.TestServer
-	first := server.StartTestServer(t)
+	first := server.StartMultinodeTestServer(t)
 	servers = append(servers, first)
 	for i := 1; i < nodes; i++ {
 		servers = append(servers, server.StartTestServerJoining(t, first))

@@ -55,9 +55,15 @@ const (
 
 // StartTestServerWithContext starts an in-memory test server.
 // ctx can be nil, in which case a default context will be created.
-func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
+func StartTestServerWithContext(t util.Tester, ctx *Context, isMultinode bool) TestServer {
 	s := TestServer{Ctx: ctx}
-	if err := s.Start(); err != nil {
+	var err error
+	if isMultinode {
+		err = s.StartMultinode()
+	} else {
+		err = s.Start()
+	}
+	if err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
 		} else {
@@ -69,7 +75,12 @@ func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
 
 // StartTestServer starts an in-memory test server.
 func StartTestServer(t util.Tester) TestServer {
-	return StartTestServerWithContext(t, nil)
+	return StartTestServerWithContext(t, nil, false)
+}
+
+// StartMultinodeTestServer starts an in-memory test server configured to accept connections.
+func StartMultinodeTestServer(t util.Tester) TestServer {
+	return StartTestServerWithContext(t, nil, true)
 }
 
 // StartTestServerJoining starts an in-memory test server that attempts to join `other`.
@@ -202,8 +213,13 @@ func (ts *TestServer) DB() *client.DB {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ts *TestServer) Start(isMultinode bool) error {
-	return ts.StartWithStopper(nil, isMultinode)
+func (ts *TestServer) Start() error {
+	return ts.StartWithStopper(nil, false)
+}
+
+// Starts a testserver with parameters anticipating other nodes joining.
+func (ts *TestServer) StartMultinode() error {
+	return ts.StartWithStopper(nil, true)
 }
 
 // StartWithStopper is the same as Start, but allows passing a stopper
