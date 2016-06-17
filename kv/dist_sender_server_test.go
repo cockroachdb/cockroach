@@ -540,7 +540,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		}
 	ctx := server.MakeTestContext()
 	ctx.TestingKnobs.Store = &storeKnobs
-	s := server.StartTestServerWithContext(t, &ctx)
+	s := server.StartTestServerWithContext(t, &ctx, false)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")
 
