@@ -168,26 +168,35 @@ func (e *explainTypesNode) Start() error {
 	return nil
 }
 
+func formatColumns(cols []ResultColumn, printTypes bool) string {
+	var buf bytes.Buffer
+	buf.WriteByte('(')
+	for i, rCol := range cols {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		if rCol.hidden {
+			buf.WriteByte('*')
+		}
+		parser.Name(rCol.Name).Format(&buf, parser.FmtSimple)
+		if printTypes {
+			buf.WriteByte(' ')
+			buf.WriteString(rCol.Typ.Type())
+		}
+	}
+	buf.WriteByte(')')
+	return buf.String()
+}
+
 func populateTypes(v *valuesNode, plan planNode, level int) {
 	name, _, children := plan.ExplainPlan(true)
 
 	// Format the result column types.
-	var colDesc bytes.Buffer
-	colDesc.WriteByte('(')
-	for i, rCol := range plan.Columns() {
-		if i > 0 {
-			colDesc.WriteString(", ")
-		}
-		colDesc.WriteString(parser.Name(rCol.Name).String())
-		colDesc.WriteByte(' ')
-		colDesc.WriteString(rCol.Typ.Type())
-	}
-	colDesc.WriteByte(')')
 	row := parser.DTuple{
 		parser.NewDInt(parser.DInt(level)),
 		parser.NewDString(name),
 		parser.NewDString("result"),
-		parser.NewDString(colDesc.String()),
+		parser.NewDString(formatColumns(plan.Columns(), true)),
 	}
 	v.rows = append(v.rows, row)
 
@@ -230,6 +239,7 @@ func (e *explainPlanNode) expandPlan() error {
 		{Name: "Description", Typ: parser.TypeString},
 	}
 	if e.verbose {
+		columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
 		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
 	}
 	e.results = &valuesNode{columns: columns}
@@ -262,6 +272,7 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) {
 		parser.NewDString(description),
 	}
 	if verbose {
+		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
 		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
 	}
 	v.rows = append(v.rows, row)
