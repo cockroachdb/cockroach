@@ -28,19 +28,24 @@ statement ok
 INSERT INTO t1 (b) VALUES (-1)
 
 statement ok
-CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a > 0), b INT CHECK (b < 0))
+CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a >= 0), b INT CHECK (b <= 0), CHECK (b < a))
 
-statement error pq: failed to satisfy CHECK constraint \(a > 0\)
-INSERT INTO t2 (b) VALUES (-1)
+statement error pq: failed to satisfy CHECK constraint \(a >= 0\)
+INSERT INTO t2 (b) VALUES (-2)
 
 ### Rename column with check constraint
 
-# TODO(seif): On column rename we'll need to rewrite the CHECK expressions
 statement ok
 ALTER TABLE t2 RENAME COLUMN b TO c
 
-statement error pq: qualified name "b" not found
-INSERT INTO t2 (c) VALUES (-1)
+statement error pq: failed to satisfy CHECK constraint \(c <= 0\)
+INSERT INTO t2 (a, c) VALUES (2, 1)
+
+statement error pq: failed to satisfy CHECK constraint \(c < a\)
+INSERT INTO t2 (a, c) VALUES (0, 0)
+
+statement ok
+INSERT INTO t2 (a, c) VALUES (2, -1)
 
 statement ok
 CREATE TABLE t3 (a INT, b INT CHECK (b < a))
