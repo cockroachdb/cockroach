@@ -1,0 +1,154 @@
+statement ok
+CREATE TABLE empty (x INT); CREATE TABLE foo (x INT)
+
+statement ok
+INSERT INTO foo(x) VALUES (44), (42), (NULL), (1)
+
+query II colnames
+SELECT * FROM foo AS a(x) CROSS JOIN foo AS b(y)
+----
+   x     y
+  44    44
+  44    42
+  44  NULL
+  44     1
+  42    44
+  42    42
+  42  NULL
+  42     1
+NULL    44
+NULL    42
+NULL  NULL
+NULL     1
+   1    44
+   1    42
+   1  NULL
+   1     1
+
+query II colnames
+SELECT * FROM foo AS a(x) JOIN foo AS b(y) ON a.x = b.y
+----
+ x  y
+44 44
+42 42
+ 1  1
+
+query I colnames
+SELECT * FROM foo AS a JOIN foo as b USING(x)
+----
+ x
+44
+42
+ 1
+
+query II colnames
+SELECT * FROM foo AS a(x) LEFT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+   x     y
+  44    44
+  42    42
+NULL  NULL
+   1     1
+
+query I colnames
+SELECT * FROM foo AS a LEFT OUTER JOIN foo AS b USING(x)
+----
+   x
+  44
+  42
+NULL
+   1
+
+query II colnames
+SELECT * FROM foo AS a(x) RIGHT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+   x     y
+  44    44
+  42    42
+NULL  NULL
+   1     1
+
+query I colnames
+SELECT * FROM foo AS a RIGHT OUTER JOIN foo AS b USING(x)
+----
+   x
+  44
+  42
+NULL
+   1
+
+query II
+SELECT * FROM foo AS a(x) CROSS JOIN empty AS b(y)
+----
+
+query II
+SELECT * FROM empty AS a CROSS JOIN foo AS b
+----
+
+query II
+SELECT * FROM foo AS a(x) JOIN empty AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM foo AS a JOIN empty AS b USING(x)
+----
+
+query II
+SELECT * FROM empty AS a(x) JOIN foo AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM empty AS a JOIN foo AS b USING(x)
+----
+
+query II colnames
+SELECT * FROM foo AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+x    y
+44   NULL
+42   NULL
+NULL NULL
+1    NULL
+
+query I colnames
+SELECT * FROM foo AS a LEFT OUTER JOIN empty AS b USING(x)
+----
+x
+44
+42
+NULL
+1
+
+query II
+SELECT * FROM empty AS a(x) LEFT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM empty AS a LEFT OUTER JOIN foo AS b USING(x)
+----
+
+query II
+SELECT * FROM foo AS a(x) RIGHT OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM foo AS a RIGHT OUTER JOIN empty AS b USING(x)
+----
+
+query II colnames
+SELECT * FROM empty AS a(x) RIGHT OUTER JOIN foo AS b(y) ON a.x = b.y
+----
+x    y
+NULL 44
+NULL 42
+NULL NULL
+NULL 1
+
+query I colnames
+SELECT * FROM empty AS a RIGHT OUTER JOIN foo AS b USING(x)
+----
+x
+44
+42
+NULL
+1
