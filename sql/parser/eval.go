@@ -2139,3 +2139,13 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 	}
 	return fmt.Sprintf("^(?:%s)$", pattern)
 }
+
+// FindEqualComparisonFunction looks up an overload of the "=" operator
+// for a given pair of input operand types.
+func FindEqualComparisonFunction(leftType, rightType Datum) (func(*EvalContext, Datum, Datum) (DBool, error), bool) {
+	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
+	if found {
+		return fn.fn, true
+	}
+	return nil, false
+}
