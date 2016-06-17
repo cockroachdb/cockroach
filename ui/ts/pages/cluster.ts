@@ -158,7 +158,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("rss"))
                 .title("Memory")
             ).format(Utils.Format.Bytes).title("Memory Usage")
-              .tooltip("The average memory in use across all nodes.")
+              .tooltip("The total memory in use across all nodes.")
           );
 
           this._addChart(
