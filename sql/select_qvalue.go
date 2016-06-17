@@ -25,12 +25,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
 type columnRef struct {
-	table *tableInfo
+	source *dataSourceInfo
 
 	// Index of column (in from.columns).
 	colIdx int
@@ -40,48 +39,12 @@ const invalidColIdx = -1
 
 // get dereferences the columnRef to the resultColumn.
 func (cr columnRef) get() ResultColumn {
-	return cr.table.columns[cr.colIdx]
+	return cr.source.sourceColumns[cr.colIdx]
 }
 
 type qvalResolver struct {
-	tables []*tableInfo
-	qvals  qvalMap
-}
-
-// findColumn looks up the column described by a QualifiedName. The qname will be normalized.
-func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error) {
-
-	ref := columnRef{colIdx: invalidColIdx}
-
-	if err := qname.NormalizeColumnName(); err != nil {
-		return ref, err
-	}
-
-	// We can't resolve stars to a single column.
-	if qname.IsStar() {
-		err := fmt.Errorf("qualified name \"%s\" not found", qname)
-		return ref, err
-	}
-
-	colName := sqlbase.NormalizeName(qname.Column())
-	for _, table := range qt.tables {
-		if qname.Base == "" || sqlbase.EqualName(table.alias, string(qname.Base)) {
-			for idx, col := range table.columns {
-				if sqlbase.NormalizeName(col.Name) == colName {
-					if ref.colIdx != invalidColIdx {
-						return ref, fmt.Errorf("column reference \"%s\" is ambiguous", qname)
-					}
-					ref.table = table
-					ref.colIdx = idx
-				}
-			}
-		}
-	}
-
-	if ref.colIdx == invalidColIdx {
-		return ref, fmt.Errorf("qualified name \"%s\" not found", qname)
-	}
-	return ref, nil
+	sources multiSourceInfo
+	qvals   qvalMap
 }
 
 // qvalue implements the parser.VariableExpr interface and is used as a
@@ -102,6 +65,13 @@ var _ parser.VariableExpr = &qvalue{}
 func (*qvalue) Variable() {}
 
 func (q *qvalue) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	if f == parser.FmtQualify {
+		tableAlias := q.colRef.source.findTableAlias(q.colRef.colIdx)
+		if tableAlias != "" {
+			buf.WriteString(tableAlias)
+			buf.WriteByte('.')
+		}
+	}
 	buf.WriteString(q.colRef.get().Name)
 }
 func (q *qvalue) String() string { return parser.AsString(q) }
@@ -174,7 +144,7 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 	case *parser.QualifiedName:
 		var colRef columnRef
 
-		colRef, v.err = v.qt.findColumn(t)
+		colRef.source, colRef.colIdx, v.err = v.qt.sources.findColumn(t)
 		if v.err != nil {
 			return false, expr
 		}
@@ -225,14 +195,14 @@ func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
 	if s.planner != nil {
 		v = &s.planner.qnameVisitor
 	}
-	return resolveQNames(expr, []*tableInfo{&s.source.info}, s.qvals, v)
+	return resolveQNames(expr, s.sourceInfo, s.qvals, v)
 }
 
 // resolveQNames walks the provided expression and resolves all qualified
 // names using the tableInfo and qvalMap. The function takes an optional
 // qnameVisitor to provide the caller the option of avoiding an allocation.
 func resolveQNames(
-	expr parser.Expr, tables []*tableInfo, qvals qvalMap, v *qnameVisitor,
+	expr parser.Expr, sources multiSourceInfo, qvals qvalMap, v *qnameVisitor,
 ) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
@@ -242,8 +212,8 @@ func resolveQNames(
 	}
 	*v = qnameVisitor{
 		qt: qvalResolver{
-			tables: tables,
-			qvals:  qvals,
+			sources: sources,
+			qvals:   qvals,
 		},
 	}
 	expr, _ = parser.WalkExpr(v, expr)
@@ -251,9 +221,9 @@ func resolveQNames(
 }
 
 // Populates one table's datum fields in the qval map given a row of values.
-func (q qvalMap) populateQVals(table *tableInfo, row parser.DTuple) {
+func (q qvalMap) populateQVals(source *dataSourceInfo, row parser.DTuple) {
 	for ref, qval := range q {
-		if ref.table == table {
+		if ref.source == source {
 			qval.datum = row[ref.colIdx]
 			if qval.datum == nil {
 				panic(fmt.Sprintf("Unpopulated value for column %d", ref.colIdx))

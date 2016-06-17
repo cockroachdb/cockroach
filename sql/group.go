@@ -52,7 +52,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		// We do not need to fully analyze the GROUP BY expression here
 		// (as per analyzeExpr) because this is taken care of by addRender
 		// below.
-		resolved, err := resolveQNames(groupBy[i], []*tableInfo{&s.source.info}, s.qvals, &p.qnameVisitor)
+		resolved, err := resolveQNames(groupBy[i], s.sourceInfo, s.qvals, &p.qnameVisitor)
 		if err != nil {
 			return nil, err
 		}
@@ -74,8 +74,8 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	var typedHaving parser.TypedExpr
 	var err error
 	if n.Having != nil {
-		typedHaving, err = p.analyzeExpr(n.Having.Expr,
-			[]*tableInfo{&s.source.info}, s.qvals, parser.TypeBool, true, "HAVING")
+		typedHaving, err = p.analyzeExpr(n.Having.Expr, s.sourceInfo, s.qvals,
+			parser.TypeBool, true, "HAVING")
 		if err != nil {
 			return nil, err
 		}
