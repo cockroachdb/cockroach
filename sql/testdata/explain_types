@@ -213,10 +213,10 @@ EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 1   render/filter   result     (x int, y int)
 1   render/filter   render 0   (x)[int]
 1   render/filter   render 1   (y)[int]
-2   index-join      result     (x int, y int, rowid int)
-3   scan            result     (x int, y int, rowid int)
+2   index-join      result     (x int, y int, rowid[hidden] int)
+3   scan            result     (x int, y int, rowid[hidden] int)
 3   scan            filter     ((x)[int] < (10)[int])[bool]
-3   scan            result     (x int, y int, rowid int)
+3   scan            result     (x int, y int, rowid[hidden] int)
 3   scan            filter     ((y)[int] > (10)[int])[bool]
 
 query ITTT
@@ -227,7 +227,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 1   render/filter   filter     ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
 1   render/filter   render 0   (x)[int]
 1   render/filter   render 1   (y)[int]
-2   scan            result     (x int, y int, rowid int)
+2   scan            result     (x int, y int, rowid[hidden] int)
 
 query ITTT
 EXPLAIN (TYPES) SELECT $1 + 2 AS a

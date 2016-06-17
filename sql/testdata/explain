@@ -4,21 +4,21 @@ EXPLAIN (PLAN) SELECT 1
 Level  Type  Description
 0      empty -
 
-query ITTT colnames
+query ITTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1
 ----
-Level  Type           Description Ordering
-0      select
-1      render/filter  (1)@
-2      empty           -
+Level  Type           Description    Columns Ordering
+0      select                        ("1")
+1      render/filter  from ()        ("1")
+2      empty          -              ()
 
-query ITTT colnames
+query ITTTT colnames
 EXPLAIN (VERBOSE, PLAN) SELECT 1
 ----
-Level  Type           Description Ordering
-0      select
-1      render/filter  (1)@
-2      empty           -
+Level  Type           Description Columns Ordering
+0      select                     ("1")
+1      render/filter  from ()     ("1")
+2      empty          -           ()
 
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT 1
@@ -61,16 +61,16 @@ statement error unsupported EXPLAIN option
 EXPLAIN (TRACE, UNKNOWN) SELECT 1
 
 # Ensure that tracing results are sorted after gathering
-query ITTT colnames
+query ITTTT colnames
 EXPLAIN(VERBOSE) EXPLAIN(TRACE) SELECT 1
 ----
-Level  Type                  Description   Ordering
-0      select                              +9,+Span Pos
-1      sort                  +9,+Span Pos  +9,+Span Pos
-2      explain               trace
-3      select
-4      render/filter(debug)  (1)@
-5      empty                 -
+Level  Type                  Description    Columns                                                                                      Ordering
+0      select                               ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition) +9,+"Span Pos"
+1      sort                  +9,+"Span Pos" ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition) +9,+"Span Pos"
+2      explain               trace          ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)
+3      select                               (RowIdx, Key, Value, Disposition)
+4      render/filter(debug)  from ()        (RowIdx, Key, Value, Disposition)
+5      empty                 -              ()
 
 # Ensure that all relevant statement types can be explained
 query ITT

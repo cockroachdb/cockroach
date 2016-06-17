@@ -105,14 +105,14 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// render target that matches the column name. This handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY a
-				if err := qname.NormalizeColumnName(); err != nil {
+				colIdx, err := s.source.findUnaliasedColumn(qname)
+				if err != nil {
 					return nil, err
 				}
-				if qname.Table() == "" || sqlbase.EqualName(s.source.info.alias, qname.Table()) {
-					qnameCol := sqlbase.NormalizeName(qname.Column())
+				if colIdx != invalidColIdx {
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
-							if sqlbase.NormalizeName(qval.colRef.get().Name) == qnameCol {
+							if qval.colRef.source == s.source.info && qval.colRef.colIdx == colIdx {
 								index = j
 								break
 							}

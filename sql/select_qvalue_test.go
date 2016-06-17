@@ -32,8 +32,8 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 	sel := &selectNode{}
 	sel.qvals = make(qvalMap)
 	sel.source.plan = scan
-	sel.source.info.alias = desc.Name
-	sel.source.info.columns = scan.Columns()
+	sel.source.info = newSourceInfoForSingleTable(desc.Name, scan.Columns())
+	sel.sourceInfo = multiSourceInfo{sel.source.info}
 
 	return sel
 }
@@ -62,7 +62,7 @@ func TestRetryResolveQNames(t *testing.T) {
 		if len(s.qvals) != 1 {
 			t.Fatalf("%d: expected 1 qvalue, but found %d", i, len(s.qvals))
 		}
-		if _, ok := s.qvals[columnRef{&s.source.info, 0}]; !ok {
+		if _, ok := s.qvals[columnRef{s.source.info, 0}]; !ok {
 			t.Fatalf("%d: unable to find qvalue for column 0 (a)", i)
 		}
 	}

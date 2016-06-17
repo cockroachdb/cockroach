@@ -205,6 +205,7 @@ var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &alterTableNode{}
+var _ planNode = &joinNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
