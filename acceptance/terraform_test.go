@@ -28,7 +28,7 @@ import (
 // useful for testing code changes in the `terrafarm` package.
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
-	f := farmer(t)
+	f := farmer(t, "baby-cluster")
 	defer f.CollectLogs()
 	if err := f.Resize(1, 1); err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestBuildBabyCluster(t *testing.T) {
 // has passed.
 func TestFiveNodesAndWriters(t *testing.T) {
 	deadline := time.After(*flagDuration)
-	f := farmer(t)
+	f := farmer(t, "five-nodes-and-writers")
 	defer f.MustDestroy()
 	const size = 5
 	if err := f.Resize(size, size); err != nil {
