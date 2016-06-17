@@ -119,8 +119,16 @@ a NULL
 query error table "foo" not found
 SELECT foo.* FROM kv
 
-query error "*" with no tables specified is not valid
+query error cannot use "\*" without a FROM clause
 SELECT *
+
+# "*" must expand to zero columns if there are zero columns to select.
+statement ok
+CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
+
+query I
+SELECT 1, * FROM nocols
+----
 
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv

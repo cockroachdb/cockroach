@@ -2573,8 +2573,14 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $2.aliasClause()}
   }
-| joined_table { /* SKIP DOC */ }
-| '(' joined_table ')' alias_clause { unimplemented() }
+| joined_table
+  {
+    $$.val = $1.tblExpr()
+  }
+| '(' joined_table ')' alias_clause
+  {
+   $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), As: $4.aliasClause()}
+  }
 
 // It may seem silly to separate joined_table from table_ref, but there is
 // method in SQL's madness: if you don't do it this way you get reduce- reduce
@@ -2609,11 +2615,11 @@ joined_table:
   }
 | table_ref NATURAL join_type JOIN table_ref
   {
-    $$.val = &JoinTableExpr{Join: astNaturalJoin, Left: $1.tblExpr(), Right: $5.tblExpr()}
+    $$.val = &JoinTableExpr{Join: $3, Left: $1.tblExpr(), Right: $5.tblExpr(), Cond: NaturalJoinCond{}}
   }
 | table_ref NATURAL JOIN table_ref
   {
-    $$.val = &JoinTableExpr{Join: astNaturalJoin, Left: $1.tblExpr(), Right: $4.tblExpr()}
+    $$.val = &JoinTableExpr{Join: astJoin, Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: NaturalJoinCond{}}
   }
 
 alias_clause:
