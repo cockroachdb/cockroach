@@ -23,6 +23,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -31,7 +32,7 @@ type valuesNode struct {
 	n        *parser.ValuesClause
 	p        *planner
 	columns  []ResultColumn
-	ordering columnOrdering
+	ordering sqlbase.ColumnOrdering
 	tuples   [][]parser.TypedExpr
 	rows     []parser.DTuple
 
@@ -200,12 +201,12 @@ func (n *valuesNode) Less(i, j int) bool {
 func (n *valuesNode) ValuesLess(ra, rb parser.DTuple) bool {
 	for _, c := range n.ordering {
 		var da, db parser.Datum
-		if c.direction == encoding.Ascending {
-			da = ra[c.colIdx]
-			db = rb[c.colIdx]
+		if c.Direction == encoding.Ascending {
+			da = ra[c.ColIdx]
+			db = rb[c.ColIdx]
 		} else {
-			da = rb[c.colIdx]
-			db = ra[c.colIdx]
+			da = rb[c.ColIdx]
+			db = ra[c.ColIdx]
 		}
 		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
 		// not sure this always holds as `CASE` expressions can return different
