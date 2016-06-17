@@ -18,7 +18,6 @@ package encoding
 
 import (
 	"bytes"
-	"encoding/binary"
 	"math"
 	"math/rand"
 	"regexp"
@@ -1236,10 +1235,152 @@ func BenchmarkPeekLengthDuration(b *testing.B) {
 }
 
 func BenchmarkEncodeNonsortingVarint(b *testing.B) {
-	bytes := make([]byte, b.N*binary.MaxVarintLen64)
+	bytes := make([]byte, 0, b.N*NonsortingVarintMaxLen)
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bytes = EncodeNonsortingVarint(bytes, rng.Int63())
+	}
+}
+
+func BenchmarkDecodeNonsortingVarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingVarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingVarint(buf, rng.Int63())
+	}
+	var err error
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf, _, _, err = DecodeNonsortingVarint(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// edgeCaseUint64s returns some uint64 edge cases for encodings. Currently:
+// - every power of two
+// - every power of two -1 and +1
+func edgeCaseUint64s() []uint64 {
+	values := []uint64{0, 1, 2}
+	for i := uint(2); i < 64; i++ {
+		x := uint64(1) << i
+		values = append(values, x-1, x, x+1)
+	}
+	values = append(values, math.MaxUint64)
+	return values
+}
+
+// randPowDistributedInt63s returns the requested number of int63s such that the
+// logarithm of the results is evenly distributed.
+func randPowDistributedInt63s(rng *rand.Rand, count int) []int64 {
+	values := make([]int64, count)
+	for i := range values {
+		// 1 << 62 is the largest number that fits in an int63 and 0 digits is
+		// not meaningful.
+		digits := uint(rng.Intn(61)) + 1
+		x := rng.Int63n(int64(1) << digits)
+		for x>>(digits-1) == 0 {
+			// If shifting off digits-1 digits is 0, then we didn't get a big enough
+			// number.
+			x = rng.Int63n(1 << digits)
+		}
+		values[i] = x
+	}
+	return values
+}
+
+func testNonsortingUvarint(t *testing.T, i uint64) {
+	buf := EncodeNonsortingUvarint(nil, i)
+	rem, n, x, err := DecodeNonsortingUvarint(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x != i {
+		t.Fatalf("expected %d got %d", i, x)
+	}
+	if n != len(buf) {
+		t.Fatalf("expected length %d got %d", len(buf), n)
+	}
+	if len(rem) != 0 {
+		t.Fatalf("expected no remaining bytes got %d", len(rem))
+	}
+}
+
+func TestNonsortingUVarint(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+
+	for _, test := range edgeCaseUint64s() {
+		testNonsortingUvarint(t, test)
+	}
+	for _, test := range randPowDistributedInt63s(rng, 1000) {
+		testNonsortingUvarint(t, uint64(test))
+	}
+}
+
+func TestPeekLengthNonsortingUVarint(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+
+	var buf []byte
+	var lengths []int
+	for _, test := range edgeCaseUint64s() {
+		length := len(buf)
+		buf = EncodeNonsortingUvarint(buf, test)
+		lengths = append(lengths, len(buf)-length)
+	}
+	for _, test := range randPowDistributedInt63s(rng, 1000) {
+		length := len(buf)
+		buf = EncodeNonsortingUvarint(buf, uint64(test))
+		lengths = append(lengths, len(buf)-length)
+	}
+
+	for _, length := range lengths {
+		l := PeekLengthNonsortingUvarint(buf)
+		if l != length {
+			t.Fatalf("seed %d: got %d expected %d: %x", seed, l, length, buf[:length])
+		}
+		buf = buf[l:]
+	}
+	if l := PeekLengthNonsortingUvarint(buf); l != 0 {
+		t.Fatalf("expected 0 for empty buffer got %d", l)
+	}
+}
+
+func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+	}
+}
+
+func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+	}
+	var err error
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf, _, _, err = DecodeNonsortingUvarint(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l := PeekLengthNonsortingUvarint(buf)
+		buf = buf[l:]
 	}
 }
