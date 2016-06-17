@@ -1010,6 +1010,10 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 	}
 }
 
+// NonsortingVarintMaxLen is the maximum length of an EncodeNonsortingVarint
+// encoded value.
+const NonsortingVarintMaxLen = binary.MaxVarintLen64
+
 // EncodeNonsortingVarint encodes an int value using encoding/binary, appends it
 // to the supplied buffer, and returns the final buffer.
 func EncodeNonsortingVarint(appendTo []byte, x int64) []byte {
@@ -1020,11 +1024,73 @@ func EncodeNonsortingVarint(appendTo []byte, x int64) []byte {
 }
 
 // DecodeNonsortingVarint decodes a value encoded by EncodeNonsortingVarint. It
-// returns the length and value.
-func DecodeNonsortingVarint(b []byte) ([]byte, int, int64, error) {
-	i, n := binary.Varint(b)
-	if n <= 0 {
-		return nil, 0, 0, fmt.Errorf("int64 varint decoding failed: %d", n)
+// returns the length of the encoded varint and value.
+func DecodeNonsortingVarint(b []byte) (remaining []byte, length int, value int64, err error) {
+	value, length = binary.Varint(b)
+	if length <= 0 {
+		return nil, 0, 0, fmt.Errorf("int64 varint decoding failed: %d", length)
 	}
-	return b[n:], n, i, nil
+	return b[length:], length, value, nil
+}
+
+// NonsortingUvarintMaxLen is the maximum length of an EncodeNonsortingUvarint
+// encoded value.
+const NonsortingUvarintMaxLen = 10
+
+// EncodeNonsortingUvarint encodes a uint64, appends it to the supplied buffer,
+// and returns the final buffer. The encoding used is similar to
+// encoding/binary, but with the most significant bits first:
+// - Unsigned integers are serialized 7 bits at a time, starting with the
+//   most significant bits.
+// - The most significant bit (msb) in each output byte indicates if there
+//   is a continuation byte (msb = 1).
+func EncodeNonsortingUvarint(appendTo []byte, x uint64) []byte {
+	switch {
+	case x < (1 << 7):
+		return append(appendTo, byte(x))
+	case x < (1 << 14):
+		return append(appendTo, 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 21):
+		return append(appendTo, 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 28):
+		return append(appendTo, 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 35):
+		return append(appendTo, 0x80|byte(x>>28), 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 42):
+		return append(appendTo, 0x80|byte(x>>35), 0x80|byte(x>>28), 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 49):
+		return append(appendTo, 0x80|byte(x>>42), 0x80|byte(x>>35), 0x80|byte(x>>28), 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 56):
+		return append(appendTo, 0x80|byte(x>>49), 0x80|byte(x>>42), 0x80|byte(x>>35), 0x80|byte(x>>28), 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	case x < (1 << 63):
+		return append(appendTo, 0x80|byte(x>>56), 0x80|byte(x>>49), 0x80|byte(x>>42), 0x80|byte(x>>35), 0x80|byte(x>>28), 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	default:
+		return append(appendTo, 0x80|byte(x>>63), 0x80|byte(x>>56), 0x80|byte(x>>49), 0x80|byte(x>>42), 0x80|byte(x>>35), 0x80|byte(x>>28), 0x80|byte(x>>21), 0x80|byte(x>>14), 0x80|byte(x>>7), 0x7f&byte(x))
+	}
+}
+
+// DecodeNonsortingUvarint decodes a value encoded by EncodeNonsortingUvarint. It
+// returns the length and value.
+func DecodeNonsortingUvarint(buf []byte) (remaining []byte, length int, value int64, err error) {
+	// TODO(dan): Handle overflow.
+	var x uint64
+	for i, b := range buf {
+		x <<= 7
+		x += uint64(b & 0x7f)
+		if b < 0x80 {
+			return buf[i+1:], i + 1, x, nil
+		}
+	}
+	return buf, 0, 0, nil
+}
+
+// PeekLengthNonsortingUvarint returns the length of the value that starts at
+// the beginning of buf and was encoded by EncodeNonsortingUvarint.
+func PeekLengthNonsortingUvarint(buf []byte) int {
+	for i, b := range buf {
+		if b&0x80 == 0 {
+			return i + 1
+		}
+	}
+	return 0
 }
