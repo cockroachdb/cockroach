@@ -819,6 +819,13 @@ func (r *Replica) State() storagebase.RangeInfo {
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.pendingCmds))
+
+	if diskState, err := loadState(r.store.Engine(), r.mu.state.Desc); err != nil {
+		log.Warning(err)
+	} else if !reflect.DeepEqual(diskState, ri.ReplicaState) {
+		log.Warningf("on-disk and in-memory state diverged:\n%+v\n%+v", diskState, ri.ReplicaState)
+	}
+
 	return ri
 }
 

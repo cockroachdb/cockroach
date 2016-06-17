@@ -135,6 +135,9 @@ func (tc *testContext) Start(t testing.TB) {
 // StartWithStoreContext initializes the test context with a single
 // range covering the entire keyspace.
 func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
+	if tc.bootstrapMode == bootstrapRangeOnly {
+		t.Skip("you are broken")
+	}
 	tc.TB = t
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
@@ -340,6 +343,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 // order to properly resolve addresses for local keys.
 func TestReplicaContains(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("should not create a random replica which isn't properly inited")
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
@@ -529,6 +533,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 
 	key := roachpb.RKey("a")
 	firstRng := tc.store.LookupReplica(key, nil)
+	log.Warningf("begin")
 	newRng := splitTestRange(tc.store, key, key, t)
 	if pErr := newRng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
