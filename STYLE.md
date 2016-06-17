@@ -55,3 +55,13 @@ Exception when omitting repeated types for consecutive arguments:
 short and related arguments (e.g. `start, end int64`) should either go on the same line
 or the type should be repeated on each line -- no argument should appear by itself
 on a line with no type (confusing and brittle when edited).
+
+## Protobuf IDLs
+See Google's [suggested rules](https://developers.google.com/protocol-buffers/docs/proto#updating)
+when modifying protos, namely:
+  * Never change the type in place
+  * Never simply delete a field -- always replace it with a `reserved ID`
+  * As an alternative to replacing a field with `reserved`, prefixing the name with `OBSOLETE_`
+  can be used to signal deprecation (while still allowing printing in debugging, etc).
+  When doing so, it is safe to change the type of an embedded message to `bytes`,
+  allowing the message definition to be deleted.
