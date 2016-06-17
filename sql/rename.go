@@ -359,6 +359,33 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, fmt.Errorf("column name %q already exists", newColName)
 	}
 
+	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+		if qname, ok := expr.(*parser.QualifiedName); ok {
+			if err := qname.NormalizeColumnName(); err != nil {
+				return err, false, nil
+			}
+			if qname.Column() == colName {
+				qname.Indirect[0] = parser.NameIndirection(newColName)
+				qname.ClearString()
+			}
+			return nil, false, qname
+		}
+		return nil, true, expr
+	}
+
+	for i := range tableDesc.Checks {
+		raw, err := parser.ParseExprTraditional(tableDesc.Checks[i].Expr)
+		if err != nil {
+			return nil, err
+		}
+		expr, err := parser.SimpleVisit(raw, preFn)
+		if err != nil {
+			return nil, err
+		}
+		if after := expr.String(); after != tableDesc.Checks[i].Expr {
+			tableDesc.Checks[i].Expr = after
+		}
+	}
 	// Rename the column in the indexes.
 	tableDesc.RenameColumn(column.ID, newColName)
 	column.Name = newColName
