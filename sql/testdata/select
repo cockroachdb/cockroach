@@ -119,7 +119,7 @@ a NULL
 query error table "foo" not found
 SELECT foo.* FROM kv
 
-query error "*" with no tables specified is not valid
+query error cannot use "\*" without a data source
 SELECT *
 
 query error "kv.*" cannot be aliased

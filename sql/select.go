@@ -22,30 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 )
-
-// tableInfo contains the information for table used by a select statement. It can be an actual
-// table, or a "virtual table" which is the result of a subquery.
-type tableInfo struct {
-	// alias (if no alias is given and the source is a table, this is the table name)
-	alias string
-
-	// resultColumns which match the node.Columns() 1-to-1. However the column names might be
-	// different if the statement renames them using AS.
-	columns []ResultColumn
-}
-
-// tableSource contains the tableInfo and planNode for a data source
-// for selectNode.
-type tableSource struct {
-	// info containing the result columns and the table alias for qname resolution.
-	info tableInfo
-
-	// plan which can be used to retrieve the data (normally a scanNode). For performance purposes,
-	// this node can be aware of the filters, grouping etc.
-	plan planNode
-}
 
 // selectNode encapsulates the core logic of a select statement: retrieving filtered results from
 // the sources. Grouping, sorting, distinct and limits are implemented on top of this node (as
@@ -60,7 +37,13 @@ type selectNode struct {
 	// source describes where the data is coming from.
 	// populated initially by initFrom().
 	// potentially modified by index selection.
-	source tableSource
+	source planDataSource
+
+	// sourceInfo contains the reference to the dataSourceInfo in the
+	// source planDataSource that is needed for qname resolution.
+	// We keep one instance of multiSourceInfo cached here so as to avoid
+	// re-creating it every time analyzeExpr() is called in addRender().
+	sourceInfo multiSourceInfo
 
 	// Map of qvalues encountered in expressions.
 	// populated by addRender() / checkRenderStar()
@@ -163,7 +146,7 @@ func (s *selectNode) Next() (bool, error) {
 			}
 		}
 		row := s.source.plan.Values()
-		s.qvals.populateQVals(&s.source.info, row)
+		s.qvals.populateQVals(s.source.info, row)
 		passesFilter, err := sqlbase.RunFilter(s.filter, &s.planner.evalCtx)
 		if err != nil {
 			return false, err
@@ -204,14 +187,20 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "(")
-	for i, col := range s.columns {
+
+	buf.WriteString("from (")
+	for i, col := range s.source.info.sourceColumns {
 		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
+		if col.hidden {
+			buf.WriteByte('*')
+		}
+		parser.Name(s.source.info.findTableAlias(i)).Format(&buf, parser.FmtSimple)
+		buf.WriteByte('.')
+		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 	}
-	fmt.Fprintf(&buf, ")@%s", s.source.info.alias)
+	buf.WriteByte(')')
 
 	name = "render/filter"
 	if s.explain != explainNone {
@@ -302,7 +291,7 @@ func (p *planner) SelectClause(
 
 	s.qvals = make(qvalMap)
 
-	if err := s.initFrom(p, parsed, scanVisibility); err != nil {
+	if err := s.initFrom(parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
@@ -370,9 +359,9 @@ func (s *selectNode) expandPlan() error {
 		// Find the set of columns that we actually need values for. This is an
 		// optimization to avoid unmarshaling unnecessary values and is also
 		// used for index selection.
-		neededCols := make([]bool, len(s.source.info.columns))
+		neededCols := make([]bool, len(s.source.info.sourceColumns))
 		for i := range neededCols {
-			_, ok := s.qvals[columnRef{&s.source.info, i}]
+			_, ok := s.qvals[columnRef{s.source.info, i}]
 			neededCols[i] = ok
 		}
 		scan.setNeededColumns(neededCols)
@@ -380,7 +369,7 @@ func (s *selectNode) expandPlan() error {
 		// Compute a filter expression for the scan node.
 		convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
 			qval := expr.(*qvalue)
-			if qval.colRef.table != &s.source.info {
+			if qval.colRef.source != s.source.info {
 				// TODO(radu): when we will support multiple tables, this
 				// will be a valid case.
 				panic("scan qvalue refers to unknown table")
@@ -440,80 +429,13 @@ func (s *selectNode) expandPlan() error {
 }
 
 // initFrom initializes the table node, given the parsed select expression
-func (s *selectNode) initFrom(
-	p *planner, parsed *parser.SelectClause, scanVisibility scanVisibility,
-) error {
-	from := parsed.From
-	var colAlias parser.NameList
-	var err error
-	switch len(from) {
-	case 0:
-		s.source.plan = &emptyNode{results: true}
-
-	case 1:
-		ate, ok := from[0].(*parser.AliasedTableExpr)
-		if !ok {
-			return util.UnimplementedWithIssueErrorf(2970, "unsupported FROM type %T", from[0])
-		}
-		// AS OF expressions should be handled by the executor.
-		if ate.AsOf.Expr != nil && !p.asOf {
-			return fmt.Errorf("unexpected AS OF SYSTEM TIME")
-		}
-
-		switch expr := ate.Expr.(type) {
-		case *parser.QualifiedName:
-			// Usual case: a table.
-			scan := p.Scan()
-			s.source.info.alias, err = scan.initTable(p, expr, ate.Hints, scanVisibility)
-			if err != nil {
-				return err
-			}
-			s.source.plan = scan
-
-		case *parser.Subquery:
-			// We have a subquery (this includes a simple "VALUES").
-			if ate.As.Alias == "" {
-				return fmt.Errorf("subquery in FROM must have an alias")
-			}
-
-			s.source.plan, err = p.newPlan(expr.Select, nil, false)
-			if err != nil {
-				return err
-			}
-
-		default:
-			panic(fmt.Sprintf("unexpected SimpleTableExpr type: %T", expr))
-		}
-
-		if ate.As.Alias != "" {
-			// If an alias was specified, use that.
-			s.source.info.alias = string(ate.As.Alias)
-		}
-		colAlias = ate.As.Cols
-	default:
-		return util.UnimplementedWithIssueErrorf(2970, "JOINs and SELECTs from multiple tables "+
-			"are not yet supported: %s", from)
+func (s *selectNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVisibility) error {
+	src, err := s.planner.getSources(parsed.From, scanVisibility)
+	if err != nil {
+		return err
 	}
-
-	s.source.info.columns = s.source.plan.Columns()
-	if len(colAlias) > 0 {
-		// Make a copy of the slice since we are about to modify the contents.
-		s.source.info.columns = append([]ResultColumn(nil), s.source.info.columns...)
-
-		// The column aliases can only refer to explicit columns.
-		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
-			if colIdx >= len(s.source.info.columns) {
-				return util.Errorf(
-					"table \"%s\" has %d columns available but %d columns specified",
-					s.source.info.alias, aliasIdx, len(colAlias))
-			}
-			if s.source.info.columns[colIdx].hidden {
-				continue
-			}
-			s.source.info.columns[colIdx].Name = string(colAlias[aliasIdx])
-			aliasIdx++
-		}
-	}
+	s.source = src
+	s.sourceInfo = multiSourceInfo{s.source.info}
 	return nil
 }
 
@@ -546,7 +468,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	}
 
 	var err error
-	s.filter, err = s.planner.analyzeExpr(where.Expr, []*tableInfo{&s.source.info}, s.qvals,
+	s.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, s.qvals,
 		parser.TypeBool, true, "WHERE")
 	if err != nil {
 		return err
@@ -566,7 +488,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 // "*" into a list of columns. The qvalMap is updated to include all the relevant columns. A
 // ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
-	target parser.SelectExpr, table *tableInfo, qvals qvalMap,
+	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
 ) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
 	qname, ok := target.Expr.(*parser.QualifiedName)
 	if !ok {
@@ -579,27 +501,12 @@ func checkRenderStar(
 		return false, nil, nil, nil
 	}
 
-	if table.alias == "" {
-		return false, nil, nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
-	}
 	if target.As != "" {
 		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
 	}
 
-	// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
-	if tableName := qname.Table(); tableName != "" && !sqlbase.EqualName(table.alias, tableName) {
-		return false, nil, nil, fmt.Errorf("table \"%s\" not found", tableName)
-	}
-
-	for idx, col := range table.columns {
-		if col.hidden {
-			continue
-		}
-		qval := qvals.getQVal(columnRef{table, idx})
-		columns = append(columns, ResultColumn{Name: col.Name, Typ: qval.datum})
-		exprs = append(exprs, qval)
-	}
-	return true, columns, exprs, nil
+	columns, exprs, err = src.expandStar(qname, qvals)
+	return true, columns, exprs, err
 }
 
 // getRenderColName returns the output column name for a render expression.
@@ -618,7 +525,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// outputName will be empty if the target is not aliased.
 	outputName := string(target.As)
 
-	if isStar, cols, typedExprs, err := checkRenderStar(target, &s.source.info, s.qvals); err != nil {
+	if isStar, cols, typedExprs, err := checkRenderStar(target, s.source.info, s.qvals); err != nil {
 		return err
 	} else if isStar {
 		s.columns = append(s.columns, cols...)
@@ -631,8 +538,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// manipulations to the expression.
 	outputName = getRenderColName(target)
 
-	normalized, err := s.planner.analyzeExpr(target.Expr,
-		[]*tableInfo{&s.source.info}, s.qvals, desiredType, false, "")
+	normalized, err := s.planner.analyzeExpr(target.Expr, s.sourceInfo, s.qvals, desiredType, false, "")
 	if err != nil {
 		return err
 	}
@@ -709,7 +615,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v, but since k is an exact match
 	// column the results are also ordered just by v.
 	for colIdx := range fromOrder.exactMatchCols {
-		colRef := columnRef{&s.source.info, colIdx}
+		colRef := columnRef{s.source.info, colIdx}
 		if renderIdx, ok := s.findRenderIndexForCol(colRef); ok {
 			ordering.addExactMatchColumn(renderIdx)
 		}
@@ -724,7 +630,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v. We cannot make any use of this
 	// ordering as an ordering on v.
 	for _, colOrder := range fromOrder.ordering {
-		colRef := columnRef{&s.source.info, colOrder.ColIdx}
+		colRef := columnRef{s.source.info, colOrder.ColIdx}
 		renderIdx, ok := s.findRenderIndexForCol(colRef)
 		if !ok {
 			return ordering
