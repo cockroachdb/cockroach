@@ -43,7 +43,9 @@ type Session struct {
 	// Info about the open transaction (if any).
 	TxnState txnState
 
-	planner planner
+	planner            planner
+	PreparedStatements PreparedStatements
+	PreparedPortals    PreparedPortals
 
 	Location              *time.Location
 	DefaultIsolationLevel enginepb.IsolationType
@@ -59,24 +61,28 @@ type SessionArgs struct {
 // NewSession creates and initializes new Session object.
 // remote can be nil.
 func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
-	s := Session{Location: time.UTC}
-	s.Database = args.Database
-	s.User = args.User
+	s := &Session{
+		Database: args.Database,
+		User:     args.User,
+		Location: time.UTC,
+	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
 		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
 		databaseCache: cache,
-		session:       &s,
+		session:       s,
 		execCtx:       &e.ctx,
 	}
+	s.PreparedStatements = makePreparedStatements(s)
+	s.PreparedPortals = makePreparedPortals(s)
 	remoteStr := ""
 	if remote != nil {
 		remoteStr = remote.String()
 	}
 	s.Trace = trace.New("sql."+args.User, remoteStr)
 	s.Trace.SetMaxEvents(100)
-	return &s
+	return s
 }
 
 // Finish releases resources held by the Session.
