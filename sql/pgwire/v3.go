@@ -93,21 +93,15 @@ const (
 	authOK int32 = 0
 )
 
-// preparedStatement is a SQL statement that has been parsed and the types
-// of arguments and results have been determined.
-type preparedStatement struct {
-	query       string
-	sqlTypes    parser.PlaceholderTypes
-	inTypes     []oid.Oid
-	columns     []sql.ResultColumn
-	portalNames map[string]struct{}
+// preparedStatementMeta is pgwire-specific metadata which is attached to each
+// sql.PreparedStatement on a v3Conn's sql.Session.
+type preparedStatementMeta struct {
+	inTypes []oid.Oid
 }
 
-// preparedPortal is a preparedStatement that has been bound with query arguments.
-type preparedPortal struct {
-	stmt       preparedStatement
-	stmtName   string
-	qargs      parser.QueryArguments
+// preparedPortalMeta is pgwire-specific metadata which is attached to each
+// sql.PreparedPortal on a v3Conn's sql.Session.
+type preparedPortalMeta struct {
 	outFormats []formatCode
 }
 
@@ -121,9 +115,6 @@ type v3Conn struct {
 	tagBuf   [64]byte
 	session  *sql.Session
 
-	preparedStatements map[string]preparedStatement
-	preparedPortals    map[string]preparedPortal
-
 	// The logic governing these guys is hairy, and is not sufficiently
 	// specified in documentation. Consult the sources before you modify:
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
@@ -136,15 +127,13 @@ func makeV3Conn(
 	conn net.Conn, executor *sql.Executor,
 	metrics *serverMetrics, sessionArgs sql.SessionArgs) v3Conn {
 	return v3Conn{
-		conn:               conn,
-		rd:                 bufio.NewReader(conn),
-		wr:                 bufio.NewWriter(conn),
-		executor:           executor,
-		writeBuf:           writeBuffer{bytecount: metrics.bytesOutCount},
-		preparedStatements: make(map[string]preparedStatement),
-		preparedPortals:    make(map[string]preparedPortal),
-		metrics:            metrics,
-		session:            sql.NewSession(sessionArgs, executor, conn.RemoteAddr()),
+		conn:     conn,
+		rd:       bufio.NewReader(conn),
+		wr:       bufio.NewWriter(conn),
+		executor: executor,
+		writeBuf: writeBuffer{bytecount: metrics.bytesOutCount},
+		metrics:  metrics,
+		session:  sql.NewSession(sessionArgs, executor, conn.RemoteAddr()),
 	}
 }
 
@@ -338,7 +327,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	}
 	// The unnamed prepared statement can be freely overwritten.
 	if name != "" {
-		if _, ok := c.preparedStatements[name]; ok {
+		if c.session.PreparedStatements.Exists(name) {
 			return c.sendInternalError(fmt.Sprintf("prepared statement %q already exists", name))
 		}
 	}
@@ -363,7 +352,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	// Prepare the mapping of SQL placeholder names to
 	// types. Pre-populate it with the type hints received from the
 	// client, if any.
-	sqlTypes := make(parser.PlaceholderTypes)
+	sqlTypeHints := make(parser.PlaceholderTypes)
 	for i, t := range inTypeHints {
 		if t == 0 {
 			continue
@@ -372,16 +361,16 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
 		}
-		sqlTypes[fmt.Sprint(i+1)] = v
+		sqlTypeHints[fmt.Sprint(i+1)] = v
 	}
-	// Prepare the query. This completes typing the placeholders.
-	cols, err := c.executor.Prepare(ctx, query, c.session, sqlTypes)
+	// Create the new PreparedStatement in the connection's Session.
+	stmt, err := c.session.PreparedStatements.New(ctx, c.executor, name, query, sqlTypeHints)
 	if err != nil {
 		return c.sendError(err)
 	}
 	// Convert the inferred SQL types back to an array of pgwire Oids.
-	inTypes := make([]oid.Oid, 0, len(sqlTypes))
-	for k := range sqlTypes {
+	inTypes := make([]oid.Oid, 0, len(stmt.SQLTypes))
+	for k, t := range stmt.SQLTypes {
 		i, err := strconv.Atoi(k)
 		if err != nil || i < 1 {
 			return c.sendInternalError(fmt.Sprintf("invalid placeholder name: $%s", k))
@@ -403,26 +392,20 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if inTypes[i] != 0 {
 			continue
 		}
-		t, _ := sqlTypes[k]
 		id, ok := datumToOid[reflect.TypeOf(t)]
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", t.Type()))
 		}
 		inTypes[i] = id
 	}
-	for i := range inTypes {
-		if inTypes[i] == 0 {
+	for i, t := range inTypes {
+		if t == 0 {
 			return c.sendInternalError(
 				fmt.Sprintf("could not determine data type of placeholder $%d", i+1))
 		}
 	}
-	c.preparedStatements[name] = preparedStatement{
-		query:       query,
-		sqlTypes:    sqlTypes,
-		inTypes:     inTypes,
-		portalNames: make(map[string]struct{}),
-		columns:     cols,
-	}
+	// Attach pgwire-specific metadata to the PreparedStatement.
+	stmt.ProtocolMeta = preparedStatementMeta{inTypes: inTypes}
 	c.writeBuf.initMsg(serverMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
@@ -438,31 +421,30 @@ func (c *v3Conn) handleDescribe(buf *readBuffer) error {
 	}
 	switch typ {
 	case prepareStatement:
-		stmt, ok := c.preparedStatements[name]
+		stmt, ok := c.session.PreparedStatements.Get(name)
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", name))
 		}
+
+		stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
 		c.writeBuf.initMsg(serverMsgParameterDescription)
-		c.writeBuf.putInt16(int16(len(stmt.inTypes)))
-		for _, t := range stmt.inTypes {
+		c.writeBuf.putInt16(int16(len(stmtMeta.inTypes)))
+		for _, t := range stmtMeta.inTypes {
 			c.writeBuf.putInt32(int32(t))
 		}
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
 			return err
 		}
 
-		return c.sendRowDescription(stmt.columns, nil)
+		return c.sendRowDescription(stmt.Columns, nil)
 	case preparePortal:
-		prtl, ok := c.preparedPortals[name]
+		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown portal %q", name))
 		}
-		stmt, ok := c.preparedStatements[prtl.stmtName]
-		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", name))
-		}
 
-		return c.sendRowDescription(stmt.columns, prtl.outFormats)
+		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
+		return c.sendRowDescription(portal.Stmt.Columns, portalMeta.outFormats)
 	default:
 		return util.Errorf("unknown describe type: %s", typ)
 	}
@@ -479,19 +461,9 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 	}
 	switch typ {
 	case prepareStatement:
-		if stmt, ok := c.preparedStatements[name]; ok {
-			for portalName := range stmt.portalNames {
-				delete(c.preparedPortals, portalName)
-			}
-		}
-		delete(c.preparedStatements, name)
+		c.session.PreparedStatements.Delete(name)
 	case preparePortal:
-		if prtl, ok := c.preparedPortals[name]; ok {
-			if stmt, ok := c.preparedStatements[prtl.stmtName]; ok {
-				delete(stmt.portalNames, name)
-			}
-		}
-		delete(c.preparedPortals, name)
+		c.session.PreparedPortals.Delete(name)
 	default:
 		return util.Errorf("unknown close type: %s", typ)
 	}
@@ -505,7 +477,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	}
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {
-		if _, ok := c.preparedPortals[portalName]; ok {
+		if c.session.PreparedPortals.Exists(portalName) {
 			return c.sendInternalError(fmt.Sprintf("portal %q already exists", portalName))
 		}
 	}
@@ -513,12 +485,13 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	stmt, ok := c.preparedStatements[statementName]
+	stmt, ok := c.session.PreparedStatements.Get(statementName)
 	if !ok {
 		return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", statementName))
 	}
 
-	numQArgs := int16(len(stmt.inTypes))
+	stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
+	numQArgs := int16(len(stmtMeta.inTypes))
 	qArgFormatCodes := make([]formatCode, numQArgs)
 	// From the docs on number of argument format codes to bind:
 	// This can be zero to indicate that there are no arguments or that the
@@ -563,7 +536,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		return c.sendInternalError(fmt.Sprintf("expected %d arguments, got %d", numQArgs, numValues))
 	}
 	qargs := parser.QueryArguments{}
-	for i, t := range stmt.inTypes {
+	for i, t := range stmtMeta.inTypes {
 		plen, err := buf.getInt32()
 		if err != nil {
 			return err
@@ -585,7 +558,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		qargs[k] = d
 	}
 
-	numColumns := int16(len(stmt.columns))
+	numColumns := int16(len(stmt.Columns))
 	columnFormatCodes := make([]formatCode, numColumns)
 
 	// From the docs on number of result-column format codes to bind:
@@ -623,13 +596,10 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	default:
 		return c.sendInternalError(fmt.Sprintf("expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
 	}
-	stmt.portalNames[portalName] = struct{}{}
-	c.preparedPortals[portalName] = preparedPortal{
-		stmt:       stmt,
-		stmtName:   statementName,
-		qargs:      qargs,
-		outFormats: columnFormatCodes,
-	}
+	// Create the new PreparedPortal in the connection's Session.
+	portal := c.session.PreparedPortals.New(portalName, stmt, qargs)
+	// Attach pgwire-specific metadata to the PreparedPortal.
+	portal.ProtocolMeta = preparedPortalMeta{outFormats: columnFormatCodes}
 	c.writeBuf.initMsg(serverMsgBindComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
@@ -639,7 +609,7 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	portal, ok := c.preparedPortals[portalName]
+	portal, ok := c.session.PreparedPortals.Get(portalName)
 	if !ok {
 		return c.sendInternalError(fmt.Sprintf("unknown portal %q", portalName))
 	}
@@ -648,12 +618,14 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 		return err
 	}
 
+	stmt := portal.Stmt
+	portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
 	pinfo := parser.PlaceholderInfo{
-		Types:  portal.stmt.sqlTypes,
-		Values: portal.qargs,
+		Types:  stmt.SQLTypes,
+		Values: portal.Qargs,
 	}
 
-	return c.executeStatements(ctx, portal.stmt.query, &pinfo, portal.outFormats, false, limit)
+	return c.executeStatements(ctx, stmt.Query, &pinfo, portalMeta.outFormats, false, limit)
 }
 
 func (c *v3Conn) executeStatements(
