@@ -88,6 +88,82 @@ func TestEncDatum(t *testing.T) {
 	}
 }
 
+// checkEncDatumCmp encodes the given values using the given encodings,
+// creates EncDatums from those encodings and verifies the Compare result on
+// those encodings. It also checks if the Compare resulted in decoding or not.
+func checkEncDatumCmp(
+	t *testing.T,
+	a *DatumAlloc,
+	v1, v2 *EncDatum,
+	enc1, enc2 DatumEncoding,
+	expectedCmp int,
+	requiresDecode bool,
+) {
+	buf1, err := v1.Encode(a, enc1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf2, err := v2.Encode(a, enc2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec1 := &EncDatum{}
+	dec1.SetEncoded(v1.Type, enc1, buf1)
+
+	dec2 := &EncDatum{}
+	dec2.SetEncoded(v2.Type, enc2, buf2)
+
+	if val, err := dec1.Compare(a, dec2); err != nil {
+		t.Fatal(err)
+	} else if val != expectedCmp {
+		t.Errorf("comparing %s (%s), %s (%s) resulted in %d, expected %d",
+			v1, enc1, v2, enc2, val, expectedCmp)
+	}
+
+	if requiresDecode {
+		if dec1.Datum == nil || dec2.Datum == nil {
+			t.Errorf("comparing %s (%s), %s (%s) did not require decoding", v1, enc1, v2, enc2)
+		}
+	} else {
+		if dec1.Datum != nil || dec2.Datum != nil {
+			t.Errorf("comparing %s (%s), %s (%s) required decoding", v1, enc1, v2, enc2)
+		}
+	}
+}
+
+func TestEncDatumCompare(t *testing.T) {
+	a := &DatumAlloc{}
+	v1 := &EncDatum{}
+	v1.SetDatum(ColumnType_INT, parser.NewDInt(1))
+	v2 := &EncDatum{}
+	v2.SetDatum(ColumnType_INT, parser.NewDInt(2))
+
+	if val, err := v1.Compare(a, v2); err != nil {
+		t.Fatal(err)
+	} else if val != -1 {
+		t.Errorf("compare(1, 2) = %d", val)
+	}
+
+	asc := DatumEncoding_ASCENDING_KEY
+	desc := DatumEncoding_DESCENDING_KEY
+	noncmp := DatumEncoding_VALUE
+
+	checkEncDatumCmp(t, a, v1, v2, asc, asc, -1, false)
+	checkEncDatumCmp(t, a, v2, v1, asc, asc, +1, false)
+	checkEncDatumCmp(t, a, v1, v1, asc, asc, 0, false)
+	checkEncDatumCmp(t, a, v2, v2, asc, asc, 0, false)
+
+	checkEncDatumCmp(t, a, v1, v2, desc, desc, -1, false)
+	checkEncDatumCmp(t, a, v2, v1, desc, desc, +1, false)
+	checkEncDatumCmp(t, a, v1, v1, desc, desc, 0, false)
+	checkEncDatumCmp(t, a, v2, v2, desc, desc, 0, false)
+
+	checkEncDatumCmp(t, a, v1, v2, noncmp, noncmp, -1, true)
+	checkEncDatumCmp(t, a, v2, v1, desc, noncmp, +1, true)
+	checkEncDatumCmp(t, a, v1, v1, asc, desc, 0, true)
+	checkEncDatumCmp(t, a, v2, v2, desc, asc, 0, true)
+}
+
 func TestEncDatumFromBuffer(t *testing.T) {
 	var alloc DatumAlloc
 	rng, _ := randutil.NewPseudoRand()

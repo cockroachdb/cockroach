@@ -174,6 +174,30 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 	}
 }
 
+// Compare returns:
+//    -1 if the receiver is less than rhs,
+//    0  if the receiver is equal to rhs,
+//    +1 if the receiver is greater than rhs.
+func (ed *EncDatum) Compare(a *DatumAlloc, rhs *EncDatum) (int, error) {
+	// TODO(radu): if we have both the Datum and a key encoding available, which
+	// one would be faster to use?
+	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
+		switch ed.encoding {
+		case DatumEncoding_ASCENDING_KEY:
+			return bytes.Compare(ed.encoded, rhs.encoded), nil
+		case DatumEncoding_DESCENDING_KEY:
+			return bytes.Compare(rhs.encoded, ed.encoded), nil
+		}
+	}
+	if err := ed.Decode(a); err != nil {
+		return 0, err
+	}
+	if err := rhs.Decode(a); err != nil {
+		return 0, err
+	}
+	return ed.Datum.Compare(rhs.Datum), nil
+}
+
 // EncDatumRow is a row of EncDatums.
 type EncDatumRow []EncDatum
 
