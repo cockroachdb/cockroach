@@ -218,6 +218,31 @@ func (r EncDatumRow) String() string {
 	return b.String()
 }
 
+// Compare returns the relative ordering of two EncDatumRows according to a
+// ColumnOrdering:
+//   -1 if the receiver comes before the rhs in the ordering,
+//   +1 if the receiver comes after the rhs in the ordering,
+//   0 if the relative order does not matter (i.e. the two rows have the same
+//     values for the columns in the ordering).
+//
+// Note that a return value of 0 does not (in general) imply that the rows are
+// equal.
+func (r EncDatumRow) Compare(a *DatumAlloc, ordering ColumnOrdering, rhs EncDatumRow) (int, error) {
+	for _, c := range ordering {
+		cmp, err := r[c.ColIdx].Compare(a, &rhs[c.ColIdx])
+		if err != nil {
+			return 0, err
+		}
+		if cmp != 0 {
+			if c.Direction == encoding.Descending {
+				cmp = -cmp
+			}
+			return cmp, nil
+		}
+	}
+	return 0, nil
+}
+
 // EncDatumRows is a slice of EncDatumRows.
 type EncDatumRows []EncDatumRow
 
