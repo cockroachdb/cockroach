@@ -1,4 +1,3 @@
 sql/parser/sql.go -diff
 ui/embedded.go -diff
-*.pb.go -diff
-*.pb.gw.go -diff
+*.pb.* -diff
