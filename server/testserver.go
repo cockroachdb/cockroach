@@ -202,13 +202,13 @@ func (ts *TestServer) DB() *client.DB {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ts *TestServer) Start() error {
-	return ts.StartWithStopper(nil)
+func (ts *TestServer) Start(isMultinode bool) error {
+	return ts.StartWithStopper(nil, isMultinode)
 }
 
 // StartWithStopper is the same as Start, but allows passing a stopper
 // explicitly.
-func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
+func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, isMultinode bool) error {
 	if ts.Ctx == nil {
 		ctx := MakeTestContext()
 		ts.Ctx = &ctx
@@ -221,7 +221,11 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	// Change the replication requirements so we don't get log spam about ranges
 	// not being replicated enough.
 	cfg := config.DefaultZoneConfig()
-	cfg.ReplicaAttrs = []roachpb.Attributes{{}, {}, {}}
+	if isMultinode {
+		cfg.ReplicaAttrs = []roachpb.Attributes{{}, {}, {}}
+	} else {
+		cfg.ReplicaAttrs = []roachpb.Attributes{{}}
+	}
 	fn := config.TestingSetDefaultZoneConfig(cfg)
 	stopper.AddCloser(stop.CloserFn(fn))
 

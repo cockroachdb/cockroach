@@ -89,7 +89,7 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 	return conns, f
 }
 
-// Waits until at least one of the joining nodes has at least one replication.
+// Waits until at least one of the joining nodes has at least one replica.
 // NOTE: the StoreID of each server's store must be the index of the server in
 // the servers array + 1. This will occur naturally if servers are indexed in
 // the order they were created. 1
