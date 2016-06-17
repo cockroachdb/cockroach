@@ -18,7 +18,6 @@ package encoding
 
 import (
 	"bytes"
-	"encoding/binary"
 	"math"
 	"math/rand"
 	"regexp"
@@ -1236,10 +1235,116 @@ func BenchmarkPeekLengthDuration(b *testing.B) {
 }
 
 func BenchmarkEncodeNonsortingVarint(b *testing.B) {
-	bytes := make([]byte, b.N*binary.MaxVarintLen64)
+	bytes := make([]byte, 0, b.N*NonsortingVarintMaxLen)
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bytes = EncodeNonsortingVarint(bytes, rng.Int63())
+	}
+}
+
+func BenchmarkDecodeNonsortingVarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingVarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingVarint(buf, rng.Int63())
+	}
+	var err error
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf, _, _, err = DecodeNonsortingVarint(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func testNonsortingUvarint(t *testing.T, i uint64) {
+	buf := EncodeNonsortingUvarint(nil, i)
+	rem, n, x, err := DecodeNonsortingUvarint(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x != i {
+		t.Fatalf("expected %d got %d", i, x)
+	}
+	if n != len(buf) {
+		t.Fatalf("expected length %d got %d", len(buf), n)
+	}
+	if len(rem) != 0 {
+		t.Fatalf("expected no remaining bytes got %d", len(rem))
+	}
+}
+
+func TestNonsortingUVarint(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+
+	for i := 0; i < math.MaxUint8+10; i++ {
+		testNonsortingUvarint(t, uint64(i))
+	}
+	testNonsortingUvarint(t, math.MaxUint64)
+	testNonsortingUvarint(t, math.MaxUint64-1)
+	for i := 0; i < 100; i++ {
+		testNonsortingUvarint(t, uint64(rng.Int63()))
+	}
+}
+
+func TestPeekLengthNonsortingUVarint(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+
+	var buf []byte
+	var lengths []int
+	for i := 0; i < 1000; i++ {
+		length := len(buf)
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+		lengths = append(lengths, len(buf)-length)
+	}
+	for _, length := range lengths {
+		l := PeekLengthNonsortingUvarint(buf)
+		if l != length {
+			t.Fatalf("seed %d: got %d expected %d: %x", seed, l, length, buf[:length])
+		}
+		buf = buf[l:]
+	}
+	if l := PeekLengthNonsortingUvarint(buf); l != 0 {
+		t.Fatalf("expected 0 for empty buffer got %d", l)
+	}
+}
+
+func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+	}
+}
+
+func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+	}
+	var err error
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf, _, _, err = DecodeNonsortingUvarint(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l := PeekLengthNonsortingUvarint(buf)
+		buf = buf[l:]
 	}
 }
