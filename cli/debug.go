@@ -62,7 +62,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
-func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (engine.Engine, error) {
+func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(512 << 20)
 	defer cache.Release()
 	db := engine.NewRocksDB(roachpb.Attributes{}, dir, cache, 10<<20, 0, stopper)
@@ -671,6 +671,31 @@ Output environment variables that influence configuration.
 	},
 }
 
+var debugCompactCmd = &cobra.Command{
+	Use:   "compact [directory]",
+	Short: "compact the sstables in a store",
+	Long: `
+Compact the sstables in a store.
+`,
+	RunE: runDebugCompact,
+}
+
+func runDebugCompact(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	if len(args) != 1 {
+		return errors.New("one argument is required")
+	}
+
+	db, err := openStore(cmd, args[0], stopper)
+	if err != nil {
+		return err
+	}
+
+	return db.Compact()
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 }
@@ -682,6 +707,7 @@ var debugCmds = []*cobra.Command{
 	debugRaftLogCmd,
 	debugGCCmd,
 	debugCheckStoreCmd,
+	debugCompactCmd,
 	kvCmd,
 	rangeCmd,
 	debugEnvCmd,

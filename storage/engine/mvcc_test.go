@@ -3441,7 +3441,9 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 		}
 
 		if i == 1 {
-			engine.(InMem).Compact()
+			if err := engine.(InMem).Compact(); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		if err := MVCCMerge(context.Background(), engine, nil, k, makeTS(0, 2), tsvalue2); err != nil {
@@ -3452,7 +3454,9 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 		}
 
 		if i == 1 {
-			engine.(InMem).Compact()
+			if err := engine.(InMem).Compact(); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		if v, _, err := MVCCGet(context.Background(), engine, k, hlc.ZeroTimestamp, true, nil); err != nil {
