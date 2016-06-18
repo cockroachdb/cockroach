@@ -308,9 +308,10 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Statement> drop_stmt
 %type <Statement> explain_stmt
 %type <Statement> explainable_stmt
+%type <Statement> prepare_stmt
+%type <Statement> preparable_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
-%type <Statement> preparable_stmt
 %type <Statement> release_stmt
 %type <Statement> rename_stmt
 %type <Statement> revoke_stmt
@@ -432,7 +433,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Expr>  in_expr
 %type <Expr>  having_clause
 %type <Expr>  array_expr
-%type <[]ColumnType> type_list
+%type <[]ColumnType> type_list prep_type_clause
 %type <Exprs> array_expr_list
 %type <Expr>  row explicit_row implicit_row
 %type <Expr>  case_expr case_arg case_default
@@ -580,7 +581,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
 %token <str>   PARTIAL PARTITION PLACING POSITION
-%token <str>   PRECEDING PRECISION PRIMARY PRIORITY
+%token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   RENAME REPEATABLE
@@ -709,6 +710,7 @@ stmt:
 | delete_stmt
 | drop_stmt
 | explain_stmt
+| prepare_stmt
 | grant_stmt
 | insert_stmt
 | rename_stmt
@@ -974,6 +976,36 @@ explain_option_list:
 
 explain_option_name:
   non_reserved_word
+
+// PREPARE <plan_name> [(args, ...)] AS <query>
+prepare_stmt:
+  PREPARE name prep_type_clause AS preparable_stmt
+	{
+    $$.val = &Prepare{
+      Name: Name($2),
+      Types: $3.colTypes(),
+      Statement: $5.stmt(),
+    }
+  }
+
+prep_type_clause:
+  '(' type_list ')'
+  {
+    $$.val = $2.colTypes();
+  }
+| /* EMPTY */
+  {
+    $$.val = []ColumnType(nil)
+  }
+
+preparable_stmt:
+  select_stmt
+  {
+    $$.val = $1.slct()
+  }
+| insert_stmt
+| update_stmt
+| delete_stmt
 
 // GRANT privileges ON privilege_target TO grantee_list
 grant_stmt:
@@ -2211,15 +2243,6 @@ cte_list:
 
 common_table_expr:
   name opt_name_list AS '(' preparable_stmt ')' { unimplemented() }
-
-preparable_stmt:
-  select_stmt
-  {
-    $$.val = $1.slct()
-  }
-| insert_stmt
-| update_stmt
-| delete_stmt
 
 opt_with_clause:
   with_clause { unimplemented() }
@@ -4267,6 +4290,7 @@ unreserved_keyword:
 | PARTIAL
 | PARTITION
 | PRECEDING
+| PREPARE
 | PRIORITY
 | RANGE
 | READ

@@ -149,6 +149,12 @@ func (*ParenSelect) StatementType() StatementType { return Rows }
 func (*ParenSelect) StatementTag() string { return "SELECT" }
 
 // StatementType implements the Statement interface.
+func (*Prepare) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Prepare) StatementTag() string { return "PREPARE" }
+
+// StatementType implements the Statement interface.
 func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -325,6 +331,7 @@ func (n *Explain) String() string                  { return AsString(n) }
 func (n *Grant) String() string                    { return AsString(n) }
 func (n *Insert) String() string                   { return AsString(n) }
 func (n *ParenSelect) String() string              { return AsString(n) }
+func (n *Prepare) String() string                  { return AsString(n) }
 func (n *ReleaseSavepoint) String() string         { return AsString(n) }
 func (n *RenameColumn) String() string             { return AsString(n) }
 func (n *RenameDatabase) String() string           { return AsString(n) }
