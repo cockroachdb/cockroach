@@ -168,6 +168,13 @@ func TestParse(t *testing.T) {
 		{`SHOW TRANSACTION ISOLATION LEVEL`},
 		{`SHOW TRANSACTION PRIORITY`},
 
+		{`PREPARE a AS SELECT 1`},
+		{`PREPARE a AS INSERT INTO a VALUES (1)`},
+		{`PREPARE a AS UPDATE a SET b = 3`},
+		{`PREPARE a AS DELETE FROM a`},
+		{`PREPARE a (INT) AS SELECT 1`},
+		{`PREPARE a (STRING, STRING) AS SELECT 1`},
+
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`GRANT SELECT ON foo TO root`},

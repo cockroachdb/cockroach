@@ -163,6 +163,7 @@ var keywords = map[string]int{
 	"POSITION":          POSITION,
 	"PRECEDING":         PRECEDING,
 	"PRECISION":         PRECISION,
+	"PREPARE":           PREPARE,
 	"PRIMARY":           PRIMARY,
 	"PRIORITY":          PRIORITY,
 	"RANGE":             RANGE,
