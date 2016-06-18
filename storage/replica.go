@@ -1378,14 +1378,14 @@ func (r *Replica) prepareRaftCommandLocked(
 	idKey storagebase.CmdIDKey,
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-) (*pendingCmd, error) {
+) *pendingCmd {
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
 	if !ba.IsLease() {
 		r.mu.lastAssignedLeaseIndex++
 	}
-	pendingCmd := &pendingCmd{
+	return &pendingCmd{
 		ctx:   ctx,
 		idKey: idKey,
 		done:  make(chan roachpb.ResponseWithError, 1),
@@ -1396,7 +1396,6 @@ func (r *Replica) prepareRaftCommandLocked(
 			MaxLeaseIndex: r.mu.lastAssignedLeaseIndex,
 		},
 	}
-	return pendingCmd, nil
 }
 
 func (r *Replica) insertRaftCommandLocked(pCmd *pendingCmd) {
@@ -1434,10 +1433,7 @@ func (r *Replica) proposeRaftCommand(
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
-	pCmd, err := r.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
-	if err != nil {
-		return nil, nil, err
-	}
+	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
 	r.insertRaftCommandLocked(pCmd)
 
 	if err := r.proposePendingCmdLocked(pCmd); err != nil {
@@ -1792,11 +1788,8 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 	// Note that the new command has the same idKey (which matters since we
 	// leaked that to the pending client).
-	newPCmd, err := r.prepareRaftCommandLocked(cmd.ctx, cmd.idKey,
+	newPCmd := r.prepareRaftCommandLocked(cmd.ctx, cmd.idKey,
 		cmd.raftCmd.OriginReplica, cmd.raftCmd.Cmd)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
 	newPCmd.done = cmd.done
 	r.insertRaftCommandLocked(newPCmd)
 	if err := r.proposePendingCmdLocked(newPCmd); err != nil {
