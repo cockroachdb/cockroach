@@ -166,6 +166,8 @@ type Engine interface {
 	Checkpoint(dir string) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
+	// Compact compacts all of the sstables.
+	Compact() error
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
