@@ -5705,7 +5705,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		// Make a new command, but pretend it didn't increment the assignment
 		// counter. This leaks some implementation, but not too much.
 		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
-		cmd, err := tc.rng.prepareRaftCommandLocked(
+		cmd := tc.rng.prepareRaftCommandLocked(
 			context.WithValue(context.Background(), magicKey{}, "foo"),
 			makeIDKey(), *replica, ba)
 		cmd.raftCmd.MaxLeaseIndex = preAssigned
@@ -5797,10 +5797,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, err := rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), *replica, ba)
-			if err != nil {
-				t.Fatal(err)
-			}
+			cmd := rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), *replica, ba)
 			rng.insertRaftCommandLocked(cmd)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
@@ -5871,10 +5868,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, err := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
-			if err != nil {
-				t.Fatal(err)
-			}
+			cmd := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
 			tc.rng.insertRaftCommandLocked(cmd)
 		}
 
@@ -5940,13 +5934,9 @@ func TestReplicaDoubleRefurbish(t *testing.T) {
 	// Make a Raft command; we'll set things up so that it will be considered
 	// for refurbishment multiple times.
 	tc.rng.mu.Lock()
-	cmd, err := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), *replica, ba)
+	cmd := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), *replica, ba)
 	ch := cmd.done // must not use cmd outside of mutex
 	tc.rng.mu.Unlock()
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	{
 		// Send some random request to advance the lease applied counter to
