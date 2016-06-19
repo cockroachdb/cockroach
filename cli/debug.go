@@ -82,7 +82,15 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 	} else {
 		fmt.Printf("%q: ", kv.Key.Key)
 	}
-	for _, decoder := range []func(kv engine.MVCCKeyValue) (string, error){tryRaftLogEntry, tryRangeDescriptor, tryMeta, tryAbort, tryTxn} {
+	decoders := []func(kv engine.MVCCKeyValue) (string, error){
+		tryRaftLogEntry,
+		tryRangeDescriptor,
+		tryMeta,
+		tryAbort,
+		tryTxn,
+		tryRangeIDKey,
+	}
+	for _, decoder := range decoders {
 		out, err := decoder(kv)
 		if err != nil {
 			continue
@@ -256,6 +264,48 @@ func tryAbort(kv engine.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("key=%q, pri=%d\n", dest.Key, dest.Priority), nil
+}
+
+func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
+	if kv.Key.Timestamp != hlc.ZeroTimestamp {
+		return "", fmt.Errorf("range ID keys shouldn't have timestamps")
+	}
+	_, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key.Key)
+	if err != nil {
+		return "", err
+	}
+
+	// All range ID keys are stored inline on the metadata.
+	var meta enginepb.MVCCMetadata
+	if err := meta.Unmarshal(kv.Value); err != nil {
+		return "", err
+	}
+	value := roachpb.Value{RawBytes: meta.RawBytes}
+
+	// Values encoded as protobufs set msg and continue outside the
+	// switch. Other types are handled inside the switch and return.
+	var msg proto.Message
+	switch {
+	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexSuffix):
+		fallthrough
+	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%d", i), nil
+
+	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
+		msg = &roachpb.RaftTruncatedState{}
+
+	default:
+		return "", fmt.Errorf("unknown raft id key %s", suffix)
+	}
+
+	if err := value.GetProto(msg); err != nil {
+		return "", err
+	}
+	return msg.String(), nil
 }
 
 func checkRangeDescriptorKey(key engine.MVCCKey) error {
