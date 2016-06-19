@@ -183,7 +183,7 @@ type groupNode struct {
 	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
 	// function and we can compute the final result using a single row, assuming
 	// a specific ordering of the underlying plan.
-	desiredOrdering columnOrdering
+	desiredOrdering sqlbase.ColumnOrdering
 	needOnlyOneRow  bool
 	gotOneRow       bool
 
@@ -410,7 +410,7 @@ func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
 	if len(n.desiredOrdering) != 1 {
 		return expr
 	}
-	i := n.desiredOrdering[0].colIdx
+	i := n.desiredOrdering[0].ColIdx
 	f := n.funcs[i]
 	isNotNull := parser.NewTypedComparisonExpr(
 		parser.IsNot,
@@ -431,7 +431,7 @@ func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
 // aggregation. If zero or multiple MIN/MAX aggregations are requested then no
 // ordering will be requested. A negative index indicates a MAX aggregation was
 // requested for the output column.
-func desiredAggregateOrdering(funcs []*aggregateFuncHolder) columnOrdering {
+func desiredAggregateOrdering(funcs []*aggregateFuncHolder) sqlbase.ColumnOrdering {
 	limit := -1
 	direction := encoding.Ascending
 	for i, f := range funcs {
@@ -458,7 +458,7 @@ func desiredAggregateOrdering(funcs []*aggregateFuncHolder) columnOrdering {
 	if limit == -1 {
 		return nil
 	}
-	return columnOrdering{{limit, direction}}
+	return sqlbase.ColumnOrdering{{limit, direction}}
 }
 
 type extractAggregatesVisitor struct {
