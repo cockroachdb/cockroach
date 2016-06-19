@@ -780,13 +780,13 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 				return err
 			}
 
-		// Ack messages do not have a corresponding protobuf field, so handle those
-		// with a default.
-		// This also includes DDLs which want CommandComplete as well.
-		default:
+		case parser.Ack, parser.DDL:
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
+
+		default:
+			panic(fmt.Sprintf("unexpected result type %v", result.Type))
 		}
 	}
 
