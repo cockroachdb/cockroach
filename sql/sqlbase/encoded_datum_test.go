@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -205,6 +206,112 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		}
 		if len(b) != 0 {
 			t.Errorf("%d leftover bytes", len(b))
+		}
+	}
+}
+
+func TestEncDatumRowCompare(t *testing.T) {
+	v := [5]EncDatum{}
+	for i := range v {
+		v[i].SetDatum(ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+	}
+
+	asc := encoding.Ascending
+	desc := encoding.Descending
+
+	testCases := []struct {
+		row1, row2 EncDatumRow
+		ord        ColumnOrdering
+		cmp        int
+	}{
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{},
+			cmp:  0,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{1, desc}},
+			cmp:  0,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{0, asc}, {1, desc}},
+			cmp:  0,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{2, asc}},
+			cmp:  -1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[3]},
+			row2: EncDatumRow{v[0], v[1], v[2]},
+			ord:  ColumnOrdering{{2, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{2, asc}, {0, asc}, {1, asc}},
+			cmp:  -1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{0, asc}, {2, desc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{1, desc}, {0, asc}, {2, desc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{0, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{1, desc}, {0, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{1, asc}, {0, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{1, asc}, {0, desc}},
+			cmp:  -1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{0, desc}, {1, asc}},
+			cmp:  -1,
+		},
+	}
+
+	a := &DatumAlloc{}
+	for _, c := range testCases {
+		cmp, err := c.row1.Compare(a, c.ord, c.row2)
+		if err != nil {
+			t.Error(err)
+		} else if cmp != c.cmp {
+			t.Errorf("%s cmp %s ordering %v got %d, expected %d",
+				c.row1, c.row2, c.ord, cmp, c.cmp)
 		}
 	}
 }
