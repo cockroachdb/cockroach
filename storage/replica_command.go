@@ -1818,7 +1818,7 @@ func (r *Replica) VerifyChecksum(
 	h roachpb.Header, args roachpb.VerifyChecksumRequest,
 ) (roachpb.VerifyChecksumResponse, error) {
 	if args.Version != replicaChecksumVersion {
-		log.Errorf("Incompatible versions: e=%d, v=%d", replicaChecksumVersion, args.Version)
+		log.Errorf("consistency check skipped: incompatible versions: e=%d, v=%d", replicaChecksumVersion, args.Version)
 		// Return success because version incompatibility might only
 		// be seen on this replica.
 		return roachpb.VerifyChecksumResponse{}, nil
@@ -1826,7 +1826,7 @@ func (r *Replica) VerifyChecksum(
 	id := args.ChecksumID
 	c, ok := r.getChecksum(id)
 	if !ok {
-		log.Errorf("checksum for id = %v doesn't exist", id)
+		log.Errorf("consistency check skipped: checksum for id = %v doesn't exist", id)
 		// Return success because a checksum might be missing only on
 		// this replica. A checksum might be missing because of a
 		// number of reasons: GC-ed, server restart, and ComputeChecksum
@@ -1836,37 +1836,39 @@ func (r *Replica) VerifyChecksum(
 	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
 		// Replication consistency problem!
 		logFunc := log.Errorf
-		if r.store.ctx.ConsistencyCheckPanicOnFailure {
-			// Let's collect some more debug information before we panic.
-			if args.Snapshot == nil {
-				// No debug information; run another consistency check to deliver
-				// more debug information.
-				if !r.store.stopper.RunAsyncTask(func() {
-					desc := r.Desc()
-					startKey := desc.StartKey.AsRawKey()
-					// Can't use a start key less than LocalMax.
-					if bytes.Compare(startKey, keys.LocalMax) < 0 {
-						startKey = keys.LocalMax
-					}
-					if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
-						log.Errorf("couldn't rerun consistency check: %s", err)
-					}
-				}) {
-					log.Error("couldn't rerun consistency check as RunAsyncTask")
+
+		// Collect some more debug information.
+		if args.Snapshot == nil {
+			// No debug information; run another consistency check to deliver
+			// more debug information.
+			if !r.store.stopper.RunAsyncTask(func() {
+				log.Errorf("consistency check failed on replica %s; fetching details", r)
+				desc := r.Desc()
+				startKey := desc.StartKey.AsRawKey()
+				// Can't use a start key less than LocalMax.
+				if bytes.Compare(startKey, keys.LocalMax) < 0 {
+					startKey = keys.LocalMax
 				}
-			} else {
-				// Compute diff.
-				diff := diffRange(args.Snapshot, c.snapshot)
-				if diff != nil {
-					for _, d := range diff {
-						l := "leader"
-						if d.Leader {
-							l = "replica"
-						}
-						log.Errorf("inconsistent k:v = (%s (%x), %s, %x) not present on %s",
-							d.Key, d.Key, d.Timestamp, d.Value, l)
-					}
+				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
+					log.Errorf("couldn't rerun consistency check: %s", err)
 				}
+			}) {
+				log.Error("couldn't rerun consistency check as RunAsyncTask")
+			}
+		} else {
+			// Compute diff.
+			diff := diffRange(args.Snapshot, c.snapshot)
+			if diff != nil {
+				for _, d := range diff {
+					l := "leader"
+					if d.Leader {
+						l = "replica"
+					}
+					log.Errorf("consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
+						d.Key, d.Key, d.Timestamp, d.Value, l)
+				}
+			}
+			if r.store.ctx.ConsistencyCheckPanicOnFailure {
 				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 					p(diff)
 				} else {
@@ -1874,7 +1876,8 @@ func (r *Replica) VerifyChecksum(
 				}
 			}
 		}
-		logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
+
+		logFunc("consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
 }
