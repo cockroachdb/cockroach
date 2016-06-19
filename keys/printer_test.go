@@ -53,6 +53,7 @@ func TestPrettyPrint(t *testing.T) {
 		{AbortCacheKey(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/r/AbortCache/%q`, txnID)},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftTombstone"},
 		{RaftAppliedIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftAppliedIndex"},
+		{LeaseAppliedIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/LeaseAppliedIndex"},
 		{RaftTruncatedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftTruncatedState"},
 		{RangeLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeLeaderLease"},
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeStats"},
