@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
@@ -48,7 +49,7 @@ var traceColumns = append([]ResultColumn{
 	{Name: "Event", Typ: parser.TypeString},
 }, debugColumns...)
 
-var traceOrdering = []columnOrderInfo{
+var traceOrdering = sqlbase.ColumnOrdering{
 	{len(traceColumns), encoding.Ascending}, /* Start time */
 	{2, encoding.Ascending},                 /* Span pos */
 }

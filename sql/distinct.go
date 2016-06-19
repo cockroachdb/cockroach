@@ -74,14 +74,14 @@ func (n *distinctNode) expandPlan() error {
 			n.columnsInOrder[colIdx] = true
 		}
 		for _, c := range ordering.ordering {
-			if c.colIdx >= len(n.columnsInOrder) {
+			if c.ColIdx >= len(n.columnsInOrder) {
 				// Cannot use sort order. This happens when the
 				// columns used for sorting are not part of the output.
 				// e.g. SELECT a FROM t ORDER BY c.
 				n.columnsInOrder = nil
 				break
 			}
-			n.columnsInOrder[c.colIdx] = true
+			n.columnsInOrder[c.ColIdx] = true
 		}
 	}
 	return nil

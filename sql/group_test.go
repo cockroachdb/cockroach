@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -29,11 +30,11 @@ func TestDesiredAggregateOrder(t *testing.T) {
 
 	testData := []struct {
 		expr     string
-		ordering columnOrdering
+		ordering sqlbase.ColumnOrdering
 	}{
 		{`a`, nil},
-		{`MIN(a)`, columnOrdering{{0, encoding.Ascending}}},
-		{`MAX(a)`, columnOrdering{{0, encoding.Descending}}},
+		{`MIN(a)`, sqlbase.ColumnOrdering{{0, encoding.Ascending}}},
+		{`MAX(a)`, sqlbase.ColumnOrdering{{0, encoding.Descending}}},
 		{`(MIN(a), MAX(a))`, nil},
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},

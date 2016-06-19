@@ -351,7 +351,7 @@ func (p *planner) SelectClause(
 
 func (s *selectNode) expandPlan() error {
 	// Get the ordering for index selection (if any).
-	var ordering columnOrdering
+	var ordering sqlbase.ColumnOrdering
 	var grouping bool
 
 	if s.top.group != nil {
@@ -724,12 +724,12 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v. We cannot make any use of this
 	// ordering as an ordering on v.
 	for _, colOrder := range fromOrder.ordering {
-		colRef := columnRef{&s.source.info, colOrder.colIdx}
+		colRef := columnRef{&s.source.info, colOrder.ColIdx}
 		renderIdx, ok := s.findRenderIndexForCol(colRef)
 		if !ok {
 			return ordering
 		}
-		ordering.addColumn(renderIdx, colOrder.direction)
+		ordering.addColumn(renderIdx, colOrder.Direction)
 	}
 	// We added all columns in fromOrder; we can copy the distinct flag.
 	ordering.unique = fromOrder.unique

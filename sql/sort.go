@@ -35,7 +35,7 @@ import (
 type sortNode struct {
 	plan     planNode
 	columns  []ResultColumn
-	ordering columnOrdering
+	ordering sqlbase.ColumnOrdering
 
 	needSort     bool
 	sortStrategy sortingStrategy
@@ -70,7 +70,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 	if s, ok := n.(*selectNode); ok {
 		numOriginalCols = s.numOriginalCols
 	}
-	var ordering columnOrdering
+	var ordering sqlbase.ColumnOrdering
 
 	for _, o := range orderBy {
 		index := -1
@@ -151,7 +151,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		if o.Direction == parser.Descending {
 			direction = encoding.Descending
 		}
-		ordering = append(ordering, columnOrderInfo{index, direction})
+		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
 	}
 
 	return &sortNode{columns: columns, ordering: ordering}, nil

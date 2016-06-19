@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -133,35 +134,48 @@ func checkEncDatumCmp(
 
 func TestEncDatumCompare(t *testing.T) {
 	a := &DatumAlloc{}
-	v1 := &EncDatum{}
-	v1.SetDatum(ColumnType_INT, parser.NewDInt(1))
-	v2 := &EncDatum{}
-	v2.SetDatum(ColumnType_INT, parser.NewDInt(2))
+	rng, _ := randutil.NewPseudoRand()
 
-	if val, err := v1.Compare(a, v2); err != nil {
-		t.Fatal(err)
-	} else if val != -1 {
-		t.Errorf("compare(1, 2) = %d", val)
+	for typ := ColumnType_Kind(0); int(typ) < len(ColumnType_Kind_value); typ++ {
+		// Generate two datums d1 < d2
+		var d1, d2 parser.Datum
+		for {
+			d1 = RandDatum(rng, typ, false)
+			d2 = RandDatum(rng, typ, false)
+			if cmp := d1.Compare(d2); cmp < 0 {
+				break
+			}
+		}
+		v1 := &EncDatum{}
+		v1.SetDatum(typ, d1)
+		v2 := &EncDatum{}
+		v2.SetDatum(typ, d2)
+
+		if val, err := v1.Compare(a, v2); err != nil {
+			t.Fatal(err)
+		} else if val != -1 {
+			t.Errorf("compare(1, 2) = %d", val)
+		}
+
+		asc := DatumEncoding_ASCENDING_KEY
+		desc := DatumEncoding_DESCENDING_KEY
+		noncmp := DatumEncoding_VALUE
+
+		checkEncDatumCmp(t, a, v1, v2, asc, asc, -1, false)
+		checkEncDatumCmp(t, a, v2, v1, asc, asc, +1, false)
+		checkEncDatumCmp(t, a, v1, v1, asc, asc, 0, false)
+		checkEncDatumCmp(t, a, v2, v2, asc, asc, 0, false)
+
+		checkEncDatumCmp(t, a, v1, v2, desc, desc, -1, false)
+		checkEncDatumCmp(t, a, v2, v1, desc, desc, +1, false)
+		checkEncDatumCmp(t, a, v1, v1, desc, desc, 0, false)
+		checkEncDatumCmp(t, a, v2, v2, desc, desc, 0, false)
+
+		checkEncDatumCmp(t, a, v1, v2, noncmp, noncmp, -1, true)
+		checkEncDatumCmp(t, a, v2, v1, desc, noncmp, +1, true)
+		checkEncDatumCmp(t, a, v1, v1, asc, desc, 0, true)
+		checkEncDatumCmp(t, a, v2, v2, desc, asc, 0, true)
 	}
-
-	asc := DatumEncoding_ASCENDING_KEY
-	desc := DatumEncoding_DESCENDING_KEY
-	noncmp := DatumEncoding_VALUE
-
-	checkEncDatumCmp(t, a, v1, v2, asc, asc, -1, false)
-	checkEncDatumCmp(t, a, v2, v1, asc, asc, +1, false)
-	checkEncDatumCmp(t, a, v1, v1, asc, asc, 0, false)
-	checkEncDatumCmp(t, a, v2, v2, asc, asc, 0, false)
-
-	checkEncDatumCmp(t, a, v1, v2, desc, desc, -1, false)
-	checkEncDatumCmp(t, a, v2, v1, desc, desc, +1, false)
-	checkEncDatumCmp(t, a, v1, v1, desc, desc, 0, false)
-	checkEncDatumCmp(t, a, v2, v2, desc, desc, 0, false)
-
-	checkEncDatumCmp(t, a, v1, v2, noncmp, noncmp, -1, true)
-	checkEncDatumCmp(t, a, v2, v1, desc, noncmp, +1, true)
-	checkEncDatumCmp(t, a, v1, v1, asc, desc, 0, true)
-	checkEncDatumCmp(t, a, v2, v2, desc, asc, 0, true)
 }
 
 func TestEncDatumFromBuffer(t *testing.T) {
@@ -205,6 +219,112 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		}
 		if len(b) != 0 {
 			t.Errorf("%d leftover bytes", len(b))
+		}
+	}
+}
+
+func TestEncDatumRowCompare(t *testing.T) {
+	v := [5]EncDatum{}
+	for i := range v {
+		v[i].SetDatum(ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+	}
+
+	asc := encoding.Ascending
+	desc := encoding.Descending
+
+	testCases := []struct {
+		row1, row2 EncDatumRow
+		ord        ColumnOrdering
+		cmp        int
+	}{
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{},
+			cmp:  0,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{1, desc}},
+			cmp:  0,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{0, asc}, {1, desc}},
+			cmp:  0,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{2, asc}},
+			cmp:  -1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[3]},
+			row2: EncDatumRow{v[0], v[1], v[2]},
+			ord:  ColumnOrdering{{2, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{2, asc}, {0, asc}, {1, asc}},
+			cmp:  -1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{0, asc}, {2, desc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[0], v[1], v[2]},
+			row2: EncDatumRow{v[0], v[1], v[3]},
+			ord:  ColumnOrdering{{1, desc}, {0, asc}, {2, desc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{0, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{1, desc}, {0, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{1, asc}, {0, asc}},
+			cmp:  1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{1, asc}, {0, desc}},
+			cmp:  -1,
+		},
+		{
+			row1: EncDatumRow{v[2], v[3]},
+			row2: EncDatumRow{v[1], v[3], v[0]},
+			ord:  ColumnOrdering{{0, desc}, {1, asc}},
+			cmp:  -1,
+		},
+	}
+
+	a := &DatumAlloc{}
+	for _, c := range testCases {
+		cmp, err := c.row1.Compare(a, c.ord, c.row2)
+		if err != nil {
+			t.Error(err)
+		} else if cmp != c.cmp {
+			t.Errorf("%s cmp %s ordering %v got %d, expected %d",
+				c.row1, c.row2, c.ord, cmp, c.cmp)
 		}
 	}
 }
