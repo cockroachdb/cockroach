@@ -49,6 +49,14 @@ const (
 	// Rows indicates that the statement returns the affected rows after
 	// the statement was applied.
 	Rows
+	// Unknown indicates that the statement does not have a known
+	// return style at the time of parsing. This is not first in the
+	// enumeration because it is more convenient to have Ack as a zero
+	// value, and because the use of Unknown should be an explicit choice.
+	// The primary example of this statement type is EXECUTE, where the
+	// statement type depends on the statement type of the prepared statement
+	// being executed.
+	Unknown
 )
 
 // Statement represents a statement.
