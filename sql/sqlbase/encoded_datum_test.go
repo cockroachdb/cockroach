@@ -134,35 +134,48 @@ func checkEncDatumCmp(
 
 func TestEncDatumCompare(t *testing.T) {
 	a := &DatumAlloc{}
-	v1 := &EncDatum{}
-	v1.SetDatum(ColumnType_INT, parser.NewDInt(1))
-	v2 := &EncDatum{}
-	v2.SetDatum(ColumnType_INT, parser.NewDInt(2))
+	rng, _ := randutil.NewPseudoRand()
 
-	if val, err := v1.Compare(a, v2); err != nil {
-		t.Fatal(err)
-	} else if val != -1 {
-		t.Errorf("compare(1, 2) = %d", val)
+	for typ := ColumnType_Kind(0); int(typ) < len(ColumnType_Kind_value); typ++ {
+		// Generate two datums d1 < d2
+		var d1, d2 parser.Datum
+		for {
+			d1 = RandDatum(rng, typ, false)
+			d2 = RandDatum(rng, typ, false)
+			if cmp := d1.Compare(d2); cmp < 0 {
+				break
+			}
+		}
+		v1 := &EncDatum{}
+		v1.SetDatum(typ, d1)
+		v2 := &EncDatum{}
+		v2.SetDatum(typ, d2)
+
+		if val, err := v1.Compare(a, v2); err != nil {
+			t.Fatal(err)
+		} else if val != -1 {
+			t.Errorf("compare(1, 2) = %d", val)
+		}
+
+		asc := DatumEncoding_ASCENDING_KEY
+		desc := DatumEncoding_DESCENDING_KEY
+		noncmp := DatumEncoding_VALUE
+
+		checkEncDatumCmp(t, a, v1, v2, asc, asc, -1, false)
+		checkEncDatumCmp(t, a, v2, v1, asc, asc, +1, false)
+		checkEncDatumCmp(t, a, v1, v1, asc, asc, 0, false)
+		checkEncDatumCmp(t, a, v2, v2, asc, asc, 0, false)
+
+		checkEncDatumCmp(t, a, v1, v2, desc, desc, -1, false)
+		checkEncDatumCmp(t, a, v2, v1, desc, desc, +1, false)
+		checkEncDatumCmp(t, a, v1, v1, desc, desc, 0, false)
+		checkEncDatumCmp(t, a, v2, v2, desc, desc, 0, false)
+
+		checkEncDatumCmp(t, a, v1, v2, noncmp, noncmp, -1, true)
+		checkEncDatumCmp(t, a, v2, v1, desc, noncmp, +1, true)
+		checkEncDatumCmp(t, a, v1, v1, asc, desc, 0, true)
+		checkEncDatumCmp(t, a, v2, v2, desc, asc, 0, true)
 	}
-
-	asc := DatumEncoding_ASCENDING_KEY
-	desc := DatumEncoding_DESCENDING_KEY
-	noncmp := DatumEncoding_VALUE
-
-	checkEncDatumCmp(t, a, v1, v2, asc, asc, -1, false)
-	checkEncDatumCmp(t, a, v2, v1, asc, asc, +1, false)
-	checkEncDatumCmp(t, a, v1, v1, asc, asc, 0, false)
-	checkEncDatumCmp(t, a, v2, v2, asc, asc, 0, false)
-
-	checkEncDatumCmp(t, a, v1, v2, desc, desc, -1, false)
-	checkEncDatumCmp(t, a, v2, v1, desc, desc, +1, false)
-	checkEncDatumCmp(t, a, v1, v1, desc, desc, 0, false)
-	checkEncDatumCmp(t, a, v2, v2, desc, desc, 0, false)
-
-	checkEncDatumCmp(t, a, v1, v2, noncmp, noncmp, -1, true)
-	checkEncDatumCmp(t, a, v2, v1, desc, noncmp, +1, true)
-	checkEncDatumCmp(t, a, v1, v1, asc, desc, 0, true)
-	checkEncDatumCmp(t, a, v2, v2, desc, asc, 0, true)
 }
 
 func TestEncDatumFromBuffer(t *testing.T) {
