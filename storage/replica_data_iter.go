@@ -87,24 +87,18 @@ func newReplicaDataIterator(
 		ranges:   rangeFunc(d),
 		iterator: e.NewIterator(false),
 	}
-	ri.Seek(ri.ranges[ri.curIndex].start)
+	ri.iterator.Seek(ri.ranges[ri.curIndex].start)
+	ri.advance()
 	return ri
 }
 
-// Close closes the underlying iterator.
+// Close the underlying iterator.
 func (ri *replicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
 	ri.iterator.Close()
 }
 
-// Seek seeks to the specified key.
-func (ri *replicaDataIterator) Seek(key engine.MVCCKey) {
-	ri.iterator.Seek(key)
-	ri.advance()
-}
-
-// Next returns the next raw key value in the iteration, or nil if
-// iteration is done.
+// Next advances to the next key in the iteration.
 func (ri *replicaDataIterator) Next() {
 	ri.iterator.Next()
 	ri.advance()
