@@ -91,21 +91,21 @@ var (
 	// after it's been aborted.
 	LocalAbortCacheSuffix = []byte("abc-")
 	// localRangeFrozenStatusSuffix is the suffix for a frozen status.
-	localRangeFrozenStatusSuffix = []byte("fzn-")
+	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// localRangeLastGCSuffix is the suffix for the last GC.
-	localRangeLastGCSuffix = []byte("lgc-")
+	LocalRangeLastGCSuffix = []byte("lgc-")
 	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	LocalRaftAppliedIndexSuffix = []byte("rfta")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
-	localRaftTombstoneSuffix = []byte("rftb")
+	LocalRaftTombstoneSuffix = []byte("rftb")
 	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
 	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
-	localRangeLeaderLeaseSuffix = []byte("rll-")
+	LocalRangeLeaderLeaseSuffix = []byte("rll-")
 	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
 	LocalLeaseAppliedIndexSuffix = []byte("rlla")
 	// localRangeStatsSuffix is the suffix for range statistics.
-	localRangeStatsSuffix = []byte("stat")
+	LocalRangeStatsSuffix = []byte("stat")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
 	// per-range data that is not fully Raft replicated. By appending this
