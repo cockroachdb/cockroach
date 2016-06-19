@@ -86,7 +86,6 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 		tryRaftLogEntry,
 		tryRangeDescriptor,
 		tryMeta,
-		tryAbort,
 		tryTxn,
 		tryRangeIDKey,
 	}
@@ -251,21 +250,6 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 	return txn.String() + "\n", nil
 }
 
-func tryAbort(kv engine.MVCCKeyValue) (string, error) {
-	if kv.Key.Timestamp != hlc.ZeroTimestamp {
-		return "", errors.New("not an abort cache key")
-	}
-	_, err := keys.DecodeAbortCacheKey(kv.Key.Key, nil)
-	if err != nil {
-		return "", err
-	}
-	var dest roachpb.AbortCacheEntry
-	if err := maybeUnmarshalInline(kv.Value, &dest); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("key=%q, pri=%d\n", dest.Key, dest.Priority), nil
-}
-
 func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	if kv.Key.Timestamp != hlc.ZeroTimestamp {
 		return "", fmt.Errorf("range ID keys shouldn't have timestamps")
@@ -295,8 +279,30 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 		}
 		return fmt.Sprintf("%d", i), nil
 
+	case bytes.Equal(suffix, keys.LocalRangeFrozenStatusSuffix):
+		b, err := value.GetBool()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%t", b), nil
+
+	case bytes.Equal(suffix, keys.LocalAbortCacheSuffix):
+		msg = &roachpb.AbortCacheEntry{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLastGCSuffix):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, keys.LocalRaftTombstoneSuffix):
+		msg = &roachpb.RaftTombstone{}
+
 	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 		msg = &roachpb.RaftTruncatedState{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLeaderLeaseSuffix):
+		msg = &roachpb.Lease{}
+
+	case bytes.Equal(suffix, keys.LocalRangeStatsSuffix):
+		msg = &enginepb.MVCCStats{}
 
 	default:
 		return "", fmt.Errorf("unknown raft id key %s", suffix)
