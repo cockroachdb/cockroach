@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 )
 
 // keyRange is a helper struct for the rangeDataIterator.
@@ -32,12 +33,11 @@ type keyRange struct {
 // The ranges keyRange slice specifies the key ranges which comprise
 // all of the range's data.
 //
-// A replicaDataIterator provides the same API as an Engine iterator
-// with the exception of the Seek() method.
+// A replicaDataIterator provides a subset of the engine.Iterator interface.
 type replicaDataIterator struct {
 	curIndex int
 	ranges   []keyRange
-	engine.Iterator
+	iterator engine.Iterator
 }
 
 // makeAllKeyRanges returns all key ranges for the given Range.
@@ -85,7 +85,7 @@ func newReplicaDataIterator(
 	}
 	ri := &replicaDataIterator{
 		ranges:   rangeFunc(d),
-		Iterator: e.NewIterator(false),
+		iterator: e.NewIterator(false),
 	}
 	ri.Seek(ri.ranges[ri.curIndex].start)
 	return ri
@@ -94,19 +94,19 @@ func newReplicaDataIterator(
 // Close closes the underlying iterator.
 func (ri *replicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
-	ri.Iterator.Close()
+	ri.iterator.Close()
 }
 
 // Seek seeks to the specified key.
 func (ri *replicaDataIterator) Seek(key engine.MVCCKey) {
-	ri.Iterator.Seek(key)
+	ri.iterator.Seek(key)
 	ri.advance()
 }
 
 // Next returns the next raw key value in the iteration, or nil if
 // iteration is done.
 func (ri *replicaDataIterator) Next() {
-	ri.Iterator.Next()
+	ri.iterator.Next()
 	ri.advance()
 }
 
@@ -115,31 +115,44 @@ func (ri *replicaDataIterator) Next() {
 // invalid.
 func (ri *replicaDataIterator) advance() {
 	for {
-		if !ri.Valid() || ri.Less(ri.ranges[ri.curIndex].end) {
+		if !ri.Valid() || ri.iterator.Less(ri.ranges[ri.curIndex].end) {
 			return
 		}
 		ri.curIndex++
 		if ri.curIndex < len(ri.ranges) {
-			ri.Iterator.Seek(ri.ranges[ri.curIndex].start)
+			ri.iterator.Seek(ri.ranges[ri.curIndex].start)
 		} else {
 			// Otherwise, seek to end to make iterator invalid.
-			ri.Iterator.Seek(engine.MVCCKeyMax)
+			ri.iterator.Seek(engine.MVCCKeyMax)
 			return
 		}
 	}
 }
 
-func (ri *replicaDataIterator) SeekReverse(key []byte) {
-	panic("cannot reverse scan replicaDataIterator")
+// Valid returns true if the iterator currently points to a valid value.
+func (ri *replicaDataIterator) Valid() bool {
+	return ri.iterator.Valid()
 }
 
-func (ri *replicaDataIterator) Prev() {
-	panic("cannot reverse scan replicaDataIterator")
+// Key returns the current key.
+func (ri *replicaDataIterator) Key() engine.MVCCKey {
+	return ri.iterator.Key()
 }
 
-// replicaDataIterator.{SeekReverse,Prev} are not intended for use and are not
-// currently referenced in code or tests. They existed to prohibit accidentally
-// calling the same methods on replicaDataIterator.Iterator. Silence unused
-// warnings.
-var _ = (*replicaDataIterator).SeekReverse
-var _ = (*replicaDataIterator).Prev
+// Value returns the current value.
+func (ri *replicaDataIterator) Value() []byte {
+	return ri.iterator.Value()
+}
+
+// Error returns the error, if any, which the iterator encountered.
+func (ri *replicaDataIterator) Error() error {
+	return ri.iterator.Error()
+}
+
+// AllocIterKeyValue returns ri.Key() and ri.Value() with the underlying
+// storage allocated from the passed ByteAllocator.
+func (ri *replicaDataIterator) AllocIterKeyValue(
+	a bufalloc.ByteAllocator,
+) (bufalloc.ByteAllocator, engine.MVCCKey, []byte) {
+	return engine.AllocIterKeyValue(a, ri.iterator)
+}
