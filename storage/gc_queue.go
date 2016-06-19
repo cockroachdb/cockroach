@@ -390,7 +390,7 @@ func RunGC(
 	resolveIntents resolveFunc,
 ) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
 
-	iter := newReplicaDataIterator(desc, snap, true /* replicatedOnly */)
+	iter := NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 
 	var infoMu = lockableGCInfo{}

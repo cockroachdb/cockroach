@@ -84,7 +84,7 @@ func (*verifyQueue) process(now hlc.Timestamp, rng *Replica,
 	_ config.SystemConfig) error {
 
 	snap := rng.store.Engine().NewSnapshot()
-	iter := newReplicaDataIterator(rng.Desc(), snap, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(rng.Desc(), snap, false /* !replicatedOnly */)
 	defer iter.Close()
 	defer snap.Close()
 

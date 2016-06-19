@@ -23,18 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/bufalloc"
 )
 
-// keyRange is a helper struct for the rangeDataIterator.
+// keyRange is a helper struct for the ReplicaDataIterator.
 type keyRange struct {
 	start, end engine.MVCCKey
 }
 
-// replicaDataIterator provides a complete iteration over all key / value
+// ReplicaDataIterator provides a complete iteration over all key / value
 // rows in a range, including all system-local metadata and user data.
 // The ranges keyRange slice specifies the key ranges which comprise
 // all of the range's data.
 //
-// A replicaDataIterator provides a subset of the engine.Iterator interface.
-type replicaDataIterator struct {
+// A ReplicaDataIterator provides a subset of the engine.Iterator interface.
+type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []keyRange
 	iterator engine.Iterator
@@ -76,14 +76,15 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor, metaFunc func(roachpb.Rang
 	}
 }
 
-func newReplicaDataIterator(
+// NewReplicaDataIterator creates a ReplicaDataIterator for the given replica.
+func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
-) *replicaDataIterator {
+) *ReplicaDataIterator {
 	rangeFunc := makeAllKeyRanges
 	if replicatedOnly {
 		rangeFunc = makeReplicatedKeyRanges
 	}
-	ri := &replicaDataIterator{
+	ri := &ReplicaDataIterator{
 		ranges:   rangeFunc(d),
 		iterator: e.NewIterator(false),
 	}
@@ -93,13 +94,13 @@ func newReplicaDataIterator(
 }
 
 // Close the underlying iterator.
-func (ri *replicaDataIterator) Close() {
+func (ri *ReplicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
 	ri.iterator.Close()
 }
 
 // Next advances to the next key in the iteration.
-func (ri *replicaDataIterator) Next() {
+func (ri *ReplicaDataIterator) Next() {
 	ri.iterator.Next()
 	ri.advance()
 }
@@ -107,7 +108,7 @@ func (ri *replicaDataIterator) Next() {
 // advance moves the iterator forward through the ranges until a valid
 // key is found or the iteration is done and the iterator becomes
 // invalid.
-func (ri *replicaDataIterator) advance() {
+func (ri *ReplicaDataIterator) advance() {
 	for {
 		if !ri.Valid() || ri.iterator.Less(ri.ranges[ri.curIndex].end) {
 			return
@@ -124,28 +125,28 @@ func (ri *replicaDataIterator) advance() {
 }
 
 // Valid returns true if the iterator currently points to a valid value.
-func (ri *replicaDataIterator) Valid() bool {
+func (ri *ReplicaDataIterator) Valid() bool {
 	return ri.iterator.Valid()
 }
 
 // Key returns the current key.
-func (ri *replicaDataIterator) Key() engine.MVCCKey {
+func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
 	return ri.iterator.Key()
 }
 
 // Value returns the current value.
-func (ri *replicaDataIterator) Value() []byte {
+func (ri *ReplicaDataIterator) Value() []byte {
 	return ri.iterator.Value()
 }
 
 // Error returns the error, if any, which the iterator encountered.
-func (ri *replicaDataIterator) Error() error {
+func (ri *ReplicaDataIterator) Error() error {
 	return ri.iterator.Error()
 }
 
 // AllocIterKeyValue returns ri.Key() and ri.Value() with the underlying
 // storage allocated from the passed ByteAllocator.
-func (ri *replicaDataIterator) AllocIterKeyValue(
+func (ri *ReplicaDataIterator) AllocIterKeyValue(
 	a bufalloc.ByteAllocator,
 ) (bufalloc.ByteAllocator, engine.MVCCKey, []byte) {
 	return engine.AllocIterKeyValue(a, ri.iterator)

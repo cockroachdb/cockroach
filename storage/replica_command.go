@@ -1768,7 +1768,7 @@ func (r *Replica) sha512(
 ) ([]byte, error) {
 	hasher := sha512.New()
 	// Iterate over all the data in the range.
-	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
