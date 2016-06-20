@@ -121,11 +121,15 @@ func TestNormalizeColumnName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		q, err := ParseExprTraditional(tc.in)
+		stmt, err := ParseOneTraditional("SELECT " + tc.in)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		err = q.(*QualifiedName).NormalizeColumnName()
+		q, ok := stmt.(*Select).Select.(*SelectClause).Exprs[0].Expr.(*QualifiedName)
+		if !ok {
+			t.Fatalf("%s does not parse to a QualifiedName", tc.in)
+		}
+		err = q.NormalizeColumnName()
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)
@@ -135,7 +139,7 @@ func TestNormalizeColumnName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %v", tc.in, err)
 		}
-		q.(*QualifiedName).ClearString()
+		q.ClearString()
 		if out := q.String(); tc.out != out {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}

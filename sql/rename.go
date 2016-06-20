@@ -373,12 +373,17 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, true, expr
 	}
 
+	exprStrings := make([]string, len(tableDesc.Checks))
+	for i, check := range tableDesc.Checks {
+		exprStrings[i] = check.Expr
+	}
+	exprs, err := parser.ParseExprsTraditional(exprStrings)
+	if err != nil {
+		return nil, err
+	}
+
 	for i := range tableDesc.Checks {
-		raw, err := parser.ParseExprTraditional(tableDesc.Checks[i].Expr)
-		if err != nil {
-			return nil, err
-		}
-		expr, err := parser.SimpleVisit(raw, preFn)
+		expr, err := parser.SimpleVisit(exprs[i], preFn)
 		if err != nil {
 			return nil, err
 		}
