@@ -1485,12 +1485,29 @@ func MVCCReverseScan(
 		consistent, txn, true /* reverse */)
 }
 
-// MVCCIterate iterates over the key range [start,end). At each step of the
-// iteration, f() is invoked with the current key/value pair. If f returns true
-// (done) or an error, the iteration stops and the error is propagated. If the
-// reverse is flag set the iterator will be moved in reverse order.
+// MVCCIterate calls MVCCIterateStats with a nil MVCCStats object.
 func MVCCIterate(ctx context.Context,
 	engine Reader,
+	startKey,
+	endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+	f func(roachpb.KeyValue) (bool, error),
+) ([]roachpb.Intent, error) {
+	return MVCCIterateStats(ctx, engine, nil /* ms */, startKey, endKey, timestamp, consistent, txn, reverse, f)
+}
+
+// MVCCIterateStats iterates over the key range [start,end). At each step of the
+// iteration, f() is invoked with the current key/value pair. If f returns true
+// (done) or an error, the iteration stops and the error is propagated. If the
+// reverse is flag set the iterator will be moved in reverse order.  If ms is
+// provided, the size of the iterated keys and values will be added to it. This
+// does not account for the size of historical keys that are not iterated over.
+func MVCCIterateStats(ctx context.Context,
+	engine Reader,
+	ms *enginepb.MVCCStats,
 	startKey,
 	endKey roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -1570,7 +1587,6 @@ func MVCCIterate(ctx context.Context,
 		if metaKey.Key == nil {
 			break
 		}
-
 		alloc, metaKey.Key = alloc.Copy(metaKey.Key, 1)
 
 		// Indicate that we're fine with an unsafe Value.RawBytes being returned.
@@ -1582,6 +1598,15 @@ func MVCCIterate(ctx context.Context,
 				// Copy the unsafe value into our allocation buffer.
 				alloc, value.RawBytes = alloc.Copy(value.RawBytes, 0)
 			}
+
+			if ms != nil {
+				keyBytes := int64(metaKey.EncodedSize())
+				valBytes := int64(len(iter.unsafeValue()))
+				// updateStatsForInline works since we're not accounting for historical
+				// keys. Doing so would require extra reads.
+				updateStatsForInline(ms, metaKey.Key, 0, 0, keyBytes, valBytes)
+			}
+
 			done, err := f(roachpb.KeyValue{Key: metaKey.Key, Value: *value})
 			if err != nil {
 				return nil, err
