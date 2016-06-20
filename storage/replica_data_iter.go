@@ -144,9 +144,9 @@ func (ri *ReplicaDataIterator) Error() error {
 	return ri.iterator.Error()
 }
 
-// AllocIterKeyValue returns ri.Key() and ri.Value() with the underlying
+// allocIterKeyValue returns ri.Key() and ri.Value() with the underlying
 // storage allocated from the passed ByteAllocator.
-func (ri *ReplicaDataIterator) AllocIterKeyValue(
+func (ri *ReplicaDataIterator) allocIterKeyValue(
 	a bufalloc.ByteAllocator,
 ) (bufalloc.ByteAllocator, engine.MVCCKey, []byte) {
 	return engine.AllocIterKeyValue(a, ri.iterator)
