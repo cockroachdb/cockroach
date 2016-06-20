@@ -928,35 +928,26 @@ func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
 	c.start(g, g.disconnected, g.rpcContext, stopper)
 }
 
-// closeClient finds and removes a client from the clients slice.
+// closeClient finds and closes a client.
 func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	c := g.removeMatchingClient(func(c *client) bool { return c.peerID == nodeID })
-	if c != nil {
+	if c := g.findClient(func(c *client) bool { return c.peerID == nodeID }); c != nil {
 		c.close()
 	}
 }
 
 // removeClient removes the specified client. Called when a client
 // disconnects.
-func (g *Gossip) removeClient(c *client) {
-	g.removeMatchingClient(func(match *client) bool { return c == match })
-}
-
-// removeMatchingClient finds and removes a client which matches the
-// provided match function from the clients slice. Returns the client
-// if found and removed.
-func (g *Gossip) removeMatchingClient(match func(*client) bool) *client {
+func (g *Gossip) removeClient(target *client) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
-	for i, c := range g.clients {
-		if match(c) {
+	for i, candidate := range g.clients {
+		if candidate == target {
 			g.clients = append(g.clients[:i], g.clients[i+1:]...)
-			delete(g.bootstrapping, c.addr.String())
-			g.outgoing.removeNode(c.peerID)
-			return c
+			delete(g.bootstrapping, candidate.addr.String())
+			g.outgoing.removeNode(candidate.peerID)
+			break
 		}
 	}
-	return nil
 }
 
 func (g *Gossip) findClient(match func(*client) bool) *client {
