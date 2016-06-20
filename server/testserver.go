@@ -216,7 +216,7 @@ func (ts *TestServer) Start() error {
 	return ts.StartWithStopper(nil, false)
 }
 
-// Starts a testserver with parameters anticipating other nodes joining.
+// StartMultinode starts a testserver with parameters anticipating other nodes joining.
 func (ts *TestServer) StartMultinode() error {
 	return ts.StartWithStopper(nil, true)
 }
