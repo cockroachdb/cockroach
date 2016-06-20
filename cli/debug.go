@@ -107,7 +107,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("one argument is required")
+		return errors.New("one argument required: dir")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -168,7 +168,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 2 {
-		return errors.New("required arguments: dir range_id")
+		return errors.New("two arguments required: dir range_id")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -195,11 +195,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	if iter.Error() != nil {
-		return iter.Error()
-	}
-
-	return nil
+	return iter.Error()
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
@@ -252,7 +248,7 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 
 func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	if kv.Key.Timestamp != hlc.ZeroTimestamp {
-		return "", fmt.Errorf("range ID keys shouldn't have timestamps")
+		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}
 	_, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key.Key)
 	if err != nil {
@@ -360,6 +356,8 @@ func loadRangeDescriptor(
 			return false, nil
 		}
 		if err := checkRangeDescriptorKey(kv.Key); err != nil {
+			// Range descriptor keys are interleaved with others, so if it
+			// doesn't parse as a range descriptor just skip it.
 			return false, nil
 		}
 		if err := getProtoValue(kv.Value, &desc); err != nil {
@@ -379,7 +377,7 @@ func loadRangeDescriptor(
 	if desc.RangeID == rangeID {
 		return desc, nil
 	}
-	return roachpb.RangeDescriptor{}, fmt.Errorf("range descriptor not found")
+	return roachpb.RangeDescriptor{}, fmt.Errorf("range descriptor %d not found", rangeID)
 }
 
 func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
@@ -387,7 +385,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("one argument is required")
+		return errors.New("one argument required: dir")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -462,7 +460,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 2 {
-		return errors.New("required arguments: dir range_id")
+		return errors.New("two arguments required: dir range_id")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -504,7 +502,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("required arguments: dir")
+		return errors.New("one argument required: dir")
 	}
 
 	var rangeID roachpb.RangeID
@@ -590,7 +588,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("required arguments: dir")
+		return errors.New("one required argument: dir")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
