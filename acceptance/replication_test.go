@@ -29,6 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// waitForReplicationDuration is how long to wait until the first range has
+// been fully replicated.
+// TODO(bram): Hoping that a longer timeout will fix #7329. Remove this when we
+// find the root cause.
+const waitForReplicationDuration = 30 * time.Second
+
 func countRangeReplicas(db *client.DB) (int, error) {
 	desc := &roachpb.RangeDescriptor{}
 	if err := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
@@ -49,7 +55,7 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 
 	log.Infof("waiting for first range to have %d replicas", wantedReplicas)
 
-	util.SucceedsSoon(t, func() error {
+	if err := util.RetryForDuration(waitForReplicationDuration, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
@@ -69,7 +75,9 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 			return nil
 		}
 		return fmt.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
-	})
+	}); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s", waitForReplicationDuration, err)
+	}
 
 	log.Infof("found %d replicas", wantedReplicas)
 }
