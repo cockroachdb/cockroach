@@ -75,6 +75,7 @@ var keywords = map[string]int{
 	"ENCODING":          ENCODING,
 	"END":               END,
 	"EXCEPT":            EXCEPT,
+	"EXECUTE":           EXECUTE,
 	"EXISTS":            EXISTS,
 	"EXPLAIN":           EXPLAIN,
 	"EXTRACT":           EXTRACT,
