@@ -1112,19 +1112,27 @@ func BenchmarkParse(b *testing.B) {
 }
 
 func TestEncodeSQLBytes(t *testing.T) {
+	type entry struct{ i, j int }
+	seen := make(map[string]entry)
 	for i := 0; i < 256; i++ {
-		s := string([]byte{byte(i)})
-		var buf bytes.Buffer
-		encodeSQLBytes(&buf, s)
-		sql := fmt.Sprintf("SELECT %s", buf.String())
-		stmts, err := parseTraditional(sql)
-		if err != nil {
-			t.Errorf("%s: expected success, but found %s", sql, err)
-			continue
-		}
-		stmt := stmts.String()
-		if sql != stmt {
-			t.Errorf("expected %s, but found %s", sql, stmt)
+		for j := 0; j < 256; j++ {
+			s := string([]byte{byte(i), byte(j)})
+			var buf bytes.Buffer
+			encodeSQLBytes(&buf, s)
+			sql := fmt.Sprintf("SELECT %s", buf.String())
+			stmts, err := parseTraditional(sql)
+			if err != nil {
+				t.Errorf("%s: expected success, but found %s", sql, err)
+				continue
+			}
+			stmt := stmts.String()
+			if e, ok := seen[stmt]; ok {
+				t.Fatalf("duplicate entry: %s, from %v, currently at %v, %v", stmt, e, i, j)
+			}
+			seen[stmt] = entry{i, j}
+			if sql != stmt {
+				t.Errorf("expected %s, but found %s", sql, stmt)
+			}
 		}
 	}
 }
