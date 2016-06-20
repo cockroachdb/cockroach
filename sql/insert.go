@@ -411,15 +411,24 @@ func makeDefaultExprs(
 
 	// Build the default expressions map from the parsed SELECT statement.
 	defaultExprs := make([]parser.TypedExpr, 0, len(cols))
+	exprStrings := make([]string, 0, len(cols))
+	for _, col := range cols {
+		if col.DefaultExpr != nil {
+			exprStrings = append(exprStrings, *col.DefaultExpr)
+		}
+	}
+	exprs, err := parser.ParseExprsTraditional(exprStrings)
+	if err != nil {
+		return nil, err
+	}
+
+	defExprIdx := 0
 	for _, col := range cols {
 		if col.DefaultExpr == nil {
 			defaultExprs = append(defaultExprs, parser.DNull)
 			continue
 		}
-		expr, err := parser.ParseExprTraditional(*col.DefaultExpr)
-		if err != nil {
-			return nil, err
-		}
+		expr := exprs[defExprIdx]
 		typedExpr, err := parser.TypeCheck(expr, nil, col.Type.ToDatumType())
 		if err != nil {
 			return nil, err
@@ -428,6 +437,7 @@ func makeDefaultExprs(
 			return nil, err
 		}
 		defaultExprs = append(defaultExprs, typedExpr)
+		defExprIdx++
 	}
 	return defaultExprs, nil
 }

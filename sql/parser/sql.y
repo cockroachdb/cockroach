@@ -415,7 +415,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <[]string> opt_conf_expr
 %type <*OnConflict> on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
+%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list set_exprs_internal
 
 %type <[]string> opt_storing
 %type <*ColumnTableDef> column_def
@@ -1083,6 +1083,15 @@ set_stmt:
 | SET SESSION set_rest
   {
     $$.val = $3.stmt()
+  }
+| set_exprs_internal { /* SKIP DOC */ }
+
+set_exprs_internal:
+  /* SET ROW serves to accelerate parser.parseExprs().
+     It cannot be used by clients. */
+  SET ROW '(' expr_list ')'
+  {
+    $$.val = &Set{Values: $4.exprs()}
   }
 
 set_rest:

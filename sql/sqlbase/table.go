@@ -207,7 +207,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 			if d.DefaultExpr.Expr != nil {
 				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
 			}
-			s := (&parser.FuncExpr{Name: &parser.QualifiedName{Base: "unique_rowid"}}).String()
+			s := "unique_rowid()"
 			col.DefaultExpr = &s
 		}
 	case *parser.FloatColType:

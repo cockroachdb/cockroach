@@ -26,6 +26,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -160,27 +161,35 @@ func ParseOneTraditional(sql string) (Statement, error) {
 	return ParseOne(sql, Traditional)
 }
 
-// parseExpr parses a sql expression.
-func parseExpr(expr string, syntax Syntax) (Expr, error) {
-	stmt, err := ParseOne(`SELECT `+expr, syntax)
+// parseExprs parses one or more sql expression.
+func parseExprs(exprs []string, syntax Syntax) (Exprs, error) {
+	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), syntax)
 	if err != nil {
 		return nil, err
 	}
-	sel, ok := stmt.(*Select)
+	set, ok := stmt.(*Set)
 	if !ok {
-		return nil, util.Errorf("expected a SELECT statement, but found %T", stmt)
+		return nil, util.Errorf("expected a SET statement, but found %T", stmt)
 	}
-	selClause, ok := sel.Select.(*SelectClause)
-	if !ok {
-		return nil, util.Errorf("expected a SELECT statement, but found %T", sel.Select)
-	}
-	if n := len(selClause.Exprs); n != 1 {
-		return nil, util.Errorf("expected 1 expression, but found %d", n)
-	}
-	return selClause.Exprs[0].Expr, nil
+	return set.Values, nil
 }
 
-// ParseExprTraditional is a short-hand for parseExpr(sql, Traditional)
+// ParseExprsTraditional is a short-hand for parseExprs(Traditional, sql)
+func ParseExprsTraditional(sql []string) (Exprs, error) {
+	if len(sql) == 0 {
+		return Exprs{}, nil
+	}
+	return parseExprs(sql, Traditional)
+}
+
+// ParseExprTraditional is a short-hand for parseExprs(Traditional, []string{sql})
 func ParseExprTraditional(sql string) (Expr, error) {
-	return parseExpr(sql, Traditional)
+	exprs, err := parseExprs([]string{sql}, Traditional)
+	if err != nil {
+		return nil, err
+	}
+	if len(exprs) != 1 {
+		return nil, util.Errorf("expected 1 expression, found %d", len(exprs))
+	}
+	return exprs[0], nil
 }
