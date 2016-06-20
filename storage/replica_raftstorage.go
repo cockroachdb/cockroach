@@ -532,13 +532,13 @@ func snapshot(
 
 	// Iterate over all the data in the range, including local-only data like
 	// the sequence cache.
-	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 	var alloc bufalloc.ByteAllocator
 	for ; iter.Valid(); iter.Next() {
 		var key engine.MVCCKey
 		var value []byte
-		alloc, key, value = engine.AllocIterKeyValue(alloc, iter.Iterator)
+		alloc, key, value = iter.allocIterKeyValue(alloc)
 		snapData.KV = append(snapData.KV,
 			roachpb.RaftSnapshotData_KeyValue{
 				Key:       key.Key,
@@ -679,7 +679,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := newReplicaDataIterator(&desc, batch, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, batch, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {

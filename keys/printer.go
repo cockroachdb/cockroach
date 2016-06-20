@@ -129,9 +129,10 @@ var (
 		psFunc func(rangeID roachpb.RangeID, input string) (string, roachpb.Key)
 	}{
 		{name: "AbortCache", suffix: LocalAbortCacheSuffix, ppFunc: abortCacheKeyPrint, psFunc: abortCacheKeyParse},
-		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
+		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexSuffix},
+		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexSuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,
 			ppFunc: raftLogKeyPrint,
 			psFunc: raftLogKeyParse,
@@ -140,8 +141,8 @@ var (
 		{name: "RaftLastIndex", suffix: localRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: localRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: localRangeLastVerificationTimestampSuffix},
-		{name: "RangeLeaderLease", suffix: localRangeLeaderLeaseSuffix},
-		{name: "RangeStats", suffix: localRangeStatsSuffix},
+		{name: "RangeLeaderLease", suffix: LocalRangeLeaderLeaseSuffix},
+		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
 	}
 
 	rangeSuffixDict = []struct {

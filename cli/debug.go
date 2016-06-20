@@ -82,7 +82,14 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 	} else {
 		fmt.Printf("%q: ", kv.Key.Key)
 	}
-	for _, decoder := range []func(kv engine.MVCCKeyValue) (string, error){tryRaftLogEntry, tryRangeDescriptor, tryMeta, tryAbort, tryTxn} {
+	decoders := []func(kv engine.MVCCKeyValue) (string, error){
+		tryRaftLogEntry,
+		tryRangeDescriptor,
+		tryMeta,
+		tryTxn,
+		tryRangeIDKey,
+	}
+	for _, decoder := range decoders {
 		out, err := decoder(kv)
 		if err != nil {
 			continue
@@ -100,7 +107,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("one argument is required")
+		return errors.New("one argument required: dir")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -144,6 +151,51 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+var debugRangeDataCmd = &cobra.Command{
+	Use:   "range-data [directory] range-id",
+	Short: "dump all the data in a range",
+	Long: `
+Pretty-prints all keys and values in a range. This includes all data covered
+by the consistency checker.
+`,
+	RunE: runDebugRangeData,
+}
+
+func runDebugRangeData(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	if len(args) != 2 {
+		return errors.New("two arguments required: dir range_id")
+	}
+
+	db, err := openStore(cmd, args[0], stopper)
+	if err != nil {
+		return err
+	}
+
+	rangeID, err := parseRangeID(args[1])
+	if err != nil {
+		return err
+	}
+
+	desc, err := loadRangeDescriptor(db, rangeID)
+	if err != nil {
+		return err
+	}
+
+	iter := storage.NewReplicaDataIterator(&desc, db, true)
+	for ; iter.Valid(); iter.Next() {
+		if _, err := printKeyValue(engine.MVCCKeyValue{
+			Key:   iter.Key(),
+			Value: iter.Value(),
+		}); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
@@ -194,34 +246,87 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 	return txn.String() + "\n", nil
 }
 
-func tryAbort(kv engine.MVCCKeyValue) (string, error) {
+func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	if kv.Key.Timestamp != hlc.ZeroTimestamp {
-		return "", errors.New("not an abort cache key")
+		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}
-	_, err := keys.DecodeAbortCacheKey(kv.Key.Key, nil)
+	_, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key.Key)
 	if err != nil {
 		return "", err
 	}
-	var dest roachpb.AbortCacheEntry
-	if err := maybeUnmarshalInline(kv.Value, &dest); err != nil {
+
+	// All range ID keys are stored inline on the metadata.
+	var meta enginepb.MVCCMetadata
+	if err := meta.Unmarshal(kv.Value); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("key=%q, pri=%d\n", dest.Key, dest.Priority), nil
+	value := roachpb.Value{RawBytes: meta.RawBytes}
+
+	// Values encoded as protobufs set msg and continue outside the
+	// switch. Other types are handled inside the switch and return.
+	var msg proto.Message
+	switch {
+	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexSuffix):
+		fallthrough
+	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%d", i), nil
+
+	case bytes.Equal(suffix, keys.LocalRangeFrozenStatusSuffix):
+		b, err := value.GetBool()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%t", b), nil
+
+	case bytes.Equal(suffix, keys.LocalAbortCacheSuffix):
+		msg = &roachpb.AbortCacheEntry{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLastGCSuffix):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, keys.LocalRaftTombstoneSuffix):
+		msg = &roachpb.RaftTombstone{}
+
+	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
+		msg = &roachpb.RaftTruncatedState{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLeaderLeaseSuffix):
+		msg = &roachpb.Lease{}
+
+	case bytes.Equal(suffix, keys.LocalRangeStatsSuffix):
+		msg = &enginepb.MVCCStats{}
+
+	default:
+		return "", fmt.Errorf("unknown raft id key %s", suffix)
+	}
+
+	if err := value.GetProto(msg); err != nil {
+		return "", err
+	}
+	return msg.String(), nil
+}
+
+func checkRangeDescriptorKey(key engine.MVCCKey) error {
+	_, suffix, _, err := keys.DecodeRangeKey(key.Key)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
+		return fmt.Errorf("wrong suffix: %s", suffix)
+	}
+	return nil
 }
 
 func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {
-	_, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
-	if err != nil {
+	if err := checkRangeDescriptorKey(kv.Key); err != nil {
 		return "", err
 	}
-	if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-		return "", fmt.Errorf("wrong suffix: %s", suffix)
-	}
-	value := roachpb.Value{
-		RawBytes: kv.Value,
-	}
 	var desc roachpb.RangeDescriptor
-	if err := value.GetProto(&desc); err != nil {
+	if err := getProtoValue(kv.Value, &desc); err != nil {
 		return "", err
 	}
 	return descStr(desc), nil
@@ -234,12 +339,53 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
+func getProtoValue(data []byte, msg proto.Message) error {
+	value := roachpb.Value{
+		RawBytes: data,
+	}
+	return value.GetProto(msg)
+}
+
+func loadRangeDescriptor(
+	db engine.Engine, rangeID roachpb.RangeID,
+) (roachpb.RangeDescriptor, error) {
+	var desc roachpb.RangeDescriptor
+	handleKV := func(kv engine.MVCCKeyValue) (bool, error) {
+		if kv.Key.Timestamp == hlc.ZeroTimestamp {
+			// We only want values, not MVCCMetadata.
+			return false, nil
+		}
+		if err := checkRangeDescriptorKey(kv.Key); err != nil {
+			// Range descriptor keys are interleaved with others, so if it
+			// doesn't parse as a range descriptor just skip it.
+			return false, nil
+		}
+		if err := getProtoValue(kv.Value, &desc); err != nil {
+			return false, err
+		}
+		return desc.RangeID == rangeID, nil
+	}
+
+	// Range descriptors are stored by key, so we have to scan over the
+	// range-local data to find the one for this RangeID.
+	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
+	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
+
+	if err := db.Iterate(start, end, handleKV); err != nil {
+		return roachpb.RangeDescriptor{}, err
+	}
+	if desc.RangeID == rangeID {
+		return desc, nil
+	}
+	return roachpb.RangeDescriptor{}, fmt.Errorf("range descriptor %d not found", rangeID)
+}
+
 func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("one argument is required")
+		return errors.New("one argument required: dir")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -314,7 +460,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 2 {
-		return errors.New("required arguments: dir range_id")
+		return errors.New("two arguments required: dir range_id")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -356,7 +502,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("required arguments: dir")
+		return errors.New("one argument required: dir")
 	}
 
 	var rangeID roachpb.RangeID
@@ -442,7 +588,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop()
 
 	if len(args) != 1 {
-		return errors.New("required arguments: dir")
+		return errors.New("one required argument: dir")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
@@ -539,6 +685,7 @@ func init() {
 
 var debugCmds = []*cobra.Command{
 	debugKeysCmd,
+	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
 	debugRaftLogCmd,
 	debugGCCmd,

@@ -158,7 +158,7 @@ func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, error) {
 
 // RaftTombstoneKey returns a system-local key for a raft tombstone.
 func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRaftTombstoneSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRaftTombstoneSuffix, nil)
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
@@ -178,23 +178,23 @@ func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 
 // RangeFrozenStatusKey returns a system-local key for the frozen status.
 func RangeFrozenStatusKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRangeFrozenStatusSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRangeFrozenStatusSuffix, nil)
 }
 
 // RangeLeaderLeaseKey returns a system-local key for a range leader lease.
 func RangeLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRangeLeaderLeaseSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLeaderLeaseSuffix, nil)
 }
 
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Range ID.
 func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRangeStatsSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRangeStatsSuffix, nil)
 }
 
 // RangeLastGCKey returns a system-local key for the last GC.
 func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRangeLastGCSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLastGCSuffix, nil)
 }
 
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
