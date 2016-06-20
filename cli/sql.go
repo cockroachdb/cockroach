@@ -290,7 +290,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		// catches cases where the last line before EOF was not terminated
 		// properly.
 		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") {
-			fmt.Fprintf(osStderr, "no semicolon at end of statement; statement ignored\n")
+			fmt.Fprintln(osStderr, "no semicolon at end of statement; statement ignored")
 			continue
 		}
 
