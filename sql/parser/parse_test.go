@@ -175,6 +175,11 @@ func TestParse(t *testing.T) {
 		{`PREPARE a (INT) AS SELECT 1`},
 		{`PREPARE a (STRING, STRING) AS SELECT 1`},
 
+		{`EXECUTE a`},
+		{`EXECUTE a (1)`},
+		{`EXECUTE a (1, 1)`},
+		{`EXECUTE a (1 + 1)`},
+
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`GRANT SELECT ON foo TO root`},

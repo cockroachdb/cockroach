@@ -42,3 +42,20 @@ func (node *Prepare) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" AS ")
 	FormatNode(buf, f, node.Statement)
 }
+
+// Execute represents an EXECUTE statement.
+type Execute struct {
+	Name   Name
+	Params Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Execute) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("EXECUTE ")
+	FormatNode(buf, f, node.Name)
+	if len(node.Params) > 0 {
+		buf.WriteString(" (")
+		FormatNode(buf, f, node.Params)
+		buf.WriteByte(')')
+	}
+}

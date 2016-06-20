@@ -310,6 +310,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Statement> explainable_stmt
 %type <Statement> prepare_stmt
 %type <Statement> preparable_stmt
+%type <Statement> execute_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
 %type <Statement> release_stmt
@@ -399,6 +400,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Exprs> position_list
 %type <Exprs> substr_list
 %type <Exprs> trim_list
+%type <Exprs> execute_param_clause
 %type <empty> opt_interval interval_second
 %type <Expr> overlay_placing
 
@@ -549,7 +551,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXPLAIN EXTRACT
+%token <str>   EXISTS EXECUTE EXPLAIN EXTRACT
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
@@ -711,6 +713,7 @@ stmt:
 | drop_stmt
 | explain_stmt
 | prepare_stmt
+| execute_stmt
 | grant_stmt
 | insert_stmt
 | rename_stmt
@@ -1006,6 +1009,28 @@ preparable_stmt:
 | insert_stmt
 | update_stmt
 | delete_stmt
+
+execute_stmt:
+  // EXECUTE <plan_name> [(params, ...)]
+  EXECUTE name execute_param_clause
+  {
+    $$.val = &Execute{
+      Name: Name($2),
+      Params: $3.exprs(),
+    }
+  }
+  // CREATE TABLE <name> AS EXECUTE <plan_name> [(params, ...)]
+// | CREATE opt_temp TABLE create_as_target AS EXECUTE name execute_param_clause opt_with_data { unimplemented() }
+
+execute_param_clause:
+  '(' expr_list ')'
+  {
+    $$.val = $2.exprs()
+  }
+| /* EMPTY */
+  {
+    $$.val = Exprs(nil)
+  }
 
 // GRANT privileges ON privilege_target TO grantee_list
 grant_stmt:
@@ -4256,6 +4281,7 @@ unreserved_keyword:
 | DOUBLE
 | DROP
 | ENCODING
+| EXECUTE
 | EXPLAIN
 | FILTER
 | FIRST

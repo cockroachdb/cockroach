@@ -133,6 +133,12 @@ func (*DropTable) StatementType() StatementType { return DDL }
 func (*DropTable) StatementTag() string { return "DROP TABLE" }
 
 // StatementType implements the Statement interface.
+func (*Execute) StatementType() StatementType { return Unknown }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Execute) StatementTag() string { return "EXECUTE" }
+
+// StatementType implements the Statement interface.
 func (*Explain) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -335,6 +341,7 @@ func (n *Delete) String() string                   { return AsString(n) }
 func (n *DropDatabase) String() string             { return AsString(n) }
 func (n *DropIndex) String() string                { return AsString(n) }
 func (n *DropTable) String() string                { return AsString(n) }
+func (n *Execute) String() string                  { return AsString(n) }
 func (n *Explain) String() string                  { return AsString(n) }
 func (n *Grant) String() string                    { return AsString(n) }
 func (n *Insert) String() string                   { return AsString(n) }
