@@ -228,7 +228,7 @@ func raftTruncatedState(
 	eng engine.Reader, rangeID roachpb.RangeID,
 ) (roachpb.RaftTruncatedState, error) {
 	ts := roachpb.RaftTruncatedState{}
-	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
+	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeTruncatedStateKey(rangeID),
 		hlc.ZeroTimestamp, true, nil, &ts)
 	return ts /* zero if not found */, err
 }

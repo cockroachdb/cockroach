@@ -1463,7 +1463,7 @@ func (r *Replica) TruncateLog(
 		r.mu.state.TruncatedState = tState
 		r.mu.Unlock()
 	})
-	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
+	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RangeTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
 }
 
 // LeaderLease sets the leader lease for this range. The command fails
