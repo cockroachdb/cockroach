@@ -587,6 +587,9 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
 			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
+	batch.Defer(func() {
+		r.assertState(r.store.Engine())
+	})
 
 	batch.Defer(func() {
 		r.mu.Lock()
