@@ -98,16 +98,16 @@ func waitForFullReplication(servers []server.TestServer, t testing.TB) {
 			t.Fatal(err)
 		}
 		for _, server := range servers {
-			var hasSameNumberOfReplicas bool
 			err := server.Stores().VisitStores(func(s *storage.Store) error {
-				hasSameNumberOfReplicas = numReplicas == s.ReplicaCount()
+				if numReplicas != s.ReplicaCount() {
+					notReplicated = true
+				}
 				return nil
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !hasSameNumberOfReplicas {
-				notReplicated = true
+			if notReplicated {
 				break
 			}
 		}
