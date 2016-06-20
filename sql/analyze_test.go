@@ -179,12 +179,12 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a < 1 OR length(i) > 0`, `true`, false},
 		{`a <= 5 AND a IN (4, 5, 6)`, `a IN (4, 5)`, true},
 
-		{`a = NULL`, `false`, true},
-		{`a != NULL`, `false`, true},
-		{`a > NULL`, `false`, true},
-		{`a >= NULL`, `false`, true},
-		{`a < NULL`, `false`, true},
-		{`a <= NULL`, `false`, true},
+		{`a = NULL`, `NULL`, true},
+		{`a != NULL`, `NULL`, true},
+		{`a > NULL`, `NULL`, true},
+		{`a >= NULL`, `NULL`, true},
+		{`a < NULL`, `NULL`, true},
+		{`a <= NULL`, `NULL`, true},
 		{`a IN (NULL)`, `false`, true},
 
 		{`f < false`, `false`, true},
@@ -255,10 +255,10 @@ func TestSimplifyExpr(t *testing.T) {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		expr, equiv := simplifyExpr(expr)
 		if s := expr.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			t.Errorf("%s: structure: expected %s, but found %s", d.expr, d.expected, s)
 		}
 		if d.isEquiv != equiv {
-			t.Fatalf("%s: expected %v, but found %v", d.expr, d.isEquiv, equiv)
+			t.Fatalf("%s: equivalence: expected %v, but found %v", d.expr, d.isEquiv, equiv)
 		}
 	}
 }

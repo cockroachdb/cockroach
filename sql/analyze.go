@@ -134,6 +134,9 @@ func joinExprs(exprs parser.TypedExprs, joinExprsFn func(left, right parser.Type
 // to the original. This occurs for expressions which are currently not handled
 // by simplification.
 func simplifyExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent bool) {
+	if e == parser.DNull {
+		return e, true
+	}
 	switch t := e.(type) {
 	case *parser.NotExpr:
 		return simplifyNotExpr(t)
@@ -152,6 +155,9 @@ func simplifyExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent b
 }
 
 func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
+	if n.Expr == parser.DNull {
+		return parser.DNull, true
+	}
 	switch t := n.Expr.(type) {
 	case *parser.ComparisonExpr:
 		op := t.Operator
@@ -206,6 +212,26 @@ func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
 	return parser.MakeDBool(true), false
 }
 
+func isKnownTrue(e parser.TypedExpr) bool {
+	if e == parser.DNull {
+		return false
+	}
+	if b, ok := e.(*parser.DBool); ok {
+		return bool(*b)
+	}
+	return false
+}
+
+func isKnownFalseOrNull(e parser.TypedExpr) bool {
+	if e == parser.DNull {
+		return true
+	}
+	if b, ok := e.(*parser.DBool); ok {
+		return !bool(*b)
+	}
+	return false
+}
+
 func simplifyAndExpr(n *parser.AndExpr) (parser.TypedExpr, bool) {
 	// a AND b AND c AND d -> [a, b, c, d]
 	equivalent := true
@@ -216,8 +242,8 @@ func simplifyAndExpr(n *parser.AndExpr) (parser.TypedExpr, bool) {
 		if !equiv {
 			equivalent = false
 		}
-		if d, ok := exprs[i].(*parser.DBool); ok && !bool(*d) {
-			return d, equivalent
+		if isKnownFalseOrNull(exprs[i]) {
+			return parser.MakeDBool(false), equivalent
 		}
 	}
 	// Simplifying exprs might have transformed one of the elements into an AND
@@ -239,10 +265,10 @@ outer:
 			if !equiv {
 				equivalent = false
 			}
-			if d, ok := exprs[j].(*parser.DBool); ok && !bool(*d) {
-				return d, equivalent
+			if isKnownFalseOrNull(exprs[j]) {
+				return exprs[j], equivalent
 			}
-			if d, ok := exprs[i].(*parser.DBool); ok && bool(*d) {
+			if isKnownTrue(exprs[i]) {
 				exprs[i] = nil
 			}
 			if exprs[i] == nil {
@@ -767,8 +793,8 @@ func simplifyOrExpr(n *parser.OrExpr) (parser.TypedExpr, bool) {
 		if !equiv {
 			equivalent = false
 		}
-		if d, ok := exprs[i].(*parser.DBool); ok && bool(*d) {
-			return d, equivalent
+		if isKnownTrue(exprs[i]) {
+			return exprs[i], equivalent
 		}
 	}
 	// Simplifying exprs might have transformed one of the elements into an OR
@@ -790,10 +816,10 @@ outer:
 			if !equiv {
 				equivalent = false
 			}
-			if d, ok := exprs[j].(*parser.DBool); ok && bool(*d) {
-				return d, equivalent
+			if isKnownTrue(exprs[j]) {
+				return exprs[j], equivalent
 			}
-			if d, ok := exprs[i].(*parser.DBool); ok && !bool(*d) {
+			if isKnownFalseOrNull(exprs[i]) {
 				exprs[i] = nil
 			}
 			if exprs[i] == nil {

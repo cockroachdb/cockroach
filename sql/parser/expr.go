@@ -933,6 +933,16 @@ type BinaryExpr struct {
 	fn BinOp
 }
 
+// TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
+func (node *BinaryExpr) TypedLeft() TypedExpr {
+	return node.Left.(TypedExpr)
+}
+
+// TypedRight returns the BinaryExpr's right expression as a TypedExpr.
+func (node *BinaryExpr) TypedRight() TypedExpr {
+	return node.Right.(TypedExpr)
+}
+
 func (*BinaryExpr) operatorExpr() {}
 
 func (node *BinaryExpr) memoizeFn() {
