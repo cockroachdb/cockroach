@@ -150,7 +150,7 @@ func (rb *readerBase) nextRow() (sqlbase.EncDatumRow, error) {
 
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
-// desired column values to an output rowReceiver.
+// desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	readerBase
@@ -158,14 +158,14 @@ type tableReader struct {
 	spans                sqlbase.Spans
 	hardLimit, softLimit int64
 
-	output rowReceiver
+	output RowReceiver
 }
 
 var _ processor = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	spec *TableReaderSpec, txn *client.Txn, output rowReceiver, evalCtx *parser.EvalContext,
+	spec *TableReaderSpec, txn *client.Txn, output RowReceiver, evalCtx *parser.EvalContext,
 ) (*tableReader, error) {
 	tr := &tableReader{
 		output:    output,
@@ -230,7 +230,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 			tr.output.Close(err)
 			return
 		}
-		// Push the row to the output rowReceiver; stop if they don't need more
+		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
 		if !tr.output.PushRow(outRow) {
 			tr.output.Close(nil)

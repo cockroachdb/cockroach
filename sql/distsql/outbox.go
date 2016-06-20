@@ -39,12 +39,12 @@ type outboxStream interface {
 	Send(*StreamMessage) error
 }
 
-// outbox implements an outgoing mailbox as a rowReceiver that receives rows and
+// outbox implements an outgoing mailbox as a RowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
 // when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
 // first).
 type outbox struct {
-	// RowChannel implements the rowReceiver interface.
+	// RowChannel implements the RowReceiver interface.
 	RowChannel
 
 	outStream outboxStream
@@ -59,7 +59,7 @@ type outbox struct {
 	wg  *sync.WaitGroup
 }
 
-var _ rowReceiver = &outbox{}
+var _ RowReceiver = &outbox{}
 
 func newOutbox(stream outboxStream) *outbox {
 	return &outbox{outStream: stream}
