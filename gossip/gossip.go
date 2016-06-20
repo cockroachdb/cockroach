@@ -930,8 +930,7 @@ func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
 
 // closeClient finds and removes a client from the clients slice.
 func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	c := g.removeMatchingClient(func(c *client) bool { return c.peerID == nodeID })
-	if c != nil {
+	if c := g.findClient(func(c *client) bool { return c.peerID == nodeID }); c != nil {
 		c.close()
 	}
 }
