@@ -149,6 +149,12 @@ func (*ParenSelect) StatementType() StatementType { return Rows }
 func (*ParenSelect) StatementTag() string { return "SELECT" }
 
 // StatementType implements the Statement interface.
+func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ReleaseSavepoint) StatementTag() string { return "RELEASE" }
+
+// StatementType implements the Statement interface.
 func (*RenameColumn) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -176,19 +182,13 @@ func (*RenameTable) StatementTag() string { return "RENAME TABLE" }
 func (*Revoke) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ReleaseSavepoint) StatementTag() string { return "RELEASE" }
-
-// StatementType implements the Statement interface.
-func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*RollbackToSavepoint) StatementTag() string { return "ROLLBACK" }
+func (*Revoke) StatementTag() string { return "REVOKE" }
 
 // StatementType implements the Statement interface.
 func (*RollbackToSavepoint) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Revoke) StatementTag() string { return "REVOKE" }
+func (*RollbackToSavepoint) StatementTag() string { return "ROLLBACK" }
 
 // StatementType implements the Statement interface.
 func (*RollbackTransaction) StatementType() StatementType { return Ack }
@@ -196,11 +196,11 @@ func (*RollbackTransaction) StatementType() StatementType { return Ack }
 // StatementTag returns a short string identifying the type of statement.
 func (*RollbackTransaction) StatementTag() string { return "ROLLBACK" }
 
-// StatementTag returns a short string identifying the type of statement.
-func (*Savepoint) StatementTag() string { return "SAVEPOINT" }
-
 // StatementType implements the Statement interface.
 func (*Savepoint) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Savepoint) StatementTag() string { return "SAVEPOINT" }
 
 // StatementType implements the Statement interface.
 func (*Select) StatementType() StatementType { return Rows }
