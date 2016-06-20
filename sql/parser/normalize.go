@@ -23,9 +23,24 @@ type normalizableExpr interface {
 	normalize(*normalizeVisitor) TypedExpr
 }
 
+func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
+	left := expr.TypedLeft()
+	right := expr.TypedRight()
+
+	if left == DNull || right == DNull {
+		return DNull
+	}
+
+	return expr
+}
+
 func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
+
+	if left == DNull || right == DNull {
+		return DNull
+	}
 
 	// Use short-circuit evaluation to simplify AND expressions.
 	if v.isConst(left) {
@@ -70,6 +85,9 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 }
 
 func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
+	if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+		return DNull
+	}
 
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
@@ -234,6 +252,10 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
 
+	if left == DNull || right == DNull {
+		return DNull
+	}
+
 	// Use short-circuit evaluation to simplify OR expressions.
 	if v.isConst(left) {
 		left, v.err = left.Eval(v.ctx)
@@ -281,34 +303,23 @@ func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
 }
 
 func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
+	left, from, to := expr.TypedLeft(), expr.TypedFrom(), expr.TypedTo()
+	if left == DNull || from == DNull || to == DNull {
+		return DNull
+	}
+
 	if expr.Not {
 		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
 		return NewTypedOrExpr(
-			NewTypedComparisonExpr(
-				LT,
-				expr.TypedLeft(),
-				expr.TypedFrom(),
-			),
-			NewTypedComparisonExpr(
-				GT,
-				expr.TypedLeft(),
-				expr.TypedTo(),
-			),
+			NewTypedComparisonExpr(LT, left, from),
+			NewTypedComparisonExpr(GT, left, to),
 		)
 	}
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
 	return NewTypedAndExpr(
-		NewTypedComparisonExpr(
-			GE,
-			expr.TypedLeft(),
-			expr.TypedFrom(),
-		),
-		NewTypedComparisonExpr(
-			LE,
-			expr.TypedLeft(),
-			expr.TypedTo(),
-		),
+		NewTypedComparisonExpr(GE, left, from),
+		NewTypedComparisonExpr(LE, left, to),
 	)
 }
 
