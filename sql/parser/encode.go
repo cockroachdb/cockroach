@@ -101,6 +101,7 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 			buf.WriteByte(encodedChar)
 			start = i + 1
 		} else if ch < 0x20 || ch >= 0x7F {
+			buf.WriteString(in[start:i])
 			// Escape non-printable characters.
 			buf.Write(hexMap[ch])
 			start = i + 1
