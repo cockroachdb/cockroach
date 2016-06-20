@@ -20,7 +20,7 @@ github.com/Sirupsen/logrus f3cfb454f4c209e6668c95216c4744b8fddb2356
 github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
-github.com/chzyer/readline 03625fbce39089d52a89922753e80125430d0d62
+github.com/chzyer/readline b411b0f4b22d724d98f4288aebd10cf2ddb42207
 github.com/client9/misspell 6c4f82f46611bc5054b80ff8c792131ce74702e7
 github.com/cockroachdb/c-jemalloc 6362977a9a1989062dccfa5fe314d6c864e7590c
 github.com/cockroachdb/c-protobuf 3bef67ea4cc857224fced66f98578362bc892f37
