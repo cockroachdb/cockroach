@@ -311,6 +311,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Statement> prepare_stmt
 %type <Statement> preparable_stmt
 %type <Statement> execute_stmt
+%type <Statement> deallocate_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
 %type <Statement> release_stmt
@@ -547,7 +548,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   CURRENT_USER CYCLE
 
 %token <str>   DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str>   DEFERRABLE DELETE DESC
+%token <str>   DEALLOCATE DEFERRABLE DELETE DESC
 %token <str>   DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
@@ -714,6 +715,7 @@ stmt:
 | explain_stmt
 | prepare_stmt
 | execute_stmt
+| deallocate_stmt
 | grant_stmt
 | insert_stmt
 | rename_stmt
@@ -1030,6 +1032,29 @@ execute_param_clause:
 | /* EMPTY */
   {
     $$.val = Exprs(nil)
+  }
+
+// DEALLOCATE [PREPARE] <plan_name>
+deallocate_stmt:
+  DEALLOCATE name
+  {
+    $$.val = &Deallocate{
+      Name: Name($2),
+    }
+  }
+| DEALLOCATE PREPARE name
+  {
+    $$.val = &Deallocate{
+      Name: Name($3),
+    }
+  }
+| DEALLOCATE ALL
+  {
+    $$.val = &Deallocate{}
+  }
+| DEALLOCATE PREPARE ALL
+  {
+    $$.val = &Deallocate{}
   }
 
 // GRANT privileges ON privilege_target TO grantee_list
@@ -4286,6 +4311,7 @@ unreserved_keyword:
 | DATABASE
 | DATABASES
 | DAY
+| DEALLOCATE
 | DELETE
 | DOUBLE
 | DROP

@@ -61,6 +61,7 @@ var keywords = map[string]int{
 	"DATABASES":         DATABASES,
 	"DATE":              DATE,
 	"DAY":               DAY,
+	"DEALLOCATE":        DEALLOCATE,
 	"DEC":               DEC,
 	"DECIMAL":           DECIMAL,
 	"DEFAULT":           DEFAULT,

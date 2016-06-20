@@ -109,6 +109,18 @@ func (*CreateTable) StatementType() StatementType { return DDL }
 func (*CreateTable) StatementTag() string { return "CREATE TABLE" }
 
 // StatementType implements the Statement interface.
+func (*Deallocate) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *Deallocate) StatementTag() string {
+	// Postgres distinguishes the command tags for these two cases of Deallocate statements.
+	if n.Name == "" {
+		return "DEALLOCATE ALL"
+	}
+	return "DEALLOCATE"
+}
+
+// StatementType implements the Statement interface.
 func (n *Delete) StatementType() StatementType { return n.Returning.StatementType() }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -337,6 +349,7 @@ func (n *CommitTransaction) String() string        { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }
 func (n *CreateIndex) String() string              { return AsString(n) }
 func (n *CreateTable) String() string              { return AsString(n) }
+func (n *Deallocate) String() string               { return AsString(n) }
 func (n *Delete) String() string                   { return AsString(n) }
 func (n *DropDatabase) String() string             { return AsString(n) }
 func (n *DropIndex) String() string                { return AsString(n) }

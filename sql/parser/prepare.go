@@ -59,3 +59,18 @@ func (node *Execute) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteByte(')')
 	}
 }
+
+// Deallocate represents a DEALLOCATE statement.
+type Deallocate struct {
+	Name Name // empty for ALL
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Deallocate) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DEALLOCATE ")
+	if node.Name == "" {
+		buf.WriteString("ALL")
+	} else {
+		FormatNode(buf, f, node.Name)
+	}
+}

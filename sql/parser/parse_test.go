@@ -180,6 +180,9 @@ func TestParse(t *testing.T) {
 		{`EXECUTE a (1, 1)`},
 		{`EXECUTE a (1 + 1)`},
 
+		{`DEALLOCATE a`},
+		{`DEALLOCATE ALL`},
+
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`GRANT SELECT ON foo TO root`},
@@ -691,6 +694,10 @@ func TestParse2(t *testing.T) {
 		{"ROLLBACK TO SAVEPOINT foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
 		{"ROLLBACK TRANSACTION TO foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
 		{"ROLLBACK TRANSACTION TO SAVEPOINT foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
+		{`DEALLOCATE PREPARE a`,
+			`DEALLOCATE a`},
+		{`DEALLOCATE PREPARE ALL`,
+			`DEALLOCATE ALL`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)

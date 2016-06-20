@@ -3,3 +3,6 @@ PREPARE a AS SELECT 1
 
 statement error unknown statement type: \*parser.Execute
 EXECUTE a
+
+statement error unknown statement type: \*parser.Deallocate
+DEALLOCATE a
