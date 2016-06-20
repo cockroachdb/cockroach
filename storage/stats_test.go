@@ -27,6 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+// initialStats are the stats for a Replica which has been created through
+// bootstrapRangeOnly. These stats are not empty because we call
+// writeInitialState().
+func initialStats() enginepb.MVCCStats {
+	return enginepb.MVCCStats{
+		SysBytes: 151,
+		SysCount: 5,
+	}
+}
 func TestRangeStatsEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{
@@ -36,8 +45,8 @@ func TestRangeStatsEmpty(t *testing.T) {
 	defer tc.Stop()
 
 	ms := tc.rng.GetMVCCStats()
-	if !reflect.DeepEqual(ms, enginepb.MVCCStats{}) {
-		t.Errorf("expected empty stats; got %+v", ms)
+	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
+		t.Errorf("expected stats %+v; got %+v", exp, ms)
 	}
 }
 

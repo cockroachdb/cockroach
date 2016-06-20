@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -55,40 +54,14 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState implements the raft.Storage interface.
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), keys.RaftHardStateKey(r.RangeID),
-		hlc.ZeroTimestamp, true, nil, &hs)
-	if err != nil {
+	hs, err := loadHardState(r.store.Engine(), r.RangeID)
+	// For uninitialized ranges, membership is unknown at this point.
+	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
-	initialized := r.isInitializedLocked()
-	if !found {
-		// We don't have a saved HardState, so set up the defaults.
-		if initialized {
-			// Set the initial log term.
-			hs.Term = raftInitialLogTerm
-			hs.Commit = raftInitialLogIndex
-			r.mu.lastIndex = raftInitialLogIndex
-		} else {
-			// This is a new range we are receiving from another node. Start
-			// from zero so we will receive a snapshot.
-			r.mu.lastIndex = 0
-		}
-	} else if initialized && hs.Commit == 0 {
-		// Normally, when the commit index changes, raft gives us a new
-		// commit index to persist, however, during initialization, which
-		// occurs entirely in cockroach, raft has no knowledge of this.
-		// By setting this to the initial log index, we avoid a panic in
-		// raft caused by this inconsistency.
-		hs.Commit = raftInitialLogIndex
-	}
-
 	var cs raftpb.ConfState
-	// For uninitialized ranges, membership is unknown at this point.
-	if found || initialized {
-		for _, rep := range r.mu.state.Desc.Replicas {
-			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
-		}
+	for _, rep := range r.mu.state.Desc.Replicas {
+		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
 	return hs, cs, nil
@@ -103,13 +76,12 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return entries(snap, r.RangeID, r.isInitializedLocked(), lo, hi, maxBytes)
+	return entries(snap, r.RangeID, lo, hi, maxBytes)
 }
 
 func entries(
 	e engine.Reader,
 	rangeID roachpb.RangeID,
-	isInitialized bool,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -159,7 +131,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := loadLastIndex(e, rangeID, isInitialized)
+		lastIndex, err := loadLastIndex(e, rangeID)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +144,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := raftTruncatedState(e, rangeID, isInitialized)
+	ts, err := raftTruncatedState(e, rangeID)
 	if err != nil {
 		return nil, err
 	}
@@ -205,13 +177,13 @@ func iterateEntries(
 func (r *Replica) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return term(snap, r.RangeID, r.isInitializedLocked(), i)
+	return term(snap, r.RangeID, i)
 }
 
-func term(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool, i uint64) (uint64, error) {
-	ents, err := entries(eng, rangeID, isInitialized, i, i+1, 0)
+func term(eng engine.Reader, rangeID roachpb.RangeID, i uint64) (uint64, error) {
+	ents, err := entries(eng, rangeID, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := raftTruncatedState(eng, rangeID, isInitialized)
+		ts, err := raftTruncatedState(eng, rangeID)
 		if err != nil {
 			return 0, err
 		}
@@ -242,7 +214,7 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID, r.isInitializedLocked())
+	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID)
 	if err != nil {
 		return ts, err
 	}
@@ -253,27 +225,12 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 }
 
 func raftTruncatedState(
-	eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool,
+	eng engine.Reader, rangeID roachpb.RangeID,
 ) (roachpb.RaftTruncatedState, error) {
 	ts := roachpb.RaftTruncatedState{}
-	ok, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
+	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
 		hlc.ZeroTimestamp, true, nil, &ts)
-	if err != nil {
-		return ts, err
-	}
-	if !ok {
-		if isInitialized {
-			// If we created this range, set the initial log index/term.
-			ts.Index = raftInitialLogIndex
-			ts.Term = raftInitialLogTerm
-		} else {
-			// This is a new range we are receiving from another node. Start
-			// from zero so we will receive a snapshot.
-			ts.Index = 0
-			ts.Term = 0
-		}
-	}
-	return ts, nil
+	return ts /* zero if not found */, err
 }
 
 // FirstIndex implements the raft.Storage interface.
@@ -292,103 +249,6 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.FirstIndex()
-}
-
-// loadAppliedIndex retrieves the applied index from the supplied engine.
-func loadAppliedIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool) (uint64, uint64, error) {
-	var appliedIndex uint64
-	if isInitialized {
-		appliedIndex = raftInitialLogIndex
-	} else {
-		appliedIndex = 0
-	}
-	v, _, err := engine.MVCCGet(context.Background(), eng, keys.RaftAppliedIndexKey(rangeID),
-		hlc.ZeroTimestamp, true, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-	if v != nil {
-		int64AppliedIndex, err := v.GetInt()
-		if err != nil {
-			return 0, 0, err
-		}
-		appliedIndex = uint64(int64AppliedIndex)
-	}
-	// TODO(tschottdorf): code duplication.
-	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(context.Background(), eng, keys.LeaseAppliedIndexKey(rangeID),
-		hlc.ZeroTimestamp, true, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-	if v != nil {
-		int64LeaseAppliedIndex, err := v.GetInt()
-		if err != nil {
-			return 0, 0, err
-		}
-		leaseAppliedIndex = uint64(int64LeaseAppliedIndex)
-	}
-
-	return appliedIndex, leaseAppliedIndex, nil
-}
-
-// setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
-	var value roachpb.Value
-	value.SetInt(int64(appliedIndex))
-
-	if err := engine.MVCCPut(context.Background(), eng, ms,
-		keys.RaftAppliedIndexKey(rangeID),
-		hlc.ZeroTimestamp,
-		value,
-		nil /* txn */); err != nil {
-		return err
-	}
-	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCPut(context.Background(), eng, ms,
-		keys.LeaseAppliedIndexKey(rangeID),
-		hlc.ZeroTimestamp,
-		value,
-		nil /* txn */)
-}
-
-// loadLastIndex retrieves the last index from storage.
-func loadLastIndex(eng engine.Reader, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
-	lastIndex := uint64(0)
-	v, _, err := engine.MVCCGet(context.Background(), eng,
-		keys.RaftLastIndexKey(rangeID),
-		hlc.ZeroTimestamp, true /* consistent */, nil)
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		int64LastIndex, err := v.GetInt()
-		if err != nil {
-			return 0, err
-		}
-		lastIndex = uint64(int64LastIndex)
-	} else {
-		// The log is empty, which means we are either starting from scratch
-		// or the entire log has been truncated away. raftTruncatedState
-		// handles both cases.
-		lastEnt, err := raftTruncatedState(eng, rangeID, isInitialized)
-		if err != nil {
-			return 0, err
-		}
-		lastIndex = lastEnt.Index
-	}
-	return lastIndex, nil
-}
-
-// setLastIndex persists a new last index.
-func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint64) error {
-	var value roachpb.Value
-	value.SetInt(int64(lastIndex))
-
-	return engine.MVCCPut(context.Background(), eng, nil, keys.RaftLastIndexKey(rangeID),
-		hlc.ZeroTimestamp,
-		value,
-		nil /* txn */)
 }
 
 // Snapshot implements the raft.Storage interface.
@@ -428,7 +288,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(snap, rangeID, r.isInitializedLocked(), r.mu.state.Desc.StartKey)
+		snapData, err := snapshot(snap, rangeID, r.mu.state.Desc.StartKey)
 		if err != nil {
 			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
@@ -495,13 +355,12 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 func snapshot(
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
-	isInitialized bool,
 	startKey roachpb.RKey,
 ) (raftpb.Snapshot, error) {
 	start := timeutil.Now()
 	var snapData roachpb.RaftSnapshotData
 
-	truncState, err := raftTruncatedState(snap, rangeID, isInitialized)
+	truncState, err := raftTruncatedState(snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -509,7 +368,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(snap, rangeID, isInitialized)
+	appliedIndex, _, err := loadAppliedIndex(snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -573,7 +432,7 @@ func snapshot(
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
-	term, err := term(snap, rangeID, isInitialized, appliedIndex)
+	term, err := term(snap, rangeID, appliedIndex)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
@@ -764,12 +623,6 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		}
 	})
 	return nil
-}
-
-// setHardState persists the raft HardState.
-func (r *Replica) setHardState(batch engine.ReadWriter, st raftpb.HardState) error {
-	return engine.MVCCPutProto(context.Background(), batch, nil, keys.RaftHardStateKey(r.RangeID),
-		hlc.ZeroTimestamp, nil, &st)
 }
 
 // Raft commands are encoded with a 1-byte version (currently 0), an 8-byte ID,

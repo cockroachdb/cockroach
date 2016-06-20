@@ -881,6 +881,11 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Minimal amount of work to keep this deprecated machinery working: Write
+	// some required Raft keys.
+	if _, err := writeInitialState(store.engine, enginepb.MVCCStats{}, desc.RangeID); err != nil {
+		t.Fatal(err)
+	}
 	newRng, err := NewReplica(desc, store, 0)
 	if err != nil {
 		t.Fatal(err)
