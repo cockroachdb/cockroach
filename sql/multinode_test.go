@@ -85,26 +85,54 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		}
 	}
 
-	waitForReplication(servers)
+	waitForReplication(servers, t)
+	waitForFullReplication(servers, t)
 	return conns, f
 }
 
 // Waits until at least one of the joining nodes has at least one replica.
 // NOTE: the StoreID of each server's store must be the index of the server in
-// the servers array + 1. This will occur naturally if servers are indexed in
-// the order they were created. 1
-func waitForReplication(servers []server.TestServer) {
-	notReplicated := true
-	for notReplicated {
+// the servers array + 1.
+func waitForReplication(servers []server.TestServer, t testing.TB) {
+	for {
 		noneReplicated := true
 		for i, server := range servers {
-			store, _ := server.Stores().GetStore(roachpb.StoreID(i + 1))
+			store, err := server.Stores().GetStore(roachpb.StoreID(i + 1))
+			if err != nil {
+				t.Fatal(err)
+			}
 			if store != nil {
 				if store.ReplicaCount() >= 1 && noneReplicated {
 					noneReplicated = false
 				} else if store.ReplicaCount() >= 1 {
-					notReplicated = false
+					return
 				}
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// Waits until all of the nodes in the cluster have the same number of replicas.
+// NOTE: the StoreID of each server's store must be the index of the server in
+// the servers array + 1.
+func waitForFullReplication(servers []server.TestServer, t testing.TB) {
+	notReplicated := true
+	for notReplicated {
+		notReplicated = false
+		store, err := servers[0].Stores().GetStore(roachpb.StoreID(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		numReplicas := store.ReplicaCount()
+		for i, server := range servers {
+			store, err := server.Stores().GetStore(roachpb.StoreID(i + 1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if store.ReplicaCount() != numReplicas {
+				notReplicated = true
+				break
 			}
 		}
 		time.Sleep(250 * time.Millisecond)
