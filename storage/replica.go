@@ -731,6 +731,21 @@ func (r *Replica) State() storagebase.RangeInfo {
 	return ri
 }
 
+// assertState can be called from the Raft goroutine to check that the in-memory
+// and on-disk states of the Replica are congruent.
+// TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
+func (r *Replica) assertState(reader engine.Reader) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	diskState, err := loadState(reader, r.mu.state.Desc)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(diskState, r.mu.state) {
+		log.Fatalf("on-disk and in-memory state diverged:\n%+v\n%+v", diskState, r.mu.state)
+	}
+}
+
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -1803,6 +1818,9 @@ func (r *Replica) applyRaftCommand(
 
 	if forcedError != nil {
 		batch = r.store.Engine().NewBatch()
+		batch.Defer(func() {
+			r.assertState(r.store.Engine())
+		})
 		br, rErr = nil, forcedError
 	} else {
 		batch, ms, br, intents, rErr = r.applyRaftCommandInBatch(ctx, idKey,
@@ -1815,7 +1833,7 @@ func (r *Replica) applyRaftCommand(
 	// remaining writes are the raft applied index and the updated MVCC stats.
 	writer := batch.Distinct()
 
-	// Advance the last applied index and commit the batch.
+	// Advance the last applied index.
 	if err := setAppliedIndex(writer, &ms, r.RangeID, index, leaseIndex); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
@@ -1835,9 +1853,13 @@ func (r *Replica) applyRaftCommand(
 	// Update store-level MVCC stats with merged range stats.
 	r.store.metrics.addMVCCStats(ms)
 
-	if err := batch.Commit(); err != nil {
-		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
-	} else {
+	// TODO(petermattis): We did not close the writer in an earlier version of
+	// the code, which went undetected even though we used the batch after
+	// (though only to commit it). We should add an assertion to prevent that in
+	// the future.
+	writer.Close()
+
+	batch.Defer(func() {
 		r.mu.Lock()
 		// Update cached appliedIndex if we were able to set the applied index
 		// on disk.
@@ -1845,6 +1867,10 @@ func (r *Replica) applyRaftCommand(
 		r.mu.state.LeaseAppliedIndex = leaseIndex
 		r.mu.state.Stats = newMS
 		r.mu.Unlock()
+	})
+	if err := batch.Commit(); err != nil {
+		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
+	} else {
 	}
 
 	// On successful write commands handle write-related triggers including
