@@ -1915,7 +1915,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	return nil, pErr
 }
 
-// maybeUpdateTransaction does a "touch" push on the specified
+// maybeUpdateTransaction does a "query" push on the specified
 // transaction to glean possible changes, such as a higher timestamp
 // and/or priority. It turns out this is necessary while a request
 // is in a backoff/retry loop pushing write intents as two txns
@@ -1946,7 +1946,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 		// ok tackling this separately.
 		//
 		// Scenario:
-		// - we're aborted and don't know it we have a read-write conflict
+		// - we're aborted and don't know if we have a read-write conflict
 		// - the push above fails and we get a WriteIntentError
 		// - we try to update our transaction (right here, and if we don't we might
 		// be stuck in a race, that's why we do this - the txn proto we're using
