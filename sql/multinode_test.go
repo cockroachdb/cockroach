@@ -81,7 +81,6 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 	}
 
 	waitForReplication(servers, t)
-	waitForFullReplication(servers, t)
 	return conns, f
 }
 
