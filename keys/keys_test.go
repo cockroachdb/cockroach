@@ -101,8 +101,8 @@ func TestKeyAddressError(t *testing.T) {
 		"local range ID key .* is not addressable": {
 			AbortCacheKey(0, uuid.NewV4()),
 			RaftTombstoneKey(0),
-			RaftAppliedIndexKey(0),
-			RaftTruncatedStateKey(0),
+			RangeAppliedIndexKey(0),
+			RangeTruncatedStateKey(0),
 			RangeLeaderLeaseKey(0),
 			RangeStatsKey(0),
 			RaftHardStateKey(0),
