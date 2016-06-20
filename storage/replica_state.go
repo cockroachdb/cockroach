@@ -24,12 +24,18 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 )
 
-// TODO(tschottdorf): unified method to update both in-mem and on-disk
-// state, similar to how loadState unifies restoring from storage.
-func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase.ReplicaState, error) {
+// loadState loads a ReplicaState from disc. The exception is the Desc field,
+// which is updated transactionally, and is populated from the supplied
+// RangeDescriptor under the convention that that is the latest committed
+// version.
+func loadState(
+	reader engine.Reader, desc *roachpb.RangeDescriptor,
+) (storagebase.ReplicaState, error) {
 	var s storagebase.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
@@ -51,7 +57,6 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase
 	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
 		reader,
 		desc.RangeID,
-		desc.IsInitialized(),
 	); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
@@ -71,20 +76,124 @@ func loadState(reader engine.Reader, desc *roachpb.RangeDescriptor) (storagebase
 	return s, nil
 }
 
-// TODO(tschottdorf): write and use setLease, too.
-func loadLease(eng engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+// saveState persists the given ReplicaState to disk. It assumes that the
+// contained Stats are up-to-date and returns the stats which result from
+// writing the updated State.
+// As an exception to the rule, the Desc field (whose on-disk state is special
+// in that it's a full MVCC value and updated transactionally) is only used for
+// its RangeID.
+//
+// TODO(tschottdorf): consolidate direct permutation and persistence of
+// state throughout the Raft path in favor of a more organized approach.
+func saveState(
+	eng engine.ReadWriter, state storagebase.ReplicaState,
+) (enginepb.MVCCStats, error) {
+	ms, rangeID := &state.Stats, state.Desc.RangeID
+	if err := setLease(eng, ms, rangeID, state.Lease); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := setAppliedIndex(
+		eng, ms, rangeID, state.RaftAppliedIndex, state.LeaseAppliedIndex,
+	); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := setFrozenStatus(eng, ms, rangeID, state.Frozen); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := setGCThreshold(eng, ms, rangeID, &state.GCThreshold); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := setTruncatedState(eng, ms, rangeID, *state.TruncatedState); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := setMVCCStats(eng, rangeID, state.Stats); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	return state.Stats, nil
+}
+
+func loadLease(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), hlc.ZeroTimestamp, true, nil, lease); err != nil {
+	_, err := engine.MVCCGetProto(context.Background(), reader,
+		keys.RangeLeaderLeaseKey(rangeID), hlc.ZeroTimestamp,
+		true, nil, lease)
+	if err != nil {
 		return nil, err
 	}
 	return lease, nil
 }
 
+func setLease(
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	lease *roachpb.Lease, // TODO(tschottdorf): better if this is never nil
+) error {
+	if lease == nil {
+		return nil
+	}
+	return engine.MVCCPutProto(
+		context.Background(), eng, ms,
+		keys.RangeLeaderLeaseKey(rangeID),
+		hlc.ZeroTimestamp, nil, lease)
+}
+
+func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, uint64, error) {
+	var appliedIndex uint64
+	v, _, err := engine.MVCCGet(context.Background(), reader, keys.RaftAppliedIndexKey(rangeID),
+		hlc.ZeroTimestamp, true, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	if v != nil {
+		int64AppliedIndex, err := v.GetInt()
+		if err != nil {
+			return 0, 0, err
+		}
+		appliedIndex = uint64(int64AppliedIndex)
+	}
+	// TODO(tschottdorf): code duplication.
+	var leaseAppliedIndex uint64
+	v, _, err = engine.MVCCGet(context.Background(), reader, keys.LeaseAppliedIndexKey(rangeID),
+		hlc.ZeroTimestamp, true, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	if v != nil {
+		int64LeaseAppliedIndex, err := v.GetInt()
+		if err != nil {
+			return 0, 0, err
+		}
+		leaseAppliedIndex = uint64(int64LeaseAppliedIndex)
+	}
+
+	return appliedIndex, leaseAppliedIndex, nil
+}
+
+func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
+	var value roachpb.Value
+	value.SetInt(int64(appliedIndex))
+
+	if err := engine.MVCCPut(context.Background(), eng, ms,
+		keys.RaftAppliedIndexKey(rangeID),
+		hlc.ZeroTimestamp,
+		value,
+		nil /* txn */); err != nil {
+		return err
+	}
+	value.SetInt(int64(leaseAppliedIndex))
+	return engine.MVCCPut(context.Background(), eng, ms,
+		keys.LeaseAppliedIndexKey(rangeID),
+		hlc.ZeroTimestamp,
+		value,
+		nil /* txn */)
+}
+
 func loadTruncatedState(
-	eng engine.Reader, rangeID roachpb.RangeID,
+	reader engine.Reader, rangeID roachpb.RangeID,
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(context.Background(), eng,
+	if _, err := engine.MVCCGetProto(context.Background(), reader,
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, true,
 		nil, &truncState); err != nil {
 		return roachpb.RaftTruncatedState{}, err
@@ -102,6 +211,13 @@ func setTruncatedState(
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
 }
 
+func loadGCThreshold(reader engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
+	var t hlc.Timestamp
+	_, err := engine.MVCCGetProto(context.Background(), reader, keys.RangeLastGCKey(rangeID),
+		hlc.ZeroTimestamp, true, nil, &t)
+	return t, err
+}
+
 func setGCThreshold(
 	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, threshold *hlc.Timestamp,
 ) error {
@@ -109,16 +225,9 @@ func setGCThreshold(
 		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
 
-func loadGCThreshold(eng engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
-	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLastGCKey(rangeID),
-		hlc.ZeroTimestamp, true, nil, &t)
-	return t, err
-}
-
-func loadMVCCStats(eng engine.Reader, rangeID roachpb.RangeID) (enginepb.MVCCStats, error) {
+func loadMVCCStats(reader engine.Reader, rangeID roachpb.RangeID) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), reader, rangeID, &ms); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return ms, nil
@@ -137,8 +246,8 @@ func setFrozenStatus(
 		keys.RangeFrozenStatusKey(rangeID), hlc.ZeroTimestamp, val, nil)
 }
 
-func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) {
-	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeFrozenStatusKey(rangeID),
+func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, error) {
+	val, _, err := engine.MVCCGet(context.Background(), reader, keys.RangeFrozenStatusKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return false, err
@@ -147,4 +256,130 @@ func loadFrozenStatus(eng engine.Reader, rangeID roachpb.RangeID) (bool, error) 
 		return false, nil
 	}
 	return val.GetBool()
+}
+
+// The rest is not technically part of ReplicaState.
+// TODO(tschottdorf): more consolidation of ad-hoc structures: last index and
+// hard state. These are closely coupled with ReplicaState (and in particular
+// with its TruncatedState) but are different in that they are not consistently
+// updated through Raft.
+
+func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, error) {
+	lastIndex := uint64(0)
+	v, _, err := engine.MVCCGet(context.Background(), reader,
+		keys.RaftLastIndexKey(rangeID),
+		hlc.ZeroTimestamp, true /* consistent */, nil)
+	if err != nil {
+		return 0, err
+	}
+	if v != nil {
+		int64LastIndex, err := v.GetInt()
+		if err != nil {
+			return 0, err
+		}
+		lastIndex = uint64(int64LastIndex)
+	} else {
+		// The log is empty, which means we are either starting from scratch
+		// or the entire log has been truncated away.
+		lastEnt, err := raftTruncatedState(reader, rangeID)
+		if err != nil {
+			return 0, err
+		}
+		lastIndex = lastEnt.Index
+	}
+	return lastIndex, nil
+}
+
+func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint64) error {
+	var value roachpb.Value
+	value.SetInt(int64(lastIndex))
+
+	return engine.MVCCPut(context.Background(), eng, nil, keys.RaftLastIndexKey(rangeID),
+		hlc.ZeroTimestamp,
+		value,
+		nil /* txn */)
+}
+
+func loadHardState(
+	reader engine.Reader, rangeID roachpb.RangeID,
+) (raftpb.HardState, error) {
+	var hs raftpb.HardState
+	found, err := engine.MVCCGetProto(context.Background(), reader,
+		keys.RaftHardStateKey(rangeID), hlc.ZeroTimestamp, true, nil, &hs)
+
+	if !found || err != nil {
+		return raftpb.HardState{}, err
+	}
+	return hs, nil
+}
+
+func setHardState(
+	batch engine.ReadWriter, rangeID roachpb.RangeID, st raftpb.HardState,
+) error {
+	return engine.MVCCPutProto(context.Background(), batch, nil,
+		keys.RaftHardStateKey(rangeID),
+		hlc.ZeroTimestamp, nil, &st)
+}
+
+// writeInitialState bootstraps a new Raft group (i.e. it is called when we
+// bootstrap a Range, or when setting up the right hand side of a split).
+// Its main task is to persist a consistent Raft (and associated Replica) state
+// which does not start from zero but presupposes a few entries already having
+// applied.
+// The supplied MVCCStats are used for the Stats field after adjusting for
+// persisting the state itself, and the updated stats are returned.
+func writeInitialState(
+	eng engine.ReadWriter, ms enginepb.MVCCStats, desc roachpb.RangeDescriptor,
+) (enginepb.MVCCStats, error) {
+	rangeID := desc.RangeID
+	var s storagebase.ReplicaState
+
+	s.TruncatedState = &roachpb.RaftTruncatedState{
+		Term:  raftInitialLogTerm,
+		Index: raftInitialLogIndex,
+	}
+	s.RaftAppliedIndex = s.TruncatedState.Index
+	s.Desc = &roachpb.RangeDescriptor{
+		RangeID: rangeID,
+	}
+	s.Stats = ms
+
+	newMS, err := saveState(eng, s)
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
+	// Load a potentially existing HardState as we may need to preserve
+	// information about cast votes. For example, during a Split for which
+	// another node's new right-hand side has contacted us before our left-hand
+	// side called in here to create the group.
+	oldHS, err := loadHardState(eng, rangeID)
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
+	newHS := raftpb.HardState{
+		Term:   s.TruncatedState.Term,
+		Commit: s.TruncatedState.Index,
+	}
+
+	if !raft.IsEmptyHardState(oldHS) {
+		if oldHS.Commit > newHS.Commit {
+			newHS.Commit = oldHS.Commit
+		}
+		if oldHS.Term > newHS.Term {
+			newHS.Term = oldHS.Term
+		}
+		newHS.Vote = oldHS.Vote
+	}
+
+	if err := setHardState(eng, rangeID, newHS); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
+	if err := setLastIndex(eng, rangeID, s.TruncatedState.Index); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
+	return newMS, nil
 }

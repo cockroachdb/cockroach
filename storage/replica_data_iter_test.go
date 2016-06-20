@@ -70,8 +70,14 @@ func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
 	}{
 		{keys.AbortCacheKey(r.RangeID, testTxnID), ts0},
 		{keys.AbortCacheKey(r.RangeID, testTxnID2), ts0},
+		{keys.RangeFrozenStatusKey(r.RangeID), ts0},
+		{keys.RangeLastGCKey(r.RangeID), ts0},
+		{keys.RaftAppliedIndexKey(r.RangeID), ts0},
+		{keys.RaftTruncatedStateKey(r.RangeID), ts0},
+		{keys.LeaseAppliedIndexKey(r.RangeID), ts0},
 		{keys.RangeStatsKey(r.RangeID), ts0},
 		{keys.RaftHardStateKey(r.RangeID), ts0},
+		{keys.RaftLastIndexKey(r.RangeID), ts0},
 		{keys.RaftLogKey(r.RangeID, 1), ts0},
 		{keys.RaftLogKey(r.RangeID, 2), ts0},
 		{keys.RangeLastReplicaGCTimestampKey(r.RangeID), ts0},
@@ -114,15 +120,12 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
 	newDesc := *tc.rng.Desc()
-	newDesc.StartKey = roachpb.RKey("a")
-	if err := tc.rng.setDesc(&newDesc); err != nil {
-		t.Fatal(err)
-	}
+	newDesc.RangeID = 125125125
 
-	iter := NewReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&newDesc, tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
-		t.Error("expected empty iteration")
+		t.Errorf("unexpected: %s", iter.Key())
 	}
 }
 

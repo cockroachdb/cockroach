@@ -82,9 +82,17 @@ const (
 	// closely resembles the real world.
 	bootstrapRangeWithMetadata bootstrapMode = iota
 	// Create a range with NewRange and Store.AddRangeTest. The store's data
-	// will be persisted but metadata will not. This mode is provided
-	// for backwards compatibility for tests that expect the store to
-	// initially be empty.
+	// will be persisted but metadata will not.
+	//
+	// Tests which run in this mode play fast and loose; they want
+	// a Replica which doesn't have too many moving parts, but then
+	// may still exercise a sizable amount of code, be it by accident
+	// or design. We bootstrap them here with what's absolutely
+	// necessary to not immediately crash on a Raft command, but
+	// nothing more.
+	// If you read this and you're writing a new test, try not to
+	// use this mode - it's deprecated and tends to get in the way
+	// of new development.
 	bootstrapRangeOnly
 )
 
@@ -196,7 +204,15 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 
 	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
-			rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
+			testDesc := testRangeDescriptor()
+			if _, err := writeInitialState(
+				tc.store.Engine(),
+				enginepb.MVCCStats{},
+				*testDesc,
+			); err != nil {
+				t.Fatal(err)
+			}
+			rng, err := NewReplica(testDesc, tc.store, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -344,26 +360,12 @@ func TestReplicaContains(t *testing.T) {
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{{
-			// This test is a little weird since it doesn't call Store.Start
-			// which would assign IDs.
-			StoreID:   0,
-			ReplicaID: 1,
-		}},
 	}
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	e := engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
-	clock := hlc.NewClock(hlc.UnixNano)
-	ctx := TestStoreContext()
-	ctx.Clock = clock
-	ctx.Transport = NewDummyRaftTransport()
-	store := NewStore(ctx, e, &roachpb.NodeDescriptor{NodeID: 1})
-	r, err := NewReplica(desc, store, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// This test really only needs a hollow shell of a Replica.
+	r := &Replica{}
+	r.mu.state.Desc = desc
+
 	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)
 	}
@@ -4025,13 +4027,30 @@ func TestReplicaStatsComputation(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	baseStats := initialStats()
+	// Add in the contribution for the leader lease request.
+	baseStats.Add(enginepb.MVCCStats{
+		SysCount: 1,
+		SysBytes: 62,
+	})
+
 	// Put a value.
 	pArgs := putArgs([]byte("a"), []byte("value1"))
 
 	if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS := enginepb.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 83, SysCount: 2, LastUpdateNanos: 0}
+	expMS := baseStats
+	expMS.Add(enginepb.MVCCStats{
+		LiveBytes: 25,
+		KeyBytes:  14,
+		ValBytes:  11,
+		LiveCount: 1,
+		KeyCount:  1,
+		ValCount:  1,
+	})
+
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
@@ -4050,7 +4069,17 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = enginepb.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
+	expMS = baseStats
+	expMS.Add(enginepb.MVCCStats{
+		LiveBytes:   101,
+		KeyBytes:    28,
+		ValBytes:    73,
+		IntentBytes: 23,
+		LiveCount:   2,
+		KeyCount:    2,
+		ValCount:    2,
+		IntentCount: 1,
+	})
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -4065,7 +4094,15 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = enginepb.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
+	expMS = baseStats
+	expMS.Add(enginepb.MVCCStats{
+		LiveBytes: 50,
+		KeyBytes:  28,
+		ValBytes:  22,
+		LiveCount: 2,
+		KeyCount:  2,
+		ValCount:  2,
+	})
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -4074,7 +4111,15 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(&dArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = enginepb.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 120, SysCount: 3, LastUpdateNanos: 0}
+	expMS = baseStats
+	expMS.Add(enginepb.MVCCStats{
+		LiveBytes: 25,
+		KeyBytes:  40,
+		ValBytes:  22,
+		LiveCount: 1,
+		KeyCount:  2,
+		ValCount:  3,
+	})
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 

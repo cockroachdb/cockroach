@@ -1553,7 +1553,7 @@ func (r *Replica) LeaderLease(
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), hlc.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := setLease(batch, ms, r.RangeID, &args.Lease); err != nil {
 		return reply, err
 	}
 	r.mu.state.Lease = &args.Lease
@@ -2250,10 +2250,13 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
-	// Create the new Replica representing the right side of the split.
-	newRng, err := NewReplica(&split.NewDesc, r.store, 0)
+	// Write the initial state for the new Raft group of the right-hand side.
+	// Node that this needs to go into deltaMS (which is the total difference
+	// in bytes reported to the store in the end). We compute the RHS' stats
+	// from it below.
+	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
 	if err != nil {
-		return err
+		return util.Errorf("unable to write initial state: %s", err)
 	}
 
 	rightMS := deltaMS
@@ -2261,23 +2264,32 @@ func (r *Replica) splitTrigger(
 	rightMS.Add(origStats)
 	// Remove stats from the left side of the split.
 	rightMS.Subtract(leftMS)
-	if err := setMVCCStats(batch, newRng.RangeID, rightMS); err != nil {
+
+	if err := setMVCCStats(batch, split.NewDesc.RangeID, rightMS); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 	log.Trace(ctx, "computed stats for new range")
 
-	// Copy the timestamp cache into the new range.
-	r.mu.Lock()
-	newRng.mu.Lock()
-	newRng.mu.state.Stats = rightMS
-	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
-	newRng.mu.Unlock()
-	r.mu.Unlock()
-	log.Trace(ctx, "copied timestamp cache")
-
 	// Note: you must not use the trace inside of this defer since it may
 	// run after the trace has already completed.
 	batch.Defer(func() {
+		// Create the new Replica representing the right side of the split.
+		// Our error handling options at this point are very limited, but
+		// we need to do this after our batch has committed.
+		newRng, err := NewReplica(&split.NewDesc, r.store, 0)
+		if err != nil {
+			panic(err)
+		}
+
+		// Copy the timestamp cache into the new range.
+		r.mu.Lock()
+		newRng.mu.Lock()
+		newRng.mu.state.Stats = rightMS
+		r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
+		newRng.mu.Unlock()
+		r.mu.Unlock()
+		log.Trace(ctx, "copied timestamp cache")
+
 		// Add the new split replica to the store. This step atomically
 		// updates the EndKey of the updated replica and also adds the
 		// new replica to the store's replica map.
