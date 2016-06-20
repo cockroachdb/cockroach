@@ -131,7 +131,7 @@ func setLease(
 
 func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, uint64, error) {
 	var appliedIndex uint64
-	v, _, err := engine.MVCCGet(context.Background(), reader, keys.RaftAppliedIndexKey(rangeID),
+	v, _, err := engine.MVCCGet(context.Background(), reader, keys.RangeAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -145,7 +145,7 @@ func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, ui
 	}
 	// TODO(tschottdorf): code duplication.
 	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(context.Background(), reader, keys.LeaseAppliedIndexKey(rangeID),
+	v, _, err = engine.MVCCGet(context.Background(), reader, keys.RangeLeaseAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -166,7 +166,7 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 	value.SetInt(int64(appliedIndex))
 
 	if err := engine.MVCCPut(context.Background(), eng, ms,
-		keys.RaftAppliedIndexKey(rangeID),
+		keys.RangeAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */); err != nil {
@@ -174,7 +174,7 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 	}
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCPut(context.Background(), eng, ms,
-		keys.LeaseAppliedIndexKey(rangeID),
+		keys.RangeLeaseAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */)
@@ -185,7 +185,7 @@ func loadTruncatedState(
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
 	if _, err := engine.MVCCGetProto(context.Background(), reader,
-		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, true,
+		keys.RangeTruncatedStateKey(rangeID), hlc.ZeroTimestamp, true,
 		nil, &truncState); err != nil {
 		return roachpb.RaftTruncatedState{}, err
 	}
@@ -199,7 +199,7 @@ func setTruncatedState(
 	truncState roachpb.RaftTruncatedState,
 ) error {
 	return engine.MVCCPutProto(context.Background(), eng, ms,
-		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
+		keys.RangeTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
 }
 
 func loadGCThreshold(reader engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
