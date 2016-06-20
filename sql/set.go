@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,6 +33,12 @@ import (
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
 func (p *planner) Set(n *parser.Set) (planNode, error) {
+	if n.Name == nil {
+		// A client has sent the reserved internal syntax SET DATA ...
+		// Reject it.
+		return nil, errors.New("invalid statement: SET DATA")
+	}
+
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
 	name := strings.ToUpper(n.Name.String())

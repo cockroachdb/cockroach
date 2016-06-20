@@ -39,11 +39,16 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 	}
 
 	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))
+	exprStrings := make([]string, len(tableDesc.Checks))
 	for i, check := range tableDesc.Checks {
-		raw, err := parser.ParseExprTraditional(check.Expr)
-		if err != nil {
-			return err
-		}
+		exprStrings[i] = check.Expr
+	}
+	exprs, err := parser.ParseExprsTraditional(exprStrings)
+	if err != nil {
+		return err
+	}
+
+	for i, raw := range exprs {
 		typedExpr, err := p.analyzeExpr(raw, []*tableInfo{&table}, c.qvals,
 			parser.TypeBool, false, "")
 		if err != nil {
