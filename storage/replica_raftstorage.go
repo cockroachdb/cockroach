@@ -538,7 +538,7 @@ func snapshot(
 	for ; iter.Valid(); iter.Next() {
 		var key engine.MVCCKey
 		var value []byte
-		alloc, key, value = iter.AllocIterKeyValue(alloc)
+		alloc, key, value = iter.allocIterKeyValue(alloc)
 		snapData.KV = append(snapData.KV,
 			roachpb.RaftSnapshotData_KeyValue{
 				Key:       key.Key,
