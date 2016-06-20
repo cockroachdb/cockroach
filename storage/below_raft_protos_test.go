@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -65,6 +66,11 @@ type fixture struct {
 }
 
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
+	reflect.TypeOf(&raftpb.HardState{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message { return &raftpb.HardState{Term: 1, Vote: 2, Commit: 3} },
+		emptySum:             13621293256077144893,
+		populatedSum:         11100902660574274053,
+	},
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCMetadata(r, false) },
 		emptySum:             7551962144604783939,
