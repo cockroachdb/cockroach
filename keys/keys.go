@@ -162,11 +162,13 @@ func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
+// TODO(tschottdorf): rename to RangeAppliedIndexKey
 func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRaftAppliedIndexSuffix, nil)
 }
 
 // LeaseAppliedIndexKey returns a system-local key for a lease applied index.
+// TODO(tschottdorf): rename to RangeLeaseAppliedIndexKey
 func LeaseAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalLeaseAppliedIndexSuffix, nil)
 }
