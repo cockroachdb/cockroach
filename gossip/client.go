@@ -94,7 +94,11 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 
 // close stops the client gossip loop and returns immediately.
 func (c *client) close() {
-	close(c.closer)
+	select {
+	case <-c.closer:
+	default:
+		close(c.closer)
+	}
 }
 
 // requestGossip requests the latest gossip from the remote server by
@@ -237,6 +241,8 @@ func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stop
 
 	for {
 		select {
+		case <-c.closer:
+			return nil
 		case <-stopper.ShouldStop():
 			return nil
 		case err := <-errCh:
