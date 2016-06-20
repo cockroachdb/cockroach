@@ -1033,7 +1033,9 @@ func TestReplicaDrainLeaderLease(t *testing.T) {
 	if !slept.Load().(bool) {
 		t.Fatal("DrainLeadership returned with active lease")
 	}
-	pErr := <-tc.rng.requestLeaderLease(tc.clock.Now())
+	tc.rng.mu.Lock()
+	pErr := <-tc.rng.requestLeaseLocked(tc.clock.Now())
+	tc.rng.mu.Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaderError)
 	if !ok {
 		t.Fatalf("expected NotLeaderError, not %v", pErr)
@@ -1652,7 +1654,9 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 			pErrCh := make(chan *roachpb.Error, num)
 			for i := 0; i < num; i++ {
 				tc.stopper.RunAsyncTask(func() {
-					leaseCh := tc.rng.requestLeaderLease(ts)
+					tc.rng.mu.Lock()
+					leaseCh := tc.rng.requestLeaseLocked(ts)
+					tc.rng.mu.Unlock()
 					wg.Done()
 					pErr := <-leaseCh
 					// Mutate the errors as we receive them to expose races.
