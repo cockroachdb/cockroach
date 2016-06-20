@@ -52,7 +52,10 @@ const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
 
 // TODO(radu): experimental code for testing distSQL flows.
-const testDistSQL bool = false
+//    0 : disabled
+//    1 : enabled, sync mode
+//    2 : enabled, async mode
+const testDistSQL int = 0
 
 type traceResult struct {
 	tag   string
@@ -996,8 +999,8 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 
-	if testDistSQL {
-		if err := hackPlanToUseDistSQL(plan); err != nil {
+	if testDistSQL != 0 {
+		if err := hackPlanToUseDistSQL(plan, testDistSQL == 1); err != nil {
 			return result, err
 		}
 	}

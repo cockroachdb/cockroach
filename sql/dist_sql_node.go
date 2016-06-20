@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // distSQLNode is a planNode that receives results from a distsql flow (through
@@ -34,11 +33,20 @@ type distSQLNode struct {
 	columns  []ResultColumn
 	ordering orderingInfo
 
+	// syncMode indicates the mode in which we run the associated flow:
+	//  - sync mode is used for small queries (where the number of table rows
+	//    needed is known); in this mode we run the processors serially and
+	//    accumulate the rows in -betew
+	syncMode bool
+
+	// flowResult is used to access the results of the flow. It can be a
+	// RowChannel or a RowBuffer (depending on syncMode).
+	flowResult distsql.RowSource
+
 	// colMapping maps columns in the RowChannel stream to result columns.
 	colMapping []uint32
 
 	flow *distsql.Flow
-	c    distsql.RowChannel
 
 	values parser.DTuple
 	alloc  sqlbase.DatumAlloc
@@ -71,40 +79,60 @@ func newDistSQLNode(
 	columns []ResultColumn,
 	colMapping []uint32,
 	ordering orderingInfo,
-) *distSQLNode {
+	srv *distsql.ServerImpl,
+	flowReq *distsql.SetupFlowsRequest,
+	syncMode bool,
+) (*distSQLNode, error) {
 	n := &distSQLNode{
+		syncMode:   syncMode,
 		columns:    columns,
 		ordering:   ordering,
 		colMapping: colMapping,
 		values:     make(parser.DTuple, len(columns)),
 	}
-	n.c.Init()
-	return n
+	var recv distsql.RowReceiver
+	if syncMode {
+		rb := new(distsql.RowBuffer)
+		n.flowResult = rb
+		recv = rb
+	} else {
+		rc := new(distsql.RowChannel)
+		rc.Init()
+		n.flowResult = rc
+		recv = rc
+	}
+
+	flow, err := srv.SetupSimpleFlow(context.Background(), flowReq, recv)
+	if err != nil {
+		return nil, err
+	}
+	n.flow = flow
+	return n, nil
 }
 
 func (n *distSQLNode) Next() (bool, error) {
 	if !n.flowStarted {
-		n.flow.Start()
+		if n.syncMode {
+			n.flow.RunSync()
+		} else {
+			n.flow.Start()
+		}
 		n.flowStarted = true
 	}
-	d, ok := <-n.c.C
-	if !ok {
-		// No more data
+	row, err := n.flowResult.NextRow()
+	if err != nil {
+		return false, err
+	}
+	if row == nil {
 		return false, nil
 	}
-	if d.Err != nil {
-		return false, d.Err
-	}
-	if len(d.Row) != len(n.colMapping) {
-		return false, util.Errorf("row length %d, expected %d", len(d.Row), len(n.colMapping))
-	}
-	for i := range d.Row {
+	for i := range row {
 		col := n.colMapping[i]
-		err := d.Row[i].Decode(&n.alloc)
+		err := row[i].Decode(&n.alloc)
 		if err != nil {
 			return false, err
 		}
-		n.values[col] = d.Row[i].Datum
+		n.values[col] = row[i].Datum
 	}
 	return true, nil
 }
@@ -170,8 +198,8 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 
 // scanNodeToDistSQL creates a flow and distSQLNode that correspond to a
 // scanNode.
-func scanNodeToDistSQL(n *scanNode) (*distSQLNode, error) {
-	req := &distsql.SetupFlowsRequest{Txn: n.p.txn.Proto}
+func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
+	req := distsql.SetupFlowsRequest{Txn: n.p.txn.Proto}
 	tr := scanNodeToTableReaderSpec(n)
 	req.Flows = []distsql.FlowSpec{{
 		Processors: []distsql.ProcessorSpec{{
@@ -185,26 +213,20 @@ func scanNodeToDistSQL(n *scanNode) (*distSQLNode, error) {
 		}},
 	}}
 
-	dn := newDistSQLNode(n.resultColumns, tr.OutputColumns, n.ordering)
-
-	srv := n.p.execCtx.DistSQLSrv
-	flow, err := srv.SetupSimpleFlow(context.Background(), req, &dn.c)
-	if err != nil {
-		return nil, err
-	}
-	dn.flow = flow
-	return dn, nil
+	return newDistSQLNode(
+		n.resultColumns, tr.OutputColumns, n.ordering, n.p.execCtx.DistSQLSrv, &req, syncMode)
 }
 
 // hackPlanToUseDistSQL goes through a planNode tree and replaces each scanNode with
 // a distSQLNode and a corresponding flow.
-func hackPlanToUseDistSQL(plan planNode) error {
+// If syncMode is true, the plan does not instantiate any goroutines internally.
+func hackPlanToUseDistSQL(plan planNode, syncMode bool) error {
 	// Trigger limit propagation.
 	plan.SetLimitHint(math.MaxInt64, true)
 
 	if sel, ok := plan.(*selectNode); ok {
 		if scan, ok := sel.source.plan.(*scanNode); ok {
-			distNode, err := scanNodeToDistSQL(scan)
+			distNode, err := scanNodeToDistSQL(scan, syncMode)
 			if err != nil {
 				return err
 			}
@@ -214,7 +236,7 @@ func hackPlanToUseDistSQL(plan planNode) error {
 
 	_, _, children := plan.ExplainPlan(true)
 	for _, c := range children {
-		if err := hackPlanToUseDistSQL(c); err != nil {
+		if err := hackPlanToUseDistSQL(c, syncMode); err != nil {
 			return err
 		}
 	}

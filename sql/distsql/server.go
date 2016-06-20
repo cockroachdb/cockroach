@@ -61,9 +61,9 @@ func (ds *ServerImpl) setupTxn(
 }
 
 // SetupSimpleFlow sets up a simple flow, connecting the simple response output
-// stream to the given rowReceiver. The flow is not started.
+// stream to the given RowReceiver. The flow is not started.
 func (ds *ServerImpl) SetupSimpleFlow(
-	ctx context.Context, req *SetupFlowsRequest, output rowReceiver,
+	ctx context.Context, req *SetupFlowsRequest, output RowReceiver,
 ) (*Flow, error) {
 	f := &Flow{evalCtx: &ds.evalCtx}
 	f.txn = ds.setupTxn(ctx, &req.Txn)
