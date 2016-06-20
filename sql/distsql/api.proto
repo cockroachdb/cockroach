@@ -23,6 +23,7 @@ option go_package = "distsql";
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/distsql/data.proto";
+import "cockroach/sql/distsql/processors.proto";
 import weak "gogoproto/gogo.proto";
 
 message SetupFlowsRequest {
