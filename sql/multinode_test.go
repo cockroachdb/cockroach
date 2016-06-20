@@ -23,9 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -80,51 +80,33 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		}
 	}
 
-	waitForReplication(servers, t)
+	waitForFullReplication(servers, t)
 	return conns, f
 }
 
-// Waits until at least one of the joining nodes has at least one replica.
-// NOTE: the StoreID of each server's store must be the index of the server in
-// the servers array + 1.
-func waitForReplication(servers []server.TestServer, t testing.TB) {
-	for {
-		noneReplicated := true
-		for i, server := range servers {
-			store, err := server.Stores().GetStore(roachpb.StoreID(i + 1))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if store != nil {
-				if store.ReplicaCount() >= 1 && noneReplicated {
-					noneReplicated = false
-				} else if store.ReplicaCount() >= 1 {
-					return
-				}
-			}
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-}
-
 // Waits until all of the nodes in the cluster have the same number of replicas.
-// NOTE: the StoreID of each server's store must be the index of the server in
-// the servers array + 1.
 func waitForFullReplication(servers []server.TestServer, t testing.TB) {
 	notReplicated := true
 	for notReplicated {
 		notReplicated = false
-		store, err := servers[0].Stores().GetStore(roachpb.StoreID(1))
+		var numReplicas int
+		err := servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			numReplicas = s.ReplicaCount()
+			return nil
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		numReplicas := store.ReplicaCount()
-		for i, server := range servers {
-			store, err := server.Stores().GetStore(roachpb.StoreID(i + 1))
+		for _, server := range servers {
+			var hasSameNumberOfReplicas bool
+			err := server.Stores().VisitStores(func(s *storage.Store) error {
+				hasSameNumberOfReplicas = numReplicas == s.ReplicaCount()
+				return nil
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if store.ReplicaCount() != numReplicas {
+			if !hasSameNumberOfReplicas {
 				notReplicated = true
 				break
 			}
@@ -142,7 +124,6 @@ func TestMultinodeCockroach(t *testing.T) {
 	conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
 	defer cleanup()
 
-	// This command will hang because it takes 1 min before any sql statements can be executed.
 	if _, err := conns[0].Exec(`CREATE TABLE testing (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
