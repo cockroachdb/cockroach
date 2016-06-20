@@ -177,6 +177,14 @@ func TestGossipCullNetwork(t *testing.T) {
 		local.startClient(&peer.is.NodeAddr, stopper)
 	}
 	local.mu.Unlock()
+
+	util.SucceedsSoon(t, func() error {
+		if len(local.Outgoing()) == minPeers {
+			return nil
+		}
+		return errors.New("some peers not yet connected")
+	})
+
 	local.manage()
 
 	util.SucceedsSoon(t, func() error {
