@@ -1565,6 +1565,8 @@ func evalPushTxn(
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
 	}
+	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
+	// TODO(kaneda): Update Sequence as well?
 
 	// If already committed or aborted, return success.
 	if reply.PusheeTxn.Status != roachpb.PENDING {
