@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -268,7 +267,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	d := int64(LeaseDuration)
 	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
 	p.leases = append(p.leases, l1)
-	et := roachpb.Timestamp{WallTime: l1.Expiration().UnixNano()}
+	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
 	if p.removeLeaseIfExpiring(l1) {
@@ -287,7 +286,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	if !p.removeLeaseIfExpiring(l1) {
 		t.Error("expected true with an expiring lease")
 	}
-	et = roachpb.Timestamp{WallTime: l2.Expiration().UnixNano()}
+	et = hlc.Timestamp{WallTime: l2.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
 	if !(len(p.leases) == 1 && p.leases[0] == l2) {

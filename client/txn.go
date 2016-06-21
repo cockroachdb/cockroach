@@ -430,7 +430,7 @@ func (txn *Txn) ResetDeadline() {
 }
 
 // GetDeadline returns the deadline. For testing.
-func (txn *Txn) GetDeadline() *roachpb.Timestamp {
+func (txn *Txn) GetDeadline() *hlc.Timestamp {
 	return txn.deadline
 }
 

@@ -293,7 +293,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 	// Reset the deadline so that a new deadline will be set after the lease is acquired.
 	p.txn.ResetDeadline()
 	for _, l := range p.leases {
-		p.txn.UpdateDeadlineMaybe(roachpb.Timestamp{WallTime: l.Expiration().UnixNano()})
+		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: l.Expiration().UnixNano()})
 	}
 	return true
 }
