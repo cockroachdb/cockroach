@@ -93,7 +93,7 @@ func encodeSQLIdent(buf *bytes.Buffer, s string) {
 func encodeSQLBytes(buf *bytes.Buffer, in string) {
 	start := 0
 	buf.WriteString("b'")
-	for i := range in {
+	for i, n := 0, len(in); i < n; i++ {
 		ch := in[i]
 		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
 			buf.WriteString(in[start:i])
