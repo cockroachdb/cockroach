@@ -25,7 +25,9 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -35,25 +37,63 @@ var (
 	hexMap    [256][]byte
 )
 
+// encodeSQLString writes a string literal to buf. All unicode and
+// non-printable characters are escaped.
 func encodeSQLString(buf *bytes.Buffer, in string) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
-	for i := range in {
-		ch := in[i]
-		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
-			if start == 0 {
-				buf.WriteString("e'") // begin e'xxx' string
+	nextStart := false
+	var i int
+	var r rune
+	writeStart := func() {
+		if start == 0 {
+			buf.WriteString("e'") // begin e'xxx' string
+		}
+		buf.WriteString(in[start:i])
+		// Since we don't know the byte width of the current unicode code point
+		// (and thus what to set start to, since it's the current index + length of
+		// current code point), set a flag to set start at the next iteration.
+		nextStart = true
+	}
+	// Loop through each unicode code point.
+	for i, r = range in {
+		if nextStart {
+			start = i
+			nextStart = false
+		}
+		if r == utf8.RuneError {
+			// Errors are due to invalid unicode points, so escape the byte (Go guarantees
+			// that it's a byte in the case of an error).
+			writeStart()
+			buf.Write(hexMap[in[i]])
+		} else if r < 256 {
+			// For single-byte runes, do the same as encodeSQLBytes.
+			ch := byte(r)
+			if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+				writeStart()
+				buf.WriteByte('\\')
+				buf.WriteByte(encodedChar)
+			} else if ch < 0x20 || ch >= 0x7F {
+				writeStart()
+				// Escape non-printable characters.
+				buf.Write(hexMap[ch])
 			}
-			buf.WriteString(in[start:i])
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
-			start = i + 1
+		} else {
+			// For multi-byte runes, print them based on their width.
+			writeStart()
+			if r <= math.MaxInt16 {
+				fmt.Fprintf(buf, `\u%04X`, r)
+			} else {
+				fmt.Fprintf(buf, `\U%08X`, r)
+			}
 		}
 	}
-	if start == 0 {
+	if start == 0 && !nextStart {
 		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
-	buf.WriteString(in[start:])
+	if !nextStart {
+		buf.WriteString(in[start:])
+	}
 	buf.WriteByte('\'')
 }
 

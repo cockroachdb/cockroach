@@ -1131,13 +1131,21 @@ func BenchmarkParse(b *testing.B) {
 }
 
 func TestEncodeSQLBytes(t *testing.T) {
+	testEncodeSQL(t, encodeSQLBytes)
+}
+
+func TestEncodeSQLString(t *testing.T) {
+	testEncodeSQL(t, encodeSQLString)
+}
+
+func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string)) {
 	type entry struct{ i, j int }
 	seen := make(map[string]entry)
 	for i := 0; i < 256; i++ {
 		for j := 0; j < 256; j++ {
 			s := string([]byte{byte(i), byte(j)})
 			var buf bytes.Buffer
-			encodeSQLBytes(&buf, s)
+			encodeSQLString(&buf, s)
 			sql := fmt.Sprintf("SELECT %s", buf.String())
 			for n := 0; n < len(sql); n++ {
 				ch := sql[n]
@@ -1147,7 +1155,7 @@ func TestEncodeSQLBytes(t *testing.T) {
 			}
 			stmts, err := parseTraditional(sql)
 			if err != nil {
-				t.Errorf("%s: expected success, but found %s", sql, err)
+				t.Fatalf("%s: expected success, but found %s", sql, err)
 				continue
 			}
 			stmt := stmts.String()
@@ -1156,7 +1164,7 @@ func TestEncodeSQLBytes(t *testing.T) {
 			}
 			seen[stmt] = entry{i, j}
 			if sql != stmt {
-				t.Errorf("expected %s, but found %s", sql, stmt)
+				t.Fatalf("expected %s, but found %s", sql, stmt)
 			}
 		}
 	}
