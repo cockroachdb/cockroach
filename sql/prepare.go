@@ -83,14 +83,24 @@ func (ps PreparedStatements) New(
 	return stmt, nil
 }
 
-// Delete removes the PreparedStatements with the provided name from the PreparedStatements.
-func (ps PreparedStatements) Delete(name string) {
+// Delete removes the PreparedStatement with the provided name from the PreparedStatements.
+// The method returns whether a statement with that name was found and removed.
+func (ps PreparedStatements) Delete(name string) bool {
 	if stmt, ok := ps.Get(name); ok {
 		for portalName := range stmt.portalNames {
 			delete(ps.session.PreparedPortals.portals, portalName)
 		}
 		delete(ps.stmts, name)
+		return true
 	}
+	return false
+}
+
+// DeleteAll removes all PreparedStatements from the PreparedStatements. This will in turn
+// remove all PreparedPortals from the session's PreparedPortals.
+func (ps PreparedStatements) DeleteAll() {
+	ps.stmts = make(map[string]*PreparedStatement)
+	ps.session.PreparedPortals.portals = make(map[string]*PreparedPortal)
 }
 
 // PreparedPortal is a PreparedStatement that has been bound with query arguments.
@@ -141,9 +151,12 @@ func (pp PreparedPortals) New(name string, stmt *PreparedStatement, qargs parser
 }
 
 // Delete removes the PreparedPortal with the provided name from the PreparedPortals.
-func (pp PreparedPortals) Delete(name string) {
+// The method returns whether a portal with that name was found and removed.
+func (pp PreparedPortals) Delete(name string) bool {
 	if portal, ok := pp.Get(name); ok {
 		delete(portal.Stmt.portalNames, name)
 		delete(pp.portals, name)
+		return true
 	}
+	return false
 }
