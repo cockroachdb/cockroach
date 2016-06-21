@@ -17,7 +17,6 @@
 package distsql
 
 import (
-	"sync"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -99,31 +98,31 @@ func TestJoinReader(t *testing.T) {
 
 		txn := client.NewTxn(context.Background(), *kvDB)
 
-		out := &testingReceiver{}
-		jr, err := newJoinReader(&js, txn, out, &parser.EvalContext{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go jr.Run(&wg)
+		in := &RowBuffer{}
 		for _, row := range c.input {
 			encRow := make(sqlbase.EncDatumRow, len(row))
 			for i, d := range row {
 				encRow[i].SetDatum(sqlbase.ColumnType_INT, d)
 			}
-			ok := jr.PushRow(encRow)
-			if !ok {
-				t.Fatal("joinReader stopped accepting rows")
-			}
+			in.rows = append(in.rows, encRow)
 		}
-		jr.Close(nil)
-		wg.Wait()
+
+		out := &RowBuffer{}
+		jr, err := newJoinReader(&js, txn, in, out, &parser.EvalContext{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		jr.Run(nil)
+
 		if out.err != nil {
 			t.Fatal(out.err)
 		}
+		if !in.done {
+			t.Fatal("joinReader stopped accepting rows")
+		}
 		if !out.closed {
-			t.Fatalf("output rowReceiver not closed")
+			t.Fatalf("output RowReceiver not closed")
 		}
 		if result := out.rows.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)

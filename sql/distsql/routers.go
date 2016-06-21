@@ -18,8 +18,8 @@ package distsql
 
 import "github.com/cockroachdb/cockroach/util"
 
-func makeRouter(typ OutputRouterSpec_Type, streams []rowReceiver) (
-	rowReceiver, error,
+func makeRouter(typ OutputRouterSpec_Type, streams []RowReceiver) (
+	RowReceiver, error,
 ) {
 	if len(streams) == 0 {
 		panic("no streams")

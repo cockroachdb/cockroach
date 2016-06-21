@@ -28,12 +28,12 @@ import (
 type Flow struct {
 	evalCtx            *parser.EvalContext
 	txn                *client.Txn
-	simpleFlowConsumer rowReceiver
+	simpleFlowConsumer RowReceiver
 	waitGroup          sync.WaitGroup
 	processors         []processor
 }
 
-func (f *Flow) setupMailbox(sp *MailboxSpec) (rowReceiver, error) {
+func (f *Flow) setupMailbox(sp *MailboxSpec) (RowReceiver, error) {
 	// TODO(radu): for now we only support the simple flow mailbox.
 	if !sp.SimpleResponse {
 		return nil, util.Errorf("mailbox spec %s not supported", sp)
@@ -41,7 +41,7 @@ func (f *Flow) setupMailbox(sp *MailboxSpec) (rowReceiver, error) {
 	return f.simpleFlowConsumer, nil
 }
 
-func (f *Flow) setupStreamOut(spec StreamEndpointSpec) (rowReceiver, error) {
+func (f *Flow) setupStreamOut(spec StreamEndpointSpec) (RowReceiver, error) {
 	if spec.LocalStreamID != nil {
 		return nil, util.Errorf("local endpoints not supported")
 	}
@@ -51,8 +51,8 @@ func (f *Flow) setupStreamOut(spec StreamEndpointSpec) (rowReceiver, error) {
 	return f.setupMailbox(spec.Mailbox)
 }
 
-func (f *Flow) setupRouter(spec OutputRouterSpec) (rowReceiver, error) {
-	streams := make([]rowReceiver, len(spec.Streams))
+func (f *Flow) setupRouter(spec OutputRouterSpec) (RowReceiver, error) {
+	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
 		streams[i], err = f.setupStreamOut(spec.Streams[i])
@@ -95,4 +95,12 @@ func (f *Flow) Start() {
 // Wait waits for all the goroutines for this flow to exit.
 func (f *Flow) Wait() {
 	f.waitGroup.Wait()
+}
+
+// RunSync runs the processors in the flow in order (serially), in the same
+// context (no goroutines are spawned).
+func (f *Flow) RunSync() {
+	for _, p := range f.processors {
+		p.Run(nil)
+	}
 }
