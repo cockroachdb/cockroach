@@ -94,25 +94,31 @@ type storeMatch int
 
 // These are the possible values for a storeMatch.
 const (
-	storeMatchDead    storeMatch = iota // The store is not yet available or has been timed out.
-	storeMatchAlive                     // The store is alive, but its attributes didn't match the required ones.
-	storeMatchMatched                   // The store is alive and its attributes matched.
+	storeMatchDead        storeMatch = iota // The store is not yet available or has been timed out.
+	storeMatchAlive                         // The store is alive, but its attributes didn't match the required ones.
+	storeMatchUnavailable                   // The store is alive and its attributes matched, but it no available.
+	storeMatchAvailable                     // The store is alive, available and its attributes matched.
 )
 
-// match returns if the store is alive, and if the store is available and it's
-// attributes contain the required ones respectively.
+// match checks the store against the attributes and returns a storeMatch.
 func (sd *storeDetail) match(now time.Time, required roachpb.Attributes) storeMatch {
 	// The store must be alive and it must have a descriptor to be considered
 	// alive.
 	if sd.dead || sd.desc == nil {
 		return storeMatchDead
 	}
-	// The store must not have a recent declined reservation to be considered
-	// available for matching.
-	if sd.unavailableUntil.After(now) || !required.IsSubset(*sd.desc.CombinedAttrs()) {
+
+	// Does the store match the attributes?
+	if !required.IsSubset(*sd.desc.CombinedAttrs()) {
 		return storeMatchAlive
 	}
-	return storeMatchMatched
+
+	// The store must not have a recent declined reservation to be available.
+	if sd.unavailableUntil.After(now) {
+		return storeMatchUnavailable
+	}
+
+	return storeMatchAvailable
 }
 
 // storePoolPQ implements the heap.Interface (which includes sort.Interface)
@@ -381,11 +387,11 @@ func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 
 // GetStoreList returns a storeList that contains all active stores that
 // contain the required attributes and their associated stats. It also returns
-// the number of total alive stores.
+// total number of alive stores and the number of unavailable stores.
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int) {
+func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
@@ -401,17 +407,22 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	now := sp.clock.Now().GoTime()
 	sl := StoreList{}
 	var aliveStoreCount int
+	var unavailableStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.mu.stores[roachpb.StoreID(storeID)]
 		matched := detail.match(now, required)
-		if matched >= storeMatchAlive {
+		switch matched {
+		case storeMatchAlive:
 			aliveStoreCount++
-		}
-		if matched == storeMatchMatched {
+		case storeMatchUnavailable:
+			aliveStoreCount++
+			unavailableStoreCount++
+		case storeMatchAvailable:
+			aliveStoreCount++
 			sl.add(detail.desc)
 		}
 	}
-	return sl, aliveStoreCount
+	return sl, aliveStoreCount, unavailableStoreCount
 }
 
 // reserve send a reservation request rpc to the node and store
