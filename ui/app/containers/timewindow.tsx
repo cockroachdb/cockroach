@@ -1,5 +1,3 @@
-/// <reference path="../../typings/index.d.ts" />
-
 import * as React from "react";
 import { connect } from "react-redux";
 import moment = require("moment");
