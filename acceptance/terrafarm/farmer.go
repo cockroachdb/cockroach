@@ -46,8 +46,9 @@ type Farmer struct {
 	// state.
 	StateFile string
 	// AddVars are additional Terraform variables to be set during calls to Add.
-	AddVars        map[string]string
-	nodes, writers []string
+	AddVars              map[string]string
+	KeepClusterAfterTest bool
+	nodes, writers       []string
 }
 
 func (f *Farmer) refresh() {
@@ -153,6 +154,10 @@ func (f *Farmer) Destroy() error {
 	f.CollectLogs()
 	if f.LogDir != "" {
 		defer f.logf("logs copied to %s", f.AbsLogDir())
+	}
+	if f.KeepClusterAfterTest {
+		f.logf("not destroying cluster")
+		return nil
 	}
 	return f.Resize(0, 0)
 }
