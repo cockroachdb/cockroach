@@ -168,6 +168,21 @@ func TestParse(t *testing.T) {
 		{`SHOW TRANSACTION ISOLATION LEVEL`},
 		{`SHOW TRANSACTION PRIORITY`},
 
+		{`PREPARE a AS SELECT 1`},
+		{`PREPARE a AS INSERT INTO a VALUES (1)`},
+		{`PREPARE a AS UPDATE a SET b = 3`},
+		{`PREPARE a AS DELETE FROM a`},
+		{`PREPARE a (INT) AS SELECT 1`},
+		{`PREPARE a (STRING, STRING) AS SELECT 1`},
+
+		{`EXECUTE a`},
+		{`EXECUTE a (1)`},
+		{`EXECUTE a (1, 1)`},
+		{`EXECUTE a (1 + 1)`},
+
+		{`DEALLOCATE a`},
+		{`DEALLOCATE ALL`},
+
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`GRANT SELECT ON foo TO root`},
@@ -679,6 +694,10 @@ func TestParse2(t *testing.T) {
 		{"ROLLBACK TO SAVEPOINT foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
 		{"ROLLBACK TRANSACTION TO foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
 		{"ROLLBACK TRANSACTION TO SAVEPOINT foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
+		{`DEALLOCATE PREPARE a`,
+			`DEALLOCATE a`},
+		{`DEALLOCATE PREPARE ALL`,
+			`DEALLOCATE ALL`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)

@@ -308,9 +308,12 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Statement> drop_stmt
 %type <Statement> explain_stmt
 %type <Statement> explainable_stmt
+%type <Statement> prepare_stmt
+%type <Statement> preparable_stmt
+%type <Statement> execute_stmt
+%type <Statement> deallocate_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
-%type <Statement> preparable_stmt
 %type <Statement> release_stmt
 %type <Statement> rename_stmt
 %type <Statement> revoke_stmt
@@ -398,6 +401,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Exprs> position_list
 %type <Exprs> substr_list
 %type <Exprs> trim_list
+%type <Exprs> execute_param_clause
 %type <empty> opt_interval interval_second
 %type <Expr> overlay_placing
 
@@ -432,7 +436,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <Expr>  in_expr
 %type <Expr>  having_clause
 %type <Expr>  array_expr
-%type <[]ColumnType> type_list
+%type <[]ColumnType> type_list prep_type_clause
 %type <Exprs> array_expr_list
 %type <Expr>  row explicit_row implicit_row
 %type <Expr>  case_expr case_arg case_default
@@ -544,11 +548,11 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   CURRENT_USER CYCLE
 
 %token <str>   DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str>   DEFERRABLE DELETE DESC
+%token <str>   DEALLOCATE DEFERRABLE DELETE DESC
 %token <str>   DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXPLAIN EXTRACT
+%token <str>   EXISTS EXECUTE EXPLAIN EXTRACT
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
@@ -580,7 +584,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
 %token <str>   PARTIAL PARTITION PLACING POSITION
-%token <str>   PRECEDING PRECISION PRIMARY PRIORITY
+%token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   RENAME REPEATABLE
@@ -709,6 +713,9 @@ stmt:
 | delete_stmt
 | drop_stmt
 | explain_stmt
+| prepare_stmt
+| execute_stmt
+| deallocate_stmt
 | grant_stmt
 | insert_stmt
 | rename_stmt
@@ -974,6 +981,81 @@ explain_option_list:
 
 explain_option_name:
   non_reserved_word
+
+// PREPARE <plan_name> [(args, ...)] AS <query>
+prepare_stmt:
+  PREPARE name prep_type_clause AS preparable_stmt
+	{
+    $$.val = &Prepare{
+      Name: Name($2),
+      Types: $3.colTypes(),
+      Statement: $5.stmt(),
+    }
+  }
+
+prep_type_clause:
+  '(' type_list ')'
+  {
+    $$.val = $2.colTypes();
+  }
+| /* EMPTY */
+  {
+    $$.val = []ColumnType(nil)
+  }
+
+preparable_stmt:
+  select_stmt
+  {
+    $$.val = $1.slct()
+  }
+| insert_stmt
+| update_stmt
+| delete_stmt
+
+execute_stmt:
+  // EXECUTE <plan_name> [(params, ...)]
+  EXECUTE name execute_param_clause
+  {
+    $$.val = &Execute{
+      Name: Name($2),
+      Params: $3.exprs(),
+    }
+  }
+  // CREATE TABLE <name> AS EXECUTE <plan_name> [(params, ...)]
+// | CREATE opt_temp TABLE create_as_target AS EXECUTE name execute_param_clause opt_with_data { unimplemented() }
+
+execute_param_clause:
+  '(' expr_list ')'
+  {
+    $$.val = $2.exprs()
+  }
+| /* EMPTY */
+  {
+    $$.val = Exprs(nil)
+  }
+
+// DEALLOCATE [PREPARE] <plan_name>
+deallocate_stmt:
+  DEALLOCATE name
+  {
+    $$.val = &Deallocate{
+      Name: Name($2),
+    }
+  }
+| DEALLOCATE PREPARE name
+  {
+    $$.val = &Deallocate{
+      Name: Name($3),
+    }
+  }
+| DEALLOCATE ALL
+  {
+    $$.val = &Deallocate{}
+  }
+| DEALLOCATE PREPARE ALL
+  {
+    $$.val = &Deallocate{}
+  }
 
 // GRANT privileges ON privilege_target TO grantee_list
 grant_stmt:
@@ -2220,15 +2302,6 @@ cte_list:
 
 common_table_expr:
   name opt_name_list AS '(' preparable_stmt ')' { unimplemented() }
-
-preparable_stmt:
-  select_stmt
-  {
-    $$.val = $1.slct()
-  }
-| insert_stmt
-| update_stmt
-| delete_stmt
 
 opt_with_clause:
   with_clause { unimplemented() }
@@ -4238,10 +4311,12 @@ unreserved_keyword:
 | DATABASE
 | DATABASES
 | DAY
+| DEALLOCATE
 | DELETE
 | DOUBLE
 | DROP
 | ENCODING
+| EXECUTE
 | EXPLAIN
 | FILTER
 | FIRST
@@ -4276,6 +4351,7 @@ unreserved_keyword:
 | PARTIAL
 | PARTITION
 | PRECEDING
+| PREPARE
 | PRIORITY
 | RANGE
 | READ
