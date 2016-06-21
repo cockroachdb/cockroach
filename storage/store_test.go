@@ -1876,7 +1876,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		repl.mu.Lock()
 		frozen := repl.mu.state.Frozen
 		repl.mu.Unlock()
-		pFrozen, err := loadFrozenStatus(store.Engine(), 1)
+		_, pFrozen, err := loadFrozenStatus(store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2015,7 +2015,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
 		repl.mu.Unlock()
-		pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
+		_, pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}

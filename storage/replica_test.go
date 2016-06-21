@@ -4005,7 +4005,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 
 func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS enginepb.MVCCStats, t *testing.T) {
 	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
+	if _, err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expMS, ms) {

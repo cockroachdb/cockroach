@@ -940,7 +940,7 @@ func TestSortRangeDescByAge(t *testing.T) {
 
 func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
 	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
+	if _, err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
 		return err
 	}
 	// Clear system counts as these are expected to vary.
