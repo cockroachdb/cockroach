@@ -19,6 +19,7 @@ package roachpb
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -28,6 +29,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/biogo/store/interval"
 	"github.com/gogo/protobuf/proto"
@@ -552,6 +554,78 @@ func (v Value) computeChecksum(key []byte) uint32 {
 		return 1
 	}
 	return sum
+}
+
+// PrettyPrint returns the value in a human readable format.
+// e.g. `Put /Table/51/1/1/0 -> /TUPLE/2:2:Int/7/1:3:Float/6.28`
+// In `1:3:Float/6.28`, the `1` is the column id diff as stored, `3` is the
+// computed (i.e. not stored) actual column id, `Float` is the type, and `6.28`
+// is the encoded value.
+func (v Value) PrettyPrint() string {
+	var buf bytes.Buffer
+	t := v.GetTag()
+	buf.WriteRune('/')
+	buf.WriteString(t.String())
+	buf.WriteRune('/')
+
+	var err error
+	switch t {
+	case ValueType_TUPLE:
+		b := v.dataBytes()
+		var colID uint32
+		for i := 0; len(b) > 0; i++ {
+			if i != 0 {
+				buf.WriteRune('/')
+			}
+			_, _, colIDDiff, typ, err := encoding.DecodeValueTag(b)
+			if err != nil {
+				break
+			}
+			colID += colIDDiff
+			var s string
+			b, s, err = encoding.PrettyPrintValueEncoded(b)
+			if err != nil {
+				break
+			}
+			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDiff, colID, typ, s)
+		}
+	case ValueType_INT:
+		var i int64
+		i, err = v.GetInt()
+		buf.WriteString(strconv.FormatInt(i, 10))
+	case ValueType_FLOAT:
+		var f float64
+		f, err = v.GetFloat()
+		buf.WriteString(strconv.FormatFloat(f, 'g', -1, 64))
+	case ValueType_BYTES:
+		var data []byte
+		data, err = v.GetBytes()
+		printable := len(bytes.TrimLeftFunc(data, unicode.IsPrint)) == 0
+		if printable {
+			buf.WriteString(string(data))
+		} else {
+			buf.WriteString(hex.EncodeToString(data))
+		}
+	case ValueType_TIME:
+		var t time.Time
+		t, err = v.GetTime()
+		buf.WriteString(t.UTC().Format(time.RFC3339Nano))
+	case ValueType_DECIMAL:
+		var d *inf.Dec
+		d, err = v.GetDecimal()
+		buf.WriteString(d.String())
+	case ValueType_DURATION:
+		var d duration.Duration
+		d, err = v.GetDuration()
+		buf.WriteString(d.String())
+	default:
+		err = errors.Errorf("unknown tag: %s", t)
+	}
+	if err != nil {
+		// Ignore the contents of buf and return directly.
+		return fmt.Sprintf("/<err: %s>", err)
+	}
+	return buf.String()
 }
 
 // NewTransaction creates a new transaction. The transaction key is
