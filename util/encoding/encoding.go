@@ -833,6 +833,7 @@ func DecodeDurationDescending(b []byte) ([]byte, duration.Duration, error) {
 
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
+//go:generate stringer -type=Type
 type Type int
 
 // Type values.
@@ -847,6 +848,10 @@ const (
 	BytesDesc // Bytes encoded descendingly
 	Time
 	Duration
+	True
+	False
+
+	SentinelType Type = 15 // Used in the Value encoding.
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -883,6 +888,19 @@ func GetMultiVarintLen(b []byte, num int) (int, error) {
 	p := 1
 	for i := 0; i < num && p < len(b); i++ {
 		len, err := getVarintLen(b[p:])
+		if err != nil {
+			return 0, err
+		}
+		p += len
+	}
+	return p, nil
+}
+
+// getMultiNonsortingVarintLen finds the length of <num> encoded nonsorting varints.
+func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
+	p := 0
+	for i := 0; i < num && p < len(b); i++ {
+		_, len, _, err := DecodeNonsortingVarint(b[p:])
 		if err != nil {
 			return 0, err
 		}
@@ -1092,4 +1110,303 @@ func PeekLengthNonsortingUvarint(buf []byte) int {
 		}
 	}
 	return 0
+}
+
+// NoColumnID is a sentinel for the EncodeFooValue methods representing an
+// invalid column id.
+const NoColumnID uint32 = 0
+
+// encodeValueTag encodes the prefix that is used by each of the EncodeFooValue
+// methods.
+//
+// The prefix uses varints to encode a column id and type, packing them into a
+// single byte when they're small (colID < 8 and typ < 15). This works by
+// shifting the colID "left" by 4 and putting any type less than 15 in the low
+// bytes. The result is uvarint encoded and fits in one byte if the original
+// column id fit in 3 bits. If it doesn't fit in one byte, the most significant
+// bits spill to the "left", leaving the type bits always at the very "right".
+//
+// If the type is > 15, the reserved sentinel of 15 is placed in the type bits
+// and a uvarint follows with the type value.
+//
+// Together, this means the everything but the last byte of the colID/typ
+// uvarint can be dropped if the column id isn't needed.
+func encodeValueTag(appendTo []byte, colID uint32, typ Type) []byte {
+	if typ >= SentinelType {
+		appendTo = EncodeNonsortingUvarint(appendTo, uint64(colID)<<4|uint64(SentinelType))
+		appendTo = EncodeNonsortingUvarint(appendTo, uint64(typ))
+		return appendTo
+	}
+	return EncodeNonsortingUvarint(appendTo, uint64(colID)<<4|uint64(typ))
+}
+
+// EncodeNullValue encodes a null value, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeNullValue(appendTo []byte, colID uint32) []byte {
+	return encodeValueTag(appendTo, colID, Null)
+}
+
+// EncodeBoolValue encodes a bool value, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeBoolValue(appendTo []byte, colID uint32, b bool) []byte {
+	if b {
+		return encodeValueTag(appendTo, colID, True)
+	}
+	return encodeValueTag(appendTo, colID, False)
+}
+
+// EncodeIntValue encodes an int value, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeIntValue(appendTo []byte, colID uint32, i int64) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Int)
+	return EncodeNonsortingVarint(appendTo, i)
+}
+
+// EncodeFloatValue encodes a float value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeFloatValue(appendTo []byte, colID uint32, f float64) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Float)
+	return EncodeUint64Ascending(appendTo, math.Float64bits(f))
+}
+
+// EncodeBytesValue encodes a byte array value, appends it to the supplied
+// buffer, and returns the final buffer.
+func EncodeBytesValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Bytes)
+	appendTo = EncodeNonsortingUvarint(appendTo, uint64(len(data)))
+	return append(appendTo, data...)
+}
+
+// EncodeTimeValue encodes a time.Time value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Time)
+	appendTo = EncodeNonsortingVarint(appendTo, t.Unix())
+	return EncodeNonsortingVarint(appendTo, int64(t.Nanosecond()))
+}
+
+// EncodeDecimalValue encodes an inf.Dec value, appends it to the supplied
+// buffer, and returns the final buffer.
+func EncodeDecimalValue(appendTo []byte, colID uint32, d *inf.Dec) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Decimal)
+	// To avoid the allocation, leave space for the varint, encode the decimal,
+	// encode the varint, and shift the encoded decimal to the end of the
+	// varint.
+	varintPos := len(appendTo)
+	// Manually append 10 (binary.MaxVarintLen64) 0s to avoid the allocation.
+	appendTo = append(appendTo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+	decOffset := len(appendTo)
+	appendTo = EncodeNonsortingDecimal(appendTo, d)
+	decLen := len(appendTo) - decOffset
+	varintLen := binary.PutUvarint(appendTo[varintPos:decOffset], uint64(decLen))
+	copy(appendTo[varintPos+varintLen:varintPos+varintLen+decLen], appendTo[decOffset:decOffset+decLen])
+	return appendTo[:varintPos+varintLen+decLen]
+}
+
+// EncodeDurationValue encodes a duration.Duration value, appends it to the
+// supplied buffer, and returns the final buffer.
+func EncodeDurationValue(appendTo []byte, colID uint32, d duration.Duration) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Duration)
+	appendTo = EncodeNonsortingVarint(appendTo, d.Months)
+	appendTo = EncodeNonsortingVarint(appendTo, d.Days)
+	return EncodeNonsortingVarint(appendTo, d.Nanos)
+}
+
+// DecodeValueTag decodes a value encoded by encodeValueTag, used as a prefix in
+// each of the other EncodeFooValue methods.
+//
+// The tag is structured such that if you no longer need the encoded column id,
+// you can drop the first typeOffset bytes and DecodeValueTag and
+// PeekValueLength will still work on the result.
+func DecodeValueTag(b []byte) (typeOffset int, dataOffset int, colID uint32, typ Type, err error) {
+	// TODO(dan): This can be made much faster by special casing the single byte
+	// version and skipping the column id extraction when it's not needed.
+	if len(b) == 0 {
+		return 0, 0, 0, Unknown, fmt.Errorf("empty array")
+	}
+	var n int
+	var tag uint64
+	b, n, tag, err = DecodeNonsortingUvarint(b)
+	if err != nil {
+		return 0, 0, 0, Unknown, err
+	}
+	colID = uint32(tag >> 4)
+	typ = Type(tag & 0xf)
+	typeOffset = n - 1
+	dataOffset = n
+	if typ == SentinelType {
+		_, n, tag, err = DecodeNonsortingUvarint(b)
+		if err != nil {
+			return 0, 0, 0, Unknown, err
+		}
+		typ = Type(tag)
+		dataOffset += n
+	}
+	return typeOffset, dataOffset, colID, typ, nil
+}
+
+// DecodeBoolValue decodes a value encoded by EncodeBoolValue.
+func DecodeBoolValue(b []byte) ([]byte, bool, error) {
+	_, dataOffset, _, typ, err := DecodeValueTag(b)
+	if err != nil {
+		return b, false, err
+	}
+	b = b[dataOffset:]
+	switch typ {
+	case True:
+		return b, true, nil
+	case False:
+		return b, false, nil
+	default:
+		return b, false, fmt.Errorf("value type is not %s or %s: %s", True, False, typ)
+	}
+}
+
+// DecodeIntValue decodes a value encoded by EncodeIntValue.
+func DecodeIntValue(b []byte) ([]byte, int64, error) {
+	var err error
+	b, err = decodeValueTypeAssert(b, Int)
+	if err != nil {
+		return b, 0, err
+	}
+	var i int64
+	b, _, i, err = DecodeNonsortingVarint(b)
+	return b, i, err
+}
+
+// DecodeFloatValue decodes a value encoded by EncodeFloatValue.
+func DecodeFloatValue(b []byte) ([]byte, float64, error) {
+	var err error
+	b, err = decodeValueTypeAssert(b, Float)
+	if err != nil {
+		return b, 0, err
+	}
+	if len(b) < 8 {
+		return b, 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(b))
+	}
+	b, f, err := DecodeUint64Ascending(b)
+	return b, math.Float64frombits(f), err
+}
+
+// DecodeBytesValue decodes a value encoded by EncodeBytesValue.
+func DecodeBytesValue(b []byte) ([]byte, []byte, error) {
+	var err error
+	b, err = decodeValueTypeAssert(b, Bytes)
+	if err != nil {
+		return b, nil, err
+	}
+	var i uint64
+	b, _, i, err = DecodeNonsortingUvarint(b)
+	if err != nil {
+		return b, nil, err
+	}
+	return b[int(i):], b[:int(i)], nil
+}
+
+// DecodeTimeValue decodes a value encoded by EncodeTimeValue.
+func DecodeTimeValue(b []byte) ([]byte, time.Time, error) {
+	var err error
+	b, err = decodeValueTypeAssert(b, Time)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	var sec, nsec int64
+	b, _, sec, err = DecodeNonsortingVarint(b)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	b, _, nsec, err = DecodeNonsortingVarint(b)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	return b, time.Unix(sec, nsec), nil
+}
+
+// DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.
+func DecodeDecimalValue(b []byte) ([]byte, *inf.Dec, error) {
+	var err error
+	b, err = decodeValueTypeAssert(b, Decimal)
+	if err != nil {
+		return b, nil, err
+	}
+	var i uint64
+	b, _, i, err = DecodeNonsortingUvarint(b)
+	if err != nil {
+		return b, nil, err
+	}
+	d, err := DecodeNonsortingDecimal(b[:int(i)], nil)
+	return b[int(i):], d, err
+}
+
+// DecodeDurationValue decodes a value encoded by EncodeDurationValue.
+func DecodeDurationValue(b []byte) ([]byte, duration.Duration, error) {
+	var err error
+	b, err = decodeValueTypeAssert(b, Duration)
+	if err != nil {
+		return b, duration.Duration{}, err
+	}
+	var months, days, nanos int64
+	b, _, months, err = DecodeNonsortingVarint(b)
+	if err != nil {
+		return b, duration.Duration{}, err
+	}
+	b, _, days, err = DecodeNonsortingVarint(b)
+	if err != nil {
+		return b, duration.Duration{}, err
+	}
+	b, _, nanos, err = DecodeNonsortingVarint(b)
+	if err != nil {
+		return b, duration.Duration{}, err
+	}
+	return b, duration.Duration{Months: months, Days: days, Nanos: nanos}, nil
+}
+
+func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
+	_, dataOffset, _, typ, err := DecodeValueTag(b)
+	if err != nil {
+		return b, err
+	}
+	b = b[dataOffset:]
+	if typ != expected {
+		return b, util.Errorf("value type is not %s: %s", expected, typ)
+	}
+	return b, nil
+}
+
+// PeekValueLength returns the length of the encoded value at the start of b.
+// Note: If this function succeeds, it's not a guarantee that decoding the value
+// will succeed.
+func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
+	if len(b) == 0 {
+		return 0, 0, nil
+	}
+	var dataOffset int
+	var typ Type
+	typeOffset, dataOffset, _, typ, err = DecodeValueTag(b)
+	if err != nil {
+		return 0, 0, err
+	}
+	b = b[dataOffset:]
+	switch typ {
+	case Null:
+		return typeOffset, dataOffset, nil
+	case True, False:
+		return typeOffset, dataOffset, nil
+	case Int:
+		_, n, _, err := DecodeNonsortingVarint(b)
+		return typeOffset, dataOffset + n, err
+	case Float:
+		return typeOffset, dataOffset + 8, nil
+	case Bytes, Decimal:
+		_, n, i, err := DecodeNonsortingUvarint(b)
+		return typeOffset, dataOffset + n + int(i), err
+	case Time:
+		n, err := getMultiNonsortingVarintLen(b, 2)
+		return typeOffset, dataOffset + n, err
+	case Duration:
+		n, err := getMultiNonsortingVarintLen(b, 3)
+		return typeOffset, dataOffset + n, err
+	default:
+		return 0, 0, util.Errorf("unknown tag %q", typ)
+	}
 }
