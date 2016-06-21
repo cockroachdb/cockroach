@@ -18,7 +18,6 @@ package storage
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -209,12 +208,22 @@ func TestStorePoolDies(t *testing.T) {
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.
-func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int, expectedAliveStoreCount int) error {
+func verifyStoreList(
+	sp *StorePool,
+	requiredAttrs []string,
+	expected []int,
+	expectedAliveStoreCount int,
+	expectedThrottledStoreCount int,
+) error {
 	var actual []int
-	sl, aliveStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
+	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
 	if aliveStoreCount != expectedAliveStoreCount {
-		return fmt.Errorf("expected AliveStoreCount %d does not match actual %d", expectedAliveStoreCount,
-			aliveStoreCount)
+		return util.Errorf("expected AliveStoreCount %d does not match actual %d",
+			expectedAliveStoreCount, aliveStoreCount)
+	}
+	if throttledStoreCount != expectedThrottledStoreCount {
+		return util.Errorf("expected ThrottledStoreCount %d does not match actual %d",
+			expectedThrottledStoreCount, throttledStoreCount)
 	}
 	for _, store := range sl.stores {
 		actual = append(actual, int(store.StoreID))
@@ -222,7 +231,7 @@ func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int, expe
 	sort.Ints(expected)
 	sort.Ints(actual)
 	if !reflect.DeepEqual(expected, actual) {
-		return fmt.Errorf("expected %+v stores, actual %+v", expected, actual)
+		return util.Errorf("expected %+v stores, actual %+v", expected, actual)
 	}
 	return nil
 }
@@ -237,7 +246,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
+	if sl, _, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
@@ -287,20 +296,20 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		int(supersetStore.StoreID),
 		int(deadStore.StoreID),
 		int(declinedStore.StoreID),
-	}, 6); err != nil {
+	}, 6, 0); err != nil {
 		t.Error(err)
 	}
 
 	// Mark one store dead and one store declined.
 	sp.mu.Lock()
 	sp.mu.stores[deadStore.StoreID].markDead(sp.clock.Now())
-	sp.mu.stores[declinedStore.StoreID].unavailableUntil = sp.clock.Now().GoTime().Add(time.Hour)
+	sp.mu.stores[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.mu.Unlock()
 
 	if err := verifyStoreList(sp, required, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
-	}, 5); err != nil {
+	}, 5, 1); err != nil {
 		t.Error(err)
 	}
 }
@@ -414,8 +423,15 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
-	if sl, c := sp.getStoreList(roachpb.Attributes{}, true); len(sl.stores) > 0 || c != 0 {
-		t.Errorf("expected 0 live stores; got list %v and total count %d", sl, c)
+	sl, alive, throttled := sp.getStoreList(roachpb.Attributes{}, true)
+	if len(sl.stores) > 0 {
+		t.Errorf("expected no live stores; got list of %v", sl)
+	}
+	if alive != 0 {
+		t.Errorf("expected no live stores; got an alive count of %d", alive)
+	}
+	if throttled != 0 {
+		t.Errorf("expected no live stores; got a throttled count of %d", throttled)
 	}
 }
 
@@ -518,7 +534,7 @@ func TestStorePoolReserve(t *testing.T) {
 	for i, testCase := range testCases {
 		f.reservationResponse = testCase.fakeResp
 		if len(testCase.fakeErr) != 0 {
-			f.reservationErr = fmt.Errorf("%s", testCase.fakeErr)
+			f.reservationErr = util.Errorf("%s", testCase.fakeErr)
 		} else {
 			f.reservationErr = nil
 		}

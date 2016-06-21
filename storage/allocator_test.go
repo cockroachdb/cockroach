@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var simpleZoneConfig = config.ZoneConfig{
@@ -401,7 +403,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		},
 		{
 			// This store will not be rebalanced to, because it already has more
-			// replias than the mean range count.
+			// replicas than the mean range count.
 			StoreID: 5,
 			Node:    roachpb.NodeDescriptor{NodeID: 5},
 			Capacity: roachpb.StoreCapacity{
@@ -1008,6 +1010,65 @@ func TestAllocatorError(t *testing.T) {
 	}
 }
 
+// TestAllocatorThrottled ensures that when a store is throttled, the replica
+// will not be sent to purgatory.
+func TestAllocatorThrottled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator()
+	defer stopper.Stop()
+
+	// First test to make sure we would send the replica to purgatory.
+	_, errPurgatory := a.AllocateTarget(
+		simpleZoneConfig.ReplicaAttrs[0],
+		[]roachpb.ReplicaDescriptor{},
+		false,
+		nil,
+	)
+	if errPurgatory == nil {
+		t.Fatal("expected an error")
+	}
+	if _, ok := errPurgatory.(purgatoryError); !ok {
+		t.Fatalf("expected a purgatory error, got: %s", errPurgatory)
+	}
+
+	// Second, test the normal case in which we can allocate to the store.
+	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
+	result, errNone := a.AllocateTarget(
+		simpleZoneConfig.ReplicaAttrs[0],
+		[]roachpb.ReplicaDescriptor{},
+		false,
+		nil,
+	)
+	if errNone != nil {
+		t.Fatalf("unable to perform allocation: %s", errNone)
+	}
+	if result.Node.NodeID != 1 || result.StoreID != 1 {
+		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
+	}
+
+	// Finally, set that store to be throttled and ensure we don't send the
+	// replica to purgatory.
+	a.storePool.mu.Lock()
+	storeDetail, ok := a.storePool.mu.stores[singleStore[0].StoreID]
+	if !ok {
+		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
+	}
+	storeDetail.throttledUntil = timeutil.Now().Add(24 * time.Hour)
+	a.storePool.mu.Unlock()
+	_, errNonPurgatory := a.AllocateTarget(
+		simpleZoneConfig.ReplicaAttrs[0],
+		[]roachpb.ReplicaDescriptor{},
+		false,
+		nil,
+	)
+	if errNonPurgatory == nil {
+		t.Fatal("expected an error")
+	}
+	if _, ok := errNonPurgatory.(purgatoryError); ok {
+		t.Fatalf("expected a non purgatory error, got: %s", errNonPurgatory)
+	}
+}
+
 type testStore struct {
 	roachpb.StoreDescriptor
 }
@@ -1087,7 +1148,7 @@ func Example_rebalancing() {
 			}
 		}
 
-		// Output store capacities as hexidecimal 2-character values.
+		// Output store capacities as hexadecimal 2-character values.
 		if i%(generations/50) == 0 {
 			var maxBytes int64
 			for j := 0; j < len(testStores); j++ {
