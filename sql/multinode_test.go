@@ -88,11 +88,12 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 }
 
 func TestMultinodeCockroach(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer tracing.Disable()()
+
 	if !*multinode {
 		t.Skip()
 	}
-	defer leaktest.AfterTest(t)()
-	defer tracing.Disable()()
 
 	conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
 	defer cleanup()
