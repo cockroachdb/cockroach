@@ -19,7 +19,6 @@ package sql_test
 import (
 	"bytes"
 	gosql "database/sql"
-	"flag"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -34,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 	_ "github.com/cockroachdb/pq"
 )
-
-var multinode = flag.Bool("multinode", false, "Flag to determine whether or not to run multinode sql benchmark tests")
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
