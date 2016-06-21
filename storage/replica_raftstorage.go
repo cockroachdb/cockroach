@@ -54,7 +54,7 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState implements the raft.Storage interface.
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	hs, err := loadHardState(r.store.Engine(), r.RangeID)
+	_, hs, err := loadHardState(r.store.Engine(), r.RangeID)
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -131,7 +131,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := loadLastIndex(e, rangeID)
+		_, lastIndex, err := loadLastIndex(e, rangeID)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := raftTruncatedState(e, rangeID)
+	_, ts, err := loadTruncatedState(e, rangeID)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 func term(eng engine.Reader, rangeID roachpb.RangeID, i uint64) (uint64, error) {
 	ents, err := entries(eng, rangeID, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := raftTruncatedState(eng, rangeID)
+		_, ts, err := loadTruncatedState(eng, rangeID)
 		if err != nil {
 			return 0, err
 		}
@@ -214,7 +214,7 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID)
+	_, ts, err := loadTruncatedState(r.store.Engine(), r.RangeID)
 	if err != nil {
 		return ts, err
 	}
@@ -222,15 +222,6 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 		r.mu.state.TruncatedState = &ts
 	}
 	return ts, nil
-}
-
-func raftTruncatedState(
-	eng engine.Reader, rangeID roachpb.RangeID,
-) (roachpb.RaftTruncatedState, error) {
-	ts := roachpb.RaftTruncatedState{}
-	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
-		hlc.ZeroTimestamp, true, nil, &ts)
-	return ts /* zero if not found */, err
 }
 
 // FirstIndex implements the raft.Storage interface.
@@ -360,7 +351,7 @@ func snapshot(
 	start := timeutil.Now()
 	var snapData roachpb.RaftSnapshotData
 
-	truncState, err := raftTruncatedState(snap, rangeID)
+	_, truncState, err := loadTruncatedState(snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -368,7 +359,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(snap, rangeID)
+	_, appliedIndex, err := loadAppliedIndex(snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}

@@ -332,7 +332,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 
-	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
+	_, r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
