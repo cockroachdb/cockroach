@@ -269,9 +269,10 @@ func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 type dropTableNode struct {
-	p  *planner
-	n  *parser.DropTable
-	td []*sqlbase.TableDescriptor
+	p        *planner
+	n        *parser.DropTable
+	td       []*sqlbase.TableDescriptor
+	dropping map[sqlbase.ID]struct{}
 }
 
 func checkIndexDependees(
@@ -299,6 +300,7 @@ func checkIndexDependees(
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
+	dropping := make(map[sqlbase.ID]struct{}, len(n.Names))
 	for _, name := range n.Names {
 		droppedDesc, err := p.dropTablePrepare(name)
 		if err != nil {
@@ -316,12 +318,15 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 				return nil, err
 			}
 		}
-		td = append(td, droppedDesc)
+		if _, ok := dropping[droppedDesc.ID]; !ok {
+			dropping[droppedDesc.ID] = struct{}{}
+			td = append(td, droppedDesc)
+		}
 	}
 	if len(td) == 0 {
 		return &emptyNode{}, nil
 	}
-	return &dropTableNode{p: p, n: n, td: td}, nil
+	return &dropTableNode{p: p, n: n, td: td, dropping: dropping}, nil
 }
 
 func (n *dropTableNode) expandPlan() error {
@@ -333,9 +338,18 @@ func (n *dropTableNode) Start() error {
 		if droppedDesc == nil {
 			continue
 		}
+		// If this table had foreign key relationships to other tables, remove the
+		// back-references from those tables.
+		for _, idx := range droppedDesc.AllNonDropIndexes() {
+			if err := n.p.removeFKBackReference(droppedDesc, idx, n.dropping); err != nil {
+				return err
+			}
+		}
+
 		if err := n.p.dropTableImpl(droppedDesc); err != nil {
 			return err
 		}
+
 		// Log a Drop Table event for this table.
 		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogDropTable,
@@ -403,14 +417,6 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	// If this table had foreign key relationships to other tables, remove the
-	// back-references from those tables.
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		if err := p.removeFKBackReference(tableDesc, idx); err != nil {
-			return err
-		}
-	}
-
 	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID sqlbase.ID) error {
 		desc, err := GetTableDesc(systemConfig, tableID)
 		if err != nil {
@@ -431,10 +437,15 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	return nil
 }
 
+// `others` is the set of table IDs being dropped -- there's no point in editing
+// a table just to drop it.
 func (p *planner) removeFKBackReference(
-	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor, others map[sqlbase.ID]struct{},
 ) error {
 	if idx.ForeignKey != nil {
+		if _, ok := others[idx.ForeignKey.Table]; ok {
+			return nil
+		}
 		t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
 		if err != nil {
 			return util.Errorf("error resolving referenced table ID %d: %v",
