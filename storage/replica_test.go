@@ -707,18 +707,6 @@ func TestReplicaNotLeaderError(t *testing.T) {
 // correctly after a lease request.
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	var numProp int64
-	sCtx := TestStoreContext()
-	sCtx.TestingKnobs.TestingCommandFilter = func(
-		args storagebase.FilterArgs,
-	) *roachpb.Error {
-		if args.Req.Method() == roachpb.LeaderLease {
-			atomic.AddInt64(&numProp, 1)
-		}
-		return nil
-	}
-
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
