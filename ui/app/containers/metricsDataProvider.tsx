@@ -1,5 +1,3 @@
-/// <reference path="../../typings/index.d.ts" />
-
 import * as React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";

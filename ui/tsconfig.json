@@ -6,11 +6,8 @@
     "noImplicitAny": true,
     "noEmit": true
   },
-  "exclude": [
-    "generated",
-    "jspm_packages",
-    "local_typings",
-    "node_modules",
-    "typings"
+  "files": [
+    "typings/index.d.ts",
+    "app/app.tsx"
   ]
 }
