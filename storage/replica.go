@@ -1431,6 +1431,25 @@ func (r *Replica) handleRaftReady() error {
 		switch e.Type {
 		case raftpb.EntryNormal:
 			if len(e.Data) == 0 {
+				r.mu.Lock()
+				// Avoid jumps in the applied index when the next "real"
+				// command applies.
+				r.mu.state.RaftAppliedIndex = e.Index
+				// Error handling is intentionally deferred to move it out
+				// of the lock.
+				newStats, err := saveState(r.store.Engine(), r.mu.state)
+				delta := newStats
+				delta.Subtract(r.mu.state.Stats) // compute the delta
+				r.mu.state.Stats = newStats
+				r.mu.Unlock()
+
+				if err != nil {
+					log.Fatalf("could not persist state after empty command: %s", err)
+				}
+
+				r.store.metrics.addMVCCStats(delta)
+				r.assertState(r.store.Engine())
+
 				shouldReproposeCmds = true
 				continue
 			}
@@ -1468,6 +1487,8 @@ func (r *Replica) handleRaftReady() error {
 			}); err != nil {
 				return err
 			}
+		default:
+			log.Fatalf("unexpected Raft entry: %v", e)
 		}
 
 	}
@@ -1802,8 +1823,8 @@ func (r *Replica) applyRaftCommand(
 	}
 	r.mu.Unlock()
 
-	if oldIndex >= index {
-		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index)))
+	if index != oldIndex+1 {
+		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
