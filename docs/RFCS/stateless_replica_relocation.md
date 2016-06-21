@@ -1,5 +1,5 @@
 - Feature Name: Stateless Replica Relocation
-- Status: draft
+- Status: complete
 - Start Date: 2015-08-19
 - RFC PR:
 - Cockroach Issue: #620
