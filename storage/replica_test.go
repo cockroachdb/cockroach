@@ -5728,8 +5728,16 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		}
 		return cmd.done
 	}()
+
+	var errStr string
+	if repropose {
+		errStr = "boom"
+	} else {
+		errStr = "observed at lease index"
+	}
+
 	if rwe := <-ch; rwe.Err != nil != withErr ||
-		(withErr && !testutils.IsPError(rwe.Err, "boom")) {
+		(withErr && !testutils.IsPError(rwe.Err, errStr)) {
 		fatalf("%s", rwe.Err)
 	}
 	if n := atomic.LoadInt32(&c); n != expProposals {
