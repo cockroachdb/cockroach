@@ -49,6 +49,7 @@ resource "template_file" "supervisor" {
     # We need to provide one node address for the block writer.
     node_address = "${google_compute_instance.cockroach.0.network_interface.0.access_config.0.assigned_nat_ip}"
     cockroach_flags = "${var.cockroach_flags}"
+    cockroach_env = "${var.cockroach_env}"
   }
 }
 

@@ -32,7 +32,7 @@ package acceptance
 //
 // make acceptance \
 //   TESTFLAGS="-v --remote -key-name google_compute_engine -cwd=allocator_terraform" \
-//   TESTS="TestUpreplicate1To3Small" \
+//   TESTS="TestUpreplicate1to3Small" \
 //   TESTTIMEOUT="24h"
 //
 // Things to note:
@@ -47,7 +47,9 @@ package acceptance
 // - Your Google Cloud credentials must be accessible by Terraform, as described
 //   here:
 //   https://www.terraform.io/docs/providers/google/
-// - Add "-cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
+// - There are various flags that start with `tf.` and `at.` that control the
+//   of Terrafarm and allocator tests, respectively. For example, you can add
+//   "-at.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
 
 import (
@@ -57,7 +59,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -104,7 +105,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 	at.f = farmer(t, at.Prefix)
 	defer func() {
 		if r := recover(); r != nil {
-			t.Errorf("recovered from panic to destroy cluster")
+			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
 		at.f.MustDestroy()
 	}()
@@ -114,8 +115,14 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 
 	// Pass on overrides to Terraform input variables.
-	if *flagCockroachBinary != "" {
-		at.f.AddVars["cockroach_binary"] = *flagCockroachBinary
+	if *flagATCockroachBinary != "" {
+		at.f.AddVars["cockroach_binary"] = *flagATCockroachBinary
+	}
+	if *flagATCockroachFlags != "" {
+		at.f.AddVars["cockroach_flags"] = *flagATCockroachFlags
+	}
+	if *flagATCockroachEnv != "" {
+		at.f.AddVars["cockroach_env"] = *flagATCockroachEnv
 	}
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
@@ -130,18 +137,17 @@ func (at *allocatorTest) Run(t *testing.T) {
 	log.Info("initial cluster is up")
 
 	log.Info("downloading archived stores from Google Cloud Storage in parallel")
-	var wg sync.WaitGroup
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
-		wg.Add(1)
 		go func(nodeNum int) {
-			defer wg.Done()
-			if err := at.f.Exec(nodeNum, "./nodectl download "+at.StoreURL); err != nil {
-				errors <- err
-			}
+			errors <- at.f.Exec(nodeNum, "./nodectl download "+at.StoreURL)
 		}(i)
 	}
-	wg.Wait()
+	for i := 0; i < at.f.NumNodes(); i++ {
+		if err := <-errors; err != nil {
+			t.Fatalf("error downloading store %d: %s", i, err)
+		}
+	}
 
 	log.Info("restarting cluster with archived store(s)")
 	for i := 0; i < at.f.NumNodes(); i++ {
@@ -226,17 +232,28 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 	return nil
 }
 
-// checkAllocatorStable returns whether the replica distribution within the cluster has
-// been stable for at least `StableInterval`.
+// checkAllocatorStable returns whether the replica distribution within the
+// cluster has been stable for at least `StableInterval`. Only unrecoverable
+// errors are returned.
 func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
-	q := `SELECT NOW() - MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3)`
+	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +
+		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3))`
 	eventTypes := []interface{}{
 		string(storage.RangeEventLogSplit),
 		string(storage.RangeEventLogAdd),
 		string(storage.RangeEventLogRemove),
 	}
 	var elapsedStr string
-	if err := db.QueryRow(q, eventTypes...).Scan(&elapsedStr); err != nil {
+	var rangeID int64
+	var storeID int64
+	var eventType string
+
+	row := db.QueryRow(q, eventTypes...)
+	if row == nil {
+		log.Errorf("couldn't find any range events")
+		return false, nil
+	}
+	if err := row.Scan(&elapsedStr, &rangeID, &storeID, &eventType); err != nil {
 		// Log but don't return errors, to increase resilience against transient
 		// errors.
 		log.Errorf("error checking rebalancer: %s", err)
@@ -247,15 +264,9 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 		return false, err
 	}
 
-	var status string
-	stable := elapsedSinceLastRangeEvent >= StableInterval
-	if stable {
-		status = fmt.Sprintf("allocator is stable (idle for %s)", StableInterval)
-	} else {
-		status = "waiting for idle allocator"
-	}
-	log.Infof("last range event was %s ago: %s", elapsedSinceLastRangeEvent, status)
-	return stable, nil
+	log.Infof("last range event: %s for range %d/store %d (%s ago)",
+		eventType, rangeID, storeID, elapsedSinceLastRangeEvent)
+	return elapsedSinceLastRangeEvent >= StableInterval, nil
 }
 
 // WaitForRebalance waits until there's been no recent range adds, removes, and
@@ -305,7 +316,7 @@ func (at *allocatorTest) WaitForRebalance() error {
 
 // TestUpreplicate1To3Small tests up-replication, starting with 1 node
 // containing 10 GiB of data and growing to 3 nodes.
-func TestUpreplicate1To3Small(t *testing.T) {
+func TestUpreplicate1to3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       1,
 		EndNodes:         3,
