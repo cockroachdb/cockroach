@@ -45,10 +45,14 @@ const matchNone = "^$"
 
 // Retrieve the IP address of docker itself.
 func dockerIP() net.IP {
+	localhost := net.IPv4(127, 0, 0, 1)
 	if host := os.Getenv("DOCKER_HOST"); host != "" {
 		u, err := url.Parse(host)
 		if err != nil {
 			panic(err)
+		}
+		if u.Scheme == "unix" {
+			return localhost
 		}
 		h, _, err := net.SplitHostPort(u.Host)
 		if err != nil {
@@ -57,7 +61,7 @@ func dockerIP() net.IP {
 		return net.ParseIP(h)
 	}
 	if runtime.GOOS == "linux" {
-		return net.IPv4(127, 0, 0, 1)
+		return localhost
 	}
 	panic("unable to determine docker ip address")
 }
