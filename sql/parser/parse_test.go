@@ -1120,6 +1120,12 @@ func TestEncodeSQLBytes(t *testing.T) {
 			var buf bytes.Buffer
 			encodeSQLBytes(&buf, s)
 			sql := fmt.Sprintf("SELECT %s", buf.String())
+			for n := 0; n < len(sql); n++ {
+				ch := sql[n]
+				if ch < 0x20 || ch >= 0x7F {
+					t.Fatalf("unprintable character: %v (%v, %v): %s %v", ch, i, j, sql, []byte(sql))
+				}
+			}
 			stmts, err := parseTraditional(sql)
 			if err != nil {
 				t.Errorf("%s: expected success, but found %s", sql, err)
