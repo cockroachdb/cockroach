@@ -29,6 +29,9 @@ export class OptInAttributes {
   updates: boolean = null; // Did the user sign up for product/feature updates
 }
 
+// VERSION_DISMISSED_KEY is the uiData key on the server that tracks when the outdated banner was last dismissed.
+export const VERSION_DISMISSED_KEY = "version_dismissed";
+
 /**
  * UIDataSet maintains the current values of fields that are persisted to the
  * server as UIData. Fields are maintained in this collection as untyped
