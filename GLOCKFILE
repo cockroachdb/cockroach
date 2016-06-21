@@ -59,6 +59,7 @@ github.com/lightstep/lightstep-tracer-go cab3c65c9d6ca0bda20c2ced3942aded1b6f9b1
 github.com/mattn/go-isatty 56b76bdf51f7708750eac80fa38b952bb9f32639
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
+github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter 8d0265a48283795806b872b4728c67bf5c777f20
 github.com/opencontainers/runc 5dc3f3576efb5262bf582217e93f86c93944374d
 github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f

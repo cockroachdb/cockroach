@@ -44,7 +44,7 @@ sha=$2
 if [ -z "${sha}" ]; then
   echo "Looking for latest sha for ${binary_path}"
   latest_url="https://s3.amazonaws.com/${BUCKET_NAME}/${binary_path}${LATEST_SUFFIX}"
-  sha=$(curl ${latest_url})
+  sha=$(curl --silent --show-error ${latest_url})
   if [ -z "${sha}" ]; then
     echo "Could not fetch latest binary: ${latest_url}"
     exit 1
@@ -53,7 +53,7 @@ fi
 
 # Fetch binary and symlink.
 binary_url="https://s3.amazonaws.com/${BUCKET_NAME}/${binary_path}.${sha}"
-time curl -O ${binary_url}
+time curl -O --silent --show-error ${binary_url}
 
 # Chmod and symlink.
 binary_name=$(basename ${binary_path})
