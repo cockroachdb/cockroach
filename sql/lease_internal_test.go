@@ -297,7 +297,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	s.Clock().SetMaxOffset(10 * LeaseDuration)
 	s.Clock().Update(s.Clock().Now().Add(int64(2*LeaseDuration), 0))
 
-	// Check the the name no longer resolves.
+	// Check the name no longer resolves.
 	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock()) != nil {
 		t.Fatalf("name resolves when it shouldn't")
 	}

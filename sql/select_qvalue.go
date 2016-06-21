@@ -267,7 +267,7 @@ func (q qvalMap) populateQVals(table *tableInfo, row parser.DTuple) {
 // aggregator since it is not parser.DNull.
 //
 // We need to implement enough functionality to satisfy the type checker and to
-// allow the the intermediate rendering of the value (before the group
+// allow the intermediate rendering of the value (before the group
 // aggregation).
 type starDatum struct{}
 

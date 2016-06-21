@@ -587,7 +587,7 @@ func EncodeNonsortingDecimal(b []byte, d *inf.Dec) []byte {
 
 // encodeNonsortingDecimalValue encodes the absolute value of a decimal's
 // exponent and slice of digit bytes into buf, returning the populated buffer
-// after encoding. The function first encodes the the absolute value of a
+// after encoding. The function first encodes the absolute value of a
 // decimal's exponent as an unsigned varint. Following this, it copies the
 // decimal's big-endian digits themselves into the buffer.
 func encodeNonsortingDecimalValue(exp uint64, digits []big.Word, buf []byte) []byte {

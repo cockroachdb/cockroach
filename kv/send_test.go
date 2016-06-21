@@ -468,7 +468,7 @@ func TestClientNotReady(t *testing.T) {
 	}()
 
 	// Send the RPC again with no timeout. We create a new node context to ensure
-	// there is a new connection; we could reuse the the old connection by not
+	// there is a new connection; we could reuse the old connection by not
 	// closing it, but by the time we reach this point in the test, GRPC may have
 	// attempted to reconnect enough times to make the backoff long enough to
 	// time out the test.
