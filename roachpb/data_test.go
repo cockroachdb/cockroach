@@ -31,6 +31,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -986,6 +988,61 @@ func BenchmarkValueGetTuple(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if _, err := v.GetTuple(); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func TestValuePrettyPrint(t *testing.T) {
+	var boolValue Value
+	boolValue.SetBool(true)
+
+	var intValue Value
+	intValue.SetInt(7)
+
+	var floatValue Value
+	floatValue.SetFloat(6.28)
+
+	var timeValue Value
+	timeValue.SetTime(time.Unix(1467216170, 5))
+
+	var decimalValue Value
+	_ = decimalValue.SetDecimal(inf.NewDec(628, 2))
+
+	var durationValue Value
+	_ = durationValue.SetDuration(duration.Duration{Months: 1, Days: 2, Nanos: 3})
+
+	var tupleValue Value
+	tupleBytes := encoding.EncodeBytesValue(encoding.EncodeIntValue(nil, 1, 8), 2, []byte("foo"))
+	tupleValue.SetTuple(tupleBytes)
+
+	var errValue Value
+	errValue.SetInt(7)
+	errValue.setTag(ValueType_FLOAT)
+
+	var errTagValue Value
+	errTagValue.SetInt(7)
+	errTagValue.setTag(ValueType(99))
+
+	tests := []struct {
+		v        Value
+		expected string
+	}{
+		{boolValue, "/INT/1"},
+		{intValue, "/INT/7"},
+		{floatValue, "/FLOAT/6.28"},
+		{timeValue, "/TIME/2016-06-29T16:02:50.000000005Z"},
+		{decimalValue, "/DECIMAL/6.28"},
+		{durationValue, "/DURATION/1m2d3ns"},
+		{MakeValueFromBytes([]byte{1, 2, 3}), "/BYTES/010203"},
+		{MakeValueFromString("foo"), "/BYTES/foo"},
+		{tupleValue, "/TUPLE/1:Int/8/2:Bytes/foo"},
+		{errValue, "/<err:float64 value should be exactly 8 bytes: 1>"},
+		{errTagValue, "/<err:unknown tag: 99>"},
+	}
+
+	for i, test := range tests {
+		if str := test.v.PrettyPrint(); str != test.expected {
+			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
 	}
 }

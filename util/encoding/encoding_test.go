@@ -1708,7 +1708,7 @@ func TestValueEncodingRand(t *testing.T) {
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
 		default:
-			err = errors.Errorf("unknown tag %q", typ)
+			err = errors.Errorf("unknown type %s", typ)
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -1727,6 +1727,36 @@ func TestValueEncodingRand(t *testing.T) {
 			if decoded != value {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
+		}
+	}
+}
+
+func TestPrettyPrintValueEncoded(t *testing.T) {
+	tests := []struct {
+		buf      []byte
+		expected string
+	}{
+		{EncodeNullValue(nil, NoColumnID), "NULL"},
+		{EncodeBoolValue(nil, NoColumnID, true), "true"},
+		{EncodeBoolValue(nil, NoColumnID, false), "false"},
+		{EncodeIntValue(nil, NoColumnID, 7), "7"},
+		{EncodeFloatValue(nil, NoColumnID, 6.28), "6.28"},
+		{EncodeDecimalValue(nil, NoColumnID, inf.NewDec(628, 2)), "6.28"},
+		{EncodeTimeValue(nil, NoColumnID, time.Unix(1467216170, 5)), "2016-06-29T16:02:50.000000005Z"},
+		{EncodeDurationValue(nil, NoColumnID, duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1m2d3ns"},
+		{EncodeBytesValue(nil, NoColumnID, []byte{1, 2, 15}), "01020f"},
+		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"},
+	}
+	for i, test := range tests {
+		remaining, str, err := PrettyPrintValueEncoded(test.buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(remaining) != 0 {
+			t.Errorf("%d: expected all bytes to be consumed but was left with %s", i, remaining)
+		}
+		if str != test.expected {
+			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
 	}
 }

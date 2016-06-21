@@ -19,11 +19,13 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"reflect"
 	"strconv"
 	"time"
+	"unicode"
 	"unsafe"
 
 	"gopkg.in/inf.v0"
@@ -1428,6 +1430,82 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		n, err := getMultiNonsortingVarintLen(b, 3)
 		return typeOffset, dataOffset + n, err
 	default:
-		return 0, 0, errors.Errorf("unknown tag %q", typ)
+		return 0, 0, errors.Errorf("unknown type %s", typ)
+	}
+}
+
+// PrettyPrintValueEncoded returns a string representation of the first
+// decodable value in the provided byte slice, along with the remaining byte
+// slice after decoding.
+func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
+	_, dataOffset, _, typ, err := DecodeValueTag(b)
+	if err != nil {
+		return b, "", err
+	}
+	switch typ {
+	case Null:
+		b = b[dataOffset:]
+		return b, "NULL", nil
+	case True:
+		b = b[dataOffset:]
+		return b, "true", nil
+	case False:
+		b = b[dataOffset:]
+		return b, "false", nil
+	case Int:
+		var i int64
+		b, i, err = DecodeIntValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.FormatInt(i, 10), nil
+	case Float:
+		var f float64
+		b, f, err = DecodeFloatValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.FormatFloat(f, 'g', -1, 64), nil
+	case Decimal:
+		var d *inf.Dec
+		b, d, err = DecodeDecimalValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, d.String(), nil
+	case Bytes:
+		var data []byte
+		b, data, err = DecodeBytesValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		str := string(data)
+		printable := true
+		for _, c := range str {
+			if !unicode.IsPrint(c) {
+				printable = false
+				break
+			}
+		}
+		if printable {
+			return b, str, nil
+		}
+		return b, hex.EncodeToString(data), nil
+	case Time:
+		var t time.Time
+		b, t, err = DecodeTimeValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.UTC().Format(time.RFC3339Nano), nil
+	case Duration:
+		var d duration.Duration
+		b, d, err = DecodeDurationValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, d.String(), nil
+	default:
+		return b, "", errors.Errorf("unknown type %s", typ)
 	}
 }
