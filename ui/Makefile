@@ -45,7 +45,11 @@ JSPM_TARGET      = build/app.js
 GOBINDATA_TARGET = embedded.go
 
 .PHONY: all
-all: app/js/protos.js lint test $(GOBINDATA_TARGET)
+all: protobuf lint test $(GOBINDATA_TARGET)
+
+.PHONY: protobuf
+protobuf:
+	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 .PHONY: lint
 lint: npm.installed typings.installed
@@ -53,7 +57,7 @@ lint: npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: app/js/protos.js npm.installed typings.installed jspm.installed
+test: protobuf npm.installed typings.installed jspm.installed
 	karma start
 
 .PHONY: watch
@@ -84,7 +88,7 @@ npm.installed: package.json npm-shrinkwrap.json
 	npm install --no-progress
 	touch $@
 
-typings.installed: generated/protos.d.ts typings.json npm.installed
+typings.installed: typings.json npm.installed
 	typings install
 	typings prune
 	touch $@
@@ -97,20 +101,3 @@ jspm.installed: npm.installed
 	# install`.
 	touch npm.installed
 	touch $@
-
-UI_PROTOS = $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto $(REPO_ROOT)/server/status/status.proto $(REPO_ROOT)/ts/tspb/timeseries.proto
-
-PBJS_ARGS = --path $(ORG_ROOT) $(UI_PROTOS)
-
-app/js/protos.js: npm.installed $(UI_PROTOS)
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	pbjs -t commonjs $(PBJS_ARGS) >> $@
-
-generated/protos.json: npm.installed $(UI_PROTOS)
-	pbjs $(PBJS_ARGS) > $@
-
-generated/protos.d.ts: generated/protos.json
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	proto2ts --file generated/protos.json >> $@
