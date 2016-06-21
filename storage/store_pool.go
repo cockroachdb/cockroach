@@ -50,7 +50,7 @@ const (
 
 	// defaultDeclinedReservationsTimeout is the amount of time to consider the
 	// store unavailable for up-replication after a reservation was declined.
-	defaultDeclinedReservationsTimeout = 1 * time.Second
+	defaultDeclinedReservationsTimeout = 0 * time.Second
 
 	// defaultReserveRPCTimeout is used for the rpc calls to Reserve on other
 	// nodes. It should be short as this may block calls to ChangeReplicas.
