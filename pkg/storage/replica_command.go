@@ -1560,11 +1560,6 @@ func evalPushTxn(
 	}
 	// Start with the persisted transaction record as final transaction.
 	reply.PusheeTxn = existTxn.Clone()
-	// The pusher might be aware of a newer version of the pushee.
-	reply.PusheeTxn.Timestamp.Forward(args.PusheeTxn.Timestamp)
-	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
-		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
-	}
 
 	// If already committed or aborted, return success.
 	if reply.PusheeTxn.Status != roachpb.PENDING {
@@ -1578,6 +1573,13 @@ func evalPushTxn(
 		// Trivial noop.
 		return EvalResult{}, nil
 	}
+
+	// The pusher might be aware of a newer version of the pushee.
+	reply.PusheeTxn.Timestamp.Forward(args.PusheeTxn.Timestamp)
+	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
+		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
+	}
+	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
 	var pusherWins bool
 	var reason string
