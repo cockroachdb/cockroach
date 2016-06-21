@@ -67,6 +67,8 @@ var isInteractive = isatty.IsTerminal(os.Stdout.Fd()) &&
 	isatty.IsTerminal(os.Stdin.Fd())
 
 func init() {
+	cobra.EnableCommandSorting = false
+
 	cockroachCmd.AddCommand(
 		startCmd,
 		certCmd,
