@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -80,20 +79,25 @@ func (ed *EncDatum) SetEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byt
 func (ed *EncDatum) SetFromBuffer(
 	typ ColumnType_Kind, enc DatumEncoding, buf []byte,
 ) (remaining []byte, err error) {
-	var encLen int
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
-		encLen, err = encoding.PeekLength(buf)
+		encLen, err := encoding.PeekLength(buf)
+		if err != nil {
+			return nil, err
+		}
+		ed.SetEncoded(typ, enc, buf[:encLen])
+		buf = buf[encLen:]
 	case DatumEncoding_VALUE:
-		encLen, err = roachpb.PeekValueLength(buf)
+		typeOffset, encLen, err := encoding.PeekValueLength(buf)
+		if err != nil {
+			return nil, err
+		}
+		ed.SetEncoded(typ, enc, buf[typeOffset:encLen])
+		buf = buf[encLen:]
 	default:
 		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
-	if err != nil {
-		return nil, err
-	}
-	ed.SetEncoded(typ, enc, buf[:encLen])
-	return buf[encLen:], nil
+	return buf, nil
 }
 
 // SetDatum initializes the EncDatum with the given Datum.
@@ -136,11 +140,14 @@ func (ed *EncDatum) Decode(a *DatumAlloc) error {
 	default:
 		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
+	if err != nil {
+		return err
+	}
 	if len(rem) != 0 {
 		ed.Datum = nil
 		return util.Errorf("%d trailing bytes in encoded value", len(rem))
 	}
-	return err
+	return nil
 }
 
 // Encoding returns the encoding that is already available (the latter indicated
@@ -168,7 +175,7 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 	case DatumEncoding_DESCENDING_KEY:
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
 	case DatumEncoding_VALUE:
-		return EncodeTableValue(appendTo, ed.Datum)
+		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum)
 	default:
 		panic(fmt.Sprintf("unknown encoding requested %s", enc))
 	}
