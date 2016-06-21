@@ -1749,6 +1749,13 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		return false
 	}
 
+	if cmd != nil {
+		// We initiated this command, so use the caller-supplied context.
+		ctx = cmd.ctx
+		delete(r.mu.pendingCmds, idKey)
+	}
+	leaseIndex := r.mu.state.LeaseAppliedIndex
+
 	if isLeaseError() {
 		if log.V(1) {
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
@@ -1756,15 +1763,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		}
 		forcedErr = roachpb.NewError(r.newNotLeaderError(
 			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
-	}
-
-	if cmd != nil {
-		// We initiated this command, so use the caller-supplied context.
-		ctx = cmd.ctx
-		delete(r.mu.pendingCmds, idKey)
-	}
-	leaseIndex := r.mu.state.LeaseAppliedIndex
-	if raftCmd.Cmd.IsLease() {
+	} else if raftCmd.Cmd.IsLease() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by
 		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
@@ -1786,10 +1785,8 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		// The command is trying to apply at a past log position. That's
 		// unfortunate and hopefully rare; we will refurbish on the proposer.
 		// Note that in this situation, the leaseIndex does not advance.
-		if log.V(1) {
-			log.Infof("command wants index %d, but require >= %d (local=%t): %s",
-				raftCmd.MaxLeaseIndex, leaseIndex, cmd != nil, raftCmd.Cmd)
-		}
+		forcedErr = roachpb.NewErrorf("command observed at lease index %d, "+
+			"but required <= %d", raftCmd.MaxLeaseIndex, leaseIndex)
 
 		if cmd != nil {
 			// Only refurbish when no earlier incarnation of this command has
@@ -1800,10 +1797,18 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 			// Note that we keep the context to avoid hiding these internal
 			// cycles from traces.
 			if localMaxLeaseIndex := cmd.raftCmd.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
+				if log.V(1) {
+					log.Infof("refurbishing command for <= %d observed at %d",
+						raftCmd.MaxLeaseIndex, leaseIndex)
+				}
+
 				if pErr := r.refurbishPendingCmdLocked(cmd); pErr == nil {
 					cmd.done = make(chan roachpb.ResponseWithError, 1)
 				} else {
-					forcedErr = pErr
+					// We could try to send the error to the client instead,
+					// but to avoid even the appearance of Replica divergence,
+					// let's not.
+					log.Warningf("unable to refurbish: %s", pErr)
 				}
 			} else {
 				// The refurbishment is already in flight, so we better get cmd back
@@ -1816,13 +1821,6 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 				// finish it when the "real" incarnation applies).
 				cmd = nil
 			}
-		}
-		if forcedErr == nil {
-			// This misaligned command either wasn't proposed here, or we
-			// have refurbished above and made sure we can simply error out
-			// now.
-			forcedErr = roachpb.NewErrorf("command applied at lease index %d, "+
-				"but required %d", leaseIndex, raftCmd.MaxLeaseIndex)
 		}
 	}
 	r.mu.Unlock()
