@@ -45,11 +45,11 @@ const (
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
 
 	// defaultFailedReservationsTimeout is the amount of time to consider the
-	// store unavailable for up-replication after a failed reservation call.
+	// store throttled for up-replication after a failed reservation call.
 	defaultFailedReservationsTimeout = 5 * time.Second
 
 	// defaultDeclinedReservationsTimeout is the amount of time to consider the
-	// store unavailable for up-replication after a reservation was declined.
+	// store throttled for up-replication after a reservation was declined.
 	defaultDeclinedReservationsTimeout = 0 * time.Second
 
 	// defaultReserveRPCTimeout is used for the rpc calls to Reserve on other
@@ -62,11 +62,11 @@ type storeDetail struct {
 	dead        bool
 	timesDied   int
 	foundDeadOn hlc.Timestamp
-	// unavailableUntil is when an unavailable store can be considered available
+	// throttledUntil is when an throttled store can be considered available
 	// again due to a failed or declined Reserve RPC.
-	unavailableUntil time.Time
-	lastUpdatedTime  hlc.Timestamp // This is also the priority for the queue.
-	index            int           // index of the item in the heap, required for heap.Interface
+	throttledUntil  time.Time
+	lastUpdatedTime hlc.Timestamp // This is also the priority for the queue.
+	index           int           // index of the item in the heap, required for heap.Interface
 }
 
 // markDead sets the storeDetail to dead(inactive).
@@ -94,25 +94,31 @@ type storeMatch int
 
 // These are the possible values for a storeMatch.
 const (
-	storeMatchDead    storeMatch = iota // The store is not yet available or has been timed out.
-	storeMatchAlive                     // The store is alive, but its attributes didn't match the required ones.
-	storeMatchMatched                   // The store is alive and its attributes matched.
+	storeMatchDead      storeMatch = iota // The store is not yet available or has been timed out.
+	storeMatchAlive                       // The store is alive, but its attributes didn't match the required ones.
+	storeMatchThrottled                   // The store is alive and its attributes matched, but it is throttled.
+	storeMatchAvailable                   // The store is alive, available and its attributes matched.
 )
 
-// match returns if the store is alive, and if the store is available and it's
-// attributes contain the required ones respectively.
+// match checks the store against the attributes and returns a storeMatch.
 func (sd *storeDetail) match(now time.Time, required roachpb.Attributes) storeMatch {
 	// The store must be alive and it must have a descriptor to be considered
 	// alive.
 	if sd.dead || sd.desc == nil {
 		return storeMatchDead
 	}
-	// The store must not have a recent declined reservation to be considered
-	// available for matching.
-	if sd.unavailableUntil.After(now) || !required.IsSubset(*sd.desc.CombinedAttrs()) {
+
+	// Does the store match the attributes?
+	if !required.IsSubset(*sd.desc.CombinedAttrs()) {
 		return storeMatchAlive
 	}
-	return storeMatchMatched
+
+	// The store must not have a recent declined reservation to be available.
+	if sd.throttledUntil.After(now) {
+		return storeMatchThrottled
+	}
+
+	return storeMatchAvailable
 }
 
 // storePoolPQ implements the heap.Interface (which includes sort.Interface)
@@ -381,11 +387,11 @@ func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 
 // GetStoreList returns a storeList that contains all active stores that
 // contain the required attributes and their associated stats. It also returns
-// the number of total alive stores.
+// the total number of alive and throttled stores.
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int) {
+func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
@@ -401,17 +407,22 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	now := sp.clock.Now().GoTime()
 	sl := StoreList{}
 	var aliveStoreCount int
+	var throttledStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.mu.stores[roachpb.StoreID(storeID)]
 		matched := detail.match(now, required)
-		if matched >= storeMatchAlive {
+		switch matched {
+		case storeMatchAlive:
 			aliveStoreCount++
-		}
-		if matched == storeMatchMatched {
+		case storeMatchThrottled:
+			aliveStoreCount++
+			throttledStoreCount++
+		case storeMatchAvailable:
+			aliveStoreCount++
 			sl.add(detail.desc)
 		}
 	}
-	return sl, aliveStoreCount
+	return sl, aliveStoreCount, throttledStoreCount
 }
 
 // reserve send a reservation request rpc to the node and store
@@ -466,18 +477,18 @@ func (sp *StorePool) reserve(
 	// be considered as a candidate for new replicas until after the configured
 	// timeout period has passed.
 	if err != nil {
-		detail.unavailableUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
+		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		if log.V(2) {
-			log.Infof("reservation failed, store:%s will be unavailable for %s until %s",
-				toStoreID, sp.failedReservationsTimeout, detail.unavailableUntil)
+			log.Infof("reservation failed, store:%s will be throttled for %s until %s",
+				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
 		return fmt.Errorf("reservation failed:%+v due to error:%s", req, err)
 	}
 	if !resp.Reserved {
-		detail.unavailableUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
+		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
-			log.Infof("reservation failed, store:%s will be unavailable for %s until %s",
-				toStoreID, sp.declinedReservationsTimeout, detail.unavailableUntil)
+			log.Infof("reservation failed, store:%s will be throttled for %s until %s",
+				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
 		return fmt.Errorf("reservation declined:%+v", req)
 	}

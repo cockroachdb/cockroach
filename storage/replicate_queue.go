@@ -135,8 +135,7 @@ func (rq *replicateQueue) process(
 			StoreID: newStore.StoreID,
 		}
 		if log.V(1) {
-			log.Infof("adding replica for under-replicated range:%d to node:%d, store:%d",
-				repl.RangeID, newReplica.NodeID, newReplica.StoreID)
+			log.Infof("adding replica for under-replicated RangeID:%d to %+v", repl.RangeID, newReplica)
 		}
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
@@ -147,8 +146,7 @@ func (rq *replicateQueue) process(
 			return err
 		}
 		if log.V(1) {
-			log.Infof("removing replica for over-replicated range:%d from node:%d, store:%d",
-				repl.RangeID, removeReplica.NodeID, removeReplica.StoreID)
+			log.Infof("removing replica for over-replicated RangeID:%d from %+v", repl.RangeID, removeReplica)
 		}
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
@@ -165,8 +163,7 @@ func (rq *replicateQueue) process(
 			break
 		}
 		if log.V(1) {
-			log.Infof("removing replica from dead store range:%d from node:%d, store:%d",
-				repl.RangeID, deadReplicas[0].NodeID, deadReplicas[0].StoreID)
+			log.Infof("removing replica from dead store RangeID:%d from %+v", repl.RangeID, deadReplicas[0])
 		}
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
 			return err
@@ -177,7 +174,7 @@ func (rq *replicateQueue) process(
 		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
 			if log.V(1) {
-				log.Infof("no suitable rebalance target for range:%d", repl.RangeID)
+				log.Infof("no suitable rebalance target for RangeID:%d", repl.RangeID)
 			}
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
@@ -188,8 +185,7 @@ func (rq *replicateQueue) process(
 			StoreID: rebalanceStore.StoreID,
 		}
 		if log.V(1) {
-			log.Infof("rebalancing range:%d to node:%d, store:%d", repl.RangeID,
-				rebalanceReplica.NodeID, rebalanceReplica.StoreID)
+			log.Infof("rebalancing RangeID:%d to %+v", repl.RangeID, rebalanceReplica)
 		}
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err

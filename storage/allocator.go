@@ -200,9 +200,18 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
-		sl, aliveStoreCount := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, a.options.Deterministic)
+		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
+			roachpb.Attributes{Attrs: attrs},
+			a.options.Deterministic,
+		)
 		if target := a.selectGood(sl, existingNodes); target != nil {
 			return target, nil
+		}
+
+		// When there are throttled stores that do match, we shouldn't send
+		// the replica to purgatory or even consider relaxing the constraints.
+		if throttledStoreCount > 0 {
+			return nil, util.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 		if len(attrs) == 0 || !relaxConstraints {
 			return nil, &allocatorError{
@@ -274,7 +283,7 @@ func (a Allocator) RebalanceTarget(
 		existingNodes[repl.NodeID] = struct{}{}
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
-	sl, _ := a.storePool.getStoreList(required, a.options.Deterministic)
+	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
 	if replacement := a.improve(storeDesc, sl, existingNodes); replacement != nil {
 		return replacement
 	}
@@ -300,7 +309,7 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 
-	sl, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
+	sl, _, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
 
 	// ShouldRebalance is true if a suitable replacement can be found.
 	return a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
