@@ -20,6 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -45,6 +45,7 @@ type rowHelper struct {
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
 	primaryIndexCols      map[sqlbase.ColumnID]struct{}
+	sortedColumnFamilies  map[sqlbase.FamilyID][]sqlbase.ColumnID
 }
 
 // encodeIndexes encodes the primary and secondary index keys. The
@@ -104,6 +105,25 @@ func (rh *rowHelper) columnInPK(colID sqlbase.ColumnID) bool {
 	}
 	_, ok := rh.primaryIndexCols[colID]
 	return ok
+}
+
+type columnIDs []sqlbase.ColumnID
+
+func (c columnIDs) Len() int           { return len(c) }
+func (c columnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+func (c columnIDs) Less(i, j int) bool { return c[i] < c[j] }
+
+func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.ColumnID, bool) {
+	if rh.sortedColumnFamilies == nil {
+		rh.sortedColumnFamilies = make(map[sqlbase.FamilyID][]sqlbase.ColumnID, len(rh.tableDesc.Families))
+		for _, family := range rh.tableDesc.Families {
+			colIDs := append([]sqlbase.ColumnID(nil), family.ColumnIDs...)
+			sort.Sort(columnIDs(colIDs))
+			rh.sortedColumnFamilies[family.ID] = colIDs
+		}
+	}
+	colIDs, ok := rh.sortedColumnFamilies[famID]
+	return colIDs, ok
 }
 
 // rowInserter abstracts the key/value operations for inserting table rows.
@@ -254,7 +274,12 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 		ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 		ri.valueBuf = ri.valueBuf[:0]
 
-		for _, colID := range family.ColumnIDs {
+		var lastColID sqlbase.ColumnID
+		familySortedColumnIDs, ok := ri.helper.sortedColumnFamily(family.ID)
+		if !ok {
+			panic("invalid family sorted column id map")
+		}
+		for _, colID := range familySortedColumnIDs {
 			if ri.helper.columnInPK(colID) {
 				if family.ID != 0 {
 					return util.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
@@ -275,8 +300,9 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 				continue
 			}
 
-			ri.valueBuf = encoding.EncodeNonsortingVarint(ri.valueBuf, int64(col.ID))
-			ri.valueBuf, err = sqlbase.EncodeTableValue(ri.valueBuf, values[idx])
+			colIDDiff := col.ID - lastColID
+			lastColID = col.ID
+			ri.valueBuf, err = sqlbase.EncodeTableValue(ri.valueBuf, colIDDiff, values[idx])
 			if err != nil {
 				return err
 			}
@@ -603,7 +629,12 @@ func (ru *rowUpdater) updateRow(
 		ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 		ru.valueBuf = ru.valueBuf[:0]
 
-		for _, colID := range family.ColumnIDs {
+		var lastColID sqlbase.ColumnID
+		familySortedColumnIDs, ok := ru.helper.sortedColumnFamily(family.ID)
+		if !ok {
+			panic("invalid family sorted column id map")
+		}
+		for _, colID := range familySortedColumnIDs {
 			if ru.helper.columnInPK(colID) {
 				if family.ID != 0 {
 					return nil, util.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
@@ -623,8 +654,8 @@ func (ru *rowUpdater) updateRow(
 				continue
 			}
 
-			ru.valueBuf = encoding.EncodeNonsortingVarint(ru.valueBuf, int64(col.ID))
-			ru.valueBuf, err = sqlbase.EncodeTableValue(ru.valueBuf, ru.newValues[idx])
+			colIDDiff := col.ID - lastColID
+			ru.valueBuf, err = sqlbase.EncodeTableValue(ru.valueBuf, colIDDiff, ru.newValues[idx])
 			if err != nil {
 				return nil, err
 			}

@@ -20,7 +20,6 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -394,30 +393,30 @@ func (rf *RowFetcher) processValueTuple(
 		return "", "", err
 	}
 
-	var colIDRaw int64
+	var colIDDiff uint32
 	var value parser.Datum
+	var lastColID ColumnID
 	for len(tupleBytes) > 0 {
-		tupleBytes, _, colIDRaw, err = encoding.DecodeNonsortingVarint(tupleBytes)
+		_, _, colIDDiff, _, err = encoding.DecodeValueTag(tupleBytes)
 		if err != nil {
 			return "", "", err
 		}
-		if colIDRaw < 0 || colIDRaw > math.MaxUint32 {
-			return "", "", util.Errorf("invalid column-id: %d", colIDRaw)
-		}
-		idx, ok := rf.colIdxMap[ColumnID(colIDRaw)]
+		colID := lastColID + ColumnID(colIDDiff)
+		lastColID = colID
+		idx, ok := rf.colIdxMap[colID]
 		// TODO(dan): Ideally rowFetcher would generate EncDatums instead of Datums
 		// and that would make the logic simpler. We won't need valNeededForCol at
 		// all, it would be up to the user of the class to decide if they want to
 		// decode them or not.
 		if !ok || !rf.valNeededForCol[idx] {
 			// This column wasn't requested, so read its length and skip it.
-			i, err := roachpb.PeekValueLength(tupleBytes)
+			_, i, err := encoding.PeekValueLength(tupleBytes)
 			if err != nil {
 				return "", "", err
 			}
 			tupleBytes = tupleBytes[i:]
 			if log.V(3) {
-				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colIDRaw)
+				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
 			continue
 		}
