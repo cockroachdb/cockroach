@@ -48,14 +48,14 @@ We use npm to manage various dependencies; be sure that your node installation
 includes a recent version of npm. If you observe problems with npm, try updating
 it using `npm install -g npm`.
 
-We use Bower to manage frontend dependencies and Typings to manage typescript
+We use JSPM to manage frontend dependencies and Typings to manage typescript
 definition files.
 Our Makefile automatically installs these tools locally, so for the most part,
 you can be blissfully ignorant of their use. However, if you wish to add
-Bower/Typings dependencies (and do not have your own opinions on binstubs), you'll
+JSPM/Typings dependencies (and do not have your own opinions on binstubs), you'll
 want to run them from the local install using one of:
-- `node_modules/.bin/bower install --save <myAwesomeDep>`
-- `node_modules/.bin/typings install --save <myAwesomeDep>`
+- `$(npm bin)/jspm install --save <myAwesomeDep>`
+- `$(npm bin)/typings install --save <myAwesomeDep>`
 
 To modify an existing npm dependency, you'll need to edit `package.json` in the
 standard fashion, while to add a new npm dependency, you'll want to run:
@@ -66,7 +66,7 @@ standard fashion, while to add a new npm dependency, you'll want to run:
 
 Either way, complete any npm changes by running:
 ```
-	rm -r node_modules && npm update && node_modules/.bin/shonkwrap
+	rm -r node_modules && npm update && $(npm bin)/shonkwrap && $(npm bin)/jspm update
 ```
 
 Be sure to commit any changes to `npm-shrinkwrap.json`.

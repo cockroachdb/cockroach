@@ -7,8 +7,7 @@ file($name, $ext, $path)
 font-face($family, $style='normal')
   @font-face
     font-family $family
-    src url(file($family, 'woff2', '../fonts')) format("woff2"),
-        url(file($family, 'woff', '../fonts')) format("woff")
+    src url(file($family, 'woff2', '../fonts')) format('woff2'), url(file($family, 'woff', '../fonts')) format('woff')
     font-weight normal
     font-style $style
     text-rendering optimizeLegibility
