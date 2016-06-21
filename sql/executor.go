@@ -887,6 +887,17 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		txnState.updateStateAndCleanupOnErr(err, e)
 		return Result{Err: err}, err
+	case *parser.Deallocate:
+		if s.Name == "" {
+			planMaker.session.PreparedStatements.DeleteAll()
+		} else {
+			if found := planMaker.session.PreparedStatements.Delete(string(s.Name)); !found {
+				err := fmt.Errorf("prepared statement %s does not exist", s.Name)
+				txnState.updateStateAndCleanupOnErr(err, e)
+				return Result{Err: err}, err
+			}
+		}
+		return Result{PGTag: s.StatementTag()}, nil
 	}
 
 	if txnState.tr != nil {

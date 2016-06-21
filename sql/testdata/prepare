@@ -4,5 +4,10 @@ PREPARE a AS SELECT 1
 statement error unknown statement type: \*parser.Execute
 EXECUTE a
 
-statement error unknown statement type: \*parser.Deallocate
+# TODO(nvanbenschoten) This deserves more robust testing, but that is hard
+# to add until we support the PREPARE statement.
+statement error prepared statement a does not exist
 DEALLOCATE a
+
+statement ok
+DEALLOCATE ALL
