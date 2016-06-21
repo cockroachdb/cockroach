@@ -209,12 +209,22 @@ func TestStorePoolDies(t *testing.T) {
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.
-func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int, expectedAliveStoreCount int) error {
+func verifyStoreList(
+	sp *StorePool,
+	requiredAttrs []string,
+	expected []int,
+	expectedAliveStoreCount int,
+	expectedUnavailableStoreCount int,
+) error {
 	var actual []int
-	sl, aliveStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
+	sl, aliveStoreCount, unavailableStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
 	if aliveStoreCount != expectedAliveStoreCount {
-		return fmt.Errorf("expected AliveStoreCount %d does not match actual %d", expectedAliveStoreCount,
-			aliveStoreCount)
+		return fmt.Errorf("expected AliveStoreCount %d does not match actual %d",
+			expectedAliveStoreCount, aliveStoreCount)
+	}
+	if unavailableStoreCount != expectedUnavailableStoreCount {
+		return fmt.Errorf("expected UnavailableStoreCount %d does not match actual %d",
+			expectedUnavailableStoreCount, unavailableStoreCount)
 	}
 	for _, store := range sl.stores {
 		actual = append(actual, int(store.StoreID))
@@ -237,7 +247,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
+	if sl, _, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
@@ -287,7 +297,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		int(supersetStore.StoreID),
 		int(deadStore.StoreID),
 		int(declinedStore.StoreID),
-	}, 6); err != nil {
+	}, 6, 0); err != nil {
 		t.Error(err)
 	}
 
@@ -300,7 +310,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	if err := verifyStoreList(sp, required, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
-	}, 5); err != nil {
+	}, 5, 1); err != nil {
 		t.Error(err)
 	}
 }
@@ -414,8 +424,15 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
-	if sl, c := sp.getStoreList(roachpb.Attributes{}, true); len(sl.stores) > 0 || c != 0 {
-		t.Errorf("expected 0 live stores; got list %v and total count %d", sl, c)
+	sl, alive, unavailable := sp.getStoreList(roachpb.Attributes{}, true)
+	if len(sl.stores) > 0 {
+		t.Errorf("expected no live stores; got list of %v", sl)
+	}
+	if alive != 0 {
+		t.Errorf("expected no live stores; got an alive count of %d", alive)
+	}
+	if unavailable != 0 {
+		t.Errorf("expected no live stores; got an unavailable count of %d", unavailable)
 	}
 }
 
