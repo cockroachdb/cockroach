@@ -29,7 +29,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// loadState loads a ReplicaState from disc. The exception is the Desc field,
+// loadState loads a ReplicaState from disk. The exception is the Desc field,
 // which is updated transactionally, and is populated from the supplied
 // RangeDescriptor under the convention that that is the latest committed
 // version.

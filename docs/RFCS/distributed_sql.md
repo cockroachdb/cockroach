@@ -481,7 +481,7 @@ Composition: src -> countdistinctmin -> final
   - `DISTINCT`
 
   `AGGREGATOR`'s output schema consists of the group key, plus a configurable
-  subset of the the generated aggregated values. The optional output filter has
+  subset of the generated aggregated values. The optional output filter has
   access to the group key and all the aggregagated values (i.e. it can use even
   values that are not ultimately outputted).
 - `SORT` sorts the input according to a configurable set of columns. Note that

@@ -267,7 +267,7 @@ in this section) to all Replicas, with teh following semantics:
 * When the process restarts, it checks that it's running the desired version of the binary, performs any data
   upgrades it has to do, and then resumes operation.
 
-As long as the the data changes are reversible, this should do the trick.
+As long as the data changes are reversible, this should do the trick.
 There's a chance of leaving the cluster in an undefined state should the
 migration crash (we likely won't be able to do it atomically, only on each
 replica, but that could be remedied with tooling (to manually drive the process
