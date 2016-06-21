@@ -57,7 +57,7 @@ func checkCounter(t *testing.T, s *storage.Store, key string, e int64) {
 func verifyStats(t *testing.T, mtc *multiTestContext, storeIdx int) {
 	// Get the current store at storeIdx.
 	s := mtc.stores[storeIdx]
-	// Stop the store at the given index, while keeping the the reference to the
+	// Stop the store at the given index, while keeping the reference to the
 	// store object. ComputeMVCCStats() still works on a stopped store (it needs
 	// only the engine, which is still open), and the most recent stats are still
 	// available on the stopped store object; however, no further information can

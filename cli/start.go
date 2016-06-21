@@ -287,7 +287,7 @@ func runStart(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Default the log directory to the the "logs" subdirectory of the first
+	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
 	//

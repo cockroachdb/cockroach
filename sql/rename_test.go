@@ -223,7 +223,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	}
 
 	// Check that the old name is not usable outside of the transaction now
-	// that the the node doesn't have a lease on it anymore (committing the txn
+	// that the node doesn't have a lease on it anymore (committing the txn
 	// should have released the lease on the version of the descriptor with the
 	// old name), even thoudh the name mapping still exists.
 	lease := s.LeaseManager().(*LeaseManager).tableNames.get(tableDesc.ID, "t", s.Clock())
