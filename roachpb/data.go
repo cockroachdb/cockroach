@@ -554,6 +554,68 @@ func (v Value) computeChecksum(key []byte) uint32 {
 	return sum
 }
 
+// PrettyPrint returns the value in a human readable format.
+// e.g. `Put /Table/51/1/1/0 -> /TUPLE/2:Int/2/1:Int/3`
+func (v Value) PrettyPrint() string {
+	var buf bytes.Buffer
+	t := v.GetTag()
+	buf.WriteString(`/`)
+	buf.WriteString(t.String())
+	buf.WriteString(`/`)
+
+	var err error
+	switch t {
+	case ValueType_TUPLE:
+		var s string
+		b := v.dataBytes()
+		for i := 0; len(b) > 0; i++ {
+			if i != 0 {
+				buf.WriteString("/")
+			}
+			_, _, colIDDiff, typ, err := encoding.DecodeValueTag(b)
+			if err != nil {
+				break
+			}
+			b, s, err = encoding.PrettyPrintValueEncoded(b)
+			if err != nil {
+				break
+			}
+			fmt.Fprintf(&buf, "%d:%s/%s", colIDDiff, typ, s)
+		}
+	case ValueType_INT:
+		var i int64
+		i, err = v.GetInt()
+		fmt.Fprintf(&buf, "%d", i)
+	case ValueType_FLOAT:
+		var f float64
+		f, err = v.GetFloat()
+		fmt.Fprintf(&buf, "%f", f)
+	case ValueType_BYTES:
+		// TODO(dan): Try to sniff out strings and protos.
+		var data []byte
+		data, err = v.GetBytes()
+		fmt.Fprintf(&buf, "%x", data)
+	case ValueType_TIME:
+		var t time.Time
+		t, err = v.GetTime()
+		buf.WriteString(t.UTC().Format(time.RFC3339Nano))
+	case ValueType_DECIMAL:
+		var d *inf.Dec
+		d, err = v.GetDecimal()
+		buf.WriteString(d.String())
+	case ValueType_DURATION:
+		var d duration.Duration
+		d, err = v.GetDuration()
+		buf.WriteString(d.String())
+	default:
+		err = errors.Errorf("unsupported tag: %s", t)
+	}
+	if err != nil {
+		return fmt.Sprintf("%s:<err:%s>", t.String(), err.Error())
+	}
+	return buf.String()
+}
+
 // NewTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
 // affected by the transaction) and a random ID to guarantee
