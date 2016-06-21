@@ -21,11 +21,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -80,39 +78,10 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		}
 	}
 
-	waitForFullReplication(servers, t)
-	return conns, f
-}
-
-// Waits until all of the nodes in the cluster have the same number of replicas.
-func waitForFullReplication(servers []server.TestServer, t testing.TB) {
-	notReplicated := true
-	for notReplicated {
-		notReplicated = false
-		var numReplicas int
-		err := servers[0].Stores().VisitStores(func(s *storage.Store) error {
-			numReplicas = s.ReplicaCount()
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, server := range servers {
-			err := server.Stores().VisitStores(func(s *storage.Store) error {
-				if numReplicas != s.ReplicaCount() {
-					notReplicated = true
-				}
-				return nil
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if notReplicated {
-				break
-			}
-		}
-		time.Sleep(250 * time.Millisecond)
+	if err := server.WaitForFullReplication(servers); err != nil {
+		t.Fatal(err)
 	}
+	return conns, f
 }
 
 func TestMultinodeCockroach(t *testing.T) {

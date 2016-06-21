@@ -293,6 +293,38 @@ func ExpectedInitialRangeCount() int {
 	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemDescriptors + 1
 }
 
+// WaitForFullReplication Waits until all of the nodes in the cluster have the
+// same number of replicas.
+func WaitForFullReplication(servers []TestServer) error {
+	for notReplicated := true; notReplicated; {
+		notReplicated = false
+		var numReplicas int
+		err := servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			numReplicas = s.ReplicaCount()
+			return nil
+		})
+		if err != nil {
+			return util.Errorf("Could not obtain replica count.")
+		}
+		for _, server := range servers {
+			err := server.Stores().VisitStores(func(s *storage.Store) error {
+				if numReplicas != s.ReplicaCount() {
+					notReplicated = true
+				}
+				return nil
+			})
+			if err != nil {
+				return util.Errorf("Could not obtain replica count.")
+			}
+			if notReplicated {
+				break
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return nil
+}
+
 // WaitForInitialSplits waits for the server to complete its expected initial
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
