@@ -89,3 +89,15 @@ variable "cockroach_machine_type" {
 variable "cockroach_disk_size" {
   default = "50" # GB
 }
+
+# Environment variables to pass into CockroachDB through the supervisor config.
+# This must be of the following form:
+#
+#   VAR1=value1[,VAR2=value2,...]
+#
+# Relevant supervisor docs:
+#
+#   https://www.terraform.io/docs/configuration/variables.html
+variable "cockroach_env" {
+  default = ""
+}

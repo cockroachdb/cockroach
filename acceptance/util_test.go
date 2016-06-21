@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	_ "github.com/cockroachdb/pq"
 )
 
@@ -54,7 +55,17 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
-var flagCockroachBinary = flag.String("cockroach-binary", "", "path to custom CockroachDB binary to use")
+var flagTFKeepCluster = flag.Bool("tf.keep-cluster", false, "do not destroy Terraform cluster after test finishes")
+
+// TODO(cuongdo): These should be refactored so that they're not allocator
+// test-specific when we have more than one kind of system test that uses these
+// flags.
+var flagATCockroachBinary = flag.String("at.cockroach-binary", "",
+	"path to custom CockroachDB binary to use for allocator tests")
+var flagATCockroachFlags = flag.String("at.cockroach-flags", "",
+	"command-line flags to pass to cockroach for allocator tests")
+var flagATCockroachEnv = flag.String("at.cockroach-env", "",
+	"supervisor-style environment variables to pass to cockroach")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
@@ -99,14 +110,17 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		t.Fatalf("farmer prefix must match regex %s", prefixRE)
 	}
 	f := &terrafarm.Farmer{
-		Output:    os.Stderr,
-		Cwd:       *flagCwd,
-		LogDir:    logDir,
-		KeyName:   *flagKeyName,
-		Stores:    stores,
-		Prefix:    prefix,
-		StateFile: prefix + ".tfstate",
-		AddVars:   make(map[string]string),
+		Output:  os.Stderr,
+		Cwd:     *flagCwd,
+		LogDir:  logDir,
+		KeyName: *flagKeyName,
+		Stores:  stores,
+		Prefix:  prefix,
+		// Prepend Terraform resource names and state file name with date/time to
+		// allow concurrent runs of the same test.
+		StateFile:            timeutil.Now().Format("20060102-150405-") + prefix + ".tfstate",
+		AddVars:              make(map[string]string),
+		KeepClusterAfterTest: *flagTFKeepCluster,
 	}
 	log.Infof("logging to %s", logDir)
 	return f
