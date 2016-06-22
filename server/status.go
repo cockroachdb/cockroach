@@ -608,7 +608,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 
 			// Check for replica descs not matching.
 			if j > 0 {
-				prevDesc := rng.Nodes[j-1].Range.Span
+				prevDesc := rng.Nodes[j-1].Range.State.Desc
 				if !reflect.DeepEqual(&desc, &prevDesc) {
 					prevNodeID := rng.Nodes[j-1].NodeID
 					rng.Errors = append(rng.Errors, serverpb.RaftRangeError{
