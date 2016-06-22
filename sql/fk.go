@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -71,6 +72,8 @@ func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByI
 
 type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 
+var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
+
 func makeFKInsertHelper(
 	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
@@ -78,6 +81,9 @@ func makeFKInsertHelper(
 	for _, idx := range table.AllNonDropIndexes() {
 		if idx.ForeignKey != nil {
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap)
+			if err == errSkipUnsedFK {
+				continue
+			}
 			if err != nil {
 				return fks, err
 			}
@@ -101,6 +107,18 @@ func (fks fkInsertHelper) checkAll(row parser.DTuple) error {
 
 func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
 	for _, fk := range fks[idx] {
+		nulls := true
+		for i := range fk.searchIdx.ColumnIDs {
+			found, ok := fk.ids[fk.searchIdx.ColumnIDs[i]]
+			if !ok {
+				panic("fk ids missing column id")
+			}
+			nulls = nulls && row[found] == parser.DNull
+		}
+		if nulls {
+			continue
+		}
+
 		found, err := fk.check(row)
 		if err != nil {
 			return err
@@ -125,6 +143,9 @@ func makeFKDeleteHelper(
 	for _, idx := range table.AllNonDropIndexes() {
 		for _, ref := range idx.ReferencedBy {
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
+			if err == errSkipUnsedFK {
+				continue
+			}
 			if err != nil {
 				return fks, err
 			}
@@ -228,8 +249,15 @@ func makeBaseFKHelper(
 	}
 
 	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
+	nulls := true
 	for i := range writeIdx.ColumnIDs {
-		b.ids[searchIdx.ColumnIDs[i]] = colMap[writeIdx.ColumnIDs[i]]
+		if found, ok := colMap[writeIdx.ColumnIDs[i]]; ok {
+			b.ids[searchIdx.ColumnIDs[i]] = found
+			nulls = false
+		}
+	}
+	if nulls {
+		return b, errSkipUnsedFK
 	}
 	return b, nil
 }

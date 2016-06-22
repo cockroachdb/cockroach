@@ -43,7 +43,7 @@ statement ok
 CREATE TABLE reviews (
   id INT PRIMARY KEY,
   product STRING NOT NULL REFERENCES products,
-  customer INT NOT NULL REFERENCES customers,
+  customer INT REFERENCES customers,
   "order" INT REFERENCES orders,
   body STRING,
   INDEX (product),
@@ -53,6 +53,18 @@ CREATE TABLE reviews (
 
 statement ok
 INSERT INTO orders VALUES (1, '780', 2);
+
+statement ok
+INSERT INTO reviews VALUES (1, '780', 2, 1, NULL)
+
+statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
+INSERT INTO reviews (id, product, body) VALUES (2, '790', 'would not buy again');
+
+statement ok
+INSERT INTO reviews (id, product, body) VALUES (2, '780', 'would not buy again');
+
+statement ok
+DELETE FROM reviews
 
 statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
 INSERT INTO orders VALUES (2, '790', 2);
