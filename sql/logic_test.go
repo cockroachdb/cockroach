@@ -468,7 +468,7 @@ func (t *logicTest) processTestFile(path string) error {
 			case "":
 				return errors.New("skipif command requires a non-blank argument")
 			case "mysql":
-			case "postgresql":
+			case "postgresql", "cockroachdb":
 				s.skip = true
 				continue
 			default:
@@ -482,6 +482,7 @@ func (t *logicTest) processTestFile(path string) error {
 			switch fields[1] {
 			case "":
 				return errors.New("onlyif command requires a non-blank argument")
+			case "cockroachdb":
 			case "mysql":
 				s.skip = true
 				continue
