@@ -276,10 +276,13 @@ func ExpectedInitialRangeCount() int {
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
 func (ts *TestServer) WaitForInitialSplits() error {
-	return waitForInitialSplits(ts.DB())
+	return WaitForInitialSplits(ts.DB())
 }
 
-func waitForInitialSplits(db *client.DB) error {
+// WaitForInitialSplits waits for the expected number of initial ranges to be
+// populated in the meta2 table. If the expected range count is not reached
+// within a configured timeout, an error is returned.
+func WaitForInitialSplits(db *client.DB) error {
 	expectedRanges := ExpectedInitialRangeCount()
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
