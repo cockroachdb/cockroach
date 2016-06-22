@@ -110,7 +110,7 @@ func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net
 	if err := node.start(addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForInitialSplits(node.ctx.DB); err != nil {
+	if err := waitForInitialSplits(node.ctx.DB); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
