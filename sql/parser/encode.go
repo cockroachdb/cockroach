@@ -26,6 +26,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -35,19 +36,46 @@ var (
 	hexMap    [256][]byte
 )
 
+// encodeSQLString writes a string literal to buf. All unicode and
+// non-printable characters are escaped.
 func encodeSQLString(buf *bytes.Buffer, in string) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
-	for i := range in {
-		ch := in[i]
-		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
-			if start == 0 {
-				buf.WriteString("e'") // begin e'xxx' string
-			}
-			buf.WriteString(in[start:i])
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
+	// Loop through each unicode code point.
+	for i, r := range in {
+		ch := byte(r)
+		if r >= 0x20 && r < 0x7F && encodeMap[ch] == dontEscape {
+			continue
+		}
+
+		if start == 0 {
+			buf.WriteString("e'") // begin e'xxx' string
+		}
+		buf.WriteString(in[start:i])
+		ln := utf8.RuneLen(r)
+		if ln < 0 || r == utf8.RuneError {
 			start = i + 1
+		} else {
+			start = i + ln
+		}
+		if r == utf8.RuneError {
+			// Errors are due to invalid unicode points, so escape the byte (Go guarantees
+			// that it's a byte in the case of an error).
+			buf.Write(hexMap[in[i]])
+		} else if ln == 1 {
+			// For single-byte runes, do the same as encodeSQLBytes.
+			if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+				buf.WriteByte('\\')
+				buf.WriteByte(encodedChar)
+			} else {
+				// Escape non-printable characters.
+				buf.Write(hexMap[ch])
+			}
+		} else if ln == 2 {
+			// For multi-byte runes, print them based on their width.
+			fmt.Fprintf(buf, `\u%04X`, r)
+		} else {
+			fmt.Fprintf(buf, `\U%08X`, r)
 		}
 	}
 	if start == 0 {
