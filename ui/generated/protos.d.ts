@@ -19,2575 +19,17 @@ declare module cockroach {
 	}
 	
 	export interface ProtoBufBuilder {
-		server: serverBuilder;
-		build: buildBuilder;
 		util: utilBuilder;
 		roachpb: roachpbBuilder;
 		storage: storageBuilder;
+		config: configBuilder;
+		server: serverBuilder;
+		build: buildBuilder;
 		gossip: gossipBuilder;
 		ts: tsBuilder;
 		
 }
 }
-
-declare module cockroach {
-	
-	export interface server {
-	
-		
-
-}
-	
-	export interface serverMessage extends server {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface serverBuilder {
-	new(data?: server): serverMessage;
-	decode(buffer: ArrayBuffer) : serverMessage;
-	decode(buffer: ByteBuffer) : serverMessage;
-	decode64(buffer: string) : serverMessage;
-	serverpb: server.serverpbBuilder;
-	status: server.statusBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server {
-	
-	export interface serverpb {
-	
-		
-
-}
-	
-	export interface serverpbMessage extends serverpb {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface serverpbBuilder {
-	new(data?: serverpb): serverpbMessage;
-	decode(buffer: ArrayBuffer) : serverpbMessage;
-	decode(buffer: ByteBuffer) : serverpbMessage;
-	decode64(buffer: string) : serverpbMessage;
-	DatabasesRequest: serverpb.DatabasesRequestBuilder;
-	DatabasesResponse: serverpb.DatabasesResponseBuilder;
-	DatabaseDetailsRequest: serverpb.DatabaseDetailsRequestBuilder;
-	DatabaseDetailsResponse: serverpb.DatabaseDetailsResponseBuilder;
-	TableDetailsRequest: serverpb.TableDetailsRequestBuilder;
-	TableDetailsResponse: serverpb.TableDetailsResponseBuilder;
-	UsersRequest: serverpb.UsersRequestBuilder;
-	UsersResponse: serverpb.UsersResponseBuilder;
-	EventsRequest: serverpb.EventsRequestBuilder;
-	EventsResponse: serverpb.EventsResponseBuilder;
-	SetUIDataRequest: serverpb.SetUIDataRequestBuilder;
-	SetUIDataResponse: serverpb.SetUIDataResponseBuilder;
-	GetUIDataRequest: serverpb.GetUIDataRequestBuilder;
-	GetUIDataResponse: serverpb.GetUIDataResponseBuilder;
-	ClusterRequest: serverpb.ClusterRequestBuilder;
-	ClusterResponse: serverpb.ClusterResponseBuilder;
-	DrainRequest: serverpb.DrainRequestBuilder;
-	DrainResponse: serverpb.DrainResponseBuilder;
-	HealthRequest: serverpb.HealthRequestBuilder;
-	HealthResponse: serverpb.HealthResponseBuilder;
-	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
-	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
-	DetailsRequest: serverpb.DetailsRequestBuilder;
-	DetailsResponse: serverpb.DetailsResponseBuilder;
-	NodesRequest: serverpb.NodesRequestBuilder;
-	NodesResponse: serverpb.NodesResponseBuilder;
-	NodeRequest: serverpb.NodeRequestBuilder;
-	RangeInfo: serverpb.RangeInfoBuilder;
-	RangesRequest: serverpb.RangesRequestBuilder;
-	RangesResponse: serverpb.RangesResponseBuilder;
-	GossipRequest: serverpb.GossipRequestBuilder;
-	JSONResponse: serverpb.JSONResponseBuilder;
-	LogsRequest: serverpb.LogsRequestBuilder;
-	LogFilesListRequest: serverpb.LogFilesListRequestBuilder;
-	LogFileRequest: serverpb.LogFileRequestBuilder;
-	StacksRequest: serverpb.StacksRequestBuilder;
-	MetricsRequest: serverpb.MetricsRequestBuilder;
-	RaftRangeNode: serverpb.RaftRangeNodeBuilder;
-	RaftRangeError: serverpb.RaftRangeErrorBuilder;
-	RaftRangeStatus: serverpb.RaftRangeStatusBuilder;
-	RaftDebugRequest: serverpb.RaftDebugRequestBuilder;
-	RaftDebugResponse: serverpb.RaftDebugResponseBuilder;
-	PrettySpan: serverpb.PrettySpanBuilder;
-	DrainMode: serverpb.DrainMode;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb {
-	
-	export interface DatabasesRequest {
-	
-		
-
-}
-	
-	export interface DatabasesRequestMessage extends DatabasesRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DatabasesRequestBuilder {
-	new(data?: DatabasesRequest): DatabasesRequestMessage;
-	decode(buffer: ArrayBuffer) : DatabasesRequestMessage;
-	decode(buffer: ByteBuffer) : DatabasesRequestMessage;
-	decode64(buffer: string) : DatabasesRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DatabasesResponse {
-	
-		
-
-databases?: string[];
-		
-
-getDatabases?() : string[];
-		setDatabases?(databases : string[]): void;
-		
-
-
-
-}
-	
-	export interface DatabasesResponseMessage extends DatabasesResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DatabasesResponseBuilder {
-	new(data?: DatabasesResponse): DatabasesResponseMessage;
-	decode(buffer: ArrayBuffer) : DatabasesResponseMessage;
-	decode(buffer: ByteBuffer) : DatabasesResponseMessage;
-	decode64(buffer: string) : DatabasesResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DatabaseDetailsRequest {
-	
-		
-
-database?: string;
-		
-
-getDatabase?() : string;
-		setDatabase?(database : string): void;
-		
-
-
-
-}
-	
-	export interface DatabaseDetailsRequestMessage extends DatabaseDetailsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DatabaseDetailsRequestBuilder {
-	new(data?: DatabaseDetailsRequest): DatabaseDetailsRequestMessage;
-	decode(buffer: ArrayBuffer) : DatabaseDetailsRequestMessage;
-	decode(buffer: ByteBuffer) : DatabaseDetailsRequestMessage;
-	decode64(buffer: string) : DatabaseDetailsRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DatabaseDetailsResponse {
-	
-		
-
-grants?: DatabaseDetailsResponse.Grant[];
-		
-
-getGrants?() : DatabaseDetailsResponse.Grant[];
-		setGrants?(grants : DatabaseDetailsResponse.Grant[]): void;
-		
-
-
-
-table_names?: string[];
-		
-
-getTableNames?() : string[];
-		setTableNames?(tableNames : string[]): void;
-		
-
-
-
-}
-	
-	export interface DatabaseDetailsResponseMessage extends DatabaseDetailsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DatabaseDetailsResponseBuilder {
-	new(data?: DatabaseDetailsResponse): DatabaseDetailsResponseMessage;
-	decode(buffer: ArrayBuffer) : DatabaseDetailsResponseMessage;
-	decode(buffer: ByteBuffer) : DatabaseDetailsResponseMessage;
-	decode64(buffer: string) : DatabaseDetailsResponseMessage;
-	Grant: DatabaseDetailsResponse.GrantBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb.DatabaseDetailsResponse {
-	
-	export interface Grant {
-	
-		
-
-user?: string;
-		
-
-getUser?() : string;
-		setUser?(user : string): void;
-		
-
-
-
-privileges?: string[];
-		
-
-getPrivileges?() : string[];
-		setPrivileges?(privileges : string[]): void;
-		
-
-
-
-}
-	
-	export interface GrantMessage extends Grant {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface GrantBuilder {
-	new(data?: Grant): GrantMessage;
-	decode(buffer: ArrayBuffer) : GrantMessage;
-	decode(buffer: ByteBuffer) : GrantMessage;
-	decode64(buffer: string) : GrantMessage;
-	
-}
-	
-}
-
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface TableDetailsRequest {
-	
-		
-
-database?: string;
-		
-
-getDatabase?() : string;
-		setDatabase?(database : string): void;
-		
-
-
-
-table?: string;
-		
-
-getTable?() : string;
-		setTable?(table : string): void;
-		
-
-
-
-}
-	
-	export interface TableDetailsRequestMessage extends TableDetailsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface TableDetailsRequestBuilder {
-	new(data?: TableDetailsRequest): TableDetailsRequestMessage;
-	decode(buffer: ArrayBuffer) : TableDetailsRequestMessage;
-	decode(buffer: ByteBuffer) : TableDetailsRequestMessage;
-	decode64(buffer: string) : TableDetailsRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface TableDetailsResponse {
-	
-		
-
-grants?: TableDetailsResponse.Grant[];
-		
-
-getGrants?() : TableDetailsResponse.Grant[];
-		setGrants?(grants : TableDetailsResponse.Grant[]): void;
-		
-
-
-
-columns?: TableDetailsResponse.Column[];
-		
-
-getColumns?() : TableDetailsResponse.Column[];
-		setColumns?(columns : TableDetailsResponse.Column[]): void;
-		
-
-
-
-indexes?: TableDetailsResponse.Index[];
-		
-
-getIndexes?() : TableDetailsResponse.Index[];
-		setIndexes?(indexes : TableDetailsResponse.Index[]): void;
-		
-
-
-
-range_count?: Long;
-		
-
-getRangeCount?() : Long;
-		setRangeCount?(rangeCount : Long): void;
-		
-
-
-
-create_table_statement?: string;
-		
-
-getCreateTableStatement?() : string;
-		setCreateTableStatement?(createTableStatement : string): void;
-		
-
-
-
-}
-	
-	export interface TableDetailsResponseMessage extends TableDetailsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface TableDetailsResponseBuilder {
-	new(data?: TableDetailsResponse): TableDetailsResponseMessage;
-	decode(buffer: ArrayBuffer) : TableDetailsResponseMessage;
-	decode(buffer: ByteBuffer) : TableDetailsResponseMessage;
-	decode64(buffer: string) : TableDetailsResponseMessage;
-	Grant: TableDetailsResponse.GrantBuilder;
-	Column: TableDetailsResponse.ColumnBuilder;
-	Index: TableDetailsResponse.IndexBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb.TableDetailsResponse {
-	
-	export interface Grant {
-	
-		
-
-user?: string;
-		
-
-getUser?() : string;
-		setUser?(user : string): void;
-		
-
-
-
-privileges?: string[];
-		
-
-getPrivileges?() : string[];
-		setPrivileges?(privileges : string[]): void;
-		
-
-
-
-}
-	
-	export interface GrantMessage extends Grant {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface GrantBuilder {
-	new(data?: Grant): GrantMessage;
-	decode(buffer: ArrayBuffer) : GrantMessage;
-	decode(buffer: ByteBuffer) : GrantMessage;
-	decode64(buffer: string) : GrantMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb.TableDetailsResponse {
-	
-	export interface Column {
-	
-		
-
-name?: string;
-		
-
-getName?() : string;
-		setName?(name : string): void;
-		
-
-
-
-type?: string;
-		
-
-getType?() : string;
-		setType?(type : string): void;
-		
-
-
-
-nullable?: boolean;
-		
-
-getNullable?() : boolean;
-		setNullable?(nullable : boolean): void;
-		
-
-
-
-default_value?: string;
-		
-
-getDefaultValue?() : string;
-		setDefaultValue?(defaultValue : string): void;
-		
-
-
-
-}
-	
-	export interface ColumnMessage extends Column {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface ColumnBuilder {
-	new(data?: Column): ColumnMessage;
-	decode(buffer: ArrayBuffer) : ColumnMessage;
-	decode(buffer: ByteBuffer) : ColumnMessage;
-	decode64(buffer: string) : ColumnMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb.TableDetailsResponse {
-	
-	export interface Index {
-	
-		
-
-name?: string;
-		
-
-getName?() : string;
-		setName?(name : string): void;
-		
-
-
-
-unique?: boolean;
-		
-
-getUnique?() : boolean;
-		setUnique?(unique : boolean): void;
-		
-
-
-
-seq?: Long;
-		
-
-getSeq?() : Long;
-		setSeq?(seq : Long): void;
-		
-
-
-
-column?: string;
-		
-
-getColumn?() : string;
-		setColumn?(column : string): void;
-		
-
-
-
-direction?: string;
-		
-
-getDirection?() : string;
-		setDirection?(direction : string): void;
-		
-
-
-
-storing?: boolean;
-		
-
-getStoring?() : boolean;
-		setStoring?(storing : boolean): void;
-		
-
-
-
-}
-	
-	export interface IndexMessage extends Index {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface IndexBuilder {
-	new(data?: Index): IndexMessage;
-	decode(buffer: ArrayBuffer) : IndexMessage;
-	decode(buffer: ByteBuffer) : IndexMessage;
-	decode64(buffer: string) : IndexMessage;
-	
-}
-	
-}
-
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface UsersRequest {
-	
-		
-
-}
-	
-	export interface UsersRequestMessage extends UsersRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface UsersRequestBuilder {
-	new(data?: UsersRequest): UsersRequestMessage;
-	decode(buffer: ArrayBuffer) : UsersRequestMessage;
-	decode(buffer: ByteBuffer) : UsersRequestMessage;
-	decode64(buffer: string) : UsersRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface UsersResponse {
-	
-		
-
-users?: UsersResponse.User[];
-		
-
-getUsers?() : UsersResponse.User[];
-		setUsers?(users : UsersResponse.User[]): void;
-		
-
-
-
-}
-	
-	export interface UsersResponseMessage extends UsersResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface UsersResponseBuilder {
-	new(data?: UsersResponse): UsersResponseMessage;
-	decode(buffer: ArrayBuffer) : UsersResponseMessage;
-	decode(buffer: ByteBuffer) : UsersResponseMessage;
-	decode64(buffer: string) : UsersResponseMessage;
-	User: UsersResponse.UserBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb.UsersResponse {
-	
-	export interface User {
-	
-		
-
-username?: string;
-		
-
-getUsername?() : string;
-		setUsername?(username : string): void;
-		
-
-
-
-}
-	
-	export interface UserMessage extends User {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface UserBuilder {
-	new(data?: User): UserMessage;
-	decode(buffer: ArrayBuffer) : UserMessage;
-	decode(buffer: ByteBuffer) : UserMessage;
-	decode64(buffer: string) : UserMessage;
-	
-}
-	
-}
-
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface EventsRequest {
-	
-		
-
-type?: string;
-		
-
-getType?() : string;
-		setType?(type : string): void;
-		
-
-
-
-target_id?: Long;
-		
-
-getTargetId?() : Long;
-		setTargetId?(targetId : Long): void;
-		
-
-
-
-}
-	
-	export interface EventsRequestMessage extends EventsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface EventsRequestBuilder {
-	new(data?: EventsRequest): EventsRequestMessage;
-	decode(buffer: ArrayBuffer) : EventsRequestMessage;
-	decode(buffer: ByteBuffer) : EventsRequestMessage;
-	decode64(buffer: string) : EventsRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface EventsResponse {
-	
-		
-
-events?: EventsResponse.Event[];
-		
-
-getEvents?() : EventsResponse.Event[];
-		setEvents?(events : EventsResponse.Event[]): void;
-		
-
-
-
-}
-	
-	export interface EventsResponseMessage extends EventsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface EventsResponseBuilder {
-	new(data?: EventsResponse): EventsResponseMessage;
-	decode(buffer: ArrayBuffer) : EventsResponseMessage;
-	decode(buffer: ByteBuffer) : EventsResponseMessage;
-	decode64(buffer: string) : EventsResponseMessage;
-	Event: EventsResponse.EventBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb.EventsResponse {
-	
-	export interface Event {
-	
-		
-
-timestamp?: Event.Timestamp;
-		
-
-getTimestamp?() : Event.Timestamp;
-		setTimestamp?(timestamp : Event.Timestamp): void;
-		
-
-
-
-event_type?: string;
-		
-
-getEventType?() : string;
-		setEventType?(eventType : string): void;
-		
-
-
-
-target_id?: Long;
-		
-
-getTargetId?() : Long;
-		setTargetId?(targetId : Long): void;
-		
-
-
-
-reporting_id?: Long;
-		
-
-getReportingId?() : Long;
-		setReportingId?(reportingId : Long): void;
-		
-
-
-
-info?: string;
-		
-
-getInfo?() : string;
-		setInfo?(info : string): void;
-		
-
-
-
-unique_id?: ByteBuffer;
-		
-
-getUniqueId?() : ByteBuffer;
-		setUniqueId?(uniqueId : ByteBuffer): void;
-		
-
-
-
-}
-	
-	export interface EventMessage extends Event {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface EventBuilder {
-	new(data?: Event): EventMessage;
-	decode(buffer: ArrayBuffer) : EventMessage;
-	decode(buffer: ByteBuffer) : EventMessage;
-	decode64(buffer: string) : EventMessage;
-	Timestamp: Event.TimestampBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb.EventsResponse.Event {
-	
-	export interface Timestamp {
-	
-		
-
-sec?: Long;
-		
-
-getSec?() : Long;
-		setSec?(sec : Long): void;
-		
-
-
-
-nsec?: number;
-		
-
-getNsec?() : number;
-		setNsec?(nsec : number): void;
-		
-
-
-
-}
-	
-	export interface TimestampMessage extends Timestamp {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface TimestampBuilder {
-	new(data?: Timestamp): TimestampMessage;
-	decode(buffer: ArrayBuffer) : TimestampMessage;
-	decode(buffer: ByteBuffer) : TimestampMessage;
-	decode64(buffer: string) : TimestampMessage;
-	
-}
-	
-}
-
-
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface SetUIDataRequest {
-	
-		
-
-key_values?: ProtoBufMap<string, ByteBuffer>;
-		
-
-getKeyValues?() : ProtoBufMap<string, ByteBuffer>;
-		setKeyValues?(keyValues : ProtoBufMap<string, ByteBuffer>): void;
-		
-
-
-
-}
-	
-	export interface SetUIDataRequestMessage extends SetUIDataRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface SetUIDataRequestBuilder {
-	new(data?: SetUIDataRequest): SetUIDataRequestMessage;
-	decode(buffer: ArrayBuffer) : SetUIDataRequestMessage;
-	decode(buffer: ByteBuffer) : SetUIDataRequestMessage;
-	decode64(buffer: string) : SetUIDataRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface SetUIDataResponse {
-	
-		
-
-}
-	
-	export interface SetUIDataResponseMessage extends SetUIDataResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface SetUIDataResponseBuilder {
-	new(data?: SetUIDataResponse): SetUIDataResponseMessage;
-	decode(buffer: ArrayBuffer) : SetUIDataResponseMessage;
-	decode(buffer: ByteBuffer) : SetUIDataResponseMessage;
-	decode64(buffer: string) : SetUIDataResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface GetUIDataRequest {
-	
-		
-
-keys?: string[];
-		
-
-getKeys?() : string[];
-		setKeys?(keys : string[]): void;
-		
-
-
-
-}
-	
-	export interface GetUIDataRequestMessage extends GetUIDataRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface GetUIDataRequestBuilder {
-	new(data?: GetUIDataRequest): GetUIDataRequestMessage;
-	decode(buffer: ArrayBuffer) : GetUIDataRequestMessage;
-	decode(buffer: ByteBuffer) : GetUIDataRequestMessage;
-	decode64(buffer: string) : GetUIDataRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface GetUIDataResponse {
-	
-		
-
-key_values?: ProtoBufMap<string, GetUIDataResponse.Value>;
-		
-
-getKeyValues?() : ProtoBufMap<string, GetUIDataResponse.Value>;
-		setKeyValues?(keyValues : ProtoBufMap<string, GetUIDataResponse.Value>): void;
-		
-
-
-
-}
-	
-	export interface GetUIDataResponseMessage extends GetUIDataResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface GetUIDataResponseBuilder {
-	new(data?: GetUIDataResponse): GetUIDataResponseMessage;
-	decode(buffer: ArrayBuffer) : GetUIDataResponseMessage;
-	decode(buffer: ByteBuffer) : GetUIDataResponseMessage;
-	decode64(buffer: string) : GetUIDataResponseMessage;
-	Timestamp: GetUIDataResponse.TimestampBuilder;
-	Value: GetUIDataResponse.ValueBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.serverpb.GetUIDataResponse {
-	
-	export interface Timestamp {
-	
-		
-
-sec?: Long;
-		
-
-getSec?() : Long;
-		setSec?(sec : Long): void;
-		
-
-
-
-nsec?: number;
-		
-
-getNsec?() : number;
-		setNsec?(nsec : number): void;
-		
-
-
-
-}
-	
-	export interface TimestampMessage extends Timestamp {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface TimestampBuilder {
-	new(data?: Timestamp): TimestampMessage;
-	decode(buffer: ArrayBuffer) : TimestampMessage;
-	decode(buffer: ByteBuffer) : TimestampMessage;
-	decode64(buffer: string) : TimestampMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb.GetUIDataResponse {
-	
-	export interface Value {
-	
-		
-
-value?: ByteBuffer;
-		
-
-getValue?() : ByteBuffer;
-		setValue?(value : ByteBuffer): void;
-		
-
-
-
-last_updated?: Timestamp;
-		
-
-getLastUpdated?() : Timestamp;
-		setLastUpdated?(lastUpdated : Timestamp): void;
-		
-
-
-
-}
-	
-	export interface ValueMessage extends Value {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface ValueBuilder {
-	new(data?: Value): ValueMessage;
-	decode(buffer: ArrayBuffer) : ValueMessage;
-	decode(buffer: ByteBuffer) : ValueMessage;
-	decode64(buffer: string) : ValueMessage;
-	
-}
-	
-}
-
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface ClusterRequest {
-	
-		
-
-}
-	
-	export interface ClusterRequestMessage extends ClusterRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface ClusterRequestBuilder {
-	new(data?: ClusterRequest): ClusterRequestMessage;
-	decode(buffer: ArrayBuffer) : ClusterRequestMessage;
-	decode(buffer: ByteBuffer) : ClusterRequestMessage;
-	decode64(buffer: string) : ClusterRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface ClusterResponse {
-	
-		
-
-cluster_id?: string;
-		
-
-getClusterId?() : string;
-		setClusterId?(clusterId : string): void;
-		
-
-
-
-}
-	
-	export interface ClusterResponseMessage extends ClusterResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface ClusterResponseBuilder {
-	new(data?: ClusterResponse): ClusterResponseMessage;
-	decode(buffer: ArrayBuffer) : ClusterResponseMessage;
-	decode(buffer: ByteBuffer) : ClusterResponseMessage;
-	decode64(buffer: string) : ClusterResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DrainRequest {
-	
-		
-
-on?: number[];
-		
-
-getOn?() : number[];
-		setOn?(on : number[]): void;
-		
-
-
-
-off?: number[];
-		
-
-getOff?() : number[];
-		setOff?(off : number[]): void;
-		
-
-
-
-shutdown?: boolean;
-		
-
-getShutdown?() : boolean;
-		setShutdown?(shutdown : boolean): void;
-		
-
-
-
-}
-	
-	export interface DrainRequestMessage extends DrainRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DrainRequestBuilder {
-	new(data?: DrainRequest): DrainRequestMessage;
-	decode(buffer: ArrayBuffer) : DrainRequestMessage;
-	decode(buffer: ByteBuffer) : DrainRequestMessage;
-	decode64(buffer: string) : DrainRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DrainResponse {
-	
-		
-
-on?: number[];
-		
-
-getOn?() : number[];
-		setOn?(on : number[]): void;
-		
-
-
-
-}
-	
-	export interface DrainResponseMessage extends DrainResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DrainResponseBuilder {
-	new(data?: DrainResponse): DrainResponseMessage;
-	decode(buffer: ArrayBuffer) : DrainResponseMessage;
-	decode(buffer: ByteBuffer) : DrainResponseMessage;
-	decode64(buffer: string) : DrainResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface HealthRequest {
-	
-		
-
-}
-	
-	export interface HealthRequestMessage extends HealthRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface HealthRequestBuilder {
-	new(data?: HealthRequest): HealthRequestMessage;
-	decode(buffer: ArrayBuffer) : HealthRequestMessage;
-	decode(buffer: ByteBuffer) : HealthRequestMessage;
-	decode64(buffer: string) : HealthRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface HealthResponse {
-	
-		
-
-}
-	
-	export interface HealthResponseMessage extends HealthResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface HealthResponseBuilder {
-	new(data?: HealthResponse): HealthResponseMessage;
-	decode(buffer: ArrayBuffer) : HealthResponseMessage;
-	decode(buffer: ByteBuffer) : HealthResponseMessage;
-	decode64(buffer: string) : HealthResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface ClusterFreezeRequest {
-	
-		
-
-freeze?: boolean;
-		
-
-getFreeze?() : boolean;
-		setFreeze?(freeze : boolean): void;
-		
-
-
-
-}
-	
-	export interface ClusterFreezeRequestMessage extends ClusterFreezeRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface ClusterFreezeRequestBuilder {
-	new(data?: ClusterFreezeRequest): ClusterFreezeRequestMessage;
-	decode(buffer: ArrayBuffer) : ClusterFreezeRequestMessage;
-	decode(buffer: ByteBuffer) : ClusterFreezeRequestMessage;
-	decode64(buffer: string) : ClusterFreezeRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface ClusterFreezeResponse {
-	
-		
-
-ranges_affected?: Long;
-		
-
-getRangesAffected?() : Long;
-		setRangesAffected?(rangesAffected : Long): void;
-		
-
-
-
-message?: string;
-		
-
-getMessage?() : string;
-		setMessage?(message : string): void;
-		
-
-
-
-}
-	
-	export interface ClusterFreezeResponseMessage extends ClusterFreezeResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface ClusterFreezeResponseBuilder {
-	new(data?: ClusterFreezeResponse): ClusterFreezeResponseMessage;
-	decode(buffer: ArrayBuffer) : ClusterFreezeResponseMessage;
-	decode(buffer: ByteBuffer) : ClusterFreezeResponseMessage;
-	decode64(buffer: string) : ClusterFreezeResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DetailsRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface DetailsRequestMessage extends DetailsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DetailsRequestBuilder {
-	new(data?: DetailsRequest): DetailsRequestMessage;
-	decode(buffer: ArrayBuffer) : DetailsRequestMessage;
-	decode(buffer: ByteBuffer) : DetailsRequestMessage;
-	decode64(buffer: string) : DetailsRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface DetailsResponse {
-	
-		
-
-node_id?: number;
-		
-
-getNodeId?() : number;
-		setNodeId?(nodeId : number): void;
-		
-
-
-
-address?: util.UnresolvedAddr;
-		
-
-getAddress?() : util.UnresolvedAddr;
-		setAddress?(address : util.UnresolvedAddr): void;
-		
-
-
-
-build_info?: build.Info;
-		
-
-getBuildInfo?() : build.Info;
-		setBuildInfo?(buildInfo : build.Info): void;
-		
-
-
-
-}
-	
-	export interface DetailsResponseMessage extends DetailsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface DetailsResponseBuilder {
-	new(data?: DetailsResponse): DetailsResponseMessage;
-	decode(buffer: ArrayBuffer) : DetailsResponseMessage;
-	decode(buffer: ByteBuffer) : DetailsResponseMessage;
-	decode64(buffer: string) : DetailsResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface NodesRequest {
-	
-		
-
-}
-	
-	export interface NodesRequestMessage extends NodesRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface NodesRequestBuilder {
-	new(data?: NodesRequest): NodesRequestMessage;
-	decode(buffer: ArrayBuffer) : NodesRequestMessage;
-	decode(buffer: ByteBuffer) : NodesRequestMessage;
-	decode64(buffer: string) : NodesRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface NodesResponse {
-	
-		
-
-nodes?: status.NodeStatus[];
-		
-
-getNodes?() : status.NodeStatus[];
-		setNodes?(nodes : status.NodeStatus[]): void;
-		
-
-
-
-}
-	
-	export interface NodesResponseMessage extends NodesResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface NodesResponseBuilder {
-	new(data?: NodesResponse): NodesResponseMessage;
-	decode(buffer: ArrayBuffer) : NodesResponseMessage;
-	decode(buffer: ByteBuffer) : NodesResponseMessage;
-	decode64(buffer: string) : NodesResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface NodeRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface NodeRequestMessage extends NodeRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface NodeRequestBuilder {
-	new(data?: NodeRequest): NodeRequestMessage;
-	decode(buffer: ArrayBuffer) : NodeRequestMessage;
-	decode(buffer: ByteBuffer) : NodeRequestMessage;
-	decode64(buffer: string) : NodeRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RangeInfo {
-	
-		
-
-span?: PrettySpan;
-		
-
-getSpan?() : PrettySpan;
-		setSpan?(span : PrettySpan): void;
-		
-
-
-
-raft_state?: string;
-		
-
-getRaftState?() : string;
-		setRaftState?(raftState : string): void;
-		
-
-
-
-state?: storage.storagebase.RangeInfo;
-		
-
-getState?() : storage.storagebase.RangeInfo;
-		setState?(state : storage.storagebase.RangeInfo): void;
-		
-
-
-
-}
-	
-	export interface RangeInfoMessage extends RangeInfo {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RangeInfoBuilder {
-	new(data?: RangeInfo): RangeInfoMessage;
-	decode(buffer: ArrayBuffer) : RangeInfoMessage;
-	decode(buffer: ByteBuffer) : RangeInfoMessage;
-	decode64(buffer: string) : RangeInfoMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RangesRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface RangesRequestMessage extends RangesRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RangesRequestBuilder {
-	new(data?: RangesRequest): RangesRequestMessage;
-	decode(buffer: ArrayBuffer) : RangesRequestMessage;
-	decode(buffer: ByteBuffer) : RangesRequestMessage;
-	decode64(buffer: string) : RangesRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RangesResponse {
-	
-		
-
-ranges?: RangeInfo[];
-		
-
-getRanges?() : RangeInfo[];
-		setRanges?(ranges : RangeInfo[]): void;
-		
-
-
-
-}
-	
-	export interface RangesResponseMessage extends RangesResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RangesResponseBuilder {
-	new(data?: RangesResponse): RangesResponseMessage;
-	decode(buffer: ArrayBuffer) : RangesResponseMessage;
-	decode(buffer: ByteBuffer) : RangesResponseMessage;
-	decode64(buffer: string) : RangesResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface GossipRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface GossipRequestMessage extends GossipRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface GossipRequestBuilder {
-	new(data?: GossipRequest): GossipRequestMessage;
-	decode(buffer: ArrayBuffer) : GossipRequestMessage;
-	decode(buffer: ByteBuffer) : GossipRequestMessage;
-	decode64(buffer: string) : GossipRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface JSONResponse {
-	
-		
-
-data?: ByteBuffer;
-		
-
-getData?() : ByteBuffer;
-		setData?(data : ByteBuffer): void;
-		
-
-
-
-}
-	
-	export interface JSONResponseMessage extends JSONResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface JSONResponseBuilder {
-	new(data?: JSONResponse): JSONResponseMessage;
-	decode(buffer: ArrayBuffer) : JSONResponseMessage;
-	decode(buffer: ByteBuffer) : JSONResponseMessage;
-	decode64(buffer: string) : JSONResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface LogsRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-level?: string;
-		
-
-getLevel?() : string;
-		setLevel?(level : string): void;
-		
-
-
-
-start_time?: string;
-		
-
-getStartTime?() : string;
-		setStartTime?(startTime : string): void;
-		
-
-
-
-end_time?: string;
-		
-
-getEndTime?() : string;
-		setEndTime?(endTime : string): void;
-		
-
-
-
-max?: string;
-		
-
-getMax?() : string;
-		setMax?(max : string): void;
-		
-
-
-
-pattern?: string;
-		
-
-getPattern?() : string;
-		setPattern?(pattern : string): void;
-		
-
-
-
-}
-	
-	export interface LogsRequestMessage extends LogsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface LogsRequestBuilder {
-	new(data?: LogsRequest): LogsRequestMessage;
-	decode(buffer: ArrayBuffer) : LogsRequestMessage;
-	decode(buffer: ByteBuffer) : LogsRequestMessage;
-	decode64(buffer: string) : LogsRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface LogFilesListRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface LogFilesListRequestMessage extends LogFilesListRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface LogFilesListRequestBuilder {
-	new(data?: LogFilesListRequest): LogFilesListRequestMessage;
-	decode(buffer: ArrayBuffer) : LogFilesListRequestMessage;
-	decode(buffer: ByteBuffer) : LogFilesListRequestMessage;
-	decode64(buffer: string) : LogFilesListRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface LogFileRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-file?: string;
-		
-
-getFile?() : string;
-		setFile?(file : string): void;
-		
-
-
-
-}
-	
-	export interface LogFileRequestMessage extends LogFileRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface LogFileRequestBuilder {
-	new(data?: LogFileRequest): LogFileRequestMessage;
-	decode(buffer: ArrayBuffer) : LogFileRequestMessage;
-	decode(buffer: ByteBuffer) : LogFileRequestMessage;
-	decode64(buffer: string) : LogFileRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface StacksRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface StacksRequestMessage extends StacksRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface StacksRequestBuilder {
-	new(data?: StacksRequest): StacksRequestMessage;
-	decode(buffer: ArrayBuffer) : StacksRequestMessage;
-	decode(buffer: ByteBuffer) : StacksRequestMessage;
-	decode64(buffer: string) : StacksRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface MetricsRequest {
-	
-		
-
-node_id?: string;
-		
-
-getNodeId?() : string;
-		setNodeId?(nodeId : string): void;
-		
-
-
-
-}
-	
-	export interface MetricsRequestMessage extends MetricsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface MetricsRequestBuilder {
-	new(data?: MetricsRequest): MetricsRequestMessage;
-	decode(buffer: ArrayBuffer) : MetricsRequestMessage;
-	decode(buffer: ByteBuffer) : MetricsRequestMessage;
-	decode64(buffer: string) : MetricsRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RaftRangeNode {
-	
-		
-
-node_id?: number;
-		
-
-getNodeId?() : number;
-		setNodeId?(nodeId : number): void;
-		
-
-
-
-range?: RangeInfo;
-		
-
-getRange?() : RangeInfo;
-		setRange?(range : RangeInfo): void;
-		
-
-
-
-}
-	
-	export interface RaftRangeNodeMessage extends RaftRangeNode {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RaftRangeNodeBuilder {
-	new(data?: RaftRangeNode): RaftRangeNodeMessage;
-	decode(buffer: ArrayBuffer) : RaftRangeNodeMessage;
-	decode(buffer: ByteBuffer) : RaftRangeNodeMessage;
-	decode64(buffer: string) : RaftRangeNodeMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RaftRangeError {
-	
-		
-
-message?: string;
-		
-
-getMessage?() : string;
-		setMessage?(message : string): void;
-		
-
-
-
-}
-	
-	export interface RaftRangeErrorMessage extends RaftRangeError {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RaftRangeErrorBuilder {
-	new(data?: RaftRangeError): RaftRangeErrorMessage;
-	decode(buffer: ArrayBuffer) : RaftRangeErrorMessage;
-	decode(buffer: ByteBuffer) : RaftRangeErrorMessage;
-	decode64(buffer: string) : RaftRangeErrorMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RaftRangeStatus {
-	
-		
-
-range_id?: Long;
-		
-
-getRangeId?() : Long;
-		setRangeId?(rangeId : Long): void;
-		
-
-
-
-errors?: RaftRangeError[];
-		
-
-getErrors?() : RaftRangeError[];
-		setErrors?(errors : RaftRangeError[]): void;
-		
-
-
-
-nodes?: RaftRangeNode[];
-		
-
-getNodes?() : RaftRangeNode[];
-		setNodes?(nodes : RaftRangeNode[]): void;
-		
-
-
-
-}
-	
-	export interface RaftRangeStatusMessage extends RaftRangeStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RaftRangeStatusBuilder {
-	new(data?: RaftRangeStatus): RaftRangeStatusMessage;
-	decode(buffer: ArrayBuffer) : RaftRangeStatusMessage;
-	decode(buffer: ByteBuffer) : RaftRangeStatusMessage;
-	decode64(buffer: string) : RaftRangeStatusMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RaftDebugRequest {
-	
-		
-
-}
-	
-	export interface RaftDebugRequestMessage extends RaftDebugRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RaftDebugRequestBuilder {
-	new(data?: RaftDebugRequest): RaftDebugRequestMessage;
-	decode(buffer: ArrayBuffer) : RaftDebugRequestMessage;
-	decode(buffer: ByteBuffer) : RaftDebugRequestMessage;
-	decode64(buffer: string) : RaftDebugRequestMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface RaftDebugResponse {
-	
-		
-
-ranges?: ProtoBufMap<Long, RaftRangeStatus>;
-		
-
-getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
-		setRanges?(ranges : ProtoBufMap<Long, RaftRangeStatus>): void;
-		
-
-
-
-}
-	
-	export interface RaftDebugResponseMessage extends RaftDebugResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface RaftDebugResponseBuilder {
-	new(data?: RaftDebugResponse): RaftDebugResponseMessage;
-	decode(buffer: ArrayBuffer) : RaftDebugResponseMessage;
-	decode(buffer: ByteBuffer) : RaftDebugResponseMessage;
-	decode64(buffer: string) : RaftDebugResponseMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	
-	export interface PrettySpan {
-	
-		
-
-start_key?: string;
-		
-
-getStartKey?() : string;
-		setStartKey?(startKey : string): void;
-		
-
-
-
-end_key?: string;
-		
-
-getEndKey?() : string;
-		setEndKey?(endKey : string): void;
-		
-
-
-
-}
-	
-	export interface PrettySpanMessage extends PrettySpan {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface PrettySpanBuilder {
-	new(data?: PrettySpan): PrettySpanMessage;
-	decode(buffer: ArrayBuffer) : PrettySpanMessage;
-	decode(buffer: ByteBuffer) : PrettySpanMessage;
-	decode64(buffer: string) : PrettySpanMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.serverpb {
-	export const enum DrainMode {
-		CLIENT = 0,
-		LEADERSHIP = 1,
-		
-}
-}
-
-
-declare module cockroach.server {
-	
-	export interface status {
-	
-		
-
-}
-	
-	export interface statusMessage extends status {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface statusBuilder {
-	new(data?: status): statusMessage;
-	decode(buffer: ArrayBuffer) : statusMessage;
-	decode(buffer: ByteBuffer) : statusMessage;
-	decode64(buffer: string) : statusMessage;
-	StoreStatus: status.StoreStatusBuilder;
-	NodeStatus: status.NodeStatusBuilder;
-	
-}
-	
-}
-
-declare module cockroach.server.status {
-	
-	export interface StoreStatus {
-	
-		
-
-desc?: roachpb.StoreDescriptor;
-		
-
-getDesc?() : roachpb.StoreDescriptor;
-		setDesc?(desc : roachpb.StoreDescriptor): void;
-		
-
-
-
-metrics?: ProtoBufMap<string, number>;
-		
-
-getMetrics?() : ProtoBufMap<string, number>;
-		setMetrics?(metrics : ProtoBufMap<string, number>): void;
-		
-
-
-
-}
-	
-	export interface StoreStatusMessage extends StoreStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface StoreStatusBuilder {
-	new(data?: StoreStatus): StoreStatusMessage;
-	decode(buffer: ArrayBuffer) : StoreStatusMessage;
-	decode(buffer: ByteBuffer) : StoreStatusMessage;
-	decode64(buffer: string) : StoreStatusMessage;
-	
-}
-	
-}
-
-
-declare module cockroach.server.status {
-	
-	export interface NodeStatus {
-	
-		
-
-desc?: roachpb.NodeDescriptor;
-		
-
-getDesc?() : roachpb.NodeDescriptor;
-		setDesc?(desc : roachpb.NodeDescriptor): void;
-		
-
-
-
-build_info?: build.Info;
-		
-
-getBuildInfo?() : build.Info;
-		setBuildInfo?(buildInfo : build.Info): void;
-		
-
-
-
-started_at?: Long;
-		
-
-getStartedAt?() : Long;
-		setStartedAt?(startedAt : Long): void;
-		
-
-
-
-updated_at?: Long;
-		
-
-getUpdatedAt?() : Long;
-		setUpdatedAt?(updatedAt : Long): void;
-		
-
-
-
-metrics?: ProtoBufMap<string, number>;
-		
-
-getMetrics?() : ProtoBufMap<string, number>;
-		setMetrics?(metrics : ProtoBufMap<string, number>): void;
-		
-
-
-
-store_statuses?: StoreStatus[];
-		
-
-getStoreStatuses?() : StoreStatus[];
-		setStoreStatuses?(storeStatuses : StoreStatus[]): void;
-		
-
-
-
-}
-	
-	export interface NodeStatusMessage extends NodeStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface NodeStatusBuilder {
-	new(data?: NodeStatus): NodeStatusMessage;
-	decode(buffer: ArrayBuffer) : NodeStatusMessage;
-	decode(buffer: ByteBuffer) : NodeStatusMessage;
-	decode64(buffer: string) : NodeStatusMessage;
-	
-}
-	
-}
-
-
-
-
-declare module cockroach {
-	
-	export interface build {
-	
-		
-
-}
-	
-	export interface buildMessage extends build {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface buildBuilder {
-	new(data?: build): buildMessage;
-	decode(buffer: ArrayBuffer) : buildMessage;
-	decode(buffer: ByteBuffer) : buildMessage;
-	decode64(buffer: string) : buildMessage;
-	Info: build.InfoBuilder;
-	
-}
-	
-}
-
-declare module cockroach.build {
-	
-	export interface Info {
-	
-		
-
-go_version?: string;
-		
-
-getGoVersion?() : string;
-		setGoVersion?(goVersion : string): void;
-		
-
-
-
-tag?: string;
-		
-
-getTag?() : string;
-		setTag?(tag : string): void;
-		
-
-
-
-time?: string;
-		
-
-getTime?() : string;
-		setTime?(time : string): void;
-		
-
-
-
-dependencies?: string;
-		
-
-getDependencies?() : string;
-		setDependencies?(dependencies : string): void;
-		
-
-
-
-cgo_compiler?: string;
-		
-
-getCgoCompiler?() : string;
-		setCgoCompiler?(cgoCompiler : string): void;
-		
-
-
-
-platform?: string;
-		
-
-getPlatform?() : string;
-		setPlatform?(platform : string): void;
-		
-
-
-
-}
-	
-	export interface InfoMessage extends Info {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface InfoBuilder {
-	new(data?: Info): InfoMessage;
-	decode(buffer: ArrayBuffer) : InfoMessage;
-	decode(buffer: ByteBuffer) : InfoMessage;
-	decode64(buffer: string) : InfoMessage;
-	
-}
-	
-}
-
-
 
 declare module cockroach {
 	
@@ -4701,6 +2143,2759 @@ export interface RangeInfoBuilder {
 	
 }
 
+
+
+
+declare module cockroach {
+	
+	export interface config {
+	
+		
+
+}
+	
+	export interface configMessage extends config {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface configBuilder {
+	new(data?: config): configMessage;
+	decode(buffer: ArrayBuffer) : configMessage;
+	decode(buffer: ByteBuffer) : configMessage;
+	decode64(buffer: string) : configMessage;
+	GCPolicy: config.GCPolicyBuilder;
+	ZoneConfig: config.ZoneConfigBuilder;
+	SystemConfig: config.SystemConfigBuilder;
+	
+}
+	
+}
+
+declare module cockroach.config {
+	
+	export interface GCPolicy {
+	
+		
+
+ttl_seconds?: number;
+		
+
+getTtlSeconds?() : number;
+		setTtlSeconds?(ttlSeconds : number): void;
+		
+
+
+
+}
+	
+	export interface GCPolicyMessage extends GCPolicy {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface GCPolicyBuilder {
+	new(data?: GCPolicy): GCPolicyMessage;
+	decode(buffer: ArrayBuffer) : GCPolicyMessage;
+	decode(buffer: ByteBuffer) : GCPolicyMessage;
+	decode64(buffer: string) : GCPolicyMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.config {
+	
+	export interface ZoneConfig {
+	
+		
+
+replica_attrs?: roachpb.Attributes[];
+		
+
+getReplicaAttrs?() : roachpb.Attributes[];
+		setReplicaAttrs?(replicaAttrs : roachpb.Attributes[]): void;
+		
+
+
+
+range_min_bytes?: Long;
+		
+
+getRangeMinBytes?() : Long;
+		setRangeMinBytes?(rangeMinBytes : Long): void;
+		
+
+
+
+range_max_bytes?: Long;
+		
+
+getRangeMaxBytes?() : Long;
+		setRangeMaxBytes?(rangeMaxBytes : Long): void;
+		
+
+
+
+gc?: GCPolicy;
+		
+
+getGc?() : GCPolicy;
+		setGc?(gc : GCPolicy): void;
+		
+
+
+
+}
+	
+	export interface ZoneConfigMessage extends ZoneConfig {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ZoneConfigBuilder {
+	new(data?: ZoneConfig): ZoneConfigMessage;
+	decode(buffer: ArrayBuffer) : ZoneConfigMessage;
+	decode(buffer: ByteBuffer) : ZoneConfigMessage;
+	decode64(buffer: string) : ZoneConfigMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.config {
+	
+	export interface SystemConfig {
+	
+		
+
+values?: roachpb.KeyValue[];
+		
+
+getValues?() : roachpb.KeyValue[];
+		setValues?(values : roachpb.KeyValue[]): void;
+		
+
+
+
+}
+	
+	export interface SystemConfigMessage extends SystemConfig {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SystemConfigBuilder {
+	new(data?: SystemConfig): SystemConfigMessage;
+	decode(buffer: ArrayBuffer) : SystemConfigMessage;
+	decode(buffer: ByteBuffer) : SystemConfigMessage;
+	decode64(buffer: string) : SystemConfigMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach {
+	
+	export interface server {
+	
+		
+
+}
+	
+	export interface serverMessage extends server {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface serverBuilder {
+	new(data?: server): serverMessage;
+	decode(buffer: ArrayBuffer) : serverMessage;
+	decode(buffer: ByteBuffer) : serverMessage;
+	decode64(buffer: string) : serverMessage;
+	serverpb: server.serverpbBuilder;
+	status: server.statusBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server {
+	
+	export interface serverpb {
+	
+		
+
+}
+	
+	export interface serverpbMessage extends serverpb {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface serverpbBuilder {
+	new(data?: serverpb): serverpbMessage;
+	decode(buffer: ArrayBuffer) : serverpbMessage;
+	decode(buffer: ByteBuffer) : serverpbMessage;
+	decode64(buffer: string) : serverpbMessage;
+	DatabasesRequest: serverpb.DatabasesRequestBuilder;
+	DatabasesResponse: serverpb.DatabasesResponseBuilder;
+	DatabaseDetailsRequest: serverpb.DatabaseDetailsRequestBuilder;
+	DatabaseDetailsResponse: serverpb.DatabaseDetailsResponseBuilder;
+	TableDetailsRequest: serverpb.TableDetailsRequestBuilder;
+	TableDetailsResponse: serverpb.TableDetailsResponseBuilder;
+	UsersRequest: serverpb.UsersRequestBuilder;
+	UsersResponse: serverpb.UsersResponseBuilder;
+	EventsRequest: serverpb.EventsRequestBuilder;
+	EventsResponse: serverpb.EventsResponseBuilder;
+	SetUIDataRequest: serverpb.SetUIDataRequestBuilder;
+	SetUIDataResponse: serverpb.SetUIDataResponseBuilder;
+	GetUIDataRequest: serverpb.GetUIDataRequestBuilder;
+	GetUIDataResponse: serverpb.GetUIDataResponseBuilder;
+	ClusterRequest: serverpb.ClusterRequestBuilder;
+	ClusterResponse: serverpb.ClusterResponseBuilder;
+	DrainRequest: serverpb.DrainRequestBuilder;
+	DrainResponse: serverpb.DrainResponseBuilder;
+	HealthRequest: serverpb.HealthRequestBuilder;
+	HealthResponse: serverpb.HealthResponseBuilder;
+	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
+	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
+	DetailsRequest: serverpb.DetailsRequestBuilder;
+	DetailsResponse: serverpb.DetailsResponseBuilder;
+	NodesRequest: serverpb.NodesRequestBuilder;
+	NodesResponse: serverpb.NodesResponseBuilder;
+	NodeRequest: serverpb.NodeRequestBuilder;
+	RangeInfo: serverpb.RangeInfoBuilder;
+	RangesRequest: serverpb.RangesRequestBuilder;
+	RangesResponse: serverpb.RangesResponseBuilder;
+	GossipRequest: serverpb.GossipRequestBuilder;
+	JSONResponse: serverpb.JSONResponseBuilder;
+	LogsRequest: serverpb.LogsRequestBuilder;
+	LogFilesListRequest: serverpb.LogFilesListRequestBuilder;
+	LogFileRequest: serverpb.LogFileRequestBuilder;
+	StacksRequest: serverpb.StacksRequestBuilder;
+	MetricsRequest: serverpb.MetricsRequestBuilder;
+	RaftRangeNode: serverpb.RaftRangeNodeBuilder;
+	RaftRangeError: serverpb.RaftRangeErrorBuilder;
+	RaftRangeStatus: serverpb.RaftRangeStatusBuilder;
+	RaftDebugRequest: serverpb.RaftDebugRequestBuilder;
+	RaftDebugResponse: serverpb.RaftDebugResponseBuilder;
+	PrettySpan: serverpb.PrettySpanBuilder;
+	ZoneConfigurationLevel: serverpb.ZoneConfigurationLevel;
+	DrainMode: serverpb.DrainMode;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb {
+	
+	export interface DatabasesRequest {
+	
+		
+
+}
+	
+	export interface DatabasesRequestMessage extends DatabasesRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DatabasesRequestBuilder {
+	new(data?: DatabasesRequest): DatabasesRequestMessage;
+	decode(buffer: ArrayBuffer) : DatabasesRequestMessage;
+	decode(buffer: ByteBuffer) : DatabasesRequestMessage;
+	decode64(buffer: string) : DatabasesRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DatabasesResponse {
+	
+		
+
+databases?: string[];
+		
+
+getDatabases?() : string[];
+		setDatabases?(databases : string[]): void;
+		
+
+
+
+}
+	
+	export interface DatabasesResponseMessage extends DatabasesResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DatabasesResponseBuilder {
+	new(data?: DatabasesResponse): DatabasesResponseMessage;
+	decode(buffer: ArrayBuffer) : DatabasesResponseMessage;
+	decode(buffer: ByteBuffer) : DatabasesResponseMessage;
+	decode64(buffer: string) : DatabasesResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DatabaseDetailsRequest {
+	
+		
+
+database?: string;
+		
+
+getDatabase?() : string;
+		setDatabase?(database : string): void;
+		
+
+
+
+}
+	
+	export interface DatabaseDetailsRequestMessage extends DatabaseDetailsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DatabaseDetailsRequestBuilder {
+	new(data?: DatabaseDetailsRequest): DatabaseDetailsRequestMessage;
+	decode(buffer: ArrayBuffer) : DatabaseDetailsRequestMessage;
+	decode(buffer: ByteBuffer) : DatabaseDetailsRequestMessage;
+	decode64(buffer: string) : DatabaseDetailsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DatabaseDetailsResponse {
+	
+		
+
+grants?: DatabaseDetailsResponse.Grant[];
+		
+
+getGrants?() : DatabaseDetailsResponse.Grant[];
+		setGrants?(grants : DatabaseDetailsResponse.Grant[]): void;
+		
+
+
+
+table_names?: string[];
+		
+
+getTableNames?() : string[];
+		setTableNames?(tableNames : string[]): void;
+		
+
+
+
+}
+	
+	export interface DatabaseDetailsResponseMessage extends DatabaseDetailsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DatabaseDetailsResponseBuilder {
+	new(data?: DatabaseDetailsResponse): DatabaseDetailsResponseMessage;
+	decode(buffer: ArrayBuffer) : DatabaseDetailsResponseMessage;
+	decode(buffer: ByteBuffer) : DatabaseDetailsResponseMessage;
+	decode64(buffer: string) : DatabaseDetailsResponseMessage;
+	Grant: DatabaseDetailsResponse.GrantBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb.DatabaseDetailsResponse {
+	
+	export interface Grant {
+	
+		
+
+user?: string;
+		
+
+getUser?() : string;
+		setUser?(user : string): void;
+		
+
+
+
+privileges?: string[];
+		
+
+getPrivileges?() : string[];
+		setPrivileges?(privileges : string[]): void;
+		
+
+
+
+}
+	
+	export interface GrantMessage extends Grant {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface GrantBuilder {
+	new(data?: Grant): GrantMessage;
+	decode(buffer: ArrayBuffer) : GrantMessage;
+	decode(buffer: ByteBuffer) : GrantMessage;
+	decode64(buffer: string) : GrantMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface TableDetailsRequest {
+	
+		
+
+database?: string;
+		
+
+getDatabase?() : string;
+		setDatabase?(database : string): void;
+		
+
+
+
+table?: string;
+		
+
+getTable?() : string;
+		setTable?(table : string): void;
+		
+
+
+
+}
+	
+	export interface TableDetailsRequestMessage extends TableDetailsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TableDetailsRequestBuilder {
+	new(data?: TableDetailsRequest): TableDetailsRequestMessage;
+	decode(buffer: ArrayBuffer) : TableDetailsRequestMessage;
+	decode(buffer: ByteBuffer) : TableDetailsRequestMessage;
+	decode64(buffer: string) : TableDetailsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface TableDetailsResponse {
+	
+		
+
+grants?: TableDetailsResponse.Grant[];
+		
+
+getGrants?() : TableDetailsResponse.Grant[];
+		setGrants?(grants : TableDetailsResponse.Grant[]): void;
+		
+
+
+
+columns?: TableDetailsResponse.Column[];
+		
+
+getColumns?() : TableDetailsResponse.Column[];
+		setColumns?(columns : TableDetailsResponse.Column[]): void;
+		
+
+
+
+indexes?: TableDetailsResponse.Index[];
+		
+
+getIndexes?() : TableDetailsResponse.Index[];
+		setIndexes?(indexes : TableDetailsResponse.Index[]): void;
+		
+
+
+
+range_count?: Long;
+		
+
+getRangeCount?() : Long;
+		setRangeCount?(rangeCount : Long): void;
+		
+
+
+
+create_table_statement?: string;
+		
+
+getCreateTableStatement?() : string;
+		setCreateTableStatement?(createTableStatement : string): void;
+		
+
+
+
+zone_config?: config.ZoneConfig;
+		
+
+getZoneConfig?() : config.ZoneConfig;
+		setZoneConfig?(zoneConfig : config.ZoneConfig): void;
+		
+
+
+
+zone_config_level?: ZoneConfigurationLevel;
+		
+
+getZoneConfigLevel?() : ZoneConfigurationLevel;
+		setZoneConfigLevel?(zoneConfigLevel : ZoneConfigurationLevel): void;
+		
+
+
+
+}
+	
+	export interface TableDetailsResponseMessage extends TableDetailsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TableDetailsResponseBuilder {
+	new(data?: TableDetailsResponse): TableDetailsResponseMessage;
+	decode(buffer: ArrayBuffer) : TableDetailsResponseMessage;
+	decode(buffer: ByteBuffer) : TableDetailsResponseMessage;
+	decode64(buffer: string) : TableDetailsResponseMessage;
+	Grant: TableDetailsResponse.GrantBuilder;
+	Column: TableDetailsResponse.ColumnBuilder;
+	Index: TableDetailsResponse.IndexBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb.TableDetailsResponse {
+	
+	export interface Grant {
+	
+		
+
+user?: string;
+		
+
+getUser?() : string;
+		setUser?(user : string): void;
+		
+
+
+
+privileges?: string[];
+		
+
+getPrivileges?() : string[];
+		setPrivileges?(privileges : string[]): void;
+		
+
+
+
+}
+	
+	export interface GrantMessage extends Grant {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface GrantBuilder {
+	new(data?: Grant): GrantMessage;
+	decode(buffer: ArrayBuffer) : GrantMessage;
+	decode(buffer: ByteBuffer) : GrantMessage;
+	decode64(buffer: string) : GrantMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb.TableDetailsResponse {
+	
+	export interface Column {
+	
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+type?: string;
+		
+
+getType?() : string;
+		setType?(type : string): void;
+		
+
+
+
+nullable?: boolean;
+		
+
+getNullable?() : boolean;
+		setNullable?(nullable : boolean): void;
+		
+
+
+
+default_value?: string;
+		
+
+getDefaultValue?() : string;
+		setDefaultValue?(defaultValue : string): void;
+		
+
+
+
+}
+	
+	export interface ColumnMessage extends Column {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ColumnBuilder {
+	new(data?: Column): ColumnMessage;
+	decode(buffer: ArrayBuffer) : ColumnMessage;
+	decode(buffer: ByteBuffer) : ColumnMessage;
+	decode64(buffer: string) : ColumnMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb.TableDetailsResponse {
+	
+	export interface Index {
+	
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+unique?: boolean;
+		
+
+getUnique?() : boolean;
+		setUnique?(unique : boolean): void;
+		
+
+
+
+seq?: Long;
+		
+
+getSeq?() : Long;
+		setSeq?(seq : Long): void;
+		
+
+
+
+column?: string;
+		
+
+getColumn?() : string;
+		setColumn?(column : string): void;
+		
+
+
+
+direction?: string;
+		
+
+getDirection?() : string;
+		setDirection?(direction : string): void;
+		
+
+
+
+storing?: boolean;
+		
+
+getStoring?() : boolean;
+		setStoring?(storing : boolean): void;
+		
+
+
+
+}
+	
+	export interface IndexMessage extends Index {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface IndexBuilder {
+	new(data?: Index): IndexMessage;
+	decode(buffer: ArrayBuffer) : IndexMessage;
+	decode(buffer: ByteBuffer) : IndexMessage;
+	decode64(buffer: string) : IndexMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface UsersRequest {
+	
+		
+
+}
+	
+	export interface UsersRequestMessage extends UsersRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface UsersRequestBuilder {
+	new(data?: UsersRequest): UsersRequestMessage;
+	decode(buffer: ArrayBuffer) : UsersRequestMessage;
+	decode(buffer: ByteBuffer) : UsersRequestMessage;
+	decode64(buffer: string) : UsersRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface UsersResponse {
+	
+		
+
+users?: UsersResponse.User[];
+		
+
+getUsers?() : UsersResponse.User[];
+		setUsers?(users : UsersResponse.User[]): void;
+		
+
+
+
+}
+	
+	export interface UsersResponseMessage extends UsersResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface UsersResponseBuilder {
+	new(data?: UsersResponse): UsersResponseMessage;
+	decode(buffer: ArrayBuffer) : UsersResponseMessage;
+	decode(buffer: ByteBuffer) : UsersResponseMessage;
+	decode64(buffer: string) : UsersResponseMessage;
+	User: UsersResponse.UserBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb.UsersResponse {
+	
+	export interface User {
+	
+		
+
+username?: string;
+		
+
+getUsername?() : string;
+		setUsername?(username : string): void;
+		
+
+
+
+}
+	
+	export interface UserMessage extends User {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface UserBuilder {
+	new(data?: User): UserMessage;
+	decode(buffer: ArrayBuffer) : UserMessage;
+	decode(buffer: ByteBuffer) : UserMessage;
+	decode64(buffer: string) : UserMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface EventsRequest {
+	
+		
+
+type?: string;
+		
+
+getType?() : string;
+		setType?(type : string): void;
+		
+
+
+
+target_id?: Long;
+		
+
+getTargetId?() : Long;
+		setTargetId?(targetId : Long): void;
+		
+
+
+
+}
+	
+	export interface EventsRequestMessage extends EventsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface EventsRequestBuilder {
+	new(data?: EventsRequest): EventsRequestMessage;
+	decode(buffer: ArrayBuffer) : EventsRequestMessage;
+	decode(buffer: ByteBuffer) : EventsRequestMessage;
+	decode64(buffer: string) : EventsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface EventsResponse {
+	
+		
+
+events?: EventsResponse.Event[];
+		
+
+getEvents?() : EventsResponse.Event[];
+		setEvents?(events : EventsResponse.Event[]): void;
+		
+
+
+
+}
+	
+	export interface EventsResponseMessage extends EventsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface EventsResponseBuilder {
+	new(data?: EventsResponse): EventsResponseMessage;
+	decode(buffer: ArrayBuffer) : EventsResponseMessage;
+	decode(buffer: ByteBuffer) : EventsResponseMessage;
+	decode64(buffer: string) : EventsResponseMessage;
+	Event: EventsResponse.EventBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb.EventsResponse {
+	
+	export interface Event {
+	
+		
+
+timestamp?: Event.Timestamp;
+		
+
+getTimestamp?() : Event.Timestamp;
+		setTimestamp?(timestamp : Event.Timestamp): void;
+		
+
+
+
+event_type?: string;
+		
+
+getEventType?() : string;
+		setEventType?(eventType : string): void;
+		
+
+
+
+target_id?: Long;
+		
+
+getTargetId?() : Long;
+		setTargetId?(targetId : Long): void;
+		
+
+
+
+reporting_id?: Long;
+		
+
+getReportingId?() : Long;
+		setReportingId?(reportingId : Long): void;
+		
+
+
+
+info?: string;
+		
+
+getInfo?() : string;
+		setInfo?(info : string): void;
+		
+
+
+
+unique_id?: ByteBuffer;
+		
+
+getUniqueId?() : ByteBuffer;
+		setUniqueId?(uniqueId : ByteBuffer): void;
+		
+
+
+
+}
+	
+	export interface EventMessage extends Event {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface EventBuilder {
+	new(data?: Event): EventMessage;
+	decode(buffer: ArrayBuffer) : EventMessage;
+	decode(buffer: ByteBuffer) : EventMessage;
+	decode64(buffer: string) : EventMessage;
+	Timestamp: Event.TimestampBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb.EventsResponse.Event {
+	
+	export interface Timestamp {
+	
+		
+
+sec?: Long;
+		
+
+getSec?() : Long;
+		setSec?(sec : Long): void;
+		
+
+
+
+nsec?: number;
+		
+
+getNsec?() : number;
+		setNsec?(nsec : number): void;
+		
+
+
+
+}
+	
+	export interface TimestampMessage extends Timestamp {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimestampBuilder {
+	new(data?: Timestamp): TimestampMessage;
+	decode(buffer: ArrayBuffer) : TimestampMessage;
+	decode(buffer: ByteBuffer) : TimestampMessage;
+	decode64(buffer: string) : TimestampMessage;
+	
+}
+	
+}
+
+
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface SetUIDataRequest {
+	
+		
+
+key_values?: ProtoBufMap<string, ByteBuffer>;
+		
+
+getKeyValues?() : ProtoBufMap<string, ByteBuffer>;
+		setKeyValues?(keyValues : ProtoBufMap<string, ByteBuffer>): void;
+		
+
+
+
+}
+	
+	export interface SetUIDataRequestMessage extends SetUIDataRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SetUIDataRequestBuilder {
+	new(data?: SetUIDataRequest): SetUIDataRequestMessage;
+	decode(buffer: ArrayBuffer) : SetUIDataRequestMessage;
+	decode(buffer: ByteBuffer) : SetUIDataRequestMessage;
+	decode64(buffer: string) : SetUIDataRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface SetUIDataResponse {
+	
+		
+
+}
+	
+	export interface SetUIDataResponseMessage extends SetUIDataResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SetUIDataResponseBuilder {
+	new(data?: SetUIDataResponse): SetUIDataResponseMessage;
+	decode(buffer: ArrayBuffer) : SetUIDataResponseMessage;
+	decode(buffer: ByteBuffer) : SetUIDataResponseMessage;
+	decode64(buffer: string) : SetUIDataResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface GetUIDataRequest {
+	
+		
+
+keys?: string[];
+		
+
+getKeys?() : string[];
+		setKeys?(keys : string[]): void;
+		
+
+
+
+}
+	
+	export interface GetUIDataRequestMessage extends GetUIDataRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface GetUIDataRequestBuilder {
+	new(data?: GetUIDataRequest): GetUIDataRequestMessage;
+	decode(buffer: ArrayBuffer) : GetUIDataRequestMessage;
+	decode(buffer: ByteBuffer) : GetUIDataRequestMessage;
+	decode64(buffer: string) : GetUIDataRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface GetUIDataResponse {
+	
+		
+
+key_values?: ProtoBufMap<string, GetUIDataResponse.Value>;
+		
+
+getKeyValues?() : ProtoBufMap<string, GetUIDataResponse.Value>;
+		setKeyValues?(keyValues : ProtoBufMap<string, GetUIDataResponse.Value>): void;
+		
+
+
+
+}
+	
+	export interface GetUIDataResponseMessage extends GetUIDataResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface GetUIDataResponseBuilder {
+	new(data?: GetUIDataResponse): GetUIDataResponseMessage;
+	decode(buffer: ArrayBuffer) : GetUIDataResponseMessage;
+	decode(buffer: ByteBuffer) : GetUIDataResponseMessage;
+	decode64(buffer: string) : GetUIDataResponseMessage;
+	Timestamp: GetUIDataResponse.TimestampBuilder;
+	Value: GetUIDataResponse.ValueBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.serverpb.GetUIDataResponse {
+	
+	export interface Timestamp {
+	
+		
+
+sec?: Long;
+		
+
+getSec?() : Long;
+		setSec?(sec : Long): void;
+		
+
+
+
+nsec?: number;
+		
+
+getNsec?() : number;
+		setNsec?(nsec : number): void;
+		
+
+
+
+}
+	
+	export interface TimestampMessage extends Timestamp {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimestampBuilder {
+	new(data?: Timestamp): TimestampMessage;
+	decode(buffer: ArrayBuffer) : TimestampMessage;
+	decode(buffer: ByteBuffer) : TimestampMessage;
+	decode64(buffer: string) : TimestampMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb.GetUIDataResponse {
+	
+	export interface Value {
+	
+		
+
+value?: ByteBuffer;
+		
+
+getValue?() : ByteBuffer;
+		setValue?(value : ByteBuffer): void;
+		
+
+
+
+last_updated?: Timestamp;
+		
+
+getLastUpdated?() : Timestamp;
+		setLastUpdated?(lastUpdated : Timestamp): void;
+		
+
+
+
+}
+	
+	export interface ValueMessage extends Value {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ValueBuilder {
+	new(data?: Value): ValueMessage;
+	decode(buffer: ArrayBuffer) : ValueMessage;
+	decode(buffer: ByteBuffer) : ValueMessage;
+	decode64(buffer: string) : ValueMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface ClusterRequest {
+	
+		
+
+}
+	
+	export interface ClusterRequestMessage extends ClusterRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ClusterRequestBuilder {
+	new(data?: ClusterRequest): ClusterRequestMessage;
+	decode(buffer: ArrayBuffer) : ClusterRequestMessage;
+	decode(buffer: ByteBuffer) : ClusterRequestMessage;
+	decode64(buffer: string) : ClusterRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface ClusterResponse {
+	
+		
+
+cluster_id?: string;
+		
+
+getClusterId?() : string;
+		setClusterId?(clusterId : string): void;
+		
+
+
+
+}
+	
+	export interface ClusterResponseMessage extends ClusterResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ClusterResponseBuilder {
+	new(data?: ClusterResponse): ClusterResponseMessage;
+	decode(buffer: ArrayBuffer) : ClusterResponseMessage;
+	decode(buffer: ByteBuffer) : ClusterResponseMessage;
+	decode64(buffer: string) : ClusterResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DrainRequest {
+	
+		
+
+on?: number[];
+		
+
+getOn?() : number[];
+		setOn?(on : number[]): void;
+		
+
+
+
+off?: number[];
+		
+
+getOff?() : number[];
+		setOff?(off : number[]): void;
+		
+
+
+
+shutdown?: boolean;
+		
+
+getShutdown?() : boolean;
+		setShutdown?(shutdown : boolean): void;
+		
+
+
+
+}
+	
+	export interface DrainRequestMessage extends DrainRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DrainRequestBuilder {
+	new(data?: DrainRequest): DrainRequestMessage;
+	decode(buffer: ArrayBuffer) : DrainRequestMessage;
+	decode(buffer: ByteBuffer) : DrainRequestMessage;
+	decode64(buffer: string) : DrainRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DrainResponse {
+	
+		
+
+on?: number[];
+		
+
+getOn?() : number[];
+		setOn?(on : number[]): void;
+		
+
+
+
+}
+	
+	export interface DrainResponseMessage extends DrainResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DrainResponseBuilder {
+	new(data?: DrainResponse): DrainResponseMessage;
+	decode(buffer: ArrayBuffer) : DrainResponseMessage;
+	decode(buffer: ByteBuffer) : DrainResponseMessage;
+	decode64(buffer: string) : DrainResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface HealthRequest {
+	
+		
+
+}
+	
+	export interface HealthRequestMessage extends HealthRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HealthRequestBuilder {
+	new(data?: HealthRequest): HealthRequestMessage;
+	decode(buffer: ArrayBuffer) : HealthRequestMessage;
+	decode(buffer: ByteBuffer) : HealthRequestMessage;
+	decode64(buffer: string) : HealthRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface HealthResponse {
+	
+		
+
+}
+	
+	export interface HealthResponseMessage extends HealthResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HealthResponseBuilder {
+	new(data?: HealthResponse): HealthResponseMessage;
+	decode(buffer: ArrayBuffer) : HealthResponseMessage;
+	decode(buffer: ByteBuffer) : HealthResponseMessage;
+	decode64(buffer: string) : HealthResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface ClusterFreezeRequest {
+	
+		
+
+freeze?: boolean;
+		
+
+getFreeze?() : boolean;
+		setFreeze?(freeze : boolean): void;
+		
+
+
+
+}
+	
+	export interface ClusterFreezeRequestMessage extends ClusterFreezeRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ClusterFreezeRequestBuilder {
+	new(data?: ClusterFreezeRequest): ClusterFreezeRequestMessage;
+	decode(buffer: ArrayBuffer) : ClusterFreezeRequestMessage;
+	decode(buffer: ByteBuffer) : ClusterFreezeRequestMessage;
+	decode64(buffer: string) : ClusterFreezeRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface ClusterFreezeResponse {
+	
+		
+
+ranges_affected?: Long;
+		
+
+getRangesAffected?() : Long;
+		setRangesAffected?(rangesAffected : Long): void;
+		
+
+
+
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
+}
+	
+	export interface ClusterFreezeResponseMessage extends ClusterFreezeResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ClusterFreezeResponseBuilder {
+	new(data?: ClusterFreezeResponse): ClusterFreezeResponseMessage;
+	decode(buffer: ArrayBuffer) : ClusterFreezeResponseMessage;
+	decode(buffer: ByteBuffer) : ClusterFreezeResponseMessage;
+	decode64(buffer: string) : ClusterFreezeResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DetailsRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface DetailsRequestMessage extends DetailsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DetailsRequestBuilder {
+	new(data?: DetailsRequest): DetailsRequestMessage;
+	decode(buffer: ArrayBuffer) : DetailsRequestMessage;
+	decode(buffer: ByteBuffer) : DetailsRequestMessage;
+	decode64(buffer: string) : DetailsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface DetailsResponse {
+	
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+address?: util.UnresolvedAddr;
+		
+
+getAddress?() : util.UnresolvedAddr;
+		setAddress?(address : util.UnresolvedAddr): void;
+		
+
+
+
+build_info?: build.Info;
+		
+
+getBuildInfo?() : build.Info;
+		setBuildInfo?(buildInfo : build.Info): void;
+		
+
+
+
+}
+	
+	export interface DetailsResponseMessage extends DetailsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface DetailsResponseBuilder {
+	new(data?: DetailsResponse): DetailsResponseMessage;
+	decode(buffer: ArrayBuffer) : DetailsResponseMessage;
+	decode(buffer: ByteBuffer) : DetailsResponseMessage;
+	decode64(buffer: string) : DetailsResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface NodesRequest {
+	
+		
+
+}
+	
+	export interface NodesRequestMessage extends NodesRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface NodesRequestBuilder {
+	new(data?: NodesRequest): NodesRequestMessage;
+	decode(buffer: ArrayBuffer) : NodesRequestMessage;
+	decode(buffer: ByteBuffer) : NodesRequestMessage;
+	decode64(buffer: string) : NodesRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface NodesResponse {
+	
+		
+
+nodes?: status.NodeStatus[];
+		
+
+getNodes?() : status.NodeStatus[];
+		setNodes?(nodes : status.NodeStatus[]): void;
+		
+
+
+
+}
+	
+	export interface NodesResponseMessage extends NodesResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface NodesResponseBuilder {
+	new(data?: NodesResponse): NodesResponseMessage;
+	decode(buffer: ArrayBuffer) : NodesResponseMessage;
+	decode(buffer: ByteBuffer) : NodesResponseMessage;
+	decode64(buffer: string) : NodesResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface NodeRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface NodeRequestMessage extends NodeRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface NodeRequestBuilder {
+	new(data?: NodeRequest): NodeRequestMessage;
+	decode(buffer: ArrayBuffer) : NodeRequestMessage;
+	decode(buffer: ByteBuffer) : NodeRequestMessage;
+	decode64(buffer: string) : NodeRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RangeInfo {
+	
+		
+
+span?: PrettySpan;
+		
+
+getSpan?() : PrettySpan;
+		setSpan?(span : PrettySpan): void;
+		
+
+
+
+raft_state?: string;
+		
+
+getRaftState?() : string;
+		setRaftState?(raftState : string): void;
+		
+
+
+
+state?: storage.storagebase.RangeInfo;
+		
+
+getState?() : storage.storagebase.RangeInfo;
+		setState?(state : storage.storagebase.RangeInfo): void;
+		
+
+
+
+}
+	
+	export interface RangeInfoMessage extends RangeInfo {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeInfoBuilder {
+	new(data?: RangeInfo): RangeInfoMessage;
+	decode(buffer: ArrayBuffer) : RangeInfoMessage;
+	decode(buffer: ByteBuffer) : RangeInfoMessage;
+	decode64(buffer: string) : RangeInfoMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RangesRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface RangesRequestMessage extends RangesRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangesRequestBuilder {
+	new(data?: RangesRequest): RangesRequestMessage;
+	decode(buffer: ArrayBuffer) : RangesRequestMessage;
+	decode(buffer: ByteBuffer) : RangesRequestMessage;
+	decode64(buffer: string) : RangesRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RangesResponse {
+	
+		
+
+ranges?: RangeInfo[];
+		
+
+getRanges?() : RangeInfo[];
+		setRanges?(ranges : RangeInfo[]): void;
+		
+
+
+
+}
+	
+	export interface RangesResponseMessage extends RangesResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangesResponseBuilder {
+	new(data?: RangesResponse): RangesResponseMessage;
+	decode(buffer: ArrayBuffer) : RangesResponseMessage;
+	decode(buffer: ByteBuffer) : RangesResponseMessage;
+	decode64(buffer: string) : RangesResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface GossipRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface GossipRequestMessage extends GossipRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface GossipRequestBuilder {
+	new(data?: GossipRequest): GossipRequestMessage;
+	decode(buffer: ArrayBuffer) : GossipRequestMessage;
+	decode(buffer: ByteBuffer) : GossipRequestMessage;
+	decode64(buffer: string) : GossipRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface JSONResponse {
+	
+		
+
+data?: ByteBuffer;
+		
+
+getData?() : ByteBuffer;
+		setData?(data : ByteBuffer): void;
+		
+
+
+
+}
+	
+	export interface JSONResponseMessage extends JSONResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface JSONResponseBuilder {
+	new(data?: JSONResponse): JSONResponseMessage;
+	decode(buffer: ArrayBuffer) : JSONResponseMessage;
+	decode(buffer: ByteBuffer) : JSONResponseMessage;
+	decode64(buffer: string) : JSONResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface LogsRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+level?: string;
+		
+
+getLevel?() : string;
+		setLevel?(level : string): void;
+		
+
+
+
+start_time?: string;
+		
+
+getStartTime?() : string;
+		setStartTime?(startTime : string): void;
+		
+
+
+
+end_time?: string;
+		
+
+getEndTime?() : string;
+		setEndTime?(endTime : string): void;
+		
+
+
+
+max?: string;
+		
+
+getMax?() : string;
+		setMax?(max : string): void;
+		
+
+
+
+pattern?: string;
+		
+
+getPattern?() : string;
+		setPattern?(pattern : string): void;
+		
+
+
+
+}
+	
+	export interface LogsRequestMessage extends LogsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogsRequestBuilder {
+	new(data?: LogsRequest): LogsRequestMessage;
+	decode(buffer: ArrayBuffer) : LogsRequestMessage;
+	decode(buffer: ByteBuffer) : LogsRequestMessage;
+	decode64(buffer: string) : LogsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface LogFilesListRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface LogFilesListRequestMessage extends LogFilesListRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogFilesListRequestBuilder {
+	new(data?: LogFilesListRequest): LogFilesListRequestMessage;
+	decode(buffer: ArrayBuffer) : LogFilesListRequestMessage;
+	decode(buffer: ByteBuffer) : LogFilesListRequestMessage;
+	decode64(buffer: string) : LogFilesListRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface LogFileRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+file?: string;
+		
+
+getFile?() : string;
+		setFile?(file : string): void;
+		
+
+
+
+}
+	
+	export interface LogFileRequestMessage extends LogFileRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogFileRequestBuilder {
+	new(data?: LogFileRequest): LogFileRequestMessage;
+	decode(buffer: ArrayBuffer) : LogFileRequestMessage;
+	decode(buffer: ByteBuffer) : LogFileRequestMessage;
+	decode64(buffer: string) : LogFileRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface StacksRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface StacksRequestMessage extends StacksRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface StacksRequestBuilder {
+	new(data?: StacksRequest): StacksRequestMessage;
+	decode(buffer: ArrayBuffer) : StacksRequestMessage;
+	decode(buffer: ByteBuffer) : StacksRequestMessage;
+	decode64(buffer: string) : StacksRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface MetricsRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+}
+	
+	export interface MetricsRequestMessage extends MetricsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface MetricsRequestBuilder {
+	new(data?: MetricsRequest): MetricsRequestMessage;
+	decode(buffer: ArrayBuffer) : MetricsRequestMessage;
+	decode(buffer: ByteBuffer) : MetricsRequestMessage;
+	decode64(buffer: string) : MetricsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RaftRangeNode {
+	
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+range?: RangeInfo;
+		
+
+getRange?() : RangeInfo;
+		setRange?(range : RangeInfo): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeNodeMessage extends RaftRangeNode {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeNodeBuilder {
+	new(data?: RaftRangeNode): RaftRangeNodeMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeNodeMessage;
+	decode(buffer: ByteBuffer) : RaftRangeNodeMessage;
+	decode64(buffer: string) : RaftRangeNodeMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RaftRangeError {
+	
+		
+
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeErrorMessage extends RaftRangeError {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeErrorBuilder {
+	new(data?: RaftRangeError): RaftRangeErrorMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeErrorMessage;
+	decode(buffer: ByteBuffer) : RaftRangeErrorMessage;
+	decode64(buffer: string) : RaftRangeErrorMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RaftRangeStatus {
+	
+		
+
+range_id?: Long;
+		
+
+getRangeId?() : Long;
+		setRangeId?(rangeId : Long): void;
+		
+
+
+
+errors?: RaftRangeError[];
+		
+
+getErrors?() : RaftRangeError[];
+		setErrors?(errors : RaftRangeError[]): void;
+		
+
+
+
+nodes?: RaftRangeNode[];
+		
+
+getNodes?() : RaftRangeNode[];
+		setNodes?(nodes : RaftRangeNode[]): void;
+		
+
+
+
+}
+	
+	export interface RaftRangeStatusMessage extends RaftRangeStatus {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftRangeStatusBuilder {
+	new(data?: RaftRangeStatus): RaftRangeStatusMessage;
+	decode(buffer: ArrayBuffer) : RaftRangeStatusMessage;
+	decode(buffer: ByteBuffer) : RaftRangeStatusMessage;
+	decode64(buffer: string) : RaftRangeStatusMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RaftDebugRequest {
+	
+		
+
+}
+	
+	export interface RaftDebugRequestMessage extends RaftDebugRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftDebugRequestBuilder {
+	new(data?: RaftDebugRequest): RaftDebugRequestMessage;
+	decode(buffer: ArrayBuffer) : RaftDebugRequestMessage;
+	decode(buffer: ByteBuffer) : RaftDebugRequestMessage;
+	decode64(buffer: string) : RaftDebugRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface RaftDebugResponse {
+	
+		
+
+ranges?: ProtoBufMap<Long, RaftRangeStatus>;
+		
+
+getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
+		setRanges?(ranges : ProtoBufMap<Long, RaftRangeStatus>): void;
+		
+
+
+
+}
+	
+	export interface RaftDebugResponseMessage extends RaftDebugResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftDebugResponseBuilder {
+	new(data?: RaftDebugResponse): RaftDebugResponseMessage;
+	decode(buffer: ArrayBuffer) : RaftDebugResponseMessage;
+	decode(buffer: ByteBuffer) : RaftDebugResponseMessage;
+	decode64(buffer: string) : RaftDebugResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface PrettySpan {
+	
+		
+
+start_key?: string;
+		
+
+getStartKey?() : string;
+		setStartKey?(startKey : string): void;
+		
+
+
+
+end_key?: string;
+		
+
+getEndKey?() : string;
+		setEndKey?(endKey : string): void;
+		
+
+
+
+}
+	
+	export interface PrettySpanMessage extends PrettySpan {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface PrettySpanBuilder {
+	new(data?: PrettySpan): PrettySpanMessage;
+	decode(buffer: ArrayBuffer) : PrettySpanMessage;
+	decode(buffer: ByteBuffer) : PrettySpanMessage;
+	decode64(buffer: string) : PrettySpanMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	export const enum ZoneConfigurationLevel {
+		UNKNOWN = 0,
+		CLUSTER = 1,
+		DATABASE = 2,
+		TABLE = 3,
+		
+}
+}
+
+declare module cockroach.server.serverpb {
+	export const enum DrainMode {
+		CLIENT = 0,
+		LEADERSHIP = 1,
+		
+}
+}
+
+
+declare module cockroach.server {
+	
+	export interface status {
+	
+		
+
+}
+	
+	export interface statusMessage extends status {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface statusBuilder {
+	new(data?: status): statusMessage;
+	decode(buffer: ArrayBuffer) : statusMessage;
+	decode(buffer: ByteBuffer) : statusMessage;
+	decode64(buffer: string) : statusMessage;
+	StoreStatus: status.StoreStatusBuilder;
+	NodeStatus: status.NodeStatusBuilder;
+	
+}
+	
+}
+
+declare module cockroach.server.status {
+	
+	export interface StoreStatus {
+	
+		
+
+desc?: roachpb.StoreDescriptor;
+		
+
+getDesc?() : roachpb.StoreDescriptor;
+		setDesc?(desc : roachpb.StoreDescriptor): void;
+		
+
+
+
+metrics?: ProtoBufMap<string, number>;
+		
+
+getMetrics?() : ProtoBufMap<string, number>;
+		setMetrics?(metrics : ProtoBufMap<string, number>): void;
+		
+
+
+
+}
+	
+	export interface StoreStatusMessage extends StoreStatus {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface StoreStatusBuilder {
+	new(data?: StoreStatus): StoreStatusMessage;
+	decode(buffer: ArrayBuffer) : StoreStatusMessage;
+	decode(buffer: ByteBuffer) : StoreStatusMessage;
+	decode64(buffer: string) : StoreStatusMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.status {
+	
+	export interface NodeStatus {
+	
+		
+
+desc?: roachpb.NodeDescriptor;
+		
+
+getDesc?() : roachpb.NodeDescriptor;
+		setDesc?(desc : roachpb.NodeDescriptor): void;
+		
+
+
+
+build_info?: build.Info;
+		
+
+getBuildInfo?() : build.Info;
+		setBuildInfo?(buildInfo : build.Info): void;
+		
+
+
+
+started_at?: Long;
+		
+
+getStartedAt?() : Long;
+		setStartedAt?(startedAt : Long): void;
+		
+
+
+
+updated_at?: Long;
+		
+
+getUpdatedAt?() : Long;
+		setUpdatedAt?(updatedAt : Long): void;
+		
+
+
+
+metrics?: ProtoBufMap<string, number>;
+		
+
+getMetrics?() : ProtoBufMap<string, number>;
+		setMetrics?(metrics : ProtoBufMap<string, number>): void;
+		
+
+
+
+store_statuses?: StoreStatus[];
+		
+
+getStoreStatuses?() : StoreStatus[];
+		setStoreStatuses?(storeStatuses : StoreStatus[]): void;
+		
+
+
+
+}
+	
+	export interface NodeStatusMessage extends NodeStatus {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface NodeStatusBuilder {
+	new(data?: NodeStatus): NodeStatusMessage;
+	decode(buffer: ArrayBuffer) : NodeStatusMessage;
+	decode(buffer: ByteBuffer) : NodeStatusMessage;
+	decode64(buffer: string) : NodeStatusMessage;
+	
+}
+	
+}
+
+
+
+
+declare module cockroach {
+	
+	export interface build {
+	
+		
+
+}
+	
+	export interface buildMessage extends build {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface buildBuilder {
+	new(data?: build): buildMessage;
+	decode(buffer: ArrayBuffer) : buildMessage;
+	decode(buffer: ByteBuffer) : buildMessage;
+	decode64(buffer: string) : buildMessage;
+	Info: build.InfoBuilder;
+	
+}
+	
+}
+
+declare module cockroach.build {
+	
+	export interface Info {
+	
+		
+
+go_version?: string;
+		
+
+getGoVersion?() : string;
+		setGoVersion?(goVersion : string): void;
+		
+
+
+
+tag?: string;
+		
+
+getTag?() : string;
+		setTag?(tag : string): void;
+		
+
+
+
+time?: string;
+		
+
+getTime?() : string;
+		setTime?(time : string): void;
+		
+
+
+
+dependencies?: string;
+		
+
+getDependencies?() : string;
+		setDependencies?(dependencies : string): void;
+		
+
+
+
+cgo_compiler?: string;
+		
+
+getCgoCompiler?() : string;
+		setCgoCompiler?(cgoCompiler : string): void;
+		
+
+
+
+platform?: string;
+		
+
+getPlatform?() : string;
+		setPlatform?(platform : string): void;
+		
+
+
+
+}
+	
+	export interface InfoMessage extends Info {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface InfoBuilder {
+	new(data?: Info): InfoMessage;
+	decode(buffer: ArrayBuffer) : InfoMessage;
+	decode(buffer: ByteBuffer) : InfoMessage;
+	decode64(buffer: string) : InfoMessage;
+	
+}
+	
+}
 
 
 
