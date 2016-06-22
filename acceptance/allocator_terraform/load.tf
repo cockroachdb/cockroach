@@ -3,11 +3,8 @@
 variable "example_block_writer_instances" {
   default = 1
 }
-#output "block_writer_ips" {
-#  value = "${join(",", google_compute_instance.block_writer.*.network_interface.0.access_config.0.assigned_nat_ip)}"
-#}
 output "example_block_writer" {
-  value = "${join(",", google_compute_instance.block_writer.*.name)}"
+  value = "${join(",", google_compute_instance.block_writer.*.network_interface.0.access_config.0.assigned_nat_ip)}"
 }
 
 resource "google_compute_instance" "block_writer" {
