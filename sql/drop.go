@@ -449,16 +449,7 @@ func (p *planner) removeFKBackReference(
 				targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 			}
 		}
-		if err := t.SetUpVersion(); err != nil {
-			return err
-		}
-		if err := t.Validate(); err != nil {
-			return err
-		}
-		if err := p.writeTableDesc(t); err != nil {
-			return err
-		}
-		p.notifySchemaChange(t.ID, sqlbase.InvalidMutationID)
+		return p.saveNonmutationAndNotify(t)
 	}
 	return nil
 }
