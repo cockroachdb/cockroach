@@ -39,7 +39,6 @@ void protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto() {
 
 #endif
   ::cockroach::util::protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto();
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   Attributes::default_instance_ = new Attributes();
   ReplicaDescriptor::default_instance_ = new ReplicaDescriptor();
   RangeDescriptor::default_instance_ = new RangeDescriptor();

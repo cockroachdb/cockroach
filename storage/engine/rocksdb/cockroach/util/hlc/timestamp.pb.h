@@ -25,7 +25,6 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
-#include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
 namespace cockroach {

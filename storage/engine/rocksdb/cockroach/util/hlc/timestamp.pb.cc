@@ -34,7 +34,6 @@ void protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #endif
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   Timestamp::default_instance_ = new Timestamp();
   Timestamp::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2futil_2fhlc_2ftimestamp_2eproto);

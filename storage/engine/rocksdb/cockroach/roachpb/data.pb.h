@@ -31,7 +31,6 @@
 #include "cockroach/roachpb/metadata.pb.h"
 #include "cockroach/storage/engine/enginepb/mvcc.pb.h"
 #include "cockroach/util/hlc/timestamp.pb.h"
-#include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
 namespace cockroach {

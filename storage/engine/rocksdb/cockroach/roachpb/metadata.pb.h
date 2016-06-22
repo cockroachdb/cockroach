@@ -26,7 +26,6 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
 #include "cockroach/util/unresolved_addr.pb.h"
-#include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
 namespace cockroach {

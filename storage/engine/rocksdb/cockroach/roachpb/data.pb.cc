@@ -48,7 +48,6 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
   ::cockroach::roachpb::protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto();
   ::cockroach::storage::engine::enginepb::protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
   ::cockroach::util::hlc::protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto();
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   Span::default_instance_ = new Span();
   Value::default_instance_ = new Value();
   KeyValue::default_instance_ = new KeyValue();
