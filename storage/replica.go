@@ -194,6 +194,8 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
+		// Has the replica been destroyed.
+		destroyed error
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -236,6 +238,10 @@ type Replica struct {
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
+	if r.mu.destroyed != nil {
+		return r.mu.destroyed
+	}
+
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(&raft.Config{
 			ID:            uint64(r.mu.replicaID),
@@ -368,6 +374,9 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	}
 	// Clear the map.
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
+	r.mu.internalRaftGroup = nil
+	r.mu.destroyed = util.Errorf("replica %d (range %d) was garbage collected",
+		r.mu.replicaID, r.RangeID)
 	r.mu.Unlock()
 
 	return r.store.destroyReplicaData(desc)

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/coreos/etcd/raft"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -385,6 +386,28 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	// Now try the latest descriptor and succeed.
 	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStoreRemoveReplicaDestroy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that removal of a replica marks it as destroyed so that future raft
+	// commands on the Replica structure will fail.
+	err = rng1.withRaftGroup(func(r *raft.RawNode) error { return nil })
+	expected := "replica .* was garbage collected"
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected error %s, but got %v", expected, err)
 	}
 }
 
