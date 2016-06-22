@@ -739,12 +739,18 @@ func (r *Replica) State() storagebase.RangeInfo {
 	return ri
 }
 
-// assertState can be called from the Raft goroutine to check that the in-memory
-// and on-disk states of the Replica are congruent.
-// TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertState(reader engine.Reader) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.assertStateLocked(reader)
+}
+
+// assertStateLocked can be called from the Raft goroutine to check that the
+// in-memory and on-disk states of the Replica are congruent. See also
+// assertState if the replica mutex is not currently held.
+//
+// TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
+func (r *Replica) assertStateLocked(reader engine.Reader) {
 	diskState, err := loadState(reader, r.mu.state.Desc)
 	if err != nil {
 		panic(err)
@@ -1373,21 +1379,11 @@ func (r *Replica) handleRaftReady() error {
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		// We use a separate batch to apply the snapshot since the Replica
-		// (and in particular the last index) is altered via Defer(), but we
-		// read it below. This also allows for more future optimization (such
-		// as using a Distinct() batch).
-		batch := r.store.Engine().NewBatch()
-		defer batch.Close()
-		if err := r.applySnapshot(batch, rd.Snapshot); err != nil {
+		var err error
+		lastIndex, err = r.applySnapshot(rd.Snapshot)
+		if err != nil {
 			return err
 		}
-		if err := batch.Commit(); err != nil {
-			return err
-		}
-		r.mu.Lock()
-		lastIndex = r.mu.lastIndex // update lastIndex for append below
-		r.mu.Unlock()
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 	batch := r.store.Engine().NewBatch()
