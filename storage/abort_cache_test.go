@@ -74,7 +74,7 @@ func TestAbortCachePutGetClearData(t *testing.T) {
 	if aborted, readErr := sc.Get(context.Background(), e, testTxnID, &entry); aborted {
 		t.Errorf("expected not aborted for id %s", testTxnID)
 	} else if readErr != nil {
-		t.Fatalf("unxpected read error: %s", readErr)
+		t.Fatalf("unexpected read error: %s", readErr)
 	}
 
 	entry = roachpb.AbortCacheEntry{
@@ -191,7 +191,7 @@ func TestAbortCacheCopyFrom(t *testing.T) {
 	for i, cache := range []*AbortCache{rc1, rc2} {
 		var actual roachpb.AbortCacheEntry
 		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
-			t.Fatalf("%d: unxpected read error: %t, %s", i, aborted, readErr)
+			t.Fatalf("%d: unexpected read error: %t, %s", i, aborted, readErr)
 		} else if !reflect.DeepEqual(entry, actual) {
 			t.Fatalf("expected %v, got %v", entry, actual)
 		}

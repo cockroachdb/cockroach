@@ -401,7 +401,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		},
 		{
 			// This store will not be rebalanced to, because it already has more
-			// replias than the mean range count.
+			// replicas than the mean range count.
 			StoreID: 5,
 			Node:    roachpb.NodeDescriptor{NodeID: 5},
 			Capacity: roachpb.StoreCapacity{

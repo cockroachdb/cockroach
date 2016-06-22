@@ -70,8 +70,8 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
-// TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
-// is insufficient.
+// TODO(bdarnell): consider caching for recent entries, if rocksdb's built in
+// caching is insufficient.
 // Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
@@ -487,13 +487,11 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, entries 
 // uninitialized or need updating.
 func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// RangeMaxBytes should be updated by looking up Zone Config in two cases:
-	// 1. After snapshot applying, if no updating of zone config
-	// for this key range, then maxBytes of this range will not
-	// be updated.
-	// 2. After a new range is created by range splition, just
-	// copying maxBytes from the original range does not work
-	// since the original range and the new range might belong
-	// to different zones.
+	// 1. After snapshot applying, if no updating of zone config for this key
+	// range, then maxBytes of this range will not be updated.
+	// 2. After a new range is created by a split, just copying maxBytes from
+	// the original range does not work since the original range and the new
+	// range might belong to different zones.
 	// Load the system config.
 	cfg, ok := r.store.Gossip().GetSystemConfig()
 	if !ok {
