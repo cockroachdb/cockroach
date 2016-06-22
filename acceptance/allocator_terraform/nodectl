@@ -31,7 +31,7 @@ case $action in
 upload)
     echo "Uploading store ${DATA_DIR} to ${store_url}"
     cd "${DATA_DIR}"
-    tar zcvf - * | gsutil cp - ${store_url}
+    tar zcvf - * --exclude='logs' | gsutil cp - ${store_url}
     ;;
 download)
     if [ -d ${DATA_DIR} ]; then
