@@ -83,9 +83,6 @@
     "arrify": {
       "version": "1.0.1"
     },
-    "ascli": {
-      "version": "1.0.0"
-    },
     "asn1": {
       "version": "0.1.11"
     },
@@ -112,9 +109,6 @@
       "dependencies": {
         "lodash": {
           "version": "4.13.1"
-        },
-        "minimatch": {
-          "version": "3.0.2"
         },
         "path-exists": {
           "version": "1.0.0"
@@ -268,9 +262,6 @@
     "builtin-modules": {
       "version": "1.1.1"
     },
-    "bytebuffer": {
-      "version": "5.0.1"
-    },
     "bytes": {
       "version": "2.4.0"
     },
@@ -304,17 +295,6 @@
     "chokidar": {
       "version": "1.5.2"
     },
-    "cli": {
-      "version": "0.6.6",
-      "dependencies": {
-        "glob": {
-          "version": "3.2.11"
-        },
-        "minimatch": {
-          "version": "0.3.0"
-        }
-      }
-    },
     "cli-boxes": {
       "version": "1.0.0"
     },
@@ -338,9 +318,6 @@
     },
     "colors": {
       "version": "1.1.2"
-    },
-    "colour": {
-      "version": "0.7.1"
     },
     "columnify": {
       "version": "1.5.4"
@@ -498,43 +475,6 @@
     "duplexer2": {
       "version": "0.0.2"
     },
-    "dustjs-helpers": {
-      "version": "1.7.3"
-    },
-    "dustjs-linkedin": {
-      "version": "2.7.2",
-      "dependencies": {
-        "async-each": {
-          "version": "0.1.6"
-        },
-        "chokidar": {
-          "version": "1.0.6"
-        },
-        "fsevents": {
-          "version": "0.3.8"
-        },
-        "glob-parent": {
-          "version": "1.3.0",
-          "dependencies": {
-            "is-glob": {
-              "version": "2.0.1"
-            }
-          }
-        },
-        "is-glob": {
-          "version": "1.1.3"
-        },
-        "minimatch": {
-          "version": "0.2.14"
-        },
-        "readable-stream": {
-          "version": "1.0.34"
-        },
-        "readdirp": {
-          "version": "1.4.0"
-        }
-      }
-    },
     "ecc-jsbn": {
       "version": "0.1.1"
     },
@@ -614,9 +554,6 @@
         "lodash": {
           "version": "4.13.1"
         },
-        "minimatch": {
-          "version": "3.0.2"
-        },
         "strip-json-comments": {
           "version": "1.0.4"
         },
@@ -656,9 +593,6 @@
     },
     "eventemitter3": {
       "version": "1.2.0"
-    },
-    "exit": {
-      "version": "0.1.2"
     },
     "exit-hook": {
       "version": "1.1.1"
@@ -759,7 +693,7 @@
       "version": "1.1.2"
     },
     "findup-sync": {
-      "version": "0.4.1"
+      "version": "0.3.0"
     },
     "first-chunk-stream": {
       "version": "1.0.0"
@@ -781,9 +715,6 @@
     },
     "form-data": {
       "version": "0.2.0"
-    },
-    "fs-exists-sync": {
-      "version": "0.1.0"
     },
     "fs-extra": {
       "version": "0.26.7"
@@ -1207,7 +1138,7 @@
       }
     },
     "glob": {
-      "version": "4.5.3"
+      "version": "5.0.15"
     },
     "glob-base": {
       "version": "0.3.0"
@@ -1218,6 +1149,12 @@
     "glob-stream": {
       "version": "3.1.18",
       "dependencies": {
+        "glob": {
+          "version": "4.5.3"
+        },
+        "minimatch": {
+          "version": "2.0.10"
+        },
         "readable-stream": {
           "version": "1.0.34"
         },
@@ -1232,12 +1169,6 @@
     "glob2base": {
       "version": "0.0.12"
     },
-    "global-modules": {
-      "version": "0.2.2"
-    },
-    "global-prefix": {
-      "version": "0.1.4"
-    },
     "globals": {
       "version": "8.18.0"
     },
@@ -1246,9 +1177,6 @@
       "dependencies": {
         "glob": {
           "version": "7.0.5"
-        },
-        "minimatch": {
-          "version": "3.0.2"
         },
         "object-assign": {
           "version": "4.1.0"
@@ -1403,12 +1331,7 @@
       "version": "0.2.7"
     },
     "is-absolute": {
-      "version": "0.2.5",
-      "dependencies": {
-        "is-windows": {
-          "version": "0.1.1"
-        }
-      }
+      "version": "0.2.5"
     },
     "is-arrayish": {
       "version": "0.2.1"
@@ -1501,7 +1424,7 @@
       "version": "0.2.1"
     },
     "is-windows": {
-      "version": "0.2.0"
+      "version": "0.1.1"
     },
     "isarray": {
       "version": "0.0.1"
@@ -1576,9 +1499,6 @@
         "glob": {
           "version": "6.0.4"
         },
-        "minimatch": {
-          "version": "3.0.2"
-        },
         "semver": {
           "version": "5.1.0"
         }
@@ -1588,6 +1508,12 @@
       "version": "0.13.13",
       "resolved": "git://github.com/tamird/github.git#2442f15aa968ee8a63766b63c1139b403099abb3",
       "dependencies": {
+        "glob": {
+          "version": "4.5.3"
+        },
+        "minimatch": {
+          "version": "2.0.10"
+        },
         "request": {
           "version": "2.53.0"
         },
@@ -1627,9 +1553,6 @@
               "version": "2.1.11"
             }
           }
-        },
-        "glob": {
-          "version": "5.0.15"
         },
         "http-signature": {
           "version": "0.11.0"
@@ -1671,9 +1594,6 @@
         },
         "lodash": {
           "version": "3.10.1"
-        },
-        "minimatch": {
-          "version": "3.0.2"
         }
       }
     },
@@ -1724,7 +1644,7 @@
       "version": "0.3.0"
     },
     "liftoff": {
-      "version": "2.2.3"
+      "version": "2.2.4"
     },
     "listify": {
       "version": "1.0.0"
@@ -1814,9 +1734,6 @@
         }
       }
     },
-    "long": {
-      "version": "3.1.0"
-    },
     "longest": {
       "version": "1.0.1"
     },
@@ -1853,7 +1770,7 @@
       }
     },
     "micromatch": {
-      "version": "2.3.8"
+      "version": "2.3.10"
     },
     "mime": {
       "version": "1.3.4"
@@ -1865,7 +1782,7 @@
       "version": "2.0.14"
     },
     "minimatch": {
-      "version": "2.0.10"
+      "version": "3.0.2"
     },
     "minimist": {
       "version": "1.2.0"
@@ -2011,9 +1928,6 @@
     },
     "options": {
       "version": "0.0.6"
-    },
-    "optjs": {
-      "version": "3.2.2"
     },
     "orchestrator": {
       "version": "0.3.7"
@@ -2195,19 +2109,6 @@
     "proper-lockfile": {
       "version": "1.1.2"
     },
-    "proto2ts": {
-      "version": "1.0.0",
-      "from": "sintef-9012/Proto2TypeScript",
-      "resolved": "git://github.com/sintef-9012/Proto2TypeScript.git#cac85819caf88028fe85fad5748c12e8743ac173"
-    },
-    "protobufjs": {
-      "version": "5.0.1",
-      "dependencies": {
-        "glob": {
-          "version": "5.0.15"
-        }
-      }
-    },
     "qs": {
       "version": "2.3.3"
     },
@@ -2253,6 +2154,9 @@
       "dependencies": {
         "isarray": {
           "version": "1.0.0"
+        },
+        "minimatch": {
+          "version": "2.0.10"
         },
         "readable-stream": {
           "version": "2.1.4"
@@ -2363,9 +2267,6 @@
     "resolve": {
       "version": "1.1.7"
     },
-    "resolve-dir": {
-      "version": "0.1.0"
-    },
     "resolve-from": {
       "version": "1.0.1"
     },
@@ -2383,9 +2284,6 @@
       "dependencies": {
         "glob": {
           "version": "7.0.5"
-        },
-        "minimatch": {
-          "version": "3.0.2"
         }
       }
     },
@@ -2571,7 +2469,7 @@
       "version": "2.0.1"
     },
     "stylint": {
-      "version": "1.5.4",
+      "version": "1.5.5",
       "dependencies": {
         "async": {
           "version": "1.5.2"
@@ -2602,9 +2500,6 @@
         "glob": {
           "version": "7.0.5"
         },
-        "minimatch": {
-          "version": "3.0.2"
-        },
         "source-map": {
           "version": "0.1.43"
         }
@@ -2627,9 +2522,6 @@
         },
         "glob": {
           "version": "7.0.5"
-        },
-        "minimatch": {
-          "version": "3.0.2"
         }
       }
     },
@@ -2701,12 +2593,7 @@
       "version": "2.2.2"
     },
     "traceur": {
-      "version": "0.0.105",
-      "dependencies": {
-        "glob": {
-          "version": "5.0.15"
-        }
-      }
+      "version": "0.0.105"
     },
     "trim-newlines": {
       "version": "1.0.0"
@@ -2720,21 +2607,8 @@
         "diff": {
           "version": "2.2.3"
         },
-        "findup-sync": {
-          "version": "0.3.0",
-          "dependencies": {
-            "glob": {
-              "version": "5.0.15"
-            }
-          }
-        },
         "glob": {
-          "version": "7.0.5",
-          "dependencies": {
-            "minimatch": {
-              "version": "3.0.2"
-            }
-          }
+          "version": "7.0.5"
         }
       }
     },

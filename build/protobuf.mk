@@ -48,15 +48,15 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACK
 GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api
 
 GW_SERVER_PROTOS := $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto
-GW_SERVER_SOURCES := $(GW_SERVER_PROTOS:%.proto=%.pb.gw.go)
-
 GW_TS_PROTOS := $(REPO_ROOT)/ts/tspb/timeseries.proto
-GW_TS_SOURCES := $(GW_TS_PROTOS:%.proto=%.pb.gw.go)
 
-GW_SOURCES := $(GW_SERVER_SOURCES) $(GW_TS_SOURCES)
+GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
+GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
+
+UI_SOURCES := $(REPO_ROOT)/ui/app/js/protos.js $(REPO_ROOT)/ui/generated/protos.json $(REPO_ROOT)/ui/generated/protos.d.ts
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
@@ -67,7 +67,7 @@ ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
 ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 
 .PHONY: protos
-protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(GW_SOURCES)
+protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(GW_SOURCES)
 
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
@@ -86,6 +86,26 @@ $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PRO
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
+
+$(REPO_ROOT)/build/npm.installed: $(REPO_ROOT)/build/package.json
+	rm -rf $(REPO_ROOT)/build/node_modules
+	cd $(REPO_ROOT)/build && npm install --no-progress
+	touch $@
+
+PBJS_ARGS = --path $(ORG_ROOT) $(GW_PROTOS)
+
+$(REPO_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GW_PROTOS)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(REPO_ROOT)/build/node_modules/.bin/pbjs -t commonjs $(PBJS_ARGS) >> $@
+
+$(REPO_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/npm.installed $(GW_PROTOS)
+	$(REPO_ROOT)/build/node_modules/.bin/pbjs $(PBJS_ARGS) > $@
+
+$(REPO_ROOT)/ui/generated/protos.d.ts: $(REPO_ROOT)/ui/generated/protos.json
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(REPO_ROOT)/build/node_modules/.bin/proto2ts --file $(REPO_ROOT)/ui/generated/protos.json >> $@
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)

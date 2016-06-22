@@ -1,0 +1,6 @@
+{
+  "devDependencies": {
+    "proto2ts": "github:sintef-9012/Proto2TypeScript",
+    "protobufjs": "^5.0.1"
+  }
+}
