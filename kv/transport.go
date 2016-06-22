@@ -19,6 +19,7 @@ package kv
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"golang.org/x/net/context"
@@ -63,6 +64,7 @@ type batchClient struct {
 	conn       *grpc.ClientConn
 	client     roachpb.InternalClient
 	args       roachpb.BatchRequest
+	healthy    bool
 }
 
 // BatchCall contains a response and an RPC error (note that the
@@ -121,19 +123,18 @@ func grpcTransportFactory(
 		}
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
+		remoteAddr := replica.NodeDesc.Address.String()
 		clients = append(clients, batchClient{
-			remoteAddr: replica.NodeDesc.Address.String(),
+			remoteAddr: remoteAddr,
 			conn:       conn,
 			client:     roachpb.NewInternalClient(conn),
 			args:       argsCopy,
+			healthy:    rpcContext.IsConnHealthy(remoteAddr),
 		})
 	}
 
 	// Put known-unhealthy clients last.
-	_, err := splitHealthy(clients)
-	if err != nil {
-		return nil, err
-	}
+	splitHealthy(clients)
 
 	return &grpcTransport{
 		opts:           opts,
@@ -205,21 +206,23 @@ func (*grpcTransport) Close() {
 // be rearranged first in the slice, and unhealthy clients will be rearranged
 // last. Within these two groups, the rearrangement will be stable. The function
 // will then return the number of healthy clients.
-func splitHealthy(clients []batchClient) (int, error) {
+func splitHealthy(clients []batchClient) int {
 	var nHealthy int
-	for i, client := range clients {
-		clientState, err := client.conn.State()
-		if err != nil {
-			// This should not currently happen with the default grpc.Picker.
-			return 0, err
-		}
-		if clientState == grpc.Ready {
-			clients[i], clients[nHealthy] = clients[nHealthy], clients[i]
+	sort.Stable(byHealth(clients))
+	for _, client := range clients {
+		if client.healthy {
 			nHealthy++
 		}
 	}
-	return nHealthy, nil
+	return nHealthy
 }
+
+// byHealth sorts a slice of batchClients by their health with healthy first.
+type byHealth []batchClient
+
+func (h byHealth) Len() int           { return len(h) }
+func (h byHealth) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
 
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender

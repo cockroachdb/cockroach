@@ -84,6 +84,70 @@ func TestHeartbeatCB(t *testing.T) {
 	<-ch
 }
 
+// TestHeartbeatHealth verifies that the health status changes after heartbeats
+// succeed or fail.
+func TestHeartbeatHealth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+
+	serverCtx := newNodeTestContext(clock, stopper)
+	s, ln := newTestServer(t, serverCtx, true)
+	remoteAddr := ln.Addr().String()
+
+	heartbeat := &ManualHeartbeatService{
+		ready:              make(chan struct{}),
+		stopper:            stopper,
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+	}
+	RegisterHeartbeatServer(s, heartbeat)
+
+	clientCtx := newNodeTestContext(clock, stopper)
+	// Make the intervals and timeouts shorter to speed up the tests.
+	clientCtx.HeartbeatInterval = 10 * time.Millisecond
+	clientCtx.HeartbeatTimeout = 20 * time.Millisecond
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should be healthy after the first successful heartbeat.
+	heartbeat.ready <- struct{}{}
+	util.SucceedsSoon(t, func() error {
+		if !clientCtx.IsConnHealthy(remoteAddr) {
+			return util.Errorf("expected %s to be healthy", remoteAddr)
+		}
+		return nil
+	})
+
+	// Should no longer be healthy after later heartbeats fail.
+	util.SucceedsSoon(t, func() error {
+		if clientCtx.IsConnHealthy(remoteAddr) {
+			return util.Errorf("expected %s to be unhealthy", remoteAddr)
+		}
+		return nil
+	})
+	// Complete the heartbeat that timed out on the server side.
+	heartbeat.ready <- struct{}{}
+
+	// Should return to healthy after another successful heartbeat.
+	heartbeat.ready <- struct{}{}
+	util.SucceedsSoon(t, func() error {
+		if !clientCtx.IsConnHealthy(remoteAddr) {
+			return util.Errorf("expected %s to be healthy", remoteAddr)
+		}
+		return nil
+	})
+
+	if clientCtx.IsConnHealthy("non-existent connection") {
+		t.Errorf("non-existent connection is reported as healthy")
+	}
+}
+
 func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
