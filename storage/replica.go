@@ -1430,14 +1430,19 @@ func (r *Replica) handleRaftReady() error {
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
+
+			var commandID string
+			var command roachpb.RaftCommand
+
 			if len(e.Data) == 0 {
 				shouldReproposeCmds = true
-				continue
-			}
-			commandID, encodedCommand := DecodeRaftCommand(e.Data)
-			var command roachpb.RaftCommand
-			if err := command.Unmarshal(encodedCommand); err != nil {
-				return err
+				commandID = "" // special-cased value, command isn't used
+			} else {
+				var encodedCommand []byte
+				commandID, encodedCommand = DecodeRaftCommand(e.Data)
+				if err := command.Unmarshal(encodedCommand); err != nil {
+					return err
+				}
 			}
 
 			// Discard errors from processRaftCommand. The error has been sent
@@ -1468,6 +1473,8 @@ func (r *Replica) handleRaftReady() error {
 			}); err != nil {
 				return err
 			}
+		default:
+			log.Fatalf("unexpected Raft entry: %v", e)
 		}
 
 	}
@@ -1639,6 +1646,9 @@ func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
+// As a special case, the zero idKey signifies an empty Raft command,
+// which will apply as a no-op (without accessing raftCmd, via an error),
+// updating only the applied index.
 func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, raftCmd roachpb.RaftCommand) *roachpb.Error {
 	if index == 0 {
 		log.Fatalc(r.context(context.TODO()), "processRaftCommand requires a non-zero index")
@@ -1680,7 +1690,14 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 
-	if isLeaseError() {
+	if idKey == "" {
+		// This is an empty Raft command (which is sent by Raft after elections
+		// to trigger reproposals or during concurrent configuration changes).
+		// Nothing to do here except making sure that the corresponding batch
+		// (which is bogus) doesn't get executed (for it is empty and so
+		// properties like key range are undefined).
+		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
+	} else if isLeaseError() {
 		if log.V(1) {
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
 				raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd)
@@ -1802,8 +1819,8 @@ func (r *Replica) applyRaftCommand(
 	}
 	r.mu.Unlock()
 
-	if oldIndex >= index {
-		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index)))
+	if index != oldIndex+1 {
+		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
