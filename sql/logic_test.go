@@ -51,10 +51,18 @@ import (
 )
 
 var (
-	resultsRE     = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	errorRE       = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	logictestdata = flag.String("d", "testdata/[^.]*", "test data glob")
-	bigtest       = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
+	resultsRE       = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	errorRE         = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	logictestdata   = flag.String("d", "testdata/[^.]*", "test data glob")
+	bigtest         = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
+	stopEarly       = flag.Bool("stop-early", false, "stop the test at the first error encountered")
+	maxErrsPerInput = flag.Int("max-errors", 10, "stop processing each input file after this number of errors (set to 0 for no limit)")
+	softTest        = flag.Bool("soft", false, "tolerate unexpected errors when preparing a query")
+	showSQL         = flag.Bool("show-sql", false, "print the individual SQL strings before processing")
+	flexTypes       = flag.Bool("flex-types", false,
+		"do not fail when a test expects a column of a number type but the query provides another type")
+	fullSummary = flag.Bool("full-summary", false,
+		"do not shorten the error or SQL strings when printing the summary for -soft or -flex-types.")
 )
 
 const logicMaxOffset = 50 * time.Millisecond
@@ -168,9 +176,67 @@ type logicTest struct {
 	user            string
 	db              *gosql.DB
 	progress        int
+	failures        int
+	unsupported     int
 	lastProgress    time.Time
 	traceFile       *os.File
 	cleanupRootUser func()
+	verbose         bool
+	softSummary     map[string][]string
+}
+
+func shortenString(msg string) string {
+	if *fullSummary {
+		return msg
+	}
+
+	shortened := false
+
+	nlPos := strings.IndexRune(msg, '\n')
+	if nlPos >= 0 {
+		shortened = true
+		msg = msg[:nlPos]
+	}
+
+	if len(msg) > 80 {
+		shortened = true
+		msg = msg[:80]
+	}
+
+	if shortened {
+		msg = msg + "..."
+	}
+
+	return msg
+}
+
+func (t *logicTest) SoftError(err error, pos string, sql string) {
+	errmsg := shortenString(fmt.Sprintf("%s", err))
+	report := fmt.Sprintf("%s; -- %s", shortenString(sql), pos)
+	t.softSummary[errmsg] = append(t.softSummary[errmsg], report)
+	t.unsupported++
+}
+
+func (t *logicTest) Errorf(format string, args ...interface{}) {
+	if *showSQL {
+		fmt.Println("\t-- FAIL")
+	}
+	t.T.Errorf(format, args...)
+	if *stopEarly {
+		t.FailNow()
+	}
+	t.failures++
+}
+func (t *logicTest) Fatalf(format string, args ...interface{}) {
+	if *showSQL {
+		fmt.Println()
+	}
+	t.T.Fatalf(format, args...)
+}
+func (t *logicTest) FinishOne(msg string) {
+	if *showSQL {
+		fmt.Printf("\t-- %s;\n", msg)
+	}
 }
 
 func (t *logicTest) close() {
@@ -236,6 +302,11 @@ func (t *logicTest) setUser(user string) func() {
 	t.clients[user] = db
 	t.db = db
 	t.user = user
+
+	if t.verbose {
+		fmt.Printf("--- new user: %s\n", user)
+	}
+
 	return cleanupFunc
 }
 
@@ -281,13 +352,44 @@ func (t *logicTest) processTestFile(path string) error {
 	defer file.Close()
 	defer t.traceStop()
 
+	if t.verbose {
+		fmt.Println("--- queries start here")
+		defer func() {
+			unsupportedMsg := ""
+			if t.unsupported > 0 {
+				unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", t.unsupported)
+			}
+			fmt.Printf("--- done: %s: %d tests, %d failures%s\n", path, t.progress, t.failures, unsupportedMsg)
+		}()
+	}
+
+	if *softTest || *flexTypes {
+		defer func() {
+			if t.unsupported > 0 {
+				fmt.Println("--- summary of ignored errors:")
+				for errmsg, sql := range t.softSummary {
+					fmt.Println(errmsg)
+					for _, q := range sql {
+						fmt.Println("   ", q)
+					}
+				}
+			}
+		}()
+	}
+
 	t.lastProgress = timeutil.Now()
 
 	execKnobs := t.srv.Ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 
+	lastFailures := t.failures
+
 	repeat := 1
 	s := newLineScanner(file)
 	for s.Scan() {
+		if *maxErrsPerInput > 0 && t.failures > lastFailures+*maxErrsPerInput {
+			return fmt.Errorf("%s: too many errors; skipping to next file", path)
+		}
+
 		fields := strings.Fields(s.Text())
 		if len(fields) == 0 {
 			continue
@@ -330,7 +432,9 @@ func (t *logicTest) processTestFile(path string) error {
 			stmt.sql = strings.TrimSpace(buf.String())
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
-					t.execStatement(stmt)
+					if ok := t.execStatement(stmt); !ok {
+						return fmt.Errorf("%s: error in statement, skipping to next file", stmt.pos)
+					}
 				}
 			} else {
 				s.skip = false
@@ -351,7 +455,7 @@ func (t *logicTest) processTestFile(path string) error {
 				// The type string specifies the number of columns and their types:
 				//   - T for text
 				//   - I for integer
-				//   - R for floating point
+				//   - R for floating point or decimal
 				//   - B for boolean
 				// The sort mode is one of:
 				//   - "nosort" (default)
@@ -524,67 +628,107 @@ func (t *logicTest) processTestFile(path string) error {
 		return err
 	}
 
-	fmt.Printf("%s: %d\n", path, t.progress)
 	return nil
 }
 
 func (t *logicTest) verifyError(
-	pos string, expectErr string, expectErrCode string, err error) {
+	sql string, pos string, expectErr string, expectErrCode string, err error) bool {
 	if expectErr == "" && expectErrCode == "" && err != nil {
-		t.Fatalf("%s: expected success, but found\n%s", pos, err)
+		if *softTest && sql != "" {
+			// If no error was expected, but we encountered one,
+			// and we are running in "soft mode", then try to prepare
+			// the query. If prepare fails, this means we (probably)
+			// do not support the input syntax, and the soft mode
+			// instructs us to ignore the error.
+			stmt, err := t.db.Prepare(sql)
+			if err != nil {
+				if *showSQL {
+					fmt.Printf("\t-- fails prepare: %s", err)
+				}
+				t.SoftError(err, pos, sql)
+				return true
+			}
+			if err := stmt.Close(); err != nil {
+				t.Errorf("%s: error when closing prepared statement: %s", pos, err)
+			}
+		}
+		t.Errorf("%s: expected success, but found\n%s", pos, err)
+		return false
 	}
 	if expectErr != "" && !testutils.IsError(err, expectErr) {
 		if err != nil {
-			t.Fatalf("%s: expected %q, but found\n%s", pos, expectErr, err)
+			t.Errorf("%s: expected %q, but found\n%s", pos, expectErr, err)
 		} else {
-			t.Fatalf("%s: expected %q, but found success", pos, expectErr)
+			t.Errorf("%s: expected %q, but found success", pos, expectErr)
 		}
+		return false
 	}
 	if expectErrCode != "" {
 		if err != nil {
 			pqErr, ok := err.(*pq.Error)
 			if !ok {
-				t.Fatalf("%s: expected error code %q, but the error we found is not "+
+				t.Errorf("%s: expected error code %q, but the error we found is not "+
 					"a libpq error: %s", pos, expectErrCode, err)
+				return false
 			}
 			if pqErr.Code != pq.ErrorCode(expectErrCode) {
-				t.Fatalf("%s: expected error code %q, but found code %q (%s)",
+				t.Errorf("%s: expected error code %q, but found code %q (%s)",
 					pos, expectErrCode, pqErr.Code, pqErr.Code.Name())
+				return false
 			}
 		} else {
-			t.Fatalf("%s: expected error code %q, but found success",
+			t.Errorf("%s: expected error code %q, but found success",
 				pos, expectErrCode)
+			return false
 		}
 	}
+	return true
 }
 
-func (t *logicTest) execStatement(stmt logicStatement) {
-	if testing.Verbose() || log.V(1) {
-		fmt.Printf("%s %s: %s\n", stmt.pos, t.user, stmt.sql)
+func (t *logicTest) execStatement(stmt logicStatement) bool {
+	if *showSQL {
+		fmt.Printf("%s;", stmt.sql)
 	}
 	_, err := t.db.Exec(stmt.sql)
-	t.verifyError(stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
+
+	// General policy for failing vs. continuing:
+	// - we want to do as much work as possible;
+	// - however, a statement that fails when it should succeed or
+	//   a statement that succeeds when it should fail may have left
+	//   the database in an improper state, so we stop there;
+	// - error on expected error is worth going further, even
+	//   if the obtained error does not match the expected error.
+	if ok := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err); !ok {
+		return false
+	}
+	t.FinishOne("OK")
+	return true
 }
 
 func (t *logicTest) execQuery(query logicQuery) {
-	if testing.Verbose() || log.V(1) {
-		fmt.Printf("%s %s: %s\n", query.pos, t.user, query.sql)
+	if *showSQL {
+		fmt.Printf("%s;", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
-	t.verifyError(query.pos, query.expectErr, query.expectErrCode, err)
+	if ok := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); !ok {
+		return
+	}
 	if err != nil {
 		// An error occurred, but it was expected.
+		t.FinishOne("XFAIL")
 		return
 	}
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return
 	}
 	if len(query.colTypes) != len(cols) {
-		t.Fatalf("%s: expected %d columns based on type-string, but found %d",
+		t.Errorf("%s: expected %d columns based on type-string, but found %d",
 			query.pos, len(query.colTypes), len(cols))
+		return
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
@@ -605,7 +749,8 @@ func (t *logicTest) execQuery(query logicQuery) {
 	for rows.Next() {
 		var resultLine []string
 		if err := rows.Scan(vals...); err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return
 		}
 		for i, v := range vals {
 			if val := *v.(*interface{}); val != nil {
@@ -614,22 +759,35 @@ func (t *logicTest) execQuery(query logicQuery) {
 				switch colT {
 				case 'T':
 					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-						t.Fatalf("%s: expected text value for column %d, but found %T: %#v", query.pos, i, val, val)
+						t.Errorf("%s: expected text value for column %d, but found %T: %#v", query.pos, i, val, val)
+						return
 					}
 				case 'I':
 					if valT != reflect.Int64 {
-						t.Fatalf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
+						if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
+							t.SoftError(fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql)
+						} else {
+							t.Errorf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
+						}
+						return
 					}
 				case 'R':
 					if valT != reflect.Float64 && valT != reflect.Slice {
-						t.Fatalf("%s: expected float value for column %d, but found %T: %#v", query.pos, i, val, val)
+						if *flexTypes && (valT == reflect.Int64) {
+							t.SoftError(fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql)
+						} else {
+							t.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v", query.pos, i, val, val)
+						}
+						return
 					}
 				case 'B':
 					if valT != reflect.Bool {
-						t.Fatalf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
+						t.Errorf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
+						return
 					}
 				default:
-					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
+					t.Errorf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
+					return
 				}
 
 				if byteArray, ok := val.([]byte); ok {
@@ -657,7 +815,8 @@ func (t *logicTest) execQuery(query logicQuery) {
 		resultLines = append(resultLines, resultLine)
 	}
 	if err := rows.Err(); err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return
 	}
 
 	if query.sorter != nil {
@@ -667,19 +826,22 @@ func (t *logicTest) execQuery(query logicQuery) {
 	if query.expectedHash != "" {
 		n := len(results)
 		if query.expectedValues != n {
-			t.Fatalf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
+			t.Errorf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
+			return
 		}
 		// Hash the values using MD5. This hashing precisely matches the hashing in
 		// sqllogictest.c.
 		h := md5.New()
 		for _, r := range results {
 			if _, err := h.Write(append([]byte(r), byte('\n'))); err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				return
 			}
 		}
 		hash := fmt.Sprintf("%x", h.Sum(nil))
 		if query.expectedHash != hash {
-			t.Fatalf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
+			t.Errorf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
+			return
 		}
 	} else if !reflect.DeepEqual(query.expectedResults, results) {
 		var buf bytes.Buffer
@@ -698,8 +860,11 @@ func (t *logicTest) execQuery(query logicQuery) {
 			fmt.Fprint(tw, "\n")
 		}
 		_ = tw.Flush()
-		t.Fatal(buf.String())
+		t.Error(buf.String())
+		return
 	}
+
+	t.FinishOne("OK")
 }
 
 func (t *logicTest) success(file string) {
@@ -707,7 +872,7 @@ func (t *logicTest) success(file string) {
 	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
 		t.lastProgress = now
-		fmt.Printf("%s: %d\n", file, t.progress)
+		fmt.Fprintf(os.Stderr, "--- progress: %s: %d statements/queries\n", file, t.progress)
 	}
 }
 
@@ -794,13 +959,35 @@ func TestLogic(t *testing.T) {
 	}
 
 	total := 0
+	totalFail := 0
+	totalUnsupported := 0
+	verbose := testing.Verbose() || log.V(1)
+	lastProgress := timeutil.Now()
 	for _, p := range paths {
-		if testing.Verbose() || log.V(1) {
-			fmt.Printf("Running logic test on file: %s\n", p)
+		if verbose {
+			fmt.Printf("--- input: %s\n", p)
 		}
-		l := logicTest{T: t}
+		l := logicTest{
+			T:           t,
+			verbose:     verbose,
+			softSummary: make(map[string][]string),
+		}
 		l.run(p)
 		total += l.progress
+		totalFail += l.failures
+		totalUnsupported += l.unsupported
+
+		now := timeutil.Now()
+		if now.Sub(lastProgress) >= 2*time.Second {
+			lastProgress = now
+			fmt.Fprintf(os.Stderr, "--- total progress: %d statements/queries\n", total)
+		}
 	}
-	fmt.Printf("%d tests passed\n", total)
+
+	unsupportedMsg := ""
+	if totalUnsupported > 0 {
+		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", totalUnsupported)
+	}
+
+	fmt.Printf("--- total: %d tests, %d failures%s\n", total, totalFail, unsupportedMsg)
 }
