@@ -418,6 +418,20 @@ func (n *createTableNode) resolveColFK(
 	return ret, nil
 }
 
+func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
+	if err := td.SetUpVersion(); err != nil {
+		return err
+	}
+	if err := td.Validate(); err != nil {
+		return err
+	}
+	if err := p.writeTableDesc(td); err != nil {
+		return err
+	}
+	p.notifySchemaChange(td.ID, sqlbase.InvalidMutationID)
+	return nil
+}
+
 func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets []fkTargetUpdate) error {
 	for _, t := range fkTargets {
 		targetIdx, err := t.target.FindIndexByID(t.targetIdx)
@@ -428,31 +442,17 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 			&sqlbase.TableAndIndexID{Table: desc.ID, Index: t.srcIdx})
 
 		// TODO(dt): Only save each referenced table once.
-		if err := t.target.SetUpVersion(); err != nil {
+		if err := n.p.saveNonmutationAndNotify(t.target); err != nil {
 			return err
 		}
-		if err := t.target.Validate(); err != nil {
-			return err
-		}
-		if err := n.p.writeTableDesc(t.target); err != nil {
-			return err
-		}
-		n.p.notifySchemaChange(t.target.ID, sqlbase.InvalidMutationID)
 	}
 
 	if desc.State == sqlbase.TableDescriptor_ADD {
 		desc.State = sqlbase.TableDescriptor_PUBLIC
 
-		if err := desc.SetUpVersion(); err != nil {
+		if err := n.p.saveNonmutationAndNotify(desc); err != nil {
 			return err
 		}
-		if err := desc.Validate(); err != nil {
-			return err
-		}
-		if err := n.p.writeTableDesc(desc); err != nil {
-			return err
-		}
-		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
 	}
 	return nil
 }
