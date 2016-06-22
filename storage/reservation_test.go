@@ -278,6 +278,7 @@ func expireNextReservation(t *testing.T, mc *hlc.ManualClock, b *bookie, expireC
 // correctly expiring any unfilled reservations in a number of different cases.
 func TestReservationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#7373")
 	// This test loads up 7 reservations at once, so set the queue higher to
 	// accommodate them.
 	stopper, mc, b := createTestBookie(time.Microsecond, 20, defaultMaxReservedBytes)
