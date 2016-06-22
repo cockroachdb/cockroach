@@ -191,3 +191,21 @@ DROP TABLE orders
 
 statement ok
 DROP TABLE products
+
+statement ok
+CREATE TABLE employees (id INT PRIMARY KEY, manager INT REFERENCES employees, INDEX (manager));
+
+statement ok
+INSERT INTO employees VALUES (1, NULL)
+
+statement ok
+INSERT INTO employees VALUES (2, 1), (3, 1)
+
+statement ok
+INSERT INTO employees VALUES (4, 2), (5, 3);
+
+statement error foreign key violation
+DELETE FROM employees WHERE id = 2
+
+statement error foreign key violation
+DELETE FROM employees WHERE id > 1
