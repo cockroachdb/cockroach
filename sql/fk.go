@@ -101,6 +101,15 @@ func (fks fkInsertHelper) checkAll(row parser.DTuple) error {
 
 func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
 	for _, fk := range fks[idx] {
+		nulls := true
+		for i := range fk.searchIdx.ColumnIDs {
+			found, ok := fk.ids[fk.searchIdx.ColumnIDs[i]]
+			nulls = nulls && (!ok || row[found] == parser.DNull)
+		}
+		if nulls {
+			continue
+		}
+
 		found, err := fk.check(row)
 		if err != nil {
 			return err
@@ -229,7 +238,9 @@ func makeBaseFKHelper(
 
 	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
 	for i := range writeIdx.ColumnIDs {
-		b.ids[searchIdx.ColumnIDs[i]] = colMap[writeIdx.ColumnIDs[i]]
+		if found, ok := colMap[writeIdx.ColumnIDs[i]]; ok {
+			b.ids[searchIdx.ColumnIDs[i]] = found
+		}
 	}
 	return b, nil
 }
