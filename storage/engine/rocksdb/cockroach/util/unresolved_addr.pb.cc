@@ -33,7 +33,6 @@ void protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #endif
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   UnresolvedAddr::default_instance_ = new UnresolvedAddr();
   UnresolvedAddr::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2futil_2funresolved_5faddr_2eproto);

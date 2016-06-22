@@ -34,7 +34,6 @@ void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #endif
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   InternalTimeSeriesData::default_instance_ = new InternalTimeSeriesData();
   InternalTimeSeriesSample::default_instance_ = new InternalTimeSeriesSample();
   InternalTimeSeriesData::default_instance_->InitAsDefaultInstance();

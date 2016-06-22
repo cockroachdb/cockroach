@@ -59,8 +59,8 @@ GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
-CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
-CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
+CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
+CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
 ENGINE_CPP_PROTOS := $(filter $(NATIVE_ROOT)%,$(GO_PROTOS))
 ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
@@ -87,10 +87,10 @@ $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PRO
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
 
-$(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
+$(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(GOGOPROTO_PROTO)
+	sed -i~ -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
 	@# For c++, protoc generates a directory structure mirroring the package
 	@# structure (and these directories must be in the include path), but cgo can
 	@# only compile a single directory so we symlink the generated pb.cc files
@@ -102,3 +102,4 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 
 $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(ORG_ROOT) $(ENGINE_CPP_PROTOS)
+	sed -i~ -E '/gogoproto/d' $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)

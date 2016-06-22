@@ -27,7 +27,6 @@
 #include <google/protobuf/extension_set.h>
 #include <google/protobuf/generated_enum_util.h>
 #include "cockroach/util/hlc/timestamp.pb.h"
-#include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
 namespace cockroach {

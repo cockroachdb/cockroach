@@ -38,7 +38,6 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
 
 #endif
   ::cockroach::util::hlc::protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto();
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   TxnMeta::default_instance_ = new TxnMeta();
   MVCCMetadata::default_instance_ = new MVCCMetadata();
   MVCCStats::default_instance_ = new MVCCStats();
