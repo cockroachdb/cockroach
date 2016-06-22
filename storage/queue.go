@@ -222,13 +222,6 @@ func (bq *baseQueue) Length() int {
 	return bq.mu.priorityQ.Len()
 }
 
-// PurgatoryLength returns the current size of purgatory.
-func (bq *baseQueue) PurgatoryLength() int {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-	return len(bq.mu.purgatory)
-}
-
 // SetDisabled turns queue processing off or on as directed.
 func (bq *baseQueue) SetDisabled(disabled bool) {
 	if disabled {

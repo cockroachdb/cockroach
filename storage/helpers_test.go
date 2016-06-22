@@ -110,18 +110,6 @@ func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.Replica
 	return s.logChange(txn, changeType, replica, desc)
 }
 
-// ReplicateQueuePurgatoryLength returns the number of replicas in replicate
-// queue purgatory.
-func (s *Store) ReplicateQueuePurgatoryLength() int {
-	return s.replicateQueue.PurgatoryLength()
-}
-
-// SetReplicaScannerDisabled turns replica scanning off or on as directed. Note
-// that while disabled, removals are still processed.
-func (s *Store) SetReplicaScannerDisabled(disabled bool) {
-	s.scanner.SetDisabled(disabled)
-}
-
 // GetLastIndex is the same function as LastIndex but it does not require
 // that the replica lock is held.
 func (r *Replica) GetLastIndex() (uint64, error) {
