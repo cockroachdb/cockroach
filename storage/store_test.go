@@ -285,6 +285,10 @@ func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Re
 		}},
 		NextReplicaID: 2,
 	}
+	if _, err := writeInitialState(s.Engine(), enginepb.MVCCStats{}, *desc); err != nil {
+		log.Fatal(err)
+	}
+
 	r, err := NewReplica(desc, s, 0)
 	if err != nil {
 		log.Fatal(err)

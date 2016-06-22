@@ -54,14 +54,20 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState implements the raft.Storage interface.
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	_, hs, err := loadHardState(r.store.Engine(), r.RangeID)
+	found, hs, err := loadHardState(r.store.Engine(), r.RangeID)
 	// For uninitialized ranges, membership is unknown at this point.
-	if raft.IsEmptyHardState(hs) || err != nil {
+	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	var cs raftpb.ConfState
 	for _, rep := range r.mu.state.Desc.Replicas {
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
+	}
+
+	if found == (raft.IsEmptyHardState(hs) || len(cs.Nodes) == 0) {
+		return raftpb.HardState{}, raftpb.ConfState{}, util.Errorf(
+			"inconsistent HardState: %v (found=%t) for %v", hs, found,
+			r.mu.state.Desc.Replicas)
 	}
 
 	return hs, cs, nil
