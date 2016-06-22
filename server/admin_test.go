@@ -34,9 +34,12 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -460,6 +463,82 @@ CREATE TABLE test.tbl (
 			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
 		}
 	}
+}
+
+func TestAdminAPITableDetailsZone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	// Create database and table.
+	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, s.sqlExecutor, nil)
+	setupQueries := []string{
+		"CREATE DATABASE test",
+		"CREATE TABLE test.tbl (val STRING)",
+	}
+	for _, q := range setupQueries {
+		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		if res.ResultList[0].Err != nil {
+			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
+		}
+	}
+
+	// Function to verify the zone for test.tbl as returned by the Admin API.
+	verifyZone := func(expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel) {
+		var resp serverpb.TableDetailsResponse
+		if err := apiGet(s, "databases/test/tables/tbl", &resp); err != nil {
+			t.Fatal(err)
+		}
+		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
+			t.Errorf("actual zone config %v did not match expected value %v", a, e)
+		}
+		if a, e := resp.ZoneConfigLevel, expectedLevel; a != e {
+			t.Errorf("actual ZoneConfigurationLevel %s did not match expected value %s", a, e)
+		}
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
+	// Function to store a zone config for a given object ID.
+	setZone := func(zoneCfg config.ZoneConfig, id sqlbase.ID) {
+		zoneBytes, err := zoneCfg.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		const query = `INSERT INTO system.zones VALUES($1, $2)`
+		params := parser.NewPlaceholderInfo()
+		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
+		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
+		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, query, params)
+		if res.ResultList[0].Err != nil {
+			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
+		}
+	}
+
+	// Verify zone matches cluster default.
+	verifyZone(config.DefaultZoneConfig(), serverpb.ZoneConfigurationLevel_CLUSTER)
+
+	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
+	// the database, and the table (in that order).
+	idPath, err := s.admin.queryDescriptorIDPath(context.Background(), session, []string{"test", "tbl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Apply zone configuration to database and check again.
+	dbZone := config.ZoneConfig{
+		RangeMinBytes: 456,
+	}
+	setZone(dbZone, idPath[1])
+	verifyZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
+
+	// Apply zone configuration to table and check again.
+	tblZone := config.ZoneConfig{
+		RangeMinBytes: 789,
+	}
+	setZone(tblZone, idPath[2])
+	verifyZone(tblZone, serverpb.ZoneConfigurationLevel_TABLE)
 }
 
 func TestAdminAPIUsers(t *testing.T) {

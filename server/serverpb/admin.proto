@@ -18,8 +18,23 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
+import "cockroach/config/config.proto";
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
+
+// ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
+// the object level at which the configuration is defined. This is needed
+// because objects without a specifically indicated Zone Configuration will 
+// inherit the configuration of their "parent".
+enum ZoneConfigurationLevel {
+  UNKNOWN = 0;
+  // CLUSTER indicates that this object uses the cluster default Zone Configuration.
+  CLUSTER = 1;
+  // DATABASE indicates that this object uses a database-level Zone Configuration.
+  DATABASE = 2;
+  // TABLE indicates that this object uses a table-level Zone Configuration.
+  TABLE = 3;
+}
 
 // DatabasesRequest requests a list of databases.
 message DatabasesRequest {
@@ -122,6 +137,10 @@ message TableDetailsResponse {
   // it is a SQL statement that would re-create the table's current schema if
   // executed.
   string create_table_statement = 5;
+  // The zone configuration in effect for this table.
+  cockroach.config.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
+  // The level at which this object's zone configuration is set.
+  ZoneConfigurationLevel zone_config_level = 7;
 }
 
 // UsersRequest requests a list of users.
