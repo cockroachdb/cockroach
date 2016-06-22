@@ -22,7 +22,7 @@ github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/chzyer/readline b411b0f4b22d724d98f4288aebd10cf2ddb42207
 github.com/client9/misspell 6d3ee069a9d5578e7fd6fbf20bf2e62d58b9eacc
-github.com/cockroachdb/c-jemalloc 6362977a9a1989062dccfa5fe314d6c864e7590c
+github.com/cockroachdb/c-jemalloc 9716a86928311cee3633f1773035ce9f0cf9f9e9
 github.com/cockroachdb/c-protobuf 3bef67ea4cc857224fced66f98578362bc892f37
 github.com/cockroachdb/c-rocksdb 9dd1f18d3ab20667957cf240724a5d12e660ad42
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
