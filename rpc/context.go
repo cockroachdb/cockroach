@@ -81,7 +81,8 @@ type Context struct {
 
 	conns struct {
 		sync.Mutex
-		cache map[string]*grpc.ClientConn
+		cache   map[string]*grpc.ClientConn
+		healthy map[string]bool
 	}
 }
 
@@ -99,6 +100,8 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 	ctx.RemoteClocks = newRemoteClockMonitor(clock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
+
+	ctx.conns.healthy = make(map[string]bool)
 
 	stopper.RunWorker(func() {
 		<-stopper.ShouldDrain()
@@ -156,8 +159,8 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	dialOpts := make([]grpc.DialOption, 0, 1+len(opts))
-	dialOpts = append(dialOpts, dialOpt)
+	dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
+	dialOpts = append(dialOpts, dialOpt, grpc.WithTimeout(base.NetworkTimeout))
 	dialOpts = append(dialOpts, opts...)
 
 	conn, err := grpc.Dial(target, dialOpts...)
@@ -183,6 +186,26 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	return conn, err
 }
 
+// setConnHealthy sets the health status of the connection.
+func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
+	ctx.conns.Lock()
+	defer ctx.conns.Unlock()
+	if healthy {
+		ctx.conns.healthy[remoteAddr] = true
+	} else {
+		delete(ctx.conns.healthy, remoteAddr)
+	}
+}
+
+// IsConnHealthy returns whether the most recent heartbeat succeeded or not.
+// This should not be used as a definite status of a nodes health and just used
+// to prioritized healthy nodes over unhealthy ones.
+func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
+	ctx.conns.Lock()
+	defer ctx.conns.Unlock()
+	return ctx.conns.healthy[remoteAddr]
+}
+
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 	request := PingRequest{Addr: ctx.Addr}
 	heartbeatClient := NewHeartbeatClient(cc)
@@ -201,6 +224,7 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 		sendTime := ctx.localClock.PhysicalTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
 		if err != nil {
+			ctx.setConnHealthy(remoteAddr, false)
 			if grpc.Code(err) == codes.DeadlineExceeded {
 				continue
 			}
@@ -224,6 +248,8 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 		}
 		ctx.RemoteClocks.UpdateOffset(remoteAddr, request.Offset)
+
+		ctx.setConnHealthy(remoteAddr, true)
 
 		if cb := ctx.HeartbeatCB; cb != nil {
 			cb()
