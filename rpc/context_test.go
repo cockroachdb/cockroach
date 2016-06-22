@@ -109,20 +109,41 @@ func TestHeartbeatHealth(t *testing.T) {
 
 	clientCtx := newNodeTestContext(clock, stopper)
 	// Make the intervals and timeouts shorter to speed up the tests.
-	clientCtx.HeartbeatInterval = 10 * time.Millisecond
-	clientCtx.HeartbeatTimeout = 20 * time.Millisecond
+	clientCtx.HeartbeatInterval = 1 * time.Millisecond
+	clientCtx.HeartbeatTimeout = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
 
+	// This code is inherently racy so when we need to verify heartbeats we want
+	// them to always succeed.
+	sendHeartbeats := func() func() {
+		done := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case heartbeat.ready <- struct{}{}:
+				default:
+					time.Sleep(500 * time.Microsecond)
+				}
+			}
+		}()
+		return func() {
+			done <- struct{}{}
+		}
+	}
+
 	// Should be healthy after the first successful heartbeat.
-	heartbeat.ready <- struct{}{}
+	stopHeartbeats := sendHeartbeats()
 	util.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
 			return util.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
 	})
+	stopHeartbeats()
 
 	// Should no longer be healthy after later heartbeats fail.
 	util.SucceedsSoon(t, func() error {
@@ -131,17 +152,16 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 		return nil
 	})
-	// Complete the heartbeat that timed out on the server side.
-	heartbeat.ready <- struct{}{}
 
 	// Should return to healthy after another successful heartbeat.
-	heartbeat.ready <- struct{}{}
+	stopHeartbeats = sendHeartbeats()
 	util.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
 			return util.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
 	})
+	stopHeartbeats()
 
 	if clientCtx.IsConnHealthy("non-existent connection") {
 		t.Errorf("non-existent connection is reported as healthy")
