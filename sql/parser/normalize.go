@@ -23,9 +23,24 @@ type normalizableExpr interface {
 	normalize(*normalizeVisitor) TypedExpr
 }
 
+func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
+	left := expr.TypedLeft()
+	right := expr.TypedRight()
+
+	if left == DNull || right == DNull {
+		return DNull
+	}
+
+	return expr
+}
+
 func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
+
+	if left == DNull && right == DNull {
+		return DNull
+	}
 
 	// Use short-circuit evaluation to simplify AND expressions.
 	if v.isConst(left) {
@@ -70,9 +85,12 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 }
 
 func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
-
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
+		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+			return DNull
+		}
+
 		// We want var nodes (VariableExpr, QualifiedName, etc) to be immediate
 		// children of the comparison expression and not second or third
 		// children. That is, we want trees that look like:
@@ -215,6 +233,10 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 			break
 		}
 	case In, NotIn:
+		if expr.TypedLeft() == DNull {
+			return DNull
+		}
+
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
 		tuple, ok := expr.Right.(*DTuple)
@@ -225,6 +247,10 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 			expr = &exprCopy
 			expr.Right = &tupleCopy
 		}
+	case SimilarTo, NotSimilarTo, Like, NotLike, NE:
+		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+			return DNull
+		}
 	}
 
 	return expr
@@ -233,6 +259,10 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
+
+	if left == DNull && right == DNull {
+		return DNull
+	}
 
 	// Use short-circuit evaluation to simplify OR expressions.
 	if v.isConst(left) {
@@ -281,34 +311,23 @@ func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
 }
 
 func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
+	left, from, to := expr.TypedLeft(), expr.TypedFrom(), expr.TypedTo()
+	if left == DNull || from == DNull || to == DNull {
+		return DNull
+	}
+
 	if expr.Not {
 		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
 		return NewTypedOrExpr(
-			NewTypedComparisonExpr(
-				LT,
-				expr.TypedLeft(),
-				expr.TypedFrom(),
-			),
-			NewTypedComparisonExpr(
-				GT,
-				expr.TypedLeft(),
-				expr.TypedTo(),
-			),
+			NewTypedComparisonExpr(LT, left, from),
+			NewTypedComparisonExpr(GT, left, to),
 		)
 	}
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
 	return NewTypedAndExpr(
-		NewTypedComparisonExpr(
-			GE,
-			expr.TypedLeft(),
-			expr.TypedFrom(),
-		),
-		NewTypedComparisonExpr(
-			LE,
-			expr.TypedLeft(),
-			expr.TypedTo(),
-		),
+		NewTypedComparisonExpr(GE, left, from),
+		NewTypedComparisonExpr(LE, left, to),
 	)
 }
 
