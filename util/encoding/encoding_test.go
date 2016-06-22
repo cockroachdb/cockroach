@@ -26,6 +26,7 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -159,34 +160,34 @@ func testBasicEncodeDecodeUint64(
 	}
 }
 
+var int64TestCases = [...]int64{
+	math.MinInt64, math.MinInt64 + 1,
+	-1<<56 - 1, -1 << 56,
+	-1<<48 - 1, -1 << 48,
+	-1<<40 - 1, -1 << 40,
+	-1<<32 - 1, -1 << 32,
+	-1<<24 - 1, -1 << 24,
+	-1<<16 - 1, -1 << 16,
+	-1<<8 - 1, -1 << 8,
+	-1, 0, 1,
+	1<<8 - 1, 1 << 8,
+	1<<16 - 1, 1 << 16,
+	1<<24 - 1, 1 << 24,
+	1<<32 - 1, 1 << 32,
+	1<<40 - 1, 1 << 40,
+	1<<48 - 1, 1 << 48,
+	1<<56 - 1, 1 << 56,
+	math.MaxInt64 - 1, math.MaxInt64,
+}
+
 func testBasicEncodeDecodeInt64(
 	encFunc func([]byte, int64) []byte,
 	decFunc func([]byte) ([]byte, int64, error),
 	descending, testPeekLen bool,
 	t *testing.T,
 ) {
-	testCases := []int64{
-		math.MinInt64, math.MinInt64 + 1,
-		-1<<56 - 1, -1 << 56,
-		-1<<48 - 1, -1 << 48,
-		-1<<40 - 1, -1 << 40,
-		-1<<32 - 1, -1 << 32,
-		-1<<24 - 1, -1 << 24,
-		-1<<16 - 1, -1 << 16,
-		-1<<8 - 1, -1 << 8,
-		-1, 0, 1,
-		1<<8 - 1, 1 << 8,
-		1<<16 - 1, 1 << 16,
-		1<<24 - 1, 1 << 24,
-		1<<32 - 1, 1 << 32,
-		1<<40 - 1, 1 << 40,
-		1<<48 - 1, 1 << 48,
-		1<<56 - 1, 1 << 56,
-		math.MaxInt64 - 1, math.MaxInt64,
-	}
-
 	var lastEnc []byte
-	for i, v := range testCases {
+	for i, v := range int64TestCases {
 		enc := encFunc(nil, v)
 		if i > 0 {
 			if (descending && bytes.Compare(enc, lastEnc) >= 0) ||
@@ -865,6 +866,33 @@ func TestPeekType(t *testing.T) {
 	}
 }
 
+type randData struct {
+	*rand.Rand
+}
+
+func (rd randData) bool() bool {
+	return rd.Intn(2) == 1
+}
+
+func (rd randData) decimal() *inf.Dec {
+	d := &inf.Dec{}
+	d.SetScale(inf.Scale(rd.Intn(40) - 20))
+	d.SetUnscaled(rd.Int63())
+	return d
+}
+
+func (rd randData) time() time.Time {
+	return time.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
+}
+
+func (rd randData) duration() duration.Duration {
+	return duration.Duration{
+		Months: rd.Int63n(1000),
+		Days:   rd.Int63n(1000),
+		Nanos:  rd.Int63n(1000000),
+	}
+}
+
 func BenchmarkEncodeUint32(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -1171,14 +1199,11 @@ func BenchmarkDecodeUnsafeStringDescending(b *testing.B) {
 
 func BenchmarkEncodeDuration(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
 
 	vals := make([]duration.Duration, 10000)
 	for i := range vals {
-		vals[i] = duration.Duration{
-			Months: rng.Int63n(1000),
-			Days:   rng.Int63n(1000),
-			Nanos:  rng.Int63n(1000000),
-		}
+		vals[i] = rd.duration()
 	}
 
 	buf := make([]byte, 0, 1000)
@@ -1193,12 +1218,12 @@ func BenchmarkEncodeDuration(b *testing.B) {
 
 func BenchmarkDecodeDuration(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
-		d := duration.Duration{Months: rng.Int63n(1000), Days: rng.Int63n(1000), Nanos: rng.Int63n(1000000)}
 		var err error
-		if vals[i], err = EncodeDurationAscending(nil, d); err != nil {
+		if vals[i], err = EncodeDurationAscending(nil, rd.duration()); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -1213,14 +1238,11 @@ func BenchmarkDecodeDuration(b *testing.B) {
 
 func BenchmarkPeekLengthDuration(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
-		d := duration.Duration{
-			Months: rng.Int63n(1000),
-			Days:   rng.Int63n(1000),
-			Nanos:  rng.Int63n(1000000),
-		}
+		d := rd.duration()
 		var err error
 		vals[i], err = EncodeDurationAscending(nil, d)
 		if err != nil {
@@ -1231,6 +1253,128 @@ func BenchmarkPeekLengthDuration(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = PeekLength(vals[i%len(vals)])
+	}
+}
+
+func TestValueEncodeDecodeBool(t *testing.T) {
+	tests := []bool{true, false}
+	for _, test := range tests {
+		buf := EncodeBoolValue(nil, NoColumnID, test)
+		_, x, err := DecodeBoolValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("expected %v got %v", test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeInt(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	tests := append(int64TestCases[0:], randPowDistributedInt63s(rng, 1000)...)
+	for _, test := range tests {
+		buf := EncodeIntValue(nil, NoColumnID, test)
+		_, x, err := DecodeIntValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeFloat(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	tests := make([]float64, 1000)
+	for i := range tests {
+		tests[i] = rng.NormFloat64()
+	}
+	for _, test := range tests {
+		buf := EncodeFloatValue(nil, NoColumnID, test)
+		_, x, err := DecodeFloatValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeBytes(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	tests := make([][]byte, 1000)
+	for i := range tests {
+		tests[i] = randutil.RandBytes(rng, 100)
+	}
+	for _, test := range tests {
+		buf := EncodeBytesValue(nil, NoColumnID, test)
+		_, x, err := DecodeBytesValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(x, test) {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeDecimal(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]*inf.Dec, 1000)
+	for i := range tests {
+		tests[i] = rd.decimal()
+	}
+	for _, test := range tests {
+		buf := EncodeDecimalValue(nil, NoColumnID, test)
+		_, x, err := DecodeDecimalValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x.Cmp(test) != 0 {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeTime(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]time.Time, 1000)
+	for i := range tests {
+		tests[i] = rd.time()
+	}
+	for _, test := range tests {
+		buf := EncodeTimeValue(nil, NoColumnID, test)
+		_, x, err := DecodeTimeValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeDuration(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]duration.Duration, 1000)
+	for i := range tests {
+		tests[i] = rd.duration()
+	}
+	for _, test := range tests {
+		buf := EncodeDurationValue(nil, NoColumnID, test)
+		_, x, err := DecodeDurationValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
 	}
 }
 
@@ -1382,5 +1526,439 @@ func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		l := PeekLengthNonsortingUvarint(buf)
 		buf = buf[l:]
+	}
+}
+
+// randValueEncode "value" encodes a random value for the specified Type into
+// buf. It returns true if there was a matching encode method and false if there
+// wasn't, in which case buf is left unchanged.
+func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, interface{}, bool) {
+	switch typ {
+	case Null:
+		return EncodeNullValue(buf, colID), nil, true
+	case True:
+		return EncodeBoolValue(buf, colID, true), true, true
+	case False:
+		return EncodeBoolValue(buf, colID, false), false, true
+	case Int:
+		x := rd.Int63()
+		return EncodeIntValue(buf, colID, x), x, true
+	case Float:
+		x := rd.NormFloat64()
+		return EncodeFloatValue(buf, colID, x), x, true
+	case Decimal:
+		x := rd.decimal()
+		return EncodeDecimalValue(buf, colID, x), x, true
+	case Bytes:
+		x := randutil.RandBytes(rd.Rand, 100)
+		return EncodeBytesValue(buf, colID, x), x, true
+	case Time:
+		x := rd.time()
+		return EncodeTimeValue(buf, colID, x), x, true
+	case Duration:
+		x := rd.duration()
+		return EncodeDurationValue(buf, colID, x), x, true
+	default:
+		return buf, nil, false
+	}
+}
+
+func TestValueEncodingPeekLength(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	var buf []byte
+	var lengths []int
+	for i := 0; i < 1000; {
+		lastLen := len(buf)
+		var ok bool
+		buf, _, ok = randValueEncode(rd, buf, uint32(rng.Int63()), Type(rng.Intn(int(SentinelType))))
+		if ok {
+			lengths = append(lengths, len(buf)-lastLen)
+			i++
+		}
+	}
+	for _, length := range lengths {
+		typeOffset, _, _, _, err := DecodeValueTag(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, l, err := PeekValueLength(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l != length {
+			t.Fatalf("seed %d: got %d expected %d: %x", seed, l, length, buf[:length])
+		}
+
+		// Check that typeOffset bytes can be dropped from the beginning and
+		// PeekValueLength still works.
+		_, l, err = PeekValueLength(buf[typeOffset:])
+		l += typeOffset
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l != length {
+			t.Fatalf("seed %d: got %d expected %d: %x", seed, l, length, buf[:length])
+		}
+
+		buf = buf[l:]
+	}
+	_, l, err := PeekValueLength(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l != 0 {
+		t.Fatalf("expected 0 for empty buffer got %d", l)
+	}
+}
+
+func TestValueEncodingTags(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+
+	tests := make([]struct {
+		colID  uint32
+		typ    Type
+		length int
+	}, 10)
+
+	var buf []byte
+	var lastLen int
+	for i := 0; i < len(tests); i++ {
+		tests[i].colID = uint32(rng.Int63())
+		tests[i].typ = Type(rng.Intn(1000))
+		buf = encodeValueTag(buf, tests[i].colID, tests[i].typ)
+		tests[i].length = len(buf) - lastLen
+		lastLen = len(buf)
+	}
+
+	for i, test := range tests {
+		typeOffset, dataOffset, colID, typ, err := DecodeValueTag(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if colID != test.colID {
+			t.Fatalf("%d seed %d: expected colID %d got %d", i, seed, test.colID, colID)
+		}
+		if typ != test.typ {
+			t.Fatalf("%d seed %d: expected type %s got %s", i, seed, test.typ, typ)
+		}
+		if dataOffset != test.length {
+			t.Fatalf("%d seed %d: expected length %d got %d", i, seed, test.length, dataOffset)
+		}
+
+		// Check that typeOffset bytes can be dropped from the beginning and
+		// everything but colID still works.
+		_, dataOffset, _, typ, err = DecodeValueTag(buf[typeOffset:])
+		dataOffset += typeOffset
+		if err != nil {
+			t.Fatal(err)
+		}
+		if typ != test.typ {
+			t.Fatalf("%d seed %d: expected type %s got %s", i, seed, test.typ, typ)
+		}
+		if dataOffset != test.length {
+			t.Fatalf("%d seed %d: expected length %d got %d", i, seed, test.length, dataOffset)
+		}
+
+		buf = buf[dataOffset:]
+	}
+}
+
+func TestValueEncodingRand(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	var buf []byte
+	var values []interface{}
+	for i := 0; i < 1000; {
+		var value interface{}
+		var ok bool
+		buf, value, ok = randValueEncode(rd, buf, uint32(rng.Int63()), Type(rng.Intn(int(SentinelType))))
+		if ok {
+			values = append(values, value)
+			i++
+		}
+	}
+	for _, value := range values {
+		_, dataOffset, _, typ, err := DecodeValueTag(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var decoded interface{}
+		switch typ {
+		case Null:
+			buf = buf[dataOffset:]
+		case True:
+			buf, decoded, err = DecodeBoolValue(buf)
+		case False:
+			buf, decoded, err = DecodeBoolValue(buf)
+		case Int:
+			buf, decoded, err = DecodeIntValue(buf)
+		case Float:
+			buf, decoded, err = DecodeFloatValue(buf)
+		case Decimal:
+			buf, decoded, err = DecodeDecimalValue(buf)
+		case Bytes:
+			buf, decoded, err = DecodeBytesValue(buf)
+		case Time:
+			buf, decoded, err = DecodeTimeValue(buf)
+		case Duration:
+			buf, decoded, err = DecodeDurationValue(buf)
+		default:
+			err = util.Errorf("unknown tag %q", typ)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		switch typ {
+		case Bytes:
+			if !bytes.Equal(decoded.([]byte), value.([]byte)) {
+				t.Fatalf("seed %d: %s got %x expected %x", seed, typ, decoded.([]byte), value.([]byte))
+			}
+		case Decimal:
+			if decoded.(*inf.Dec).Cmp(value.(*inf.Dec)) != 0 {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
+		default:
+			if decoded != value {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
+		}
+	}
+}
+
+func BenchmarkEncodeBoolValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]bool, 10000)
+	for i := range vals {
+		vals[i] = rd.bool()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeBoolValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeBoolValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBoolValue(nil, uint32(rng.Intn(100)), rd.bool())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeBoolValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeIntValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]int64, 10000)
+	for i := range vals {
+		vals[i] = rng.Int63()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeIntValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeIntValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeIntValue(nil, uint32(rng.Intn(100)), rng.Int63())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeIntValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeFloatValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]float64, 10000)
+	for i := range vals {
+		vals[i] = rng.NormFloat64()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeFloatValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeFloatValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeFloatValue(nil, uint32(rng.Intn(100)), rng.NormFloat64())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeFloatValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeBytesValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = randutil.RandBytes(rng, 100)
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeBytesValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeBytesValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBytesValue(nil, uint32(rng.Intn(100)), randutil.RandBytes(rng, 100))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeBytesValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeTimeValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]time.Time, 10000)
+	for i := range vals {
+		vals[i] = rd.time()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeTimeValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeTimeValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeTimeValue(nil, uint32(rng.Intn(100)), rd.time())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeTimeValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeDecimalValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]*inf.Dec, 10000)
+	for i := range vals {
+		vals[i] = rd.decimal()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeDecimalValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeDecimalValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeDecimalValue(nil, uint32(rng.Intn(100)), rd.decimal())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeDecimalValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeDurationValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]duration.Duration, 10000)
+	for i := range vals {
+		vals[i] = rd.duration()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeDurationValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeDurationValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeDurationValue(nil, uint32(rng.Intn(100)), rd.duration())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeDurationValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

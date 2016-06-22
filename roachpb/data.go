@@ -299,207 +299,50 @@ func (v Value) dataBytes() []byte {
 	return v.RawBytes[headerSize:]
 }
 
-// EncodeIntValue encodes an int value, appends it to the supplied buffer, and
-// returns the final buffer.
-func EncodeIntValue(appendTo []byte, i int64) []byte {
-	appendTo = append(appendTo, byte(ValueType_INT))
-	return encoding.EncodeNonsortingVarint(appendTo, i)
-}
-
-// EncodeFloatValue encodes a float value, appends it to the supplied buffer,
-// and returns the final buffer.
-func EncodeFloatValue(appendTo []byte, f float64) []byte {
-	appendTo = append(appendTo, byte(ValueType_FLOAT))
-	return encoding.EncodeUint64Ascending(appendTo, math.Float64bits(f))
-}
-
-// EncodeBytesValue encodes a byte array value, appends it to the supplied
-// buffer, and returns the final buffer.
-func EncodeBytesValue(appendTo []byte, data []byte, delimited bool) []byte {
-	if delimited {
-		appendTo = append(appendTo, byte(ValueType_DELIMITED_BYTES))
-		appendTo = encoding.EncodeNonsortingVarint(appendTo, int64(len(data)))
-	} else {
-		appendTo = append(appendTo, byte(ValueType_BYTES))
-	}
-	return append(appendTo, data...)
-}
-
-// EncodeTimeValue encodes a time.Time value, appends it to the supplied buffer,
-// and returns the final buffer.
-func EncodeTimeValue(appendTo []byte, t time.Time) []byte {
-	appendTo = append(appendTo, byte(ValueType_TIME))
-	return encoding.EncodeTimeAscending(appendTo, t)
-}
-
-// EncodeDecimalValue encodes an inf.Dec value, appends it to the supplied
-// buffer, and returns the final buffer.
-func EncodeDecimalValue(appendTo []byte, d *inf.Dec, delimited bool) []byte {
-	if delimited {
-		appendTo = append(appendTo, byte(ValueType_DELIMITED_DECIMAL))
-		// To avoid the allocation, leave space for the varint, encode the decimal,
-		// encode the varint, and shift the encoded decimal to the end of the
-		// varint.
-		varintPos := len(appendTo)
-		// Manually append 10 (binary.MaxVarintLen64) 0s to avoid the allocation.
-		appendTo = append(appendTo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-		decOffset := len(appendTo)
-		appendTo = encoding.EncodeNonsortingDecimal(appendTo, d)
-		decLen := len(appendTo) - decOffset
-		varintLen := binary.PutVarint(appendTo[varintPos:decOffset], int64(decLen))
-		copy(appendTo[varintPos+varintLen:varintPos+varintLen+decLen], appendTo[decOffset:decOffset+decLen])
-		return appendTo[:varintPos+varintLen+decLen]
-	}
-	appendTo = append(appendTo, byte(ValueType_DECIMAL))
-	return encoding.EncodeNonsortingDecimal(appendTo, d)
-}
-
-// EncodeDurationValue encodes a duration.Duration value, appends it to the
-// supplied buffer, and returns the final buffer.
-func EncodeDurationValue(appendTo []byte, d duration.Duration) ([]byte, error) {
-	appendTo = append(appendTo, byte(ValueType_DURATION))
-	return encoding.EncodeDurationAscending(appendTo, d)
-}
-
-// DecodeIntValue decodes a value encoded by EncodeIntValue.
-func DecodeIntValue(b []byte) ([]byte, int64, error) {
-	if len(b) == 0 {
-		return nil, 0, fmt.Errorf("array is empty")
-	}
-	if tag := ValueType(b[0]); tag != ValueType_INT {
-		return nil, 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
-	}
-	var i int64
-	var err error
-	b, _, i, err = encoding.DecodeNonsortingVarint(b[1:])
-	return b, i, err
-}
-
-// DecodeFloatValue decodes a value encoded by EncodeFloatValue.
-func DecodeFloatValue(b []byte) ([]byte, float64, error) {
-	if len(b) == 0 {
-		return nil, 0, fmt.Errorf("array is empty")
-	}
-	if tag := ValueType(b[0]); tag != ValueType_FLOAT {
-		return nil, 0, fmt.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
-	}
-	b = b[1:]
-	if len(b) < 8 {
-		return nil, 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(b))
-	}
-	b, f, err := encoding.DecodeUint64Ascending(b)
-	return b, math.Float64frombits(f), err
-}
-
-// DecodeBytesValue decodes a value encoded by EncodeBytesValue.
-func DecodeBytesValue(b []byte) ([]byte, []byte, error) {
-	if len(b) == 0 {
-		return nil, nil, fmt.Errorf("array is empty")
-	}
-	tag := ValueType(b[0])
-	b = b[1:]
-	switch tag {
-	case ValueType_BYTES:
-		return nil, b, nil
-	case ValueType_DELIMITED_BYTES:
-		var i int64
-		var err error
-		b, _, i, err = encoding.DecodeNonsortingVarint(b)
-		if err != nil {
-			return nil, nil, err
-		}
-		return b[int(i):], b[:int(i)], nil
-	}
-	return nil, nil, fmt.Errorf(
-		"value type is not %s or %s: %s", ValueType_BYTES, ValueType_DELIMITED_BYTES, tag)
-}
-
-// DecodeTimeValue decodes a value encoded by EncodeTimeValue.
-func DecodeTimeValue(b []byte) ([]byte, time.Time, error) {
-	if len(b) == 0 {
-		return nil, time.Time{}, fmt.Errorf("array is empty")
-	}
-	if tag := ValueType(b[0]); tag != ValueType_TIME {
-		return nil, time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
-	}
-	b = b[1:]
-	return encoding.DecodeTimeAscending(b)
-}
-
-// DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.
-func DecodeDecimalValue(b []byte) ([]byte, *inf.Dec, error) {
-	if len(b) == 0 {
-		return nil, nil, fmt.Errorf("array is empty")
-	}
-	tag := ValueType(b[0])
-	b = b[1:]
-	switch tag {
-	case ValueType_DECIMAL:
-		d, err := encoding.DecodeNonsortingDecimal(b, nil)
-		return nil, d, err
-	case ValueType_DELIMITED_DECIMAL:
-		var i int64
-		var err error
-		b, _, i, err = encoding.DecodeNonsortingVarint(b)
-		if err != nil {
-			return nil, nil, err
-		}
-		d, err := encoding.DecodeNonsortingDecimal(b[:int(i)], nil)
-		return b[int(i):], d, err
-	}
-	return nil, nil, fmt.Errorf("value type is not %s or %s: %s", ValueType_DECIMAL, ValueType_DELIMITED_DECIMAL, tag)
-}
-
-// DecodeDurationValue decodes a value encoded by EncodeDurationValue.
-func DecodeDurationValue(b []byte) ([]byte, duration.Duration, error) {
-	if len(b) == 0 {
-		return nil, duration.Duration{}, fmt.Errorf("array is empty")
-	}
-	if tag := ValueType(b[0]); tag != ValueType_DURATION {
-		return nil, duration.Duration{}, fmt.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
-	}
-	b = b[1:]
-	return encoding.DecodeDurationAscending(b)
-}
-
 // SetBytes sets the bytes and tag field of the receiver and clears the checksum.
 func (v *Value) SetBytes(b []byte) {
-	v.RawBytes = make([]byte, checksumSize, headerSize+len(b))
-	v.RawBytes = EncodeBytesValue(v.RawBytes, b, false)
+	v.RawBytes = make([]byte, headerSize+len(b))
+	copy(v.dataBytes(), b)
+	v.setTag(ValueType_BYTES)
 }
 
 // SetString sets the bytes and tag field of the receiver and clears the
 // checksum. This is identical to SetBytes, but specialized for a string
 // argument.
 func (v *Value) SetString(s string) {
-	v.RawBytes = make([]byte, checksumSize, headerSize+len(s))
-	v.RawBytes = EncodeBytesValue(v.RawBytes, []byte(s), false)
+	v.RawBytes = make([]byte, headerSize+len(s))
+	copy(v.dataBytes(), s)
+	v.setTag(ValueType_BYTES)
 }
 
 // SetFloat encodes the specified float64 value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetFloat(f float64) {
-	v.RawBytes = make([]byte, checksumSize, headerSize+8)
-	v.RawBytes = EncodeFloatValue(v.RawBytes, f)
+	v.RawBytes = make([]byte, headerSize+8)
+	encoding.EncodeUint64Ascending(v.RawBytes[headerSize:headerSize], math.Float64bits(f))
+	v.setTag(ValueType_FLOAT)
 }
 
 // SetBool encodes the specified bool value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetBool(b bool) {
 	// 0 or 1 will always encode to a 1-byte long varint.
-	v.RawBytes = make([]byte, checksumSize, headerSize+1)
+	v.RawBytes = make([]byte, headerSize+1)
 	i := int64(0)
 	if b {
 		i = 1
 	}
-	v.RawBytes = EncodeIntValue(v.RawBytes, i)
+	_ = binary.PutVarint(v.RawBytes[headerSize:], i)
+	v.setTag(ValueType_INT)
 }
 
 // SetInt encodes the specified int64 value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetInt(i int64) {
-	v.RawBytes = make([]byte, checksumSize, headerSize+binary.MaxVarintLen64)
-	v.RawBytes = EncodeIntValue(v.RawBytes, i)
+	v.RawBytes = make([]byte, headerSize+binary.MaxVarintLen64)
+	n := binary.PutVarint(v.RawBytes[headerSize:], i)
+	v.RawBytes = v.RawBytes[:headerSize+n]
+	v.setTag(ValueType_INT)
 }
 
 // SetProto encodes the specified proto message into the bytes field of the
@@ -522,25 +365,31 @@ func (v *Value) SetProto(msg proto.Message) error {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetTime(t time.Time) {
 	const encodingSizeOverestimate = 11
-	v.RawBytes = make([]byte, checksumSize, headerSize+encodingSizeOverestimate)
-	v.RawBytes = EncodeTimeValue(v.RawBytes, t)
+	v.RawBytes = make([]byte, headerSize, headerSize+encodingSizeOverestimate)
+	v.RawBytes = encoding.EncodeTimeAscending(v.RawBytes, t)
+	v.setTag(ValueType_TIME)
 }
 
 // SetDuration encodes the specified duration value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetDuration(t duration.Duration) error {
 	var err error
-	v.RawBytes = make([]byte, checksumSize, headerSize+encoding.EncodedDurationMaxLen)
-	v.RawBytes, err = EncodeDurationValue(v.RawBytes, t)
-	return err
+	v.RawBytes = make([]byte, headerSize, headerSize+encoding.EncodedDurationMaxLen)
+	v.RawBytes, err = encoding.EncodeDurationAscending(v.RawBytes, t)
+	if err != nil {
+		return err
+	}
+	v.setTag(ValueType_DURATION)
+	return nil
 }
 
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *inf.Dec) error {
 	decSize := encoding.UpperBoundNonsortingDecimalSize(dec)
-	v.RawBytes = make([]byte, checksumSize, headerSize+decSize)
-	v.RawBytes = EncodeDecimalValue(v.RawBytes, dec, false)
+	v.RawBytes = make([]byte, headerSize, headerSize+decSize)
+	v.RawBytes = encoding.EncodeNonsortingDecimal(v.RawBytes, dec)
+	v.setTag(ValueType_DECIMAL)
 	return nil
 }
 
@@ -557,8 +406,6 @@ func (v *Value) SetTuple(data []byte) {
 // GetBytes returns the bytes field of the receiver. If the tag is not
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
-	// GetBytes doesn't use DecodeBytesValue because it's 66% slower in the
-	// benchmark.
 	if tag := v.GetTag(); tag != ValueType_BYTES {
 		return nil, fmt.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
 	}
@@ -569,17 +416,33 @@ func (v Value) GetBytes() ([]byte, error) {
 // the bytes field is not 8 bytes in length or the tag is not FLOAT an error
 // will be returned.
 func (v Value) GetFloat() (float64, error) {
-	_, f, err := DecodeFloatValue(v.RawBytes[checksumSize:])
-	return f, err
+	if tag := v.GetTag(); tag != ValueType_FLOAT {
+		return 0, fmt.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
+	}
+	dataBytes := v.dataBytes()
+	if len(dataBytes) != 8 {
+		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
+	}
+	_, u, err := encoding.DecodeUint64Ascending(dataBytes)
+	if err != nil {
+		return 0, err
+	}
+	return math.Float64frombits(u), nil
 }
 
 // GetBool decodes a bool value from the bytes field of the receiver. If the
 // tag is not INT (the tag used for bool values) or the value cannot be decoded
 // an error will be returned.
 func (v Value) GetBool() (bool, error) {
-	_, i, err := DecodeIntValue(v.RawBytes[checksumSize:])
-	if err != nil {
-		return false, err
+	if tag := v.GetTag(); tag != ValueType_INT {
+		return false, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
+	}
+	i, n := binary.Varint(v.dataBytes())
+	if n <= 0 {
+		return false, fmt.Errorf("int64 varint decoding failed: %d", n)
+	}
+	if i > 1 || i < 0 {
+		return false, fmt.Errorf("invalid bool: %d", i)
 	}
 	return i != 0, nil
 }
@@ -587,8 +450,14 @@ func (v Value) GetBool() (bool, error) {
 // GetInt decodes an int64 value from the bytes field of the receiver. If the
 // tag is not INT or the value cannot be decoded an error will be returned.
 func (v Value) GetInt() (int64, error) {
-	_, i, err := DecodeIntValue(v.RawBytes[checksumSize:])
-	return i, err
+	if tag := v.GetTag(); tag != ValueType_INT {
+		return 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
+	}
+	i, n := binary.Varint(v.dataBytes())
+	if n <= 0 {
+		return 0, fmt.Errorf("int64 varint decoding failed: %d", n)
+	}
+	return i, nil
 }
 
 // GetProto unmarshals the bytes field of the receiver into msg. If
@@ -611,22 +480,30 @@ func (v Value) GetProto(msg proto.Message) error {
 // GetTime decodes a time value from the bytes field of the receiver. If the
 // tag is not TIME an error will be returned.
 func (v Value) GetTime() (time.Time, error) {
-	_, t, err := DecodeTimeValue(v.RawBytes[checksumSize:])
+	if tag := v.GetTag(); tag != ValueType_TIME {
+		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
+	}
+	_, t, err := encoding.DecodeTimeAscending(v.dataBytes())
 	return t, err
 }
 
 // GetDuration decodes a duration value from the bytes field of the receiver. If
 // the tag is not DURATION an error will be returned.
 func (v Value) GetDuration() (duration.Duration, error) {
-	_, d, err := DecodeDurationValue(v.RawBytes[checksumSize:])
-	return d, err
+	if tag := v.GetTag(); tag != ValueType_DURATION {
+		return duration.Duration{}, fmt.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
+	}
+	_, t, err := encoding.DecodeDurationAscending(v.dataBytes())
+	return t, err
 }
 
 // GetDecimal decodes a decimal value from the bytes of the receiver. If the
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimal() (*inf.Dec, error) {
-	_, d, err := DecodeDecimalValue(v.RawBytes[checksumSize:])
-	return d, err
+	if tag := v.GetTag(); tag != ValueType_DECIMAL {
+		return nil, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+	}
+	return encoding.DecodeNonsortingDecimal(v.dataBytes(), nil)
 }
 
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
@@ -644,37 +521,6 @@ func (v Value) GetTuple() ([]byte, error) {
 		return nil, fmt.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
 	}
 	return v.dataBytes(), nil
-}
-
-// PeekValueLength returns the length of the encoded value at the start of b.
-// Note: If this function succeeds, it's not a guarantee that decoding the value
-// will succeed.
-func PeekValueLength(b []byte) (int, error) {
-	if len(b) == 0 {
-		return 0, util.Errorf("empty slice")
-	}
-	tag := ValueType(b[0])
-	switch tag {
-	case ValueType_NULL:
-		return 1, nil
-	case ValueType_INT:
-		_, n, _, err := encoding.DecodeNonsortingVarint(b[1:])
-		return 1 + n, err
-	case ValueType_FLOAT:
-		return 9, nil
-	case ValueType_DELIMITED_BYTES, ValueType_DELIMITED_DECIMAL:
-		_, n, i, err := encoding.DecodeNonsortingVarint(b[1:])
-		return 1 + n + int(i), err
-	case ValueType_TIME:
-		n, err := encoding.GetMultiVarintLen(b[1:], 2)
-		return 1 + n, err
-	case ValueType_DURATION:
-		n, err := encoding.GetMultiVarintLen(b[1:], 3)
-		return 1 + n, err
-	case ValueType_BYTES, ValueType_DECIMAL:
-		return 0, util.Errorf("not a self-delimiting tag: %q", tag)
-	}
-	return 0, util.Errorf("unknown tag %q", tag)
 }
 
 var crc32Pool = sync.Pool{
