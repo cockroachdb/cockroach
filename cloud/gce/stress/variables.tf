@@ -3,6 +3,10 @@ variable "tests_sha" {
   default = ""
 }
 
+variable "shard_count" {
+  default="5"
+}
+
 # Sha of the stress binary to pull down. If none, the latest is fetched.
 variable "stress_sha" {
   default = ""

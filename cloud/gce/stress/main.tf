@@ -20,7 +20,7 @@ output "instance" {
 }
 
 resource "google_compute_instance" "stress" {
-  count = 1
+  count = "${var.shard_count}"
 
   name = "stress-test-${count.index}"
   machine_type = "${var.gce_machine_type}"
@@ -76,6 +76,8 @@ resource "google_compute_instance" "stress" {
       "bash download_binary.sh stress/stress ${var.stress_sha}",
       "tar xfz static-tests.tar.gz",
       "mkdir -p logs",
+      "export SHARD_COUNT=${var.shard_count}",
+      "export SHARD_INDEX=${count.index + 1}",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start stress",
     ]

@@ -31,6 +31,8 @@ function run_one_test {
   popd
 }
 
-for test in $(find cockroach/ -type f -name '*.test' | sort); do
+find cockroach/ -type f -name '*.test' | sort > all_tests
+
+for test in $(split -n "l/${SHARD_INDEX}"/"${SHARD_COUNT}" all_tests); do
   run_one_test ${test}
 done
