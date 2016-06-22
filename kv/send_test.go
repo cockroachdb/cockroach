@@ -19,6 +19,7 @@ package kv
 import (
 	"errors"
 	"net"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -598,6 +599,69 @@ func TestComplexScenarios(t *testing.T) {
 			if err == nil {
 				t.Errorf("%d: unexpected success", i)
 			}
+		}
+	}
+}
+
+// TestSplitHealthy tests that the splitHealthy helper function sorts healthy
+// nodes before unhealthy nodes.
+func TestSplitHealthy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		in       []batchClient
+		out      []batchClient
+		nHealthy int
+	}{
+		{nil, nil, 0},
+		{
+			[]batchClient{
+				{remoteAddr: "1", healthy: false},
+				{remoteAddr: "2", healthy: false},
+				{remoteAddr: "3", healthy: true},
+			},
+			[]batchClient{
+				{remoteAddr: "3", healthy: true},
+				{remoteAddr: "1", healthy: false},
+				{remoteAddr: "2", healthy: false},
+			},
+			1,
+		},
+		{
+			[]batchClient{
+				{remoteAddr: "1", healthy: true},
+				{remoteAddr: "2", healthy: false},
+				{remoteAddr: "3", healthy: true},
+			},
+			[]batchClient{
+				{remoteAddr: "1", healthy: true},
+				{remoteAddr: "3", healthy: true},
+				{remoteAddr: "2", healthy: false},
+			},
+			2,
+		},
+		{
+			[]batchClient{
+				{remoteAddr: "1", healthy: true},
+				{remoteAddr: "2", healthy: true},
+				{remoteAddr: "3", healthy: true},
+			},
+			[]batchClient{
+				{remoteAddr: "1", healthy: true},
+				{remoteAddr: "2", healthy: true},
+				{remoteAddr: "3", healthy: true},
+			},
+			3,
+		},
+	}
+
+	for i, td := range testData {
+		nHealthy := splitHealthy(td.in)
+		if nHealthy != td.nHealthy {
+			t.Errorf("%d. splitHealthy(%+v) = %d; not %d", i, td.in, nHealthy, td.nHealthy)
+		}
+		if !reflect.DeepEqual(td.in, td.out) {
+			t.Errorf("%d. splitHealthy(...)\n  = %+v;\nnot %+v", i, td.in, td.out)
 		}
 	}
 }

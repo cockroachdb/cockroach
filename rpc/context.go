@@ -65,6 +65,11 @@ func NewServer(ctx *Context) *grpc.Server {
 	return s
 }
 
+type connMeta struct {
+	conn    *grpc.ClientConn
+	healthy bool
+}
+
 // Context contains the fields required by the rpc framework.
 type Context struct {
 	*base.Context
@@ -81,7 +86,7 @@ type Context struct {
 
 	conns struct {
 		sync.Mutex
-		cache map[string]*grpc.ClientConn
+		cache map[string]connMeta
 	}
 }
 
@@ -104,8 +109,8 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 		<-stopper.ShouldDrain()
 
 		ctx.conns.Lock()
-		for key, conn := range ctx.conns.cache {
-			ctx.removeConn(key, conn)
+		for key, meta := range ctx.conns.cache {
+			ctx.removeConn(key, meta.conn)
 		}
 		ctx.conns.Unlock()
 	})
@@ -141,8 +146,8 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
 
-	if conn, ok := ctx.conns.cache[target]; ok {
-		return conn, nil
+	if meta, ok := ctx.conns.cache[target]; ok {
+		return meta.conn, nil
 	}
 
 	var dialOpt grpc.DialOption
@@ -163,9 +168,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	conn, err := grpc.Dial(target, dialOpts...)
 	if err == nil {
 		if ctx.conns.cache == nil {
-			ctx.conns.cache = make(map[string]*grpc.ClientConn)
+			ctx.conns.cache = make(map[string]connMeta)
 		}
-		ctx.conns.cache[target] = conn
+		ctx.conns.cache[target] = connMeta{conn: conn}
 
 		if !ctx.Stopper.RunTask(func() {
 			ctx.Stopper.RunWorker(func() {
@@ -181,6 +186,28 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 	}
 	return conn, err
+}
+
+// setConnHealthy sets the health status of the connection.
+func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
+	ctx.conns.Lock()
+	defer ctx.conns.Unlock()
+
+	meta, ok := ctx.conns.cache[remoteAddr]
+	if ok {
+		meta.healthy = healthy
+		ctx.conns.cache[remoteAddr] = meta
+	}
+}
+
+// IsConnHealthy returns whether the most recent heartbeat succeeded or not.
+// This should not be used as a definite status of a nodes health and just used
+// to prioritized healthy nodes over unhealthy ones.
+func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
+	ctx.conns.Lock()
+	defer ctx.conns.Unlock()
+
+	return ctx.conns.cache[remoteAddr].healthy
 }
 
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
@@ -200,6 +227,7 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 		}
 		sendTime := ctx.localClock.PhysicalTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
+		ctx.setConnHealthy(remoteAddr, err == nil)
 		if err != nil {
 			if grpc.Code(err) == codes.DeadlineExceeded {
 				continue
