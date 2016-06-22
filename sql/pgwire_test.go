@@ -1166,3 +1166,43 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestPGTypes verifies that all types can be sent with prepared statements.
+func TestPGTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGTypes")
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		CREATE DATABASE d;
+		CREATE TABLE d.t (i int, f float, s string, b bytes, d date, m timestamp, n interval, o bool, e decimal);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	var i int64
+	var f float64
+	var str string
+	var b []byte
+	d := "2006-01-02"
+	m := time.Now().Format(time.RFC3339Nano)
+	n := time.Hour.String()
+	o := true
+	e := "0.0"
+
+	if _, err := db.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		i, f, str, b, d, m, n, o, e,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
