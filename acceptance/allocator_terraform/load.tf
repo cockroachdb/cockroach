@@ -3,6 +3,11 @@
 variable "example_block_writer_instances" {
   default = 1
 }
+
+# Despite its name, example_block_writer actually has `photos` too. We're
+# sticking to this name for compatibility with Terrafarm. Since our load
+# generators are rarely CPU-bound, it's fine to have them on a single GCE
+# instance.
 output "example_block_writer" {
   value = "${join(",", google_compute_instance.block_writer.*.network_interface.0.access_config.0.assigned_nat_ip)}"
 }
@@ -58,6 +63,7 @@ FILE
       "sudo apt-get -qqy install supervisor >/dev/null",
       "sudo service supervisor stop",
       "bash download_binary.sh examples-go/block_writer ${var.block_writer_sha}",
+      "bash download_binary.sh examples-go/photos ${var.block_writer_sha}",
       "mkdir -p logs",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
     ]
