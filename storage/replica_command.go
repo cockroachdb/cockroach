@@ -2616,16 +2616,11 @@ func (r *Replica) ChangeReplicas(
 
 		// Before we try to add a new replica, we first need to secure a
 		// reservation for the replica on the receiving store.
-		maxSize := r.GetMaxBytes()
-		curSize := r.GetMVCCStats().Total()
-		if curSize > maxSize {
-			maxSize = curSize
-		}
 		if err := r.store.allocator.storePool.reserve(
 			r.store.Ident,
 			replica.StoreID,
 			rangeID,
-			maxSize,
+			r.GetMVCCStats().Total(),
 		); err != nil {
 			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
 		}
