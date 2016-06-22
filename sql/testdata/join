@@ -28,21 +28,21 @@ SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 44 44
 42 42
 
-query I colnames
+query I colnames label-short
 SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x)
 ----
  x
 44
 42
 
-query I colnames
+query I colnames label-short
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
 ----
  x
 44
 42
 
-query II colnames
+query II colnames label-2col
 SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
    x     y
@@ -50,7 +50,7 @@ SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 NULL  NULL
   42    42
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x)
 ----
    x
@@ -58,7 +58,7 @@ SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x)
 NULL
   42
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 ----
    x
@@ -66,7 +66,7 @@ SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 NULL
   42
 
-query II colnames
+query II colnames label-2col
 SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
    x     y
@@ -74,7 +74,7 @@ SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 NULL  NULL
   42    42
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x)
 ----
    x
@@ -82,7 +82,7 @@ SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x)
 NULL
   42
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
 ----
    x
@@ -117,7 +117,7 @@ NULL 43
 42   42
 44   NULL
 
-query I colnames
+query I colnames label-full
 SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
 ----
 x
@@ -127,7 +127,7 @@ NULL
 43
 44
 
-query I colnames
+query I colnames label-full
 SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
 ----
 x
@@ -172,7 +172,7 @@ x    y
 NULL NULL
 42   NULL
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x)
 ----
 x
@@ -204,7 +204,7 @@ NULL 44
 NULL NULL
 NULL 42
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x)
 ----
 x
@@ -220,7 +220,7 @@ x    y
 NULL NULL
 42   NULL
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x)
 ----
 x
@@ -236,7 +236,7 @@ NULL 44
 NULL NULL
 NULL 42
 
-query I colnames
+query I colnames label-1col
 SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x)
 ----
 x
