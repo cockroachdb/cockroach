@@ -134,6 +134,9 @@ func (rq *replicateQueue) process(
 			NodeID:  newStore.Node.NodeID,
 			StoreID: newStore.StoreID,
 		}
+		if log.V(1) {
+			log.Infof("adding replica for under-replicated RangeID:%d to %+v", repl.RangeID, newReplica)
+		}
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
@@ -141,6 +144,9 @@ func (rq *replicateQueue) process(
 		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas)
 		if err != nil {
 			return err
+		}
+		if log.V(1) {
+			log.Infof("removing replica for over-replicated RangeID:%d from %+v", repl.RangeID, removeReplica)
 		}
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
@@ -156,6 +162,9 @@ func (rq *replicateQueue) process(
 			}
 			break
 		}
+		if log.V(1) {
+			log.Infof("removing replica from dead store RangeID:%d from %+v", repl.RangeID, deadReplicas[0])
+		}
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
 			return err
 		}
@@ -164,6 +173,9 @@ func (rq *replicateQueue) process(
 		// rebalance. Attempt to find a rebalancing target.
 		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
+			if log.V(1) {
+				log.Infof("no suitable rebalance target for RangeID:%d", repl.RangeID)
+			}
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
 			return nil
@@ -171,6 +183,9 @@ func (rq *replicateQueue) process(
 		rebalanceReplica := roachpb.ReplicaDescriptor{
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
+		}
+		if log.V(1) {
+			log.Infof("rebalancing RangeID:%d to %+v", repl.RangeID, rebalanceReplica)
 		}
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
