@@ -84,6 +84,58 @@ func TestHeartbeatCB(t *testing.T) {
 	<-ch
 }
 
+// TestHeartbeatHealth verifies that the health status changes after heartbeats
+// succeed or fail.
+func TestHeartbeatHealth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+
+	serverCtx := newNodeTestContext(clock, stopper)
+	s, ln := newTestServer(t, serverCtx, true)
+	remoteAddr := ln.Addr().String()
+
+	heartbeat := &ManualHeartbeatService{
+		ready:              make(chan struct{}),
+		stopper:            stopper,
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+	}
+	RegisterHeartbeatServer(s, heartbeat)
+
+	// Create a client that never receives a heartbeat after the first.
+	clientCtx := newNodeTestContext(clock, stopper)
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+		t.Fatal(err)
+	}
+	heartbeat.ready <- struct{}{}
+
+	// Should be healthy after the first successful heartbeat.
+	util.SucceedsSoon(t, func() error {
+		if !clientCtx.IsConnHealthy(remoteAddr) {
+			return util.Errorf("expected %s to be healthy", remoteAddr)
+		}
+		return nil
+	})
+
+	// Should no longer be healthy after later heartbeats fail.
+	util.SucceedsSoon(t, func() error {
+		if clientCtx.IsConnHealthy(remoteAddr) {
+			return util.Errorf("expected %s to be unhealthy", remoteAddr)
+		}
+		return nil
+	})
+
+	if clientCtx.IsConnHealthy("non-existent connection") {
+		t.Errorf("non-existent connection is reported as healthy")
+	}
+
+}
+
 func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
