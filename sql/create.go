@@ -354,7 +354,11 @@ func (n *createTableNode) resolveColFK(
 		return ret, err
 	}
 	if target == nil {
-		return ret, fmt.Errorf("referenced table %q not found", targetTable.String())
+		if targetTable.String() == tbl.Name {
+			target = tbl
+		} else {
+			return ret, fmt.Errorf("referenced table %q not found", targetTable.String())
+		}
 	}
 	ret.target = target
 	// If a column isn't specified, attempt to default to PK.
@@ -440,6 +444,15 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 		}
 		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy,
 			&sqlbase.TableAndIndexID{Table: desc.ID, Index: t.srcIdx})
+
+		if t.target == desc {
+			srcIdx, err := desc.FindIndexByID(t.srcIdx)
+			if err != nil {
+				return err
+			}
+			srcIdx.ForeignKey.Table = desc.ID
+			continue
+		}
 
 		// TODO(dt): Only save each referenced table once.
 		if err := n.p.saveNonmutationAndNotify(t.target); err != nil {
