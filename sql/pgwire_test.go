@@ -326,6 +326,14 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.SetArgs("1.0").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
 			base.SetArgs(true).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
+		"SELECT ($1) > 0": {
+			base.SetArgs(1).Results(true),
+			base.SetArgs(-1).Results(false),
+		},
+		"SELECT ((($1))) > 0": {
+			base.SetArgs(1).Results(true),
+			base.SetArgs(-1).Results(false),
+		},
 		"SELECT TRUE AND $1": {
 			base.SetArgs(true).Results(true),
 			base.SetArgs(false).Results(false),
