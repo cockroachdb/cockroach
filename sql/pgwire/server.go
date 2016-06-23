@@ -73,17 +73,21 @@ type serverMetrics struct {
 	conns         *metric.Counter
 }
 
+func newServerMetrics(reg *metric.Registry) *serverMetrics {
+	return &serverMetrics{
+		conns:         reg.Counter("conns"),
+		bytesInCount:  reg.Counter("bytesin"),
+		bytesOutCount: reg.Counter("bytesout"),
+	}
+}
+
 // MakeServer creates a Server, adding network stats to the given Registry.
 func MakeServer(context *base.Context, executor *sql.Executor, reg *metric.Registry) *Server {
 	return &Server{
 		context:  context,
 		executor: executor,
 		registry: reg,
-		metrics: &serverMetrics{
-			conns:         reg.Counter("conns"),
-			bytesInCount:  reg.Counter("bytesin"),
-			bytesOutCount: reg.Counter("bytesout"),
-		},
+		metrics:  newServerMetrics(reg),
 	}
 }
 

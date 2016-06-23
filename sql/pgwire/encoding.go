@@ -114,7 +114,10 @@ func (b *readBuffer) getString() (string, error) {
 
 func (b *readBuffer) getPrepareType() (prepareType, error) {
 	v, err := b.getBytes(1)
-	return prepareType(v[0]), err
+	if err != nil {
+		return 0, err
+	}
+	return prepareType(v[0]), nil
 }
 
 func (b *readBuffer) getBytes(n int) ([]byte, error) {
