@@ -662,25 +662,6 @@ func TestAdminAPIUIData(t *testing.T) {
 	expectValueEquals("bin", buf.Bytes())
 }
 
-func TestCluster(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
-
-	// We need to retry, because the cluster ID isn't set until after
-	// bootstrapping.
-	util.SucceedsSoon(t, func() error {
-		var resp serverpb.ClusterResponse
-		if err := apiGet(s, "cluster", &resp); err != nil {
-			return err
-		}
-		if a, e := resp.ClusterID, s.node.ClusterID.String(); a != e {
-			return util.Errorf("cluster ID %s != expected %s", a, e)
-		}
-		return nil
-	})
-}
-
 func TestClusterFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
