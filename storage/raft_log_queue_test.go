@@ -111,7 +111,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Fatal("expected GetRange to fail on missing range")
 	}
 
-	store.DisableRaftLogQueue(true)
+	store.SetRaftLogQueueActive(false)
 
 	// Test on a new range which should not have a raft group yet.
 	rngNew := createRange(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
@@ -160,7 +160,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	}
 
 	// Enable the raft log scanner and and force a truncation.
-	store.DisableRaftLogQueue(false)
+	store.SetRaftLogQueueActive(true)
 	store.ForceRaftLogScanAndProcess()
 	// Wait for tasks to finish, in case the processLoop grabbed the event
 	// before ForceRaftLogScanAndProcess but is still working on it.

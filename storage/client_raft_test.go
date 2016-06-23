@@ -1597,7 +1597,7 @@ func TestLeaderRemoveSelf(t *testing.T) {
 	// Disable the replica GC queue. This verifies that the replica is
 	// considered removed even before the gc queue has run, and also
 	// helps avoid a deadlock at shutdown.
-	mtc.stores[0].DisableReplicaGCQueue(true)
+	mtc.stores[0].SetReplicaGCQueueActive(false)
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1)
 	// Remove the replica from first store.
@@ -1626,7 +1626,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 	// Disable the GC queue and move the range from store 0 to 1.
-	mtc.stores[0].DisableReplicaGCQueue(true)
+	mtc.stores[0].SetReplicaGCQueueActive(false)
 	const rangeID roachpb.RangeID = 1
 	mtc.replicateRange(rangeID, 1)
 	mtc.unreplicateRange(rangeID, 0)
@@ -1665,7 +1665,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	// since the scanner could have already run at this point, but it
 	// should be enough to prevent us from accidentally relying on the
 	// scanner.
-	mtc.stores[0].DisableReplicaGCQueue(true)
+	mtc.stores[0].SetReplicaGCQueueActive(false)
 
 	// The Replica object is not recreated.
 	if _, err := mtc.stores[0].GetReplica(rangeID); err == nil {

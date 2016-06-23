@@ -857,7 +857,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
 	// Disable raft log truncation which confuses this test.
-	tc.store.DisableRaftLogQueue(true)
+	tc.store.SetRaftLogQueueActive(false)
 
 	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
@@ -4203,7 +4203,7 @@ func TestTruncateLog(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	tc.rng.store.DisableRaftLogQueue(true)
+	tc.rng.store.SetRaftLogQueueActive(false)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64
@@ -4991,7 +4991,7 @@ func TestEntries(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	tc.rng.store.DisableRaftLogQueue(true)
+	tc.rng.store.SetRaftLogQueueActive(false)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64
@@ -5112,7 +5112,7 @@ func TestTerm(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	tc.rng.store.DisableRaftLogQueue(true)
+	tc.rng.store.SetRaftLogQueueActive(false)
 
 	rng := tc.rng
 	rangeID := rng.RangeID

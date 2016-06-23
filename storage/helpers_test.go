@@ -67,11 +67,6 @@ func (s *Store) ForceReplicationScanAndProcess() {
 	s.replicateQueue.DrainQueue(s.ctx.Clock)
 }
 
-// DisableReplicaGCQueue disables or enables the replica GC queue.
-func (s *Store) DisableReplicaGCQueue(disabled bool) {
-	s.replicaGCQueue.SetDisabled(disabled)
-}
-
 // ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
 // may need to be GC'd.
 func (s *Store) ForceReplicaGCScanAndProcess() {
@@ -82,16 +77,6 @@ func (s *Store) ForceReplicaGCScanAndProcess() {
 	s.mu.Unlock()
 
 	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
-}
-
-// DisableRaftLogQueue disables or enables the raft log queue.
-func (s *Store) DisableRaftLogQueue(disabled bool) {
-	s.raftLogQueue.SetDisabled(disabled)
-}
-
-// DisableSplitQueue disables or enables the replica split queue.
-func (s *Store) DisableSplitQueue(disabled bool) {
-	s.splitQueue.SetDisabled(disabled)
 }
 
 // ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
