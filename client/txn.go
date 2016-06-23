@@ -561,15 +561,13 @@ func (txn *Txn) Exec(
 			}
 		}
 
-		if err == nil {
-			break
-		}
-
 		if !opt.AutoRetry {
 			break
 		}
 
-		if retErr, retryable := err.(*roachpb.RetryableTxnError); retryable {
+		if retErr, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+			break
+		} else {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error.
 			if txn.Proto.ID != nil {
@@ -584,8 +582,6 @@ func (txn *Txn) Exec(
 			if !retErr.Backoff {
 				r.Reset()
 			}
-		} else {
-			break
 		}
 		if log.V(2) {
 			log.Infof("automatically retrying transaction: %s because of error: %s",
