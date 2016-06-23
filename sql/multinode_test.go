@@ -40,9 +40,9 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 		t.Fatal("invalid cluster size: ", nodes)
 	}
 
-	conns, mtc := server.StartMultinodeTestCluster(t, 3, name)
+	mtc := server.StartMultinodeTestCluster(t, 3, name)
 
-	if _, err := conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
+	if _, err := mtc.Conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -57,8 +57,8 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 			fn()
 		}
 	}
-
-	return conns, f
+	mtc.WaitForFullReplication()
+	return mtc.Conns, f
 }
 
 func TestMultinodeCockroach(t *testing.T) {
