@@ -73,7 +73,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Disable splits since we're increasing the raft log with puts.
 	for _, store := range mtc.stores {
-		store.DisableSplitQueue(true)
+		store.SetSplitQueueActive(false)
 	}
 
 	// Write a collection of values to increase the raft log.

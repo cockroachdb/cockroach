@@ -2624,3 +2624,21 @@ func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationRespo
 	}
 	return s.bookie.Reserve(req)
 }
+
+// The methods below can be used to control a store's queues. Stopping a queue
+// is only meant to happen in tests.
+
+// SetReplicaGCQueueActive enables or disables the replica GC queue.
+func (s *Store) SetReplicaGCQueueActive(active bool) {
+	s.replicaGCQueue.SetDisabled(!active)
+}
+
+// SetRaftLogQueueActive enables or disables the raft log queue.
+func (s *Store) SetRaftLogQueueActive(active bool) {
+	s.raftLogQueue.SetDisabled(!active)
+}
+
+// SetSplitQueueActive enables or disables the replica split queue.
+func (s *Store) SetSplitQueueActive(active bool) {
+	s.splitQueue.SetDisabled(!active)
+}

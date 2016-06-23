@@ -92,7 +92,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 	// Disable the replica gc queue to prevent direct removal of replica.
-	mtc.stores[1].DisableReplicaGCQueue(true)
+	mtc.stores[1].SetReplicaGCQueueActive(false)
 
 	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
@@ -106,7 +106,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	}
 
 	// Enable the queue.
-	mtc.stores[1].DisableReplicaGCQueue(false)
+	mtc.stores[1].SetReplicaGCQueueActive(true)
 
 	// Increment the clock's timestamp to make the replica GC queue process the range.
 	mtc.expireLeases()
