@@ -217,6 +217,7 @@ func (ts *TestServer) DB() *client.DB {
 // TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
+	fmt.Println("here on fail")
 	return ts.StartWithStopper(nil, false)
 }
 
@@ -480,7 +481,7 @@ func (mtc *MultinodeTestCluster) WaitForFullReplication() error {
 			return nil
 		})
 		if err != nil {
-			return util.Errorf("Could not obtain replica count.")
+			return errors.Errorf("Could not obtain replica count.")
 		}
 		for _, server := range mtc.Servers {
 			err := server.Stores().VisitStores(func(s *storage.Store) error {
@@ -490,7 +491,7 @@ func (mtc *MultinodeTestCluster) WaitForFullReplication() error {
 				return nil
 			})
 			if err != nil {
-				return util.Errorf("Could not obtain replica count.")
+				return errors.Errorf("Could not obtain replica count.")
 			}
 			if notReplicated {
 				break
