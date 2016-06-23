@@ -227,8 +227,9 @@ Start key in pretty-printed format. See also --raw.`),
 	cliflags.ToName: wrapText(`
 Exclusive end key in pretty-printed format. See also --raw.`),
 
-	cliflags.RawName: wrapText(`
-Interpret keys as raw bytes.`),
+	cliflags.TypeName: wrapText(`
+Interpret the arguments to --from and --to as raw bytes ('raw'),
+rangeIDs ('rangeID') or pretty-printed keys ('pretty').`),
 
 	cliflags.ValuesName: wrapText(`
 Print values along with their associated key.`),
@@ -491,7 +492,7 @@ func init() {
 		f := debugKeysCmd.Flags()
 		f.StringVar(&debugCtx.startKey, cliflags.FromName, "", usageNoEnv(cliflags.FromName))
 		f.StringVar(&debugCtx.endKey, cliflags.ToName, "", usageNoEnv(cliflags.ToName))
-		f.BoolVar(&debugCtx.raw, cliflags.RawName, false, usageNoEnv(cliflags.RawName))
+		f.StringVar(&debugCtx.typ, cliflags.TypeName, "raw", usageNoEnv(cliflags.TypeName))
 		f.BoolVar(&debugCtx.values, cliflags.ValuesName, false, usageNoEnv(cliflags.ValuesName))
 	}
 
