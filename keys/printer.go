@@ -130,7 +130,7 @@ var (
 	}{
 		{name: "AbortCache", suffix: LocalAbortCacheSuffix, ppFunc: abortCacheKeyPrint, psFunc: abortCacheKeyParse},
 		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
-		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
+		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexSuffix},
 		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexSuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,
@@ -138,9 +138,9 @@ var (
 			psFunc: raftLogKeyParse,
 		},
 		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateSuffix},
-		{name: "RaftLastIndex", suffix: localRaftLastIndexSuffix},
-		{name: "RangeLastReplicaGCTimestamp", suffix: localRangeLastReplicaGCTimestampSuffix},
-		{name: "RangeLastVerificationTimestamp", suffix: localRangeLastVerificationTimestampSuffix},
+		{name: "RaftLastIndex", suffix: LocalRaftLastIndexSuffix},
+		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
+		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffix},
 		{name: "RangeLeaderLease", suffix: LocalRangeLeaderLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
 	}

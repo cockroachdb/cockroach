@@ -300,6 +300,22 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeStatsSuffix):
 		msg = &enginepb.MVCCStats{}
 
+	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
+		msg = &raftpb.HardState{}
+
+	case bytes.Equal(suffix, keys.LocalRaftLastIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%d", i), nil
+
+	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffix):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
+		msg = &hlc.Timestamp{}
+
 	default:
 		return "", fmt.Errorf("unknown raft id key %s", suffix)
 	}
