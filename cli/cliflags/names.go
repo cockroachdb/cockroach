@@ -43,7 +43,6 @@ const (
 	UserName              = "user"
 	FromName              = "from"
 	ToName                = "to"
-	TypeName              = "type"
 	ValuesName            = "values"
 	RaftTickIntervalName  = "raft-tick-interval"
 	UndoFreezeClusterName = "undo"
