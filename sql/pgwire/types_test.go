@@ -110,7 +110,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 
 	rbuf := readBuffer{msg: wbuf.wrapped.Bytes()}
 
-	plen, err := rbuf.getInt32()
+	plen, err := rbuf.getUint32()
 	if err != nil {
 		b.Fatal(err)
 	}

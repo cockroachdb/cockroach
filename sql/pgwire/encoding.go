@@ -138,11 +138,11 @@ func (b *readBuffer) getUint16() (uint16, error) {
 	return v, nil
 }
 
-func (b *readBuffer) getInt32() (int32, error) {
+func (b *readBuffer) getUint32() (uint32, error) {
 	if len(b.msg) < 4 {
 		return 0, errors.Errorf("insufficient data: %d", len(b.msg))
 	}
-	v := int32(binary.BigEndian.Uint32(b.msg[:4]))
+	v := binary.BigEndian.Uint32(b.msg[:4])
 	b.msg = b.msg[4:]
 	return v, nil
 }
