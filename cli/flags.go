@@ -222,14 +222,10 @@ database, insecure, certs).`),
 Database user name.`),
 
 	cliflags.FromName: wrapText(`
-Start key in pretty-printed format. See also --raw.`),
+Start key and format as <key>:<format>.`),
 
 	cliflags.ToName: wrapText(`
-Exclusive end key in pretty-printed format. See also --raw.`),
-
-	cliflags.TypeName: wrapText(`
-Interpret the arguments to --from and --to as raw bytes ('raw'),
-rangeIDs ('rangeID') or pretty-printed keys ('pretty').`),
+Exclusive end key and format as <key>:<format>.`),
 
 	cliflags.ValuesName: wrapText(`
 Print values along with their associated key.`),
@@ -490,10 +486,8 @@ func init() {
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		f.StringVar(&debugCtx.startKey, cliflags.FromName, "", usageNoEnv(cliflags.FromName))
-		f.StringVar(&debugCtx.endKey, cliflags.ToName, "", usageNoEnv(cliflags.ToName))
-		// TODO(tamird): should technically be an enum, but there's no good flag support for them.
-		f.StringVar(&debugCtx.typ, cliflags.TypeName, "raw", usageNoEnv(cliflags.TypeName))
+		f.Var(&debugCtx.startKey, cliflags.FromName, usageNoEnv(cliflags.FromName))
+		f.Var(&debugCtx.endKey, cliflags.ToName, usageNoEnv(cliflags.ToName))
 		f.BoolVar(&debugCtx.values, cliflags.ValuesName, false, usageNoEnv(cliflags.ValuesName))
 	}
 

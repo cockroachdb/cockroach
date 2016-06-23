@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"golang.org/x/net/context"
 
@@ -116,53 +115,14 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	from := engine.NilKey
-	to := engine.MVCCKeyMax
+	from, err := debugCtx.startKey.roachKey(engine.NilKey)
+	if err != nil {
+		return err
+	}
 
-	switch strings.ToLower(debugCtx.typ) {
-	case "rangeid":
-		var fromID, toID roachpb.RangeID
-		var err error
-		if len(debugCtx.startKey) > 0 {
-			fromID, err = parseRangeID(debugCtx.startKey)
-			if err != nil {
-				return err
-			}
-			from = engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID))
-		}
-		if len(debugCtx.endKey) > 0 {
-			toID, err = parseRangeID(debugCtx.endKey)
-			if err != nil {
-				return err
-			}
-			to = engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(toID))
-		} else {
-			to = engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID + 1))
-		}
-	case "raw":
-		if len(debugCtx.startKey) > 0 {
-			from = engine.MakeMVCCMetadataKey(roachpb.Key(debugCtx.startKey))
-		}
-		if len(debugCtx.endKey) > 0 {
-			to = engine.MakeMVCCMetadataKey(roachpb.Key(debugCtx.endKey))
-		}
-	case "pretty":
-		if len(debugCtx.startKey) > 0 {
-			startKey, err := keys.UglyPrint(debugCtx.startKey)
-			if err != nil {
-				return err
-			}
-			from = engine.MakeMVCCMetadataKey(startKey)
-		}
-		if len(debugCtx.endKey) > 0 {
-			endKey, err := keys.UglyPrint(debugCtx.endKey)
-			if err != nil {
-				return err
-			}
-			to = engine.MakeMVCCMetadataKey(endKey)
-		}
-	default:
-		return fmt.Errorf("invalid input key type '%s'", debugCtx.typ)
+	to, err := debugCtx.startKey.roachKey(engine.MVCCKeyMax)
+	if err != nil {
+		return err
 	}
 
 	printer := printKey
