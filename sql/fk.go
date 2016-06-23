@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
