@@ -18,7 +18,6 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -29,6 +28,7 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -131,7 +131,7 @@ type Node struct {
 func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
 	r, err := db.Inc(keys.NodeIDGenerator, 1)
 	if err != nil {
-		return 0, util.Errorf("unable to allocate node ID: %s", err)
+		return 0, errors.Errorf("unable to allocate node ID: %s", err)
 	}
 	return roachpb.NodeID(r.ValueInt()), nil
 }
@@ -142,7 +142,7 @@ func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
 func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.StoreID, error) {
 	r, err := db.Inc(keys.StoreIDGenerator, inc)
 	if err != nil {
-		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
+		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
 	return roachpb.StoreID(r.ValueInt() - inc + 1), nil
 }
@@ -195,7 +195,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 
 		// Verify the store isn't already part of a cluster.
 		if s.Ident.ClusterID != *uuid.EmptyUUID {
-			return uuid.UUID{}, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
+			return uuid.UUID{}, errors.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 		}
 
 		// Bootstrap store to persist the store ident.
@@ -220,12 +220,12 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
 			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
-				return uuid.UUID{}, util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
+				return uuid.UUID{}, errors.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
 		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
-			return uuid.UUID{}, util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
+			return uuid.UUID{}, errors.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
 	}
@@ -390,7 +390,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	var bootstraps []*storage.Store
 
 	if len(engines) == 0 {
-		return util.Errorf("no engines")
+		return errors.Errorf("no engines")
 	}
 	for _, e := range engines {
 		s := storage.NewStore(n.ctx, e, &n.Descriptor)
@@ -402,14 +402,14 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 				bootstraps = append(bootstraps, s)
 				continue
 			}
-			return util.Errorf("failed to start store: %s", err)
+			return errors.Errorf("failed to start store: %s", err)
 		}
 		if s.Ident.ClusterID == *uuid.EmptyUUID || s.Ident.NodeID == 0 {
-			return util.Errorf("unidentified store: %s", s)
+			return errors.Errorf("unidentified store: %s", s)
 		}
 		capacity, err := s.Capacity()
 		if err != nil {
-			return util.Errorf("could not query store capacity: %s", err)
+			return errors.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof("initialized store %s: %+v", s, capacity)
 		n.addStore(s)
@@ -477,9 +477,9 @@ func (n *Node) validateStores() error {
 			n.ClusterID = s.Ident.ClusterID
 			n.initNodeID(s.Ident.NodeID)
 		} else if n.ClusterID != s.Ident.ClusterID {
-			return util.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
+			return errors.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
-			return util.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
+			return errors.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
 		}
 		return nil
 	})
@@ -747,7 +747,7 @@ func (n *Node) Batch(
 				return nil, err
 			}
 			if certUser != security.NodeUser {
-				return nil, util.Errorf("user %s is not allowed", certUser)
+				return nil, errors.Errorf("user %s is not allowed", certUser)
 			}
 		}
 	}
@@ -801,7 +801,7 @@ func (n *Node) Batch(
 	}
 
 	if !n.stopper.RunTask(f) {
-		return nil, util.Errorf("node %d stopped", n.Descriptor.NodeID)
+		return nil, errors.Errorf("node %d stopped", n.Descriptor.NodeID)
 	}
 	return br, nil
 }
@@ -810,7 +810,7 @@ func (n *Node) execStoreCommand(
 	h roachpb.StoreRequestHeader, f func(*storage.Store) error,
 ) error {
 	if h.NodeID != n.Descriptor.NodeID {
-		return util.Errorf("request for NodeID %d cannot be served by NodeID %d",
+		return errors.Errorf("request for NodeID %d cannot be served by NodeID %d",
 			h.NodeID, n.Descriptor.NodeID)
 	}
 	store, err := n.stores.GetStore(h.StoreID)

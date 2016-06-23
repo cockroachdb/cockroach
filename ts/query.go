@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // calibratedData is used to calibrate an InternalTimeSeriesData object for
@@ -64,7 +64,7 @@ func (ds *dataSpan) timestampForOffset(offset int32) int64 {
 // it to a calibratedData object in the process.
 func (ds *dataSpan) addData(data roachpb.InternalTimeSeriesData) error {
 	if data.SampleDurationNanos != ds.sampleNanos {
-		return util.Errorf("data added to dataSpan with mismatched sample duration period")
+		return errors.Errorf("data added to dataSpan with mismatched sample duration period")
 	}
 
 	// Reject data if there are no samples.
@@ -91,7 +91,7 @@ func (ds *dataSpan) addData(data roachpb.InternalTimeSeriesData) error {
 	if len(ds.datas) > 0 {
 		last := ds.datas[len(ds.datas)-1]
 		if rd.offsetAt(0) <= last.offsetAt(len(last.Samples)-1) {
-			return util.Errorf("data must be added to dataSpan in chronological order")
+			return errors.Errorf("data must be added to dataSpan in chronological order")
 		}
 	}
 
@@ -599,5 +599,5 @@ func getDownsampleFunction(agg tspb.TimeSeriesQueryAggregator) (downsampleFn, er
 	case tspb.TimeSeriesQueryAggregator_MIN:
 		return (roachpb.InternalTimeSeriesSample).Minimum, nil
 	}
-	return nil, util.Errorf("query specified unknown time series aggregator %s", agg.String())
+	return nil, errors.Errorf("query specified unknown time series aggregator %s", agg.String())
 }

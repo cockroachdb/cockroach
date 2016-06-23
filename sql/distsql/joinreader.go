@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -56,7 +56,7 @@ func newJoinReader(
 
 	if spec.IndexIdx != 0 {
 		// TODO(radu): for now we only support joining with the primary index
-		return nil, util.Errorf("join with index not implemented")
+		return nil, errors.Errorf("join with index not implemented")
 	}
 
 	err := jr.readerBase.init(&spec.Table, int(spec.IndexIdx), txn, spec.Filter, evalCtx,
@@ -73,7 +73,7 @@ func (jr *joinReader) generateKey(
 ) (roachpb.Key, error) {
 	index := jr.index
 	if len(row) != len(index.ColumnIDs) {
-		return nil, util.Errorf("joinReader input has %d columns, expected %d",
+		return nil, errors.Errorf("joinReader input has %d columns, expected %d",
 			len(row), len(jr.desc.PrimaryIndex.ColumnIDs))
 	}
 
@@ -82,7 +82,7 @@ func (jr *joinReader) generateKey(
 	for i, cid := range index.ColumnIDs {
 		colType := jr.desc.Columns[jr.colIdxMap[cid]].Type.Kind
 		if row[i].Type != colType {
-			return nil, util.Errorf("joinReader input column %d has invalid type %s, expected %s",
+			return nil, errors.Errorf("joinReader input column %d has invalid type %s, expected %s",
 				i, row[i].Type, colType)
 		}
 	}

@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 // A Stores provides methods to access a collection of stores. There's
@@ -82,7 +82,7 @@ func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
 	store, ok := ls.storeMap[storeID]
 	ls.mu.RUnlock()
 	if !ok {
-		return nil, util.Errorf("store %d not found", storeID)
+		return nil, errors.Errorf("store %d not found", storeID)
 	}
 	return store, nil
 }
@@ -214,7 +214,7 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			continue
 		}
 		// Should never happen outside of tests.
-		return 0, nil, util.Errorf(
+		return 0, nil, errors.Errorf(
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {

@@ -20,7 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
+
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -58,7 +59,7 @@ func promptForPassword() ([]byte, error) {
 	// Make sure stdout moves on to the next line.
 	fmt.Print("\n")
 	if !bytes.Equal(one, two) {
-		return nil, util.Errorf("password mismatch")
+		return nil, errors.Errorf("password mismatch")
 	}
 	return []byte(one), nil
 }
@@ -77,7 +78,7 @@ func PromptForPasswordAndHash() ([]byte, error) {
 	}
 	// TODO(marc): we may want to have a minimum length.
 	if len(password) == 0 {
-		return nil, util.Errorf("password cannot be empty")
+		return nil, errors.Errorf("password cannot be empty")
 	}
 	return HashPassword(password)
 }

@@ -19,6 +19,8 @@ package resolver
 import (
 	"net"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -45,5 +47,5 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 		}
 		return util.NewUnresolvedAddr("tcp", sr.addr), nil
 	}
-	return nil, util.Errorf("unknown address type: %q", sr.typ)
+	return nil, errors.Errorf("unknown address type: %q", sr.typ)
 }

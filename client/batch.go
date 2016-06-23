@@ -17,8 +17,9 @@
 package client
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 const (
@@ -79,7 +80,7 @@ func (b *Batch) RawResponse() *roachpb.BatchResponse {
 // the batch, asserting that that error is non-nil.
 func (b *Batch) MustPErr() *roachpb.Error {
 	if b.pErr == nil {
-		panic(util.Errorf("expected non-nil pErr for batch %+v", b))
+		panic(errors.Errorf("expected non-nil pErr for batch %+v", b))
 	}
 	return b.pErr
 }
@@ -95,7 +96,7 @@ func (b *Batch) prepare() error {
 
 func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
 	if err == nil && b.raw && !raw {
-		err = util.Errorf("must not use non-raw operations on a raw batch")
+		err = errors.Errorf("must not use non-raw operations on a raw batch")
 	}
 	// TODO(tschottdorf): assert that calls is 0 or 1?
 	r := Result{calls: calls, Err: err}
@@ -164,7 +165,7 @@ func (b *Batch) fillResults() error {
 						// instead; this effectively just leaks here.
 						// TODO(tschottdorf): returning an error here seems
 						// to get swallowed.
-						panic(util.Errorf("not enough responses for calls: %+v, %+v",
+						panic(errors.Errorf("not enough responses for calls: %+v, %+v",
 							b.reqs, b.response))
 					}
 				}
@@ -236,7 +237,7 @@ func (b *Batch) fillResults() error {
 
 			default:
 				if result.Err == nil {
-					result.Err = util.Errorf("unsupported reply: %T for %T",
+					result.Err = errors.Errorf("unsupported reply: %T for %T",
 						reply, args)
 				}
 

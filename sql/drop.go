@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 type dropDatabaseNode struct {
@@ -79,7 +79,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		}
 		if tbDesc == nil {
 			// Database claims to have this table, but it does not exist.
-			return nil, util.Errorf("table %q was described by database %q, but does not exist",
+			return nil, errors.Errorf("table %q was described by database %q, but does not exist",
 				tbName.String(), n.Name)
 		}
 		td[i] = tbDesc
@@ -282,7 +282,7 @@ func checkIndexDependees(
 	}
 	t, err := getTableDescFromID(txn, idx.ReferencedBy[0].Table)
 	if err != nil {
-		return util.Errorf("%s %q is referenced by table ID %d, err resolving ID: %v",
+		return errors.Errorf("%s %q is referenced by table ID %d, err resolving ID: %v",
 			what, name, idx.ReferencedBy[0].Table, err)
 	}
 	if behavior == parser.DropCascade {
@@ -417,12 +417,12 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 			return err
 		}
 		if desc == nil {
-			return util.Errorf("table %d missing", tableID)
+			return errors.Errorf("table %d missing", tableID)
 		}
 		if desc.Deleted() {
 			return nil
 		}
-		return util.Errorf("expected table %d to be marked as deleted", tableID)
+		return errors.Errorf("expected table %d to be marked as deleted", tableID)
 	}
 	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		return verifyMetadataCallback(systemConfig, tableDesc.ID)
@@ -437,7 +437,7 @@ func (p *planner) removeFKBackReference(
 	if idx.ForeignKey != nil {
 		t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
 		if err != nil {
-			return util.Errorf("error resolving referenced table ID %d: %v",
+			return errors.Errorf("error resolving referenced table ID %d: %v",
 				idx.ForeignKey.Table, err)
 		}
 		targetIdx, err := t.FindIndexByID(idx.ForeignKey.Index)

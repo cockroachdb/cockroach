@@ -17,13 +17,13 @@
 package gossip
 
 import (
-	"errors"
 	"math"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -307,7 +307,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 		if outgoing == 1 && incoming == 1 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
 			return nil
 		}
-		return util.Errorf("incorrect number of incoming (%d) or outgoing (%d) connections", incoming, outgoing)
+		return errors.Errorf("incorrect number of incoming (%d) or outgoing (%d) connections", incoming, outgoing)
 	})
 }
 
@@ -350,7 +350,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		g[0].mu.Lock()
 		defer g[0].mu.Unlock()
 		if a, e := len(g[0].nodeMap), 2; a != e {
-			return util.Errorf("expected %s to contain %d nodes, got %d", g[0].nodeMap, e, a)
+			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].nodeMap, e, a)
 		}
 		return nil
 	})

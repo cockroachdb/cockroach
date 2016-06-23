@@ -19,7 +19,6 @@ package sql
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -34,12 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 // TODO(pmattis): Periodically renew leases for tables that were used recently and
@@ -147,7 +146,7 @@ func (s LeaseStore) Acquire(
 		return nil, errTableDeleted
 	}
 	if tableDesc == nil || tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-		return nil, util.Errorf("ID %d is not a table", tableID)
+		return nil, errors.Errorf("ID %d is not a table", tableID)
 	}
 
 	tableDesc.MaybeUpgradeFormatVersion()
@@ -157,7 +156,7 @@ func (s LeaseStore) Acquire(
 		return nil, err
 	}
 	if lease.Version < minVersion {
-		return nil, util.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
+		return nil, errors.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
 	}
 
 	// Insert the entry in the lease table in a separate transaction. This is
@@ -181,7 +180,7 @@ func (s LeaseStore) Acquire(
 			return err
 		}
 		if count != 1 {
-			return util.Errorf("%s: expected 1 result, found %d", insertLease, count)
+			return errors.Errorf("%s: expected 1 result, found %d", insertLease, count)
 		}
 		return nil
 	})
@@ -202,7 +201,7 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 			return err
 		}
 		if count != 1 {
-			return util.Errorf("unexpected results while deleting lease %s: "+
+			return errors.Errorf("unexpected results while deleting lease %s: "+
 				"expected 1 result, found %d", lease, count)
 		}
 		return nil
@@ -234,7 +233,7 @@ func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Option
 		}
 		tableDesc = desc.GetTable()
 		if tableDesc == nil {
-			return 0, util.Errorf("ID %d is not a table", tableID)
+			return 0, errors.Errorf("ID %d is not a table", tableID)
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
@@ -290,7 +289,7 @@ func (s LeaseStore) Publish(
 			}
 			tableDesc := desc.GetTable()
 			if tableDesc == nil {
-				return util.Errorf("ID %d is not a table", tableID)
+				return errors.Errorf("ID %d is not a table", tableID)
 			}
 			if expectedVersion != tableDesc.Version {
 				// The version changed out from under us. Someone else must be
@@ -489,7 +488,7 @@ func (t *tableState) acquire(
 		} else if version != 0 {
 			n := t.active.findNewest(0)
 			if n != nil && version < n.Version {
-				return nil, util.Errorf("table %d unable to acquire lease on old version: %d < %d",
+				return nil, errors.Errorf("table %d unable to acquire lease on old version: %d < %d",
 					t.id, version, n.Version)
 			}
 		}
@@ -636,7 +635,7 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 
 	s := t.active.find(lease.Version, lease.expiration)
 	if s == nil {
-		return util.Errorf("table %d version %d not found", lease.ID, lease.Version)
+		return errors.Errorf("table %d version %d not found", lease.ID, lease.Version)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1039,7 +1038,7 @@ func (m *LeaseManager) acquireFreshestFromStore(
 func (m *LeaseManager) Release(lease *LeaseState) error {
 	t := m.findTableState(lease.ID, false, nil)
 	if t == nil {
-		return util.Errorf("table %d not found", lease.ID)
+		return errors.Errorf("table %d not found", lease.ID)
 	}
 	// TODO(pmattis): Can/should we delete from LeaseManager.tables if the
 	// tableState becomes empty?

@@ -23,7 +23,7 @@ import (
 	"encoding/pem"
 	"os"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // loadCACertAndKey loads the certificate and key files,parses them,
@@ -32,14 +32,14 @@ func loadCACertAndKey(sslCA, sslCAKey string) (*x509.Certificate, crypto.Private
 	// LoadX509KeyPair does a bunch of validation, including len(Certificates) != 0.
 	caCert, err := tls.LoadX509KeyPair(sslCA, sslCAKey)
 	if err != nil {
-		return nil, nil, util.Errorf("error loading CA certificate %s and key %s: %s",
+		return nil, nil, errors.Errorf("error loading CA certificate %s and key %s: %s",
 			sslCA, sslCAKey, err)
 	}
 
 	// Extract x509 certificate from tls cert.
 	x509Cert, err := x509.ParseCertificate(caCert.Certificate[0])
 	if err != nil {
-		return nil, nil, util.Errorf("error parsing CA certificate %s: %s", sslCA, err)
+		return nil, nil, errors.Errorf("error parsing CA certificate %s: %s", sslCA, err)
 	}
 	return x509Cert, caCert.PrivateKey, nil
 }
@@ -63,29 +63,29 @@ func writeCertificateAndKey(certFilePath, keyFilePath string,
 	// Write certificate to file.
 	certFile, err := os.OpenFile(certFilePath, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		return util.Errorf("error creating certificate: %s", err)
+		return errors.Errorf("error creating certificate: %s", err)
 	}
 
 	if err := pem.Encode(certFile, certBlock); err != nil {
-		return util.Errorf("error encoding certificate: %s", err)
+		return errors.Errorf("error encoding certificate: %s", err)
 	}
 
 	if err := certFile.Close(); err != nil {
-		return util.Errorf("error closing file %s: %s", certFilePath, err)
+		return errors.Errorf("error closing file %s: %s", certFilePath, err)
 	}
 
 	// Write key to file.
 	keyFile, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
-		return util.Errorf("error creating key: %s", err)
+		return errors.Errorf("error creating key: %s", err)
 	}
 
 	if err := pem.Encode(keyFile, keyBlock); err != nil {
-		return util.Errorf("error encoding key: %s", err)
+		return errors.Errorf("error encoding key: %s", err)
 	}
 
 	if err := keyFile.Close(); err != nil {
-		return util.Errorf("error closing file %s: %s", keyFilePath, err)
+		return errors.Errorf("error closing file %s: %s", keyFilePath, err)
 	}
 
 	return nil
@@ -100,7 +100,7 @@ func RunCreateCACert(sslCA, sslCAKey string, keySize int) error {
 	// Generate certificate.
 	certificate, key, err := GenerateCA(keySize)
 	if err != nil {
-		return util.Errorf("error creating CA certificate and key: %s", err)
+		return errors.Errorf("error creating CA certificate and key: %s", err)
 	}
 
 	return writeCertificateAndKey(sslCA, sslCAKey, certificate, key)
@@ -114,7 +114,7 @@ func RunCreateCACert(sslCA, sslCAKey string, keySize int) error {
 // - sslCertKey: path to the node key
 func RunCreateNodeCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int, hosts []string) error {
 	if len(hosts) == 0 {
-		return util.Errorf("no hosts specified. Need at least one")
+		return errors.Errorf("no hosts specified. Need at least one")
 	}
 
 	caCert, caKey, err := loadCACertAndKey(sslCA, sslCAKey)
@@ -125,7 +125,7 @@ func RunCreateNodeCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int,
 	// Generate certificates and keys.
 	serverCert, serverKey, err := GenerateServerCert(caCert, caKey, keySize, hosts)
 	if err != nil {
-		return util.Errorf("error creating node server certificate and key: %s", err)
+		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}
 
 	// TODO(marc): we fail if files already exist. At this point, we're checking four
@@ -146,7 +146,7 @@ func RunCreateNodeCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int,
 // - sslCertKey: path to the node key
 func RunCreateClientCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int, username string) error {
 	if len(username) == 0 {
-		return util.Errorf("no username specified.")
+		return errors.Errorf("no username specified.")
 	}
 
 	caCert, caKey, err := loadCACertAndKey(sslCA, sslCAKey)
@@ -157,7 +157,7 @@ func RunCreateClientCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize in
 	// Generate certificate.
 	certificate, key, err := GenerateClientCert(caCert, caKey, keySize, username)
 	if err != nil {
-		return util.Errorf("error creating client certificate and key: %s", err)
+		return errors.Errorf("error creating client certificate and key: %s", err)
 	}
 
 	return writeCertificateAndKey(sslCert, sslCertKey, certificate, key)

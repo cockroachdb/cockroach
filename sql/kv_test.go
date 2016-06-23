@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/pkg/errors"
 )
 
 type kvInterface interface {
@@ -139,7 +139,7 @@ func (kv *kvNative) scan(rows, run int) error {
 		return err
 	})
 	if len(kvs) != rows {
-		return util.Errorf("expected %d rows; got %d", rows, len(kvs))
+		return errors.Errorf("expected %d rows; got %d", rows, len(kvs))
 	}
 	return err
 }
@@ -252,7 +252,7 @@ func (kv *kvSQL) scan(count, run int) error {
 		return err
 	}
 	if n != count {
-		return util.Errorf("unexpected result count: %d (expected %d)", n, count)
+		return errors.Errorf("unexpected result count: %d (expected %d)", n, count)
 	}
 	return nil
 }

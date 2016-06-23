@@ -31,10 +31,10 @@ import (
 
 	"github.com/biogo/store/interval"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -937,7 +937,7 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 // rs.EndKey is nil. This gives the method unexpected behavior.
 func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	if !rs.Key.Less(desc.EndKey) || !desc.StartKey.Less(rs.EndKey) {
-		return rs, util.Errorf("span and descriptor's range do not overlap")
+		return rs, errors.Errorf("span and descriptor's range do not overlap")
 	}
 
 	key := rs.Key

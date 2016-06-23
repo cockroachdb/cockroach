@@ -30,10 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/pq/oid"
+	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=clientMessageType
@@ -152,14 +152,14 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 	for {
 		key, err := buf.getString()
 		if err != nil {
-			return sql.SessionArgs{}, util.Errorf("error reading option key: %s", err)
+			return sql.SessionArgs{}, errors.Errorf("error reading option key: %s", err)
 		}
 		if len(key) == 0 {
 			break
 		}
 		value, err := buf.getString()
 		if err != nil {
-			return sql.SessionArgs{}, util.Errorf("error reading option value: %s", err)
+			return sql.SessionArgs{}, errors.Errorf("error reading option value: %s", err)
 		}
 		switch key {
 		case "database":
@@ -446,7 +446,7 @@ func (c *v3Conn) handleDescribe(buf *readBuffer) error {
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
 		return c.sendRowDescription(portal.Stmt.Columns, portalMeta.outFormats)
 	default:
-		return util.Errorf("unknown describe type: %s", typ)
+		return errors.Errorf("unknown describe type: %s", typ)
 	}
 }
 
@@ -465,7 +465,7 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 	case preparePortal:
 		c.session.PreparedPortals.Delete(name)
 	default:
-		return util.Errorf("unknown close type: %s", typ)
+		return errors.Errorf("unknown close type: %s", typ)
 	}
 	return nil
 }
@@ -765,7 +765,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 					case formatBinary:
 						c.writeBuf.writeBinaryDatum(col)
 					default:
-						c.writeBuf.setError(util.Errorf("unsupported format code %s", fmtCode))
+						c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
 					}
 				}
 				if err := c.writeBuf.finishMsg(c.wr); err != nil {

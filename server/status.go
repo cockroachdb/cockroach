@@ -33,6 +33,7 @@ import (
 
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
@@ -521,7 +522,7 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 
 	var nodeStatus status.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
-		err = util.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
+		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
 		log.Error(err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -696,7 +697,7 @@ func marshalToJSON(value interface{}) ([]byte, error) {
 	}
 	body, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		return nil, util.Errorf("unable to marshal %+v to json: %s", value, err)
+		return nil, errors.Errorf("unable to marshal %+v to json: %s", value, err)
 	}
 	return body, nil
 }

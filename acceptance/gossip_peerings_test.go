@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -53,14 +55,14 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration, f checkGossip
 				return err
 			}
 			if err := f(infoStatus.Infos); err != nil {
-				return util.Errorf("node %d: %s", i, err)
+				return errors.Errorf("node %d: %s", i, err)
 			}
 		}
 
 		return nil
 	})
 	if err != nil {
-		t.Fatal(util.ErrorfSkipFrames(1, "condition failed to evaluate within %s: %s", d, err))
+		t.Fatal(errors.Errorf("condition failed to evaluate within %s: %s", d, err))
 	}
 }
 
@@ -75,7 +77,7 @@ func hasPeers(expected int) checkGossipFunc {
 			}
 		}
 		if count != expected {
-			return util.Errorf("expected %d peers, found %d", expected, count)
+			return errors.Errorf("expected %d peers, found %d", expected, count)
 		}
 		return nil
 	}
@@ -84,7 +86,7 @@ func hasPeers(expected int) checkGossipFunc {
 // hasSentinel is a checkGossipFunc that passes when the sentinel gossip is present.
 func hasSentinel(infos map[string]gossip.Info) error {
 	if _, ok := infos[gossip.KeySentinel]; !ok {
-		return util.Errorf("sentinel not found")
+		return errors.Errorf("sentinel not found")
 	}
 	return nil
 }
@@ -92,7 +94,7 @@ func hasSentinel(infos map[string]gossip.Info) error {
 // hasClusterID is a checkGossipFunc that passes when the cluster ID gossip is present.
 func hasClusterID(infos map[string]gossip.Info) error {
 	if _, ok := infos[gossip.KeyClusterID]; !ok {
-		return util.Errorf("cluster ID not found")
+		return errors.Errorf("cluster ID not found")
 	}
 	return nil
 }

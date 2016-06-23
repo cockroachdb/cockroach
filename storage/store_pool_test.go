@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"errors"
 	"reflect"
 	"sort"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 var uniqueStore = []*roachpb.StoreDescriptor{
@@ -218,11 +218,11 @@ func verifyStoreList(
 	var actual []int
 	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
 	if aliveStoreCount != expectedAliveStoreCount {
-		return util.Errorf("expected AliveStoreCount %d does not match actual %d",
+		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
 			expectedAliveStoreCount, aliveStoreCount)
 	}
 	if throttledStoreCount != expectedThrottledStoreCount {
-		return util.Errorf("expected ThrottledStoreCount %d does not match actual %d",
+		return errors.Errorf("expected ThrottledStoreCount %d does not match actual %d",
 			expectedThrottledStoreCount, throttledStoreCount)
 	}
 	for _, store := range sl.stores {
@@ -231,7 +231,7 @@ func verifyStoreList(
 	sort.Ints(expected)
 	sort.Ints(actual)
 	if !reflect.DeepEqual(expected, actual) {
-		return util.Errorf("expected %+v stores, actual %+v", expected, actual)
+		return errors.Errorf("expected %+v stores, actual %+v", expected, actual)
 	}
 	return nil
 }
@@ -534,7 +534,7 @@ func TestStorePoolReserve(t *testing.T) {
 	for i, testCase := range testCases {
 		f.reservationResponse = testCase.fakeResp
 		if len(testCase.fakeErr) != 0 {
-			f.reservationErr = util.Errorf("%s", testCase.fakeErr)
+			f.reservationErr = errors.Errorf("%s", testCase.fakeErr)
 		} else {
 			f.reservationErr = nil
 		}

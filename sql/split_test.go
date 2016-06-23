@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // getFastScanContext returns a test context with fast scan.
@@ -92,7 +93,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 			return err
 		}
 		if e := expectedInitialRanges + 1; num != e {
-			return util.Errorf("expected %d splits, found %d", e, num)
+			return errors.Errorf("expected %d splits, found %d", e, num)
 		}
 		return nil
 	})
@@ -119,7 +120,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 			return err
 		}
 		if e := expectedInitialRanges + 2; num != e {
-			return util.Errorf("expected %d splits, found %d", e, num)
+			return errors.Errorf("expected %d splits, found %d", e, num)
 		}
 		return nil
 	})

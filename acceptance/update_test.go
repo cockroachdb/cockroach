@@ -21,6 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -29,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(tschottdorf): name and location of this test. Should also test an actual
@@ -69,7 +71,7 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 	mustPost := func(freeze bool) serverpb.ClusterFreezeResponse {
 		reply, err := postFreeze(c, freeze, long)
 		if err != nil {
-			t.Fatal(util.ErrorfSkipFrames(1, "%v", err))
+			t.Fatal(errors.Errorf("%v", err))
 		}
 		return reply
 	}

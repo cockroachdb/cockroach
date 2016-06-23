@@ -20,9 +20,10 @@
 package parser
 
 import (
-	"errors"
 	"go/constant"
 	"go/token"
+
+    "github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -165,7 +166,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 	errSSLRequired := false
 	if version == versionSSL {
 		if len(buf.msg) > 0 {
-			return util.Errorf("unexpected data after SSLRequest: %q", buf.msg)
+			return errors.Errorf("unexpected data after SSLRequest: %q", buf.msg)
 		}
 
 		if s.context.Insecure {
@@ -226,7 +227,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		return v3conn.serve(nil)
 	}
 
-	return util.Errorf("unknown protocol version %d", version)
+	return errors.Errorf("unknown protocol version %d", version)
 }
 
 // Registry returns a registry with the metrics tracked by this server, which can be used to

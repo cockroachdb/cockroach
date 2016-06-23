@@ -18,8 +18,8 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/pkg/errors"
 )
 
 type planMaker interface {
@@ -304,7 +304,7 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 	case *parser.ValuesClause:
 		return p.ValuesClause(n, desiredTypes)
 	default:
-		return nil, util.Errorf("unknown statement type: %T", stmt)
+		return nil, errors.Errorf("unknown statement type: %T", stmt)
 	}
 }
 

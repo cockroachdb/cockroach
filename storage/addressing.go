@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 type metaAction func(*client.Batch, roachpb.Key, *roachpb.RangeDescriptor)
@@ -80,7 +80,7 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, keys.Meta1Prefix) ||
 		bytes.HasPrefix(desc.StartKey, keys.Meta1Prefix) {
-		return util.Errorf("meta1 addressing records cannot be split: %+v", desc)
+		return errors.Errorf("meta1 addressing records cannot be split: %+v", desc)
 	}
 
 	// Note that both cases 2 and 3 are handled by keys.RangeMetaKey.

@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -35,7 +37,7 @@ func TestSucceedsSoon(t *testing.T) {
 		if elapsed > duration {
 			return nil
 		}
-		return Errorf("%s elapsed, waiting until %s elapses", elapsed, duration)
+		return errors.Errorf("%s elapsed, waiting until %s elapses", elapsed, duration)
 	})
 }
 

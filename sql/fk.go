@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // TablesByID maps table IDs to looked up descriptors.
@@ -208,7 +208,7 @@ func makeBaseFKHelper(
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchPrefix: ref.IndexKeyPrefix()}
 	searchTable, ok := otherTables[ref.Table]
 	if !ok {
-		return b, util.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchTable = searchTable
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)

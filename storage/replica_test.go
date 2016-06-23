@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -35,6 +34,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -273,7 +273,7 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 
 	util.SucceedsSoon(t, func() error {
 		if _, ok := tc.gossip.GetSystemConfig(); !ok {
-			return util.Errorf("expected system config to be set")
+			return errors.Errorf("expected system config to be set")
 		}
 		return nil
 	})
@@ -715,7 +715,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	assert := func(actual, min, max int64) {
 		if actual < min || actual > max {
-			t.Fatal(util.ErrorfSkipFrames(1,
+			t.Fatal(errors.Errorf(
 				"metrics counters actual=%d, expected=[%d,%d]", actual, min, max))
 		}
 	}
@@ -833,14 +833,14 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		cfg, ok := tc.gossip.GetSystemConfig()
 		if !ok {
-			return util.Errorf("expected system config to be set")
+			return errors.Errorf("expected system config to be set")
 		}
 		numValues := len(cfg.Values)
 		if numValues != 1 {
-			return util.Errorf("num config values != 1; got %d", numValues)
+			return errors.Errorf("num config values != 1; got %d", numValues)
 		}
 		if k := cfg.Values[numValues-1].Key; !k.Equal(key) {
-			return util.Errorf("invalid key for config value (%q != %q)", k, key)
+			return errors.Errorf("invalid key for config value (%q != %q)", k, key)
 		}
 		return nil
 	})
@@ -1568,7 +1568,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			newLease, _ := tc.rng.getLeaderLease()
 			if !lease.StartStasis.Less(newLease.StartStasis) {
-				return util.Errorf("%d: lease did not get extended: %+v to %+v", i, lease, newLease)
+				return errors.Errorf("%d: lease did not get extended: %+v to %+v", i, lease, newLease)
 			}
 			return nil
 		})
@@ -3036,7 +3036,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if filterArgs.Req.Method() == roachpb.GC {
-				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 			return nil
 		}
@@ -3140,7 +3140,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
-				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 			return nil
 		}
@@ -3195,14 +3195,14 @@ func TestEndTransactionDirectGC(t *testing.T) {
 		if gr, _, err := tc.rng.Get(context.Background(), tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
 			return err
 		} else if gr.Value != nil {
-			return util.Errorf("txn entry still there: %+v", gr)
+			return errors.Errorf("txn entry still there: %+v", gr)
 		}
 
 		var entry roachpb.AbortCacheEntry
 		if aborted, err := tc.rng.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		} else if aborted {
-			return util.Errorf("abort cache still populated: %v", entry)
+			return errors.Errorf("abort cache still populated: %v", entry)
 		}
 		if aborted, err := rightRng.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
@@ -3228,7 +3228,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
-				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			} else if filterArgs.Req.Method() == roachpb.GC {
 				t.Fatalf("unexpected GCRequest: %+v", filterArgs.Req)
 			}
@@ -3246,7 +3246,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	// would trigger a Fatal from the command filter.
 	util.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&count) == 0 {
-			return util.Errorf("intent resolution not attempted yet")
+			return errors.Errorf("intent resolution not attempted yet")
 		} else if err := tc.store.DB().Put("panama", "banana"); err != nil {
 			return err
 		}
@@ -4935,7 +4935,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 		}
 
 		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemConfigSpan.Key) {
-			return util.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, kvs)
+			return errors.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, kvs)
 		}
 		return nil
 	})
@@ -5557,7 +5557,7 @@ func TestAsyncSnapshot(t *testing.T) {
 			return err
 		}
 		if len(snap.Data) == 0 {
-			return util.Errorf("snapshot is empty")
+			return errors.Errorf("snapshot is empty")
 		}
 		return nil
 	})
@@ -5683,7 +5683,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 
 	prefix := fmt.Sprintf("repropose=%t withErr=%t: ", repropose, withErr)
 	fatalf := func(msg string, args ...interface{}) {
-		t.Fatal(util.ErrorfSkipFrames(1, prefix+msg, args...))
+		t.Fatal(errors.Errorf(prefix+msg, args...))
 	}
 
 	type magicKey struct{}

@@ -22,11 +22,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -138,7 +138,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 
 	default:
 		mustUsage(cmd)
-		return util.Errorf("expected no arguments or a single node ID")
+		return errors.Errorf("expected no arguments or a single node ID")
 	}
 
 	printQueryOutput(os.Stdout, nodesColumnHeaders, nodeStatusesToRows(nodeStatuses), "", cliCtx.prettyFmt)

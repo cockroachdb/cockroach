@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -110,7 +110,7 @@ func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.Syste
 	reply := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 
 	if len(reply.Ranges) != 1 {
-		return util.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))
+		return errors.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))
 	}
 
 	replyDesc := reply.Ranges[0]

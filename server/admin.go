@@ -20,7 +20,6 @@ package server
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +28,7 @@ import (
 
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -134,12 +134,12 @@ func (s *adminServer) serverErrors(errors []error) error {
 // the first error that was found.
 func (s *adminServer) checkQueryResults(results []sql.Result, numResults int) error {
 	if a, e := len(results), numResults; a != e {
-		return util.Errorf("# of results %d != expected %d", a, e)
+		return errors.Errorf("# of results %d != expected %d", a, e)
 	}
 
 	for _, result := range results {
 		if result.Err != nil {
-			return util.Errorf("%s", result.Err)
+			return errors.Errorf("%s", result.Err)
 		}
 	}
 
@@ -916,7 +916,7 @@ func (q *sqlQuery) Append(s string, params ...parser.Datum) {
 
 	if placeholders != len(params) {
 		q.errs = append(q.errs,
-			util.Errorf("# of placeholders %d != # of params %d", placeholders, len(params)))
+			errors.Errorf("# of placeholders %d != # of params %d", placeholders, len(params)))
 	}
 	for i, param := range params {
 		q.qargs.SetValue(fmt.Sprint(firstpidx+i+1), param)
@@ -944,7 +944,7 @@ func makeResultScanner(cols []sql.ResultColumn) resultScanner {
 func (rs resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
 	idx, ok := rs.colNameToIdx[col]
 	if !ok {
-		return false, util.Errorf("result is missing column %s", col)
+		return false, errors.Errorf("result is missing column %s", col)
 	}
 	return row.Values[idx] == parser.DNull, nil
 }
@@ -956,57 +956,57 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 	switch d := dst.(type) {
 	case *string:
 		if dst == nil {
-			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+			return errors.Errorf("nil destination pointer passed in")
 		}
 		s, ok := src.(*parser.DString)
 		if !ok {
-			return util.ErrorfSkipFrames(1, "source type assertion failed")
+			return errors.Errorf("source type assertion failed")
 		}
 		*d = string(*s)
 
 	case *bool:
 		if dst == nil {
-			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+			return errors.Errorf("nil destination pointer passed in")
 		}
 		s, ok := src.(*parser.DBool)
 		if !ok {
-			return util.ErrorfSkipFrames(1, "source type assertion failed")
+			return errors.Errorf("source type assertion failed")
 		}
 		*d = bool(*s)
 
 	case *int64:
 		if dst == nil {
-			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+			return errors.Errorf("nil destination pointer passed in")
 		}
 		s, ok := src.(*parser.DInt)
 		if !ok {
-			return util.ErrorfSkipFrames(1, "source type assertion failed")
+			return errors.Errorf("source type assertion failed")
 		}
 		*d = int64(*s)
 
 	case *time.Time:
 		if dst == nil {
-			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+			return errors.Errorf("nil destination pointer passed in")
 		}
 		s, ok := src.(*parser.DTimestamp)
 		if !ok {
-			return util.ErrorfSkipFrames(1, "source type assertion failed")
+			return errors.Errorf("source type assertion failed")
 		}
 		*d = time.Time(s.Time)
 
 	case *[]byte:
 		if dst == nil {
-			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+			return errors.Errorf("nil destination pointer passed in")
 		}
 		s, ok := src.(*parser.DBytes)
 		if !ok {
-			return util.ErrorfSkipFrames(1, "source type assertion failed")
+			return errors.Errorf("source type assertion failed")
 		}
 		// Yes, this copies, but this probably isn't in the critical path.
 		*d = []byte(*s)
 
 	default:
-		return util.ErrorfSkipFrames(1, "unimplemented type for scanCol: %T", dst)
+		return errors.Errorf("unimplemented type for scanCol: %T", dst)
 	}
 
 	return nil
@@ -1016,7 +1016,7 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 func (rs resultScanner) Scan(row sql.ResultRow, colName string, dst interface{}) error {
 	idx, ok := rs.colNameToIdx[colName]
 	if !ok {
-		return util.Errorf("result is missing column %s", colName)
+		return errors.Errorf("result is missing column %s", colName)
 	}
 	return rs.ScanIndex(row, idx, dst)
 }

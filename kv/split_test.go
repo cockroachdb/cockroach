@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -108,7 +109,7 @@ func TestRangeSplitMeta(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, 0, hlc.MaxTimestamp, true, nil); err != nil {
-			return util.Errorf("failed to verify no dangling intents: %s", err)
+			return errors.Errorf("failed to verify no dangling intents: %s", err)
 		}
 		return nil
 	})
@@ -191,10 +192,10 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		// Scan the txn records.
 		rows, err := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
-			return util.Errorf("failed to scan meta2 keys: %s", err)
+			return errors.Errorf("failed to scan meta2 keys: %s", err)
 		}
 		if lr := len(rows); lr < 5 {
-			return util.Errorf("expected >= 5 scans; got %d", lr)
+			return errors.Errorf("expected >= 5 scans; got %d", lr)
 		}
 		return nil
 	})
@@ -210,7 +211,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// asynchronous split.
 	util.SucceedsSoon(t, func() error {
 		if _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, 0, hlc.MaxTimestamp, true, nil); err != nil {
-			return util.Errorf("failed to verify no dangling intents: %s", err)
+			return errors.Errorf("failed to verify no dangling intents: %s", err)
 		}
 		return nil
 	})

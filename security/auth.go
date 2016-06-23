@@ -19,8 +19,8 @@ package security
 import (
 	"crypto/tls"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -33,14 +33,14 @@ const (
 // GetCertificateUser extract the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if tlsState == nil {
-		return "", util.Errorf("request is not using TLS")
+		return "", errors.Errorf("request is not using TLS")
 	}
 	if len(tlsState.PeerCertificates) == 0 {
-		return "", util.Errorf("no client certificates in request")
+		return "", errors.Errorf("no client certificates in request")
 	}
 	if len(tlsState.VerifiedChains) != len(tlsState.PeerCertificates) {
 		// TODO(marc): can this happen? Should we require exactly one?
-		return "", util.Errorf("client cerficates not verified")
+		return "", errors.Errorf("client cerficates not verified")
 	}
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
@@ -65,11 +65,11 @@ func ProtoAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
 		// RequestWithUser must be implemented.
 		requestWithUser, ok := request.(RequestWithUser)
 		if !ok {
-			return util.Errorf("unknown request type: %T", request)
+			return errors.Errorf("unknown request type: %T", request)
 		}
 
 		if err := userHook(requestWithUser.GetUser(), public); err != nil {
-			return util.Errorf("%s error in request: %s", err, request)
+			return errors.Errorf("%s error in request: %s", err, request)
 		}
 		return nil
 	}, nil
@@ -92,11 +92,11 @@ func UserAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
 	return func(requestedUser string, public bool) error {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if len(requestedUser) == 0 {
-			return util.Errorf("user is missing")
+			return errors.Errorf("user is missing")
 		}
 
 		if !public && requestedUser != NodeUser {
-			return util.Errorf("user %s is not allowed", requestedUser)
+			return errors.Errorf("user %s is not allowed", requestedUser)
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
@@ -108,7 +108,7 @@ func UserAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
 		// except if the certificate user is NodeUser, which is allowed to
 		// act on behalf of all other users.
 		if !(certUser == NodeUser || certUser == requestedUser) {
-			return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
+			return errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
 		}
 
 		return nil

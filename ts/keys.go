@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // Time series keys are carefully constructed to usefully sort the data in the
@@ -77,7 +77,7 @@ func DecodeDataKey(key roachpb.Key) (string, string, Resolution, int64, error) {
 	// Detect and remove prefix.
 	remainder := key
 	if !bytes.HasPrefix(remainder, keys.TimeseriesPrefix) {
-		return "", "", 0, 0, util.Errorf("malformed time series data key %v: improper prefix", key)
+		return "", "", 0, 0, errors.Errorf("malformed time series data key %v: improper prefix", key)
 	}
 	remainder = remainder[len(keys.TimeseriesPrefix):]
 

@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func makeColIDtoRowIndex(row planNode, desc *sqlbase.TableDescriptor) (
@@ -128,7 +128,7 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 				case *sqlbase.DescriptorMutation_Index:
 					addedIndexDescs = append(addedIndexDescs, *t.Index)
 				default:
-					return util.Errorf("unsupported mutation: %+v", m)
+					return errors.Errorf("unsupported mutation: %+v", m)
 				}
 
 			case sqlbase.DescriptorMutation_DROP:
@@ -138,7 +138,7 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 				case *sqlbase.DescriptorMutation_Index:
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				default:
-					return util.Errorf("unsupported mutation: %+v", m)
+					return errors.Errorf("unsupported mutation: %+v", m)
 				}
 			}
 		}

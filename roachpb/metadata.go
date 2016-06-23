@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
@@ -143,19 +143,19 @@ func (r RangeDescriptor) IsInitialized() bool {
 // Validate performs some basic validation of the contents of a range descriptor.
 func (r RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
-		return util.Errorf("NextReplicaID must be non-zero")
+		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
 	for i, rep := range r.Replicas {
 		if err := rep.Validate(); err != nil {
-			return util.Errorf("replica %d is invalid: %s", i, err)
+			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
 		if _, ok := seen[rep.ReplicaID]; ok {
-			return util.Errorf("ReplicaID %d was reused", rep.ReplicaID)
+			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
 		}
 		seen[rep.ReplicaID] = struct{}{}
 		if rep.ReplicaID >= r.NextReplicaID {
-			return util.Errorf("ReplicaID %d must be less than NextReplicaID %d",
+			return errors.Errorf("ReplicaID %d must be less than NextReplicaID %d",
 				rep.ReplicaID, r.NextReplicaID)
 		}
 	}
@@ -165,13 +165,13 @@ func (r RangeDescriptor) Validate() error {
 // Validate performs some basic validation of the contents of a replica descriptor.
 func (r ReplicaDescriptor) Validate() error {
 	if r.NodeID == 0 {
-		return util.Errorf("NodeID must not be zero")
+		return errors.Errorf("NodeID must not be zero")
 	}
 	if r.StoreID == 0 {
-		return util.Errorf("StoreID must not be zero")
+		return errors.Errorf("StoreID must not be zero")
 	}
 	if r.ReplicaID == 0 {
-		return util.Errorf("ReplicaID must not be zero")
+		return errors.Errorf("ReplicaID must not be zero")
 	}
 	return nil
 }

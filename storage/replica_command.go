@@ -23,13 +23,13 @@ import (
 	"bytes"
 	"crypto/sha512"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -162,7 +161,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		resp := reply.(*roachpb.ChangeFrozenResponse)
 		*resp, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
 	default:
-		err = util.Errorf("unrecognized command %s", args.Method())
+		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
 	if log.V(2) {
@@ -351,10 +350,10 @@ func (r *Replica) ReverseScan(ctx context.Context, batch engine.ReadWriter, h ro
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	if h.Txn == nil {
-		return util.Errorf("no transaction specified to %s", args.Method())
+		return errors.Errorf("no transaction specified to %s", args.Method())
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
-		return util.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
+		return errors.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
 	}
 	return nil
 }
@@ -844,16 +843,16 @@ func (r *Replica) RangeLookup(
 		return reply, nil, err
 	}
 	if !key.Equal(args.Key) {
-		return reply, nil, util.Errorf("illegal lookup of range-local key")
+		return reply, nil, errors.Errorf("illegal lookup of range-local key")
 	}
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
-		return reply, nil, util.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
+		return reply, nil, errors.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 	consistent := h.ReadConsistency != roachpb.INCONSISTENT
 	if consistent && args.ConsiderIntents {
-		return reply, nil, util.Errorf("can not read consistently and special-case intents")
+		return reply, nil, errors.Errorf("can not read consistently and special-case intents")
 	}
 	if args.ConsiderIntents {
 		// Disable prefetching; the caller only cares about a single intent,
@@ -1061,7 +1060,7 @@ func (r *Replica) HeartbeatTxn(
 		// This could mean the heartbeat is a delayed relic or it could
 		// mean that the BeginTransaction call was delayed. In either
 		// case, there's no reason to persist a new transaction record.
-		return reply, util.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
+		return reply, errors.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
 	}
 
 	if txn.Status == roachpb.PENDING {
@@ -1171,11 +1170,11 @@ func (r *Replica) PushTxn(
 		return reply, errTransactionUnsupported
 	}
 	if args.Now.Equal(hlc.ZeroTimestamp) {
-		return reply, util.Errorf("the field Now must be provided")
+		return reply, errors.Errorf("the field Now must be provided")
 	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
+		return reply, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
@@ -1501,7 +1500,7 @@ func (r *Replica) LeaderLease(
 	if l := args.Lease; !l.Start.Less(l.StartStasis) ||
 		l.Expiration.Less(l.StartStasis) {
 		// This amounts to a bug.
-		return reply, util.Errorf("illegal lease interval: [%s, %s, %s]",
+		return reply, errors.Errorf("illegal lease interval: [%s, %s, %s]",
 			l.Start, l.StartStasis, l.Expiration)
 	}
 
@@ -1903,7 +1902,7 @@ func (r *Replica) ChangeFrozen(
 		return resp, err
 	}
 	if !bytes.Equal(curStart, args.Key) {
-		return resp, util.Errorf("unsupported range-local key")
+		return resp, errors.Errorf("unsupported range-local key")
 	}
 
 	desc := r.Desc()
@@ -1919,7 +1918,7 @@ func (r *Replica) ChangeFrozen(
 	}
 
 	if args.MustVersion == "" {
-		return resp, util.Errorf("empty version tag")
+		return resp, errors.Errorf("empty version tag")
 	} else if bi := build.GetInfo(); !frozen && args.Frozen && args.MustVersion != bi.Tag {
 		// Some earlier version tried to freeze but we never applied it until
 		// someone restarted this node with another version. No bueno - have to
@@ -2198,7 +2197,7 @@ func (r *Replica) splitTrigger(
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, split.UpdatedDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, split.NewDesc.EndKey) {
-		return util.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
+		return errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
 			split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey,
 			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
 	}
@@ -2210,7 +2209,7 @@ func (r *Replica) splitTrigger(
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
 	if err := engine.AccountForSelf(&deltaMS, split.NewDesc.RangeID); err != nil {
-		return util.Errorf("unable to account for enginepb.MVCCStats's own stats impact: %s", err)
+		return errors.Errorf("unable to account for enginepb.MVCCStats's own stats impact: %s", err)
 	}
 
 	// TODO(d4l3k): we should check which half is smaller and compute stats for it
@@ -2219,12 +2218,12 @@ func (r *Replica) splitTrigger(
 	// Compute stats for updated range.
 	leftMS, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
 	if err != nil {
-		return util.Errorf("unable to compute stats for updated range after split: %s", err)
+		return errors.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
 	log.Trace(ctx, "computed stats for old range")
 
 	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
-		return util.Errorf("unable to write MVCC stats: %s", err)
+		return errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 	r.mu.Lock()
 	r.mu.state.Stats = leftMS
@@ -2235,24 +2234,24 @@ func (r *Replica) splitTrigger(
 	// nil on calls to MVCCPutProto.
 	replicaGCTS, err := r.getLastReplicaGCTimestamp()
 	if err != nil {
-		return util.Errorf("unable to fetch last replica GC timestamp: %s", err)
+		return errors.Errorf("unable to fetch last replica GC timestamp: %s", err)
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
-		return util.Errorf("unable to copy last replica GC timestamp: %s", err)
+		return errors.Errorf("unable to copy last replica GC timestamp: %s", err)
 	}
 	verifyTS, err := r.getLastVerificationTimestamp()
 	if err != nil {
-		return util.Errorf("unable to fetch last verification timestamp: %s", err)
+		return errors.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
-		return util.Errorf("unable to copy last verification timestamp: %s", err)
+		return errors.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
 	// Initialize the new range's abort cache by copying the original's.
 	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return util.Errorf("unable to copy abort cache to new split range: %s", err)
+		return errors.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
@@ -2262,7 +2261,7 @@ func (r *Replica) splitTrigger(
 	// from it below.
 	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
 	if err != nil {
-		return util.Errorf("unable to write initial state: %s", err)
+		return errors.Errorf("unable to write initial state: %s", err)
 	}
 
 	rightMS := deltaMS
@@ -2272,7 +2271,7 @@ func (r *Replica) splitTrigger(
 	rightMS.Subtract(leftMS)
 
 	if err := setMVCCStats(batch, split.NewDesc.RangeID, rightMS); err != nil {
-		return util.Errorf("unable to write MVCC stats: %s", err)
+		return errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 	log.Trace(ctx, "computed stats for new range")
 
@@ -2429,15 +2428,15 @@ func (r *Replica) AdminMerge(
 		// Verify that the two ranges are mergeable.
 		if !bytes.Equal(origLeftDesc.EndKey, rightDesc.StartKey) {
 			// Should never happen, but just in case.
-			return util.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
+			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
 		if !bytes.Equal(rightDesc.EndKey, updatedLeftDesc.EndKey) {
 			// This merge raced with a split of the right-hand range.
 			// TODO(bdarnell): needs a test.
-			return util.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
+			return errors.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
 		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
-			return util.Errorf("ranges not collocated")
+			return errors.Errorf("ranges not collocated")
 		}
 
 		b := &client.Batch{}
@@ -2481,18 +2480,18 @@ func (r *Replica) mergeTrigger(
 ) error {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
-		return util.Errorf("range and updated range start keys do not match: %s != %s",
+		return errors.Errorf("range and updated range start keys do not match: %s != %s",
 			desc.StartKey, merge.UpdatedDesc.StartKey)
 	}
 
 	if !desc.EndKey.Less(merge.UpdatedDesc.EndKey) {
-		return util.Errorf("range end key is not less than the post merge end key: %s >= %s",
+		return errors.Errorf("range end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.UpdatedDesc.EndKey)
 	}
 
 	subsumedRangeID := merge.SubsumedDesc.RangeID
 	if subsumedRangeID <= 0 {
-		return util.Errorf("subsumed range ID must be provided: %d", subsumedRangeID)
+		return errors.Errorf("subsumed range ID must be provided: %d", subsumedRangeID)
 	}
 
 	// Compute stats for premerged range, including current transaction.
@@ -2511,7 +2510,7 @@ func (r *Replica) mergeTrigger(
 	// Copy the subsumed range's abort cache to the subsuming one.
 	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, subsumedRangeID)
 	if err != nil {
-		return util.Errorf("unable to copy abort cache to new split range: %s", err)
+		return errors.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 
 	// Remove the subsumed range's metadata. Note that we don't need to
@@ -2519,7 +2518,7 @@ func (r *Replica) mergeTrigger(
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(subsumedRangeID)
 	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, hlc.ZeroTimestamp, nil, false); err != nil {
-		return util.Errorf("cannot remove range metadata %s", err)
+		return errors.Errorf("cannot remove range metadata %s", err)
 	}
 
 	// Add in the stats for the subsumed range's range keys.
@@ -2529,13 +2528,13 @@ func (r *Replica) mergeTrigger(
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.EndKey))
 	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
-		return util.Errorf("unable to compute subsumed range's local stats: %s", err)
+		return errors.Errorf("unable to compute subsumed range's local stats: %s", err)
 	}
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range (in-memory updated under lock below).
 	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
-		return util.Errorf("unable to write MVCC stats: %s", err)
+		return errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
 	// Clear the timestamp cache. In the case that this replica and the
@@ -2611,7 +2610,7 @@ func (r *Replica) ChangeReplicas(
 		// If the replica exists on the remote node, no matter in which store,
 		// abort the replica add.
 		if nodeUsed {
-			return util.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
+			return errors.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
 		}
 
 		// Before we try to add a new replica, we first need to secure a
@@ -2622,7 +2621,7 @@ func (r *Replica) ChangeReplicas(
 			rangeID,
 			r.GetMVCCStats().Total(),
 		); err != nil {
-			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
+			return errors.Errorf("change replicas of %d failed: %s", rangeID, err)
 		}
 
 		// Send a pre-emptive snapshot. Note that the replica to which this
@@ -2644,7 +2643,7 @@ func (r *Replica) ChangeReplicas(
 
 		snap, err := r.GetSnapshot()
 		if err != nil {
-			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
+			return errors.Errorf("change replicas of %d failed: %s", rangeID, err)
 		}
 
 		fromReplica, err := r.GetReplica()
@@ -2663,7 +2662,7 @@ func (r *Replica) ChangeReplicas(
 				Snapshot: snap,
 			},
 		}); err != nil {
-			return util.Errorf("change replicas of %d failed: %s", rangeID, err)
+			return errors.Errorf("change replicas of %d failed: %s", rangeID, err)
 		}
 
 		replica.ReplicaID = updatedDesc.NextReplicaID
@@ -2673,7 +2672,7 @@ func (r *Replica) ChangeReplicas(
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if replicaIdx == -1 {
-			return util.Errorf("removing replica %v which is not present in range %d", replica, rangeID)
+			return errors.Errorf("removing replica %v which is not present in range %d", replica, rangeID)
 		}
 		updatedDesc.Replicas[replicaIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -2721,7 +2720,7 @@ func (r *Replica) ChangeReplicas(
 		})
 		return txn.Run(b)
 	}); pErr != nil {
-		return util.Errorf("change replicas of %d failed: %s", rangeID, pErr)
+		return errors.Errorf("change replicas of %d failed: %s", rangeID, pErr)
 	}
 	return nil
 }

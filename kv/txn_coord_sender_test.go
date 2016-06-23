@@ -18,7 +18,6 @@ package kv
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // senderFn is a function that implements a Sender.
@@ -323,7 +323,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 				heartbeatTS = *txn.LastHeartbeat
 				return nil
 			}
-			return util.Errorf("expected heartbeat")
+			return errors.Errorf("expected heartbeat")
 		})
 	}
 
@@ -596,7 +596,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 		_, ok := sender.txns[txnID]
 		sender.Unlock()
 		if ok {
-			return util.Errorf("expected garbage collection")
+			return errors.Errorf("expected garbage collection")
 		}
 		return nil
 	})
@@ -662,7 +662,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 		_, ok := sender.txns[txnID]
 		sender.Unlock()
 		if ok {
-			return util.Errorf("expected garbage collection")
+			return errors.Errorf("expected garbage collection")
 		}
 		return nil
 	})
@@ -1083,7 +1083,7 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
 
 		for _, tc := range testcases {
 			if tc.a != tc.e {
-				return util.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
+				return errors.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
 			}
 		}
 
@@ -1099,7 +1099,7 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
 			}
 		}
 		if a, e := actualRestarts, restarts; a != e {
-			return util.Errorf("%s: actual restarts %d != expected %d", name, a, e)
+			return errors.Errorf("%s: actual restarts %d != expected %d", name, a, e)
 		}
 
 		return nil

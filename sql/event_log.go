@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/pkg/errors"
 )
 
 // EventLogType represents an event type that can be recorded in the event log.
@@ -110,7 +110,7 @@ VALUES(
 		return err
 	}
 	if rows != 1 {
-		return util.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
+		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
 }

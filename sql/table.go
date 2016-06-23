@@ -19,17 +19,16 @@ package sql
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 var testDisableTableLeases bool
@@ -329,11 +328,11 @@ func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.Qual
 func (p *planner) getAliasedTableLease(n parser.TableExpr) (*sqlbase.TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	table, ok := ate.Expr.(*parser.QualifiedName)
 	if !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	desc, err := p.getTableLease(table)
 	if err != nil {

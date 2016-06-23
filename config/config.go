@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -201,7 +202,7 @@ func decodeDescMetadataID(key roachpb.Key) (uint64, error) {
 		return 0, err
 	}
 	if tableID != keys.DescriptorTableID {
-		return 0, util.Errorf("key is not a descriptor table entry: %v", key)
+		return 0, errors.Errorf("key is not a descriptor table entry: %v", key)
 	}
 	// DescriptorTable.PrimaryIndex.ID
 	remaining, _, err = encoding.DecodeUvarintAscending(remaining)
@@ -313,7 +314,7 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 	hook := ZoneConfigHook
 	testingLock.Unlock()
 	if hook == nil {
-		return nil, util.Errorf("ZoneConfigHook not set, unable to lookup zone config")
+		return nil, errors.Errorf("ZoneConfigHook not set, unable to lookup zone config")
 	}
 	if cfg, err := hook(s, id); cfg != nil || err != nil {
 		return cfg, err

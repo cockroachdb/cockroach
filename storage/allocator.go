@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -211,7 +212,7 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 		// When there are throttled stores that do match, we shouldn't send
 		// the replica to purgatory or even consider relaxing the constraints.
 		if throttledStoreCount > 0 {
-			return nil, util.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 		if len(attrs) == 0 || !relaxConstraints {
 			return nil, &allocatorError{
@@ -233,7 +234,7 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 // requirements (i.e. multiple data centers).
 func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
-		return roachpb.ReplicaDescriptor{}, util.Errorf("must supply at least one replica to allocator.RemoveTarget()")
+		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
@@ -253,7 +254,7 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.R
 			}
 		}
 	}
-	return roachpb.ReplicaDescriptor{}, util.Errorf("RemoveTarget() could not select an appropriate replica to be remove")
+	return roachpb.ReplicaDescriptor{}, errors.Errorf("RemoveTarget() could not select an appropriate replica to be remove")
 }
 
 // RebalanceTarget returns a suitable store for a rebalance target

@@ -37,6 +37,7 @@ import (
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
 	"github.com/docker/go-connections/nat"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -824,7 +825,7 @@ func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
 				return err
 			}
 			if resp.Running {
-				return util.Errorf("command still running")
+				return errors.Errorf("command still running")
 			}
 			if resp.ExitCode != 0 {
 				return fmt.Errorf("error executing %s:\n%s\n%s",

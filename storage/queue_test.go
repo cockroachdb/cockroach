@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
@@ -52,7 +53,7 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 	// Wait for SystemConfig.
 	util.SucceedsSoon(t, func() error {
 		if _, ok := g.GetSystemConfig(); !ok {
-			return util.Errorf("expected system config to be set")
+			return errors.Errorf("expected system config to be set")
 		}
 		return nil
 	})
@@ -286,7 +287,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	testQueue.blocker <- struct{}{}
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(1) {
-			return util.Errorf("expected %d processed replicas; got %d", 1, pc)
+			return errors.Errorf("expected %d processed replicas; got %d", 1, pc)
 		}
 		return nil
 	})
@@ -294,7 +295,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	testQueue.blocker <- struct{}{}
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc < int32(2) {
-			return util.Errorf("expected >= %d processed replicas; got %d", 2, pc)
+			return errors.Errorf("expected >= %d processed replicas; got %d", 2, pc)
 		}
 		return nil
 	})
@@ -411,7 +412,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(2) {
-			return util.Errorf("expected %d processed replicas; got %d", 2, pc)
+			return errors.Errorf("expected %d processed replicas; got %d", 2, pc)
 		}
 		return nil
 	})
@@ -440,7 +441,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(3) {
-			return util.Errorf("expected %d processed replicas; got %d", 3, pc)
+			return errors.Errorf("expected %d processed replicas; got %d", 3, pc)
 		}
 		return nil
 	})
@@ -493,7 +494,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount) {
-			return util.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
 		}
 		return nil
 	})
@@ -514,7 +515,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*2) {
-			return util.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
 		}
 		return nil
 	})
@@ -536,7 +537,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*3) {
-			return util.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
 		}
 		return nil
 	})

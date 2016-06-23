@@ -19,7 +19,7 @@ package distsql
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // StreamEncoder converts EncDatum rows into a sequence of StreamMessage.
@@ -69,7 +69,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 		}
 	}
 	if len(se.infos) != len(row) {
-		return util.Errorf("inconsistent row length: had %d, now %d",
+		return errors.Errorf("inconsistent row length: had %d, now %d",
 			len(se.infos), len(row))
 	}
 	for i := range row {

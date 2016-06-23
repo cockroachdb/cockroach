@@ -21,6 +21,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -90,7 +91,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	_, ok := s.nodeMap[args.Addr]
 	s.mu.Unlock()
 	if ok {
-		return util.Errorf("duplicate connection from node at %s", args.Addr)
+		return errors.Errorf("duplicate connection from node at %s", args.Addr)
 	}
 
 	errCh := make(chan error, 1)

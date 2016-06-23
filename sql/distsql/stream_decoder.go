@@ -18,7 +18,7 @@ package distsql
 
 import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // StreamDecoder converts a sequence of StreamMessage to EncDatumRows.
@@ -56,21 +56,21 @@ type StreamDecoder struct {
 // all the rows in the message are retrieved with GetRow.
 func (sd *StreamDecoder) AddMessage(msg *StreamMessage) error {
 	if sd.trailerReceived {
-		return util.Errorf("message after trailer was received")
+		return errors.Errorf("message after trailer was received")
 	}
 	headerReceived := (sd.info != nil)
 	if msg.Header != nil {
 		if headerReceived {
-			return util.Errorf("received multiple headers")
+			return errors.Errorf("received multiple headers")
 		}
 		sd.info = msg.Header.Info
 	} else {
 		if !headerReceived {
 			if msg.Trailer == nil {
-				return util.Errorf("first message doesn't have header or trailer")
+				return errors.Errorf("first message doesn't have header or trailer")
 			}
 			if len(msg.Data.RawBytes) != 0 {
-				return util.Errorf("first and final message doesn't have header but has data")
+				return errors.Errorf("first and final message doesn't have header but has data")
 			}
 		}
 	}
