@@ -129,11 +129,11 @@ func (b *readBuffer) getBytes(n int) ([]byte, error) {
 	return v, nil
 }
 
-func (b *readBuffer) getInt16() (int16, error) {
+func (b *readBuffer) getUint16() (uint16, error) {
 	if len(b.msg) < 2 {
 		return 0, errors.Errorf("insufficient data: %d", len(b.msg))
 	}
-	v := int16(binary.BigEndian.Uint16(b.msg[:2]))
+	v := binary.BigEndian.Uint16(b.msg[:2])
 	b.msg = b.msg[2:]
 	return v, nil
 }
