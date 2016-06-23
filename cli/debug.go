@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -117,14 +118,35 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 
 	from := engine.NilKey
 	to := engine.MVCCKeyMax
-	if debugCtx.raw {
+
+	switch strings.ToLower(debugCtx.typ) {
+	case "rangeid":
+		var fromID, toID roachpb.RangeID
+		var err error
+		if len(debugCtx.startKey) > 0 {
+			fromID, err = parseRangeID(debugCtx.startKey)
+			if err != nil {
+				return err
+			}
+			from = engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID))
+		}
+		if len(debugCtx.endKey) > 0 {
+			toID, err = parseRangeID(debugCtx.endKey)
+			if err != nil {
+				return err
+			}
+			to = engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(toID))
+		} else {
+			to = engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID + 1))
+		}
+	case "raw":
 		if len(debugCtx.startKey) > 0 {
 			from = engine.MakeMVCCMetadataKey(roachpb.Key(debugCtx.startKey))
 		}
 		if len(debugCtx.endKey) > 0 {
 			to = engine.MakeMVCCMetadataKey(roachpb.Key(debugCtx.endKey))
 		}
-	} else {
+	case "pretty":
 		if len(debugCtx.startKey) > 0 {
 			startKey, err := keys.UglyPrint(debugCtx.startKey)
 			if err != nil {
@@ -139,6 +161,8 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			}
 			to = engine.MakeMVCCMetadataKey(endKey)
 		}
+	default:
+		return fmt.Errorf("invalid input key type '%s'", debugCtx.typ)
 	}
 
 	printer := printKey
@@ -273,14 +297,14 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%d", i), nil
+		return strconv.FormatInt(i, 10), nil
 
 	case bytes.Equal(suffix, keys.LocalRangeFrozenStatusSuffix):
 		b, err := value.GetBool()
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%t", b), nil
+		return strconv.FormatBool(b), nil
 
 	case bytes.Equal(suffix, keys.LocalAbortCacheSuffix):
 		msg = &roachpb.AbortCacheEntry{}
@@ -299,6 +323,22 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 
 	case bytes.Equal(suffix, keys.LocalRangeStatsSuffix):
 		msg = &enginepb.MVCCStats{}
+
+	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
+		msg = &raftpb.HardState{}
+
+	case bytes.Equal(suffix, keys.LocalRaftLastIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(i, 10), nil
+
+	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffix):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
+		msg = &hlc.Timestamp{}
 
 	default:
 		return "", fmt.Errorf("unknown raft id key %s", suffix)

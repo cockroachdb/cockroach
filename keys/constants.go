@@ -114,17 +114,17 @@ var (
 	// together or individually in a single scan.
 	localRangeIDUnreplicatedInfix = []byte("u")
 	// localRaftHardStateSuffix is the Suffix for the raft HardState.
-	localRaftHardStateSuffix = []byte("rfth")
+	LocalRaftHardStateSuffix = []byte("rfth")
 	// localRaftLastIndexSuffix is the suffix for raft's last index.
-	localRaftLastIndexSuffix = []byte("rfti")
+	LocalRaftLastIndexSuffix = []byte("rfti")
 	// LocalRaftLogSuffix is the suffix for the raft log.
 	LocalRaftLogSuffix = []byte("rftl")
 	// localRangeLastReplicaGCTimestampSuffix is the suffix for a range's
 	// last replica GC timestamp (for GC of old replicas).
-	localRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
+	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
 	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
-	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
+	LocalRangeLastVerificationTimestampSuffix = []byte("rlvt")
 
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The

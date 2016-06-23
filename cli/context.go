@@ -62,6 +62,6 @@ type sqlContext struct {
 
 type debugContext struct {
 	startKey, endKey string
-	raw              bool
+	typ              string
 	values           bool
 }
