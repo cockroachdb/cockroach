@@ -14,8 +14,10 @@ machine:
 
 checkout:
   post:
-    - git fetch --unshallow || true
-    - git fetch --tags
+    # git tags are used to generate build info which is baked into the
+    # CockroachDB binary; unfortunately, it is not possible to fetch all tags
+    # without also unshallowing the checkout, so we must do both.
+    - git fetch --unshallow --tags
     # GOPATH is cached, so we need to clean out the version from the previous
     # run or the subsequent `mv` will fail. We put our checkout in the correct
     # location for the OSX build step.
