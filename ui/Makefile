@@ -73,7 +73,7 @@ $(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
 	gofmt -s -w $@
 	goimports -w $@
 
-$(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
+$(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -or -name '*.js')
 	jspm bundle-sfx app/app build/app.js
 
 # TODO(tamird/matt/max): write a systemjs stylus plugin.
