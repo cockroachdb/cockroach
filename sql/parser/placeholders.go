@@ -109,13 +109,13 @@ func (p *PlaceholderInfo) SetTypes(src PlaceholderTypes) {
 }
 
 // IsUnresolvedPlaceholder returns whether expr is an unresolved placeholder. In
-// other words, it returns whether the provided expression is a placeholder, and
-// if so, whether the placeholder's type remains unset or not.
+// other words, it returns whether the provided expression is a placeholder
+// expression or a placeholder expression within nested parentheses, and if so,
+// whether the placeholder's type remains unset in the PlaceholderInfo.
 func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
-	if pl, ok := expr.(Placeholder); ok {
-		if _, ok := p.Types[pl.Name]; !ok {
-			return true
-		}
+	if t, ok := StripParens(expr).(Placeholder); ok {
+		_, res := p.Types[t.Name]
+		return !res
 	}
 	return false
 }

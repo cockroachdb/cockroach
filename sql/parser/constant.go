@@ -48,6 +48,11 @@ type Constant interface {
 var _ Constant = &NumVal{}
 var _ Constant = &StrVal{}
 
+func isConstant(expr Expr) bool {
+	_, ok := expr.(Constant)
+	return ok
+}
+
 func isNumericConstant(expr Expr) bool {
 	_, ok := expr.(*NumVal)
 	return ok
