@@ -258,6 +258,10 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	if config.TestingTableSplitsDisabled() {
 		return nil
 	}
+	if stk, ok := ts.ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
+		stk.DisableSplitQueue {
+		return nil
+	}
 	if err := ts.WaitForInitialSplits(); err != nil {
 		ts.Stop()
 		return err

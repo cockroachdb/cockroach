@@ -435,6 +435,10 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// DisableSplitQueue disables the split queue.
+	DisableSplitQueue bool
+	// DisableReplicateQueue disables the replication queue.
+	DisableReplicateQueue bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -713,6 +717,13 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
+	}
+
+	if ctx.TestingKnobs.DisableSplitQueue {
+		s.DisableSplitQueue(true)
+	}
+	if ctx.TestingKnobs.DisableReplicateQueue {
+		s.DisableReplicateQueue(true)
 	}
 
 	return s
@@ -2481,4 +2492,14 @@ func (s *Store) DisableReplicaGCQueue(disabled bool) {
 // DisableRaftLogQueue disables or enables the raft log queue.
 func (s *Store) DisableRaftLogQueue(disabled bool) {
 	s.raftLogQueue.SetDisabled(disabled)
+}
+
+// DisableReplicateQueue disables or enables the replication queue.
+func (s *Store) DisableReplicateQueue(disabled bool) {
+	s.replicateQueue.SetDisabled(disabled)
+}
+
+// DisableSplitQueue disables or enables the split queue.
+func (s *Store) DisableSplitQueue(disabled bool) {
+	s.splitQueue.SetDisabled(disabled)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -33,6 +34,10 @@ func TestTestCluster(t *testing.T) {
 	defer tracing.Disable()()
 
 	params := testingshim.TestServerParams{}
+	params.Knobs.Store = &storage.StoreTestingKnobs{
+		DisableSplitQueue:     true,
+		DisableReplicateQueue: true,
+	}
 	tc, cleanup := StartTestCluster(t, 3, "t", params)
 	defer cleanup()
 
