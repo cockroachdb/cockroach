@@ -313,7 +313,7 @@ func scanMaxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
 		// Scan limit is less than remaining batch limit.
 		return scanMaxResults
 	}
-	// Reamining batch limit is less than scan limit.
+	// Remaining batch limit is less than scan limit.
 	return remScanResults
 }
 
@@ -986,7 +986,7 @@ func (r *Replica) RangeLookup(
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record colocated with a replica
+		// split-related intents or a txn record collocated with a replica
 		// involved in the split. Since we cannot know the correct answer, we
 		// reply with both the pre- and post- transaction values when the
 		// ConsiderIntents flag is set.
@@ -1508,7 +1508,7 @@ func (r *Replica) LeaderLease(
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
 	effectiveStart := args.Lease.Start
 
-	// Verify that requestion replica is part of the current replica set.
+	// Verify that requisition replica is part of the current replica set.
 	if idx, _ := r.mu.state.Desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
 		return reply, rErr
@@ -1924,7 +1924,7 @@ func (r *Replica) ChangeFrozen(
 		// Some earlier version tried to freeze but we never applied it until
 		// someone restarted this node with another version. No bueno - have to
 		// assume that integrity has already been compromised.
-		// Note that we have extra hooks upstream which delay returning succeess
+		// Note that we have extra hooks upstream which delay returning success
 		// to the caller until it's reasonable to assume that all Replicas have
 		// applied the freeze.
 		// This is a classical candidate for returning replica corruption, but
@@ -1937,7 +1937,7 @@ func (r *Replica) ChangeFrozen(
 	// Generally, we want to act only if the request hits the Range's StartKey.
 	// The one case in which that behaves unexpectedly is if we're the first
 	// range, which has StartKey equal to KeyMin, but the lowest curStart which
-	// is feasible is LocaLMax.
+	// is feasible is LocalMax.
 	if !desc.StartKey.Less(curStart) {
 		resp.RangesAffected++
 	} else if locMax, err := keys.Addr(keys.LocalMax); err != nil {
