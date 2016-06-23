@@ -2307,6 +2307,17 @@ func (r *Replica) splitTrigger(
 		// Update store stats with difference in stats before and after split.
 		r.store.metrics.addMVCCStats(deltaMS)
 
+		// If the range was not properly replicated before the split, the replicate
+		// queue may not have picked it up (due to the need for a split). Enqueue
+		// both new halves to speed up a potentially necessary replication. See
+		// #7022.
+		if len(split.UpdatedDesc.Replicas) == 1 {
+			r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
+		if len(split.NewDesc.Replicas) == 1 {
+			r.store.replicateQueue.MaybeAdd(newRng, r.store.Clock().Now())
+		}
+
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
 		// election as soon as the split is processed.
