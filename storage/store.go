@@ -2472,3 +2472,13 @@ func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationRespo
 	}
 	return s.bookie.Reserve(req)
 }
+
+// DisableReplicaGCQueue disables or enables the replica GC queue.
+func (s *Store) DisableReplicaGCQueue(disabled bool) {
+	s.replicaGCQueue.SetDisabled(disabled)
+}
+
+// DisableRaftLogQueue disables or enables the raft log queue.
+func (s *Store) DisableRaftLogQueue(disabled bool) {
+	s.raftLogQueue.SetDisabled(disabled)
+}
