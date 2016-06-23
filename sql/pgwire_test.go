@@ -750,6 +750,28 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
+			"CREATE TABLE d.types (i int, f float, s string, b bytes, d date, m timestamp, n interval, o bool, e decimal)",
+			[]preparedExecTest{
+				base,
+			},
+		},
+		{
+			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+			[]preparedExecTest{
+				base.RowsAffected(1).SetArgs(
+					int64(0),
+					float64(0),
+					"",
+					[]byte{},
+					"2015-01-02",
+					time.Now().Format(time.RFC3339Nano),
+					time.Hour.String(),
+					true,
+					"0.0",
+				),
+			},
+		},
+		{
 			"DROP DATABASE d",
 			[]preparedExecTest{
 				base,
