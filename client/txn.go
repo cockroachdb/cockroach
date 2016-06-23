@@ -552,7 +552,7 @@ func (txn *Txn) Exec(
 				txn.retrying = false
 			}()
 		}
-		if (err == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
 			// Wrap a non-retryable error so that a caller can inspect.
