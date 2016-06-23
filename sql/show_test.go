@@ -54,6 +54,11 @@ func TestShowCreateTable(t *testing.T) {
 	s STRING NULL,
 	v FLOAT NOT NULL,
 	t TIMESTAMP NULL DEFAULT NOW(),
+	FAMILY "primary" (rowid),
+	FAMILY fam_1_i (i),
+	FAMILY fam_2_s (s),
+	FAMILY fam_3_v (v),
+	FAMILY fam_4_t (t),
 	CHECK (i > 0)
 )`,
 		},
@@ -69,6 +74,11 @@ func TestShowCreateTable(t *testing.T) {
 	s STRING NULL,
 	v FLOAT NOT NULL,
 	t TIMESTAMP NULL DEFAULT NOW(),
+	FAMILY "primary" (rowid),
+	FAMILY fam_1_i (i),
+	FAMILY fam_2_s (s),
+	FAMILY fam_3_v (v),
+	FAMILY fam_4_t (t),
 	CHECK (i > 0)
 )`,
 		},
@@ -81,6 +91,9 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
+	FAMILY "primary" (rowid),
+	FAMILY fam_1_i (i),
+	FAMILY fam_2_s (s),
 	CONSTRAINT ck CHECK (i > 0)
 )`,
 		},
@@ -90,7 +103,8 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 			expect: `CREATE TABLE %s (
 	i INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i)
+	CONSTRAINT "primary" PRIMARY KEY (i),
+	FAMILY "primary" (i)
 )`,
 		},
 		{
@@ -105,13 +119,19 @@ func TestShowCreateTable(t *testing.T) {
 	s STRING NULL,
 	d DATE NULL,
 	INDEX idx_if (f, i) STORING (s, d),
-	UNIQUE INDEX %[1]s_d_key (d)
+	UNIQUE INDEX %[1]s_d_key (d),
+	FAMILY "primary" (rowid),
+	FAMILY fam_1_i (i),
+	FAMILY fam_2_f (f),
+	FAMILY fam_3_s (s),
+	FAMILY fam_4_d (d)
 )`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
 	"te""st" INT NOT NULL,
-	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st")
+	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st"),
+	FAMILY "primary" ("te""st")
 )`,
 		},
 	}

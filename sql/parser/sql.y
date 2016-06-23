@@ -1484,7 +1484,7 @@ table_elem:
     $$.val = $1.colDef()
   }
 | index_def
-| family_def { /* unimplemented */ }
+| family_def
 | table_constraint
   {
     $$.val = $1.constraintDef()

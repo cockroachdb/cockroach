@@ -57,7 +57,7 @@ func TestAllocateIDs(t *testing.T) {
 			makeIndexDescriptor("e", []string{"b"}),
 		},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
-		FormatVersion: BaseFormatVersion,
+		FormatVersion: FamilyFormatVersion,
 	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestAllocateIDs(t *testing.T) {
 				ColumnIDs:   []ColumnID{1, 2},
 			},
 			{
-				ID: 3, Name: "fam_c",
+				ID: 3, Name: "fam_3_c",
 				ColumnNames:     []string{"c"},
 				ColumnIDs:       []ColumnID{3},
 				DefaultColumnID: ColumnID(3),
@@ -104,7 +104,7 @@ func TestAllocateIDs(t *testing.T) {
 		NextFamilyID:   4,
 		NextIndexID:    4,
 		NextMutationID: 1,
-		FormatVersion:  BaseFormatVersion,
+		FormatVersion:  FamilyFormatVersion,
 	}
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
@@ -142,14 +142,14 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 			}},
 		{`empty column name`,
 			TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 0},
 				},
@@ -160,7 +160,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 0, Name: "bar"},
 				},
@@ -171,7 +171,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -186,7 +186,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "bar"},
@@ -198,7 +198,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "blah"},
@@ -210,7 +210,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -221,7 +221,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -235,7 +235,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -251,7 +251,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -267,7 +267,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -283,7 +283,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -298,7 +298,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -313,7 +313,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -328,7 +328,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -343,7 +343,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -359,7 +359,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -381,7 +381,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -399,7 +399,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -417,7 +417,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -440,7 +440,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -457,7 +457,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
@@ -478,7 +478,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -504,7 +504,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -530,7 +530,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -550,7 +550,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -570,7 +570,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: BaseFormatVersion,
+				FormatVersion: FamilyFormatVersion,
 				Columns: []ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},

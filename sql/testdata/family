@@ -1,7 +1,94 @@
-statement error unsupported table def
-CREATE TABLE abc(
+# a is the primary key so b gets optimized into a one column value. The c, d
+# family has two columns, so it's encoded as a tuple
+statement ok
+CREATE TABLE abcd(
   a INT PRIMARY KEY,
   b INT,
   c INT,
-  FAMILY pri (a, b)
+  d INT,
+  FAMILY f1 (a, b),
+  FAMILY (c, d)
 )
+
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE abcd (
+      a INT NOT NULL,
+      b INT NULL,
+      c INT NULL,
+      d INT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a),
+      FAMILY f1 (a, b),
+      FAMILY fam_1_c_d (c, d)
+		  )
+
+statement ok
+INSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+query IIII
+SELECT * FROM abcd
+----
+1 2 3 4
+5 6 7 8
+
+statement ok
+UPDATE abcd SET b = 9, d = 10, c = NULL where c = 7
+
+query IIII
+SELECT * FROM abcd
+----
+1 2 3    4
+5 9 NULL 10
+
+statement ok
+DELETE FROM abcd where c = 3
+
+query IIII
+SELECT * FROM abcd
+----
+5 9 NULL 10
+
+statement ok
+UPSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+query IIII
+SELECT * FROM abcd
+----
+1 2 3 4
+5 6 7 8
+
+statement ok
+UPDATE abcd SET b = NULL, c = NULL, d = NULL WHERE a = 1
+
+query IIII
+SELECT * FROM abcd WHERE a = 1
+----
+1 NULL NULL NULL
+
+# TODO(dan): Specify family f1
+statement ok
+ALTER TABLE abcd ADD e STRING
+
+statement ok
+INSERT INTO abcd VALUES (9, 10, 11, 12, 'foo')
+
+query IIIIT
+SELECT * from abcd WHERE a > 1
+----
+5 6  7  8  NULL
+9 10 11 12 foo
+
+statement ok
+CREATE TABLE unsorted_colids (a INT PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, FAMILY (c, b, a))
+
+statement ok
+INSERT INTO unsorted_colids VALUES (1, 1, 1)
+
+statement ok
+UPDATE unsorted_colids SET b = 2, c = 3 WHERE a = 1
+
+query III
+SELECT * FROM unsorted_colids
+----
+1 2 3
