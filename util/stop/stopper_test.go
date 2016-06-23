@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 func TestStopper(t *testing.T) {
@@ -286,7 +287,7 @@ func TestStopperNumTasks(t *testing.T) {
 		expNum := len(tasks[i+1:])
 		util.SucceedsSoon(t, func() error {
 			if nt := s.NumTasks(); nt != expNum {
-				return util.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, nt)
+				return errors.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, nt)
 			}
 			return nil
 		})

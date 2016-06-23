@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -497,12 +497,12 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, er
 
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
-	return nil, util.Errorf("unhandled type %T", expr)
+	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
-	return nil, util.Errorf("unhandled type %T", expr)
+	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.

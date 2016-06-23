@@ -22,14 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func getGauge(t *testing.T, s *storage.Store, key string) int64 {
 	gauge := s.Registry().GetGauge(key)
 	if gauge == nil {
-		t.Fatal(util.ErrorfSkipFrames(1, "store did not contain gauge %s", key))
+		t.Fatal(errors.Errorf("store did not contain gauge %s", key))
 	}
 	return gauge.Value()
 }
@@ -37,20 +37,20 @@ func getGauge(t *testing.T, s *storage.Store, key string) int64 {
 func getCounter(t *testing.T, s *storage.Store, key string) int64 {
 	counter := s.Registry().GetCounter(key)
 	if counter == nil {
-		t.Fatal(util.ErrorfSkipFrames(1, "store did not contain counter %s", key))
+		t.Fatal(errors.Errorf("store did not contain counter %s", key))
 	}
 	return counter.Count()
 }
 
 func checkGauge(t *testing.T, s *storage.Store, key string, e int64) {
 	if a := getGauge(t, s, key); a != e {
-		t.Error(util.ErrorfSkipFrames(1, "%s for store: actual %d != expected %d", key, a, e))
+		t.Error(errors.Errorf("%s for store: actual %d != expected %d", key, a, e))
 	}
 }
 
 func checkCounter(t *testing.T, s *storage.Store, key string, e int64) {
 	if a := getCounter(t, s, key); a != e {
-		t.Error(util.ErrorfSkipFrames(1, "%s for store: actual %d != expected %d", key, a, e))
+		t.Error(errors.Errorf("%s for store: actual %d != expected %d", key, a, e))
 	}
 }
 
@@ -98,7 +98,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdx int) {
 	// verify them in this test.
 
 	if t.Failed() {
-		t.Log(util.ErrorfSkipFrames(1, "verifyStats failed, aborting test."))
+		t.Log(errors.Errorf("verifyStats failed, aborting test."))
 		t.FailNow()
 	}
 

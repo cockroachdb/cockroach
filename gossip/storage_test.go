@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
@@ -118,7 +120,7 @@ func TestGossipStorage(t *testing.T) {
 			p := &stores[i]
 
 			if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, p.Len(); expected != actual {
-				return util.Errorf("expected %v, got %v (info: %#v)", expected, actual, p.Info().Addresses)
+				return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, p.Info().Addresses)
 			}
 		}
 		return nil
@@ -201,7 +203,7 @@ func TestGossipStorage(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
-			return util.Errorf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
+			return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
 		}
 		return nil
 	})

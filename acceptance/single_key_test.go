@@ -21,9 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -79,7 +80,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 					// exp or larger (since concurrent writers might have
 					// committed but not yet performed their atomic update).
 					if err == nil && v < minExp {
-						return util.Errorf("unexpected read: %d, expected >= %d", v, minExp)
+						return errors.Errorf("unexpected read: %d, expected >= %d", v, minExp)
 					}
 					return err
 				})

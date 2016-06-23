@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -297,7 +297,7 @@ func (gcq *gcQueue) process(now hlc.Timestamp, repl *Replica,
 	// Lookup the GC policy for the zone containing this key range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		return util.Errorf("could not find zone config for range %s: %s", repl, err)
+		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,

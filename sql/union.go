@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
@@ -48,7 +48,7 @@ func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum
 			emit = make(exceptNodeEmitDistinct)
 		}
 	default:
-		return nil, util.Errorf("%v is not supported", n.Type)
+		return nil, errors.Errorf("%v is not supported", n.Type)
 	}
 
 	left, err := p.newPlan(n.Left, desiredTypes, autoCommit)

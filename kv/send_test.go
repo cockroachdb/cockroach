@@ -17,13 +17,13 @@
 package kv
 
 import (
-	"errors"
 	"net"
 	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -480,7 +480,7 @@ func TestClientNotReady(t *testing.T) {
 			Context: context.Background(),
 		}, addrs, nodeContext)
 		if !testutils.IsError(err, "failed as client connection was closed") {
-			errCh <- util.Errorf("unexpected error: %v", err)
+			errCh <- errors.Errorf("unexpected error: %v", err)
 		} else {
 			close(errCh)
 		}

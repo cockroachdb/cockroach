@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func TestValues(t *testing.T) {
@@ -110,7 +110,7 @@ func TestValues(t *testing.T) {
 		plan, err := func() (_ planNode, err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = util.Errorf("%v", r)
+					err = errors.Errorf("%v", r)
 				}
 			}()
 			return p.ValuesClause(tc.stmt, nil)

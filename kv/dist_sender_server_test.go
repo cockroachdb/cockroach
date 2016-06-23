@@ -17,10 +17,11 @@
 package kv_test
 
 import (
-	"errors"
 	"sync/atomic"
 	"testing"
 
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -775,9 +775,9 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	}
 	util.SucceedsSoon(t, func() error {
 		if replica, err := store1.GetReplica(rangeID); err != nil {
-			return util.Errorf("failed to look up replica: %s", err)
+			return errors.Errorf("failed to look up replica: %s", err)
 		} else if replica.IsInitialized() {
-			return util.Errorf("expected replica to be uninitialized")
+			return errors.Errorf("expected replica to be uninitialized")
 		}
 		return nil
 	})

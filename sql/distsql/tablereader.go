@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 // readerBase implements basic code shared by tableReader and joinReader.
@@ -72,7 +72,7 @@ func (rb *readerBase) init(
 	valNeededForCol := make([]bool, numCols)
 	for _, c := range rb.outputCols {
 		if c < 0 || c >= numCols {
-			return util.Errorf("invalid column index %d", c)
+			return errors.Errorf("invalid column index %d", c)
 		}
 		valNeededForCol[c] = true
 	}
@@ -93,7 +93,7 @@ func (rb *readerBase) init(
 	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
 	// secondary index.
 	if indexIdx < 0 || indexIdx > len(rb.desc.Indexes) {
-		return util.Errorf("invalid indexIdx %d", indexIdx)
+		return errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
 
 	if indexIdx > 0 {
@@ -174,7 +174,7 @@ func newTableReader(
 	}
 
 	if tr.hardLimit != 0 && tr.hardLimit < tr.softLimit {
-		return nil, util.Errorf("soft limit %d larger than hard limit %d", tr.softLimit,
+		return nil, errors.Errorf("soft limit %d larger than hard limit %d", tr.softLimit,
 			tr.hardLimit)
 	}
 

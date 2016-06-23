@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -291,7 +292,7 @@ func WaitForInitialSplits(db *client.DB) error {
 			return err
 		}
 		if a, e := len(rows), expectedRanges; a != e {
-			return util.Errorf("had %d ranges at startup, expected %d", a, e)
+			return errors.Errorf("had %d ranges at startup, expected %d", a, e)
 		}
 		return nil
 	})

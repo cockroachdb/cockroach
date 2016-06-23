@@ -28,8 +28,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // Utility to generate x509 certificates, both CA and not.
@@ -63,11 +63,11 @@ func privateKeyPEMBlock(key crypto.PrivateKey) (*pem.Block, error) {
 	case *ecdsa.PrivateKey:
 		bytes, err := x509.MarshalECPrivateKey(k)
 		if err != nil {
-			return nil, util.Errorf("error marshalling ECDSA key: %s", err)
+			return nil, errors.Errorf("error marshalling ECDSA key: %s", err)
 		}
 		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: bytes}, nil
 	default:
-		return nil, util.Errorf("unknown key type: %v", k)
+		return nil, errors.Errorf("unknown key type: %v", k)
 	}
 }
 
@@ -182,7 +182,7 @@ func GenerateClientCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySi
 
 	// TODO(marc): should we add extra checks?
 	if len(name) == 0 {
-		return nil, nil, util.Errorf("name cannot be empty")
+		return nil, nil, errors.Errorf("name cannot be empty")
 	}
 
 	template, err := newTemplate(name)

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // editNode (Base, Run) is shared between all row updating
@@ -348,7 +348,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.QualifiedNames
 			case *parser.DTuple:
 				n = len(*t)
 			default:
-				return nil, util.Errorf("unsupported tuple assignment: %T", newExpr)
+				return nil, errors.Errorf("unsupported tuple assignment: %T", newExpr)
 			}
 			if len(expr.Names) != n {
 				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",

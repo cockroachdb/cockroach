@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -121,7 +121,7 @@ func (rq *replicateQueue) process(
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {
-		return util.Errorf("range requires a replication change, but lacks a quorum of live nodes.")
+		return errors.Errorf("range requires a replication change, but lacks a quorum of live nodes.")
 	}
 
 	switch action {

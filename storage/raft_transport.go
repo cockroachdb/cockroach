@@ -23,13 +23,13 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -119,7 +119,7 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 					t.mu.Unlock()
 
 					if !ok {
-						return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
+						return errors.Errorf("Unable to proxy message to node: %d", req.Message.To)
 					}
 
 					if err := handler(req); err != nil {
@@ -249,7 +249,7 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 				t.mu.Unlock()
 			})
 		}) {
-			return util.Errorf("node stopped")
+			return errors.Errorf("node stopped")
 		}
 	}
 
@@ -257,6 +257,6 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 	case ch <- req:
 		return nil
 	default:
-		return util.Errorf("queue for node %d is full", req.ToReplica.NodeID)
+		return errors.Errorf("queue for node %d is full", req.ToReplica.NodeID)
 	}
 }

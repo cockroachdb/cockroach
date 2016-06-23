@@ -23,12 +23,12 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -85,7 +85,7 @@ func entries(
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
-		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
+		return nil, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
@@ -140,7 +140,7 @@ func entries(
 		}
 
 		// We have a gap in the record, if so, return a nasty error.
-		return nil, util.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
+		return nil, errors.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
 	}
 
 	// No results, was it due to unavailability or truncation?
@@ -380,10 +380,10 @@ func snapshot(
 	ok, err := engine.MVCCGetProto(context.Background(), snap, keys.RangeDescriptorKey(startKey),
 		hlc.MaxTimestamp, false /* !consistent */, nil, &desc)
 	if err != nil {
-		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
+		return raftpb.Snapshot{}, errors.Errorf("failed to get desc: %s", err)
 	}
 	if !ok {
-		return raftpb.Snapshot{}, util.Errorf("couldn't find range descriptor")
+		return raftpb.Snapshot{}, errors.Errorf("couldn't find range descriptor")
 	}
 
 	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
@@ -434,7 +434,7 @@ func snapshot(
 
 	term, err := term(snap, rangeID, appliedIndex)
 	if err != nil {
-		return raftpb.Snapshot{}, util.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
+		return raftpb.Snapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
 	log.Infof("generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
@@ -506,7 +506,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// Find zone config for this range.
 	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		return util.Errorf("failed to lookup zone config for Range %s: %s", r, err)
+		return errors.Errorf("failed to lookup zone config for Range %s: %s", r, err)
 	}
 
 	r.SetMaxBytes(zone.RangeMaxBytes)

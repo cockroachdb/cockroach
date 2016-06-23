@@ -20,7 +20,7 @@ import (
 	"container/heap"
 
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 type srcInfo struct {
@@ -130,7 +130,7 @@ func (s *orderedSynchronizer) advanceRoot() error {
 		if cmp, err := oldRow.Compare(&s.alloc, s.ordering, src.row); err != nil {
 			return err
 		} else if cmp > 0 {
-			return util.Errorf("incorrectly ordered stream %s after %s", src.row, oldRow)
+			return errors.Errorf("incorrectly ordered stream %s after %s", src.row, oldRow)
 		}
 	}
 	// heap operations might set s.err (see Less)
@@ -159,7 +159,7 @@ func (s *orderedSynchronizer) NextRow() (sqlbase.EncDatumRow, error) {
 
 func makeOrderedSync(ordering sqlbase.ColumnOrdering, sources []RowSource) (RowSource, error) {
 	if len(sources) < 2 {
-		return nil, util.Errorf("only %d sources for ordered synchronizer", len(sources))
+		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))
 	}
 	s := &orderedSynchronizer{
 		sources:  make([]srcInfo, len(sources)),

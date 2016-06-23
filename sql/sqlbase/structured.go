@@ -18,14 +18,13 @@ package sqlbase
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -110,7 +109,7 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 	case IndexDescriptor_DESC:
 		return encoding.Descending, nil
 	default:
-		return encoding.Ascending, util.Errorf("invalid direction: %s", dir)
+		return encoding.Ascending, errors.Errorf("invalid direction: %s", dir)
 	}
 }
 
@@ -584,16 +583,16 @@ func (desc *TableDescriptor) Validate() error {
 		case *DescriptorMutation_Column:
 			col := desc.Column
 			if unSetEnums {
-				return util.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
+				return errors.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
 			}
 			columnIDs[col.ID] = col.Name
 		case *DescriptorMutation_Index:
 			if unSetEnums {
 				idx := desc.Index
-				return util.Errorf("mutation in state %s, direction %s, index %s, id %v", m.State, m.Direction, idx.Name, idx.ID)
+				return errors.Errorf("mutation in state %s, direction %s, index %s, id %v", m.State, m.Direction, idx.Name, idx.ID)
 			}
 		default:
-			return util.Errorf("mutation in state %s, direction %s, and no column/index descriptor", m.State, m.Direction)
+			return errors.Errorf("mutation in state %s, direction %s, and no column/index descriptor", m.State, m.Direction)
 		}
 	}
 

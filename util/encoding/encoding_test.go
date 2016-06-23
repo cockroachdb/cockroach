@@ -26,10 +26,10 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
@@ -1708,7 +1708,7 @@ func TestValueEncodingRand(t *testing.T) {
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
 		default:
-			err = util.Errorf("unknown tag %q", typ)
+			err = errors.Errorf("unknown tag %q", typ)
 		}
 		if err != nil {
 			t.Fatal(err)

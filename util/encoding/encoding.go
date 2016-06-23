@@ -28,8 +28,8 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -129,7 +129,7 @@ func EncodeUint32Descending(b []byte, v uint32) []byte {
 // of the input buffer and the decoded uint32 are returned.
 func DecodeUint32Ascending(b []byte) ([]byte, uint32, error) {
 	if len(b) < 4 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uint32 int value")
+		return nil, 0, errors.Errorf("insufficient bytes to decode uint32 int value")
 	}
 	v := (uint32(b[0]) << 24) | (uint32(b[1]) << 16) |
 		(uint32(b[2]) << 8) | uint32(b[3])
@@ -163,7 +163,7 @@ func EncodeUint64Descending(b []byte, v uint64) []byte {
 // of the input buffer and the decoded uint64 are returned.
 func DecodeUint64Ascending(b []byte) ([]byte, uint64, error) {
 	if len(b) < 8 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uint64 int value")
+		return nil, 0, errors.Errorf("insufficient bytes to decode uint64 int value")
 	}
 	v := (uint64(b[0]) << 56) | (uint64(b[1]) << 48) |
 		(uint64(b[2]) << 40) | (uint64(b[3]) << 32) |
@@ -238,7 +238,7 @@ func getVarintLen(b []byte) (int, error) {
 	}
 
 	if length > len(b) {
-		return 0, util.Errorf("varint length %d exceeds slice length %d", length, len(b))
+		return 0, errors.Errorf("varint length %d exceeds slice length %d", length, len(b))
 	}
 	return length, nil
 }
@@ -246,14 +246,14 @@ func getVarintLen(b []byte) (int, error) {
 // DecodeVarintAscending decodes a value encoded by EncodeVaringAscending.
 func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uvarint value")
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value")
 	}
 	length := int(b[0]) - intZero
 	if length < 0 {
 		length = -length
 		remB := b[1:]
 		if len(remB) < length {
-			return nil, 0, util.Errorf("insufficient bytes to decode uvarint value: %s", remB)
+			return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %s", remB)
 		}
 		var v int64
 		// Use the ones-complement of each encoded byte in order to build
@@ -270,7 +270,7 @@ func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 		return remB, 0, err
 	}
 	if v > math.MaxInt64 {
-		return nil, 0, util.Errorf("varint %d overflows int64", v)
+		return nil, 0, errors.Errorf("varint %d overflows int64", v)
 	}
 	return remB, int64(v), nil
 }
@@ -391,7 +391,7 @@ func EncLenUvarintDescending(v uint64) int {
 // are returned.
 func DecodeUvarintAscending(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uvarint value")
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value")
 	}
 	length := int(b[0]) - intZero
 	b = b[1:] // skip length byte
@@ -400,9 +400,9 @@ func DecodeUvarintAscending(b []byte) ([]byte, uint64, error) {
 	}
 	length -= intSmall
 	if length < 0 || length > 8 {
-		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
+		return nil, 0, errors.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
-		return nil, 0, util.Errorf("insufficient bytes to decode uvarint value: %v", b)
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %v", b)
 	}
 	var v uint64
 	// It is faster to range over the elements in a slice than to index
@@ -417,14 +417,14 @@ func DecodeUvarintAscending(b []byte) ([]byte, uint64, error) {
 // using EncodeUvarintDescending.
 func DecodeUvarintDescending(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uvarint value")
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value")
 	}
 	length := intZero - int(b[0])
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
-		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
+		return nil, 0, errors.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
-		return nil, 0, util.Errorf("insufficient bytes to decode uvarint value: %v", b)
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %v", b)
 	}
 	var x uint64
 	for _, t := range b[:length] {
@@ -515,7 +515,7 @@ func DecodeBytesDescending(b []byte, r []byte) ([]byte, []byte, error) {
 func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]byte, []byte, error) {
 	if expectMarker {
 		if len(b) == 0 || b[0] != e.marker {
-			return nil, nil, util.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
+			return nil, nil, errors.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
 		}
 		b = b[1:]
 	}
@@ -523,10 +523,10 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 	for {
 		i := bytes.IndexByte(b, e.escape)
 		if i == -1 {
-			return nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
+			return nil, nil, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
 		}
 		if i+1 >= len(b) {
-			return nil, nil, util.Errorf("malformed escape in buffer %#x", b)
+			return nil, nil, errors.Errorf("malformed escape in buffer %#x", b)
 		}
 		v := b[i+1]
 		if v == e.escapedTerm {
@@ -539,7 +539,7 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 		}
 
 		if v != e.escaped00 {
-			return nil, nil, util.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
+			return nil, nil, errors.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
 		}
 
 		r = append(r, b[:i]...)
@@ -555,10 +555,10 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 	for {
 		i := bytes.IndexByte(b[skipped:], e.escape)
 		if i == -1 {
-			return 0, util.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
+			return 0, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
 		}
 		if i+1 >= len(b) {
-			return 0, util.Errorf("malformed escape in buffer %#x", b)
+			return 0, errors.Errorf("malformed escape in buffer %#x", b)
 		}
 		skipped += i + 2
 		if b[skipped-1] == e.escapedTerm {
@@ -732,7 +732,7 @@ func DecodeTimeDescending(b []byte) ([]byte, time.Time, error) {
 
 func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
 	if PeekType(b) != Time {
-		return nil, 0, 0, util.Errorf("did not find marker")
+		return nil, 0, 0, errors.Errorf("did not find marker")
 	}
 	b = b[1:]
 	b, sec, err = DecodeVarintAscending(b)
@@ -784,7 +784,7 @@ func EncodeDurationDescending(b []byte, d duration.Duration) ([]byte, error) {
 // decoded duration.Duration are returned.
 func DecodeDurationAscending(b []byte) ([]byte, duration.Duration, error) {
 	if PeekType(b) != Duration {
-		return nil, duration.Duration{}, util.Errorf("did not find marker %x", b)
+		return nil, duration.Duration{}, errors.Errorf("did not find marker %x", b)
 	}
 	b = b[1:]
 	b, sortNanos, err := DecodeVarintAscending(b)
@@ -809,7 +809,7 @@ func DecodeDurationAscending(b []byte) ([]byte, duration.Duration, error) {
 // DecodeDurationDescending is the descending version of DecodeDurationAscending.
 func DecodeDurationDescending(b []byte) ([]byte, duration.Duration, error) {
 	if PeekType(b) != Duration {
-		return nil, duration.Duration{}, util.Errorf("did not find marker")
+		return nil, duration.Duration{}, errors.Errorf("did not find marker")
 	}
 	b = b[1:]
 	b, sortNanos, err := DecodeVarintDescending(b)
@@ -915,7 +915,7 @@ func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
 // succeed.
 func PeekLength(b []byte) (int, error) {
 	if len(b) == 0 {
-		return 0, util.Errorf("empty slice")
+		return 0, errors.Errorf("empty slice")
 	}
 	m := b[0]
 	switch m {
@@ -933,7 +933,7 @@ func PeekLength(b []byte) (int, error) {
 	case floatNeg, floatPos:
 		// the marker is followed by 8 bytes
 		if len(b) < 9 {
-			return 0, util.Errorf("slice too short for float (%d)", len(b))
+			return 0, errors.Errorf("slice too short for float (%d)", len(b))
 		}
 		return 9, nil
 	}
@@ -943,7 +943,7 @@ func PeekLength(b []byte) (int, error) {
 	if m >= decimalNaN && m <= decimalNaNDesc {
 		return getDecimalLen(b)
 	}
-	return 0, util.Errorf("unknown tag %d", m)
+	return 0, errors.Errorf("unknown tag %d", m)
 }
 
 // PrettyPrintValue returns the string representation of all contiguous decodable
@@ -1382,7 +1382,7 @@ func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	}
 	b = b[dataOffset:]
 	if typ != expected {
-		return b, util.Errorf("value type is not %s: %s", expected, typ)
+		return b, errors.Errorf("value type is not %s: %s", expected, typ)
 	}
 	return b, nil
 }
@@ -1428,6 +1428,6 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		n, err := getMultiNonsortingVarintLen(b, 3)
 		return typeOffset, dataOffset + n, err
 	default:
-		return 0, 0, util.Errorf("unknown tag %q", typ)
+		return 0, 0, errors.Errorf("unknown tag %q", typ)
 	}
 }

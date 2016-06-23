@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/pkg/errors"
 )
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
@@ -170,7 +170,7 @@ func checkEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 	// For more information, see the related comment at the beginning of
 	// planner.makePlan().
 	if hasSystemKey && !modifiedSystemConfigSpan {
-		return roachpb.NewError(util.Errorf("EndTransaction hasSystemKey=%t, but hasSystemConfigTrigger=%t",
+		return roachpb.NewError(errors.Errorf("EndTransaction hasSystemKey=%t, but hasSystemConfigTrigger=%t",
 			hasSystemKey, modifiedSystemConfigSpan))
 	}
 

@@ -24,9 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -263,10 +263,10 @@ func (tm *testModel) assertQuery(
 	}
 	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
 		tm.t.Logf("actual datapoints: %v", actualDatapoints)
-		tm.t.Fatal(util.ErrorfSkipFrames(1, "query expected %d datapoints, got %d", e, a))
+		tm.t.Fatal(errors.Errorf("query expected %d datapoints, got %d", e, a))
 	}
 	if a, e := len(actualSources), expectedSourceCount; a != e {
-		tm.t.Fatal(util.ErrorfSkipFrames(1, "query expected %d sources, got %d", e, a))
+		tm.t.Fatal(errors.Errorf("query expected %d sources, got %d", e, a))
 	}
 
 	// Construct an expected result for comparison.
@@ -383,10 +383,10 @@ func (tm *testModel) assertQuery(
 	sort.Strings(expectedSources)
 	sort.Strings(actualSources)
 	if !reflect.DeepEqual(actualSources, expectedSources) {
-		tm.t.Error(util.ErrorfSkipFrames(1, "actual source list: %v, expected: %v", actualSources, expectedSources))
+		tm.t.Error(errors.Errorf("actual source list: %v, expected: %v", actualSources, expectedSources))
 	}
 	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
-		tm.t.Error(util.ErrorfSkipFrames(1, "actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints))
+		tm.t.Error(errors.Errorf("actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints))
 	}
 }
 

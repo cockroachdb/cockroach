@@ -34,6 +34,7 @@ import (
 
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -104,7 +105,7 @@ type Server struct {
 // NewServer creates a Server from a server.Context.
 func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	if _, err := net.ResolveTCPAddr("tcp", ctx.Addr); err != nil {
-		return nil, util.Errorf("unable to resolve RPC address %q: %v", ctx.Addr, err)
+		return nil, errors.Errorf("unable to resolve RPC address %q: %v", ctx.Addr, err)
 	}
 
 	if ctx.Insecure {
@@ -472,7 +473,7 @@ func (s *Server) Start() error {
 
 	conn, err := s.rpcContext.GRPCDial(s.ctx.Addr, opts...)
 	if err != nil {
-		return util.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
+		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
@@ -507,7 +508,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 		case mode == serverpb.DrainMode_LEADERSHIP:
 			err = s.node.SetDraining(setTo)
 		default:
-			err = util.Errorf("unknown drain mode: %v (%d)", mode, mode)
+			err = errors.Errorf("unknown drain mode: %v (%d)", mode, mode)
 		}
 		if err != nil {
 			return nil, err

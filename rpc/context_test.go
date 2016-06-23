@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
@@ -137,7 +138,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	stopHeartbeats := sendHeartbeats()
 	util.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return util.Errorf("expected %s to be healthy", remoteAddr)
+			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
 	})
@@ -146,7 +147,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Should no longer be healthy after heartbeating stops.
 	util.SucceedsSoon(t, func() error {
 		if clientCtx.IsConnHealthy(remoteAddr) {
-			return util.Errorf("expected %s to be unhealthy", remoteAddr)
+			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
 		}
 		return nil
 	})
@@ -155,7 +156,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	stopHeartbeats = sendHeartbeats()
 	util.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return util.Errorf("expected %s to be healthy", remoteAddr)
+			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
 	})
@@ -199,9 +200,9 @@ func TestOffsetMeasurement(t *testing.T) {
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
 		if o, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; !ok {
-			return util.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
+			return errors.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
 		} else if o != expectedOffset {
-			return util.Errorf("expected:\n%v\nactual:\n%v", expectedOffset, o)
+			return errors.Errorf("expected:\n%v\nactual:\n%v", expectedOffset, o)
 		}
 		return nil
 	})
@@ -216,7 +217,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
 		if o, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; ok {
-			return util.Errorf("expected offset to have been cleared, but found %s", o)
+			return errors.Errorf("expected offset to have been cleared, but found %s", o)
 		}
 		return nil
 	})
@@ -258,7 +259,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
 		if _, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; !ok {
-			return util.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
+			return errors.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
 		}
 		return nil
 	})
@@ -268,7 +269,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		defer serverCtx.RemoteClocks.mu.Unlock()
 
 		if o, ok := serverCtx.RemoteClocks.mu.offsets[remoteAddr]; ok {
-			return util.Errorf("expected offset of %s to not be initialized, but it was: %v", remoteAddr, o)
+			return errors.Errorf("expected offset of %s to not be initialized, but it was: %v", remoteAddr, o)
 		}
 		return nil
 	})
@@ -364,7 +365,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			defer nodeCtx.ctx.RemoteClocks.mu.Unlock()
 
 			if a, e := len(nodeCtx.ctx.RemoteClocks.mu.offsets), len(nodeCtxs)-1; a != e {
-				return util.Errorf("not yet fully connected: have %d of %d connections: %v", a, e, nodeCtx.ctx.RemoteClocks.mu.offsets)
+				return errors.Errorf("not yet fully connected: have %d of %d connections: %v", a, e, nodeCtx.ctx.RemoteClocks.mu.offsets)
 			}
 			return nil
 		})

@@ -27,9 +27,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -189,7 +190,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 			ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err = security.LoadClientTLSConfig(
 				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 			if ctx.clientTLSConfig.err != nil {
-				ctx.clientTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
+				ctx.clientTLSConfig.err = errors.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
 			}
 		} else {
 			log.Println("no certificates specified: using insecure TLS")
@@ -214,10 +215,10 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 			ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err = security.LoadServerTLSConfig(
 				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 			if ctx.serverTLSConfig.err != nil {
-				ctx.serverTLSConfig.err = util.Errorf("error setting up server TLS config: %s", ctx.serverTLSConfig.err)
+				ctx.serverTLSConfig.err = errors.Errorf("error setting up server TLS config: %s", ctx.serverTLSConfig.err)
 			}
 		} else {
-			ctx.serverTLSConfig.err = util.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
+			ctx.serverTLSConfig.err = errors.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
 				cliflags.InsecureName, cliflags.CertName)
 		}
 	})

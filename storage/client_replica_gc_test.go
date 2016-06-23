@@ -17,7 +17,6 @@
 package storage_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // TestReplicaGCQueueDropReplica verifies that a removed replica is
@@ -78,7 +78,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// Make sure the range is removed from the store.
 	util.SucceedsSoon(t, func() error {
 		if _, err := mtc.stores[1].GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {
-			return util.Errorf("expected range removal")
+			return errors.Errorf("expected range removal")
 		}
 		return nil
 	})
@@ -117,7 +117,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 		store := mtc.stores[1]
 		store.ForceReplicaGCScanAndProcess()
 		if _, err := store.GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {
-			return util.Errorf("expected range removal: %s", err)
+			return errors.Errorf("expected range removal: %s", err)
 		}
 		return nil
 	})

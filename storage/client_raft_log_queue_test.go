@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // TestRaftLogQueue verifies that the raft log queue correctly truncates the
@@ -86,7 +87,7 @@ func TestRaftLogQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 		if afterTruncationIndex <= originalIndex {
-			return util.Errorf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
+			return errors.Errorf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
 				afterTruncationIndex, originalIndex)
 		}
 		return nil

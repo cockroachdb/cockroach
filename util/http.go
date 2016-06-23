@@ -26,6 +26,7 @@ import (
 	"github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -61,7 +62,7 @@ func GetJSON(httpClient http.Client, path string, response proto.Message) error 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(resp.Body)
-		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
 }
@@ -80,7 +81,7 @@ func PostJSON(httpClient http.Client, path string, request, response proto.Messa
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(resp.Body)
-		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
 }
@@ -109,7 +110,7 @@ func StreamJSON(
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(resp.Body)
-		return Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
 	}
 
 	// grpc-gw/runtime's JSONpb {en,de}coder is pretty half-baked. Essentially
@@ -133,7 +134,7 @@ func StreamJSON(
 		v := m.Elem().MapIndex(reflect.ValueOf("result"))
 		if !v.IsValid() {
 			// TODO(tschottdorf): recover actual JSON.
-			return Errorf("unexpected JSON response: %+v", m)
+			return errors.Errorf("unexpected JSON response: %+v", m)
 		}
 		callback(v.Interface().(proto.Message))
 	}

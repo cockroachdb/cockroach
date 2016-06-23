@@ -21,8 +21,9 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -105,7 +106,7 @@ func MakeRangeIDReplicatedKey(rangeID roachpb.RangeID, suffix, detail roachpb.RK
 // suffix, and detail.
 func DecodeRangeIDKey(key roachpb.Key) (rangeID roachpb.RangeID, infix, suffix, detail roachpb.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
-		return 0, nil, nil, nil, util.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
+		return 0, nil, nil, nil, errors.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
 	}
 	// Cut the prefix, the Range ID, and the infix specifier.
 	b := key[len(LocalRangeIDPrefix):]
@@ -114,7 +115,7 @@ func DecodeRangeIDKey(key roachpb.Key) (rangeID roachpb.RangeID, infix, suffix, 
 		return 0, nil, nil, nil, err
 	}
 	if len(b) < localSuffixLength+1 {
-		return 0, nil, nil, nil, util.Errorf("malformed key does not contain range ID infix and suffix")
+		return 0, nil, nil, nil, errors.Errorf("malformed key does not contain range ID infix and suffix")
 	}
 	infix = b[:1]
 	b = b[1:]
@@ -141,7 +142,7 @@ func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, error) {
 		return nil, err
 	}
 	if !bytes.Equal(suffix, LocalAbortCacheSuffix) {
-		return nil, util.Errorf("key %s does not contain the abort cache suffix %s",
+		return nil, errors.Errorf("key %s does not contain the abort cache suffix %s",
 			key, LocalAbortCacheSuffix)
 	}
 	// Decode the id.
@@ -150,7 +151,7 @@ func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, error) {
 		return nil, err
 	}
 	if len(detail) > 0 {
-		return nil, util.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key", key, detail)
+		return nil, errors.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key", key, detail)
 	}
 	txnID, err := uuid.FromBytes(idBytes)
 	return txnID, err
@@ -278,7 +279,7 @@ func MakeRangeKeyPrefix(key roachpb.RKey) roachpb.Key {
 // suffix and optional detail (may be nil).
 func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangePrefix) {
-		return nil, nil, nil, util.Errorf("key %q does not have %q prefix",
+		return nil, nil, nil, errors.Errorf("key %q does not have %q prefix",
 			key, LocalRangePrefix)
 	}
 	// Cut the prefix and the Range ID.
@@ -288,7 +289,7 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 		return nil, nil, nil, err
 	}
 	if len(b) < localSuffixLength {
-		return nil, nil, nil, util.Errorf("key %q does not have suffix of length %d",
+		return nil, nil, nil, errors.Errorf("key %q does not have suffix of length %d",
 			key, localSuffixLength)
 	}
 	// Cut the suffix.
@@ -341,13 +342,13 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 
 	for {
 		if bytes.HasPrefix(k, localStorePrefix) {
-			return nil, util.Errorf("store-local key %q is not addressable", k)
+			return nil, errors.Errorf("store-local key %q is not addressable", k)
 		}
 		if bytes.HasPrefix(k, LocalRangeIDPrefix) {
-			return nil, util.Errorf("local range ID key %q is not addressable", k)
+			return nil, errors.Errorf("local range ID key %q is not addressable", k)
 		}
 		if !bytes.HasPrefix(k, LocalRangePrefix) {
-			return nil, util.Errorf("local key %q malformed; should contain prefix %q",
+			return nil, errors.Errorf("local key %q malformed; should contain prefix %q",
 				k, LocalRangePrefix)
 		}
 		k = k[len(LocalRangePrefix):]
@@ -502,7 +503,7 @@ func MakeTablePrefix(tableID uint32) []byte {
 // ID of the table.
 func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	if encoding.PeekType(key) != encoding.Int {
-		return key, 0, util.Errorf("invalid key prefix: %q", key)
+		return key, 0, errors.Errorf("invalid key prefix: %q", key)
 	}
 	return encoding.DecodeUvarintAscending(key)
 }
@@ -545,7 +546,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	buf := key[n-1:]
 	if encoding.PeekType(buf) != encoding.Int {
 		// The last byte is not a valid column ID suffix.
-		return nil, util.Errorf("%s: not a valid table key", key)
+		return nil, errors.Errorf("%s: not a valid table key", key)
 	}
 
 	// Strip off the column ID suffix from the buf. The last byte of the buf
@@ -563,7 +564,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		// don't consider this an error because MakeSplitKey can be called on keys
 		// that look like table keys but which do not have a column ID length
 		// suffix (e.g SystemConfig.ComputeSplitKeys).
-		return nil, util.Errorf("%s: malformed table key", key)
+		return nil, errors.Errorf("%s: malformed table key", key)
 	}
 	return key[:len(key)-int(colIDLen)-1], nil
 }
@@ -579,7 +580,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 		}
 		h := req.Header()
 		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
-			return roachpb.RSpan{}, util.Errorf("end key specified for non-range operation: %s", req)
+			return roachpb.RSpan{}, errors.Errorf("end key specified for non-range operation: %s", req)
 		}
 
 		key, err := Addr(h.Key)
@@ -593,7 +594,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 		if !key.Less(to) {
 			// Key.Next() is larger than `to`.
 			if bytes.Compare(key, roachpb.RKeyMax) > 0 {
-				return roachpb.RSpan{}, util.Errorf("%s must be less than KeyMax", key)
+				return roachpb.RSpan{}, errors.Errorf("%s must be less than KeyMax", key)
 			}
 			to = key.Next()
 		}
@@ -606,7 +607,7 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 			return roachpb.RSpan{}, err
 		}
 		if bytes.Compare(roachpb.RKeyMax, endKey) < 0 {
-			return roachpb.RSpan{}, util.Errorf("%s must be less than or equal to KeyMax", endKey)
+			return roachpb.RSpan{}, errors.Errorf("%s must be less than or equal to KeyMax", endKey)
 		}
 		if to.Less(endKey) {
 			// EndKey is larger than `to`.

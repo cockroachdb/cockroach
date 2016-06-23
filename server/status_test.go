@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -91,7 +92,7 @@ func TestStatusJson(t *testing.T) {
 		}
 
 		if len(nodes.Nodes) == 0 {
-			return util.Errorf("expected non-empty node list, got: %v", nodes)
+			return errors.Errorf("expected non-empty node list, got: %v", nodes)
 		}
 		return nil
 	})

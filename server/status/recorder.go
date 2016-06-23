@@ -26,10 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -293,7 +293,7 @@ func extractValue(mtr interface{}) (float64, error) {
 	case *metric.GaugeFloat64:
 		return mtr.Value(), nil
 	default:
-		return 0, util.Errorf("cannot extract value for type %T", mtr)
+		return 0, errors.Errorf("cannot extract value for type %T", mtr)
 	}
 }
 

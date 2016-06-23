@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -35,12 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -1191,7 +1190,7 @@ func checkResultDatum(datum parser.Datum) error {
 	case *parser.DPlaceholder:
 		return fmt.Errorf("could not determine data type of %s %s", datum.Type(), datum)
 	default:
-		return util.Errorf("unsupported result type: %s", datum.Type())
+		return errors.Errorf("unsupported result type: %s", datum.Type())
 	}
 	return nil
 }

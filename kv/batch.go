@@ -17,9 +17,10 @@
 package kv
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 var emptySpan = roachpb.Span{}
@@ -40,7 +41,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
-				return false, emptySpan, util.Errorf("%T is not a range command, but EndKey is set", args)
+				return false, emptySpan, errors.Errorf("%T is not a range command, but EndKey is set", args)
 			}
 			keyAddr, err := keys.Addr(header.Key)
 			if err != nil {
@@ -63,7 +64,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		}
 		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
 			if !l || !r {
-				return false, emptySpan, util.Errorf("local key mixed with global key in range")
+				return false, emptySpan, errors.Errorf("local key mixed with global key in range")
 			}
 			local = true
 		}
