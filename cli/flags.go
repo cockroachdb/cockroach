@@ -492,8 +492,7 @@ func init() {
 		f := debugKeysCmd.Flags()
 		f.StringVar(&debugCtx.startKey, cliflags.FromName, "", usageNoEnv(cliflags.FromName))
 		f.StringVar(&debugCtx.endKey, cliflags.ToName, "", usageNoEnv(cliflags.ToName))
-		// TODO(tamird): should technically be an enum, but there's no good flag support for them.
-		f.StringVar(&debugCtx.typ, cliflags.TypeName, "raw", usageNoEnv(cliflags.TypeName))
+		f.Var(&debugCtx.typ, cliflags.TypeName, usageNoEnv(cliflags.TypeName))
 		f.BoolVar(&debugCtx.values, cliflags.ValuesName, false, usageNoEnv(cliflags.ValuesName))
 	}
 

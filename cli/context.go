@@ -17,6 +17,7 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -60,8 +61,31 @@ type sqlContext struct {
 	execStmts statementsValue
 }
 
+type keyType int
+
+//go:generate stringer -type=keyType
+const (
+	keyRaw keyType = iota
+	keyPretty
+	keyRangeID
+)
+
+func (k *keyType) Set(value string) error {
+	for i := 0; i < len(_keyType_index)-1; i++ {
+		if strings.EqualFold(value, _keyType_name[_keyType_index[i]:_keyType_index[i+1]]) {
+			*k = keyType(i)
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown key type '%s'", value)
+}
+
+func (k *keyType) Type() string {
+	return "keyType"
+}
+
 type debugContext struct {
 	startKey, endKey string
-	typ              string
+	typ              keyType
 	values           bool
 }
