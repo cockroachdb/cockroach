@@ -337,7 +337,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	}
 	// The client may provide type information for (some of) the
 	// placeholders. Read this first.
-	numQArgTypes, err := buf.getInt16()
+	numQArgTypes, err := buf.getUint16()
 	if err != nil {
 		return err
 	}
@@ -491,7 +491,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	}
 
 	stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
-	numQArgs := int16(len(stmtMeta.inTypes))
+	numQArgs := uint16(len(stmtMeta.inTypes))
 	qArgFormatCodes := make([]formatCode, numQArgs)
 	// From the docs on number of argument format codes to bind:
 	// This can be zero to indicate that there are no arguments or that the
@@ -499,7 +499,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	// specified format code is applied to all arguments; or it can equal the
 	// actual number of arguments.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numQArgFormatCodes, err := buf.getInt16()
+	numQArgFormatCodes, err := buf.getUint16()
 	if err != nil {
 		return err
 	}
@@ -507,7 +507,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	case 0:
 	case 1:
 		// `1` means read one code and apply it to every argument.
-		c, err := buf.getInt16()
+		c, err := buf.getUint16()
 		if err != nil {
 			return err
 		}
@@ -518,7 +518,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	case numQArgs:
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
-			c, err := buf.getInt16()
+			c, err := buf.getUint16()
 			if err != nil {
 				return err
 			}
@@ -528,7 +528,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		return c.sendInternalError(fmt.Sprintf("wrong number of format codes specified: %d for %d arguments", numQArgFormatCodes, numQArgs))
 	}
 
-	numValues, err := buf.getInt16()
+	numValues, err := buf.getUint16()
 	if err != nil {
 		return err
 	}
@@ -558,7 +558,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		qargs[k] = d
 	}
 
-	numColumns := int16(len(stmt.Columns))
+	numColumns := uint16(len(stmt.Columns))
 	columnFormatCodes := make([]formatCode, numColumns)
 
 	// From the docs on number of result-column format codes to bind:
@@ -568,7 +568,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	// (if any); or it can equal the actual number of result columns of the
 	// query.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numColumnFormatCodes, err := buf.getInt16()
+	numColumnFormatCodes, err := buf.getUint16()
 	if err != nil {
 		return err
 	}
@@ -576,7 +576,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	case 0:
 	case 1:
 		// Read one code and apply it to every column.
-		c, err := buf.getInt16()
+		c, err := buf.getUint16()
 		if err != nil {
 			return err
 		}
@@ -587,7 +587,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	case numColumns:
 		// Read one format code for each column and apply it to that column.
 		for i := range columnFormatCodes {
-			c, err := buf.getInt16()
+			c, err := buf.getUint16()
 			if err != nil {
 				return err
 			}

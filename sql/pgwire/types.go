@@ -37,7 +37,7 @@ import (
 )
 
 //go:generate stringer -type=formatCode
-type formatCode int16
+type formatCode uint16
 
 const (
 	formatText   formatCode = 0
