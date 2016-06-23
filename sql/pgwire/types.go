@@ -627,11 +627,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		case formatText:
 			d, err := parser.ParseDInterval(string(b))
 			if err != nil {
-				return d, util.Errorf("could not parse string %q as interval", b)
+				return d, errors.Errorf("could not parse string %q as interval", b)
 			}
 			return d, nil
 		default:
-			return d, util.Errorf("unsupported interval format code: %s", code)
+			return d, errors.Errorf("unsupported interval format code: %s", code)
 		}
 	default:
 		return d, errors.Errorf("unsupported OID: %v", id)
