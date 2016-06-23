@@ -343,7 +343,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	}
 	inTypeHints := make([]oid.Oid, numQArgTypes)
 	for i := range inTypeHints {
-		typ, err := buf.getInt32()
+		typ, err := buf.getUint32()
 		if err != nil {
 			return err
 		}
@@ -537,12 +537,12 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	}
 	qargs := parser.QueryArguments{}
 	for i, t := range stmtMeta.inTypes {
-		plen, err := buf.getInt32()
+		plen, err := buf.getUint32()
 		if err != nil {
 			return err
 		}
 		k := fmt.Sprint(i + 1)
-		if plen == -1 {
+		if int32(plen) == -1 {
 			// The argument is a NULL value.
 			qargs[k] = parser.DNull
 			continue
@@ -613,7 +613,7 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 	if !ok {
 		return c.sendInternalError(fmt.Sprintf("unknown portal %q", portalName))
 	}
-	limit, err := buf.getInt32()
+	limit, err := buf.getUint32()
 	if err != nil {
 		return err
 	}
@@ -625,7 +625,7 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 		Values: portal.Qargs,
 	}
 
-	return c.executeStatements(ctx, stmt.Query, &pinfo, portalMeta.outFormats, false, limit)
+	return c.executeStatements(ctx, stmt.Query, &pinfo, portalMeta.outFormats, false, int(limit))
 }
 
 func (c *v3Conn) executeStatements(
@@ -634,7 +634,7 @@ func (c *v3Conn) executeStatements(
 	pinfo *parser.PlaceholderInfo,
 	formatCodes []formatCode,
 	sendDescription bool,
-	limit int32,
+	limit int,
 ) error {
 	tracing.AnnotateTrace()
 	results := c.executor.ExecuteStatements(ctx, c.session, stmts, pinfo)
@@ -708,7 +708,7 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToS
 	return c.wr.Flush()
 }
 
-func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int32) error {
+func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int) error {
 	if len(results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
@@ -719,7 +719,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 			}
 			break
 		}
-		if limit != 0 && len(result.Rows) > int(limit) {
+		if limit != 0 && len(result.Rows) > limit {
 			if err := c.sendInternalError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, len(result.Rows))); err != nil {
 				return err
 			}

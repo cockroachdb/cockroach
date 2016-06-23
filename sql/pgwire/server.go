@@ -99,7 +99,7 @@ func Match(rd io.Reader) bool {
 	if err != nil {
 		return false
 	}
-	version, err := buf.getInt32()
+	version, err := buf.getUint32()
 	if err != nil {
 		return false
 	}
@@ -163,7 +163,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		return err
 	}
 	s.metrics.bytesInCount.Inc(int64(n))
-	version, err := buf.getInt32()
+	version, err := buf.getUint32()
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 			return err
 		}
 		s.metrics.bytesInCount.Inc(int64(n))
-		version, err = buf.getInt32()
+		version, err = buf.getUint32()
 		if err != nil {
 			return err
 		}
