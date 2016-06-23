@@ -14,8 +14,6 @@ machine:
 
 checkout:
   post:
-    - git fetch --unshallow || true
-    - git fetch --tags
     # GOPATH is cached, so we need to clean out the version from the previous
     # run or the subsequent `mv` will fail. We put our checkout in the correct
     # location for the OSX build step.
