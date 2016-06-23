@@ -253,13 +253,13 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 	escDbName := parser.Name(req.Database).String()
 	escTableName := parser.Name(req.Table).String()
 	escQualTable := fmt.Sprintf("%s.%s", escDbName, escTableName)
-	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s",
-		escQualTable, escQualTable, escQualTable)
+	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
+		escQualTable, escQualTable, escQualTable, escQualTable)
 	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
-	if err := s.checkQueryResults(r.ResultList, 3); err != nil {
+	if err := s.checkQueryResults(r.ResultList, 4); err != nil {
 		return nil, err
 	}
 
@@ -359,6 +359,23 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 			grant.Privileges = strings.Split(privileges, ",")
 			resp.Grants = append(resp.Grants, grant)
 		}
+	}
+
+	// Marshal SHOW CREATE TABLE result.
+	{
+		const createTableCol = "CreateTable"
+		showResult := r.ResultList[3]
+		if len(showResult.Rows) != 1 {
+			return nil, s.serverErrorf("CreateTable response not available.")
+		}
+
+		scanner := makeResultScanner(showResult.Columns)
+		var createStmt string
+		if err := scanner.Scan(showResult.Rows[0], createTableCol, &createStmt); err != nil {
+			return nil, err
+		}
+
+		resp.CreateTableStatement = createStmt
 	}
 
 	// Get the number of ranges in the table. We get the key span for the table
