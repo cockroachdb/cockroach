@@ -50,6 +50,9 @@ func TestMaliciousInputs(t *testing.T) {
 		// This byte string exploited the same bug using a clientMsgDescribe
 		// message type.
 		{byte(clientMsgDescribe), 0x00, 0x00, 0x00, 0x04},
+		// This would cause readBuffer.getInt16 to overflow, resulting in a
+		// negative value being used for an allocation size.
+		{byte(clientMsgParse), 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0xff, 0xff},
 	} {
 		testMaliciousInput(t, data)
 	}
