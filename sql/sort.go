@@ -25,9 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 // sortNode represents a node that sorts the rows returned by its
@@ -144,7 +144,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				}
 				index = len(s.columns) - 1
 			} else {
-				return nil, util.Errorf("column %s does not exist", expr)
+				return nil, errors.Errorf("column %s does not exist", expr)
 			}
 		}
 		direction := encoding.Ascending

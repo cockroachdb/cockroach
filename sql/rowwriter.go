@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -204,7 +204,7 @@ func insertPutFn(b *client.Batch, key *roachpb.Key, value interface{}, logValue 
 // with the given values.
 func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreConflicts bool) error {
 	if len(values) != len(ri.insertCols) {
-		return util.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
+		return errors.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
 	}
 
 	putFn := insertCPutFn
@@ -250,7 +250,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 			if family.ID == 0 {
 				// TODO(dan): Delete this once column families can be created that are
 				// not backward compatible with the old format.
-				return util.Errorf("family is not backward compatible: %v", family)
+				return errors.Errorf("family is not backward compatible: %v", family)
 			}
 
 			idx, ok := ri.insertColIDtoRowIndex[family.DefaultColumnID]
@@ -282,7 +282,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 		for _, colID := range familySortedColumnIDs {
 			if ri.helper.columnInPK(colID) {
 				if family.ID != 0 {
-					return util.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
+					return errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
 				}
 				// Skip primary key columns as their values are encoded in the key of
 				// each family. Family 0 is guaranteed to exist and acts as a sentinel.
@@ -312,7 +312,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 			// TODO(dan): Delete this check once column families can be created that
 			// are not backward compatible with the old format.
 			if family.ID == 0 && len(ri.valueBuf) > 0 {
-				return util.Errorf("family is not backward compatible: %v", family)
+				return errors.Errorf("family is not backward compatible: %v", family)
 			}
 			ri.value.SetTuple(ri.valueBuf)
 			putFn(b, &ri.key, &ri.value, &ri.value)
@@ -508,10 +508,10 @@ func (ru *rowUpdater) updateRow(
 	updateValues []parser.Datum,
 ) ([]parser.Datum, error) {
 	if len(oldValues) != len(ru.fetchCols) {
-		return nil, util.Errorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))
+		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))
 	}
 	if len(updateValues) != len(ru.updateCols) {
-		return nil, util.Errorf("got %d values but expected %d", len(updateValues), len(ru.updateCols))
+		return nil, errors.Errorf("got %d values but expected %d", len(updateValues), len(ru.updateCols))
 	}
 
 	primaryIndexKey, secondaryIndexEntries, err := ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, oldValues)
@@ -608,7 +608,7 @@ func (ru *rowUpdater) updateRow(
 			if family.ID == 0 {
 				// TODO(dan): Delete this once column families can be created that are
 				// not backward compatible with the old format.
-				return nil, util.Errorf("family is not backward compatible: %v", family)
+				return nil, errors.Errorf("family is not backward compatible: %v", family)
 			}
 
 			idx, ok := ru.updateColIDtoRowIndex[family.DefaultColumnID]
@@ -637,7 +637,7 @@ func (ru *rowUpdater) updateRow(
 		for _, colID := range familySortedColumnIDs {
 			if ru.helper.columnInPK(colID) {
 				if family.ID != 0 {
-					return nil, util.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
+					return nil, errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
 				}
 				// Skip primary key columns as their values are encoded in the key of
 				// each family. Family 0 is guaranteed to exist and acts as a sentinel.
@@ -646,7 +646,7 @@ func (ru *rowUpdater) updateRow(
 
 			idx, ok := ru.fetchColIDtoRowIndex[colID]
 			if !ok {
-				return nil, util.Errorf("column %d was expected to be fetched, but wasn't", colID)
+				return nil, errors.Errorf("column %d was expected to be fetched, but wasn't", colID)
 			}
 			col := ru.fetchCols[idx]
 
@@ -673,7 +673,7 @@ func (ru *rowUpdater) updateRow(
 			// TODO(dan): Delete this check once column families can be created that
 			// are not backward compatible with the old format.
 			if family.ID == 0 && len(ru.valueBuf) > 0 {
-				return nil, util.Errorf("family is not backward compatible: %v", family)
+				return nil, errors.Errorf("family is not backward compatible: %v", family)
 			}
 			ru.value.SetTuple(ru.valueBuf)
 			if log.V(2) {

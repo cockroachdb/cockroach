@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 var configID = sqlbase.ID(1)
@@ -69,12 +70,12 @@ func waitForConfigChange(t *testing.T, s *testServer) config.SystemConfig {
 					t.Fatal(err)
 				}
 				if id := foundDesc.GetDatabase().GetID(); id != configID {
-					return util.Errorf("expected database id %d; got %d", configID, id)
+					return errors.Errorf("expected database id %d; got %d", configID, id)
 				}
 				return nil
 			}
 		}
-		return util.Errorf("got nil system config")
+		return errors.Errorf("got nil system config")
 	})
 	return cfg
 }

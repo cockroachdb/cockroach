@@ -28,6 +28,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -108,19 +109,19 @@ func TestStoreContext() StoreContext {
 // contains range-local keys is completely range-local.
 func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	if bytes.Compare(start, roachpb.KeyMax) >= 0 {
-		return util.Errorf("start key %q must be less than KeyMax", start)
+		return errors.Errorf("start key %q must be less than KeyMax", start)
 	}
 	if !checkEndKey {
 		if len(end) != 0 {
-			return util.Errorf("end key %q should not be specified for this operation", end)
+			return errors.Errorf("end key %q should not be specified for this operation", end)
 		}
 		return nil
 	}
 	if end == nil {
-		return util.Errorf("end key must be specified")
+		return errors.Errorf("end key must be specified")
 	}
 	if bytes.Compare(roachpb.KeyMax, end) < 0 {
-		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
+		return errors.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
 	{
 		sAddr, err := keys.Addr(start)
@@ -132,16 +133,16 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 			return err
 		}
 		if !sAddr.Less(eAddr) {
-			return util.Errorf("end key %q must be greater than start %q", end, start)
+			return errors.Errorf("end key %q must be greater than start %q", end, start)
 		}
 		if !bytes.Equal(sAddr, start) {
 			if bytes.Equal(eAddr, end) {
-				return util.Errorf("start key is range-local, but end key is not")
+				return errors.Errorf("start key is range-local, but end key is not")
 			}
 		} else if bytes.Compare(start, keys.LocalMax) < 0 {
 			// It's a range op, not local but somehow plows through local data -
 			// not cool.
-			return util.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
+			return errors.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
 		}
 	}
 
@@ -846,7 +847,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 
 	// If the nodeID is 0, it has not be assigned yet.
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
-		return util.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
+		return errors.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
 	// Always set gossip NodeID before gossiping any info.
 	if s.ctx.Gossip != nil {
@@ -1152,7 +1153,7 @@ func (s *Store) GossipStore() {
 // non-empty engine.
 func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error {
 	if s.Ident.NodeID != 0 {
-		return util.Errorf("engine already bootstrapped")
+		return errors.Errorf("engine already bootstrapped")
 	}
 	if err := s.engine.Open(); err != nil {
 		return err
@@ -1162,21 +1163,21 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
 		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)), 10)
 	if err != nil {
-		return util.Errorf("store %s: unable to access: %s", s.engine, err)
+		return errors.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
 		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
-			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
+			return errors.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
 		}
 		if ok {
-			return util.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
+			return errors.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
 		}
 		keyVals := []string{}
 		for _, kv := range kvs {
 			keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
 		}
-		return util.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
+		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
 	err = engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
 	return err
@@ -1397,7 +1398,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 	if !bytes.Equal(origDesc.EndKey, newDesc.EndKey) ||
 		bytes.Compare(origDesc.StartKey, newDesc.StartKey) >= 0 {
-		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
+		return errors.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
 	}
 
 	s.mu.Lock()
@@ -1416,7 +1417,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
 	if s.mu.replicasByKey.Delete(origRng) == nil {
-		return util.Errorf("couldn't find range %s in rangesByKey btree", origRng)
+		return errors.Errorf("couldn't find range %s in rangesByKey btree", origRng)
 	}
 
 	copyDesc := *origDesc
@@ -1424,11 +1425,11 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
 	if s.mu.replicasByKey.ReplaceOrInsert(origRng) != nil {
-		return util.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
+		return errors.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
 	}
 
 	if err := s.addReplicaInternalLocked(newRng); err != nil {
-		return util.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
+		return errors.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
 	}
 
 	// Update the max bytes and other information of the new range.
@@ -1450,25 +1451,25 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 	subsumingDesc := subsumingRng.Desc()
 
 	if !subsumingDesc.EndKey.Less(updatedEndKey) {
-		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
+		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingDesc.EndKey)
 	}
 
 	subsumedRng, err := s.GetReplica(subsumedRangeID)
 	if err != nil {
-		return util.Errorf("could not find the subsumed range: %d", subsumedRangeID)
+		return errors.Errorf("could not find the subsumed range: %d", subsumedRangeID)
 	}
 	subsumedDesc := subsumedRng.Desc()
 
 	if !replicaSetsEqual(subsumedDesc.Replicas, subsumingDesc.Replicas) {
-		return util.Errorf("ranges are not on the same replicas sets: %+v != %+v",
+		return errors.Errorf("ranges are not on the same replicas sets: %+v != %+v",
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
 	// Remove and destroy the subsumed range. Note that we are on the
 	// processRaft goroutine so we can call removeReplicaImpl directly.
 	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc, false); err != nil {
-		return util.Errorf("cannot remove range %s", err)
+		return errors.Errorf("cannot remove range %s", err)
 	}
 
 	// Update the end key of the subsuming range.
@@ -1499,7 +1500,7 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 // addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 	if !rng.IsInitialized() {
-		return util.Errorf("attempted to add uninitialized range %s", rng)
+		return errors.Errorf("attempted to add uninitialized range %s", rng)
 	}
 
 	// TODO(spencer); will need to determine which range is
@@ -1512,7 +1513,7 @@ func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
-		return util.Errorf("range for key %v already exists in rangesByKey btree",
+		return errors.Errorf("range for key %v already exists in rangesByKey btree",
 			(exRngItem.(*Replica)).getKey())
 	}
 	return nil
@@ -1547,7 +1548,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	desc := rep.Desc()
 	_, rd := desc.FindReplica(s.StoreID())
 	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
-		return util.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
+		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
 			rep, rd.ReplicaID, origDesc.NextReplicaID)
 	}
 	s.mu.Lock()
@@ -1555,7 +1556,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 
 	delete(s.mu.replicas, rep.RangeID)
 	if s.mu.replicasByKey.Delete(rep) == nil {
-		return util.Errorf("couldn't find range in replicasByKey btree")
+		return errors.Errorf("couldn't find range in replicasByKey btree")
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
@@ -1613,7 +1614,7 @@ func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
 // processRangeDescriptorUpdateLocked requires that the store lock is held.
 func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	if !rng.IsInitialized() {
-		return util.Errorf("attempted to process uninitialized range %s", rng)
+		return errors.Errorf("attempted to process uninitialized range %s", rng)
 	}
 
 	rangeID := rng.RangeID
@@ -1631,7 +1632,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
-		return util.Errorf("range for key %v already exists in rangesByKey btree",
+		return errors.Errorf("range for key %v already exists in rangesByKey btree",
 			(exRngItem.(*Replica)).getKey())
 	}
 	return nil

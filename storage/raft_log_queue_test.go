@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 )
 
 func TestGetQuorumMatchedIndex(t *testing.T) {
@@ -154,13 +155,13 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		store.ForceRaftLogScanAndProcess()
 		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
 		if err != nil {
-			return util.Errorf("expected no error, got %s", err)
+			return errors.Errorf("expected no error, got %s", err)
 		}
 		if truncatableIndexes != 0 {
-			return util.Errorf("expected 0 for truncatable index, got %d", truncatableIndexes)
+			return errors.Errorf("expected 0 for truncatable index, got %d", truncatableIndexes)
 		}
 		if oldestIndex != 0 {
-			return util.Errorf("expected 0 for oldest index, got %d", oldestIndex)
+			return errors.Errorf("expected 0 for oldest index, got %d", oldestIndex)
 		}
 		return nil
 	})

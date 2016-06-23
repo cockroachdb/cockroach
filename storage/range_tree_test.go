@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func createTreeContext(rootKey roachpb.RKey, nodes []*RangeTreeNode) *treeContext {
@@ -78,26 +78,26 @@ func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, k
 		// Is the value correct?
 		cached, err := tc.getNode(expected.Key)
 		if err != nil {
-			t.Fatal(util.ErrorfSkipFrames(1, "%d: Could not get node %s", testNumber, expected.Key))
+			t.Fatal(errors.Errorf("%d: Could not get node %s", testNumber, expected.Key))
 		}
 		if !reflect.DeepEqual(cached, expected) {
-			t.Error(util.ErrorfSkipFrames(1, "%d: Expected %s node is not the same as the actual.\nExpected: %+v\nActual: %+v", testNumber, name, expected, actual))
+			t.Error(errors.Errorf("%d: Expected %s node is not the same as the actual.\nExpected: %+v\nActual: %+v", testNumber, name, expected, actual))
 		}
 
 		// Is there a returned value to match against the cached one?
 		if actual != nil {
 			if !reflect.DeepEqual(actual, cached) {
-				t.Error(util.ErrorfSkipFrames(1, "%d: Cached %s node is not the same as the actual.\nExpected: %+v\nActual: %+v", testNumber, name, cached, actual))
+				t.Error(errors.Errorf("%d: Cached %s node is not the same as the actual.\nExpected: %+v\nActual: %+v", testNumber, name, cached, actual))
 			}
 		}
 
 		// Is the node marked as dirty?
 		if !tc.nodes[string(expected.Key)].dirty {
-			t.Error(util.ErrorfSkipFrames(1, "%d: Expected %s node to be dirty", testNumber, name))
+			t.Error(errors.Errorf("%d: Expected %s node to be dirty", testNumber, name))
 		}
 	} else {
 		if cached := tc.nodes[string(key)].node; cached != nil {
-			t.Error(util.ErrorfSkipFrames(1, "%d: Expected nil for %s node, got a cached value of: %+v", testNumber, name, cached))
+			t.Error(errors.Errorf("%d: Expected nil for %s node, got a cached value of: %+v", testNumber, name, cached))
 		}
 	}
 }

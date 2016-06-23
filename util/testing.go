@@ -110,7 +110,7 @@ func SucceedsSoon(t Tester, fn func() error) {
 // stack depth offset.
 func SucceedsSoonDepth(depth int, t Tester, fn func() error) {
 	if err := RetryForDuration(defaultSucceedsSoonDuration, fn); err != nil {
-		t.Fatal(ErrorfSkipFrames(1+depth, "condition failed to evaluate within %s: %s", defaultSucceedsSoonDuration, err))
+		t.Fatalf("condition failed to evaluate within %s: %s", defaultSucceedsSoonDuration, err)
 	}
 }
 

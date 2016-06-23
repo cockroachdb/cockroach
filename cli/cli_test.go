@@ -31,11 +31,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -143,7 +144,7 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 		outResult := <-outC
 		out, err = outResult.out, outResult.err
 		if x := recover(); x != nil {
-			err = util.Errorf("panic: %v", x)
+			err = errors.Errorf("panic: %v", x)
 		}
 	}()
 
@@ -886,7 +887,7 @@ func TestFreeze(t *testing.T) {
 
 	assertOutput := func(msg string) {
 		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
-			t.Fatal(util.ErrorfSkipFrames(1, "expected trailing 'ok':\n%s", msg))
+			t.Fatal(errors.Errorf("expected trailing 'ok':\n%s", msg))
 		}
 	}
 
@@ -1058,7 +1059,7 @@ func extractFields(line string) ([]string, error) {
 	// |, and another empty one to the right of the final |. So, we need to take those
 	// out.
 	if a, e := len(fields), len(nodesColumnHeaders)+2; a != e {
-		return nil, util.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
+		return nil, errors.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
 	}
 	fields = fields[1 : len(fields)-1]
 	var r []string

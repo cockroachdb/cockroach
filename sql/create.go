@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 type createDatabaseNode struct {
@@ -56,7 +56,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	}
 
 	if p.session.User != security.RootUser {
-		return nil, util.Errorf("only %s is allowed to create databases", security.RootUser)
+		return nil, errors.Errorf("only %s is allowed to create databases", security.RootUser)
 	}
 
 	return &createDatabaseNode{p: p, n: n}, nil
@@ -360,7 +360,7 @@ func (n *createTableNode) resolveColFK(
 	// If a column isn't specified, attempt to default to PK.
 	if targetColName == "" {
 		if len(target.PrimaryIndex.ColumnNames) != 1 {
-			return ret, util.Errorf("must specify a single unique column to reference %q", targetTable.String())
+			return ret, errors.Errorf("must specify a single unique column to reference %q", targetTable.String())
 		}
 		targetColName = target.PrimaryIndex.ColumnNames[0]
 	}

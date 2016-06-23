@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
@@ -77,10 +79,10 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 	var details serverpb.DetailsResponse
 	for _, urlID := range urlIDs {
 		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/"+urlID, &details); err != nil {
-			t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
+			t.Fatal(errors.Errorf("unable to parse details - %s", err))
 		}
 		if details.NodeID != expectedNodeID {
-			t.Fatal(util.ErrorfSkipFrames(1, "%d calling %s: node ids don't match - expected %d, actual %d", nodeID, urlID, expectedNodeID, details.NodeID))
+			t.Fatal(errors.Errorf("%d calling %s: node ids don't match - expected %d, actual %d", nodeID, urlID, expectedNodeID, details.NodeID))
 		}
 
 		get(t, c.URL(i), fmt.Sprintf("/_status/gossip/%s", urlID))

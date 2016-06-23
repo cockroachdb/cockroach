@@ -28,8 +28,8 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/pkg/errors"
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal
@@ -261,9 +261,9 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, *inf.Dec, error
 	// Handle the simplistic cases first.
 	switch buf[0] {
 	case decimalNaN, decimalNaNDesc:
-		return nil, nil, util.Errorf("decimal does not support NaN values: %q", buf)
+		return nil, nil, errors.Errorf("decimal does not support NaN values: %q", buf)
 	case decimalInfinity, decimalNegativeInfinity:
-		return nil, nil, util.Errorf("decimal does not support infinite values: %q", buf)
+		return nil, nil, errors.Errorf("decimal does not support infinite values: %q", buf)
 	case decimalZero:
 		return buf[1:], inf.NewDec(0, 0), nil
 	}
@@ -312,7 +312,7 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, *inf.Dec, error
 		}
 		return r, makeDecimalFromMandE(invert, e, m, tmp2), nil
 	default:
-		return nil, nil, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
+		return nil, nil, errors.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
 }
 
@@ -392,7 +392,7 @@ func findDecimalTerminator(buf []byte) (int, error) {
 			return i, nil
 		}
 	}
-	return -1, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
+	return -1, errors.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
 }
 
 func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, rest []byte, newTmp []byte, err error) {
@@ -673,7 +673,7 @@ func DecodeNonsortingDecimal(buf []byte, tmp []byte) (*inf.Dec, error) {
 		}
 		return dec, nil
 	default:
-		return nil, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
+		return nil, errors.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
 }
 

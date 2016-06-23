@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -192,7 +192,7 @@ func (tc *treeContext) getUncle(node *RangeTreeNode) (*RangeTreeNode, error) {
 func (tc *treeContext) replaceNode(oldNode, newNode *RangeTreeNode) (*RangeTreeNode, error) {
 	if oldNode.ParentKey == nil {
 		if newNode == nil {
-			return nil, util.Errorf("cannot replace the root node with nil")
+			return nil, errors.Errorf("cannot replace the root node with nil")
 		}
 		// Update the root key if this was the root.
 		tc.setRootKey(newNode.Key)
@@ -308,7 +308,7 @@ func (tc *treeContext) insert(node *RangeTreeNode) error {
 				return err
 			}
 			if node.Key.Equal(currentNode.Key) {
-				return util.Errorf("key %s already exists in the range tree", node.Key)
+				return errors.Errorf("key %s already exists in the range tree", node.Key)
 			}
 			if node.Key.Less(currentNode.Key) {
 				if currentNode.LeftKey == nil {
@@ -469,7 +469,7 @@ func DeleteRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) error {
 		return err
 	}
 	if node == nil {
-		return util.Errorf("could not find range tree node with the key %s", key)
+		return errors.Errorf("could not find range tree node with the key %s", key)
 	}
 	if err := tc.delete(node); err != nil {
 		return err

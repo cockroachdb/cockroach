@@ -24,7 +24,7 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // EmbeddedCertsDir is the certs directory inside embedded assets.
@@ -91,7 +91,7 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	certPool := x509.NewCertPool()
 
 	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
-		err = util.Errorf("failed to parse PEM data to pool")
+		err = errors.Errorf("failed to parse PEM data to pool")
 		return nil, err
 	}
 
@@ -150,7 +150,7 @@ func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	certPool := x509.NewCertPool()
 
 	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
-		return nil, util.Errorf("failed to parse PEM data to pool")
+		return nil, errors.Errorf("failed to parse PEM data to pool")
 	}
 
 	return &tls.Config{

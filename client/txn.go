@@ -17,22 +17,21 @@
 package client
 
 import (
-	"errors"
 	"strconv"
 
+	"github.com/gogo/protobuf/proto"
+	basictracer "github.com/opentracing/basictracer-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
-	basictracer "github.com/opentracing/basictracer-go"
 )
 
 // txnSender implements the Sender interface and is used to keep the Send
@@ -154,12 +153,12 @@ func (txn *Txn) DebugName() string {
 func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 	if txn.retrying {
 		if txn.Proto.Isolation != isolation {
-			return util.Errorf("cannot change the isolation level of a retrying transaction")
+			return errors.Errorf("cannot change the isolation level of a retrying transaction")
 		}
 		return nil
 	}
 	if txn.Proto.IsInitialized() {
-		return util.Errorf("cannot change the isolation level of a running transaction")
+		return errors.Errorf("cannot change the isolation level of a running transaction")
 	}
 	txn.Proto.Isolation = isolation
 	return nil
@@ -171,15 +170,15 @@ func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 	if txn.retrying {
 		if txn.UserPriority != userPriority {
-			return util.Errorf("cannot change the user priority of a retrying transaction")
+			return errors.Errorf("cannot change the user priority of a retrying transaction")
 		}
 		return nil
 	}
 	if txn.Proto.IsInitialized() {
-		return util.Errorf("cannot change the user priority of a running transaction")
+		return errors.Errorf("cannot change the user priority of a running transaction")
 	}
 	if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
-		return util.Errorf("the given user priority %f is out of the allowed range [%f, %d]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
+		return errors.Errorf("the given user priority %f is out of the allowed range [%f, %d]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
 	}
 	txn.UserPriority = userPriority
 	return nil
@@ -390,7 +389,7 @@ func (txn *Txn) Commit() error {
 // transaction.
 func (txn *Txn) CommitInBatch(b *Batch) error {
 	if txn != b.txn {
-		return util.Errorf("a batch b can only be committed by b.txn")
+		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
 	b.AddRawRequest(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
 	err := txn.Run(b)

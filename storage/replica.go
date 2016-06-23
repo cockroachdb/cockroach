@@ -21,7 +21,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -34,6 +33,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -336,12 +335,12 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 	if r.isInitializedLocked() && replicaID != 0 {
-		return util.Errorf("replicaID must be 0 when creating an initialized replica")
+		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 	if replicaID == 0 {
 		_, repDesc := desc.FindReplica(r.store.StoreID())
 		if repDesc == nil {
-			return util.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in %s)",
+			return errors.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in %s)",
 				r.store.StoreID(), desc)
 		}
 		replicaID = repDesc.ReplicaID
@@ -360,7 +359,7 @@ func (r *Replica) String() string {
 func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	desc := r.Desc()
 	if _, rd := desc.FindReplica(r.store.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
-		return util.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
+		return errors.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
 			r, rd.ReplicaID, origDesc.NextReplicaID)
 	}
 
@@ -375,7 +374,7 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	// Clear the map.
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = util.Errorf("replica %d (range %d) was garbage collected",
+	r.mu.destroyed = errors.Errorf("replica %d (range %d) was garbage collected",
 		r.mu.replicaID, r.RangeID)
 	r.mu.Unlock()
 
@@ -393,7 +392,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if r.mu.replicaID == replicaID {
 		return nil
 	} else if r.mu.replicaID > replicaID {
-		return util.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
+		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
 	} else if r.mu.replicaID != 0 {
 		// TODO(bdarnell): clean up previous raftGroup (update peers)
 	}
@@ -635,7 +634,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 			return repAddress, nil
 		}
 	}
-	return roachpb.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
+	return roachpb.ReplicaDescriptor{}, errors.Errorf("replica %d not found in range %d",
 		replicaID, desc.RangeID)
 }
 
@@ -835,13 +834,13 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 	if ba.IsReadOnly() {
 		if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Txn != nil {
 			// Disallow any inconsistent reads within txns.
-			return util.Errorf("cannot allow inconsistent reads within a transaction")
+			return errors.Errorf("cannot allow inconsistent reads within a transaction")
 		}
 		if ba.ReadConsistency == roachpb.CONSENSUS {
-			return util.Errorf("consensus reads not implemented")
+			return errors.Errorf("consensus reads not implemented")
 		}
 	} else if ba.ReadConsistency == roachpb.INCONSISTENT {
-		return util.Errorf("inconsistent mode is only available to reads")
+		return errors.Errorf("inconsistent mode is only available to reads")
 	}
 
 	return nil
@@ -1306,7 +1305,7 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 
 func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	if p.raftCmd.Cmd.Timestamp == hlc.ZeroTimestamp {
-		return util.Errorf("can't propose Raft command with zero timestamp")
+		return errors.Errorf("can't propose Raft command with zero timestamp")
 	}
 
 	data, err := protoutil.Marshal(&p.raftCmd)
@@ -1829,7 +1828,7 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Unlock()
 
 	if index != oldIndex+1 {
-		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index jumped from %d to %d", oldIndex, index)))
+		return nil, roachpb.NewError(newReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
@@ -1893,7 +1892,7 @@ func (r *Replica) applyRaftCommand(
 		r.mu.Unlock()
 	})
 	if err := batch.Commit(); err != nil {
-		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
+		rErr = roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
 	}
 
@@ -1979,7 +1978,7 @@ func (r *Replica) checkIfTxnAborted(
 	var entry roachpb.AbortCacheEntry
 	aborted, err := r.abortCache.Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from abort cache"), err))
+		return roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not read from abort cache"), err))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.

@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/pkg/errors"
 )
 
 // TODO(mrtracy): All of this logic should probably be moved into the SQL
@@ -112,7 +112,7 @@ VALUES(
 		return err
 	}
 	if rows != 1 {
-		return util.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
+		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func (s *Store) logChange(txn *client.Txn, changeType roachpb.ReplicaChangeType,
 			UpdatedDesc    roachpb.RangeDescriptor
 		}{replica, desc}
 	default:
-		return util.Errorf("unknown replica change type %s", changeType)
+		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
 	infoBytes, err := json.Marshal(infoStruct)

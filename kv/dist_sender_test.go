@@ -19,12 +19,12 @@ package kv
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -208,7 +208,7 @@ func TestSendRPCOrder(t *testing.T) {
 			var actualAddrs []roachpb.NodeID
 			for i, r := range replicas {
 				if len(expAddrs) <= i {
-					return util.Errorf("got unexpected address: %s", r.NodeDesc.Address)
+					return errors.Errorf("got unexpected address: %s", r.NodeDesc.Address)
 				}
 				if expAddrs[i] == 0 {
 					actualAddrs = append(actualAddrs, 0)
@@ -217,7 +217,7 @@ func TestSendRPCOrder(t *testing.T) {
 				}
 			}
 			if !reflect.DeepEqual(expAddrs, actualAddrs) {
-				return util.Errorf("expected %d, but found %d", expAddrs, actualAddrs)
+				return errors.Errorf("expected %d, but found %d", expAddrs, actualAddrs)
 			}
 			return nil
 		}
@@ -899,7 +899,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 		if desc != nil && desc.NodeID == 5 {
 			return nil
 		}
-		return util.Errorf("wanted NodeID 5, got %v", desc)
+		return errors.Errorf("wanted NodeID 5, got %v", desc)
 	})
 }
 
@@ -1683,7 +1683,7 @@ func (t *slowLeaderTransport) factory(
 	_ roachpb.BatchRequest,
 ) (Transport, error) {
 	if t.created {
-		return nil, util.Errorf("should not create multiple transports")
+		return nil, errors.Errorf("should not create multiple transports")
 	}
 	t.created = true
 	return t, nil

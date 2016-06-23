@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // Show a session-local variable name.
@@ -209,7 +209,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
-		return nil, util.Errorf("TODO(marc): implement SHOW GRANT with no targets")
+		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
 	descriptors, err := p.getDescriptorsFromTargetList(*n.Targets)
 	if err != nil {

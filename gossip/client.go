@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -161,17 +162,17 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	// Handle remote forwarding.
 	if reply.AlternateAddr != nil {
 		if g.hasIncoming(reply.AlternateNodeID) || g.hasOutgoing(reply.AlternateNodeID) {
-			return util.Errorf("received forward from node %d to %d (%s); already have active connection, skipping",
+			return errors.Errorf("received forward from node %d to %d (%s); already have active connection, skipping",
 				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 		}
 		// We try to resolve the address, but don't actually use the result.
 		// The certificates (if any) may only be valid for the unresolved
 		// address.
 		if _, err := reply.AlternateAddr.Resolve(); err != nil {
-			return util.Errorf("unable to resolve alternate address %s for node %d: %s", reply.AlternateAddr, reply.AlternateNodeID, err)
+			return errors.Errorf("unable to resolve alternate address %s for node %d: %s", reply.AlternateAddr, reply.AlternateNodeID, err)
 		}
 		c.forwardAddr = reply.AlternateAddr
-		return util.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
+		return errors.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
 	// If we have the sentinel gossip we're considered connected.
@@ -181,11 +182,11 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	// being done by an incoming client, either because an outgoing
 	// matches an incoming or the client is connecting to itself.
 	if g.is.NodeID == c.peerID {
-		return util.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
+		return errors.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
 	} else if g.hasIncoming(c.peerID) && g.is.NodeID < c.peerID {
 		// To avoid mutual shutdown, we only shutdown our client if our
 		// node ID is less than the peer's.
-		return util.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)
+		return errors.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)
 	}
 
 	return nil

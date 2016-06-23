@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -650,7 +651,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			ctx.TestingKnobs.TestingCommandFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
-						return roachpb.NewError(util.Errorf("boom"))
+						return roachpb.NewError(errors.Errorf("boom"))
 					}
 					return nil
 				}
@@ -712,7 +713,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				ctx.TestingKnobs.TestingCommandFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 						if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
-							return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+							return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 						}
 						return nil
 					}
@@ -1043,7 +1044,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		for _, test := range testData {
 			if mb := test.rng.GetMaxBytes(); mb != test.expMaxBytes {
-				return util.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
+				return errors.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
 			}
 		}
 		return nil
@@ -1545,13 +1546,13 @@ func TestStoreReadInconsistent(t *testing.T) {
 			if reply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); pErr != nil {
-				return util.Errorf("expected read to succeed: %s", pErr)
+				return errors.Errorf("expected read to succeed: %s", pErr)
 			} else if gReply := reply.(*roachpb.GetResponse).Value; gReply == nil {
-				return util.Errorf("value is nil")
+				return errors.Errorf("value is nil")
 			} else if replyBytes, err := gReply.GetBytes(); err != nil {
 				return err
 			} else if !bytes.Equal(replyBytes, []byte("value2")) {
-				return util.Errorf("expected value %q, got %+v", []byte("value2"), reply)
+				return errors.Errorf("expected value %q, got %+v", []byte("value2"), reply)
 			}
 			return nil
 		})
@@ -1713,7 +1714,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
 			if ok && intercept.Load().(bool) {
-				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 			return nil
 		}
@@ -1753,7 +1754,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		}, &sArgs); pErr != nil {
 			return pErr.GoError()
 		} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 10 {
-			return util.Errorf("could not read rows as expected")
+			return errors.Errorf("could not read rows as expected")
 		}
 		return nil
 	})
@@ -1904,15 +1905,15 @@ func TestStoreChangeFrozen(t *testing.T) {
 			t.Fatal(err)
 		}
 		if pFrozen != frozen {
-			t.Fatal(util.ErrorfSkipFrames(1, "persisted != in-memory frozen status: %t vs %t",
+			t.Fatal(errors.Errorf("persisted != in-memory frozen status: %t vs %t",
 				pFrozen, frozen))
 		}
 		if pFrozen != b {
-			t.Fatal(util.ErrorfSkipFrames(1, "expected status %t, got %t", b, pFrozen))
+			t.Fatal(errors.Errorf("expected status %t, got %t", b, pFrozen))
 		}
 		results := store.FrozenStatus(!pFrozen)
 		if len(results) != 0 {
-			t.Fatal(util.ErrorfSkipFrames(1,
+			t.Fatal(errors.Errorf(
 				"expected frozen=%t, got %d mismatching replicas: %+v",
 				pFrozen, len(results), results))
 		}
@@ -2043,11 +2044,11 @@ func TestStoreGCThreshold(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !gcThreshold.Equal(pgcThreshold) {
-			t.Fatal(util.ErrorfSkipFrames(1, "persisted != in-memory threshold: %s vs %s",
+			t.Fatal(errors.Errorf("persisted != in-memory threshold: %s vs %s",
 				pgcThreshold, gcThreshold))
 		}
 		if !pgcThreshold.Equal(ts) {
-			t.Fatal(util.ErrorfSkipFrames(1, "expected timestamp %s, got %s", ts, pgcThreshold))
+			t.Fatal(errors.Errorf("expected timestamp %s, got %s", ts, pgcThreshold))
 		}
 	}
 

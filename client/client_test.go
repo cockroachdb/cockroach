@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -38,13 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/gogo/protobuf/proto"
 )
 
 // testUser has valid client certs.
@@ -301,16 +301,16 @@ func TestClientRunTransaction(t *testing.T) {
 			if gr, err := db.Get(key); err != nil {
 				return err
 			} else if gr.Value != nil {
-				return util.Errorf("expected nil value; got %+v", gr.Value)
+				return errors.Errorf("expected nil value; got %+v", gr.Value)
 			}
 			// Read within the transaction.
 			if gr, err := txn.Get(key); err != nil {
 				return err
 			} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
-				return util.Errorf("expected value %q; got %q", value, gr.ValueBytes())
+				return errors.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 			}
 			if !commit {
-				return util.Errorf("purposefully failing transaction")
+				return errors.Errorf("purposefully failing transaction")
 			}
 			return nil
 		})

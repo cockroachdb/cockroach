@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/pkg/errors"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -229,7 +229,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 		return nil, err
 	}
 	if next {
-		return nil, util.Errorf("%s: unexpected multiple results", sql)
+		return nil, errors.Errorf("%s: unexpected multiple results", sql)
 	}
 	return values, nil
 }

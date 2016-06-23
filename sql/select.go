@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // tableInfo contains the information for table used by a select statement. It can be an actual
@@ -503,7 +504,7 @@ func (s *selectNode) initFrom(
 		// The column aliases can only refer to explicit columns.
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(s.source.info.columns) {
-				return util.Errorf(
+				return errors.Errorf(
 					"table \"%s\" has %d columns available but %d columns specified",
 					s.source.info.alias, aliasIdx, len(colAlias))
 			}

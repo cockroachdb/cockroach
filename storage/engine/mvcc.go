@@ -19,7 +19,6 @@ package engine
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -28,11 +27,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -671,7 +670,7 @@ func mvccGetInternal(
 	buf *getBuffer,
 ) (*roachpb.Value, []roachpb.Intent, valueSafety, error) {
 	if !consistent && txn != nil {
-		return nil, nil, safeValue, util.Errorf(
+		return nil, nil, safeValue, errors.Errorf(
 			"cannot allow inconsistent reads within a transaction")
 	}
 
@@ -723,7 +722,7 @@ func mvccGetInternal(
 		// we're now reading. In this case, we skip the intent.
 		if ownIntent && txn.Epoch != meta.Txn.Epoch {
 			if txn.Epoch < meta.Txn.Epoch {
-				return nil, nil, safeValue, util.Errorf(
+				return nil, nil, safeValue, errors.Errorf(
 					"failed to read with epoch %d due to a write intent with epoch %d",
 					txn.Epoch, meta.Txn.Epoch)
 			}
@@ -771,7 +770,7 @@ func mvccGetInternal(
 		return nil, ignoredIntents, safeValue, nil
 	}
 	if !unsafeKey.IsValue() {
-		return nil, nil, safeValue, util.Errorf(
+		return nil, nil, safeValue, errors.Errorf(
 			"expected scan to versioned value reading key %s; got %s %s",
 			metaKey.Key, unsafeKey, unsafeKey.Timestamp)
 	}
@@ -912,7 +911,7 @@ func mvccPutUsingIter(
 	var rawBytes []byte
 	if valueFn == nil {
 		if value.Timestamp != hlc.ZeroTimestamp {
-			return util.Errorf("cannot have timestamp set in value on Put")
+			return errors.Errorf("cannot have timestamp set in value on Put")
 		}
 		rawBytes = value.RawBytes
 	}
@@ -979,13 +978,13 @@ func mvccPutInternal(
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.Equal(hlc.ZeroTimestamp)
 	if ok && putIsInline != buf.meta.IsInline() {
-		return util.Errorf("%q: put is inline=%t, but existing value is inline=%t",
+		return errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
 	}
 	// Handle inline put.
 	if putIsInline {
 		if txn != nil {
-			return util.Errorf("%q: inline writes not allowed within transactions", metaKey)
+			return errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
 		}
 		var metaKeySize, metaValSize int64
 		if value, err = maybeGetValue(ok, timestamp); err != nil {
@@ -1016,7 +1015,7 @@ func mvccPutInternal(
 				// transaction.
 				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *meta.Txn}}}
 			} else if txn.Epoch < meta.Txn.Epoch {
-				return util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
+				return errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
 			} else if txn.Sequence < meta.Txn.Sequence ||
 				(txn.Sequence == meta.Txn.Sequence && txn.BatchIndex <= meta.Txn.BatchIndex) {
@@ -1145,13 +1144,13 @@ func MVCCIncrement(
 		if value != nil {
 			var err error
 			if int64Val, err = value.GetInt(); err != nil {
-				return nil, util.Errorf("key %q does not contain an integer value", key)
+				return nil, errors.Errorf("key %q does not contain an integer value", key)
 			}
 		}
 
 		// Check for overflow and underflow.
 		if willOverflow(int64Val, inc) {
-			return nil, util.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
+			return nil, errors.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
 		}
 
 		int64Val = int64Val + inc
@@ -1500,7 +1499,7 @@ func MVCCIterate(ctx context.Context,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	if !consistent && txn != nil {
-		return nil, util.Errorf("cannot allow inconsistent reads within a transaction")
+		return nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(endKey) == 0 {
 		return nil, emptyKeyError()
@@ -1716,7 +1715,7 @@ func mvccResolveWriteIntent(
 		return emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
-		return util.Errorf("can't resolve range intent as point intent")
+		return errors.Errorf("can't resolve range intent as point intent")
 	}
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
@@ -1867,7 +1866,7 @@ func mvccResolveWriteIntent(
 
 	unsafeIterKey := iter.unsafeKey()
 	if !unsafeIterKey.IsValue() {
-		return util.Errorf("expected an MVCC value key: %s", unsafeIterKey)
+		return errors.Errorf("expected an MVCC value key: %s", unsafeIterKey)
 	}
 	// Get the bytes for the next version so we have size for stat counts.
 	valueSize := int64(len(iter.unsafeValue()))
@@ -2015,10 +2014,10 @@ func MVCCGarbageCollect(
 			// they are internal and GCing them directly saves the extra
 			// deletion step.
 			if !meta.Deleted && !inlinedValue {
-				return util.Errorf("request to GC non-deleted, latest value of %q", gcKey.Key)
+				return errors.Errorf("request to GC non-deleted, latest value of %q", gcKey.Key)
 			}
 			if meta.Txn != nil {
-				return util.Errorf("request to GC intent at %q", gcKey.Key)
+				return errors.Errorf("request to GC intent at %q", gcKey.Key)
 			}
 			if ms != nil {
 				if inlinedValue {
@@ -2168,7 +2167,7 @@ func MVCCFindSplitKey(
 	}
 
 	if bestSplitKey.Key.Equal(encStartKey.Key) {
-		return nil, util.Errorf("the range cannot be split; considered range %q-%q has no valid splits", key, endKey)
+		return nil, errors.Errorf("the range cannot be split; considered range %q-%q has no valid splits", key, endKey)
 	}
 
 	// The key is an MVCC (versioned) key, so to avoid corrupting MVCC we only

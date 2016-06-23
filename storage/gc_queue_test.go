@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -448,7 +449,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				// We've special cased one test case. Note that the intent is still
 				// counted in `resolved`.
 				if testCases[id].failResolve {
-					return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+					return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 				}
 			}
 			return nil
@@ -604,7 +605,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 					return false, err
 				}
 				if meta.Txn != nil {
-					return false, util.Errorf("non-nil Txn after GC for key %s", kv.Key)
+					return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
 				}
 			}
 			return false, nil

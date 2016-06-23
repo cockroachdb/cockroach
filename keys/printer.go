@@ -18,13 +18,13 @@ package keys
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -242,7 +242,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 		}
 		input = input[endPos:]
 	} else {
-		panic(errors.New("illegal RangeID"))
+		panic(errors.Errorf("illegal RangeID: %q", input))
 	}
 	input = mustShiftSlash(input)
 	var infix string
@@ -253,7 +253,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	case bytes.Equal(localRangeIDReplicatedInfix, []byte(infix)):
 		replicated = true
 	default:
-		panic(fmt.Errorf("invalid infix"))
+		panic(errors.Errorf("invalid infix: %q", infix))
 	}
 
 	input = mustShiftSlash(input)
@@ -509,7 +509,7 @@ func UglyPrint(input string) (_ roachpb.Key, rErr error) {
 				rErr = err
 				return
 			}
-			rErr = fmt.Errorf("%v", r)
+			rErr = errors.Errorf("%v", r)
 		}
 	}()
 
@@ -520,7 +520,7 @@ func UglyPrint(input string) (_ roachpb.Key, rErr error) {
 		if err == nil {
 			err = errIllegalInput
 		}
-		return nil, util.ErrorfSkipFrames(1, `can't parse "%s" after reading %s: %s`, input, origInput[:len(origInput)-len(input)], err)
+		return nil, errors.Errorf(`can't parse "%s" after reading %s: %s`, input, origInput[:len(origInput)-len(input)], err)
 	}
 
 	var entries []dictEntry // nil if not pinned to a subrange
@@ -561,7 +561,7 @@ outer:
 		return mkErr(errors.New("can't handle key"))
 	}
 	if out := PrettyPrint(output); out != origInput {
-		return nil, fmt.Errorf("constructed key deviates from original: %s vs %s", out, origInput)
+		return nil, errors.Errorf("constructed key deviates from original: %s vs %s", out, origInput)
 	}
 	return output, nil
 }

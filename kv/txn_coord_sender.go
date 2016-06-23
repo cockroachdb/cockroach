@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -26,6 +25,7 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -469,7 +469,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 // transaction is already in state txn.Writing=true.
 func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
-		return util.Errorf("empty batch with txn")
+		return errors.Errorf("empty batch with txn")
 	}
 	if ba.Txn.ID == nil {
 		// Create transaction without a key. The key is set when a begin
@@ -499,7 +499,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 		args := req.GetInner()
 		if bt, ok := args.(*roachpb.BeginTransactionRequest); ok {
 			if haveBeginTxn || ba.Txn.Writing {
-				return util.Errorf("begin transaction requested twice in the same transaction: %s", ba.Txn)
+				return errors.Errorf("begin transaction requested twice in the same transaction: %s", ba.Txn)
 			}
 			haveBeginTxn = true
 			if ba.Txn.Key == nil {
@@ -507,7 +507,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 			}
 		}
 		if roachpb.IsTransactionWrite(args) && !haveBeginTxn && !ba.Txn.Writing {
-			return util.Errorf("transactional write before begin transaction")
+			return errors.Errorf("transactional write before begin transaction")
 		}
 	}
 	return nil
@@ -773,7 +773,7 @@ func (tc *TxnCoordSender) updateState(
 		// timestamp from the node.
 		restartTS, ok := newTxn.GetObservedTimestamp(pErr.OriginNode)
 		if !ok {
-			pErr = roachpb.NewError(util.Errorf("no observed timestamp for node %d found on uncertainty restart", pErr.OriginNode))
+			pErr = roachpb.NewError(errors.Errorf("no observed timestamp for node %d found on uncertainty restart", pErr.OriginNode))
 		} else {
 			newTxn.Timestamp.Forward(restartTS)
 			newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)

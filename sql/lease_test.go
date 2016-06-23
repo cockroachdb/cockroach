@@ -267,7 +267,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// It is an error to acquire a lease for an old version once a new version
 	// exists and there are no local references for the old version.
-	expected = "lease.go.*: table .* unable to acquire lease on old version: 1 < 2"
+	expected = `table \d+ unable to acquire lease on old version: 1 < 2`
 	if _, err := t.acquire(1, descID, 1); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}

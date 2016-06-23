@@ -20,8 +20,8 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -248,7 +248,7 @@ func (a *avgAggregate) Result() (Datum, error) {
 		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
 		return t, nil
 	default:
-		return nil, util.Errorf("unexpected SUM result type: %s", t.Type())
+		return nil, errors.Errorf("unexpected SUM result type: %s", t.Type())
 	}
 }
 
@@ -273,7 +273,7 @@ func (a *boolAndAggregate) Add(datum Datum) error {
 		}
 		return nil
 	default:
-		return util.Errorf("unexpected BOOL_AND argument type: %s", t.Type())
+		return errors.Errorf("unexpected BOOL_AND argument type: %s", t.Type())
 	}
 }
 
@@ -305,7 +305,7 @@ func (a *boolOrAggregate) Add(datum Datum) error {
 		}
 		return nil
 	default:
-		return util.Errorf("unexpected BOOL_OR argument type: %s", t.Type())
+		return errors.Errorf("unexpected BOOL_OR argument type: %s", t.Type())
 	}
 }
 
@@ -437,7 +437,7 @@ func (a *sumAggregate) Add(datum Datum) error {
 	case *DDecimal:
 		a.sumDec.Add(&a.sumDec, &t.Dec)
 	default:
-		return util.Errorf("unexpected SUM argument type: %s", datum.Type())
+		return errors.Errorf("unexpected SUM argument type: %s", datum.Type())
 	}
 	if a.sumType == nil {
 		a.sumType = datum
@@ -486,7 +486,7 @@ func (a *varianceAggregate) Add(datum Datum) error {
 			switch a.typedAggregate.(type) {
 			case *floatVarianceAggregate:
 			default:
-				return util.Errorf(unexpectedErrFormat, datum.Type())
+				return errors.Errorf(unexpectedErrFormat, datum.Type())
 			}
 		}
 		return a.typedAggregate.Add(t)
@@ -497,7 +497,7 @@ func (a *varianceAggregate) Add(datum Datum) error {
 			switch a.typedAggregate.(type) {
 			case *decimalVarianceAggregate:
 			default:
-				return util.Errorf(unexpectedErrFormat, datum.Type())
+				return errors.Errorf(unexpectedErrFormat, datum.Type())
 			}
 		}
 		a.tmpDec.SetUnscaled(int64(*t))
@@ -509,12 +509,12 @@ func (a *varianceAggregate) Add(datum Datum) error {
 			switch a.typedAggregate.(type) {
 			case *decimalVarianceAggregate:
 			default:
-				return util.Errorf(unexpectedErrFormat, datum.Type())
+				return errors.Errorf(unexpectedErrFormat, datum.Type())
 			}
 		}
 		return a.typedAggregate.Add(t)
 	default:
-		return util.Errorf(unexpectedErrFormat, datum.Type())
+		return errors.Errorf(unexpectedErrFormat, datum.Type())
 	}
 }
 
@@ -621,5 +621,5 @@ func (a *stddevAggregate) Result() (Datum, error) {
 		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
 		return t, nil
 	}
-	return nil, util.Errorf("unexpected variance result type: %s", variance.Type())
+	return nil, errors.Errorf("unexpected variance result type: %s", variance.Type())
 }

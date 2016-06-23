@@ -27,6 +27,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -263,10 +264,10 @@ func TestReplicateRange(t *testing.T) {
 			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); err != nil {
 				return err
 			} else if !ok {
-				return util.Errorf("failed to resolve %s", key.AsRawKey())
+				return errors.Errorf("failed to resolve %s", key.AsRawKey())
 			}
 			if !reflect.DeepEqual(metaDesc, desc) {
-				return util.Errorf("descs not equal: %+v != %+v", metaDesc, desc)
+				return errors.Errorf("descs not equal: %+v != %+v", metaDesc, desc)
 			}
 		}
 		return nil
@@ -278,9 +279,9 @@ func TestReplicateRange(t *testing.T) {
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
-			return util.Errorf("failed to read data: %s", err)
+			return errors.Errorf("failed to read data: %s", err)
 		} else if e, v := int64(5), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
-			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
 	})
@@ -350,9 +351,9 @@ func TestRestoreReplicas(t *testing.T) {
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
-			return util.Errorf("failed to read data: %s", err)
+			return errors.Errorf("failed to read data: %s", err)
 		} else if e, v := int64(39), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
-			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
 	})
@@ -387,7 +388,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if runFilter.Load().(bool) {
 				if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
-					return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+					return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 				}
 			}
 			return nil
@@ -441,7 +442,7 @@ func TestFailedReplicaChange(t *testing.T) {
 				return err
 			}
 			if lr := len(rang.Desc().Replicas); lr <= 1 {
-				return util.Errorf("expected > 1 replicas; got %d", lr)
+				return errors.Errorf("expected > 1 replicas; got %d", lr)
 			}
 		}
 		return nil
@@ -499,9 +500,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
-			return util.Errorf("failed to read data: %s", err)
+			return errors.Errorf("failed to read data: %s", err)
 		} else if e, v := int64(16), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
-			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
 	})
@@ -513,7 +514,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
-			return util.Errorf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
+			return errors.Errorf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
 		}
 		return nil
 	})
@@ -530,9 +531,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
-			return util.Errorf("failed to read data: %s", err)
+			return errors.Errorf("failed to read data: %s", err)
 		} else if e, v := int64(39), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
-			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
 	})
@@ -566,7 +567,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		for _, s := range mtc.stores {
 			r := s.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 			if r == nil {
-				return util.Errorf("expected replica for keys \"a\" - \"b\"")
+				return errors.Errorf("expected replica for keys \"a\" - \"b\"")
 			}
 		}
 		return nil
@@ -729,7 +730,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		r := mtc.stores[1].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 		if r == nil {
-			return util.Errorf("expected replica for keys \"a\" - \"b\"")
+			return errors.Errorf("expected replica for keys \"a\" - \"b\"")
 		}
 		return nil
 	})
@@ -756,7 +757,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		r := mtc.stores[2].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 		if r == nil {
-			return util.Errorf("expected replica for keys \"a\" - \"b\"")
+			return errors.Errorf("expected replica for keys \"a\" - \"b\"")
 		}
 		return nil
 	})
@@ -789,7 +790,7 @@ func TestProgressWithDownNode(t *testing.T) {
 				values = append(values, mustGetInt(val))
 			}
 			if !reflect.DeepEqual(expected, values) {
-				return util.Errorf("expected %v, got %v", expected, values)
+				return errors.Errorf("expected %v, got %v", expected, values)
 			}
 			return nil
 		})
@@ -838,7 +839,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 					values = append(values, mustGetInt(val))
 				}
 				if !reflect.DeepEqual(expected, values) {
-					return util.Errorf("addFirst: %t, expected %v, got %v", addFirst, expected, values)
+					return errors.Errorf("addFirst: %t, expected %v, got %v", addFirst, expected, values)
 				}
 				return nil
 			})
@@ -971,9 +972,9 @@ func TestReplicateAfterSplit(t *testing.T) {
 			RangeID:         rangeID2,
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
-			return util.Errorf("failed to read data: %s", err)
+			return errors.Errorf("failed to read data: %s", err)
 		} else if e, v := int64(11), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
-			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
 	})
@@ -1030,12 +1031,12 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 				util.SucceedsSoon(t, func() error {
 					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
 						if term := raftStatus.Term; term <= latestTerm {
-							return util.Errorf("%d: raft term has not yet advanced: %d", i, term)
+							return errors.Errorf("%d: raft term has not yet advanced: %d", i, term)
 						} else if latestTerm == 0 {
 							latestTerm = term
 						}
 					} else {
-						return util.Errorf("%d: raft group is not yet initialized", i)
+						return errors.Errorf("%d: raft group is not yet initialized", i)
 					}
 					return nil
 				})
@@ -1145,7 +1146,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		} else if err != nil {
 			return err
 		}
-		return util.Errorf("range still exists")
+		return errors.Errorf("range still exists")
 	})
 
 	replica1 := roachpb.ReplicaDescriptor{
@@ -1403,7 +1404,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		actual := mtc.readIntFromEngines(roachpb.Key("a"))
 		expected := []int64{16, 0, 5}
 		if !reflect.DeepEqual(expected, actual) {
-			return util.Errorf("expected %v, got %v", expected, actual)
+			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
@@ -1453,7 +1454,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		expected1 := []int64{16, 0, 5}
 		expected2 := []int64{16, 0, 0}
 		if !reflect.DeepEqual(expected1, actual) && !reflect.DeepEqual(expected2, actual) {
-			return util.Errorf("expected %v or %v, got %v", expected1, expected2, actual)
+			return errors.Errorf("expected %v or %v, got %v", expected1, expected2, actual)
 		}
 		return nil
 	})
@@ -1645,7 +1646,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 		}
 		desc := rep.Desc()
 		if len(desc.Replicas) != 1 {
-			return util.Errorf("range has %d replicas", len(desc.Replicas))
+			return errors.Errorf("range has %d replicas", len(desc.Replicas))
 		}
 		return nil
 	})
@@ -1807,7 +1808,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		status = rng.RaftStatus()
 		if status.Lead != 2 {
-			return util.Errorf("expected raft leader be 2; got %d", status.Lead)
+			return errors.Errorf("expected raft leader be 2; got %d", status.Lead)
 		}
 		return nil
 	})

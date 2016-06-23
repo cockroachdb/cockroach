@@ -20,7 +20,6 @@
 package engine
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -31,11 +30,11 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
@@ -120,7 +119,7 @@ func (r *RocksDB) Open() error {
 	}
 
 	if r.memtableBudget < minMemtableBudget {
-		return util.Errorf("memtable budget must be at least %s: %s",
+		return errors.Errorf("memtable budget must be at least %s: %s",
 			humanize.IBytes(minMemtableBudget), humanizeutil.IBytes(r.memtableBudget))
 	}
 
@@ -156,7 +155,7 @@ func (r *RocksDB) Open() error {
 			logging_enabled: C.bool(log.V(3)),
 		})
 	if err := statusToError(status); err != nil {
-		return util.Errorf("could not open rocksdb instance: %s", err)
+		return errors.Errorf("could not open rocksdb instance: %s", err)
 	}
 
 	// Update or add the version file if needed.
@@ -340,10 +339,10 @@ func (r *RocksDB) Flush() error {
 // Checkpoint creates a point-in-time snapshot of the on-disk state.
 func (r *RocksDB) Checkpoint(dir string) error {
 	if len(r.dir) == 0 {
-		return util.Errorf("unable to checkpoint in-memory rocksdb instance")
+		return errors.Errorf("unable to checkpoint in-memory rocksdb instance")
 	}
 	if len(dir) == 0 {
-		return util.Errorf("empty checkpoint directory")
+		return errors.Errorf("empty checkpoint directory")
 	}
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(r.dir, dir)
@@ -1046,14 +1045,14 @@ func goMerge(existing, update []byte) ([]byte, error) {
 	var result C.DBString
 	status := C.DBMergeOne(goToCSlice(existing), goToCSlice(update), &result)
 	if status.data != nil {
-		return nil, util.Errorf("%s: existing=%q, update=%q",
+		return nil, errors.Errorf("%s: existing=%q, update=%q",
 			cStringToGoString(status), existing, update)
 	}
 	return cStringToGoBytes(result), nil
 }
 
 func emptyKeyError() error {
-	return util.ErrorfSkipFrames(1, "attempted access to empty key")
+	return errors.Errorf("attempted access to empty key")
 }
 
 func dbPut(rdb *C.DBEngine, key MVCCKey, value []byte) error {
