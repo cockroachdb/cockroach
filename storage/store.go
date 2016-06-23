@@ -876,6 +876,37 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// (which is necessary to have a non-nil raft group)
 			return false, s.destroyReplicaData(&desc)
 		}
+
+		{
+			// MIGRATION(tschottdorf): As of #7310, we make sure that a Replica
+			// always has a complete Raft state on disk. Prior versions may not
+			// have that, which causes issues due to the fact that we used to
+			// synthesize a TruncatedState and do so no more. To make up for
+			// that, write a missing TruncatedState here. That key is in the
+			// replicated state, but since during a cluster upgrade, all nodes
+			// do it, it's fine (and we never CPut on that key, so anything in
+			// the Raft pipeline will simply overwrite it).
+			if !desc.IsInitialized() {
+				log.Fatalf("found uninitialized descriptor on range: %+v", desc)
+			}
+			batch := s.engine.NewBatch()
+			state, err := loadState(batch, &desc)
+			if err != nil {
+				return false, err
+			}
+			if (*state.TruncatedState == roachpb.RaftTruncatedState{}) {
+				state.TruncatedState.Term = raftInitialLogTerm
+				state.TruncatedState.Index = raftInitialLogIndex
+			}
+			if _, err := saveState(batch, state); err != nil {
+				log.Fatalf("could not migrate truncated state: %s", err)
+			}
+			if err := batch.Commit(); err != nil {
+				log.Fatalf("could not migrate truncated state: %s", err)
+			}
+			log.Warning("migration: synthesized truncated state for %+v", desc)
+		}
+
 		rng, err := NewReplica(&desc, s, 0)
 		if err != nil {
 			return false, err
