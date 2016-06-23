@@ -125,8 +125,6 @@ func TestHeartbeatHealth(t *testing.T) {
 				case <-done:
 					return
 				case heartbeat.ready <- struct{}{}:
-				default:
-					time.Sleep(500 * time.Microsecond)
 				}
 			}
 		}()
