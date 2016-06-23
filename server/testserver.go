@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -55,14 +57,10 @@ const (
 
 // StartTestServerWithContext starts an in-memory test server.
 // ctx can be nil, in which case a default context will be created.
-func StartTestServerWithContext(t util.Tester, ctx *Context, isMultinode bool) TestServer {
+func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
 	s := TestServer{Ctx: ctx}
 	var err error
-	if isMultinode {
-		err = s.StartMultinode()
-	} else {
-		err = s.Start()
-	}
+	err = s.Start()
 	if err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
@@ -75,12 +73,12 @@ func StartTestServerWithContext(t util.Tester, ctx *Context, isMultinode bool) T
 
 // StartTestServer starts an in-memory test server.
 func StartTestServer(t util.Tester) TestServer {
-	return StartTestServerWithContext(t, nil, false)
+	return StartTestServerWithContext(t, nil)
 }
 
 // StartMultinodeTestServer starts an in-memory test server configured to accept connections.
 func StartMultinodeTestServer(t util.Tester) TestServer {
-	return StartTestServerWithContext(t, nil, true)
+	return StartTestServerWithContext(t, nil)
 }
 
 // StartTestServerJoining starts an in-memory test server that attempts to join `other`.
@@ -214,17 +212,12 @@ func (ts *TestServer) DB() *client.DB {
 // TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
-	return ts.StartWithStopper(nil, false)
-}
-
-// StartMultinode starts a testserver with parameters anticipating other nodes joining.
-func (ts *TestServer) StartMultinode() error {
-	return ts.StartWithStopper(nil, true)
+	return ts.StartWithStopper(nil)
 }
 
 // StartWithStopper is the same as Start, but allows passing a stopper
 // explicitly.
-func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, isMultinode bool) error {
+func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	if ts.Ctx == nil {
 		ctx := MakeTestContext()
 		ts.Ctx = &ctx
@@ -237,11 +230,8 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, isMultinode bool) 
 	// Change the replication requirements so we don't get log spam about ranges
 	// not being replicated enough.
 	cfg := config.DefaultZoneConfig()
-	if isMultinode {
-		cfg.ReplicaAttrs = []roachpb.Attributes{{}, {}, {}}
-	} else {
-		cfg.ReplicaAttrs = []roachpb.Attributes{{}}
-	}
+	cfg.ReplicaAttrs = []roachpb.Attributes{{}}
+
 	fn := config.TestingSetDefaultZoneConfig(cfg)
 	stopper.AddCloser(stop.CloserFn(fn))
 
@@ -291,38 +281,6 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, isMultinode bool) 
 // process.
 func ExpectedInitialRangeCount() int {
 	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemDescriptors + 1
-}
-
-// WaitForFullReplication Waits until all of the nodes in the cluster have the
-// same number of replicas.
-func WaitForFullReplication(servers []TestServer) error {
-	for notReplicated := true; notReplicated; {
-		notReplicated = false
-		var numReplicas int
-		err := servers[0].Stores().VisitStores(func(s *storage.Store) error {
-			numReplicas = s.ReplicaCount()
-			return nil
-		})
-		if err != nil {
-			return util.Errorf("Could not obtain replica count.")
-		}
-		for _, server := range servers {
-			err := server.Stores().VisitStores(func(s *storage.Store) error {
-				if numReplicas != s.ReplicaCount() {
-					notReplicated = true
-				}
-				return nil
-			})
-			if err != nil {
-				return util.Errorf("Could not obtain replica count.")
-			}
-			if notReplicated {
-				break
-			}
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return nil
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
@@ -457,4 +415,72 @@ func (testServerFactoryImpl) New(params testingshim.TestServerParams) testingshi
 	ctx.TestingKnobs = params.Knobs
 	ctx.JoinUsing = params.JoinAddr
 	return &TestServer{Ctx: &ctx}
+}
+
+// A MultinodeTestCluster is a collection of TestServers configured for
+// replication testing.
+type MultinodeTestCluster struct {
+	Servers  []TestServer
+	Closes   []func() error
+	Cleanups []func()
+}
+
+// StartMultinodeTestCluster returns a properly configured cluster.
+func StartMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.DB, MultinodeTestCluster) {
+	var servers []TestServer
+	first := StartMultinodeTestServer(t)
+	servers = append(servers, first)
+	for i := 1; i < nodes; i++ {
+		servers = append(servers, StartTestServerJoining(t, first))
+	}
+
+	var conns []*gosql.DB
+	var closes []func() error
+	var cleanups []func()
+
+	for i, s := range servers {
+		pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
+			fmt.Sprintf("node%d", i))
+		pgURL.Path = name
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		closes = append(closes, db.Close)
+		cleanups = append(cleanups, cleanupFn)
+		conns = append(conns, db)
+	}
+	return conns, MultinodeTestCluster{Servers: servers, Closes: closes, Cleanups: cleanups}
+}
+
+// WaitForFullReplication Waits until all of the nodes in the cluster have the
+// same number of replicas.
+func (mtc *MultinodeestCluster) WaitForFullReplication() error {
+	for notReplicated := true; notReplicated; {
+		notReplicated = false
+		var numReplicas int
+		err := mtc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			numReplicas = s.ReplicaCount()
+			return nil
+		})
+		if err != nil {
+			return util.Errorf("Could not obtain replica count.")
+		}
+		for _, server := range mtc.Servers {
+			err := server.Stores().VisitStores(func(s *storage.Store) error {
+				if numReplicas != s.ReplicaCount() {
+					notReplicated = true
+				}
+				return nil
+			})
+			if err != nil {
+				return util.Errorf("Could not obtain replica count.")
+			}
+			if notReplicated {
+				break
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return nil
 }

@@ -23,9 +23,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -41,49 +39,25 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
-	var servers []server.TestServer
-	first := server.StartMultinodeTestServer(t)
-	servers = append(servers, first)
-	for i := 1; i < nodes; i++ {
-		servers = append(servers, server.StartTestServerJoining(t, first))
-	}
 
-	var conns []*gosql.DB
-	var closes []func() error
-	var cleanups []func()
-
-	for i, s := range servers {
-		pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
-			fmt.Sprintf("node%d", i))
-		pgURL.Path = name
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		closes = append(closes, db.Close)
-		cleanups = append(cleanups, cleanupFn)
-		conns = append(conns, db)
-	}
+	conns, mtc := server.StartMultinodeTestCluster(t, 3, name)
 
 	if _, err := conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
 		t.Fatal(err)
 	}
 
 	f := func() {
-		for _, fn := range closes {
+		for _, fn := range mtc.Closes {
 			_ = fn()
 		}
-		for _, s := range servers {
+		for _, s := range mtc.Servers {
 			s.Stop()
 		}
-		for _, fn := range cleanups {
+		for _, fn := range mtc.Cleanups {
 			fn()
 		}
 	}
 
-	if err := server.WaitForFullReplication(servers); err != nil {
-		t.Fatal(err)
-	}
 	return conns, f
 }
 
