@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 // databaseKey implements sqlbase.DescriptorKey.
@@ -146,7 +146,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 
 	database := desc.GetDatabase()
 	if database == nil {
-		return nil, util.Errorf("%q is not a database", name)
+		return nil, errors.Errorf("%q is not a database", name)
 	}
 
 	return database, database.Validate()

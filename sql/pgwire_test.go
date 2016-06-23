@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/pq"
+	"github.com/pkg/errors"
 )
 
 func trivialQuery(pgURL url.URL) error {
@@ -1010,16 +1011,16 @@ func checkSQLNetworkMetrics(s server.TestServer, minBytesIn, minBytesOut, maxByt
 	bytesIn := s.MustGetSQLNetworkCounter("bytesin")
 	bytesOut := s.MustGetSQLNetworkCounter("bytesout")
 	if a, min := bytesIn, minBytesIn; a < min {
-		return bytesIn, bytesOut, util.Errorf("bytesin %d < expected min %d", a, min)
+		return bytesIn, bytesOut, errors.Errorf("bytesin %d < expected min %d", a, min)
 	}
 	if a, min := bytesOut, minBytesOut; a < min {
-		return bytesIn, bytesOut, util.Errorf("bytesout %d < expected min %d", a, min)
+		return bytesIn, bytesOut, errors.Errorf("bytesout %d < expected min %d", a, min)
 	}
 	if a, max := bytesIn, maxBytesIn; a > max {
-		return bytesIn, bytesOut, util.Errorf("bytesin %d > expected max %d", a, max)
+		return bytesIn, bytesOut, errors.Errorf("bytesin %d > expected max %d", a, max)
 	}
 	if a, max := bytesOut, maxBytesOut; a > max {
-		return bytesIn, bytesOut, util.Errorf("bytesout %d > expected max %d", a, max)
+		return bytesIn, bytesOut, errors.Errorf("bytesout %d > expected max %d", a, max)
 	}
 	return bytesIn, bytesOut, nil
 }
@@ -1064,7 +1065,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	expectConns := func(n int) {
 		util.SucceedsSoon(t, func() error {
 			if conns := s.MustGetSQLNetworkCounter("conns"); conns != int64(n) {
-				return util.Errorf("connections %d != expected %d", conns, n)
+				return errors.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil
 		})

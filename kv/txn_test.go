@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // TestTxnDBBasics verifies that a simple transaction can be run and
@@ -66,18 +67,18 @@ func TestTxnDBBasics(t *testing.T) {
 			if gr, err := s.DB.Get(key); err != nil {
 				return err
 			} else if gr.Exists() {
-				return util.Errorf("expected nil value; got %v", gr.Value)
+				return errors.Errorf("expected nil value; got %v", gr.Value)
 			}
 
 			// Read within the transaction.
 			if gr, err := txn.Get(key); err != nil {
 				return err
 			} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
-				return util.Errorf("expected value %q; got %q", value, gr.Value)
+				return errors.Errorf("expected value %q; got %q", value, gr.Value)
 			}
 
 			if !commit {
-				return util.Errorf("purposefully failing transaction")
+				return errors.Errorf("purposefully failing transaction")
 			}
 			return nil
 		})
@@ -695,7 +696,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			if len(rows) >= 2 {
 				return nil
 			}
-			return util.Errorf("failed to split")
+			return errors.Errorf("failed to split")
 		})
 		// Notify txnA put(c).
 		ch <- struct{}{}

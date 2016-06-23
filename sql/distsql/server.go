@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // ServerContext encompasses the configuration required to create a
@@ -73,7 +73,7 @@ func (ds *ServerImpl) SetupSimpleFlow(
 
 	// TODO(radu): for now we expect exactly one processor (a table reader).
 	if len(flow.Processors) != 1 {
-		return nil, util.Errorf("only single-processor flows supported")
+		return nil, errors.Errorf("only single-processor flows supported")
 	}
 	_, err := f.setupProcessor(&flow.Processors[0])
 	if err != nil {
@@ -87,7 +87,7 @@ func (ds *ServerImpl) RunSimpleFlow(
 	req *SetupFlowsRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
 	if len(req.Flows) != 1 {
-		return util.Errorf("expected exactly one flow, got %d", len(req.Flows))
+		return errors.Errorf("expected exactly one flow, got %d", len(req.Flows))
 	}
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutbox(stream)
@@ -108,5 +108,5 @@ func (ds *ServerImpl) RunSimpleFlow(
 func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	*SimpleResponse, error,
 ) {
-	return nil, util.Errorf("not implemented")
+	return nil, errors.Errorf("not implemented")
 }

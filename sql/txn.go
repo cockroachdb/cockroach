@@ -20,13 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // BeginTransaction starts a new transaction.
 func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
 	if p.txn == nil {
-		return nil, util.Errorf("the server should have already created a transaction")
+		return nil, errors.Errorf("the server should have already created a transaction")
 	}
 	if err := p.setIsolationLevel(n.Isolation); err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 	case parser.SerializableIsolation:
 		return p.txn.SetIsolation(enginepb.SERIALIZABLE)
 	default:
-		return util.Errorf("unknown isolation level: %s", level)
+		return errors.Errorf("unknown isolation level: %s", level)
 	}
 }
 
@@ -84,6 +84,6 @@ func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
 		}
 		return p.txn.SetUserPriority(roachpb.HighUserPriority)
 	default:
-		return util.Errorf("unknown user priority: %s", userPriority)
+		return errors.Errorf("unknown user priority: %s", userPriority)
 	}
 }

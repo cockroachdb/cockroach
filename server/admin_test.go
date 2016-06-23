@@ -19,7 +19,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -32,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -675,7 +675,7 @@ func TestCluster(t *testing.T) {
 			return err
 		}
 		if a, e := resp.ClusterID, s.node.ClusterID.String(); a != e {
-			return util.Errorf("cluster ID %s != expected %s", a, e)
+			return errors.Errorf("cluster ID %s != expected %s", a, e)
 		}
 		return nil
 	})

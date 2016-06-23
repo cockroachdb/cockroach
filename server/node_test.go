@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // createTestNode creates an rpc server using the specified address,
@@ -199,7 +200,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// new node.
 	util.SucceedsSoon(t, func() error {
 		if n := node.stores.GetStoreCount(); n != 3 {
-			return util.Errorf("expected 3 stores but got %d", n)
+			return errors.Errorf("expected 3 stores but got %d", n)
 		}
 		return nil
 	})
@@ -207,7 +208,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Check whether all stores are started properly.
 	if err := node.stores.VisitStores(func(s *storage.Store) error {
 		if s.IsStarted() == false {
-			return util.Errorf("fail to start store: %s", s)
+			return errors.Errorf("fail to start store: %s", s)
 		}
 		return nil
 	}); err != nil {
@@ -239,7 +240,7 @@ func TestNodeJoin(t *testing.T) {
 	// Verify new node is able to bootstrap its store.
 	util.SucceedsSoon(t, func() error {
 		if sc := node2.stores.GetStoreCount(); sc != 1 {
-			return util.Errorf("GetStoreCount() expected 1; got %d", sc)
+			return errors.Errorf("GetStoreCount() expected 1; got %d", sc)
 		}
 		return nil
 	})
@@ -253,14 +254,14 @@ func TestNodeJoin(t *testing.T) {
 			return err
 		}
 		if addr2Str, server2AddrStr := nodeDesc1.Address.String(), server2Addr.String(); addr2Str != server2AddrStr {
-			return util.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2Str, server2AddrStr)
+			return errors.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2Str, server2AddrStr)
 		}
 		var nodeDesc2 roachpb.NodeDescriptor
 		if err := node2.ctx.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
 			return err
 		}
 		if addr1Str, server1AddrStr := nodeDesc2.Address.String(), server1Addr.String(); addr1Str != server1AddrStr {
-			return util.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1Str, server1AddrStr)
+			return errors.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1Str, server1AddrStr)
 		}
 		return nil
 	})
@@ -468,7 +469,7 @@ func TestStatusSummaries(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		for i := 1; i <= int(initialRanges); i++ {
 			if s.RaftStatus(roachpb.RangeID(i)) == nil {
-				return util.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
+				return errors.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
 			}
 		}
 		return nil

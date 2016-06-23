@@ -36,6 +36,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -203,7 +204,7 @@ func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, er
 	if ok {
 		return addr, nil
 	}
-	return nil, util.Errorf("unknown peer %d", nodeID)
+	return nil, errors.Errorf("unknown peer %d", nodeID)
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -251,7 +252,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	util.SucceedsSoon(t, func() error {
 		for i, g := range m.gossips {
 			if _, ok := g.GetSystemConfig(); !ok {
-				return util.Errorf("system config not available at index %d", i)
+				return errors.Errorf("system config not available at index %d", i)
 			}
 		}
 		return nil
@@ -727,7 +728,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
 			if store := m.stores[dest]; store.LookupReplica(startKey, nil) == nil {
-				return util.Errorf("range %d not found on store %+v", rangeID, store.Ident)
+				return errors.Errorf("range %d not found on store %+v", rangeID, store.Ident)
 			}
 		}
 		return nil
@@ -789,7 +790,7 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 	util.SucceedsSoonDepth(1, m.t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
-			return util.Errorf("expected %v, got %v", expected, actual)
+			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
@@ -832,7 +833,7 @@ func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Repli
 			}
 		}
 		if latestTerm == 0 || raftLeaderRepl == nil {
-			return util.Errorf("could not find a raft leader for range %s", rangeID)
+			return errors.Errorf("could not find a raft leader for range %s", rangeID)
 		}
 		return nil
 	})

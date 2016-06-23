@@ -16,7 +16,7 @@
 
 package distsql
 
-import "github.com/cockroachdb/cockroach/util"
+import "github.com/pkg/errors"
 
 func makeRouter(typ OutputRouterSpec_Type, streams []RowReceiver) (
 	RowReceiver, error,
@@ -28,5 +28,5 @@ func makeRouter(typ OutputRouterSpec_Type, streams []RowReceiver) (
 		// Special passthrough case - no router.
 		return streams[0], nil
 	}
-	return nil, util.Errorf("router type %s not supported", typ)
+	return nil, errors.Errorf("router type %s not supported", typ)
 }

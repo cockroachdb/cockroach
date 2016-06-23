@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 // An idAllocator is used to increment a key in allocation blocks
@@ -52,10 +52,10 @@ func newIDAllocator(
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
 	if minID == 0 {
-		return nil, util.Errorf("minID must be a positive integer: %d", minID)
+		return nil, errors.Errorf("minID must be a positive integer: %d", minID)
 	}
 	if blockSize == 0 {
-		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
+		return nil, errors.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &idAllocator{
 		db:        db,
@@ -76,7 +76,7 @@ func (ia *idAllocator) Allocate() (uint32, error) {
 	id := <-ia.ids
 	// when the channel is closed, the zero value is returned.
 	if id == 0 {
-		return id, util.Errorf("could not allocate ID; system is draining")
+		return id, errors.Errorf("could not allocate ID; system is draining")
 	}
 	return id, nil
 }

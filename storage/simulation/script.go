@@ -26,7 +26,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // Operation enumerates the possible scripted operations that can occur to a
@@ -237,19 +237,19 @@ func (s *Script) parse(scriptFile string) error {
 		// Split the line by space.
 		elements := strings.Split(line, " ")
 		if len(elements) < 2 {
-			return util.Errorf("line %d has too few elements: %s", lineNumber, line)
+			return errors.Errorf("line %d has too few elements: %s", lineNumber, line)
 		}
 		if len(elements) > 6 {
-			return util.Errorf("line %d has too many elements: %s", lineNumber, line)
+			return errors.Errorf("line %d has too many elements: %s", lineNumber, line)
 		}
 
 		// Split the first element into operation-variant.
 		subElements := strings.Split(elements[0], "-")
 		if len(subElements) > 2 {
-			return util.Errorf("line %d operation has more than one option: %s", lineNumber, elements[0])
+			return errors.Errorf("line %d operation has more than one option: %s", lineNumber, elements[0])
 		}
 		if !isValidOperation(subElements[0]) {
-			return util.Errorf("line %d operation could not be found: %s", lineNumber, subElements[0])
+			return errors.Errorf("line %d operation could not be found: %s", lineNumber, subElements[0])
 		}
 
 		details := ActionDetails{Action: Action{operation: Operation(subElements[0])}}
@@ -257,7 +257,7 @@ func (s *Script) parse(scriptFile string) error {
 		if len(subElements) == 2 {
 			isValid, value, err := isValidOperationVariant(subElements[1])
 			if err != nil {
-				return util.Errorf("line %d operation option could not be found or parsed: %s",
+				return errors.Errorf("line %d operation option could not be found or parsed: %s",
 					lineNumber, subElements[1])
 			}
 			if isValid {
@@ -269,39 +269,39 @@ func (s *Script) parse(scriptFile string) error {
 
 		// Get the first epoch.
 		if details.first, err = strconv.Atoi(elements[1]); err != nil {
-			return util.Errorf("line %d FIRST could not be parsed: %s", lineNumber, elements[1])
+			return errors.Errorf("line %d FIRST could not be parsed: %s", lineNumber, elements[1])
 		}
 
 		// Get the last epoch.
 		if len(elements) > 2 {
 			if details.last, err = strconv.Atoi(elements[2]); err != nil {
-				return util.Errorf("line %d LAST could not be parsed: %s", lineNumber, elements[2])
+				return errors.Errorf("line %d LAST could not be parsed: %s", lineNumber, elements[2])
 			}
 		}
 
 		// Get the every value.
 		if len(elements) > 3 {
 			if details.every, err = strconv.Atoi(elements[3]); err != nil {
-				return util.Errorf("line %d EVERY could not be parsed: %s", lineNumber, elements[3])
+				return errors.Errorf("line %d EVERY could not be parsed: %s", lineNumber, elements[3])
 			}
 		}
 
 		// Get the repeat value.
 		if len(elements) > 4 {
 			if details.repeat, err = strconv.Atoi(elements[4]); err != nil {
-				return util.Errorf("line %d REPEAT could not be parsed: %s", lineNumber, elements[4])
+				return errors.Errorf("line %d REPEAT could not be parsed: %s", lineNumber, elements[4])
 			}
 		}
 
 		// Get the percentage value.
 		if len(elements) > 5 {
 			if details.percent, err = strconv.Atoi(elements[5]); err != nil {
-				return util.Errorf("line %d PERCENT could not be parsed: %s", lineNumber, elements[5])
+				return errors.Errorf("line %d PERCENT could not be parsed: %s", lineNumber, elements[5])
 			}
 			if details.percent < 1 {
-				return util.Errorf("line %d PERCENT is less than 1: %s", lineNumber, elements[5])
+				return errors.Errorf("line %d PERCENT is less than 1: %s", lineNumber, elements[5])
 			} else if details.percent > 100 {
-				return util.Errorf("line %d PERCENT is greater than 100: %s", lineNumber, elements[5])
+				return errors.Errorf("line %d PERCENT is greater than 100: %s", lineNumber, elements[5])
 			}
 		} else {
 			details.percent = 100

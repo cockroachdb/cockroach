@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 // RowFetcher handles fetching kvs and forming table rows.
@@ -120,7 +120,7 @@ func (rf *RowFetcher) Init(
 	if isSecondaryIndex {
 		for i, needed := range valNeededForCol {
 			if needed && !index.ContainsColumnID(rf.cols[i].ID) {
-				return util.Errorf("requested column %s not in index", rf.cols[i].Name)
+				return errors.Errorf("requested column %s not in index", rf.cols[i].Name)
 			}
 		}
 	}
@@ -342,7 +342,7 @@ func (rf *RowFetcher) processValueSingle(
 		if family.ID == keys.SentinelFamilyID {
 			return "", "", nil
 		}
-		return "", "", util.Errorf("single entry value with no default column id")
+		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
 	idx, ok := rf.colIdxMap[colID]

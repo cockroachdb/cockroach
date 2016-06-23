@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -97,7 +97,7 @@ func (sq *splitQueue) process(now hlc.Timestamp, rng *Replica,
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
 			if err := sq.db.AdminSplit(splitKey.AsRawKey()); err != nil {
-				return util.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
+				return errors.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
 			}
 		}
 		return nil

@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -93,11 +93,11 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	defer r.mu.Unlock()
 	firstIndex, err := r.FirstIndex()
 	if err != nil {
-		return 0, 0, util.Errorf("error retrieving first index for range %d: %s", rangeID, err)
+		return 0, 0, errors.Errorf("error retrieving first index for range %d: %s", rangeID, err)
 	}
 
 	if oldestIndex < firstIndex {
-		return 0, 0, util.Errorf("raft log's oldest index (%d) is less than the first index (%d) for range %d",
+		return 0, 0, errors.Errorf("raft log's oldest index (%d) is less than the first index (%d) for range %d",
 			oldestIndex, firstIndex, rangeID)
 	}
 

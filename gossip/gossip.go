@@ -61,6 +61,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -222,7 +223,7 @@ func (g *Gossip) ResetNodeID(nodeID roachpb.NodeID) {
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeDescriptorGossip); err != nil {
-		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
+		return errors.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
 	return nil
 }
@@ -484,7 +485,7 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 		return nodeDescriptor, nil
 	}
 
-	return nil, util.Errorf("unable to lookup descriptor for node %d", nodeID)
+	return nil, errors.Errorf("unable to lookup descriptor for node %d", nodeID)
 }
 
 // getNodeIDAddressLocked looks up the address of the node by ID. The mutex is
@@ -534,7 +535,7 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 		}
 		return i.Value.GetBytes()
 	}
-	return nil, util.Errorf("key %q does not exist or has expired", key)
+	return nil, errors.Errorf("key %q does not exist or has expired", key)
 }
 
 // GetInfoProto returns an info value by key or an error if specified

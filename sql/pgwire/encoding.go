@@ -23,8 +23,8 @@ import (
 	"io"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/pkg/errors"
 )
 
 const maxMessageSize = 1 << 24
@@ -78,7 +78,7 @@ func (b *readBuffer) readUntypedMsg(rd io.Reader) (int, error) {
 	// size includes itself.
 	size -= 4
 	if size > maxMessageSize || size < 0 {
-		return nread, util.Errorf("message size %d out of bounds (0..%d)",
+		return nread, errors.Errorf("message size %d out of bounds (0..%d)",
 			size, maxMessageSize)
 	}
 
@@ -102,7 +102,7 @@ func (b *readBuffer) readTypedMsg(rd bufferedReader) (clientMessageType, int, er
 func (b *readBuffer) getString() (string, error) {
 	pos := bytes.IndexByte(b.msg, 0)
 	if pos == -1 {
-		return "", util.Errorf("NUL terminator not found")
+		return "", errors.Errorf("NUL terminator not found")
 	}
 	// Note: this is a conversion from a byte slice to a string which avoids
 	// allocation and copying. It is safe because we never reuse the bytes in our
@@ -119,7 +119,7 @@ func (b *readBuffer) getPrepareType() (prepareType, error) {
 
 func (b *readBuffer) getBytes(n int) ([]byte, error) {
 	if len(b.msg) < n {
-		return nil, util.Errorf("insufficient data: %d", len(b.msg))
+		return nil, errors.Errorf("insufficient data: %d", len(b.msg))
 	}
 	v := b.msg[:n]
 	b.msg = b.msg[n:]
@@ -128,7 +128,7 @@ func (b *readBuffer) getBytes(n int) ([]byte, error) {
 
 func (b *readBuffer) getInt16() (int16, error) {
 	if len(b.msg) < 2 {
-		return 0, util.Errorf("insufficient data: %d", len(b.msg))
+		return 0, errors.Errorf("insufficient data: %d", len(b.msg))
 	}
 	v := int16(binary.BigEndian.Uint16(b.msg[:2]))
 	b.msg = b.msg[2:]
@@ -137,7 +137,7 @@ func (b *readBuffer) getInt16() (int16, error) {
 
 func (b *readBuffer) getInt32() (int32, error) {
 	if len(b.msg) < 4 {
-		return 0, util.Errorf("insufficient data: %d", len(b.msg))
+		return 0, errors.Errorf("insufficient data: %d", len(b.msg))
 	}
 	v := int32(binary.BigEndian.Uint32(b.msg[:4]))
 	b.msg = b.msg[4:]

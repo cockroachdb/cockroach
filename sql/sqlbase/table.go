@@ -17,7 +17,6 @@
 package sqlbase
 
 import (
-	"errors"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -28,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
@@ -141,7 +140,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			desc.Checks = append(desc.Checks, check)
 
 		default:
-			return desc, util.Errorf("unsupported table def: %T", def)
+			return desc, errors.Errorf("unsupported table def: %T", def)
 		}
 	}
 
@@ -239,7 +238,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.Type.Kind = ColumnType_BYTES
 		colDatumType = parser.TypeBytes
 	default:
-		return nil, nil, util.Errorf("unexpected type %T", t)
+		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}
 
 	if col.Type.Kind == ColumnType_DECIMAL {
@@ -360,7 +359,7 @@ func MakeKeyFromEncDatums(
 	alloc *DatumAlloc,
 ) (key roachpb.Key, err error) {
 	if len(values) != len(directions) {
-		return nil, util.Errorf("%d values, %d directions", len(values), len(directions))
+		return nil, errors.Errorf("%d values, %d directions", len(values), len(directions))
 	}
 	// We know we will append to the key which will cause the capacity to grow
 	// so make it bigger from the get-go.
@@ -404,7 +403,7 @@ func EncodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
 // EncodeTableKey encodes `val` into `b` and returns the new buffer.
 func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
-		return nil, util.Errorf("invalid direction: %d", dir)
+		return nil, errors.Errorf("invalid direction: %d", dir)
 	}
 
 	if val == parser.DNull {
@@ -481,7 +480,7 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		}
 		return b, nil
 	}
-	return nil, util.Errorf("unable to encode table key: %T", val)
+	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
 
 // EncodeTableValue encodes `val` into `appendTo` using DatumEncoding_VALUE and
@@ -512,7 +511,7 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 	case *parser.DInterval:
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
 	}
-	return nil, util.Errorf("unable to encode table value: %T", val)
+	return nil, errors.Errorf("unable to encode table value: %T", val)
 }
 
 // MakeKeyVals returns a slice of Datums with the correct types for the given
@@ -540,7 +539,7 @@ func DecodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (
 	IndexID, []byte, error,
 ) {
 	if encoding.PeekType(key) != encoding.Int {
-		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
+		return 0, nil, errors.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
 
 	key, tableID, err := encoding.DecodeUvarintAscending(key)
@@ -554,7 +553,7 @@ func DecodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (
 
 	if ID(tableID) != desc.ID {
 		return IndexID(indexID), nil,
-			util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+			errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
 	return IndexID(indexID), key, nil
@@ -579,7 +578,7 @@ func DecodeIndexKey(
 	}
 
 	if decodedIndexID != indexID {
-		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
+		return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
 	}
 	return DecodeKeyVals(a, valTypes, vals, colDirs, remaining)
 }
@@ -596,7 +595,7 @@ func DecodeIndexKey(
 func DecodeKeyVals(a *DatumAlloc, valTypes, vals []parser.Datum,
 	directions []encoding.Direction, key []byte) ([]byte, error) {
 	if directions != nil && len(directions) != len(valTypes) {
-		return nil, util.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
+		return nil, errors.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
 			len(directions), len(valTypes))
 	}
 	for j := range valTypes {
@@ -817,7 +816,7 @@ func DecodeTableKey(
 	a *DatumAlloc, valType parser.Datum, key []byte, dir encoding.Direction,
 ) (parser.Datum, []byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
-		return nil, nil, util.Errorf("invalid direction: %d", dir)
+		return nil, nil, errors.Errorf("invalid direction: %d", dir)
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
@@ -911,7 +910,7 @@ func DecodeTableKey(
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
 	default:
-		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
+		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
 }
 
@@ -970,7 +969,7 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Datum, b []byte) (parser.Dat
 		b, d, err = encoding.DecodeDurationValue(b)
 		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
 	default:
-		return nil, nil, util.Errorf("TODO(pmattis): decoded index value: %s", valType.Type())
+		return nil, nil, errors.Errorf("TODO(pmattis): decoded index value: %s", valType.Type())
 	}
 }
 
@@ -1097,7 +1096,7 @@ func CheckColumnType(col ColumnDescriptor, val parser.Datum, pmap *parser.Placeh
 		_, ok = val.(*parser.DInterval)
 		set = parser.TypeInterval
 	default:
-		return util.Errorf("unsupported column type: %s", col.Type.Kind)
+		return errors.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
 
 	// If the value is a placeholder, then the column check above has
@@ -1183,7 +1182,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, err
 		}
 	default:
-		return r, util.Errorf("unsupported column type: %s", col.Type.Kind)
+		return r, errors.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
 	return r, fmt.Errorf("value type %s doesn't match type %s of column %q",
 		val.Type(), col.Type.Kind, col.Name)
@@ -1263,7 +1262,7 @@ func UnmarshalColumnValue(
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), nil
 	default:
-		return nil, util.Errorf("unsupported column type: %s", kind)
+		return nil, errors.Errorf("unsupported column type: %s", kind)
 	}
 }
 

@@ -20,7 +20,7 @@ package encoding
 import (
 	"math"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // EncodeFloatAscending returns the resulting byte slice with the encoded float64
@@ -71,7 +71,7 @@ func EncodeFloatDescending(b []byte, f float64) []byte {
 // float64 from buf.
 func DecodeFloatAscending(buf []byte) ([]byte, float64, error) {
 	if PeekType(buf) != Float {
-		return buf, 0, util.Errorf("did not find marker")
+		return buf, 0, errors.Errorf("did not find marker")
 	}
 	switch buf[0] {
 	case floatNaN, floatNaNDesc:
@@ -92,7 +92,7 @@ func DecodeFloatAscending(buf []byte) ([]byte, float64, error) {
 		}
 		return b, math.Float64frombits(u), nil
 	default:
-		return nil, 0, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
+		return nil, 0, errors.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
 }
 

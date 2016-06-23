@@ -24,11 +24,11 @@ package parser
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 //go:generate make
@@ -151,7 +151,7 @@ func ParseOne(sql string, syntax Syntax) (Statement, error) {
 		return nil, err
 	}
 	if len(stmts) != 1 {
-		return nil, util.Errorf("expected 1 statement, but found %d", len(stmts))
+		return nil, errors.Errorf("expected 1 statement, but found %d", len(stmts))
 	}
 	return stmts[0], nil
 }
@@ -169,7 +169,7 @@ func parseExprs(exprs []string, syntax Syntax) (Exprs, error) {
 	}
 	set, ok := stmt.(*Set)
 	if !ok {
-		return nil, util.Errorf("expected a SET statement, but found %T", stmt)
+		return nil, errors.Errorf("expected a SET statement, but found %T", stmt)
 	}
 	return set.Values, nil
 }
@@ -189,7 +189,7 @@ func ParseExprTraditional(sql string) (Expr, error) {
 		return nil, err
 	}
 	if len(exprs) != 1 {
-		return nil, util.Errorf("expected 1 expression, found %d", len(exprs))
+		return nil, errors.Errorf("expected 1 expression, found %d", len(exprs))
 	}
 	return exprs[0], nil
 }

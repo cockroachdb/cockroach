@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/btree"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
@@ -200,7 +201,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	s.Start(clock, stopper)
 	util.SucceedsSoon(t, func() error {
 		if q1.count() != count || q2.count() != count {
-			return util.Errorf("q1 or q2 count != %d; got %d, %d", count, q1.count(), q2.count())
+			return errors.Errorf("q1 or q2 count != %d; got %d, %d", count, q1.count(), q2.count())
 		}
 		return nil
 	})
@@ -215,7 +216,7 @@ func TestScannerAddToQueues(t *testing.T) {
 		c1 := q1.count()
 		c2 := q2.count()
 		if c1 != count-1 || c2 != count-1 {
-			return util.Errorf("q1 or q2 count != %d; got %d, %d", count-1, c1, c2)
+			return errors.Errorf("q1 or q2 count != %d; got %d, %d", count-1, c1, c2)
 		}
 		return nil
 	})
@@ -255,7 +256,7 @@ func TestScannerTiming(t *testing.T) {
 			log.Infof("%d: average scan: %s", i, avg)
 			if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
 				duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
-				return util.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
+				return errors.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
 			}
 			return nil
 		})

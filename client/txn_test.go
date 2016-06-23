@@ -17,16 +17,15 @@
 package client
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -447,7 +446,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		if err := txn.Put("a", "b"); err != nil {
 			return err
 		}
-		return util.Errorf("foo")
+		return errors.Errorf("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
 	}

@@ -18,12 +18,13 @@ package gossip
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"regexp"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -183,7 +184,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 		i.Value.InitChecksum([]byte(key))
 		i.OrigStamp = monotonicUnixNano()
 		if highWaterStamp, ok := is.highWaterStamps[i.NodeID]; ok && highWaterStamp >= i.OrigStamp {
-			panic(util.Errorf("high water stamp %d >= %d", highWaterStamp, i.OrigStamp))
+			panic(errors.Errorf("high water stamp %d >= %d", highWaterStamp, i.OrigStamp))
 		}
 	}
 	// Update info map.
@@ -320,7 +321,7 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (fre
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
 		if infoCopy.OrigStamp == 0 {
-			panic(util.Errorf("combining info from node %d with 0 original timestamp", nodeID))
+			panic(errors.Errorf("combining info from node %d with 0 original timestamp", nodeID))
 		}
 		if addErr := is.addInfo(key, &infoCopy); addErr == nil {
 			freshCount++

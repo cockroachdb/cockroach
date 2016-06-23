@@ -21,8 +21,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // EncDatum represents a datum that is "backed" by an encoding and/or by a
@@ -144,7 +144,7 @@ func (ed *EncDatum) Decode(a *DatumAlloc) error {
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
-		return util.Errorf("%d trailing bytes in encoded value", len(rem))
+		return errors.Errorf("%d trailing bytes in encoded value", len(rem))
 	}
 	return nil
 }

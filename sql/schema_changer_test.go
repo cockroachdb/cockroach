@@ -18,7 +18,6 @@ package sql_test
 
 import (
 	gosql "database/sql"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // schemaChangeManagerDisabled can be used to disable asynchronous processing
@@ -864,7 +864,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	util.SucceedsSoon(t, func() error {
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
-			return util.Errorf("%d mutations remaining", len(tableDesc.Mutations))
+			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
 		return nil
 	})
@@ -967,7 +967,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// Read table descriptor.
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
-			return util.Errorf("%d mutations remaining", len(tableDesc.Mutations))
+			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
 
 		// Verify that t.test has the expected data. Read the table data while
@@ -984,7 +984,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Ensure that sql is using the correct table lease.
 		if len(cols) != len(expectedCols) {
-			return util.Errorf("incorrect columns: %v", cols)
+			return errors.Errorf("incorrect columns: %v", cols)
 		}
 		if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
 			t.Fatalf("incorrect columns: %v", cols)

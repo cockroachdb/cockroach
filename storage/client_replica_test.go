@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -80,7 +81,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 			values = append(values, mustGetInt(val))
 		}
 		if !reflect.DeepEqual(values, []int64{5, 5, 5}) {
-			return util.Errorf("expected (5, 5, 5), got %v", values)
+			return errors.Errorf("expected (5, 5, 5), got %v", values)
 		}
 		return nil
 	})
@@ -206,7 +207,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 				// succeeds). Returns an error for the fourth get request to avoid timestamp cache
 				// update after the third get operation pushes the txn timestamp.
 				if atomic.AddInt32(&numGets, 1) == 4 {
-					return roachpb.NewErrorWithTxn(util.Errorf("Test"), filterArgs.Hdr.Txn)
+					return roachpb.NewErrorWithTxn(errors.Errorf("Test"), filterArgs.Hdr.Txn)
 				}
 			}
 			return nil

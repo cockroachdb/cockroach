@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/pkg/errors"
 )
 
 func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
@@ -559,7 +560,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			rng = store.LookupReplica(tableBoundary, nil)
 			if actualRSpan := rng.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
-				return util.Errorf("expected range %s to span %s", rng, expectedRSpan)
+				return errors.Errorf("expected range %s to span %s", rng, expectedRSpan)
 			}
 			return nil
 		})
@@ -579,7 +580,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		rngDesc := rng.Desc()
 		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
 		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
-			return util.Errorf("range %s has not yet split", rng)
+			return errors.Errorf("range %s has not yet split", rng)
 		}
 		return nil
 	})
@@ -610,10 +611,10 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		newRng := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		if newRng.RangeID == origRng.RangeID {
-			return util.Errorf("expected new range created by split")
+			return errors.Errorf("expected new range created by split")
 		}
 		if newRng.GetMaxBytes() != maxBytes {
-			return util.Errorf("expected %d max bytes for the new range, but got %d",
+			return errors.Errorf("expected %d max bytes for the new range, but got %d",
 				maxBytes, newRng.GetMaxBytes())
 		}
 		return nil
@@ -698,7 +699,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 				keys = append(keys, r.Key)
 			}
 			if !reflect.DeepEqual(keys, expKeys) {
-				return util.Errorf("expected split keys:\n%v\nbut found:\n%v", expKeys, keys)
+				return errors.Errorf("expected split keys:\n%v\nbut found:\n%v", expKeys, keys)
 			}
 			return nil
 		})
@@ -793,7 +794,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	util.SucceedsSoon(t, func() error {
 		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).RangeID
 		if rightRangeID == leftRangeID {
-			return util.Errorf("store 1 hasn't processed split yet")
+			return errors.Errorf("store 1 hasn't processed split yet")
 		}
 		return nil
 	})

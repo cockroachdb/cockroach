@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
@@ -105,7 +107,7 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 		}
 
 		if a, e := len(seenIds), c.NumNodes(); a != e {
-			return util.Errorf("expected %d node join messages, found %d: %v", e, a, seenIds)
+			return errors.Errorf("expected %d node join messages, found %d: %v", e, a, seenIds)
 		}
 
 		confirmedClusterID = clusterID
@@ -165,7 +167,7 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 			return err
 		}
 		if seenCount != 1 {
-			return util.Errorf("Expected only one node restart event, found %d", seenCount)
+			return errors.Errorf("Expected only one node restart event, found %d", seenCount)
 		}
 		return nil
 	})

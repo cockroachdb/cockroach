@@ -18,7 +18,6 @@ package kv
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -33,10 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/pkg/errors"
 )
 
 // correctnessTestRetryOptions uses aggressive retries with a limit on
@@ -935,7 +934,7 @@ func TestTxnDBReadSkewAnomaly(t *testing.T) {
 		history: "R(C)",
 		checkFn: func(env map[string]int64) error {
 			if env["C"] != 2 && env["C"] != 0 {
-				return util.Errorf("expected C to be either 0 or 2, got %d", env["C"])
+				return errors.Errorf("expected C to be either 0 or 2, got %d", env["C"])
 			}
 			return nil
 		},
@@ -966,7 +965,7 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 		history: "R(A)",
 		checkFn: func(env map[string]int64) error {
 			if env["A"] != 2 {
-				return util.Errorf("expected A=2, got %d", env["A"])
+				return errors.Errorf("expected A=2, got %d", env["A"])
 			}
 			return nil
 		},
@@ -998,7 +997,7 @@ func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 		history:    "R(A) R(B)",
 		checkFn: func(env map[string]int64) error {
 			if env["B"] != 0 && env["A"] == 0 {
-				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
+				return errors.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
 			}
 			return nil
 		},
@@ -1033,7 +1032,7 @@ func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 		history:    "R(A) R(B)",
 		checkFn: func(env map[string]int64) error {
 			if env["B"] != 0 && env["A"] == 0 {
-				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
+				return errors.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
 			}
 			return nil
 		},
@@ -1061,7 +1060,7 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 		history: "R(D) R(E)",
 		checkFn: func(env map[string]int64) error {
 			if env["D"] != env["E"] {
-				return util.Errorf("expected D == E (%d != %d)", env["D"], env["E"])
+				return errors.Errorf("expected D == E (%d != %d)", env["D"], env["E"])
 			}
 			return nil
 		},
@@ -1084,7 +1083,7 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 		history: "R(D)",
 		checkFn: func(env map[string]int64) error {
 			if env["D"] != 0 {
-				return util.Errorf("expected delete range to yield an empty scan of same range, sum=%d", env["D"])
+				return errors.Errorf("expected delete range to yield an empty scan of same range, sum=%d", env["D"])
 			}
 			return nil
 		},
@@ -1096,7 +1095,7 @@ func runWriteSkewTest(t *testing.T, iso enginepb.IsolationType) {
 	checks := make(map[enginepb.IsolationType]func(map[string]int64) error)
 	checks[enginepb.SERIALIZABLE] = func(env map[string]int64) error {
 		if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
-			return util.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
+			return errors.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
 		}
 		return nil
 	}

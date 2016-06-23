@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 // createTestBookie creates a new bookie, stopper and manual clock for testing.
@@ -52,15 +53,15 @@ func createTestBookie(
 // and that the expirationQueue's length are correct.
 func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedBytes int64) {
 	if e, a := reservedBytes, b.metrics.reserved.Count(); e != a {
-		t.Error(util.ErrorfSkipFrames(1, "expected total bytes reserved to be %d, got %d", e, a))
+		t.Error(errors.Errorf("expected total bytes reserved to be %d, got %d", e, a))
 	}
 	if e, a := reservations, int(b.metrics.reservedReplicaCount.Count()); e != a {
-		t.Error(util.ErrorfSkipFrames(1, "expected total reservations to be %d, got %d", e, a))
+		t.Error(errors.Errorf("expected total reservations to be %d, got %d", e, a))
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if e, a := queueLen, len(b.mu.queue); e != a {
-		t.Error(util.ErrorfSkipFrames(1, "expected total queue length to be %d, got %d", e, a))
+		t.Error(errors.Errorf("expected total queue length to be %d, got %d", e, a))
 	}
 }
 

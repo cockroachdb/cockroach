@@ -17,17 +17,15 @@
 package storage
 
 import (
-	"errors"
-
 	"golang.org/x/net/context"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -147,13 +145,13 @@ func copySeqCache(
 			// corresponding key in the new cache.
 			txnID, err := decodeAbortCacheMVCCKey(kv.Key, scratch[:0])
 			if err != nil {
-				return false, util.Errorf("could not decode an abort cache key %s: %s", kv.Key, err)
+				return false, errors.Errorf("could not decode an abort cache key %s: %s", kv.Key, err)
 			}
 			key := keys.AbortCacheKey(dstID, txnID)
 			encKey := engine.MakeMVCCMetadataKey(key)
 			// Decode the MVCCMetadata value.
 			if err := proto.Unmarshal(kv.Value, &meta); err != nil {
-				return false, util.Errorf("could not decode mvcc metadata %s [% x]: %s", kv.Key, kv.Value, err)
+				return false, errors.Errorf("could not decode mvcc metadata %s [% x]: %s", kv.Key, kv.Value, err)
 			}
 			value := engine.MakeValue(meta)
 			value.ClearChecksum()
@@ -233,7 +231,7 @@ func decodeAbortCacheMVCCKey(
 	encKey engine.MVCCKey, dest []byte,
 ) (*uuid.UUID, error) {
 	if encKey.IsValue() {
-		return nil, util.Errorf("key %s is not a raw MVCC value", encKey)
+		return nil, errors.Errorf("key %s is not a raw MVCC value", encKey)
 	}
 	return keys.DecodeAbortCacheKey(encKey.Key, dest)
 }

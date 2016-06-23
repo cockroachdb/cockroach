@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,40 +12,11 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package util
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/util/caller"
-)
-
-const defaultSkip = 2
-const errorPrefixFormat string = "%s:%d: "
-
-// getPrefix skips "skip" stack frames to get the file & line number
-// of original caller.
-func getPrefix(skip int, format string) string {
-	file, line, _ := caller.Lookup(skip)
-	return fmt.Sprintf(format, file, line)
-}
-
-// Errorf is a passthrough to fmt.Errorf, with an additional prefix
-// containing the filename and line number.
-func Errorf(format string, a ...interface{}) error {
-	return fmt.Errorf(getPrefix(defaultSkip, errorPrefixFormat)+format, a...)
-}
-
-// ErrorfSkipFrames allows the skip count for stack frames to be
-// specified. This is useful when generating errors via helper
-// methods. Skip should be specified as the number of additional stack
-// frames between the location at which the error is caused and the
-// location at which the error is generated.
-func ErrorfSkipFrames(skip int, format string, a ...interface{}) error {
-	return fmt.Errorf(getPrefix(defaultSkip+skip, errorPrefixFormat)+format, a...)
-}
+import "fmt"
 
 // UnimplementedWithIssueError is an error that links unimplemented functionality back
 // to its issue on GitHub.

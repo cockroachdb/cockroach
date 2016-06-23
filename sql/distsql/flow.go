@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 )
 
 // Flow represents a flow which consists of processors and streams.
@@ -36,17 +36,17 @@ type Flow struct {
 func (f *Flow) setupMailbox(sp *MailboxSpec) (RowReceiver, error) {
 	// TODO(radu): for now we only support the simple flow mailbox.
 	if !sp.SimpleResponse {
-		return nil, util.Errorf("mailbox spec %s not supported", sp)
+		return nil, errors.Errorf("mailbox spec %s not supported", sp)
 	}
 	return f.simpleFlowConsumer, nil
 }
 
 func (f *Flow) setupStreamOut(spec StreamEndpointSpec) (RowReceiver, error) {
 	if spec.LocalStreamID != nil {
-		return nil, util.Errorf("local endpoints not supported")
+		return nil, errors.Errorf("local endpoints not supported")
 	}
 	if spec.Mailbox == nil {
-		return nil, util.Errorf("empty endpoint spec")
+		return nil, errors.Errorf("empty endpoint spec")
 	}
 	return f.setupMailbox(spec.Mailbox)
 }
@@ -67,10 +67,10 @@ func (f *Flow) setupRouter(spec OutputRouterSpec) (RowReceiver, error) {
 // a TableReader.
 func (f *Flow) setupProcessor(ps *ProcessorSpec) (*tableReader, error) {
 	if ps.Core.TableReader == nil {
-		return nil, util.Errorf("unsupported processor %s", ps)
+		return nil, errors.Errorf("unsupported processor %s", ps)
 	}
 	if len(ps.Output) != 1 {
-		return nil, util.Errorf("only single-output processors supported")
+		return nil, errors.Errorf("only single-output processors supported")
 	}
 	out, err := f.setupRouter(ps.Output[0])
 	if err != nil {

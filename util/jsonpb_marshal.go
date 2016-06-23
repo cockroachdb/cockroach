@@ -26,6 +26,7 @@ import (
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 var _ gwruntime.Marshaler = (*JSONPb)(nil)
@@ -100,7 +101,7 @@ func (j *JSONPb) Unmarshal(data []byte, v interface{}) error {
 	if pb, ok := v.(proto.Message); ok {
 		return jsonpb.Unmarshal(bytes.NewReader(data), pb)
 	}
-	return Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
 
 // NewDecoder implements gwruntime.Marshaler.
@@ -109,7 +110,7 @@ func (j *JSONPb) NewDecoder(r io.Reader) gwruntime.Decoder {
 		if pb, ok := v.(proto.Message); ok {
 			return jsonpb.Unmarshal(r, pb)
 		}
-		return Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 	})
 }
 
@@ -120,6 +121,6 @@ func (j *JSONPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 			marshalFn := (*jsonpb.Marshaler)(j).Marshal
 			return marshalFn(w, pb)
 		}
-		return Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 	})
 }
