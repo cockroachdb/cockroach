@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log/logflags"
@@ -47,7 +48,10 @@ var serverCtx = server.MakeContext()
 var baseCtx = serverCtx.Context
 var cliCtx = cliContext{Context: baseCtx}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
-var debugCtx debugContext
+var debugCtx = debugContext{
+	startKey: engine.NilKey,
+	endKey:   engine.MVCCKeyMax,
+}
 
 var cacheSize *bytesValue
 var insecure *insecureValue
@@ -222,14 +226,12 @@ database, insecure, certs).`),
 Database user name.`),
 
 	cliflags.FromName: wrapText(`
-Start key in pretty-printed format. See also --raw.`),
+Start key and format as [<format>:]<key>. Supported formats:
+`) + fmt.Sprintf("\n%+v", keyTypes()),
 
 	cliflags.ToName: wrapText(`
-Exclusive end key in pretty-printed format. See also --raw.`),
-
-	cliflags.TypeName: wrapText(`
-Interpret the arguments to --from and --to as raw bytes ('raw'),
-rangeIDs ('rangeID') or pretty-printed keys ('pretty').`),
+Exclusive end key and format as [<format>:]<key>. Supported formats:
+`) + fmt.Sprintf("\n%+v", keyTypes()),
 
 	cliflags.ValuesName: wrapText(`
 Print values along with their associated key.`),
@@ -490,10 +492,8 @@ func init() {
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		f.StringVar(&debugCtx.startKey, cliflags.FromName, "", usageNoEnv(cliflags.FromName))
-		f.StringVar(&debugCtx.endKey, cliflags.ToName, "", usageNoEnv(cliflags.ToName))
-		// TODO(tamird): should technically be an enum, but there's no good flag support for them.
-		f.StringVar(&debugCtx.typ, cliflags.TypeName, "raw", usageNoEnv(cliflags.TypeName))
+		f.Var((*mvccKey)(&debugCtx.startKey), cliflags.FromName, usageNoEnv(cliflags.FromName))
+		f.Var((*mvccKey)(&debugCtx.endKey), cliflags.ToName, usageNoEnv(cliflags.ToName))
 		f.BoolVar(&debugCtx.values, cliflags.ValuesName, false, usageNoEnv(cliflags.ValuesName))
 	}
 
