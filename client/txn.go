@@ -508,7 +508,8 @@ func (e *AutoCommitError) Error() string {
 // used.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
-	fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
+	fn func(txn *Txn, opt *TxnExecOptions) error,
+) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var retryOptions retry.Options
