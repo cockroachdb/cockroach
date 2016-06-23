@@ -868,17 +868,16 @@ func TestNonRetryableErrorFromCommit(t *testing.T) {
 // the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
 func TestTxnDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#7394")
 
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 
-	restartDone := false
+	clockUpdate := false
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
 		TestingCommandFilter: cmdFilters.runFilters,
 		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
-			if restartDone {
+			if clockUpdate {
 				return
 			}
 
@@ -886,6 +885,7 @@ func TestTxnDeadline(t *testing.T) {
 			for _, union := range ba.Requests {
 				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
 					if bytes.Contains(req.Key, testKey) {
+						clockUpdate = true
 						now := c.Now()
 						now.WallTime += int64(5 * sql.LeaseDuration)
 						c.Update(now)
@@ -901,6 +901,7 @@ func TestTxnDeadline(t *testing.T) {
 	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
+	restartDone := false
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if restartDone {
