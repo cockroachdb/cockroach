@@ -91,7 +91,7 @@ func StartTestServerJoining(t util.Tester, other TestServer) TestServer {
 	ctx := MakeTestContext()
 	ctx.JoinUsing = other.ServingAddr()
 	s := TestServer{Ctx: &ctx}
-	if err := s.StartMultinode(); err != nil {
+	if err := s.Start(); err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
 		} else {
