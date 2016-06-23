@@ -218,13 +218,13 @@ func MakeRangeIDUnreplicatedKey(rangeID roachpb.RangeID, suffix roachpb.RKey, de
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
 func RaftHardStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDUnreplicatedKey(rangeID, localRaftHardStateSuffix, nil)
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRaftHardStateSuffix, nil)
 }
 
 // RaftLastIndexKey returns a system-local key for the last index of the
 // Raft log.
 func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDUnreplicatedKey(rangeID, localRaftLastIndexSuffix, nil)
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRaftLastIndexSuffix, nil)
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries
@@ -243,13 +243,13 @@ func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 // RangeLastReplicaGCTimestampKey returns a range-local key for
 // the range's last replica GC timestamp.
 func RangeLastReplicaGCTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDUnreplicatedKey(rangeID, localRangeLastReplicaGCTimestampSuffix, nil)
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeLastReplicaGCTimestampSuffix, nil)
 }
 
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
 func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDUnreplicatedKey(rangeID, localRangeLastVerificationTimestampSuffix, nil)
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeLastVerificationTimestampSuffix, nil)
 }
 
 // MakeRangeKey creates a range-local key based on the range
