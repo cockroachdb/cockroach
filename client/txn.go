@@ -534,7 +534,7 @@ func (txn *Txn) Exec(
 	if opt.AutoRetry {
 		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
-RetryLoop:
+
 	for r := retry.Start(retryOptions); r.Next(); {
 		if txn != nil {
 			// If we're looking at a brand new transaction, then communicate
@@ -566,7 +566,7 @@ RetryLoop:
 		}
 
 		if !opt.AutoRetry {
-			break RetryLoop
+			break
 		}
 
 		if retErr, retryable := err.(*roachpb.RetryableTxnError); retryable {
@@ -585,7 +585,7 @@ RetryLoop:
 				r.Reset()
 			}
 		} else {
-			break RetryLoop
+			break
 		}
 		if log.V(2) {
 			log.Infof("automatically retrying transaction: %s because of error: %s",
