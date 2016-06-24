@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
@@ -35,7 +36,10 @@ type envVarInfo struct {
 	value    string
 }
 
-var envVarRegistry map[string]envVarInfo
+var envVarRegistry struct {
+	mu    sync.Mutex
+	cache map[string]envVarInfo
+}
 
 func init() {
 	ClearEnvCache()
@@ -56,28 +60,38 @@ func VarName(name string) string {
 func getEnv(name string) (string, bool) {
 	_, consumer, _, _ := runtime.Caller(2)
 	varName := VarName(name)
-	if f, ok := envVarRegistry[varName]; ok {
+
+	envVarRegistry.mu.Lock()
+	defer envVarRegistry.mu.Unlock()
+
+	if f, ok := envVarRegistry.cache[varName]; ok {
 		if f.consumer != consumer {
 			panic("environment variable " + varName + " already used from " + f.consumer)
 		}
 		return f.value, f.present
 	}
 	v, found := os.LookupEnv(varName)
-	envVarRegistry[varName] = envVarInfo{consumer: consumer, present: found, value: v}
+	envVarRegistry.cache[varName] = envVarInfo{consumer: consumer, present: found, value: v}
 	return v, found
 }
 
 // ClearEnvCache clears saved environment values so that
 // a new read access the environment again. (Used for testing)
 func ClearEnvCache() {
-	envVarRegistry = make(map[string]envVarInfo)
+	envVarRegistry.mu.Lock()
+	defer envVarRegistry.mu.Unlock()
+
+	envVarRegistry.cache = make(map[string]envVarInfo)
 }
 
 // GetEnvReport dumps all configuration variables that may have been
 // used and their value.
 func GetEnvReport() string {
+	envVarRegistry.mu.Lock()
+	defer envVarRegistry.mu.Unlock()
+
 	var b bytes.Buffer
-	for k, v := range envVarRegistry {
+	for k, v := range envVarRegistry.cache {
 		if v.present {
 			fmt.Fprintf(&b, "%s = %s # %s\n", k, v.value, v.consumer)
 		} else {
