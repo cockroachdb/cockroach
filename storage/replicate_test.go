@@ -17,9 +17,11 @@
 package storage_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -36,12 +38,19 @@ func TestEagerReplication(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// After the initial splits have been performed, all of the resulting ranges
-	// should be present in replicate queue purgatory (because we only have a
-	// single store in the test and thus replication cannot succeed).
-	expected := server.ExpectedInitialRangeCount()
-	if n := store.ReplicateQueuePurgatoryLength(); expected != n {
-		t.Fatalf("expected %d replicas in purgatory, but found %d",
-			expected, n)
-	}
+	// WaitForInitialSplits will return as soon as the meta2 span contains the
+	// expected number of descriptors. But the addition of replicas to the
+	// replicateQueue after a split occurs happens after the update of the
+	// descriptors in meta2 leaving a tiny window of time in which the newly
+	// split replica will not have been added to purgatory. Thus we loop.
+	util.SucceedsSoon(t, func() error {
+		// After the initial splits have been performed, all of the resulting ranges
+		// should be present in replicate queue purgatory (because we only have a
+		// single store in the test and thus replication cannot succeed).
+		expected := server.ExpectedInitialRangeCount()
+		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
+			return fmt.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
+		}
+		return nil
+	})
 }
