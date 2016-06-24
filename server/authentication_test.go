@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -57,8 +59,8 @@ func doHTTPReq(t *testing.T, client http.Client, method, url string, body proto.
 // Verify client certificate enforcement and user whitelisting.
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	// HTTPS with client certs for security.RootUser.
 	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)
@@ -129,7 +131,9 @@ func TestSSLEnforcement(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}
-		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.Ctx.HTTPAddr, tc.path)
+		url := fmt.Sprintf(
+			"%s://%s%s", tc.ctx.HTTPRequestScheme(),
+			s.(*TestServer).Ctx.HTTPAddr, tc.path)
 		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
 		if (err == nil) != tc.success {
 			t.Errorf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)

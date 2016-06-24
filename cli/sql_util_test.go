@@ -22,15 +22,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestRunQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := server.StartTestServer(nil)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestRunQuery")
 	defer cleanup()

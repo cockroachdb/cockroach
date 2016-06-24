@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/serverpb"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -79,9 +80,9 @@ func TestPGWire(t *testing.T) {
 	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 
 	for _, insecure := range [...]bool{true, false} {
-		ctx, _ := createTestServerContext()
-		ctx.Insecure = insecure
-		s := setupTestServerWithContext(t, &ctx)
+		params, _ := createTestServerParams()
+		params.Insecure = insecure
+		s, _, _ := sqlutils.SetupServer(t, params)
 
 		host, port, err := net.SplitHostPort(s.ServingAddr())
 		if err != nil {
@@ -161,7 +162,7 @@ func TestPGWire(t *testing.T) {
 			}
 		}
 
-		cleanupTestServer(s)
+		s.Stopper().Stop()
 	}
 }
 
@@ -169,11 +170,10 @@ func TestPGWire(t *testing.T) {
 // it's in draining mode.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, _ := createTestServerContext()
-	ctx.Insecure = true
-
-	s := setupTestServerWithContext(t, &ctx)
-	defer cleanupTestServer(s)
+	params, _ := createTestServerParams()
+	params.Insecure = true
+	s, _, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	host, port, err := net.SplitHostPort(s.ServingAddr())
 	if err != nil {
@@ -188,7 +188,7 @@ func TestPGWireDrainClient(t *testing.T) {
 
 	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
 
-	if now, err := s.Drain(on); err != nil {
+	if now, err := s.(*server.TestServer).Drain(on); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(on, now) {
 		t.Fatalf("expected drain modes %v, got %v", on, now)
@@ -196,7 +196,8 @@ func TestPGWireDrainClient(t *testing.T) {
 	if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
 		t.Fatal(err)
 	}
-	if now := s.Undrain([]serverpb.DrainMode{serverpb.DrainMode_CLIENT}); len(now) != 0 {
+	if now := s.(*server.TestServer).Undrain(
+		[]serverpb.DrainMode{serverpb.DrainMode_CLIENT}); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
 	if err := trivialQuery(pgBaseURL); err != nil {
@@ -207,8 +208,8 @@ func TestPGWireDrainClient(t *testing.T) {
 func TestPGWireDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGWireDBName")
 	pgURL.Path = "foo"
@@ -242,8 +243,8 @@ func TestPGWireDBName(t *testing.T) {
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPrepareFail")
 	defer cleanupFn()
@@ -533,8 +534,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 	}
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPreparedQuery")
 	defer cleanupFn()
@@ -788,8 +789,8 @@ func TestPGPreparedExec(t *testing.T) {
 		},
 	}
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPreparedExec")
 	defer cleanupFn()
@@ -847,8 +848,8 @@ func TestPGPreparedExec(t *testing.T) {
 // was given in the connection string.
 func TestPGPrepareNameQual(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPrepareNameQual")
 	defer cleanupFn()
@@ -897,8 +898,8 @@ func TestPGPrepareNameQual(t *testing.T) {
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
 		"TestCmdCompleteVsEmptyStatements")
@@ -939,8 +940,8 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 // the methods where it depends on their values (Begin, Commit, RowsAffected for INSERTs).
 func TestPGCommandTags(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGCommandTags")
 	defer cleanupFn()
@@ -1033,7 +1034,10 @@ func TestPGCommandTags(t *testing.T) {
 
 // checkSQLNetworkMetrics returns the server's pgwire bytesIn/bytesOut and an
 // error if the bytesIn/bytesOut don't satisfy the given minimums and maximums.
-func checkSQLNetworkMetrics(s server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
+func checkSQLNetworkMetrics(
+	s testingshim.TestServerInterface,
+	minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
+) (int64, int64, error) {
 	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err
 	}
@@ -1058,8 +1062,8 @@ func checkSQLNetworkMetrics(s server.TestServer, minBytesIn, minBytesOut, maxByt
 func TestSQLNetworkMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
@@ -1126,8 +1130,8 @@ func TestSQLNetworkMetrics(t *testing.T) {
 func TestPrepareSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPrepareSyntax")
 	defer cleanupFn()
@@ -1177,11 +1181,11 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 
 	socketFile := filepath.Join(tempDir, ".s.PGSQL.123456")
 
-	ctx, _ := createTestServerContext()
-	ctx.Insecure = true
-	ctx.SocketFile = socketFile
-	s := setupTestServerWithContext(t, &ctx)
-	defer s.Stop()
+	params, _ := createTestServerParams()
+	params.Insecure = true
+	params.SocketFile = socketFile
+	s, _, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.
 	options := url.Values{

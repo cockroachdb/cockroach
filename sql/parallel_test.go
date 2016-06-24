@@ -37,8 +37,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -56,7 +57,7 @@ type testDB struct {
 
 type parallelTest struct {
 	*testing.T
-	srv     *testServer
+	srv     testingshim.TestServerInterface
 	clients []testDB
 }
 
@@ -67,13 +68,13 @@ func (t *parallelTest) close() {
 	}
 	t.clients = nil
 	if t.srv != nil {
-		cleanupTestServer(t.srv)
+		t.srv.Stopper().Stop()
 		t.srv = nil
 	}
 }
 
 func (t *parallelTest) addClient(createDB bool) {
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.TestServer.ServingAddr(), security.RootUser,
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.ServingAddr(), security.RootUser,
 		"TestParallel")
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
@@ -154,13 +155,16 @@ func (t *parallelTest) run(dir string) {
 }
 
 func (t *parallelTest) setup() {
-	ctx := server.MakeTestContext()
-	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		WaitForGossipUpdate:   true,
-		CheckStmtStringChange: true,
+	params := testingshim.TestServerParams{
+		MaxOffset: logicMaxOffset,
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				WaitForGossipUpdate:   true,
+				CheckStmtStringChange: true,
+			},
+		},
 	}
-	t.srv = setupTestServerWithContext(t.T, &ctx)
+	t.srv, _, _ = sqlutils.SetupServer(t, params)
 }
 
 func TestParallel(t *testing.T) {

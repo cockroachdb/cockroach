@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/pgbench"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -102,8 +102,8 @@ func execPgbench(b *testing.B, pgUrl url.URL) {
 
 func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
 	defer tracing.Disable()()
-	s := server.StartInsecureTestServer(b)
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(b, testingshim.TestServerParams{Insecure: true})
+	defer s.Stopper().Stop()
 
 	pgUrl, cleanupFn := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
 	pgUrl.RawQuery = "sslmode=disable"

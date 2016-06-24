@@ -24,37 +24,30 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// SetupServerWithParams creates a test server with the given params and sets up
-// a gosql DB connection.
-func SetupServerWithParams(t *testing.T, params testingshim.TestServerParams) (
-	server testingshim.TestServerInterface, goDB *gosql.DB, kvClient *client.DB, cleanupFn func(),
+// SetupServer creates a test server and sets up a gosql DB connection.
+// The server should be stopped by calling server.Stopper().Stop().
+func SetupServer(t testing.TB, params testingshim.TestServerParams) (
+	testingshim.TestServerInterface, *gosql.DB, *client.DB,
 ) {
-	server = testingshim.NewTestServer(params)
-	if err := server.Start(); err != nil {
-		t.Fatal(err)
-	}
-
-	kvClient = server.KVClient().(*client.DB)
-	url, cleanupGoDB := PGUrl(t, server.ServingAddr(), security.RootUser, "SetupServer")
-	goDB, err := gosql.Open("postgres", url.String())
+	server, err := testingshim.StartServerRaw(params)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cleanupFn = func() {
-		_ = goDB.Close()
-		cleanupGoDB()
-		server.Stop()
+	kvClient := server.KVClient().(*client.DB)
+	pgURL, cleanupGoDB := PGUrl(t, server.ServingAddr(), security.RootUser, "SetupServer")
+	pgURL.Path = params.UseDatabase
+	goDB, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
 	}
-	return server, goDB, kvClient, cleanupFn
-}
-
-// SetupServer creates a test server with default parameters and sets up a gosql
-// DB connection.
-func SetupServer(t *testing.T) (
-	server testingshim.TestServerInterface, goDB *gosql.DB, kvClient *client.DB, cleanupFn func(),
-) {
-	return SetupServerWithParams(t, testingshim.TestServerParams{})
+	server.Stopper().AddCloser(
+		stop.CloserFn(func() {
+			_ = goDB.Close()
+			cleanupGoDB()
+		}))
+	return server, goDB, kvClient
 }

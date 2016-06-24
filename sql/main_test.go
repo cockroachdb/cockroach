@@ -12,19 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Marc Berhault (marc@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql_test
 
 import (
 	"bytes"
-	gosql "database/sql"
 	"fmt"
 	"os"
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
@@ -33,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/pkg/errors"
@@ -177,60 +174,19 @@ func checkEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 	return nil
 }
 
-type testServer struct {
-	server.TestServer
-	cleanupFns []func()
-}
-
-func createTestServerContext() (server.Context, *CommandFilters) {
-	ctx := server.MakeTestContext()
+// createTestServerParams creates a set of params suitable for SQL tests.
+// It enables some EndTransaction sanity checking and installs a flexible
+// TestingCommandFilter.
+// TODO(andrei): this function is not used consistently by SQL tests. Figure out
+// if the EndTransaction checks are important.
+func createTestServerParams() (testingshim.TestServerParams, *CommandFilters) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
-	ctx.TestingKnobs.Store = &storage.StoreTestingKnobs{
+	params := testingshim.TestServerParams{}
+	params.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingCommandFilter: cmdFilters.runFilters,
 	}
-	return ctx, &cmdFilters
-}
-
-// The context used should probably come from createTestServerContext.
-func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
-	s := &testServer{TestServer: server.TestServer{Ctx: ctx}}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
-	return s
-}
-
-func setup(t *testing.T) (*testServer, *gosql.DB, *client.DB) {
-	ctx := server.MakeTestContext()
-	return setupWithContext(t, &ctx)
-}
-
-func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *gosql.DB, *client.DB) {
-	s := setupTestServerWithContext(t, ctx)
-
-	// SQL requests use security.RootUser which has ALL permissions on everything.
-	url, cleanupFn := sqlutils.PGUrl(t, s.TestServer.ServingAddr(), security.RootUser,
-		"setupWithContext")
-	sqlDB, err := gosql.Open("postgres", url.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.cleanupFns = append(s.cleanupFns, cleanupFn)
-
-	return s, sqlDB, s.DB()
-}
-
-func cleanupTestServer(s *testServer) {
-	s.Stop()
-	for _, fn := range s.cleanupFns {
-		fn()
-	}
-}
-
-func cleanup(s *testServer, db *gosql.DB) {
-	_ = db.Close()
-	cleanupTestServer(s)
+	return params, &cmdFilters
 }
 
 func TestMain(m *testing.M) {

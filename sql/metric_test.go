@@ -23,13 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, _ := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	var testcases = []struct {
 		query            string
@@ -92,9 +94,9 @@ func TestQueryCounts(t *testing.T) {
 func TestAbortCountConflictingWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
-	s, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(s, sqlDB)
+	params, cmdFilters := createTestServerParams()
+	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 		t.Fatal(err)
@@ -142,8 +144,9 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 // results in an error during a txn.
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, _ := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	txn, err := sqlDB.Begin()
 	if err != nil {

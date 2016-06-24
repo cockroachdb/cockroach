@@ -37,13 +37,14 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 type cliTest struct {
-	server.TestServer
+	*server.TestServer
 	certsDir    string
 	cleanupFunc func()
 }
@@ -51,7 +52,7 @@ type cliTest struct {
 func (c cliTest) stop() {
 	c.cleanupFunc()
 	security.SetReadFileFn(securitytest.Asset)
-	c.Stop()
+	c.Stopper().Stop()
 }
 
 func newCLITest() cliTest {
@@ -63,8 +64,8 @@ func newCLITest() cliTest {
 
 	osStderr = os.Stdout
 
-	var s server.TestServer
-	if err := s.Start(); err != nil {
+	s, err := testingshim.StartServerRaw(testingshim.TestServerParams{})
+	if err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
 
@@ -93,7 +94,7 @@ func newCLITest() cliTest {
 	}
 
 	return cliTest{
-		TestServer: s,
+		TestServer: s.(*server.TestServer),
 		certsDir:   tempDir,
 		cleanupFunc: func() {
 			if err := os.RemoveAll(tempDir); err != nil {
@@ -297,14 +298,13 @@ func Example_quoted() {
 }
 
 func Example_insecure() {
-	c := cliTest{cleanupFunc: func() {}}
-	ctx := server.MakeTestContext()
-	ctx.Insecure = true
-	c.TestServer.Ctx = &ctx
-	if err := c.Start(); err != nil {
+	s, err := testingshim.StartServerRaw(
+		testingshim.TestServerParams{Insecure: true})
+	if err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
-	defer c.stop()
+	defer s.Stopper().Stop()
+	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
 
 	c.Run("debug kv put --insecure a 1 b 2")
 	c.Run("debug kv scan --insecure")

@@ -32,6 +32,7 @@ import (
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -49,8 +50,9 @@ func schemaChangeManagerDisabled() error {
 
 func TestSchemaChangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	server, sqlDB, _ := setup(t)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -62,8 +64,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
-	db := server.DB()
-	changer := csql.NewSchemaChangerForTesting(id, 0, node, *db, nil)
+	changer := csql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil)
 
 	// Acquire a lease.
 	lease, err := changer.AcquireLease()
@@ -131,18 +132,19 @@ func TestSchemaChangeProcess(t *testing.T) {
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
+
+	params, _ := createTestServerParams()
 	// Disable external processing of mutations.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
+
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
-	db := server.DB()
-	leaseMgr := csql.NewLeaseManager(0, *db, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{})
-	changer := csql.NewSchemaChangerForTesting(id, 0, node, *db, leaseMgr)
+	leaseMgr := csql.NewLeaseManager(0, *kvDB, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{})
+	changer := csql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -232,7 +234,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.Name = "bar"
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
-	changer = csql.NewSchemaChangerForTesting(id, tableDesc.NextMutationID, node, *db, leaseMgr)
+	changer = csql.NewSchemaChangerForTesting(id, tableDesc.NextMutationID, node, *kvDB, leaseMgr)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
 		Direction:   sqlbase.DescriptorMutation_ADD,
@@ -291,8 +293,8 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs = base.TestingKnobs{
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &csql.ExecutorTestingKnobs{
 			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
@@ -302,9 +304,8 @@ func TestAsyncSchemaChanger(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -507,11 +508,11 @@ func runSchemaChangeWithOperations(
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var backfillNotification chan bool
+	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
-	var backfillNotification chan bool
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs = base.TestingKnobs{
+	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &csql.ExecutorTestingKnobs{
 			SchemaChangersStartBackfillNotification: func() error {
 				if backfillNotification != nil {
@@ -525,8 +526,8 @@ func TestRaceWithBackfill(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -680,9 +681,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	params, _ := createTestServerParams()
 	attempts := 0
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs = base.TestingKnobs{
+	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &csql.ExecutorTestingKnobs{
 			SchemaChangersStartBackfillNotification: func() error {
 				attempts++
@@ -699,8 +700,8 @@ func TestSchemaChangeRetry(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -758,12 +759,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	params, _ := createTestServerParams()
 	// Disable the async schema changer.
 	var enableAsyncSchemaChanges uint32
-
 	attempts := 0
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs = base.TestingKnobs{
+	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &csql.ExecutorTestingKnobs{
 			SchemaChangersStartBackfillNotification: func() error {
 				attempts++
@@ -787,8 +787,8 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -882,11 +882,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // correctly when one of them violates a constraint.
 func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
 	// Disable synchronous schema change processing so that the mutations get
 	// processed asynchronously.
-	ctx, _ := createTestServerContext()
 	var enableAsyncSchemaChanges uint32
-	ctx.TestingKnobs = base.TestingKnobs{
+	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &csql.ExecutorTestingKnobs{
 			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
@@ -902,8 +902,8 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	// Create a k-v table.
 	if _, err := sqlDB.Exec(`

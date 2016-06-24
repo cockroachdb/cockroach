@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -31,8 +32,8 @@ import (
 func TestServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, sqlDB, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 	conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)

@@ -23,10 +23,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -111,17 +114,15 @@ func TestIntentResolution(t *testing.T) {
 					return nil
 				}
 
-			ctx := MakeTestContext()
-			ctx.TestingKnobs.Store = &storeKnobs
-
-			s := StartTestServerWithContext(t, &ctx)
-			defer s.Stop()
+			s, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{
+				Knobs: base.TestingKnobs{Store: &storeKnobs}})
+			defer s.Stopper().Stop()
 			// Split the Range. This should not have any asynchronous intents.
-			if err := s.db.AdminSplit(splitKey); err != nil {
+			if err := kvDB.AdminSplit(splitKey); err != nil {
 				t.Fatal(err)
 			}
 
-			if err := s.db.Txn(func(txn *client.Txn) error {
+			if err := kvDB.Txn(func(txn *client.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
@@ -156,7 +157,7 @@ func TestIntentResolution(t *testing.T) {
 			// Use Raft to make it likely that any straddling intent
 			// resolutions have come in. Don't touch existing data; that could
 			// generate unexpected intent resolutions.
-			if _, err := s.db.Scan("z\x00", "z\x00\x00", 0); err != nil {
+			if _, err := kvDB.Scan("z\x00", "z\x00\x00", 0); err != nil {
 				t.Fatal(err)
 			}
 		}()

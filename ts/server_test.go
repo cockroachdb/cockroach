@@ -24,6 +24,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -31,11 +33,9 @@ import (
 
 func TestQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var tsrv server.TestServer
-	if err := tsrv.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer tsrv.Stop()
+	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
+	tsrv := s.(*server.TestServer)
 
 	// Populate data directly.
 	tsdb := tsrv.TsDB()

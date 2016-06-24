@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -33,8 +34,8 @@ import (
 func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, sqlDB, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	defer s.Stopper().Stop()
 
 	// Create a table where each row is:
 	//

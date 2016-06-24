@@ -22,8 +22,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -137,19 +138,13 @@ func TestUseCerts(t *testing.T) {
 
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
-	ctx := server.MakeContext()
-	ctx.Insecure = false
-	ctx.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)
-	ctx.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
-	ctx.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
-	ctx.User = security.NodeUser
-	ctx.Addr = "127.0.0.1:0"
-	ctx.HTTPAddr = "127.0.0.1:0"
-	s := server.TestServer{Ctx: &ctx}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
+	params := testingshim.TestServerParams{
+		SSLCA:      filepath.Join(certsDir, security.EmbeddedCACert),
+		SSLCert:    filepath.Join(certsDir, security.EmbeddedNodeCert),
+		SSLCertKey: filepath.Join(certsDir, security.EmbeddedNodeKey),
 	}
-	defer s.Stop()
+	s, _, _ := sqlutils.SetupServer(t, params)
+	defer s.Stopper().Stop()
 
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
@@ -158,7 +153,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", s.Ctx.AdminURL()+"/_admin/v1/health", nil)
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -177,7 +172,7 @@ func TestUseCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Endpoint that does not enforce client auth (see: server/authentication_test.go)
-	req, err = http.NewRequest("GET", s.Ctx.AdminURL()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -199,7 +194,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", s.Ctx.AdminURL()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_admin/v1/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}

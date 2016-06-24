@@ -24,8 +24,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -129,18 +128,9 @@ func testScanBatchQuery(t *testing.T, db *gosql.DB, numSpans, numAs, numBs int, 
 func TestScanBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
-
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "scanTestCockroach")
-	pgURL.Path = "test"
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	s, db, _ := sqlutils.SetupServer(
+		t, testingshim.TestServerParams{UseDatabase: "test"})
+	defer s.Stopper().Stop()
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS test`); err != nil {
 		t.Fatal(err)

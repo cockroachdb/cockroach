@@ -23,15 +23,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func setup() (server.TestServer, *client.DB) {
-	s := server.StartTestServer(nil)
-	return s, s.DB()
+func setup(t *testing.T) (testingshim.TestServerInterface, *client.DB) {
+	s, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	return s, kvDB
 }
 
 func checkIntResult(t *testing.T, expected, result int64) {
@@ -76,8 +76,8 @@ func checkLen(t *testing.T, expected, count int) {
 
 func TestDB_Get(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	result, err := db.Get("aa")
 	if err != nil {
@@ -88,8 +88,8 @@ func TestDB_Get(t *testing.T) {
 
 func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
@@ -103,8 +103,8 @@ func TestDB_Put(t *testing.T) {
 
 func TestDB_CPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
@@ -148,8 +148,8 @@ func TestDB_CPut(t *testing.T) {
 
 func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	if err := db.InitPut("aa", "1"); err != nil {
 		panic(err)
@@ -169,8 +169,8 @@ func TestDB_InitPut(t *testing.T) {
 
 func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	if _, err := db.Inc("aa", 100); err != nil {
 		panic(err)
@@ -184,8 +184,8 @@ func TestDB_Inc(t *testing.T) {
 
 func TestBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	b := &client.Batch{}
 	b.Get("aa")
@@ -203,8 +203,8 @@ func TestBatch(t *testing.T) {
 
 func TestDB_Scan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
@@ -228,8 +228,8 @@ func TestDB_Scan(t *testing.T) {
 
 func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
@@ -253,8 +253,8 @@ func TestDB_ReverseScan(t *testing.T) {
 
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
@@ -280,8 +280,8 @@ func TestDB_Del(t *testing.T) {
 
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
@@ -308,17 +308,9 @@ func TestTxn_Commit(t *testing.T) {
 
 func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := server.MakeTestContext()
-	ctx.Insecure = true
-	s := server.TestServer{
-		Ctx: &ctx,
-	}
-	if err := s.Start(); err != nil {
-		log.Fatalf("Could not start server: %v", err)
-	}
-	defer s.Stop()
+	s, _, db := sqlutils.SetupServer(t, testingshim.TestServerParams{Insecure: true})
+	defer s.Stopper().Stop()
 
-	db := s.DB()
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
@@ -331,8 +323,8 @@ func TestDB_Put_insecure(t *testing.T) {
 
 func TestDebugName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
+	s, db := setup(t)
+	defer s.Stopper().Stop()
 
 	file, _, _ := caller.Lookup(0)
 	if err := db.Txn(func(txn *client.Txn) error {

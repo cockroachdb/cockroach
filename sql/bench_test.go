@@ -27,8 +27,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	_ "github.com/cockroachdb/pq"
@@ -36,18 +35,9 @@ import (
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
-	s := server.StartTestServer(b)
-	defer s.Stop()
-
-	pgURL, cleanupFn := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
-	pgURL.Path = "bench"
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
+	s, db, _ := sqlutils.SetupServer(
+		b, testingshim.TestServerParams{UseDatabase: "bench"})
+	defer s.Stopper().Stop()
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
 		b.Fatal(err)
