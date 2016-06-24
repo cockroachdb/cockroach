@@ -321,6 +321,35 @@ func setHardState(
 		hlc.ZeroTimestamp, nil, &st)
 }
 
+func updateHardState(eng engine.ReadWriter, s storagebase.ReplicaState) error {
+	// Load a potentially existing HardState as we may need to preserve
+	// information about cast votes. For example, during a Split for which
+	// another node's new right-hand side has contacted us before our left-hand
+	// side called in here to create the group.
+	rangeID := s.Desc.RangeID
+	oldHS, err := loadHardState(eng, rangeID)
+	if err != nil {
+		return err
+	}
+
+	newHS := raftpb.HardState{
+		Term:   s.TruncatedState.Term,
+		Commit: s.RaftAppliedIndex,
+	}
+
+	if !raft.IsEmptyHardState(oldHS) {
+		if oldHS.Commit > newHS.Commit {
+			newHS.Commit = oldHS.Commit
+		}
+		if oldHS.Term > newHS.Term {
+			newHS.Term = oldHS.Term
+		}
+		newHS.Vote = oldHS.Vote
+	}
+
+	return setHardState(eng, rangeID, newHS)
+}
+
 // writeInitialState bootstraps a new Raft group (i.e. it is called when we
 // bootstrap a Range, or when setting up the right hand side of a split).
 // Its main task is to persist a consistent Raft (and associated Replica) state
@@ -349,31 +378,7 @@ func writeInitialState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	// Load a potentially existing HardState as we may need to preserve
-	// information about cast votes. For example, during a Split for which
-	// another node's new right-hand side has contacted us before our left-hand
-	// side called in here to create the group.
-	oldHS, err := loadHardState(eng, rangeID)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-
-	newHS := raftpb.HardState{
-		Term:   s.TruncatedState.Term,
-		Commit: s.TruncatedState.Index,
-	}
-
-	if !raft.IsEmptyHardState(oldHS) {
-		if oldHS.Commit > newHS.Commit {
-			newHS.Commit = oldHS.Commit
-		}
-		if oldHS.Term > newHS.Term {
-			newHS.Term = oldHS.Term
-		}
-		newHS.Vote = oldHS.Vote
-	}
-
-	if err := setHardState(eng, rangeID, newHS); err != nil {
+	if err := updateHardState(eng, s); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
