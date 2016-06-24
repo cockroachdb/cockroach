@@ -4943,6 +4943,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 
 func TestReplicaDestroy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#7457")
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
