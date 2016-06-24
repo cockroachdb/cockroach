@@ -38,6 +38,12 @@ func countRangeReplicas(db *client.DB) (int, error) {
 }
 
 func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
+	if c.NumNodes() < 1 {
+		// Looks silly, but we actually start zero-node clusters in the
+		// reference tests.
+		t.Log("replication test is a no-op for empty cluster")
+		return
+	}
 	// Always talk to node 0.
 	client, dbStopper := c.NewClient(t, 0)
 	defer dbStopper.Stop()
