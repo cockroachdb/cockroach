@@ -345,42 +345,47 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 	// would happen with real RPCs.
 	t.mtc.mu.RLock()
 	defer t.mtc.mu.RUnlock()
-	if s := t.mtc.stoppers[nodeIndex]; s == nil || !s.RunAsyncTask(func() {
-		t.mtc.mu.RLock()
-		defer t.mtc.mu.RUnlock()
-		sender := t.mtc.senders[nodeIndex]
-		// Make a copy and clone txn of batch args for sending.
-		baCopy := t.args
-		if txn := baCopy.Txn; txn != nil {
-			txnClone := baCopy.Txn.Clone()
-			baCopy.Txn = &txnClone
-		}
-		br, pErr := sender.Send(t.ctx, baCopy)
-		if br == nil {
-			br = &roachpb.BatchResponse{}
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(sender, br))
-		}
-		br.Error = pErr
-
-		// On certain errors, we must advance our manual clock to ensure
-		// that the next attempt has a chance of succeeding.
-		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.NotLeaderError:
-			if tErr.Leader == nil {
-				// stores has the range, is *not* the Leader, but the
-				// Leader is not known; this can happen if the leader is removed
-				// from the group. Move the manual clock forward in an attempt to
-				// expire the lease.
-				t.mtc.expireLeaderLeases()
-			} else if t.mtc.stores[tErr.Leader.NodeID-1] == nil {
-				// The leader is known but down, so expire its lease.
-				t.mtc.expireLeaderLeases()
+	var runErr error
+	s := t.mtc.stoppers[nodeIndex]
+	if s != nil {
+		runErr = s.RunAsyncTask(func() {
+			t.mtc.mu.RLock()
+			defer t.mtc.mu.RUnlock()
+			sender := t.mtc.senders[nodeIndex]
+			// Make a copy and clone txn of batch args for sending.
+			baCopy := t.args
+			if txn := baCopy.Txn; txn != nil {
+				txnClone := baCopy.Txn.Clone()
+				baCopy.Txn = &txnClone
 			}
-		}
-		done <- kv.BatchCall{Reply: br, Err: nil}
-	}) {
+			br, pErr := sender.Send(t.ctx, baCopy)
+			if br == nil {
+				br = &roachpb.BatchResponse{}
+			}
+			if br.Error != nil {
+				panic(roachpb.ErrorUnexpectedlySet(sender, br))
+			}
+			br.Error = pErr
+
+			// On certain errors, we must advance our manual clock to ensure
+			// that the next attempt has a chance of succeeding.
+			switch tErr := pErr.GetDetail().(type) {
+			case *roachpb.NotLeaderError:
+				if tErr.Leader == nil {
+					// stores has the range, is *not* the Leader, but the
+					// Leader is not known; this can happen if the leader is removed
+					// from the group. Move the manual clock forward in an attempt to
+					// expire the lease.
+					t.mtc.expireLeaderLeases()
+				} else if t.mtc.stores[tErr.Leader.NodeID-1] == nil {
+					// The leader is known but down, so expire its lease.
+					t.mtc.expireLeaderLeases()
+				}
+			}
+			done <- kv.BatchCall{Reply: br, Err: nil}
+		})
+	}
+	if s == nil || runErr != nil {
 		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
 		t.mtc.expireLeaderLeases()
 	}

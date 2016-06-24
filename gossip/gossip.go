@@ -738,7 +738,7 @@ func (g *Gossip) bootstrap() {
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
-			stopper.RunTask(func() {
+			if err := stopper.RunTask(func() {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
@@ -753,7 +753,9 @@ func (g *Gossip) bootstrap() {
 						g.maybeSignalStalledLocked()
 					}
 				}
-			})
+			}); err != nil {
+				return
+			}
 
 			// Pause an interval before next possible bootstrap.
 			bootstrapTimer.Reset(g.bootstrapInterval)

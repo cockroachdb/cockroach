@@ -170,12 +170,13 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 				return false
 			}
 
-			return !stopper.RunTask(func() {
+			err := stopper.RunTask(func() {
 				// Try adding replica to all queues.
 				for _, q := range rs.queues {
 					q.MaybeAdd(repl, clock.Now())
 				}
 			})
+			return err != nil
 		case repl := <-rs.removed:
 			// Remove replica from all queues as applicable. Note that we still
 			// process removals while disabled.
@@ -214,20 +215,24 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				shouldStop = rs.waitAndProcess(start, clock, stopper, nil)
 			}
 
-			shouldStop = shouldStop || !stopper.RunTask(func() {
-				// Increment iteration count.
-				rs.completedScan.L.Lock()
-				rs.count++
-				rs.total += timeutil.Since(start)
-				rs.completedScan.Broadcast()
-				rs.completedScan.L.Unlock()
-				if log.V(6) {
-					log.Infof("reset replica scan iteration")
-				}
+			if !shouldStop {
+				if err := stopper.RunTask(func() {
+					// Increment iteration count.
+					rs.completedScan.L.Lock()
+					rs.count++
+					rs.total += timeutil.Since(start)
+					rs.completedScan.Broadcast()
+					rs.completedScan.L.Unlock()
+					if log.V(6) {
+						log.Infof("reset replica scan iteration")
+					}
 
-				// Reset iteration and start time.
-				start = timeutil.Now()
-			})
+					// Reset iteration and start time.
+					start = timeutil.Now()
+				}); err != nil {
+					shouldStop = true
+				}
+			}
 			if shouldStop {
 				return
 			}

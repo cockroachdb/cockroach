@@ -280,7 +280,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// reads from the channel, and can abandon the snapshot if it gets stale.
 	ch := make(chan (raftpb.Snapshot))
 
-	if r.store.Stopper().RunAsyncTask(func() {
+	if err := r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
 		snap := r.store.NewSnapshot()
 		defer snap.Close()
@@ -299,7 +299,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 				// just takes too long to use it), abandon it to save memory.
 			}
 		}
-	}) {
+	}); err == nil {
 		r.mu.snapshotChan = ch
 	} else {
 		r.store.ReleaseRaftSnapshot()

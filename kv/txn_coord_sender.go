@@ -651,7 +651,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		IntentSpans: intentSpans,
 	}
 	ba.Add(et)
-	tc.stopper.RunAsyncTask(func() {
+	if err := tc.stopper.RunAsyncTask(func() {
 		// Use the wrapped sender since the normal Sender does not allow
 		// clients to specify intents.
 		// TODO(tschottdorf): not using the existing context here since that
@@ -662,7 +662,9 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 				log.Warningf("abort due to inactivity failed for %s: %s ", txn, pErr)
 			}
 		}
-	})
+	}); err != nil {
+		log.Warning(err)
+	}
 }
 
 func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
@@ -865,9 +867,9 @@ func (tc *TxnCoordSender) updateState(
 				}
 				tc.txns[txnID] = txnMeta
 
-				if !tc.stopper.RunAsyncTask(func() {
+				if err := tc.stopper.RunAsyncTask(func() {
 					tc.heartbeatLoop(ctx, txnID)
-				}) {
+				}); err != nil {
 					// The system is already draining and we can't start the
 					// heartbeat. We refuse new transactions for now because
 					// they're likely not going to have all intents committed.
