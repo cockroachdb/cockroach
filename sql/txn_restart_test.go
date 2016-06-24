@@ -21,6 +21,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -870,12 +871,12 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 
-	clockUpdate := false
+	var clockUpdate int32
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
 		TestingCommandFilter: cmdFilters.runFilters,
 		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
-			if clockUpdate {
+			if atomic.LoadInt32(&clockUpdate) > 0 {
 				return
 			}
 
@@ -883,7 +884,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 			for _, union := range ba.Requests {
 				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
 					if bytes.Contains(req.Key, testKey) {
-						clockUpdate = true
+						atomic.AddInt32(&clockUpdate, 1)
 						now := c.Now()
 						now.WallTime += int64(5 * sql.LeaseDuration)
 						c.Update(now)
@@ -899,16 +900,16 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	server, sqlDB, _ := setupWithContext(t, &ctx)
 	defer cleanup(server, sqlDB)
 
-	restartDone := false
+	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
-			if restartDone {
+			if atomic.LoadInt32(&restartDone) > 0 {
 				return nil
 			}
 
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
 				if bytes.Contains(req.Key, testKey) {
-					restartDone = true
+					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on retry.
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
@@ -942,10 +943,10 @@ SELECT * from t.test WHERE k = 'test_key';
 		t.Fatal(err)
 	}
 
-	if !clockUpdate {
-		t.Errorf("expected clock update, but it didn't happen")
+	if u := atomic.LoadInt32(&clockUpdate); u != 1 {
+		t.Errorf("expected exacltly one clock update, but got %d", u)
 	}
-	if !restartDone {
-		t.Errorf("expected restart, but it didn't happen")
+	if u := atomic.LoadInt32(&restartDone); u != 1 {
+		t.Errorf("expected exactly one restart, but got %d", u)
 	}
 }
