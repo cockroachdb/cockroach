@@ -225,7 +225,13 @@ func (l *LocalCluster) OneShot(
 	if err := l.oneshot.Start(); err != nil {
 		return err
 	}
-	return l.oneshot.Wait()
+	err = l.oneshot.Wait()
+	if err != nil {
+		var b bytes.Buffer
+		_ = l.oneshot.Logs(&b)
+		return fmt.Errorf("%s:\n%s", err, b.String())
+	}
+	return nil
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt

@@ -21,14 +21,26 @@ import (
 	"testing"
 )
 
+func runReferenceTestWithScript(
+	t *testing.T,
+	script string,
+) {
+	if err := testDockerOneShot(t, "reference", []string{"/cockroach", "version"}); err != nil {
+		t.Skipf(`TODO(dt): No /cockroach binary in one-shot container, see #6086: %s`, err)
+	}
+
+	err := testDockerOneShot(t, "reference", []string{"/bin/bash", "-c", script})
+	if err != nil {
+		t.Errorf("expected success: %s", err)
+	}
+
+}
+
 func runReadWriteReferenceTest(
 	t *testing.T,
 	referenceBinPath string,
 	backwardReferenceTest string,
 ) {
-	if err := testDockerSingleNode(t, "reference", []string{"/cockroach", "version"}); err != nil {
-		t.Skipf(`TODO(dt): No /cockroach binary in one-shot container, see #6086: %s`, err)
-	}
 	referenceTestScript := fmt.Sprintf(`
 set -xe
 mkdir /old
@@ -41,6 +53,7 @@ bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
 $bin start &
 sleep 1
+
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
 $bin sql -e "CREATE DATABASE old"
 $bin sql -d old -e "CREATE TABLE testing_old (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
@@ -56,6 +69,10 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 
+# Scan all data (some of which may not have been touched by the SQL commands)
+# to wake up all Raft groups.
+$bin debug kv scan
+
 echo "Add a row with the new binary and render the updated data before shutting down."
 $bin sql -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > new.everything
@@ -70,10 +87,7 @@ echo "Read the modified data using the reference binary again."
 bin=/%s/cockroach
 %s
 `, referenceBinPath, referenceBinPath, backwardReferenceTest)
-	err := testDockerSingleNode(t, "reference", []string{"/bin/bash", "-c", referenceTestScript})
-	if err != nil {
-		t.Errorf("expected success: %s", err)
-	}
+	runReferenceTestWithScript(t, referenceTestScript)
 }
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
@@ -97,4 +111,24 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 $bin quit && wait
 `
 	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
+}
+
+func TestDockerMigration_7429(t *testing.T) {
+	script := `
+set -eux
+bin=/cockroach
+
+touch out
+
+function finish {
+  cat out
+}
+
+trap finish EXIT
+
+$bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
+$bin debug kv scan
+$bin quit
+`
+	runReferenceTestWithScript(t, script)
 }
