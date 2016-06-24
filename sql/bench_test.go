@@ -27,27 +27,17 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	_ "github.com/cockroachdb/pq"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
-	s := server.StartTestServer(b)
-	defer s.Stop()
-
-	pgURL, cleanupFn := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
-	pgURL.Path = "bench"
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
+	s, db, _ := serverutils.StartServer(
+		b, base.TestServerArgs{UseDatabase: "bench"})
+	defer s.Stopper().Stop()
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
 		b.Fatal(err)
@@ -58,11 +48,11 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 
 func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
-	testCluster, conns, cleanup := SetupMultinodeTestCluster(b, 3, "bench")
+	testCluster, conns, stopper := SetupMultinodeTestCluster(b, 3, "bench")
 	if err := testCluster.WaitForFullReplication(); err != nil {
 		b.Fatal(err)
 	}
-	defer cleanup()
+	defer stopper.Stop()
 	f(b, conns[0])
 }
 

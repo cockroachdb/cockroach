@@ -24,10 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -35,14 +34,14 @@ import (
 // a rename operation.
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	counter := int64(keys.MaxReservedDescID + 1)
 
 	// Table creation should fail, and nothing should have been written.
 	oldDBID := sqlbase.ID(counter)
-	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
+	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
 	counter++
@@ -50,7 +49,7 @@ func TestRenameTable(t *testing.T) {
 	// Create table in 'test'.
 	tableCounter := counter
 	oldName := "foo"
-	if _, err := sqlDB.Exec(`CREATE TABLE test.foo (k INT PRIMARY KEY, v int)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE test.foo (k INT PRIMARY KEY, v int)`); err != nil {
 		t.Fatal(err)
 	}
 	counter++
@@ -71,14 +70,14 @@ func TestRenameTable(t *testing.T) {
 
 	// Create database test2.
 	newDBID := sqlbase.ID(counter)
-	if _, err := sqlDB.Exec(`CREATE DATABASE test2`); err != nil {
+	if _, err := db.Exec(`CREATE DATABASE test2`); err != nil {
 		t.Fatal(err)
 	}
 	counter++
 
 	// Move table to test2 and change its name as well.
 	newName := "bar"
-	if _, err := sqlDB.Exec(`ALTER TABLE test.foo RENAME TO test2.bar`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE test.foo RENAME TO test2.bar`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,7 +129,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// renameUnblocked is used to block the rename schema change until the test
 	// doesn't need the old name->id mapping to exist anymore.
 	renameUnblocked := make(chan interface{})
-	serverParams := testingshim.TestServerParams{
+	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
 				SyncSchemaChangersRenameOldNameNotInUseNotification: func() {
@@ -160,8 +159,8 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 				}
 			}
 		}
-	s, db, kvClient, cleanup := sqlutils.SetupServerWithParams(t, serverParams)
-	defer cleanup()
+	s, db, kvDB := serverutils.StartServer(t, serverParams)
+	defer s.Stopper().Stop()
 
 	sql := `
 CREATE DATABASE test;
@@ -172,7 +171,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvClient, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	mu.Lock()
 	waitTableID = tableDesc.ID
 	mu.Unlock()
@@ -245,8 +244,8 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 // better or worse.
 func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, db, _, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	sql := `
 CREATE DATABASE test;
@@ -286,8 +285,8 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 // series of renames in a transaction.
 func TestSeriesOfRenames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, db, _, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	sql := `
 CREATE DATABASE test;

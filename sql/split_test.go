@@ -25,18 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/pkg/errors"
 )
-
-// getFastScanContext returns a test context with fast scan.
-func getFastScanContext() server.Context {
-	c := server.MakeTestContext()
-	c.ScanInterval = time.Millisecond
-	c.ScanMaxIdleTime = time.Millisecond
-	return c
-}
 
 // getRangeKeys returns the end keys of all ranges.
 func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
@@ -75,9 +68,13 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 // as new tables get created.
 func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := getFastScanContext()
-	s, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(s, sqlDB)
+
+	params, _ := createTestServerParams()
+	// We want fast scan.
+	params.ScanInterval = time.Millisecond
+	params.ScanMaxIdleTime = time.Millisecond
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	expectedInitialRanges := server.ExpectedInitialRangeCount()
 

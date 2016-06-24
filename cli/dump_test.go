@@ -28,8 +28,13 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
+<<<<<<< HEAD
+	"github.com/cockroachdb/cockroach/server/testingshim"
+=======
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
+>>>>>>> 436e7c9... testutils/serverutils: combine TestServer utils
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -124,8 +129,8 @@ INSERT INTO t VALUES
 func TestDumpBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestDumpBytes")
 	defer cleanup()
@@ -182,8 +187,8 @@ var randomTestTime = flag.Duration("duration-random", time.Second, "duration for
 func TestDumpRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := server.StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestDumpRandom")
 	defer cleanup()
