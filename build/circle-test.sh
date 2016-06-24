@@ -88,7 +88,7 @@ prepare_artifacts() {
       function post() {
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
         "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
-        -d "${2:0:30000}"
+        -d "${2}"
       }
 
       echo "Posting an issue"
@@ -102,7 +102,7 @@ prepare_artifacts() {
       fi
 
       # JSON monster to post the issue.
-      post issues "{ \"title\": \"circleci: failed tests: ${FAILEDTESTS}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\", \"Robot\"], \"milestone\": 4 }" > /dev/null
+      post issues "{ \"title\": \"circleci: failed tests: ${FAILEDTESTS}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()[:30000]).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\", \"Robot\"], \"milestone\": 4 }" > /dev/null
       echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
   fi
 
