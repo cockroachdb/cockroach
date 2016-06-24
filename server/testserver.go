@@ -72,22 +72,6 @@ func StartTestServer(t util.Tester) TestServer {
 	return StartTestServerWithContext(t, nil)
 }
 
-// StartTestServerJoining starts an in-memory test server that attempts to join `other`.
-func StartTestServerJoining(t util.Tester, other TestServer) TestServer {
-	ctx := MakeTestContext()
-	ctx.JoinUsing = other.ServingAddr()
-	s := TestServer{Ctx: &ctx}
-	if err := s.Start(); err != nil {
-		if t != nil {
-			t.Fatalf("Could not start server: %v", err)
-		} else {
-			log.Fatalf("Could not start server: %v", err)
-		}
-	}
-	log.Infof("Node ID: %d", s.Gossip().GetNodeID())
-	return s
-}
-
 // StartInsecureTestServer starts an insecure in-memory test server.
 func StartInsecureTestServer(t util.Tester) TestServer {
 	ctx := MakeTestContext()
