@@ -555,9 +555,12 @@ func (txn *Txn) Exec(
 		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
-			// Wrap a non-retryable error so that a caller can inspect.
-			if _, retryable := err.(*roachpb.RetryableTxnError); err != nil && !retryable {
-				err = &AutoCommitError{cause: err}
+			if err != nil {
+				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+					// We can't retry, so let the caller know we tried to
+					// autocommit.
+					err = &AutoCommitError{cause: err}
+				}
 			}
 		}
 
