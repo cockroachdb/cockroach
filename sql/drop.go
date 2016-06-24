@@ -218,15 +218,23 @@ func (n *dropIndexNode) Start() error {
 		case sqlbase.DescriptorActive:
 			idx := tableDesc.Indexes[i]
 
-			// If an index is either end of a FK constraint, it cannot be dropped.
 			if idx.ForeignKey != nil {
-				if n.n.DropBehavior == parser.DropCascade {
-					return fmt.Errorf("CASCADE is not yet supported and index %q is in use as a foreign key constraint", idx.Name)
+				if n.n.DropBehavior != parser.DropCascade {
+					return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 				}
-				return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+				if err := n.p.removeFKBackReference(tableDesc, idx); err != nil {
+					return err
+				}
 			}
-			if err := checkIndexDependees(idx, "index", idx.Name, n.p.txn, n.n.DropBehavior); err != nil {
-				return err
+
+			for _, ref := range idx.ReferencedBy {
+				fetched, err := n.p.canRemoveFK(idx.Name, ref, n.n.DropBehavior)
+				if err != nil {
+					return err
+				}
+				if err := n.p.removeFK(ref, fetched); err != nil {
+					return err
+				}
 			}
 
 			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
@@ -274,25 +282,6 @@ type dropTableNode struct {
 	td []*sqlbase.TableDescriptor
 }
 
-func checkIndexDependees(
-	idx sqlbase.IndexDescriptor, what, name string, txn *client.Txn, behavior parser.DropBehavior,
-) error {
-	if len(idx.ReferencedBy) == 0 {
-		return nil
-	}
-	t, err := getTableDescFromID(txn, idx.ReferencedBy[0].Table)
-	if err != nil {
-		return errors.Errorf("%s %q is referenced by table ID %d, err resolving ID: %v",
-			what, name, idx.ReferencedBy[0].Table, err)
-	}
-	if behavior == parser.DropCascade {
-		return fmt.Errorf(
-			"CASCADE is not yet supported and %s %q is referenced by foreign key from table %q",
-			what, name, t.Name)
-	}
-	return fmt.Errorf("%s %q is referenced by foreign key from table %q", what, name, t.Name)
-}
-
 // DropTable drops a table.
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
@@ -311,13 +300,17 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			// Table does not exist, but we want it to: error out.
 			return nil, sqlbase.NewUndefinedTableError(name.String())
 		}
+
 		for _, idx := range droppedDesc.AllNonDropIndexes() {
-			if err := checkIndexDependees(idx, "table", droppedDesc.Name, p.txn, n.DropBehavior); err != nil {
-				return nil, err
+			for _, ref := range idx.ReferencedBy {
+				if _, err := p.canRemoveFK(droppedDesc.Name, ref, n.DropBehavior); err != nil {
+					return nil, err
+				}
 			}
 		}
 		td = append(td, droppedDesc)
 	}
+
 	if len(td) == 0 {
 		return &emptyNode{}, nil
 	}
@@ -326,6 +319,38 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 
 func (n *dropTableNode) expandPlan() error {
 	return nil
+}
+
+func (p *planner) canRemoveFK(
+	from string, ref *sqlbase.TableAndIndexID, behavior parser.DropBehavior,
+) (*sqlbase.TableDescriptor, error) {
+	table, err := getTableDescFromID(p.txn, ref.Table)
+	if err != nil {
+		return nil, err
+	}
+	if behavior != parser.DropCascade {
+		return nil, fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
+	}
+	if err := p.checkPrivilege(table, privilege.CREATE); err != nil {
+		return nil, err
+	}
+	return table, nil
+}
+
+func (p *planner) removeFK(ref *sqlbase.TableAndIndexID, table *sqlbase.TableDescriptor) error {
+	if table == nil {
+		var err error
+		table, err = getTableDescFromID(p.txn, ref.Table)
+		if err != nil {
+			return err
+		}
+	}
+	idx, err := table.FindIndexByID(ref.Index)
+	if err != nil {
+		return err
+	}
+	idx.ForeignKey = nil
+	return p.saveNonmutationAndNotify(table)
 }
 
 func (n *dropTableNode) Start() error {
@@ -403,11 +428,18 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	// If this table had foreign key relationships to other tables, remove the
-	// back-references from those tables.
+	// Remove FK relationships.
 	for _, idx := range tableDesc.AllNonDropIndexes() {
-		if err := p.removeFKBackReference(tableDesc, idx); err != nil {
-			return err
+		if idx.ForeignKey != nil {
+			if err := p.removeFKBackReference(tableDesc, idx); err != nil {
+				return err
+			}
+		}
+		for _, ref := range idx.ReferencedBy {
+			// Nil forces re-fetching tables, since they may have been modified.
+			if err := p.removeFK(ref, nil); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -434,33 +466,20 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 func (p *planner) removeFKBackReference(
 	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
-	if idx.ForeignKey != nil {
-		t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
-		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v",
-				idx.ForeignKey.Table, err)
-		}
-		targetIdx, err := t.FindIndexByID(idx.ForeignKey.Index)
-		if err != nil {
-			return err
-		}
-		for k, ref := range targetIdx.ReferencedBy {
-			if ref.Table == tableDesc.ID {
-				targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
-			}
-		}
-		if err := t.SetUpVersion(); err != nil {
-			return err
-		}
-		if err := t.Validate(); err != nil {
-			return err
-		}
-		if err := p.writeTableDesc(t); err != nil {
-			return err
-		}
-		p.notifySchemaChange(t.ID, sqlbase.InvalidMutationID)
+	t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
+	if err != nil {
+		return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
 	}
-	return nil
+	targetIdx, err := t.FindIndexByID(idx.ForeignKey.Index)
+	if err != nil {
+		return err
+	}
+	for k, ref := range targetIdx.ReferencedBy {
+		if ref.Table == tableDesc.ID {
+			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
+		}
+	}
+	return p.saveNonmutationAndNotify(t)
 }
 
 // truncateAndDropTable batches all the commands required for truncating and deleting the
