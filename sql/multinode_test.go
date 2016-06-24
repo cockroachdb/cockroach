@@ -65,6 +65,7 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (*server.Mu
 		cleanups = append(cleanups, cleanupFn)
 		conns = append(conns, db)
 	}
+
 	if _, err := conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
 		t.Fatal(err)
 	}
