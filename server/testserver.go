@@ -54,10 +54,15 @@ const (
 )
 
 // StartTestServerWithContext starts an in-memory test server.
-// ctx can be nil, in which case a default context will be created.
-func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
+// ctx can be nil, in which case a default context will be created. If not nil,
+// the Server takes ownership of the Context; it cannot be reused by the caller.
+// A stopper can be passed in and shared between multiple TestServers if they
+// all need to be stopped at once. It can be nil otherwise.
+func StartTestServerWithContext(
+	t util.Tester, ctx *Context, stopper *stop.Stopper,
+) TestServer {
 	s := TestServer{Ctx: ctx}
-	if err := s.Start(); err != nil {
+	if err := s.StartWithStopper(stopper); err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
 		} else {
@@ -69,23 +74,7 @@ func StartTestServerWithContext(t util.Tester, ctx *Context) TestServer {
 
 // StartTestServer starts an in-memory test server.
 func StartTestServer(t util.Tester) TestServer {
-	return StartTestServerWithContext(t, nil)
-}
-
-// StartTestServerJoining starts an in-memory test server that attempts to join `other`.
-func StartTestServerJoining(t util.Tester, other TestServer) TestServer {
-	ctx := MakeTestContext()
-	ctx.JoinUsing = other.ServingAddr()
-	s := TestServer{Ctx: &ctx}
-	if err := s.Start(); err != nil {
-		if t != nil {
-			t.Fatalf("Could not start server: %v", err)
-		} else {
-			log.Fatalf("Could not start server: %v", err)
-		}
-	}
-	log.Infof("Node ID: %d", s.Gossip().GetNodeID())
-	return s
+	return StartTestServerWithContext(t, nil, nil)
 }
 
 // StartInsecureTestServer starts an insecure in-memory test server.
@@ -141,7 +130,8 @@ func MakeTestContext() Context {
 // A TestServer encapsulates an in-memory instantiation of a cockroach
 // node with a single store. Example usage of a TestServer follows:
 //
-//   s := server.StartTestServer(t)
+//   ctx := server.MakeTestContext()
+//   s := server.StartTestServerWithContext(t, ctx, nil /* stopper */)
 //   defer s.Stop()
 //
 type TestServer struct {
@@ -207,7 +197,7 @@ func (ts *TestServer) Start() error {
 }
 
 // StartWithStopper is the same as Start, but allows passing a stopper
-// explicitly.
+// explicitly. Calling stopper.Stop() has the same effect as TestServer.Stop().
 func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	if ts.Ctx == nil {
 		ctx := MakeTestContext()
@@ -321,6 +311,8 @@ func (ts *TestServer) ServingPort() (string, error) {
 }
 
 // Stop stops the TestServer.
+// This is equivalent to calling stopper.Stop() on the stopper used with
+// Start(), if a stopper was specified.
 func (ts *TestServer) Stop() {
 	if r := recover(); r != nil {
 		panic(r)

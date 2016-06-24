@@ -46,7 +46,10 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 	first := server.StartTestServer(t)
 	servers = append(servers, first)
 	for i := 1; i < nodes; i++ {
-		servers = append(servers, server.StartTestServerJoining(t, first))
+		ctx := server.MakeTestContext()
+		ctx.JoinUsing = first.ServingAddr()
+		servers = append(servers,
+			server.StartTestServerWithContext(t, &ctx, nil /* stopper */))
 	}
 
 	var conns []*gosql.DB
