@@ -2297,7 +2297,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 	}
 	var hasLease bool
 	var pErr *roachpb.Error
-	if !r.store.Stopper().RunTask(func() {
+	if runErr := r.store.Stopper().RunTask(func() {
 		// Check for or obtain the lease, if none active.
 		pErr = r.redirectOnOrAcquireLeaderLease(ctx)
 		hasLease = pErr == nil
@@ -2334,8 +2334,8 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 				log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
 			}
 		}
-	}) {
-		pErr = roachpb.NewErrorf("node is stopping")
+	}); runErr != nil {
+		pErr = roachpb.NewError(runErr)
 	}
 	return hasLease, pErr
 }

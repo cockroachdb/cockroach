@@ -17,6 +17,7 @@
 package stop
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,6 +27,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/util/caller"
 )
+
+var errNodeStopping = errors.New("node is stopping")
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()
@@ -153,43 +156,43 @@ func (s *Stopper) AddCloser(c Closer) {
 // goroutines launched to do periodic work and the kv/db.go gateway which
 // accepts external client requests.
 //
-// Returns false to indicate that the system is currently draining and
+// Returns an error to indicate that the system is currently draining and
 // function f was not called.
-func (s *Stopper) RunTask(f func()) bool {
+func (s *Stopper) RunTask(f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
-		return false
+		return errNodeStopping
 	}
 	// Call f.
 	defer s.runPostlude(key)
 	f()
-	return true
+	return nil
 }
 
-// RunAsyncTask runs function f in a goroutine. It returns false when the
-// Stopper is draining and the function is not executed.
-func (s *Stopper) RunAsyncTask(f func()) bool {
+// RunAsyncTask runs function f in a goroutine. It returns an error when the
+// Stopper is draining, in which case the function is not executed.
+func (s *Stopper) RunAsyncTask(f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
-		return false
+		return errNodeStopping
 	}
 	// Call f.
 	go func() {
 		defer s.runPostlude(key)
 		f()
 	}()
-	return true
+	return nil
 }
 
-// RunLimitedAsyncTask runs function f in a goroutine, using the given
-// channel as a semaphore to limit the number of tasks that are run
-// concurrently to the channel's capacity. Blocks until the semaphore
-// is available in order to push back on callers that may be trying to
-// create many tasks. Returns false if the Stopper is draining and the
-// function is not executed.
-func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) bool {
+// RunLimitedAsyncTask runs function f in a goroutine, using the given channel
+// as a semaphore to limit the number of tasks that are run concurrently to
+// the channel's capacity. Blocks until the semaphore is available in order to
+// push back on callers that may be trying to create many tasks. Returns an
+// error if the Stopper is draining, in which case the function is not
+// executed.
+func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 
@@ -197,27 +200,27 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) bool {
 	select {
 	case sem <- struct{}{}:
 	case <-s.ShouldDrain():
-		return false
+		return errNodeStopping
 	default:
 		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
 		case <-s.ShouldDrain():
-			return false
+			return errNodeStopping
 		}
 	}
 
 	if !s.runPrelude(key) {
 		<-sem
-		return false
+		return errNodeStopping
 	}
 	go func() {
 		defer s.runPostlude(key)
 		defer func() { <-sem }()
 		f()
 	}()
-	return true
+	return nil
 }
 
 func (s *Stopper) runPrelude(key taskKey) bool {

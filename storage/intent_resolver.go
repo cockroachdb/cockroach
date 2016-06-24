@@ -267,7 +267,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 	for _, item := range intents {
 		if item.args.Method() != roachpb.EndTransaction {
-			stopper.RunLimitedAsyncTask(ir.sem, func() {
+			if err := stopper.RunLimitedAsyncTask(ir.sem, func() {
 				// Everything here is best effort; give up rather than waiting
 				// too long (helps avoid deadlocks during test shutdown,
 				// although this is imperfect due to the use of an
@@ -300,9 +300,12 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 					log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pushErr)
 					return
 				}
-			})
+			}); err != nil {
+				log.Warningf("failed to resolve intents: %s", err)
+				return
+			}
 		} else { // EndTransaction
-			stopper.RunLimitedAsyncTask(ir.sem, func() {
+			if err := stopper.RunLimitedAsyncTask(ir.sem, func() {
 				ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 				defer cancel()
 
@@ -339,7 +342,10 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				if _, pErr := r.addWriteCmd(ctxWithTimeout, ba, nil /* nil */); pErr != nil {
 					log.Warningf("could not GC completed transaction: %s", pErr)
 				}
-			})
+			}); err != nil {
+				log.Warningf("failed to resolve intents: %s", err)
+				return
+			}
 		}
 	}
 }
@@ -417,15 +423,16 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 			return pErr.GoError()
 		}
 		wg.Add(1)
-		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
+		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {
 				log.Warningf("unable to resolve local intents; %s", err)
 			}
-		}) {
+		}) != nil {
 			// Still run the task when draining. Our caller already has a task and
 			// going async here again is merely for performance, but some intents
 			// need to be resolved because they might block other tasks. See #1684.
 			// Note that handleSkippedIntents has a TODO in case #1684 comes back.
+			// This is ripe for removal.
 			if err := action(); err != nil {
 				return err
 			}
@@ -440,13 +447,14 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 			// TODO(tschottdorf): no tracing here yet.
 			return r.store.DB().Run(b)
 		}
-		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
+		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {
 				log.Warningf("unable to resolve external intents: %s", err)
 			}
-		}) {
+		}) != nil {
 			// As with local intents, try async to not keep the caller waiting, but
 			// when draining just go ahead and do it synchronously. See #1684.
+			// This is ripe for removal.
 			if err := action(); err != nil {
 				return err
 			}

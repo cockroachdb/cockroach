@@ -103,7 +103,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Replica:     nextLeaseHolder,
 		},
 	}
-	if !replica.store.Stopper().RunAsyncTask(func() {
+	if replica.store.Stopper().RunAsyncTask(func() {
 		// Propose a LeaderLease command and wait for it to apply.
 		var execPErr *roachpb.Error
 		ba := roachpb.BatchRequest{}
@@ -150,7 +150,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 		p.llChans = p.llChans[:0]
 		p.nextLease = roachpb.Lease{}
-	}) {
+	}) != nil {
 		// We failed to start the asynchronous task. Send a blank NotLeaderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.

@@ -753,13 +753,13 @@ func (s *adminServer) waitForStoreFrozen(
 			// Run a limited, non-blocking task. That means the task simply
 			// won't run if the semaphore is full (or the node is draining).
 			// Both are handled by the surrounding retry loop.
-			if !s.server.stopper.RunLimitedAsyncTask(sem, func() {
+			if err := s.server.stopper.RunLimitedAsyncTask(sem, func() {
 				if err := action(); err != nil {
 					sendErr(err)
 				}
-			}) {
+			}); err != nil {
 				// Node draining.
-				sendErr(errors.New("node is shutting down"))
+				sendErr(err)
 				break
 			}
 		}

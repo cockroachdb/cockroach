@@ -455,9 +455,11 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
-		stopper.RunAsyncTask(func() {
+		if err := stopper.RunAsyncTask(func() {
 			n.bootstrapStores(bootstraps, stopper)
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -651,7 +653,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 // NodeStatusRecorder and persists them to the cockroach data store.
 func (n *Node) writeSummaries() error {
 	var err error
-	n.stopper.RunTask(func() {
+	if runErr := n.stopper.RunTask(func() {
 		nodeStatus := n.recorder.GetStatusSummary()
 		if nodeStatus != nil {
 			key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
@@ -673,7 +675,9 @@ func (n *Node) writeSummaries() error {
 				log.Infof("node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 			}
 		}
-	})
+	}); runErr != nil {
+		err = runErr
+	}
 	return err
 }
 
@@ -800,8 +804,8 @@ func (n *Node) Batch(
 		br.Error = pErr
 	}
 
-	if !n.stopper.RunTask(f) {
-		return nil, errors.Errorf("node %d stopped", n.Descriptor.NodeID)
+	if err := n.stopper.RunTask(f); err != nil {
+		return nil, err
 	}
 	return br, nil
 }

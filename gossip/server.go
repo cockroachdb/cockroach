@@ -97,11 +97,14 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
-	s.stopper.RunTask(func() {
+	if s.stopper.RunTask(func() {
 		s.stopper.RunWorker(func() {
 			errCh <- s.gossipReceiver(&args, send, stream.Recv)
 		})
-	})
+	}) != nil {
+		// Node stopped; exit without error.
+		return nil
+	}
 
 	reply := new(Response)
 

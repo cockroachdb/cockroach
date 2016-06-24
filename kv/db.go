@@ -117,8 +117,8 @@ func (s *DBServer) Batch(
 		br.Error = pErr
 	}
 
-	if !s.stopper.RunTask(f) {
-		err = errors.Errorf("node stopped")
+	if runErr := s.stopper.RunTask(f); runErr != nil {
+		err = runErr
 	}
 	return br, err
 }

@@ -943,7 +943,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
-	s.stopper.RunAsyncTask(func() {
+	if s.stopper.RunAsyncTask(func() {
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -956,7 +956,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return true
 			}
 			wg.Add(1)
-			if !s.stopper.RunLimitedAsyncTask(sem, func() {
+			if s.stopper.RunLimitedAsyncTask(sem, func() {
 				defer wg.Done()
 				desc := r.Desc()
 				var ba roachpb.BatchRequest
@@ -979,7 +979,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 					// across various nodes' logs.
 					atomic.AddInt64(&unfrozen, 1)
 				}
-			}) {
+			}) != nil {
 				wg.Done()
 			}
 			return true
@@ -988,7 +988,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if unfrozen > 0 {
 			log.Infof("reactivated %d frozen Ranges", unfrozen)
 		}
-	})
+	}) != nil {
+		close(doneUnfreezing)
+	}
 	// We don't want to jump into gossiping too early - if the first range is
 	// frozen, that means waiting for the next attempt to happen. Instead,
 	// wait for a little bit and if things take too long, let the Gossip

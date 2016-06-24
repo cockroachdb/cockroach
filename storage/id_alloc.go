@@ -88,15 +88,13 @@ func (ia *idAllocator) start() {
 		for {
 			var newValue int64
 			for newValue <= int64(ia.minID) {
-				var (
-					err error
-					res client.KeyValue
-				)
+				var err error
+				var res client.KeyValue
 				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
-					if !ia.stopper.RunTask(func() {
+					if ia.stopper.RunTask(func() {
 						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
-					}) {
+					}) != nil {
 						return
 					}
 					if err == nil {
