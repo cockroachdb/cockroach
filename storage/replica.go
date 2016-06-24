@@ -240,6 +240,11 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	if r.mu.destroyed != nil {
 		return r.mu.destroyed
 	}
+	if r.mu.replicaID == 0 {
+		// The replica's raft group has not yet been configured (i.e. the replica
+		// was created from a preemptive snapshot).
+		return nil
+	}
 
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(&raft.Config{
@@ -340,8 +345,10 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if replicaID == 0 {
 		_, repDesc := desc.FindReplica(r.store.StoreID())
 		if repDesc == nil {
-			return errors.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in %s)",
-				r.store.StoreID(), desc)
+			// This is intentionally not an error and is the code path exercised
+			// during preemptive snapshots. The replica ID will be sent when the
+			// actual raft replica change occurs.
+			return nil
 		}
 		replicaID = repDesc.ReplicaID
 	}

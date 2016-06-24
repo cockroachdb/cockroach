@@ -534,10 +534,13 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	replicaID := r.mu.replicaID
 	r.mu.Unlock()
 
-	log.Infof("replica %d received snapshot for range %d at index %d. encoded size=%d, %d KV pairs, %d log entries",
-		replicaID, desc.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
+	log.Infof("replica %d received snapshot for range %d at index %d. "+
+		"encoded size=%d, %d KV pairs, %d log entries",
+		replicaID, desc.RangeID, snap.Metadata.Index,
+		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %d applied snapshot for range %d in %s", replicaID, desc.RangeID, timeutil.Since(start))
+		log.Infof("replica %d applied snapshot for range %d in %s",
+			replicaID, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
@@ -591,6 +594,21 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	if s.RaftAppliedIndex != snap.Metadata.Index {
 		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
 			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
+	}
+
+	if replicaID == 0 {
+		// The replica is not part of the Raft group so we need to write the
+		// initial raft state for the replica.
+		ms, err := writeInitialState(batch, s.Stats, desc)
+		if err != nil {
+			return 0, errors.Errorf("unable to write initial state: %s", err)
+		}
+		if err := setMVCCStats(batch, r.RangeID, ms); err != nil {
+			return 0, errors.Errorf("unable to write MVCC stats: %s", err)
+		}
+		if s, err = loadState(batch, &desc); err != nil {
+			return 0, err
+		}
 	}
 
 	if err := batch.Commit(); err != nil {

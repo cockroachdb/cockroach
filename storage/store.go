@@ -2081,10 +2081,11 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	// Lazily create the group.
 	r, err := s.getOrCreateReplicaLocked(req.GroupID, req.ToReplica.ReplicaID,
 		req.FromReplica)
+	uninitialized := err != nil || r.mu.replicaID == 0
 	// TODO(bdarnell): is it safe to release the store lock here?
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
-	if err != nil {
+	if err != nil || (uninitialized && req.Message.Type != raftpb.MsgSnap) {
 		// If getOrCreateReplicaLocked returns an error, log it at V(1)
 		// instead of returning it (where the caller will log it as
 		// Error). Errors here generally mean that the sender is out of
@@ -2094,10 +2095,18 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		// sender then we could prompt the sender to GC this replica
 		// immediately.
 		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %s",
+			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %v",
 				req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
 		}
 		return nil
+	}
+
+	if uninitialized && (req.Message.Type == raftpb.MsgSnap) {
+		// Allow snapshots to be applied to uninitialized replicas (i.e. replicas
+		// with an ID of 0). In particular, this allows snapshots to be applied
+		// before a replica is added to the raft group.
+		_, err := r.applySnapshot(req.Message.Snapshot)
+		return err
 	}
 
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
