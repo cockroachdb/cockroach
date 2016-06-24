@@ -177,7 +177,7 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 		}
 		for i := 0; i < concurrency; i++ {
 			localI := i
-			s.RunAsyncTask(func() {
+			if err := s.RunAsyncTask(func() {
 				for timeutil.Now().Before(deadline) {
 					select {
 					case <-s.ShouldDrain():
@@ -186,7 +186,9 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 					}
 					b.Invoke(localI)
 				}
-			})
+			}); err != nil {
+				t.Fatal(err)
+			}
 		}
 		select {
 		case <-stopper:

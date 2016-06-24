@@ -385,12 +385,14 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				repl := bq.pop()
 				bq.mu.Unlock()
 				if repl != nil {
-					stopper.RunTask(func() {
+					if stopper.RunTask(func() {
 						if err := bq.processReplica(repl, clock); err != nil {
 							// Maybe add failing replica to purgatory if the queue supports it.
 							bq.maybeAddToPurgatory(repl, err, clock, stopper)
 						}
-					})
+					}) != nil {
+						return
+					}
 				}
 				if bq.Length() == 0 {
 					nextTime = nil
@@ -495,11 +497,13 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 				}
 				bq.mu.Unlock()
 				for _, repl := range repls {
-					stopper.RunTask(func() {
+					if stopper.RunTask(func() {
 						if err := bq.processReplica(repl, clock); err != nil {
 							bq.maybeAddToPurgatory(repl, err, clock, stopper)
 						}
-					})
+					}) != nil {
+						return
+					}
 				}
 				bq.mu.Lock()
 				if len(bq.mu.purgatory) == 0 {

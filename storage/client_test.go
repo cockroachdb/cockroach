@@ -345,7 +345,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 	// would happen with real RPCs.
 	t.mtc.mu.RLock()
 	defer t.mtc.mu.RUnlock()
-	if s := t.mtc.stoppers[nodeIndex]; s == nil || !s.RunAsyncTask(func() {
+	if s := t.mtc.stoppers[nodeIndex]; s == nil || s.RunAsyncTask(func() {
 		t.mtc.mu.RLock()
 		defer t.mtc.mu.RUnlock()
 		sender := t.mtc.senders[nodeIndex]
@@ -380,7 +380,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 			}
 		}
 		done <- kv.BatchCall{Reply: br, Err: nil}
-	}) {
+	}) != nil {
 		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
 		t.mtc.expireLeaderLeases()
 	}
