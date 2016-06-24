@@ -29,6 +29,7 @@ import (
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -193,12 +194,12 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+	params, _ := createTestServerParams()
+	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -371,12 +372,12 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// The descriptor changes made must have an immediate effect.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+	params, _ := createTestServerParams()
+	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -494,12 +495,12 @@ func TestOperationsWithUniqueColumnMutation(t *testing.T) {
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+	params, _ := createTestServerParams()
+	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
@@ -642,12 +643,12 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+	params, _ := createTestServerParams()
+	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -848,8 +849,8 @@ func TestTableMutationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Disable synchronous and asynchronous schema change processing so that
 	// the mutations get queued up.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs = base.TestingKnobs{
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &csql.ExecutorTestingKnobs{
 			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
@@ -859,9 +860,8 @@ func TestTableMutationQueue(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-
-	server, sqlDB, kvDB := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`

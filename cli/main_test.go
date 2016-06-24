@@ -17,12 +17,22 @@
 package cli_test
 
 import (
+	"os"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 )
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
+}
+
+func TestMain(m *testing.M) {
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	os.Exit(m.Run())
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go

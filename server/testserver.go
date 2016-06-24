@@ -19,9 +19,11 @@ package server
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -29,14 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -53,63 +53,10 @@ const (
 	initialSplitsTimeout = 10 * time.Second
 )
 
-// StartTestServerWithContext starts an in-memory test server.
-// ctx can be nil, in which case a default context will be created.
-func StartTestServerWithContext(t util.Tester, ctx *Context, startParams StartParams) TestServer {
-	s := TestServer{Ctx: ctx}
-	var err error
-	err = s.StartWithStopper(nil, startParams)
-	if err != nil {
-		if t != nil {
-			t.Fatalf("Could not start server: %v", err)
-		} else {
-			log.Fatalf("Could not start server: %v", err)
-		}
-	}
-	return s
-}
-
-// StartTestServer starts an in-memory test server.
-func StartTestServer(t util.Tester) TestServer {
-	return StartTestServerWithContext(t, nil, StartParams{Nodes: 1})
-}
-
-// StartTestServerJoining starts an in-memory test server that attempts to join `other`.
-func StartTestServerJoining(t util.Tester, other TestServer) TestServer {
-	ctx := MakeTestContext()
-	ctx.JoinUsing = other.ServingAddr()
-	s := TestServer{Ctx: &ctx}
-	if err := s.Start(); err != nil {
-		if t != nil {
-			t.Fatalf("Could not start server: %v", err)
-		} else {
-			log.Fatalf("Could not start server: %v", err)
-		}
-	}
-	log.Infof("Node ID: %d", s.Gossip().GetNodeID())
-	return s
-}
-
-// StartInsecureTestServer starts an insecure in-memory test server.
-func StartInsecureTestServer(t util.Tester) TestServer {
-	ctx := MakeTestContext()
-	ctx.Insecure = true
-	s := TestServer{Ctx: &ctx}
-
-	if err := s.Start(); err != nil {
-		if t != nil {
-			t.Fatalf("Could not start server: %v", err)
-		} else {
-			log.Fatalf("Could not start server: %v", err)
-		}
-	}
-	return s
-}
-
-// MakeTestContext returns a context for testing. It overrides the
+// makeTestContext returns a context for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
-func MakeTestContext() Context {
+func makeTestContext() Context {
 	ctx := MakeContext()
 
 	// MaxOffset is the maximum offset for clocks in the cluster.
@@ -140,61 +87,58 @@ func MakeTestContext() Context {
 	return ctx
 }
 
-// A TestServer encapsulates an in-memory instantiation of a cockroach
-// node with a single store. Example usage of a TestServer follows:
+// makeTestContextFromParams creates a Context from a TestServerParams.
+func makeTestContextFromParams(params base.TestServerArgs) Context {
+	ctx := makeTestContext()
+	ctx.TestingKnobs = params.Knobs
+	if params.JoinAddr != "" {
+		ctx.JoinUsing = params.JoinAddr
+	}
+	ctx.Insecure = params.Insecure
+	ctx.SocketFile = params.SocketFile
+	if params.MetricsSampleInterval != time.Duration(0) {
+		ctx.MetricsSampleInterval = params.MetricsSampleInterval
+	}
+	if params.MaxOffset != time.Duration(0) {
+		ctx.MaxOffset = params.MaxOffset
+	}
+	if params.ScanInterval != time.Duration(0) {
+		ctx.ScanInterval = params.ScanInterval
+	}
+	if params.ScanMaxIdleTime != time.Duration(0) {
+		ctx.ScanMaxIdleTime = params.ScanMaxIdleTime
+	}
+	if params.SSLCA != "" {
+		ctx.SSLCA = params.SSLCA
+	}
+	if params.SSLCert != "" {
+		ctx.SSLCert = params.SSLCert
+	}
+	if params.SSLCertKey != "" {
+		ctx.SSLCertKey = params.SSLCertKey
+	}
+	ctx.JoinUsing = params.JoinAddr
+	return ctx
+}
+
+// A TestServer encapsulates an in-memory instantiation of a cockroach node with
+// a single store. It provides tests with access to Server internals.
+// Where possible, it should be used through the
+// testingshim.TestServerInterface.
 //
-//   s := server.StartTestServer(t)
-//   defer s.Stop()
+// Example usage of a TestServer:
+//
+//   s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+//   defer s.Stopper().Stop()
+//   // If really needed, in tests that can depend on server, downcast to
+//   // server.TestServer:
+//   ts := s.(*server.TestServer)
 //
 type TestServer struct {
 	// Ctx is the context used by this server.
 	Ctx *Context
 	// server is the embedded Cockroach server struct.
 	*Server
-	StoresPerNode int
-}
-
-// StartParams are knobs that determine the properties of a testserver when it
-// initializes.
-type StartParams struct {
-	Nodes int
-}
-
-// A MultinodeTestCluster is an array of in-memory nodes connected to each other.
-type MultinodeTestCluster struct {
-	Servers []TestServer
-}
-
-// WaitForFullReplication waits until all of the nodes in the cluster have the
-// same number of replicas.
-func (tc *MultinodeTestCluster) WaitForFullReplication() error {
-	// TODO (WillHaack): Optimize sleep time.
-	for notReplicated := true; notReplicated; time.Sleep(100 * time.Millisecond) {
-		notReplicated = false
-		var numReplicas int
-		err := tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
-			numReplicas = s.ReplicaCount()
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		for _, server := range tc.Servers {
-			err := server.Stores().VisitStores(func(s *storage.Store) error {
-				if numReplicas != s.ReplicaCount() {
-					notReplicated = true
-				}
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-			if notReplicated {
-				break
-			}
-		}
-	}
-	return nil
 }
 
 // Stopper returns the embedded server's Stopper.
@@ -245,32 +189,27 @@ func (ts *TestServer) DB() *client.DB {
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.ServingAddr() after Start() for client connections. Use Stop()
-// to shutdown the server after the test completes.
-func (ts *TestServer) Start() error {
-	return ts.StartWithStopper(nil, StartParams{Nodes: 1})
-}
-
-// StartWithStopper is the same as Start, but allows passing a stopper
-// explicitly.
-func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, StartParams StartParams) error {
+// TestServer.ServingAddr() after Start() for client connections.
+// Use TestServer.Stopper.Stop() to shutdown the server after the test
+// completes.
+func (ts *TestServer) Start(params base.TestServerArgs) error {
 	if ts.Ctx == nil {
-		ctx := MakeTestContext()
-		ts.Ctx = &ctx
+		panic("Ctx not set")
 	}
 
-	if stopper == nil {
-		stopper = stop.NewStopper()
+	// !!! I shouldn't change params.Stopper.
+	if params.Stopper == nil {
+		params.Stopper = stop.NewStopper()
 	}
 
-	// Change the replication requirements so we don't get log spam about ranges
-	// not being replicated enough.
-	cfg := config.DefaultZoneConfig()
-
-	cfg.ReplicaAttrs = make([]roachpb.Attributes, StartParams.Nodes)
-
-	fn := config.TestingSetDefaultZoneConfig(cfg)
-	stopper.AddCloser(stop.CloserFn(fn))
+	if !params.PartOfCluster {
+		// Change the replication requirements so we don't get log spam about ranges
+		// not being replicated enough.
+		cfg := config.DefaultZoneConfig()
+		cfg.ReplicaAttrs = []roachpb.Attributes{{}}
+		fn := config.TestingSetDefaultZoneConfig(cfg)
+		params.Stopper.AddCloser(stop.CloserFn(fn))
+	}
 
 	// Needs to be called before NewServer to ensure resolvers are initialized.
 	if err := ts.Ctx.InitNode(); err != nil {
@@ -279,15 +218,15 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, StartParams StartP
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
-	if ts.StoresPerNode < 1 {
-		ts.StoresPerNode = 1
+	if params.StoresPerNode < 1 {
+		params.StoresPerNode = 1
 	}
-	for i := len(ts.Ctx.Engines); i < ts.StoresPerNode; i++ {
-		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, stopper))
+	for i := len(ts.Ctx.Engines); i < params.StoresPerNode; i++ {
+		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, params.Stopper))
 	}
 
 	var err error
-	ts.Server, err = NewServer(*ts.Ctx, stopper)
+	ts.Server, err = NewServer(*ts.Ctx, params.Stopper)
 	if err != nil {
 		return err
 	}
@@ -367,14 +306,6 @@ func (ts *TestServer) ServingPort() (string, error) {
 	return p, err
 }
 
-// Stop stops the TestServer.
-func (ts *TestServer) Stop() {
-	if r := recover(); r != nil {
-		panic(r)
-	}
-	ts.Server.Stop()
-}
-
 // SetRangeRetryOptions sets the retry options for stores in TestServer.
 func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
@@ -385,14 +316,22 @@ func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 	}
 }
 
-// WriteSummaries records summaries of time-series data, which is required for any tests
-// that query server stats.
+// WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.node.writeSummaries()
 }
 
-// MustGetSQLCounter returns the value of a counter metric from the server's SQL
-// Executor. Runs in O(# of metrics) time, which is fine for test code.
+// AdminURL implements TestServerInterface.
+func (ts *TestServer) AdminURL() string {
+	return ts.Ctx.AdminURL()
+}
+
+// GetHTTPClient implements TestServerInterface.
+func (ts *TestServer) GetHTTPClient() (http.Client, error) {
+	return ts.Ctx.GetHTTPClient()
+}
+
+// MustGetSQLCounter implements TestServerInterface.
 func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	var c int64
 	var found bool
@@ -409,9 +348,7 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	return c
 }
 
-// MustGetSQLNetworkCounter returns the value of a counter metric from the
-// server's SQL server. Runs in O(# of metrics) time, which is fine for test
-// code.
+// MustGetSQLNetworkCounter implements TestServerInterface.
 func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var c int64
 	var found bool
@@ -428,8 +365,6 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	return c
 }
 
-var _ testingshim.TestServerInterface = &TestServer{}
-
 // KVClient is part of TestServerInterface.
 func (ts *TestServer) KVClient() interface{} { return ts.db }
 
@@ -444,12 +379,12 @@ func (ts *TestServer) LeaseManager() interface{} {
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to testingshim.InitTestServerFactory
-var TestServerFactory testingshim.TestServerFactory = testServerFactoryImpl{}
+var TestServerFactory = testServerFactoryImpl{}
 
-// New is part of TestServerInterface.
-func (testServerFactoryImpl) New(params testingshim.TestServerParams) testingshim.TestServerInterface {
-	ctx := MakeTestContext()
-	ctx.TestingKnobs = params.Knobs
-	ctx.JoinUsing = params.JoinAddr
+// New is part of TestServerFactory interface.
+func (testServerFactoryImpl) New(
+	params base.TestServerArgs,
+) interface{} {
+	ctx := makeTestContextFromParams(params)
 	return &TestServer{Ctx: &ctx}
 }

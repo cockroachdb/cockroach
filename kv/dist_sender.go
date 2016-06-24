@@ -199,6 +199,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	return ds
 }
 
+// RangeLookup implements the RangeDescriptorDB interface.
 // RangeLookup dispatches a RangeLookup request for the given metadata
 // key to the replicas of the given range. Note that we allow
 // inconsistent reads when doing range lookups for efficiency. Getting
@@ -238,6 +239,7 @@ func (ds *DistSender) RangeLookup(
 	return resp.Ranges, resp.PrefetchedRanges, nil
 }
 
+// FirstRange implements the RangeDescriptorDB interface.
 // FirstRange returns the RangeDescriptor for the first range on the cluster,
 // which is retrieved from the gossip protocol instead of the datastore.
 func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
