@@ -1561,6 +1561,10 @@ col_qualification_elem:
       Col: Name($3),
     }
  }
+| FAMILY name
+  {
+    $$.val = &ColumnFamilyConstraint{Family: Name($2)}
+  }
 
 index_def:
   INDEX opt_name '(' index_params ')' opt_storing

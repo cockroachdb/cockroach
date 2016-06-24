@@ -172,6 +172,8 @@ type ColumnTableDef struct {
 		Col            Name
 		ConstraintName Name
 	}
+	Family               Name
+	FamilyConstraintName Name
 }
 
 func newColumnTableDef(
@@ -219,6 +221,11 @@ func newColumnTableDef(
 			d.References.Col = t.Col
 			if c.Name != "" {
 				d.References.ConstraintName = c.Name
+			}
+		case *ColumnFamilyConstraint:
+			d.Family = t.Family
+			if c.Name != "" {
+				d.FamilyConstraintName = c.Name
 			}
 		default:
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
@@ -276,7 +283,13 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 			buf.WriteByte(')')
 		}
 	}
-
+	if node.Family != "" {
+		if node.FamilyConstraintName != "" {
+			fmt.Fprintf(buf, " CONSTRAINT %s", node.FamilyConstraintName)
+		}
+		buf.WriteString(" FAMILY ")
+		FormatNode(buf, f, node.Family)
+	}
 }
 
 // NamedColumnQualification wraps a NamedColumnQualification with a name.
@@ -290,13 +303,14 @@ type ColumnQualification interface {
 	columnQualification()
 }
 
-func (*ColumnDefault) columnQualification()         {}
-func (NotNullConstraint) columnQualification()      {}
-func (NullConstraint) columnQualification()         {}
-func (PrimaryKeyConstraint) columnQualification()   {}
-func (UniqueConstraint) columnQualification()       {}
-func (*ColumnCheckConstraint) columnQualification() {}
-func (*ColumnFKConstraint) columnQualification()    {}
+func (*ColumnDefault) columnQualification()          {}
+func (NotNullConstraint) columnQualification()       {}
+func (NullConstraint) columnQualification()          {}
+func (PrimaryKeyConstraint) columnQualification()    {}
+func (UniqueConstraint) columnQualification()        {}
+func (*ColumnCheckConstraint) columnQualification()  {}
+func (*ColumnFKConstraint) columnQualification()     {}
+func (*ColumnFamilyConstraint) columnQualification() {}
 
 // ColumnDefault represents a DEFAULT clause for a column.
 type ColumnDefault struct {
@@ -324,6 +338,11 @@ type ColumnCheckConstraint struct {
 type ColumnFKConstraint struct {
 	Table *QualifiedName
 	Col   Name // empty-string means use PK
+}
+
+// ColumnFamilyConstraint represents FAMILY on a column.
+type ColumnFamilyConstraint struct {
+	Family Name
 }
 
 // NameListToIndexElems converts a NameList to an IndexElemList with all

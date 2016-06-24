@@ -754,6 +754,18 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 	return nil
 }
 
+// AddColumnToFamily adds the specified column to the specified family.
+// AllocateIDs must be called before the TableDesciptor will be valid.
+func (desc *TableDescriptor) AddColumnToFamily(col string, family string) error {
+	for i := range desc.Families {
+		if desc.Families[i].Name == family {
+			desc.Families[i].ColumnNames = append(desc.Families[i].ColumnNames, col)
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown family %q", family)
+}
+
 // RemoveColumnFromFamily removes a colID from the family it's assigned to.
 func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	for i, family := range desc.Families {
@@ -763,6 +775,9 @@ func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 					desc.Families[i].ColumnIDs[:j], desc.Families[i].ColumnIDs[j+1:]...)
 				desc.Families[i].ColumnNames = append(
 					desc.Families[i].ColumnNames[:j], desc.Families[i].ColumnNames[j+1:]...)
+				if len(desc.Families[i].ColumnIDs) == 0 {
+					desc.Families = append(desc.Families[:i], desc.Families[i+1:]...)
+				}
 				return
 			}
 		}
