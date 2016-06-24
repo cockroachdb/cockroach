@@ -102,10 +102,11 @@ func (s *DBServer) Batch(
 		}
 	}
 
-	f := func() {
-		if err = verifyRequest(args); err != nil {
-			return
-		}
+	if err = verifyRequest(args); err != nil {
+		return
+	}
+
+	err = s.stopper.RunTask(func() {
 		var pErr *roachpb.Error
 		br, pErr = s.sender.Send(context.TODO(), *args)
 		if pErr != nil {
@@ -115,12 +116,8 @@ func (s *DBServer) Batch(
 			panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
 		}
 		br.Error = pErr
-	}
-
-	if !s.stopper.RunTask(f) {
-		err = errors.Errorf("node stopped")
-	}
-	return br, err
+	})
+	return
 }
 
 // verifyRequest checks for illegal inputs in request proto and
