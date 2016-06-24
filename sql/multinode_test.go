@@ -92,6 +92,8 @@ func TestMultinodeCockroach(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer tracing.Disable()()
 
+	t.Skip("#7450")
+
 	conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
 	defer cleanup()
 
