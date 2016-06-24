@@ -513,11 +513,18 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 
 // applySnapshot updates the replica based on the given snapshot.
 // Returns the new last index.
-func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error {
+func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
+	// We use a separate batch to apply the snapshot since the Replica (and in
+	// particular the last index) is updated after the batch commits. Using a
+	// separate batch also allows for future optimization (such as using a
+	// Distinct() batch).
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
+
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Extract the updated range descriptor.
@@ -540,7 +547,7 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -558,25 +565,25 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 			Timestamp: kv.Timestamp,
 		}
 		if err := batch.Put(mvccKey, kv.Value); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	logEntries := make([]raftpb.Entry, len(snapData.LogEntries))
 	for i, bytes := range snapData.LogEntries {
 		if err := logEntries[i].Unmarshal(bytes); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	// Write the snapshot's Raft log into the range.
 	if _, err := r.append(batch, 0, logEntries); err != nil {
-		return err
+		return 0, err
 	}
 
 	s, err := loadState(batch, &desc)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// As outlined above, last and applied index are the same after applying
@@ -585,45 +592,46 @@ func (r *Replica) applySnapshot(batch engine.Batch, snap raftpb.Snapshot) error 
 		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
 			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
-	batch.Defer(func() {
-		r.assertState(r.store.Engine())
-	})
 
-	batch.Defer(func() {
-		r.mu.Lock()
-		// We set the persisted last index to the last applied index. This is
-		// not a correctness issue, but means that we may have just transferred
-		// some entries we're about to re-request from the leader and overwrite.
-		// However, raft.MultiNode currently expects this behaviour, and the
-		// performance implications are not likely to be drastic. If our
-		// feelings about this ever change, we can add a LastIndex field to
-		// raftpb.SnapshotMetadata.
-		r.mu.lastIndex = s.RaftAppliedIndex
-		// Update the range and store stats.
-		r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
-		r.store.metrics.addMVCCStats(s.Stats)
-		r.mu.state = s
-		r.mu.Unlock()
+	if err := batch.Commit(); err != nil {
+		return 0, err
+	}
 
-		// Update other fields which are uninitialized or need updating.
-		// This may not happen if the system config has not yet been loaded.
-		// While config update will correctly set the fields, there is no order
-		// guarantee in ApplySnapshot.
-		// TODO: should go through the standard store lock when adding a replica.
-		if err := r.updateRangeInfo(&desc); err != nil {
-			panic(err)
-		}
+	r.mu.Lock()
+	// We set the persisted last index to the last applied index. This is
+	// not a correctness issue, but means that we may have just transferred
+	// some entries we're about to re-request from the leader and overwrite.
+	// However, raft.MultiNode currently expects this behaviour, and the
+	// performance implications are not likely to be drastic. If our
+	// feelings about this ever change, we can add a LastIndex field to
+	// raftpb.SnapshotMetadata.
+	r.mu.lastIndex = s.RaftAppliedIndex
+	// Update the range and store stats.
+	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
+	r.store.metrics.addMVCCStats(s.Stats)
+	r.mu.state = s
+	lastIndex := r.mu.lastIndex
+	r.assertStateLocked(r.store.Engine())
+	r.mu.Unlock()
 
-		// Fill the reservation if there was any one for this range.
-		r.store.bookie.Fill(desc.RangeID)
+	// Update other fields which are uninitialized or need updating.
+	// This may not happen if the system config has not yet been loaded.
+	// While config update will correctly set the fields, there is no order
+	// guarantee in ApplySnapshot.
+	// TODO: should go through the standard store lock when adding a replica.
+	if err := r.updateRangeInfo(&desc); err != nil {
+		panic(err)
+	}
 
-		// Update the range descriptor. This is done last as this is the step that
-		// makes the Replica visible in the Store.
-		if err := r.setDesc(&desc); err != nil {
-			panic(err)
-		}
-	})
-	return nil
+	// Fill the reservation if there was any one for this range.
+	r.store.bookie.Fill(desc.RangeID)
+
+	// Update the range descriptor. This is done last as this is the step that
+	// makes the Replica visible in the Store.
+	if err := r.setDesc(&desc); err != nil {
+		panic(err)
+	}
+	return lastIndex, nil
 }
 
 // Raft commands are encoded with a 1-byte version (currently 0), an 8-byte ID,

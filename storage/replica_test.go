@@ -6154,14 +6154,8 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
-	b := tc.engine.NewBatch()
-	defer b.Close()
-	if err := firstRng.applySnapshot(b, snap); err != nil {
+	if _, err := firstRng.applySnapshot(snap); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-
 	checkReservations(t, 0)
 }
