@@ -859,14 +859,12 @@ func TestNonRetryableErrorFromCommit(t *testing.T) {
 	}
 }
 
-// Verifies that a read-only transaction that triggers a deadline-exceeded error finishes
-// without causing an Executor error. In particular, this test case creates a read-only txn
-// that elides EndTransactionRequest and makes sure a deadline-exceeded error causes a
-// retryable error.
+// Verifies that an expired lease is released and a new lease is acquired on transaction
+// restart.
 //
 // This test triggers the above scenario by making ReadWithinUncertaintyIntervalError advance
 // the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
-func TestTxnDeadline(t *testing.T) {
+func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var cmdFilters CommandFilters
@@ -911,7 +909,7 @@ func TestTxnDeadline(t *testing.T) {
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
 				if bytes.Contains(req.Key, testKey) {
 					restartDone = true
-					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on rery.
+					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on retry.
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
 					now := server.Clock().Now()
@@ -936,14 +934,17 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 		t.Fatal(err)
 	}
 	// Acquire the lease and enable the auto-retry. The first read attempt will trigger ReadWithinUncertaintyIntervalError
-	// and advance the transaction timestmap. The second read attempt will succeed, but the (elided) EndTransactionRequest
-	// hits a deadline-exceeded error.
+	// and advance the transaction timestmap. The transaction timestamp will exceed the lease expiration
+	// time, and the second read attempt will re-acquire the lease.
 	if _, err := sqlDB.Exec(`
 SELECT * from t.test WHERE k = 'test_key';
 `); err != nil {
 		t.Fatal(err)
 	}
 
+	if !clockUpdate {
+		t.Errorf("expected clock update, but it didn't happen")
+	}
 	if !restartDone {
 		t.Errorf("expected restart, but it didn't happen")
 	}
