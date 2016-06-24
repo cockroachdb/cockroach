@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -35,30 +37,50 @@ var multinode = flag.Bool("multinode", false, "Flag to determine whether or not 
 // node (to the named db), as well as a cleanup func that stops and
 // cleans up all nodes and connections. This method waits for
 // all the nodes to have a copy of each replica before returning.
-func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.DB, func()) {
+func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (*server.MultinodeTestCluster, []*gosql.DB, func()) {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
+	var servers []*server.TestServer
+	first := server.StartMultinodeTestServer(t)
+	servers = append(servers, &first)
+	for i := 1; i < nodes; i++ {
+		joiningServer := server.StartTestServerJoining(t, first)
+		servers = append(servers, &joiningServer)
+	}
+	testCluster := server.MultinodeTestCluster{Servers: servers}
+	var conns []*gosql.DB
+	var closes []func() error
+	var cleanups []func()
 
-	mtc := server.StartMultinodeTestCluster(t, 3, name)
-
-	if _, err := mtc.Conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
+	for i, s := range servers {
+		pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
+			fmt.Sprintf("node%d", i))
+		pgURL.Path = name
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		closes = append(closes, db.Close)
+		cleanups = append(cleanups, cleanupFn)
+		conns = append(conns, db)
+	}
+	if _, err := conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
 		t.Fatal(err)
 	}
 
 	f := func() {
-		for _, fn := range mtc.Closes {
+		for _, fn := range closes {
 			_ = fn()
 		}
-		for _, s := range mtc.Servers {
+		for _, s := range servers {
 			s.Stop()
 		}
-		for _, fn := range mtc.Cleanups {
+		for _, fn := range cleanups {
 			fn()
 		}
 	}
-	mtc.WaitForFullReplication()
-	return mtc.Conns, f
+	return &testCluster, conns, f
 }
 
 func TestMultinodeCockroach(t *testing.T) {
@@ -69,9 +91,10 @@ func TestMultinodeCockroach(t *testing.T) {
 		t.Skip()
 	}
 
-	t.Skip("#7450")
-
-	conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
+	testCluster, conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
+	if err := testCluster.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
 	defer cleanup()
 
 	if _, err := conns[0].Exec(`CREATE TABLE testing (k INT PRIMARY KEY, v INT)`); err != nil {

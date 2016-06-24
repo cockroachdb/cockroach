@@ -65,7 +65,10 @@ func benchmarkSingleNodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.D
 }
 
 func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	conns, cleanup := SetupMultinodeTestCluster(b, 3, "bench")
+	testCluster, conns, cleanup := SetupMultinodeTestCluster(b, 3, "bench")
+	if err := testCluster.WaitForFullReplication(); err != nil {
+		b.Fatal(err)
+	}
 	defer cleanup()
 	f(b, conns[0])
 }
