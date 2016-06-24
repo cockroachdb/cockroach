@@ -48,6 +48,7 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (*server.Mu
 		joiningServer := server.StartTestServerJoining(t, first)
 		servers = append(servers, &joiningServer)
 	}
+
 	testCluster := server.MultinodeTestCluster{Servers: servers}
 	var conns []*gosql.DB
 	var closes []func() error
@@ -81,6 +82,7 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (*server.Mu
 			fn()
 		}
 	}
+
 	return &testCluster, conns, f
 }
 
