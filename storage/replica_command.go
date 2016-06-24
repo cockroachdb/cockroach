@@ -1744,7 +1744,7 @@ func (r *Replica) ComputeChecksum(
 	snap := r.store.NewSnapshot()
 
 	// Compute SHA asynchronously and store it in a map by UUID.
-	if !stopper.RunAsyncTask(func() {
+	if err := stopper.RunAsyncTask(func() {
 		defer snap.Close()
 		var snapshot *roachpb.RaftSnapshotData
 		if args.Snapshot {
@@ -1756,7 +1756,7 @@ func (r *Replica) ComputeChecksum(
 			sha = nil
 		}
 		r.computeChecksumDone(id, sha, snapshot)
-	}) {
+	}); err != nil {
 		defer snap.Close()
 		// Set checksum to nil.
 		r.computeChecksumDone(id, nil, nil)
@@ -1846,7 +1846,7 @@ func (r *Replica) VerifyChecksum(
 		if args.Snapshot == nil {
 			// No debug information; run another consistency check to deliver
 			// more debug information.
-			if !r.store.stopper.RunAsyncTask(func() {
+			if err := r.store.stopper.RunAsyncTask(func() {
 				log.Errorf("consistency check failed on replica %s; fetching details", r)
 				desc := r.Desc()
 				startKey := desc.StartKey.AsRawKey()
@@ -1857,8 +1857,8 @@ func (r *Replica) VerifyChecksum(
 				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
 					log.Errorf("couldn't rerun consistency check: %s", err)
 				}
-			}) {
-				log.Error("couldn't rerun consistency check as RunAsyncTask")
+			}); err != nil {
+				log.Errorf("couldn't rerun consistency check as: %s", err)
 			}
 		} else {
 			// Compute diff.
@@ -2345,7 +2345,7 @@ func (r *Replica) splitTrigger(
 			// However, the test for this feature disables election timeouts
 			// and relies solely on this campaign trigger, so it is unacceptably
 			// flaky without a bit of a delay.
-			r.store.stopper.RunAsyncTask(func() {
+			if err := r.store.stopper.RunAsyncTask(func() {
 				time.Sleep(10 * time.Millisecond)
 				// Make sure that newRng hasn't been removed.
 				replica, err := r.store.GetReplica(newRng.RangeID)
@@ -2366,7 +2366,10 @@ func (r *Replica) splitTrigger(
 				}); err != nil {
 					panic(err)
 				}
-			})
+			}); err != nil {
+				log.Warning(err)
+				return
+			}
 		}
 	})
 

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
@@ -130,7 +131,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 
-	if !s.RunTask(func() {
+	if err := s.RunTask(func() {
 		go s.Stop()
 
 		select {
@@ -139,8 +140,8 @@ func TestStopperStartFinishTasks(t *testing.T) {
 		case <-time.After(1 * time.Millisecond):
 			// Expected.
 		}
-	}) {
-		t.Error("expected RunTask to succeed")
+	}); err != nil {
+		t.Error(err)
 	}
 	select {
 	case <-s.ShouldStop():
@@ -191,8 +192,10 @@ func TestStopperQuiesce(t *testing.T) {
 		thisStopper.RunWorker(func() {
 			// Wait until Quiesce() is called.
 			<-qc
-			if thisStopper.RunTask(func() {}) {
-				t.Error("expected RunTask to fail")
+			if err := thisStopper.RunTask(func() {}); !testutils.IsError(
+				err, "stopper is stopping",
+			) {
+				t.Error(err)
 			}
 			// Make the stoppers call Stop().
 			close(sc)
@@ -254,10 +257,12 @@ func TestStopperNumTasks(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		c := make(chan bool)
 		tasks = append(tasks, c)
-		s.RunAsyncTask(func() {
+		if err := s.RunAsyncTask(func() {
 			// Wait for channel to close
 			<-c
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		tm := s.RunningTasks()
 		if numTypes, numTasks := len(tm), s.NumTasks(); numTypes != 1 || numTasks != i+1 {
 			t.Errorf("stopper should have %d running tasks, got %d / %+v", i+1, numTasks, tm)
@@ -311,9 +316,11 @@ func TestStopperRunTaskPanic(t *testing.T) {
 		defer func() {
 			_ = recover()
 		}()
-		s.RunTask(func() {
+		if err := s.RunTask(func() {
 			panic("ouch")
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}()
 }
 
@@ -334,9 +341,11 @@ func TestStopperShouldDrain(t *testing.T) {
 	// Run an asynchronous task. A stopper which has been Stop()ed will not
 	// close it's ShouldStop() channel until all tasks have completed. This task
 	// will complete when the "runningTask" channel is closed.
-	s.RunAsyncTask(func() {
+	if err := s.RunAsyncTask(func() {
 		<-runningTask
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	go func() {
 		// The ShouldDrain() channel should close as soon as the stopper is
@@ -405,7 +414,9 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < maxConcurrency*3; i++ {
 		wg.Add(1)
-		s.RunLimitedAsyncTask(sem, f)
+		if err := s.RunLimitedAsyncTask(sem, f); err != nil {
+			t.Fatal(err)
+		}
 	}
 	wg.Wait()
 	if concurrency != 0 {
@@ -437,7 +448,9 @@ func BenchmarkStopper(b *testing.B) {
 	s := stop.NewStopper()
 	defer s.Stop()
 	for i := 0; i < b.N; i++ {
-		s.RunTask(maybePrint)
+		if err := s.RunTask(maybePrint); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 func BenchmarkDirectCallPar(b *testing.B) {
@@ -457,7 +470,9 @@ func BenchmarkStopperPar(b *testing.B) {
 	defer s.Stop()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			s.RunTask(maybePrint)
+			if err := s.RunTask(maybePrint); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 }

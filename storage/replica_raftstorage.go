@@ -299,7 +299,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 				// just takes too long to use it), abandon it to save memory.
 			}
 		}
-	}) {
+	}) == nil {
 		r.mu.snapshotChan = ch
 	} else {
 		r.store.ReleaseRaftSnapshot()

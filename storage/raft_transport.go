@@ -105,7 +105,8 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
 	errCh := make(chan error, 1)
 
-	t.rpcContext.Stopper.RunTask(func() {
+	// Node stopping error is caught below in the select.
+	if err := t.rpcContext.Stopper.RunTask(func() {
 		t.rpcContext.Stopper.RunWorker(func() {
 			errCh <- func() error {
 				for {
@@ -128,7 +129,9 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 				}
 			}()
 		})
-	})
+	}); err != nil {
+		return err
+	}
 
 	select {
 	case err := <-errCh:
@@ -181,11 +184,13 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, nodeID roachpb
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
-	t.rpcContext.Stopper.RunTask(func() {
+	if err := t.rpcContext.Stopper.RunTask(func() {
 		t.rpcContext.Stopper.RunWorker(func() {
 			errCh <- stream.RecvMsg(new(RaftMessageResponse))
 		})
-	})
+	}); err != nil {
+		return err
+	}
 
 	var raftIdleTimer timeutil.Timer
 	defer raftIdleTimer.Stop()
@@ -238,7 +243,7 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 
 	if !ok {
 		// Starting workers in a task prevents data races during shutdown.
-		if !t.rpcContext.Stopper.RunTask(func() {
+		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
 				if err := t.processQueue(ch, req.ToReplica.NodeID); err != nil {
 					log.Error(err)
@@ -248,8 +253,8 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 				delete(queues, req.ToReplica.NodeID)
 				t.mu.Unlock()
 			})
-		}) {
-			return errors.Errorf("node stopped")
+		}); err != nil {
+			return err
 		}
 	}
 

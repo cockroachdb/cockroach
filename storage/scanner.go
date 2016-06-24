@@ -170,12 +170,13 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 				return false
 			}
 
-			return !stopper.RunTask(func() {
+			return nil != stopper.RunTask(func() {
 				// Try adding replica to all queues.
 				for _, q := range rs.queues {
 					q.MaybeAdd(repl, clock.Now())
 				}
 			})
+
 		case repl := <-rs.removed:
 			// Remove replica from all queues as applicable. Note that we still
 			// process removals while disabled.
@@ -185,6 +186,7 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 			if log.V(6) {
 				log.Infof("removed replica %s", repl)
 			}
+
 		case <-stopper.ShouldStop():
 			return true
 		}
@@ -214,7 +216,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				shouldStop = rs.waitAndProcess(start, clock, stopper, nil)
 			}
 
-			shouldStop = shouldStop || !stopper.RunTask(func() {
+			shouldStop = shouldStop || nil != stopper.RunTask(func() {
 				// Increment iteration count.
 				rs.completedScan.L.Lock()
 				rs.count++

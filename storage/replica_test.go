@@ -1000,7 +1000,7 @@ func TestReplicaDrainLeaderLease(t *testing.T) {
 	}
 	var slept atomic.Value
 	slept.Store(false)
-	tc.stopper.RunAsyncTask(func() {
+	if err := tc.stopper.RunAsyncTask(func() {
 		// Wait just a bit so that the main thread can check that
 		// DrainLeadership blocks (false negatives are possible, but 10ms is
 		// plenty to make this fail 99.999% of the time in practice).
@@ -1015,7 +1015,9 @@ func TestReplicaDrainLeaderLease(t *testing.T) {
 				return
 			}
 		}
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := tc.store.DrainLeadership(true); err != nil {
 		t.Fatal(err)
@@ -1643,7 +1645,7 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 			ts := tc.clock.Now()
 			pErrCh := make(chan *roachpb.Error, num)
 			for i := 0; i < num; i++ {
-				tc.stopper.RunAsyncTask(func() {
+				if err := tc.stopper.RunAsyncTask(func() {
 					tc.rng.mu.Lock()
 					leaseCh := tc.rng.requestLeaseLocked(ts)
 					tc.rng.mu.Unlock()
@@ -1654,7 +1656,9 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 						pErr.OriginNode = 0
 					}
 					pErrCh <- pErr
-				})
+				}); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			pErrs := make([]*roachpb.Error, num)
@@ -1784,7 +1788,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 		key2 := roachpb.Key(fmt.Sprintf("key2-%d", i))
 		// Asynchronously put a value to the rng with blocking enabled.
 		cmd1Done := make(chan struct{})
-		tc.stopper.RunAsyncTask(func() {
+		if err := tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd1Read)
 
 			_, pErr := tc.SendWrappedWith(roachpb.Header{
@@ -1795,13 +1799,15 @@ func TestReplicaCommandQueue(t *testing.T) {
 				t.Fatalf("test %d: %s", i, pErr)
 			}
 			close(cmd1Done)
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		// Wait for cmd1 to get into the command queue.
 		<-blockingStart
 
 		// First, try a command for same key as cmd1 to verify it blocks.
 		cmd2Done := make(chan struct{})
-		tc.stopper.RunAsyncTask(func() {
+		if err := tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key1, test.cmd2Read)
 
 			_, pErr := tc.SendWrapped(args)
@@ -1810,11 +1816,13 @@ func TestReplicaCommandQueue(t *testing.T) {
 				t.Fatalf("test %d: %s", i, pErr)
 			}
 			close(cmd2Done)
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 
 		// Next, try read for a non-impacted key--should go through immediately.
 		cmd3Done := make(chan struct{})
-		tc.stopper.RunAsyncTask(func() {
+		if err := tc.stopper.RunAsyncTask(func() {
 			args := readOrWriteArgs(key2, true)
 
 			_, pErr := tc.SendWrapped(args)
@@ -1823,7 +1831,9 @@ func TestReplicaCommandQueue(t *testing.T) {
 				t.Fatalf("test %d: %s", i, pErr)
 			}
 			close(cmd3Done)
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 
 		if test.expWait {
 			// Verify cmd3 finishes but not cmd2.
