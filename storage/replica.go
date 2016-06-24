@@ -194,7 +194,7 @@ type Replica struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
 		// Has the replica been destroyed.
-		destroyed error
+		destroyed bool
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -237,8 +237,10 @@ type Replica struct {
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
-	if r.mu.destroyed != nil {
-		return r.mu.destroyed
+	if r.mu.destroyed {
+		// Silently ignore all operations on destroyed replicas. We can't return an
+		// error here as all errors returned from this method are considered fatal.
+		return nil
 	}
 
 	if r.mu.internalRaftGroup == nil {
@@ -374,8 +376,7 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	// Clear the map.
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = errors.Errorf("replica %d (range %d) was garbage collected",
-		r.mu.replicaID, r.RangeID)
+	r.mu.destroyed = true
 	r.mu.Unlock()
 
 	return r.store.destroyReplicaData(desc)
@@ -1273,6 +1274,10 @@ func (r *Replica) proposeRaftCommand(
 	chan roachpb.ResponseWithError, func() bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.mu.destroyed {
+		// Silently drop raft commands if the replica has been destroyed.
+		return nil, nil, nil
+	}
 	_, replica := r.mu.state.Desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)

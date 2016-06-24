@@ -404,11 +404,12 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
-	// commands on the Replica structure will fail.
-	err = rng1.withRaftGroup(func(r *raft.RawNode) error { return nil })
-	expected := "replica .* was garbage collected"
-	if !testutils.IsError(err, expected) {
-		t.Fatalf("expected error %s, but got %v", expected, err)
+	// commands on the Replica will silently be dropped.
+	err = rng1.withRaftGroup(func(r *raft.RawNode) error {
+		return errors.Errorf("unexpectedly created a raft group")
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
