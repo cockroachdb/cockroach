@@ -215,7 +215,11 @@ type Replica struct {
 		// TODO(tschottdorf): evaluate whether this should be a list/slice.
 		pendingCmds       map[storagebase.CmdIDKey]*pendingCmd
 		internalRaftGroup *raft.RawNode
-		replicaID         roachpb.ReplicaID
+		// The ID of the replica within the Raft group. May be 0 if the replica has
+		// been created from a preemptive snapshot (i.e. before being added to the
+		// Raft group). The replica ID will be non-zero whenever the replica is
+		// part of a Raft group.
+		replicaID roachpb.ReplicaID
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -240,6 +244,11 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	if r.mu.destroyed != nil {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
+		return nil
+	}
+	if r.mu.replicaID == 0 {
+		// The replica's raft group has not yet been configured (i.e. the replica
+		// was created from a preemptive snapshot).
 		return nil
 	}
 
@@ -342,8 +351,10 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if replicaID == 0 {
 		_, repDesc := desc.FindReplica(r.store.StoreID())
 		if repDesc == nil {
-			return errors.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in %s)",
-				r.store.StoreID(), desc)
+			// This is intentionally not an error and is the code path exercised
+			// during preemptive snapshots. The replica ID will be sent when the
+			// actual raft replica change occurs.
+			return nil
 		}
 		replicaID = repDesc.ReplicaID
 	}

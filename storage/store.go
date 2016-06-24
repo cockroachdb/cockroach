@@ -2107,8 +2107,26 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		// sender then we could prompt the sender to GC this replica
 		// immediately.
 		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %s",
+			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %v",
 				req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
+		}
+		return nil
+	}
+
+	if req.ToReplica.ReplicaID == 0 {
+		if req.Message.Type == raftpb.MsgSnap {
+			// Allow snapshots to be applied to uninitialized replicas (i.e. replicas
+			// with an ID of 0). In particular, this allows snapshots to be applied
+			// before a replica is added to the raft group.
+			_, err := r.applySnapshot(req.Message.Snapshot)
+			return err
+		}
+		// We disallow non-snapshot messages to replica ID 0. Note that
+		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
+		// the only way we can get here is if the replica did not previously exist.
+		if log.V(1) {
+			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v",
+				req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica)
 		}
 		return nil
 	}
