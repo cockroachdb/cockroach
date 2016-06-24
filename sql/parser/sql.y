@@ -1516,6 +1516,10 @@ col_qualification:
     $$.val = NamedColumnQualification{Qualification: $1.colQualElem()}
   }
 | COLLATE any_name { unimplemented() }
+| FAMILY name
+  {
+    $$.val = NamedColumnQualification{Qualification: &ColumnFamilyConstraint{Family: Name($2)}}
+  }
 
 // DEFAULT NULL is already the default for Postgres. But define it here and
 // carry it forward into the system to make it explicit.
