@@ -94,6 +94,11 @@ func (n *alterTableNode) Start() error {
 			if idx != nil {
 				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
 			}
+			if t.ColumnDef.Family != "" {
+				if err := n.tableDesc.AddColumnToFamily(col.Name, string(t.ColumnDef.Family)); err != nil {
+					return err
+				}
+			}
 
 		case *parser.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
