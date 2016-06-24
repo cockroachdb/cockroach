@@ -34,9 +34,7 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 
 	c.qvals = make(qvalMap)
 	c.cols = tableDesc.Columns
-	table := tableInfo{
-		columns: makeResultColumns(tableDesc.Columns),
-	}
+	sourceInfo := newSourceInfoForSingleTable(tableDesc.Name, makeResultColumns(tableDesc.Columns))
 
 	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))
 	exprStrings := make([]string, len(tableDesc.Checks))
@@ -49,7 +47,7 @@ func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error
 	}
 
 	for i, raw := range exprs {
-		typedExpr, err := p.analyzeExpr(raw, []*tableInfo{&table}, c.qvals,
+		typedExpr, err := p.analyzeExpr(raw, multiSourceInfo{sourceInfo}, c.qvals,
 			parser.TypeBool, false, "")
 		if err != nil {
 			return err

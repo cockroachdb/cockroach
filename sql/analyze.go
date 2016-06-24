@@ -1594,13 +1594,13 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 // - resolving qnames (optional);
 // - type checking (with optional type enforcement);
 // - normalization.
-// The parameters tables and qvals, if both are non-nil, indicate
+// The parameters sources and qvals, if both are non-nil, indicate
 // qname resolution should be performed. The qvals map will be filled
 // as a result.
 func (p *planner) analyzeExpr(
 	raw parser.Expr,
 	/* arguments for qname resolution */
-	tables []*tableInfo,
+	sources multiSourceInfo,
 	qvals qvalMap,
 	/* arguments for type checking */
 	expectedType parser.Datum,
@@ -1619,10 +1619,10 @@ func (p *planner) analyzeExpr(
 
 	// Perform optional qname resolution.
 	var resolved parser.Expr
-	if tables == nil || qvals == nil {
+	if sources == nil || qvals == nil {
 		resolved = replaced
 	} else {
-		resolved, err = resolveQNames(replaced, tables, qvals, &p.qnameVisitor)
+		resolved, err = resolveQNames(replaced, sources, qvals, &p.qnameVisitor)
 		if err != nil {
 			return nil, err
 		}

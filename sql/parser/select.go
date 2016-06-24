@@ -213,7 +213,7 @@ func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
 // AliasedTableExpr represents a table expression coupled with an optional
 // alias.
 type AliasedTableExpr struct {
-	Expr  SimpleTableExpr
+	Expr  TableExpr
 	Hints *IndexHints
 	As    AliasClause
 	AsOf  AsOfClause
@@ -235,14 +235,8 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// SimpleTableExpr represents a simple table expression.
-type SimpleTableExpr interface {
-	NodeFormatter
-	simpleTableExpr()
-}
-
-func (QualifiedName) simpleTableExpr() {}
-func (*Subquery) simpleTableExpr()     {}
+func (QualifiedName) tableExpr() {}
+func (*Subquery) tableExpr()     {}
 
 // ParenTableExpr represents a parenthesized TableExpr.
 type ParenTableExpr struct {
@@ -266,24 +260,33 @@ type JoinTableExpr struct {
 
 // JoinTableExpr.Join
 const (
-	astJoin        = "JOIN"
-	astFullJoin    = "FULL JOIN"
-	astLeftJoin    = "LEFT JOIN"
-	astRightJoin   = "RIGHT JOIN"
-	astCrossJoin   = "CROSS JOIN"
-	astNaturalJoin = "NATURAL JOIN"
-	astInnerJoin   = "INNER JOIN"
+	astJoin      = "JOIN"
+	astFullJoin  = "FULL JOIN"
+	astLeftJoin  = "LEFT JOIN"
+	astRightJoin = "RIGHT JOIN"
+	astCrossJoin = "CROSS JOIN"
+	astInnerJoin = "INNER JOIN"
 )
 
 // Format implements the NodeFormatter interface.
 func (node *JoinTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Left)
 	buf.WriteByte(' ')
-	buf.WriteString(node.Join)
-	buf.WriteByte(' ')
-	FormatNode(buf, f, node.Right)
-	if node.Cond != nil {
+	if _, isNatural := node.Cond.(NaturalJoinCond); isNatural {
+		// Natural joins have a different syntax: "<a> NATURAL <join_type> <b>"
 		FormatNode(buf, f, node.Cond)
+		buf.WriteByte(' ')
+		buf.WriteString(node.Join)
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.Right)
+	} else {
+		// General syntax: "<a> <join_type> <b> <condition>"
+		buf.WriteString(node.Join)
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.Right)
+		if node.Cond != nil {
+			FormatNode(buf, f, node.Cond)
+		}
 	}
 }
 
@@ -293,8 +296,17 @@ type JoinCond interface {
 	joinCond()
 }
 
-func (*OnJoinCond) joinCond()    {}
-func (*UsingJoinCond) joinCond() {}
+func (NaturalJoinCond) joinCond() {}
+func (*OnJoinCond) joinCond()     {}
+func (*UsingJoinCond) joinCond()  {}
+
+// NaturalJoinCond represents a NATURAL join condition
+type NaturalJoinCond struct{}
+
+// Format implements the NodeFormatter interface.
+func (NaturalJoinCond) Format(buf *bytes.Buffer, _ FmtFlags) {
+	buf.WriteString("NATURAL")
+}
 
 // OnJoinCond represents an ON join condition.
 type OnJoinCond struct {
