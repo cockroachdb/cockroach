@@ -208,11 +208,17 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	if !*flagRemote {
 		logDir := *flagLogDir
 		if logDir != "" {
-			_, _, fun := caller.Lookup(3)
-			if !testFuncRE.MatchString(fun) {
-				t.Fatalf("invalid caller %s; want TestX -> runTestOnConfigs -> func()", fun)
+			var i int
+			for ; i < 100; i++ {
+				_, _, fun := caller.Lookup(i)
+				if testFuncRE.MatchString(fun) {
+				}
+				logDir = filepath.Join(logDir, fun)
+				break
 			}
-			logDir = filepath.Join(logDir, fun)
+			if i >= 100 {
+				panic("no caller matching Test(.*) in stack trace")
+			}
 		}
 		l := cluster.CreateLocal(cfg, logDir, *flagPrivileged, stopper)
 		l.Start()
@@ -279,18 +285,18 @@ const (
 	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag
 )
 
-func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
+func testDocker(t *testing.T, num int, name string, cmd []string) error {
 	SkipUnlessLocal(t)
 	cfg := cluster.TestConfig{
 		Name:     name,
 		Duration: *flagDuration,
-		Nodes:    []cluster.NodeConfig{{Count: 1, Stores: []cluster.StoreConfig{{Count: 1}}}},
+		Nodes:    []cluster.NodeConfig{{Count: int32(num), Stores: []cluster.StoreConfig{{Count: 1}}}},
 	}
 	l := StartCluster(t, cfg).(*cluster.LocalCluster)
 	defer l.AssertAndStop(t)
 
 	containerConfig := container.Config{
-		Image: fmt.Sprintf(postgresTestImage),
+		Image: postgresTestImage,
 		Env: []string{
 			"PGHOST=roach0",
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
@@ -301,4 +307,12 @@ func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 	}
 	hostConfig := container.HostConfig{NetworkMode: "host"}
 	return l.OneShot(postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
+}
+
+func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
+	return testDocker(t, 1, name, cmd)
+}
+
+func testDockerOneShot(t *testing.T, name string, cmd []string) error {
+	return testDocker(t, 0, name, cmd)
 }
