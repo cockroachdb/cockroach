@@ -33,6 +33,7 @@ const (
 	PasswordName          = "password"
 	PortName              = "port"
 	HTTPPortName          = "http-port"
+	HTTPAddrName          = "http-addr"
 	CACertName            = "ca-cert"
 	CAKeyName             = "ca-key"
 	CertName              = "cert"

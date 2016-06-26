@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -89,6 +90,36 @@ func TestRaftTickIntervalFlagValue(t *testing.T) {
 		}
 		if td.expected != serverCtx.RaftTickInterval {
 			t.Errorf("%d. RaftTickInterval expected %d, but got %d", i, td.expected, serverCtx.RaftTickInterval)
+		}
+	}
+}
+
+func TestHttpAddrFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args     []string
+		expected string
+	}{
+		{[]string{"start", "--" + cliflags.HTTPAddrName, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.HTTPAddrName, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
+		// confirm hostnames will work
+		{[]string{"start", "--" + cliflags.HTTPAddrName, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.HTTPAddrName, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
+		// confirm IPv6 works too
+		{[]string{"start", "--" + cliflags.HTTPAddrName, "::1"}, "[::1]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.HTTPAddrName, "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
+	}
+
+	for i, td := range testData {
+		if err := f.Parse(td.args); err != nil {
+			t.Fatal(err)
+		}
+
+		extraFlagInit()
+		if td.expected != serverCtx.HTTPAddr {
+			t.Errorf("%d. serverCtx.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCtx.HTTPAddr, td.args)
 		}
 	}
 }
