@@ -815,10 +815,12 @@ func (s *Store) migrate7310(desc roachpb.RangeDescriptor) {
 	if err != nil {
 		log.Fatalf("could not migrate truncated state: %s", err)
 	}
-	if (*state.TruncatedState == roachpb.RaftTruncatedState{}) {
-		state.TruncatedState.Term = raftInitialLogTerm
-		state.TruncatedState.Index = raftInitialLogIndex
+	if (*state.TruncatedState != roachpb.RaftTruncatedState{}) {
+		return
 	}
+
+	state.TruncatedState.Term = raftInitialLogTerm
+	state.TruncatedState.Index = raftInitialLogIndex
 	if _, err := saveState(batch, state); err != nil {
 		log.Fatalf("could not migrate truncated state: %s", err)
 	}
