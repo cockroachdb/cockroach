@@ -48,9 +48,12 @@ const (
 	// The default port for HTTP-for-humans.
 	DefaultHTTPPort = "8080"
 
+	// The default IP address for HTTP-for-humans.
+	DefaultHTTPIPAddr = "127.0.0.1"
+
 	// NB: net.JoinHostPort is not a constant.
 	defaultAddr     = ":" + DefaultPort
-	defaultHTTPAddr = ":" + DefaultHTTPPort
+	defaultHTTPAddr = DefaultHTTPIPAddr + ":" + DefaultHTTPPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
