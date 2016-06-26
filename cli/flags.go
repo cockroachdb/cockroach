@@ -40,7 +40,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connPort, httpPort, connDBName string
+var connUser, connHost, connPort, httpPort, httpIPAddr, connDBName string
 var startBackground bool
 var undoFreezeCluster bool
 
@@ -92,6 +92,9 @@ Database server port to connect to.`),
 	forClient(cliflags.HTTPPortName): wrapText(`
 Database server port to connect to for HTTP requests.`),
 
+	forClient(cliflags.HTTPIPAddrName): wrapText(`
+Database server IP address to connect to for HTTP requests.`),
+
 	cliflags.DatabaseName: wrapText(`
 The name of the database to connect to.`),
 
@@ -130,6 +133,9 @@ The port to bind to.`),
 
 	forServer(cliflags.HTTPPortName): wrapText(`
 The port to bind to for HTTP requests.`),
+
+	forServer(cliflags.HTTPIPAddrName): wrapText(`
+The IP address to bind to for HTTP requests.`),
 
 	cliflags.SocketName: wrapText(`
 Unix socket file, postgresql protocol only.
@@ -387,6 +393,7 @@ func init() {
 		f.StringVar(&connHost, cliflags.HostName, "", usageNoEnv(forServer(cliflags.HostName)))
 		f.StringVarP(&connPort, cliflags.PortName, "p", base.DefaultPort, usageNoEnv(forServer(cliflags.PortName)))
 		f.StringVar(&httpPort, cliflags.HTTPPortName, base.DefaultHTTPPort, usageNoEnv(forServer(cliflags.HTTPPortName)))
+		f.StringVar(&httpIPAddr, cliflags.HTTPIPAddrName, "", usageNoEnv(forServer(cliflags.HTTPIPAddrName)))
 		f.StringVar(&serverCtx.Attrs, cliflags.AttrsName, serverCtx.Attrs, usageNoEnv(cliflags.AttrsName))
 		f.VarP(&serverCtx.Stores, cliflags.StoreName, "s", usageNoEnv(cliflags.StoreName))
 		f.DurationVar(&serverCtx.RaftTickInterval, cliflags.RaftTickIntervalName, base.DefaultRaftTickInterval, usageNoEnv(cliflags.RaftTickIntervalName))
@@ -515,6 +522,9 @@ func init() {
 		}
 
 		serverCtx.Addr = net.JoinHostPort(connHost, connPort)
-		serverCtx.HTTPAddr = net.JoinHostPort(connHost, httpPort)
+		if httpIPAddr == "" {
+			httpIPAddr = connHost
+		}
+		serverCtx.HTTPAddr = net.JoinHostPort(httpIPAddr, httpPort)
 	})
 }
