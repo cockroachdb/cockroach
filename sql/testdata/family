@@ -66,9 +66,8 @@ SELECT * FROM abcd WHERE a = 1
 ----
 1 NULL NULL NULL
 
-# TODO(dan): Specify family f1
 statement ok
-ALTER TABLE abcd ADD e STRING
+ALTER TABLE abcd ADD e STRING FAMILY f1
 
 statement ok
 INSERT INTO abcd VALUES (9, 10, 11, 12, 'foo')
@@ -79,6 +78,45 @@ SELECT * from abcd WHERE a > 1
 5 6  7  8  NULL
 9 10 11 12 foo
 
+# Check the descriptor bookkeeping
+statement ok
+ALTER TABLE abcd ADD COLUMN f INT
+
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE abcd (
+      a INT NOT NULL,
+      b INT NULL,
+      c INT NULL,
+      d INT NULL,
+      e STRING NULL,
+      f INT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a),
+      FAMILY f1 (a, b, e),
+      FAMILY fam_1_c_d (c, d),
+      FAMILY fam_6_f (f)
+      )
+
+statement ok
+ALTER TABLE abcd DROP c, DROP d, DROP e
+
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE abcd (
+      a INT NOT NULL,
+      b INT NULL,
+      f INT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a),
+      FAMILY f1 (a, b),
+      FAMILY fam_6_f (f)
+      )
+
+statement error unknown family \"foo\"
+ALTER TABLE abcd ADD COLUMN c INT FAMILY foo
+
+# Check the the diff-column-id storage
 statement ok
 CREATE TABLE unsorted_colids (a INT PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, FAMILY (c, b, a))
 
