@@ -261,7 +261,14 @@ func (kv *kvSQL) prep(rows int, initData bool) error {
 	if _, err := kv.db.Exec(`DROP TABLE IF EXISTS bench.kv`); err != nil {
 		return err
 	}
-	if _, err := kv.db.Exec(`CREATE TABLE IF NOT EXISTS bench.kv (k STRING PRIMARY KEY, v INT)`); err != nil {
+	schema := `
+CREATE TABLE IF NOT EXISTS bench.kv (
+  k STRING PRIMARY KEY,
+  v INT,
+  FAMILY (k, v)
+)
+`
+	if _, err := kv.db.Exec(schema); err != nil {
 		return err
 	}
 	if !initData {
