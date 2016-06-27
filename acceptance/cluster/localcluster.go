@@ -486,7 +486,11 @@ func (l *LocalCluster) startNode(node *testNode) {
 			"--logtostderr=false")
 
 	}
-	env := []string{"COCKROACH_SCAN_MAX_IDLE_TIME=200ms", "COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true"}
+	env := []string{
+		"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",
+		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true",
+		"COCKROACH_SKIP_UPDATE_CHECK=1",
+	}
 	l.createRoach(node, l.vols, env, cmd...)
 	maybePanic(node.Start())
 	httpAddr := node.Addr(defaultHTTP)
