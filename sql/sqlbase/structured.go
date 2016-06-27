@@ -725,6 +725,86 @@ func (desc *TableDescriptor) Validate() error {
 	return desc.Privileges.Validate(desc.GetID())
 }
 
+// FamilyHeuristicTargetBytes is the target total byte size of columns that the
+// current heuristic will assign to a family.
+const FamilyHeuristicTargetBytes = 256
+
+// upperBoundColumnValueEncodedSize returns the maximum encoded size of the
+// given column using the "value" encoding. If the size is unbounded, false is returned.
+func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
+	switch col.Type.Kind {
+	case ColumnType_BOOL:
+		return encoding.UpperBoundValueEncodingSize(uint32(col.ID), encoding.True, 0)
+	case ColumnType_INT, ColumnType_DATE, ColumnType_TIMESTAMP, ColumnType_TIMESTAMPTZ:
+		return encoding.UpperBoundValueEncodingSize(uint32(col.ID), encoding.Int, int(col.Type.Width))
+	case ColumnType_FLOAT:
+		return encoding.UpperBoundValueEncodingSize(uint32(col.ID), encoding.Float, 0)
+	case ColumnType_INTERVAL:
+		return encoding.UpperBoundValueEncodingSize(uint32(col.ID), encoding.Duration, 0)
+	case ColumnType_STRING, ColumnType_BYTES:
+		// STRINGs are counted as runes, so this isn't totally correct, but this
+		// seems better than always assuming the maximum rune width.
+		return encoding.UpperBoundValueEncodingSize(uint32(col.ID), encoding.Bytes, int(col.Type.Width))
+	case ColumnType_DECIMAL:
+		return encoding.UpperBoundValueEncodingSize(
+			uint32(col.ID), encoding.Decimal, int(col.Type.Precision))
+	default:
+		panic(errors.Errorf("unknown column type: %s", col.Type.Kind))
+	}
+}
+
+// fitColumnToFamily attempts to fit a new column into the existing column
+// families. If the heuristics find a fit, true is returned along with the
+// index of the selected family. Otherwise, false is returned and the column
+// should be put in a new family.
+//
+// Current heuristics:
+// - If the column is unbounded size (bytes, string, decimal) put it in a new
+//   family.
+// - If the column is bounded size (int, float, duration, date, timestamp, bool,
+//   or user bounded string/decimal), find the first family where the storage
+//   size of the existing columns plus the new column is not greater than
+//   FamilyHeuristicTargetBytes. The maximum size of the value encoding is used
+//   as the size of columns.
+// - Otherwise, the column doesn't fit in any existing family, spill it over
+//   into a new family.
+//
+// TODO(dan): Calling this function repeatedly to add columns is N^2. It
+// shouldn't be a problem because the number of columns is small, but if it
+// becomes an issue, make the bookkeeping of the columnSizesByID incremental.
+func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
+	size, isBounded := upperBoundColumnValueEncodedSize(col)
+	if !isBounded || size > FamilyHeuristicTargetBytes {
+		return 0, false
+	}
+
+	columnSizesByID := make(map[ColumnID]int, len(desc.Columns))
+	for _, c := range desc.Columns {
+		if columnSizesByID[c.ID], isBounded = upperBoundColumnValueEncodedSize(c); !isBounded {
+			// Not bounded in size, so exceed the heuristic max to avoid assigning to
+			// a family that this column is in.
+			columnSizesByID[c.ID] = FamilyHeuristicTargetBytes + 1
+		}
+	}
+
+	// TODO(dan): This naively places columns in the first family they'll fit in,
+	// which is likely to lead to fragmentation. Consider something smarter like
+	// picking the most full family that will fit the column.
+	for i, family := range desc.Families {
+		var familySize int
+		for _, colID := range family.ColumnIDs {
+			familySize += columnSizesByID[colID]
+			if familySize > FamilyHeuristicTargetBytes {
+				break
+			}
+		}
+		if familySize+size <= FamilyHeuristicTargetBytes {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // AddColumn adds a column to the table.
 func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 	desc.Columns = append(desc.Columns, col)

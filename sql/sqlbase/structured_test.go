@@ -622,3 +622,135 @@ func TestColumnTypeSQLString(t *testing.T) {
 		}
 	}
 }
+
+func TestColumnValueEncodedSize(t *testing.T) {
+	tests := []struct {
+		colType   ColumnType
+		isBounded bool
+		size      int // not applicable if isBounded is false
+	}{
+		{ColumnType{Kind: ColumnType_BOOL}, true, 1},
+		{ColumnType{Kind: ColumnType_INT}, true, 10},
+		{ColumnType{Kind: ColumnType_INT, Width: 2}, true, 10},
+		{ColumnType{Kind: ColumnType_FLOAT}, true, 9},
+		{ColumnType{Kind: ColumnType_FLOAT, Precision: 100}, true, 9},
+		{ColumnType{Kind: ColumnType_DECIMAL}, false, -1},
+		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 100}, true, 68},
+		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 100, Width: 100}, true, 68},
+		{ColumnType{Kind: ColumnType_DATE}, true, 10},
+		{ColumnType{Kind: ColumnType_TIMESTAMP}, true, 10},
+		{ColumnType{Kind: ColumnType_INTERVAL}, true, 28},
+		{ColumnType{Kind: ColumnType_STRING}, false, -1},
+		{ColumnType{Kind: ColumnType_STRING, Width: 100}, true, 110},
+		{ColumnType{Kind: ColumnType_BYTES}, false, -1},
+	}
+	for i, test := range tests {
+		size, isBounded := upperBoundColumnValueEncodedSize(ColumnDescriptor{
+			Type: test.colType,
+		})
+		if isBounded != test.isBounded {
+			if isBounded {
+				t.Errorf("%d: expected unbounded but got bounded", i)
+			} else {
+				t.Errorf("%d: expected bounded but got unbounded", i)
+			}
+			continue
+		}
+		if isBounded && size != test.size {
+			t.Errorf("%d: got size %d but expected %d", i, size, test.size)
+		}
+	}
+}
+
+func TestFitColumnToFamily(t *testing.T) {
+	intEncodedSize, _ := upperBoundColumnValueEncodedSize(ColumnDescriptor{
+		ID:   8,
+		Type: ColumnType{Kind: ColumnType_INT},
+	})
+
+	makeTestTableDescriptor := func(familyTypes [][]ColumnType) TableDescriptor {
+		nextColumnID := ColumnID(8)
+		var desc TableDescriptor
+		for _, fTypes := range familyTypes {
+			var family ColumnFamilyDescriptor
+			for _, t := range fTypes {
+				desc.Columns = append(desc.Columns, ColumnDescriptor{
+					ID:   nextColumnID,
+					Type: t,
+				})
+				family.ColumnIDs = append(family.ColumnIDs, nextColumnID)
+				nextColumnID++
+			}
+			desc.Families = append(desc.Families, family)
+		}
+		return desc
+	}
+
+	emptyFamily := []ColumnType{}
+	partiallyFullFamily := []ColumnType{
+		{Kind: ColumnType_INT},
+		{Kind: ColumnType_BYTES, Width: 10},
+	}
+	fullFamily := []ColumnType{
+		{Kind: ColumnType_BYTES, Width: FamilyHeuristicTargetBytes + 1},
+	}
+	maxIntsInOneFamily := make([]ColumnType, FamilyHeuristicTargetBytes/intEncodedSize)
+	for i := range maxIntsInOneFamily {
+		maxIntsInOneFamily[i] = ColumnType{Kind: ColumnType_INT}
+	}
+
+	tests := []struct {
+		newCol           ColumnType
+		existingFamilies [][]ColumnType
+		colFits          bool
+		idx              int // not applicable if colFits is false
+	}{
+		// Bounded size column.
+		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_BOOL},
+			existingFamilies: nil,
+		},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+			existingFamilies: [][]ColumnType{emptyFamily},
+		},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+			existingFamilies: [][]ColumnType{partiallyFullFamily},
+		},
+		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_BOOL},
+			existingFamilies: [][]ColumnType{fullFamily},
+		},
+		{colFits: true, idx: 1, newCol: ColumnType{Kind: ColumnType_BOOL},
+			existingFamilies: [][]ColumnType{fullFamily, emptyFamily},
+		},
+
+		// Unbounded size column.
+		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_DECIMAL},
+			existingFamilies: [][]ColumnType{emptyFamily},
+		},
+		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_DECIMAL},
+			existingFamilies: [][]ColumnType{partiallyFullFamily},
+		},
+
+		// Check FamilyHeuristicMaxBytes boundary.
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_INT},
+			existingFamilies: [][]ColumnType{maxIntsInOneFamily[1:]},
+		},
+		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_INT},
+			existingFamilies: [][]ColumnType{maxIntsInOneFamily},
+		},
+	}
+	for i, test := range tests {
+		desc := makeTestTableDescriptor(test.existingFamilies)
+		idx, colFits := fitColumnToFamily(desc, ColumnDescriptor{Type: test.newCol})
+		if colFits != test.colFits {
+			if colFits {
+				t.Errorf("%d: expected no fit for the column but got one", i)
+			} else {
+				t.Errorf("%d: expected fit for the column but didn't get one", i)
+			}
+			continue
+		}
+		if colFits && idx != test.idx {
+			t.Errorf("%d: got a fit in family offset %d but expected offset %d", i, idx, test.idx)
+		}
+	}
+}

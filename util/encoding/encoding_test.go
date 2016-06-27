@@ -1731,6 +1731,45 @@ func TestValueEncodingRand(t *testing.T) {
 	}
 }
 
+func TestUpperBoundValueEncodingSize(t *testing.T) {
+	tests := []struct {
+		colID     uint32
+		typ       Type
+		width     int
+		isBounded bool
+		size      int // Not applicable if isBounded is false.
+	}{
+		{0, Null, 0, true, 1},
+		{0, True, 0, true, 1},
+		{0, False, 0, true, 1},
+		{0, Int, 0, true, 10},
+		{0, Int, 100, true, 10},
+		{0, Float, 0, true, 9},
+		{0, Decimal, 0, false, -1},
+		{0, Decimal, 100, true, 68},
+		{0, Time, 0, true, 19},
+		{0, Duration, 0, true, 28},
+		{0, Bytes, 0, false, -1},
+		{0, Bytes, 100, true, 110},
+
+		{8, True, 0, true, 2},
+	}
+	for i, test := range tests {
+		size, isBounded := UpperBoundValueEncodingSize(test.colID, test.typ, test.width)
+		if isBounded != test.isBounded {
+			if isBounded {
+				t.Errorf("%d: expected unbounded but got bounded", i)
+			} else {
+				t.Errorf("%d: expected bounded but got unbounded", i)
+			}
+			continue
+		}
+		if isBounded && size != test.size {
+			t.Errorf("%d: got size %d but expected %d", i, size, test.size)
+		}
+	}
+}
+
 func BenchmarkEncodeBoolValue(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	rd := randData{rng}
