@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -861,7 +862,12 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}))
 
 	// Add the bookie to the store.
-	s.bookie = newBookie(s.ctx.Clock, s.stopper, s.metrics)
+	s.bookie = newBookie(
+		s.ctx.Clock,
+		s.stopper,
+		s.metrics,
+		envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip),
+	)
 
 	if s.Ident.NodeID == 0 {
 		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"

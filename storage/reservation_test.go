@@ -19,12 +19,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/pkg/errors"
 )
 
 // createTestBookie creates a new bookie, stopper and manual clock for testing.
@@ -36,12 +37,11 @@ func createTestBookie(
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	b := newBookie(clock, stopper, newStoreMetrics())
+	b := newBookie(clock, stopper, newStoreMetrics(), reservationTimeout)
 	// Lock the bookie to prevent the main loop from running as we change some
 	// of the bookie's state.
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.reservationTimeout = reservationTimeout
 	b.maxReservations = maxReservations
 	b.maxReservedBytes = maxReservedBytes
 	// Set a high number for a mocked total available space.
@@ -250,18 +250,17 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 }
 
 // expireNextReservation advances the manual clock to one nanosecond passed the
-// next expiring reservation and waits until exactly the number of expired
-// reservations is equal to expireCount.
-func expireNextReservation(t *testing.T, mc *hlc.ManualClock, b *bookie, expireCount int) {
+// next expiring reservation and waits until exactly one reservation has expired.
+func expireNextReservation(t *testing.T, mc *hlc.ManualClock, b *bookie) {
 	b.mu.Lock()
 	nextExpiredReservation := b.mu.queue.peek()
-	expectedExpires := len(b.mu.queue) - expireCount
-	b.mu.Unlock()
 	if nextExpiredReservation == nil {
-		return
+		t.Fatalf("expected at least one reservation, but there are none")
 	}
+	expectedExpires := len(b.mu.queue) - 1
 	// Set the clock to after next timeout.
 	mc.Set(nextExpiredReservation.expireAt.WallTime + 1)
+	b.mu.Unlock()
 
 	util.SucceedsSoon(t, func() error {
 		b.mu.Lock()
@@ -279,7 +278,6 @@ func expireNextReservation(t *testing.T, mc *hlc.ManualClock, b *bookie, expireC
 // correctly expiring any unfilled reservations in a number of different cases.
 func TestReservationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#7373")
 	// This test loads up 7 reservations at once, so set the queue higher to
 	// accommodate them.
 	stopper, mc, b := createTestBookie(time.Microsecond, 20, defaultMaxReservedBytes)
@@ -313,7 +311,7 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 9 /*reservations*/, 10 /*queue*/, 9*bytesPerReservation /*bytes*/)
 
 	// Expire reservation 1.
-	expireNextReservation(t, mc, b, 1)
+	expireNextReservation(t, mc, b)
 	verifyBookie(t, b, 8 /*reservations*/, 9 /*queue*/, 8*bytesPerReservation /*bytes*/)
 
 	// Fill reservations 4 and 6.
@@ -325,11 +323,11 @@ func TestReservationQueue(t *testing.T) {
 	}
 	verifyBookie(t, b, 6 /*reservations*/, 9 /*queue*/, 6*bytesPerReservation /*bytes*/)
 
-	expireNextReservation(t, mc, b, 1) // Expire 2 (already filled)
+	expireNextReservation(t, mc, b) // Expire 2 (already filled)
 	verifyBookie(t, b, 6 /*reservations*/, 8 /*queue*/, 6*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 3
+	expireNextReservation(t, mc, b) // Expire 3
 	verifyBookie(t, b, 5 /*reservations*/, 7 /*queue*/, 5*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 4 (already filled)
+	expireNextReservation(t, mc, b) // Expire 4 (already filled)
 	verifyBookie(t, b, 5 /*reservations*/, 6 /*queue*/, 5*bytesPerReservation /*bytes*/)
 
 	// Add three new reservations, 1 and 2, which have already been filled and
@@ -381,22 +379,22 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 7 /*reservations*/, 9 /*queue*/, 7*bytesPerReservation /*bytes*/)
 
 	// Expire all the remaining reservations one at a time.
-	expireNextReservation(t, mc, b, 1) // Expire 5
+	expireNextReservation(t, mc, b) // Expire 5
 	verifyBookie(t, b, 6 /*reservations*/, 8 /*queue*/, 6*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 6(1) - already filled
+	expireNextReservation(t, mc, b) // Expire 6(1) - already filled
 	verifyBookie(t, b, 6 /*reservations*/, 7 /*queue*/, 6*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 7
+	expireNextReservation(t, mc, b) // Expire 7
 	verifyBookie(t, b, 5 /*reservations*/, 6 /*queue*/, 5*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 8
+	expireNextReservation(t, mc, b) // Expire 8
 	verifyBookie(t, b, 4 /*reservations*/, 5 /*queue*/, 4*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 9
+	expireNextReservation(t, mc, b) // Expire 9
 	verifyBookie(t, b, 3 /*reservations*/, 4 /*queue*/, 3*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 10
+	expireNextReservation(t, mc, b) // Expire 10
 	verifyBookie(t, b, 2 /*reservations*/, 3 /*queue*/, 2*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 1(2) - already filled
+	expireNextReservation(t, mc, b) // Expire 1(2) - already filled
 	verifyBookie(t, b, 2 /*reservations*/, 2 /*queue*/, 2*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 2(2)
+	expireNextReservation(t, mc, b) // Expire 2(2)
 	verifyBookie(t, b, 1 /*reservations*/, 1 /*queue*/, 1*bytesPerReservation /*bytes*/)
-	expireNextReservation(t, mc, b, 1) // Expire 6(2)
+	expireNextReservation(t, mc, b) // Expire 6(2)
 	verifyBookie(t, b, 0 /*reservations*/, 0 /*queue*/, 0 /*bytes*/)
 }

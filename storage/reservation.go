@@ -91,11 +91,12 @@ func newBookie(
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 	metrics *storeMetrics,
+	reservationTimeout time.Duration,
 ) *bookie {
 	b := &bookie{
 		clock:              clock,
 		metrics:            metrics,
-		reservationTimeout: envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip),
+		reservationTimeout: reservationTimeout,
 		maxReservations:    envutil.EnvOrDefaultInt("max_reservations", defaultMaxReservations),
 		maxReservedBytes:   envutil.EnvOrDefaultBytes("max_reserved_bytes", defaultMaxReservedBytes),
 	}
