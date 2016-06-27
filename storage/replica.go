@@ -238,7 +238,9 @@ type Replica struct {
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	if r.mu.destroyed != nil {
-		return r.mu.destroyed
+		// Silently ignore all operations on destroyed replicas. We can't return an
+		// error here as all errors returned from this method are considered fatal.
+		return nil
 	}
 
 	if r.mu.internalRaftGroup == nil {
@@ -1279,6 +1281,9 @@ func (r *Replica) proposeRaftCommand(
 	chan roachpb.ResponseWithError, func() bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.mu.destroyed != nil {
+		return nil, nil, r.mu.destroyed
+	}
 	_, replica := r.mu.state.Desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
