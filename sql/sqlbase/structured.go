@@ -725,6 +725,87 @@ func (desc *TableDescriptor) Validate() error {
 	return desc.Privileges.Validate(desc.GetID())
 }
 
+// FamilyHeuristicMaxBytes is the maximum total byte size of columns that the
+// current heuristic will assign to a family.
+const FamilyHeuristicMaxBytes = 256
+
+// columnValueEncodedSize returns the maximum encoded size of the given column
+// type using the "value" encoding. It accounts for the tag, but assumes the tag
+// is one byte, which is true when the column id part is small (i.e., less than
+// 8). If the size is unbounded, false is returned.
+func columnValueEncodedSize(colType ColumnType) (int, bool) {
+	switch colType.Kind {
+	case ColumnType_BOOL:
+		// BOOLs are stored in the tag byte.
+		return 1, true
+	case ColumnType_INT, ColumnType_FLOAT:
+		return 1 + 9, true
+	case ColumnType_DATE, ColumnType_TIMESTAMP, ColumnType_TIMESTAMPTZ:
+		return 1 + 9, true
+	case ColumnType_INTERVAL:
+		return 1 + 9*3, true
+	case ColumnType_STRING, ColumnType_BYTES:
+		if colType.Width != 0 {
+			// STRINGs are counted as runes, so this isn't totally correct, but this
+			// seems better than always assuming the maximum rune width.
+			return 1 + 9 + int(colType.Width), true
+		}
+		return 0, false
+	case ColumnType_DECIMAL:
+		if colType.Width != 0 {
+			return 1 + int(colType.Width), true
+		}
+		return 0, false
+	default:
+		panic(errors.Errorf("unknown column type: %s", colType.Kind))
+	}
+}
+
+// fitColumnToFamily attempts to fit a new column into the existing column
+// families. If the heuristics finds a fit, true is returned along with the
+// index of the selected family. Otherwise, false is returned and the column
+// should be put in a new family.
+//
+// Current heuristics:
+// - If the column is unbounded size (bytes, string, decimal) put it in a new
+//   family.
+// - If the column is bounded size (int, float, duration, date, timestamp, bool,
+//   or user bounded bytes/string/decimal), find the first family where the
+//   storage size of the existing columns plus the new column is not greater
+//   than FamilyHeuristicMaxBytes. The maximum size of the value encoding is
+//   used as the size of columns.
+// - Otherwise, the column doesn't fit in any existing family, spill it over
+//   into a new family.
+func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
+	size, isBounded := columnValueEncodedSize(col.Type)
+	if !isBounded || size > FamilyHeuristicMaxBytes {
+		return 0, false
+	}
+
+	columnSizesByID := make(map[ColumnID]int, len(desc.Columns))
+	for _, c := range desc.Columns {
+		if columnSizesByID[c.ID], isBounded = columnValueEncodedSize(c.Type); !isBounded {
+			// Not bounded in size, so exceed the heuristic max to avoid assigning to
+			// a family that this column is in.
+			columnSizesByID[c.ID] = FamilyHeuristicMaxBytes + 1
+		}
+	}
+
+	for i, family := range desc.Families {
+		var familySize int
+		for _, colID := range family.ColumnIDs {
+			familySize += columnSizesByID[colID]
+			if familySize > FamilyHeuristicMaxBytes {
+				break
+			}
+		}
+		if familySize+size <= FamilyHeuristicMaxBytes {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // AddColumn adds a column to the table.
 func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 	desc.Columns = append(desc.Columns, col)
