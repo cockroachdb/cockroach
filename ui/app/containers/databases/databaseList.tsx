@@ -185,4 +185,3 @@ let databasesMainConnected = connect(
 )(DatabasesMain);
 
 export default databasesMainConnected;
-

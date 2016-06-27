@@ -81,7 +81,7 @@ System.config({
     "react-dom": "npm:react-dom@15.1.0",
     "react-paginate": "npm:react-paginate@2.1.1",
     "react-redux": "npm:react-redux@4.4.5",
-    "react-router": "npm:react-router@2.4.1",
+    "react-router": "npm:react-router@2.5.1",
     "react-router-redux": "npm:react-router-redux@4.0.5",
     "redux": "npm:redux@3.5.2",
     "redux-thunk": "npm:redux-thunk@2.1.0",
@@ -702,7 +702,7 @@ System.config({
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
       "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "http": "github:jspm/nodelibs-http@1.7.1",
-      "jsprim": "npm:jsprim@1.2.2",
+      "jsprim": "npm:jsprim@1.3.0",
       "sshpk": "npm:sshpk@1.8.3",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },
@@ -784,7 +784,7 @@ System.config({
     "npm:jsonpointer@2.0.0": {
       "assert": "github:jspm/nodelibs-assert@0.1.0"
     },
-    "npm:jsprim@1.2.2": {
+    "npm:jsprim@1.3.0": {
       "assert": "github:jspm/nodelibs-assert@0.1.0",
       "extsprintf": "npm:extsprintf@1.0.2",
       "json-schema": "npm:json-schema@0.2.2",
@@ -999,10 +999,11 @@ System.config({
       "react": "npm:react@15.1.0",
       "redux": "npm:redux@3.5.2"
     },
-    "npm:react-router@2.4.1": {
+    "npm:react-router@2.5.1": {
       "history": "npm:history@2.1.2",
       "hoist-non-react-statics": "npm:hoist-non-react-statics@1.2.0",
       "invariant": "npm:invariant@2.2.1",
+      "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "react": "npm:react@15.1.0",
       "warning": "npm:warning@2.1.0"

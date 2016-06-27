@@ -20,4 +20,3 @@ export class ToolTip extends React.Component<ToolTipProps, {}> {
     </div>;
   }
 }
-

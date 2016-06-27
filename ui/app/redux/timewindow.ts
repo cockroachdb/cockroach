@@ -108,4 +108,3 @@ export function setTimeScale(ts: TimeScale): PayloadAction<TimeScale> {
     payload: ts,
   };
 }
-
