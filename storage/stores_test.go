@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -153,6 +154,9 @@ func TestStoresLookupReplica(t *testing.T) {
 			StartKey: rng.start,
 			EndKey:   rng.end,
 			Replicas: []roachpb.ReplicaDescriptor{{StoreID: rng.storeID}},
+		}
+		if _, err := writeInitialState(e[i], enginepb.MVCCStats{}, *d[i]); err != nil {
+			t.Fatal(err)
 		}
 		newRng, err := NewReplica(d[i], s[i], 0)
 		if err != nil {
