@@ -811,7 +811,7 @@ func (s *Store) migrate7310(desc roachpb.RangeDescriptor) {
 		log.Fatalf("found uninitialized descriptor on range: %+v", desc)
 	}
 	batch := s.engine.NewBatch()
-	state, err := loadState(batch, &desc)
+	state, err := loadState(batch, &desc, false /* !assert */)
 	if err != nil {
 		log.Fatalf("could not migrate truncated state: %s", err)
 	}

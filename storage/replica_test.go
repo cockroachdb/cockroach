@@ -4750,13 +4750,12 @@ func TestReplicaLookup(t *testing.T) {
 	}
 }
 
-// TestRequestLeaderEncounterGroupDeleteError verifies that a request leader proposal which fails with
-// RaftGroupDeletedError is converted to a RangeNotFoundError in the Store.
+// TestRequestLeaderEncounterGroupDeleteError verifies that a request leader
+// proposal which fails with RaftGroupDeletedError is converted to
+// a RangeNotFoundError in the Store.
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{
-		rng: &Replica{},
-	}
+	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
@@ -4764,18 +4763,10 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	proposeRaftCommandFn := func(*pendingCmd) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
-	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
-
+	rng := tc.rng
 	rng.mu.Lock()
 	rng.mu.proposeRaftCommandFn = proposeRaftCommandFn
 	rng.mu.Unlock()
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := tc.store.AddReplicaTest(rng); err != nil {
-		t.Fatal(err)
-	}
 
 	gArgs := getArgs(roachpb.Key("a"))
 	// Force the read command request a new lease.

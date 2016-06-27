@@ -44,12 +44,20 @@ set -xe
 mkdir /old
 cd /old
 
+function finish() {
+  touch oldout newout
+  cat oldout
+  cat newout
+}
+
+trap finish EXIT
+
 export PGHOST=localhost
 export PGPORT=""
 
 bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
-$bin start &
+$bin start --alsologtostderr & &> oldout
 sleep 1
 
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
@@ -61,7 +69,7 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach
-$bin start --background
+$bin start --background --alsologtostderr &> newout
 echo "Read data written by reference version using new binary"
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -102,7 +110,13 @@ $bin quit && wait
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
-$bin start &
+function finish() {
+  touch out
+  cat out
+}
+trap finish EXIT
+
+$bin start & &> out
 sleep 1
 # grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 2, but this client only supports version 1"

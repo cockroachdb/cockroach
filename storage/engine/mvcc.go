@@ -411,8 +411,6 @@ func updateStatsOnGC(
 
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the enginepb.MVCCStats struct.
-//
-// TODO(tschottdorf): see whether keeping this method around makes sense.
 func MVCCGetRangeStats(
 	ctx context.Context,
 	engine Reader,
