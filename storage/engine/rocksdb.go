@@ -59,12 +59,28 @@ func init() {
 	rocksdb.Logger = log.Infof
 }
 
+// RocksDBCache is a wrapper around C.DBCache
+type RocksDBCache struct {
+	cache *C.DBCache
+}
+
+// NewRocksDBCache creates a new cache of the specified size.
+func NewRocksDBCache(cacheSize int64) RocksDBCache {
+	return RocksDBCache{cache: C.DBNewCache(C.uint64_t(cacheSize))}
+}
+
+// Release releases the cache. Note that the cache will continue to be used
+// until all of the RocksDB engines it was attached to have been closed.
+func (c RocksDBCache) Release() {
+	C.DBReleaseCache(c.cache)
+}
+
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
 	rdb            *C.DBEngine
 	attrs          roachpb.Attributes // Attributes for this engine
 	dir            string             // The data directory
-	cacheSize      int64              // Memory to use to cache values.
+	cache          RocksDBCache       // Shared cache.
 	memtableBudget int64              // Memory to use for the memory table.
 	maxSize        int64              // Used for calculating rebalancing and free space.
 	stopper        *stop.Stopper
@@ -74,15 +90,20 @@ type RocksDB struct {
 var _ Engine = &RocksDB{}
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget, maxSize int64,
-	stopper *stop.Stopper) *RocksDB {
+func NewRocksDB(
+	attrs roachpb.Attributes,
+	dir string,
+	cache RocksDBCache,
+	memtableBudget, maxSize int64,
+	stopper *stop.Stopper,
+) *RocksDB {
 	if dir == "" {
 		panic("dir must be non-empty")
 	}
 	return &RocksDB{
 		attrs:          attrs,
 		dir:            dir,
-		cacheSize:      cacheSize,
+		cache:          cache,
 		memtableBudget: memtableBudget,
 		maxSize:        maxSize,
 		stopper:        stopper,
@@ -90,11 +111,16 @@ func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget,
 	}
 }
 
-func newMemRocksDB(attrs roachpb.Attributes, cacheSize, memtableBudget int64, stopper *stop.Stopper) *RocksDB {
+func newMemRocksDB(
+	attrs roachpb.Attributes,
+	cache RocksDBCache,
+	memtableBudget int64,
+	stopper *stop.Stopper,
+) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		// dir: empty dir == "mem" RocksDB instance.
-		cacheSize:      cacheSize,
+		cache:          cache,
 		memtableBudget: memtableBudget,
 		stopper:        stopper,
 		deallocated:    make(chan struct{}),
@@ -147,7 +173,7 @@ func (r *RocksDB) Open() error {
 
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
-			cache_size:      C.uint64_t(r.cacheSize),
+			cache:           r.cache.cache,
 			memtable_budget: C.uint64_t(r.memtableBudget),
 			block_size:      C.uint64_t(envutil.EnvOrDefaultBytes("rocksdb_block_size", defaultBlockSize)),
 			wal_ttl_seconds: C.uint64_t(envutil.EnvOrDefaultDuration("rocksdb_wal_ttl", 0).Seconds()),

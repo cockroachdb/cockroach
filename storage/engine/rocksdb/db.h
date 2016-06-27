@@ -54,18 +54,22 @@ typedef struct {
 // operation. If DBStatus.data == NULL the operation succeeded.
 typedef DBString DBStatus;
 
+typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
 
 // DBOptions contains local database options.
 typedef struct {
-  uint64_t cache_size;
+  DBCache *cache;
   uint64_t memtable_budget;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
   bool allow_os_buffer;
   bool logging_enabled;
 } DBOptions;
+
+DBCache* DBNewCache(uint64_t size);
+void DBReleaseCache(DBCache *cache);
 
 // Opens the database located in "dir", creating it if it doesn't
 // exist.
