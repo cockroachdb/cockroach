@@ -101,7 +101,6 @@ type Txn struct {
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
-	retrying            bool
 	// The txn has to be committed by this deadline. A nil value indicates no
 	// deadline.
 	deadline *hlc.Timestamp
@@ -151,10 +150,7 @@ func (txn *Txn) DebugName() string {
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
 func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
-	if txn.retrying {
-		if txn.Proto.Isolation != isolation {
-			return errors.Errorf("cannot change the isolation level of a retrying transaction")
-		}
+	if txn.Proto.Isolation == isolation {
 		return nil
 	}
 	if txn.Proto.IsInitialized() {
@@ -168,10 +164,7 @@ func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
 func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
-	if txn.retrying {
-		if txn.UserPriority != userPriority {
-			return errors.Errorf("cannot change the user priority of a retrying transaction")
-		}
+	if txn.UserPriority == userPriority {
 		return nil
 	}
 	if txn.Proto.IsInitialized() {
@@ -508,7 +501,8 @@ func (e *AutoCommitError) Error() string {
 // used.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
-	fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
+	fn func(txn *Txn, opt *TxnExecOptions) error,
+) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var retryOptions retry.Options
@@ -533,7 +527,7 @@ func (txn *Txn) Exec(
 	if opt.AutoRetry {
 		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
-RetryLoop:
+
 	for r := retry.Start(retryOptions); r.Next(); {
 		if txn != nil {
 			// If we're looking at a brand new transaction, then communicate
@@ -545,30 +539,25 @@ RetryLoop:
 		}
 
 		err = fn(txn, &opt)
-		if txn != nil {
-			txn.retrying = true
-			defer func() {
-				txn.retrying = false
-			}()
-		}
-		if (err == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
-			// Wrap a non-retryable error so that a caller can inspect.
-			if _, retryable := err.(*roachpb.RetryableTxnError); err != nil && !retryable {
-				err = &AutoCommitError{cause: err}
+			if err != nil {
+				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+					// We can't retry, so let the caller know we tried to
+					// autocommit.
+					err = &AutoCommitError{cause: err}
+				}
 			}
 		}
 
-		if err == nil {
+		if !opt.AutoRetry {
 			break
 		}
 
-		if !opt.AutoRetry {
-			break RetryLoop
-		}
-
-		if retErr, retryable := err.(*roachpb.RetryableTxnError); retryable {
+		if retErr, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+			break
+		} else {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error.
 			if txn.Proto.ID != nil {
@@ -583,8 +572,6 @@ RetryLoop:
 			if !retErr.Backoff {
 				r.Reset()
 			}
-		} else {
-			break RetryLoop
 		}
 		if log.V(2) {
 			log.Infof("automatically retrying transaction: %s because of error: %s",
