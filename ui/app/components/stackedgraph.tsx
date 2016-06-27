@@ -78,6 +78,7 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
 
     /**
      * TODO: This method is missing from the nvd3 typescript typings.
+     * https://github.com/jgoz/typed-nvd3/issues/1
      */
     (this.chart as any).showControls(false);
 

@@ -99,8 +99,8 @@ let nodeStatuses = (state: any): NodeStatus[] => state.nodes.statuses;
 let newerVersions = (state: any): VersionList => state.version.valid ? state.version.data : null;
 let clusterID = (state: any): string => state.cluster.data && state.cluster.data.cluster_id;
 
-// TODO (maxlang): change the way uiData stores data so we don't need an added check to see if the value was fetched
-// TODO (maxlang): determine whether they dismissed a node version mismatch or an upstream version check
+// TODO(maxlang): change the way uiData stores data so we don't need an added check to see if the value was fetched
+// TODO(maxlang): determine whether they dismissed a node version mismatch or an upstream version check
 let versionCheckDismissedFetched = (state: any): boolean => state.uiData.data && _.has(state.uiData.data, VERSION_DISMISSED_KEY);
 let versionCheckDismissed = (state: any): number => versionCheckDismissedFetched(state) ? state.uiData.data[VERSION_DISMISSED_KEY] : undefined;
 

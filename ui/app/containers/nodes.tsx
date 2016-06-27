@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { ListLink } from "../components/listLink.tsx";
+import { ListLink } from "../components/listLink";
 import TimeScaleSelector from "./timescale";
 
 /**
@@ -16,15 +16,12 @@ export default class Layout extends React.Component<{}, {}> {
     let child = React.Children.only(this.props.children);
     let displayTimescale = (child as any).type.displayTimeScale === true;
 
-    // TODO: The first div seems superfluous, remove after switch to ui/next.
-    return <div>
-      <div className="nav-container">
-        <ul className="nav">
-          <ListLink to="/nodes/overview">Overview</ListLink>
-          <ListLink to="/nodes/graphs">Graphs</ListLink>
-          { displayTimescale ? <TimeScaleSelector/> : null }
-        </ul>
-      </div>
+    return <div className="nav-container">
+      <ul className="nav">
+        <ListLink to="/nodes/overview">Overview</ListLink>
+        <ListLink to="/nodes/graphs">Graphs</ListLink>
+        { displayTimescale ? <TimeScaleSelector/> : null }
+      </ul>
       { this.props.children }
     </div>;
   }

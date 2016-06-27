@@ -322,7 +322,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
       });
     });
 
-  // TODO (maxlang): truncate long db names
+  // TODO(maxlang): truncate long db names
   static title(props: any) {
     return <h2><Link to="/databases" >Databases </Link>: <Link to={`/databases/${props.params.database_name}`}> {props.params.database_name}</Link>: {props.params.table_name}</h2>;
   }

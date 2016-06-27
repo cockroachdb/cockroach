@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, RouteComponentProps } from "react-router";
 
-import { IndexListLink, ListLink } from "../components/listLink.tsx";
+import { IndexListLink, ListLink } from "../components/listLink";
 import TimeScaleSelector from "./timescale";
 
 /**
@@ -21,16 +21,13 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
 
     let baseRoute = `/nodes/${this.props.params.node_id}`;
 
-    // TODO: The first div seems superfluous, remove after switch to ui/next.
-    return <div>
-      <div className="nav-container">
-        <ul className="nav">
-          <IndexListLink to={baseRoute}>Overview</IndexListLink>
-          <ListLink to={baseRoute + "/graphs"}>Graphs</ListLink>
-          <ListLink to={baseRoute + "/logs"}>Logs</ListLink>
-          { displayTimescale ? <TimeScaleSelector/> : null }
-        </ul>
-      </div>
+    return <div className="nav-container">
+      <ul className="nav">
+        <IndexListLink to={baseRoute}>Overview</IndexListLink>
+        <ListLink to={baseRoute + "/graphs"}>Graphs</ListLink>
+        <ListLink to={baseRoute + "/logs"}>Logs</ListLink>
+        { displayTimescale ? <TimeScaleSelector/> : null }
+      </ul>
       { this.props.children }
     </div>;
   }

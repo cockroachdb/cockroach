@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { IndexListLink, ListLink } from "../components/listLink.tsx";
+import { IndexListLink, ListLink } from "../components/listLink";
 import TimeScaleSelector from "./timescale";
 
 /**
@@ -13,6 +13,9 @@ export default class extends React.Component<{}, {}> {
 
   render() {
     // Determine whether or not the time scale options should be displayed.
+    //
+    // TODO(mrtracy): is this the right object heirarchy? Seems odd to inspect
+    // the child. Also see about removing the `any` below.
     let child = React.Children.only(this.props.children);
     let displayTimescale = (child as any).type.displayTimeScale === true;
 
