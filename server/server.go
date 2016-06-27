@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -276,8 +277,8 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	httpServer := util.MakeServer(s.stopper, tlsConfig, s)
-	plainRedirectServer := util.MakeServer(s.stopper, tlsConfig, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	httpServer := netutil.MakeServer(s.stopper, tlsConfig, s)
+	plainRedirectServer := netutil.MakeServer(s.stopper, tlsConfig, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
 		http.Redirect(w, r, "https://"+r.Host+r.RequestURI, 308)
 	}))
@@ -348,27 +349,27 @@ func (s *Server) Start() error {
 		tlsL := httpMux.Match(cmux.Any())
 
 		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(httpMux.Serve())
+			netutil.FatalIfUnexpected(httpMux.Serve())
 		})
 
 		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
+			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		})
 
 		httpLn = tls.NewListener(tlsL, tlsConfig)
 	}
 
 	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(httpServer.Serve(httpLn))
+		netutil.FatalIfUnexpected(httpServer.Serve(httpLn))
 	})
 
 	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(s.grpc.Serve(anyL))
+		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
 	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(httpServer.ServeWith(pgL, func(conn net.Conn) {
-			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
+		netutil.FatalIfUnexpected(httpServer.ServeWith(pgL, func(conn net.Conn) {
+			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
 				log.Error(err)
 			}
 		}))
@@ -389,8 +390,9 @@ func (s *Server) Start() error {
 		})
 
 		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(httpServer.ServeWith(unixLn, func(conn net.Conn) {
-				if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
+			netutil.FatalIfUnexpected(httpServer.ServeWith(unixLn, func(conn net.Conn) {
+				if err := s.pgServer.ServeConn(conn); err != nil &&
+					!netutil.IsClosedConnection(err) {
 					log.Error(err)
 				}
 			}))
@@ -431,7 +433,7 @@ func (s *Server) Start() error {
 	}
 
 	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(m.Serve())
+		netutil.FatalIfUnexpected(m.Serve())
 	})
 
 	// Initialize grpc-gateway mux and context.

@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -570,7 +571,7 @@ func (m *multiTestContext) addStore() {
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	ln, err := util.ListenAndServeGRPC(m.transportStopper,
+	ln, err := netutil.ListenAndServeGRPC(m.transportStopper,
 		m.grpcServers[idx], util.TestAddr)
 	if err != nil {
 		m.t.Fatal(err)

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -88,7 +89,7 @@ func NewNetwork(nodeCount int) *Network {
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode() (*Node, error) {
 	server := rpc.NewServer(n.rpcContext)
-	ln, err := util.ListenAndServeGRPC(n.Stopper, server, util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(n.Stopper, server, util.TestAddr)
 	if err != nil {
 		return nil, err
 	}
