@@ -173,6 +173,10 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			return err
 		}
 		if found != nil {
+			if row == nil {
+				return fmt.Errorf("foreign key violation: non-empty columns %s referenced in table %q",
+					fk.writeIdx.ColumnNames, fk.searchTable.Name)
+			}
 			fkValues := make(parser.DTuple, len(fk.searchIdx.ColumnIDs))
 			for i := range fk.searchIdx.ColumnIDs {
 				fkValues[i] = row[fk.ids[fk.searchIdx.ColumnIDs[i]]]
@@ -180,6 +184,7 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			return fmt.Errorf("foreign key violation: value(s) %v in columns %s referenced in table %q",
 				fkValues, fk.writeIdx.ColumnNames, fk.searchTable.Name)
 		}
+
 	}
 	return nil
 }
@@ -263,12 +268,16 @@ func makeBaseFKHelper(
 
 // TODO(dt): Batch checks of many rows.
 func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
-	keyBytes, _, err := sqlbase.EncodeIndexKey(f.searchIdx, f.ids, values, f.searchPrefix)
-	if err != nil {
-		return nil, err
+	var key roachpb.Key
+	if values != nil {
+		keyBytes, _, err := sqlbase.EncodeIndexKey(f.searchIdx, f.ids, values, f.searchPrefix)
+		if err != nil {
+			return nil, err
+		}
+		key = roachpb.Key(keyBytes)
+	} else {
+		key = roachpb.Key(f.searchPrefix)
 	}
-	key := roachpb.Key(keyBytes)
-
 	spans := sqlbase.Spans{sqlbase.Span{Start: key, End: key.PrefixEnd()}}
 	if err := f.rf.StartScan(f.txn, spans, 1); err != nil {
 		return nil, err
