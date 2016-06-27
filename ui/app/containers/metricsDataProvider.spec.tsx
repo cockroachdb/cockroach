@@ -189,4 +189,3 @@ describe("<MetricsDataProvider>", function() {
     });
   });
 });
-
