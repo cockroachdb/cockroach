@@ -26,10 +26,9 @@ import (
 )
 
 func setupMVCCRocksDB(b testing.TB, loc string) (Engine, *stop.Stopper) {
-	const cacheSize = 0
 	const memtableBudget = 512 << 20 // 512 MB
 	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, 0, stopper)
+	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, RocksDBCache{}, memtableBudget, 0, stopper)
 	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}

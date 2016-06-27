@@ -38,7 +38,7 @@ const testCacheSize = 1 << 30 // 1 GB
 func TestMinMemtableBudget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rocksdb := NewRocksDB(roachpb.Attributes{}, ".", 0, 0, 0, stop.NewStopper())
+	rocksdb := NewRocksDB(roachpb.Attributes{}, ".", RocksDBCache{}, 0, 0, stop.NewStopper())
 	const expected = "memtable budget must be at least"
 	if err := rocksdb.Open(); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but got %v", expected, err)
@@ -231,7 +231,7 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 		}
 	}
 
-	rocksdb := NewRocksDB(roachpb.Attributes{}, dir, 0, minMemtableBudget, 0, stopper)
+	rocksdb := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, minMemtableBudget, 0, stopper)
 	return rocksdb.Open()
 }
 
@@ -253,7 +253,7 @@ func TestCheckpoint(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
 
-		db := NewRocksDB(roachpb.Attributes{}, dir, 0, minMemtableBudget, 0, stopper)
+		db := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, minMemtableBudget, 0, stopper)
 		if err := db.Open(); err != nil {
 			t.Fatal(err)
 		}
@@ -280,7 +280,7 @@ func TestCheckpoint(t *testing.T) {
 		defer stopper.Stop()
 
 		dir = filepath.Join(dir, "checkpoint")
-		db := NewRocksDB(roachpb.Attributes{}, dir, 0, minMemtableBudget, 0, stopper)
+		db := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, minMemtableBudget, 0, stopper)
 		if err := db.Open(); err != nil {
 			t.Fatal(err)
 		}
