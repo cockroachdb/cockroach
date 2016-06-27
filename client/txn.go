@@ -101,7 +101,6 @@ type Txn struct {
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
-	retrying            bool
 	// The txn has to be committed by this deadline. A nil value indicates no
 	// deadline.
 	deadline *hlc.Timestamp
@@ -151,10 +150,7 @@ func (txn *Txn) DebugName() string {
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
 func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
-	if txn.retrying {
-		if txn.Proto.Isolation != isolation {
-			return errors.Errorf("cannot change the isolation level of a retrying transaction")
-		}
+	if txn.Proto.Isolation == isolation {
 		return nil
 	}
 	if txn.Proto.IsInitialized() {
@@ -168,10 +164,7 @@ func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
 func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
-	if txn.retrying {
-		if txn.UserPriority != userPriority {
-			return errors.Errorf("cannot change the user priority of a retrying transaction")
-		}
+	if txn.UserPriority == userPriority {
 		return nil
 	}
 	if txn.Proto.IsInitialized() {
@@ -546,12 +539,6 @@ func (txn *Txn) Exec(
 		}
 
 		err = fn(txn, &opt)
-		if txn != nil {
-			txn.retrying = true
-			defer func() {
-				txn.retrying = false
-			}()
-		}
 		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()

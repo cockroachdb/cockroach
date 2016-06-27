@@ -121,10 +121,10 @@ type txnState struct {
 	txn   *client.Txn
 	State TxnStateEnum
 
-	// false at first, true since the moment when a transaction is retried.
-	// TODO(andrei): this duplicates the retrying field in client.Txn, but the
-	// state of that one is not reliable because of #5531. Clean this field up
-	// once that bug is settled.
+	// retrying is used to work around the non-idempotence of SAVEPOINT
+	// queries.
+	//
+	// See the comment at the site of its use for more detail.
 	retrying bool
 
 	// If set, the user declared the intention to retry the txn in case of retriable
