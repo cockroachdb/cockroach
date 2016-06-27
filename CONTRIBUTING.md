@@ -3,16 +3,10 @@
 ### Getting and building
 
 1.  Install the following prerequisites, as necessary:
-	- A C++ compiler that supports C++11 (GCC 4.9+ and clang 3.6+ are
-	  known to work). On Mac OS X, Xcode should suffice.
-	- A [Go environment](http://golang.org/doc/code.html) with a
-	  64-bit version of Go 1.6.2. You can download the
-	  [Go binary](https://golang.org/dl/) directly from the official
-	  site. On OS X, you can also use [homebrew](http://brew.sh):
-	  `brew install go`. Be sure to set the `$GOPATH` and `$PATH`
-	  environment variables as described
-	  [here](https://golang.org/doc/code.html#GOPATH).
-	- Git 1.8+
+  - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
+  work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
+  - A Go environment with a 64-bit version of Go 1.6.2.
+  - Git 1.8+.
 
 2.  Get the CockroachDB code:
 
