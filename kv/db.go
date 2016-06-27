@@ -103,7 +103,7 @@ func (s *DBServer) Batch(
 	}
 
 	if err = verifyRequest(args); err != nil {
-		return
+		return br, err
 	}
 
 	err = s.stopper.RunTask(func() {
@@ -117,7 +117,7 @@ func (s *DBServer) Batch(
 		}
 		br.Error = pErr
 	})
-	return
+	return br, err
 }
 
 // verifyRequest checks for illegal inputs in request proto and

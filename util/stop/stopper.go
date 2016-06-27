@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 )
 
-var errStopperStopping = errors.New("stopper is stopping")
+var errStopping = errors.New("stopper is stopping")
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()
@@ -162,7 +162,7 @@ func (s *Stopper) RunTask(f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
-		return errStopperStopping
+		return errStopping
 	}
 	// Call f.
 	defer s.runPostlude(key)
@@ -176,7 +176,7 @@ func (s *Stopper) RunAsyncTask(f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
-		return errStopperStopping
+		return errStopping
 	}
 	// Call f.
 	go func() {
@@ -200,20 +200,20 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 	select {
 	case sem <- struct{}{}:
 	case <-s.ShouldDrain():
-		return errStopperStopping
+		return errStopping
 	default:
 		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
 		case <-s.ShouldDrain():
-			return errStopperStopping
+			return errStopping
 		}
 	}
 
 	if !s.runPrelude(key) {
 		<-sem
-		return errStopperStopping
+		return errStopping
 	}
 	go func() {
 		defer s.runPostlude(key)
