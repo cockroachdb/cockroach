@@ -76,14 +76,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		index := -1
 
 		// Unwrap parenthesized expressions like "((a))" to "a".
-		expr := o.Expr
-		for {
-			if paren, ok := expr.(*parser.ParenExpr); ok {
-				expr = paren.Expr
-			} else {
-				break
-			}
-		}
+		expr := parser.StripParens(o.Expr)
 
 		if qname, ok := expr.(*parser.QualifiedName); ok {
 			if len(qname.Indirect) == 0 {
