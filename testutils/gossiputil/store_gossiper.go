@@ -54,41 +54,35 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 
 // GossipStores queues up a list of stores to gossip and blocks until each one
 // is gossiped before returning.
-func (sg *StoreGossiper) GossipStores(stores []*roachpb.StoreDescriptor, t *testing.T) {
-	sg.mu.Lock()
-	defer sg.mu.Unlock()
-	sg.storeKeyMap = make(map[string]struct{})
-	for _, s := range stores {
-		storeKey := gossip.MakeStoreKey(s.StoreID)
-		sg.storeKeyMap[storeKey] = struct{}{}
-		// Gossip store descriptor.
-		err := sg.g.AddInfoProto(storeKey, s, 0)
-		if err != nil {
-			t.Fatal(err)
+func (sg *StoreGossiper) GossipStores(storeDescs []*roachpb.StoreDescriptor, t *testing.T) {
+	storeIDs := make([]roachpb.StoreID, len(storeDescs))
+	for i, store := range storeDescs {
+		storeIDs[i] = store.StoreID
+	}
+	sg.GossipWithFunction(storeIDs, func() {
+		for i, storeDesc := range storeDescs {
+			if err := sg.g.AddInfoProto(gossip.MakeStoreKey(storeIDs[i]), storeDesc, 0); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
-
-	// Wait for all gossip callbacks to be invoked.
-	for len(sg.storeKeyMap) > 0 {
-		sg.cond.Wait()
-	}
+	})
 }
 
-// GossipWithFunction is similar to GossipStores but instead of gossiping the
-// store descriptors directly, call the passed in function to do so.
-func (sg *StoreGossiper) GossipWithFunction(stores []roachpb.StoreID, gossiper func()) {
+// GossipWithFunction calls gossipFn and blocks until gossip callbacks have
+// fired on each of the stores specified by storeIDs.
+func (sg *StoreGossiper) GossipWithFunction(storeIDs []roachpb.StoreID, gossipFn func()) {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
 	sg.storeKeyMap = make(map[string]struct{})
-	for _, s := range stores {
-		storeKey := gossip.MakeStoreKey(s)
+	for _, storeID := range storeIDs {
+		storeKey := gossip.MakeStoreKey(storeID)
 		sg.storeKeyMap[storeKey] = struct{}{}
+
 	}
 
-	// Gossip the stores via the passed in function.
-	gossiper()
+	gossipFn()
 
-	// Wait for all gossip callbacks to be invoked.
+	// Wait for gossip callbacks to be invoked on all the stores.
 	for len(sg.storeKeyMap) > 0 {
 		sg.cond.Wait()
 	}
