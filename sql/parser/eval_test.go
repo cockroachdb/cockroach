@@ -270,6 +270,8 @@ func TestEval(t *testing.T) {
 		// IN and NOT IN expressions.
 		{`1 NOT IN (2, 3, 4)`, `true`},
 		{`1+1 IN (2, 3, 4)`, `true`},
+		{`2.2 IN (2.1, 2.2, 2.3)`, `true`},
+		{`2.0 IN (2.1, 2.2, 2.3)`, `false`},
 		{`'a0' IN ('a'||0::char, 'b'||1::char, 'c'||2::char)`, `true`},
 		{`'2012-09-21'::date IN ('2012-09-21'::date)`, `true`},
 		{`'2010-09-28 12:00:00.1'::timestamp IN ('2010-09-28 12:00:00.1'::timestamp)`, `true`},
