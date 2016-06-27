@@ -230,6 +230,17 @@ func (node *ParenExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
 }
 
+// StripParens strips parentheses surrounding an expression. For instance:
+//   1   -> 1
+//  (1)  -> 1
+// ((1)) -> 1
+func StripParens(expr Expr) Expr {
+	if p, ok := expr.(*ParenExpr); ok {
+		return StripParens(p.Expr)
+	}
+	return expr
+}
+
 // ComparisonOperator represents a binary operator.
 type ComparisonOperator int
 
