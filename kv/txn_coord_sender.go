@@ -875,7 +875,7 @@ func (tc *TxnCoordSender) updateState(
 					// they're likely not going to have all intents committed.
 					// In principle, we can relax this as needed though.
 					tc.unregisterTxnLocked(txnID)
-					return roachpb.NewError(&roachpb.NodeUnavailableError{})
+					return roachpb.NewError(err)
 				}
 			} else {
 				// If this was a successful one phase commit, update stats
