@@ -277,7 +277,7 @@ export function invalidateDatabaseDetails(db: string): PayloadAction<WithID<void
 }
 
 // NOTE: We encode the db and table name so we can combine them as a string.
-// TODO (maxlang): there's probably a nicer way to do this
+// TODO(maxlang): there's probably a nicer way to do this
 export function generateTableID(db: string, table: string) {
   return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
 }

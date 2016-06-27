@@ -68,12 +68,6 @@ export function timeout<T>(promise: Promise<T>): Promise<T> {
 // are generated interfaces which are implemented by the protocol buffer
 // objects themselves. TResponseMessageBuilder is an interface implemented by
 // the builder objects provided at runtime by protobuf.js.
-//
-// TODO(tamird): note that most of TResponseMessageBuilder's surface is
-// currently unused - it is present for reasons of documentation and future
-// use. In the future, Fetch will communicate with the server using serialized
-// protocol buffers in production mode, and using JSON in development mode.
-// This paragraph will be removed when that behaviour is implemented.
 function Fetch<TRequestMessage extends {
   encodeJSON(): string
   toArrayBuffer(): ArrayBuffer

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { ListLink } from "../components/listLink.tsx";
+import { ListLink } from "../components/listLink";
 
 /**
  * Renders the layout of the nodes page.
@@ -11,7 +11,8 @@ export default class Layout extends React.Component<{}, {}> {
   }
 
   render() {
-    // TODO: The first div seems superfluous, remove after switch to ui/next.
+    // TODO(mrtracy): this outer div is used to spare the children
+    // `nav-container's styling. Should those styles apply only to `nav`?
     return <div>
       <div className="nav-container">
         <ul className="nav">

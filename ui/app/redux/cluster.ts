@@ -93,7 +93,7 @@ export function refreshCluster() {
   return (dispatch: Dispatch, getState: () => any) => {
     let { cluster }: {cluster: ClusterState} = getState();
 
-    // TODO (maxlang): Currently we only refresh when the page is revisited. Eventually
+    // TODO(maxlang): Currently we only refresh when the page is revisited. Eventually
     // we should refresh on a timer like other components.
 
     // Don't refresh if a request is already in flight
