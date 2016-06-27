@@ -490,12 +490,19 @@ func runQuit(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	defer stopper.Stop()
-	if _, err := c.Drain(stopperContext(stopper),
-		&serverpb.DrainRequest{
-			On:       onModes,
+
+	ctx := stopperContext(stopper)
+
+	if _, err := c.Drain(ctx, &serverpb.DrainRequest{
+		On:       onModes,
+		Shutdown: true,
+	}); err != nil {
+		fmt.Printf("graceful shutdown failed, proceeding with hard shutdown: %v\n", err)
+		if _, err := c.Drain(ctx, &serverpb.DrainRequest{
 			Shutdown: true,
 		}); err != nil {
-		return err
+			return err
+		}
 	}
 	fmt.Println("ok")
 	return nil
