@@ -156,10 +156,8 @@ if is_shard 2; then
     cmds=$(grep '^cmd ' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
     time ssh node0 mkdir -p "${gopath0}/bin/linux_amd64"
     time ssh node0 sudo chown "${USER}.${USER}" "${gopath0}/bin/linux_amd64"
-    for cmd in ${cmds}; do
-      path="${gopath0}/bin/linux_amd64/${cmd}"
-      time rsync "${path}" node0:"${path}"
-    done
+    path="${gopath0}/bin/linux_amd64"
+    (time cd "$path" && rsync ${cmds} node0:"${path}")
   fi
 fi
 
