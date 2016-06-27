@@ -57,7 +57,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := TablesNeededForFKs(en.tableDesc, CheckDeletes)
+	fkTables := TablesNeededForFKs(*en.tableDesc, CheckDeletes)
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}

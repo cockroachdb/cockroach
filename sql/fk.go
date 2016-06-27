@@ -46,7 +46,7 @@ const (
 // in planner, should fill the map's values by acquiring leases. This function
 // is essentially just returning a slice of IDs, but the empty map can be filled
 // in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByID {
+func TablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) TablesByID {
 	var ret TablesByID
 	for _, idx := range table.AllNonDropIndexes() {
 		if usage != CheckDeletes && idx.ForeignKey != nil {
@@ -74,7 +74,7 @@ type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -136,7 +136,7 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -190,7 +190,7 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error

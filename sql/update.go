@@ -163,7 +163,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := TablesNeededForFKs(en.tableDesc, CheckUpdates)
+	fkTables := TablesNeededForFKs(*en.tableDesc, CheckUpdates)
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}
