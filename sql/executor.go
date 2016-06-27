@@ -859,14 +859,17 @@ func (e *Executor) execStmtInOpenTxn(
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
 			return Result{Err: err}, err
 		}
-		// We check if the transaction has "started" already by looking inside the txn proto.
-		// The executor should not be doing that. But it's also what the planner does for
-		// SET TRANSACTION ISOLATION ... It feels ever more wrong here.
-		// TODO(andrei): find a better way to track this running state.
-		// TODO(andrei): the check for retrying is a hack - we erroneously allow
-		// SAVEPOINT to be issued at any time during a retry, not just in the
-		// beginning. We should figure out how to track whether we started using the
-		// transaction during a retry.
+		// We want to disallow SAVEPOINTs to be issued after a transaction has
+		// started running, but such enforcement is problematic in the
+		// presence of transaction retries (since the transaction proto is
+		// necessarily reused). To work around this, we keep track of the
+		// transaction's retrying state and special-case SAVEPOINT when it is
+		// set.
+		//
+		// TODO(andrei): the check for retrying is a hack - we erroneously
+		// allow SAVEPOINT to be issued at any time during a retry, not just
+		// in the beginning. We should figure out how to track whether we
+		// started using the transaction during a retry.
 		if txnState.txn.Proto.IsInitialized() && !txnState.retrying {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a transaction",
 				parser.RestartSavepointName)
