@@ -328,7 +328,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 	var err error
 
-	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = loadState(r.store.Engine(), desc, true /* assert */); err != nil {
 		return err
 	}
 
@@ -753,7 +753,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(reader engine.Reader) {
-	diskState, err := loadState(reader, r.mu.state.Desc)
+	diskState, err := loadState(reader, r.mu.state.Desc, true /* assert */)
 	if err != nil {
 		panic(err)
 	}

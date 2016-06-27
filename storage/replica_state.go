@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -34,51 +36,67 @@ import (
 // RangeDescriptor under the convention that that is the latest committed
 // version.
 func loadState(
-	reader engine.Reader, desc *roachpb.RangeDescriptor,
+	reader engine.Reader, desc *roachpb.RangeDescriptor, shouldAssert bool,
 ) (storagebase.ReplicaState, error) {
 	var s storagebase.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
-	// Read the leader lease.
+
+	exists := desc.IsInitialized()
+	assert := func(curExists bool) {
+		if shouldAssert && exists != curExists {
+			log.Fatalf("%+v", errors.Errorf(
+				"expected value: %t, got value: %t", exists, curExists))
+		}
+	}
+
 	var err error
+	var curExists bool
 	if _, s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
-	if _, s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
+	if curExists, s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if _, s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
+	if curExists, s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if _, s.RaftAppliedIndex, err = loadAppliedIndex(
+	if curExists, s.RaftAppliedIndex, err = loadAppliedIndex(
 		reader,
 		desc.RangeID,
 	); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if _, s.LeaseAppliedIndex, err = loadLeaseAppliedIndex(
+	if curExists, s.LeaseAppliedIndex, err = loadLeaseAppliedIndex(
 		reader,
 		desc.RangeID,
 	); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if _, s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+	if curExists, s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
+	var truncState roachpb.RaftTruncatedState
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
-	_, truncState, err := loadTruncatedState(reader, desc.RangeID)
+	curExists, truncState, err = loadTruncatedState(reader, desc.RangeID)
 	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 	s.TruncatedState = &truncState
+	assert(curExists)
 
 	return s, nil
 }
@@ -262,8 +280,11 @@ func setFrozenStatus(
 }
 
 func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, bool, error) {
-	val, _, err := engine.MVCCGet(context.Background(), reader, keys.RangeFrozenStatusKey(rangeID),
-		hlc.ZeroTimestamp, true, nil)
+	val, _, err := engine.MVCCGet(
+		context.Background(), reader,
+		keys.RangeFrozenStatusKey(rangeID),
+		hlc.ZeroTimestamp, true, nil,
+	)
 	if err != nil {
 		return false, false, err
 	}
