@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/pkg/errors"
 )
@@ -41,7 +42,7 @@ func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.L
 	}
 	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
 
-	ln, err := util.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}

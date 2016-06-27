@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -99,7 +100,7 @@ func TestSendAndReceive(t *testing.T) {
 		nodeID := nextNodeID
 		nextNodeID++
 		grpcServer := rpc.NewServer(nodeRPCContext)
-		ln, err := util.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
+		ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -271,7 +272,7 @@ func TestInOrderDelivery(t *testing.T) {
 	g := gossip.New(nodeRPCContext, nil, stopper)
 
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	ln, err := util.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}

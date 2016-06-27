@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -41,7 +42,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
-	ln, err := util.ListenAndServeGRPC(stopper, server, util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
-	lln, err := util.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
+	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
-	rln, err := util.ListenAndServeGRPC(stopper, rserver, util.TestAddr)
+	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +325,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 		server := rpc.NewServer(RPCContext)
-		ln, err := util.ListenAndServeGRPC(stopper, server, util.TestAddr)
+		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.TestAddr)
 		if err != nil {
 			t.Fatal(err)
 		}

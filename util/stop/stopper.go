@@ -17,7 +17,6 @@
 package stop
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,10 +24,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
 )
 
-var errStopperStopping = errors.New("stopper is stopping")
+var errUnavailable = &roachpb.NodeUnavailableError{}
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()
@@ -162,7 +162,7 @@ func (s *Stopper) RunTask(f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
-		return errStopperStopping
+		return errUnavailable
 	}
 	// Call f.
 	defer s.runPostlude(key)
@@ -176,7 +176,7 @@ func (s *Stopper) RunAsyncTask(f func()) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
-		return errStopperStopping
+		return errUnavailable
 	}
 	// Call f.
 	go func() {
@@ -200,20 +200,20 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 	select {
 	case sem <- struct{}{}:
 	case <-s.ShouldDrain():
-		return errStopperStopping
+		return errUnavailable
 	default:
 		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
 		case <-s.ShouldDrain():
-			return errStopperStopping
+			return errUnavailable
 		}
 	}
 
 	if !s.runPrelude(key) {
 		<-sem
-		return errStopperStopping
+		return errUnavailable
 	}
 	go func() {
 		defer s.runPostlude(key)

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/pkg/errors"
@@ -460,7 +461,7 @@ func (f *fakeNodeServer) Reserve(_ context.Context, _ *roachpb.ReservationReques
 func newFakeNodeServer(stopper *stop.Stopper) (*fakeNodeServer, *rpc.Context, string, error) {
 	ctx := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
 	s := rpc.NewServer(ctx)
-	ln, err := util.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {
 		return nil, nil, "", err
 	}

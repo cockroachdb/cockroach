@@ -1858,7 +1858,7 @@ func (r *Replica) VerifyChecksum(
 					log.Errorf("couldn't rerun consistency check: %s", err)
 				}
 			}); err != nil {
-				log.Errorf("couldn't rerun consistency check: %s", err)
+				log.Error(errors.Wrap(err, "could not rerun consistency check"))
 			}
 		} else {
 			// Compute diff.
