@@ -1208,47 +1208,13 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
-	var sgs []*gossiputil.StoreGossiper
-	for _, g := range mtc.gossips {
-		sgs = append(sgs, gossiputil.NewStoreGossiper(g))
-	}
-
 	// Replicate the range to all stores.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
-	// Initialize the gossip network.
-	var storeIDs []roachpb.StoreID
-	for _, s := range mtc.stores {
-		storeIDs = append(storeIDs, s.StoreID())
-	}
-
-	// Gossip all stores and wait for callbacks to be run. This is
-	// tricky since we have multiple gossip objects communicating
-	// asynchronously. We use StoreGossiper to track callbacks but we
-	// need to set up all the callback tracking before any stores are
-	// gossiped.
-	var readyWG sync.WaitGroup
-	var doneWG sync.WaitGroup
-	readyWG.Add(len(sgs))
-	doneWG.Add(len(sgs))
-	for _, sg := range sgs {
-		go func(sg *gossiputil.StoreGossiper) {
-			ready := false
-			sg.GossipWithFunction(storeIDs, func() {
-				if !ready {
-					readyWG.Done()
-					ready = true
-				}
-			})
-			doneWG.Done()
-		}(sg)
-	}
-	readyWG.Wait()
 	for _, s := range mtc.stores {
 		s.GossipStore()
 	}
-	doneWG.Wait()
 
 	rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
 	if e, a := 3, len(rangeDesc.Replicas); e != a {
