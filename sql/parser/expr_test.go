@@ -232,6 +232,28 @@ func TestExprString(t *testing.T) {
 	}
 }
 
+func TestStripParens(t *testing.T) {
+	testExprs := []struct {
+		in, out string
+	}{
+		{`1`, `1`},
+		{`(1)`, `1`},
+		{`((1))`, `1`},
+		{`(1) + (2)`, `(1) + (2)`},
+		{`((1) + (2))`, `(1) + (2)`},
+	}
+	for i, test := range testExprs {
+		expr, err := ParseExprTraditional(test.in)
+		if err != nil {
+			t.Fatalf("%d: %v", i, err)
+		}
+		stripped := StripParens(expr)
+		if str := stripped.String(); str != test.out {
+			t.Fatalf("%d: expected StripParens(%s) = %s, but found %s", i, test.in, test.out, str)
+		}
+	}
+}
+
 type stripFuncsVisitor struct{}
 
 func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {

@@ -211,11 +211,14 @@ func typeCheckOverloadedExprs(
 		}
 		for _, expr := range placeholderExprs {
 			if errorOnPlaceholders {
-				_, err := expr.e.(Placeholder).TypeCheck(ctx, nil)
+				_, err := expr.e.TypeCheck(ctx, nil)
 				return err
 			}
 			// If we dont want to error on args, avoid type checking them without a desired type.
-			typedExprs[expr.i] = &DPlaceholder{name: expr.e.(Placeholder).Name, pmap: ctx.Placeholders}
+			typedExprs[expr.i] = &DPlaceholder{
+				name: StripParens(expr.e).(Placeholder).Name,
+				pmap: ctx.Placeholders,
+			}
 		}
 		return nil
 	}
