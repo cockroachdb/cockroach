@@ -4,7 +4,7 @@ import _ = require("lodash");
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
-import { refreshNodes } from "../redux/nodes";
+import { refreshNodes } from "../redux/apiReducers";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
 import { StackedAreaGraph } from "../components/stackedgraph";
 import GraphGroup from "../components/graphGroup";
@@ -144,7 +144,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
   }
 }
 
-let nodeStatuses = (state: any): NodeStatus[] => state.nodes.statuses;
+let nodeStatuses = (state: any): NodeStatus[] => state.cachedData.nodes.data;
 let clusterInfo = createSelector(
   nodeStatuses,
   (nss) => {
