@@ -68,7 +68,12 @@ func (w *LeaseReleaseWaiter) WaitForRelease(lease *LeaseState) error {
 		panic(fmt.Sprintf("wasn't prepared to wait for %s", lease))
 	}
 	w.mu.Unlock()
-	return <-ch
+	err := <-ch
+	w.mu.Lock()
+	delete(w.waitingFor, lease)
+	w.mu.Unlock()
+
+	return err
 }
 
 // LeaseReleasedNotification has to be called after a lease is removed from the
@@ -82,5 +87,4 @@ func (w *LeaseReleaseWaiter) LeaseReleasedNotification(
 	if ch, ok := w.waitingFor[lease]; ok {
 		ch <- err
 	}
-	delete(w.waitingFor, lease)
 }

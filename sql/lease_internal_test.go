@@ -20,6 +20,7 @@ package sql
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -331,5 +332,109 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 	if err := leaseManager.Release(lease); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Test that there's no deadlock between AcquireByName and Release.
+// We used to have one due to lock inversion between the tableNameCache lock and
+// the leaseState lock, triggered when the same lease was Release()d after the
+// table had been deleted (which means it's removed from the tableNameCache) and
+// AcquireByName()d at the same time.
+func TestReleaseAcquireByNameDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	releaseWaiter := NewLeaseReleaseWaiter()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: releaseWaiter.LeaseReleasedNotification,
+			},
+		},
+	}
+	s, sqlDB, kvDB, cleanup := sqlutils.SetupServerWithParams(
+		t, testingshim.TestServerParams{Knobs: testingKnobs})
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Populate the name cache.
+	if err := kvDB.Txn(func(txn *client.Txn) error {
+		_, err := leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pretend the table has been deleted, so that when we release leases on it,
+	// they are removed from the tableNameCache too.
+	tableState := leaseManager.findTableState(tableDesc.ID, true, &leaseManager.tableNames)
+	tableState.deleted = true
+
+	// Try to trigger the race repeatedly: race an AcquireByName against a
+	// Release.
+	// leaseChan acts as a semaphore, synchornizing the two routines at every
+	// iteration.
+	leaseChan := make(chan *LeaseState)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		for i := 0; i < 50; i++ {
+			var leaseByName *LeaseState
+			if err := kvDB.Txn(func(txn *client.Txn) error {
+				var err error
+				lease, err := leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+				if err != nil {
+					return err
+				}
+				releaseWaiter.PrepareToWait(lease)
+				// Start the race: signal the other guy to release, and we do another
+				// acquire at the same time.
+				leaseChan <- lease
+				leaseByName, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+				if err != nil {
+					panic(err)
+				}
+				<-leaseChan
+				cleanupLease(leaseManager, lease)
+				if err := releaseWaiter.WaitForRelease(lease); err != nil {
+					panic(err)
+				}
+				if leaseByName != lease {
+					releaseWaiter.PrepareToWait(leaseByName)
+					cleanupLease(leaseManager, leaseByName)
+					if err := releaseWaiter.WaitForRelease(leaseByName); err != nil {
+						panic(err)
+					}
+				}
+				return nil
+			}); err != nil {
+				panic(err)
+			}
+		}
+		close(leaseChan)
+		wg.Done()
+	}()
+	for leaseState := range leaseChan {
+		if err := leaseManager.Release(leaseState); err != nil {
+			panic(err)
+		}
+		leaseChan <- nil
+	}
+
+	wg.Wait()
+}
+
+func cleanupLease(leaseManager *LeaseManager, lease *LeaseState) {
+	for i := lease.Refcount(); i > 0; i-- {
+		if err := leaseManager.Release(lease); err != nil {
+			panic(err)
+		}
 	}
 }
