@@ -104,6 +104,10 @@ func (at *allocatorTest) Run(t *testing.T) {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
+		if t.Failed() && at.f.KeepClusterAfterFail {
+			t.Log("test has failed, not destroying")
+			return
+		}
 		at.f.MustDestroy()
 	}()
 
