@@ -738,6 +738,11 @@ func (r *Replica) State() storagebase.RangeInfo {
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.pendingCmds))
+	var err error
+	if ri.LastVerification, err = r.getLastVerificationTimestamp(); err != nil {
+		log.Warning(err)
+	}
+
 	return ri
 }
 

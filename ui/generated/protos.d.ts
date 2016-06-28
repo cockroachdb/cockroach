@@ -2069,6 +2069,15 @@ getFrozen?() : boolean;
 
 
 
+last_verification?: util.hlc.Timestamp;
+		
+
+getLastVerification?() : util.hlc.Timestamp;
+		setLastVerification?(lastVerification : util.hlc.Timestamp): void;
+		
+
+
+
 }
 	
 	export interface ReplicaStateMessage extends ReplicaState {
