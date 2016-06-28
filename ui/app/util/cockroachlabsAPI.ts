@@ -8,7 +8,7 @@ import { timeout } from "./api";
 
 export const COCKROACHLABS_ADDR = "https://register.cockroachdb.com";
 
-// TODO (maxlang): might be possible to consolidate with Fetch in api.ts
+// TODO(maxlang): might be possible to consolidate with Fetch in api.ts
 function timeoutFetch<T extends BodyInit, R>(url: string, req?: T): Promise<R> {
   return timeout(fetch(url, {
     method: req ? "POST" : "GET",

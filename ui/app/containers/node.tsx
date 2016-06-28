@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, RouteComponentProps } from "react-router";
 
-import { IndexListLink, ListLink } from "../components/listLink.tsx";
+import { IndexListLink, ListLink } from "../components/listLink";
 import TimeScaleSelector from "./timescale";
 
 /**
@@ -21,7 +21,8 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
 
     let baseRoute = `/nodes/${this.props.params.node_id}`;
 
-    // TODO: The first div seems superfluous, remove after switch to ui/next.
+    // TODO(mrtracy): this outer div is used to spare the children
+    // `nav-container's styling. Should those styles apply only to `nav`?
     return <div>
       <div className="nav-container">
         <ul className="nav">
