@@ -4556,7 +4556,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:691
 		{
-			sqllex.(*scanner).stmts = sqlDollar[1].union.stmts()
+			sqllex.(*Scanner).stmts = sqlDollar[1].union.stmts()
 		}
 	case 2:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
