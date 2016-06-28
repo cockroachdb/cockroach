@@ -844,7 +844,11 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	key := c.makeCacheKey(lease.ParentID, lease.Name)
 	existing, ok := c.tables[key]
 	if !ok {
-		panic(fmt.Sprintf("table for lease not found in table name cache: %s", lease))
+		// Table for lease not found in table name cache. This can happen if we had
+		// a more recent lease on the table in the tableNameCache, then the table
+		// gets deleted, then the more recent lease is remove()d - which clears the
+		// cache.
+		return
 	}
 	// If this was the lease that the cache had for the table name, remove it.
 	// If the cache had some other lease, this remove is a no-op.
