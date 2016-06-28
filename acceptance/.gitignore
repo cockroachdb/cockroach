@@ -1,2 +1,4 @@
 .localcluster.certs.*
 .cluster.certs.*
+*.backup
+*.tfstate
