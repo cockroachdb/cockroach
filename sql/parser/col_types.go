@@ -19,6 +19,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // ColumnType represents a type in a column definition.
@@ -247,3 +249,30 @@ func (node *TimestampTZColType) String() string { return AsString(node) }
 func (node *IntervalColType) String() string    { return AsString(node) }
 func (node *StringColType) String() string      { return AsString(node) }
 func (node *BytesColType) String() string       { return AsString(node) }
+
+// DatumTypeToColumnType produces a SQL column type equivalent to the
+// given Datum type. Used to generate CastExpr nodes during
+// normalization.
+func DatumTypeToColumnType(d Datum) (ColumnType, error) {
+	switch d.(type) {
+	case *DInt:
+		return &IntColType{"INT", 0}, nil
+	case *DFloat:
+		return &FloatColType{"FLOAT", 0}, nil
+	case *DDecimal:
+		return &DecimalColType{"DECIMAL", 0, 0}, nil
+	case *DTimestamp:
+		return &TimestampColType{}, nil
+	case *DTimestampTZ:
+		return &TimestampTZColType{}, nil
+	case *DInterval:
+		return &IntervalColType{}, nil
+	case *DDate:
+		return &DateColType{}, nil
+	case *DString:
+		return &StringColType{"STRING", 0}, nil
+	case *DBytes:
+		return &BytesColType{"BYTES"}, nil
+	}
+	return nil, errors.Errorf("internal error: unknown Datum type %T", d)
+}
