@@ -4,7 +4,7 @@
 
 1.  Install the following prerequisites, as necessary:
   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
-  work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
+  work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891. 
   - A Go environment with a 64-bit version of Go 1.6.2.
   - Git 1.8+.
 
@@ -16,7 +16,7 @@
 	```
 
 3.  Run `make build`, `make test`, or anything else our Makefile
-	offers. Note that the first time you run `make`, it can take some
+	offers. Note that at least 4GB of RAM is required to build from source. Also, the first time you run `make`, it can take some
 	time to download and install various dependencies.
 
 Note that if you edit a `.proto` or `.ts` file, you will need to
