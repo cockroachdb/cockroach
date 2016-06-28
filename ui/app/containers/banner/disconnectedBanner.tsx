@@ -1,7 +1,7 @@
 import * as React from "react";
 import { connect } from "react-redux";
 import Banner from "./banner";
-import { refreshHealth, HealthState } from "../../redux/health";
+import { refreshHealth, HealthState } from "../../redux/apiReducers";
 
 class DisconnectedBannerProps {
   health: HealthState;

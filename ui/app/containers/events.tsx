@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as _ from "lodash";
-import { refreshEvents } from "../redux/events";
+import { refreshEvents } from "../redux/apiReducers";
 import { connect } from "react-redux";
 import { TimestampToMoment } from "../util/convert";
 

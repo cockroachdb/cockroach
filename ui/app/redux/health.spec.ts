@@ -1,29 +1,31 @@
 import { assert } from "chai";
 
 import * as protos from "../js/protos";
-import reducer, * as health from "./health";
+import { healthReducerObj as health, HealthState } from "./apiReducers";
+
+let reducer = health.reducer;
 
 describe("health reducer", function() {
   describe("actions", function() {
-    it("requestHealth() creates the correct action type.", function() {
-      assert.equal(health.requestHealth().type, health.REQUEST);
+    it("requestData() creates the correct action type.", function() {
+      assert.equal(health.requestData().type, health.REQUEST);
     });
 
-    it("receiveHealth() creates the correct action type.", function() {
-      assert.equal(health.receiveHealth(null).type, health.RECEIVE);
+    it("receiveData() creates the correct action type.", function() {
+      assert.equal(health.receiveData(null).type, health.RECEIVE);
     });
 
-    it("errorHealth() creates the correct action type.", function() {
-      assert.equal(health.errorHealth(null).type, health.ERROR);
+    it("errorData() creates the correct action type.", function() {
+      assert.equal(health.errorData(null).type, health.ERROR);
     });
 
-    it("invalidateHealth() creates the correct action type.", function() {
-      assert.equal(health.invalidateHealth().type, health.INVALIDATE);
+    it("invalidateData() creates the correct action type.", function() {
+      assert.equal(health.invalidateData().type, health.INVALIDATE);
     });
   });
 
   describe("reducer", function() {
-    let state: health.HealthState;
+    let state: HealthState;
 
     beforeEach(() => {
       state = reducer(undefined, { type: "unknown" });
@@ -36,18 +38,18 @@ describe("health reducer", function() {
       });
     });
 
-    it("should correctly dispatch requestHealth", function () {
-      state = reducer(state, health.requestHealth());
+    it("should correctly dispatch requestData", function () {
+      state = reducer(state, health.requestData());
       assert.deepEqual(state, {
         inFlight: true,
         valid: false,
       });
     });
 
-    it("should correctly dispatch receiveHealth", function () {
+    it("should correctly dispatch receiveData", function () {
       let h = new protos.cockroach.server.serverpb.HealthResponse();
 
-      state = reducer(state, health.receiveHealth(h));
+      state = reducer(state, health.receiveData(h));
       assert.deepEqual(state, {
         inFlight: false,
         valid: true,
@@ -56,10 +58,10 @@ describe("health reducer", function() {
       });
     });
 
-    it("should correctly dispatch errorHealth", function() {
+    it("should correctly dispatch errorData", function() {
       let e = new Error();
 
-      state = reducer(state, health.errorHealth(e));
+      state = reducer(state, health.errorData(e));
       assert.deepEqual(state, {
         inFlight: false,
         valid: false,
@@ -67,8 +69,8 @@ describe("health reducer", function() {
       });
     });
 
-    it("should correctly dispatch invalidateHealth", function() {
-      state = reducer(state, health.invalidateHealth());
+    it("should correctly dispatch invalidateData", function() {
+      state = reducer(state, health.invalidateData());
       assert.deepEqual(state, {
         inFlight: false,
         valid: false,

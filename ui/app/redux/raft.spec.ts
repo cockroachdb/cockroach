@@ -2,30 +2,35 @@ import { assert } from "chai";
 import * as fetchMock from "fetch-mock";
 
 import * as protos from "../js/protos";
-import reducer, * as raft from "./raft";
 import { Action } from "../interfaces/action";
+import { raftReducerObj as raft, RaftDebugState } from "./apiReducers";
+import { CachedDataReducerState } from "./cachedDataReducer";
+
+type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
+
+let reducer = raft.reducer;
 
 describe("raft reducer", function() {
   describe("actions", function() {
-    it("requestMetrics() creates the correct action type.", function() {
-      assert.equal(raft.requestRanges().type, raft.REQUEST);
+    it("requestData() creates the correct action type.", function() {
+      assert.equal(raft.requestData().type, raft.REQUEST);
     });
 
-    it("receiveRanges() creates the correct action type.", function() {
-      assert.equal(raft.receiveRanges(null).type, raft.RECEIVE);
+    it("receiveData() creates the correct action type.", function() {
+      assert.equal(raft.receiveData(null).type, raft.RECEIVE);
     });
 
-    it("errorRanges() creates the correct action type.", function() {
-      assert.equal(raft.errorRanges(null).type, raft.ERROR);
+    it("errorData() creates the correct action type.", function() {
+      assert.equal(raft.errorData(null).type, raft.ERROR);
     });
 
-    it("invalidateRanges() creates the correct action type.", function() {
-      assert.equal(raft.invalidateRanges().type, raft.INVALIDATE);
+    it("invalidateData() creates the correct action type.", function() {
+      assert.equal(raft.invalidateData().type, raft.INVALIDATE);
     });
   });
 
   describe("reducer", function() {
-    let state: raft.RaftDebugState;
+    let state: RaftDebugState;
 
     beforeEach(function() {
       state = reducer(undefined, { type: "unknown" });
@@ -34,48 +39,48 @@ describe("raft reducer", function() {
     it("should have the correct default value.", function() {
       let expected = {
         inFlight: false,
-        isValid: false,
+        valid: false,
       };
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch requestRanges", function() {
-      state = reducer(state, raft.requestRanges());
+    it("should correctly dispatch requestData", function() {
+      state = reducer(state, raft.requestData());
       assert.isTrue(state.inFlight);
     });
 
-    it("should correctly dispatch receiveRanges", function() {
+    it("should correctly dispatch receiveData", function() {
       let response = new protos.cockroach.server.serverpb.RaftDebugResponse({});
-      state = reducer(state, raft.receiveRanges(response));
+      state = reducer(state, raft.receiveData(response));
       assert.isNotTrue(state.inFlight);
-      assert.isTrue(state.isValid);
-      assert.deepEqual(state.statuses, response);
+      assert.isTrue(state.valid);
+      assert.deepEqual(state.data, response);
       assert.isNull(state.lastError);
     });
 
-    it("should correctly dispatch errorRanges", function() {
+    it("should correctly dispatch errorData", function() {
       let error: Error = new Error("An error occurred");
-      state = reducer(state, raft.errorRanges(error));
+      state = reducer(state, raft.errorData(error));
       assert.isNotTrue(state.inFlight);
-      assert.isNotTrue(state.isValid);
+      assert.isNotTrue(state.valid);
       assert.deepEqual(state.lastError, error);
     });
   });
 
-  describe("refreshRaft asynchronous action", function() {
+  describe("refresh asynchronous action", function() {
     // Mock of raft state.
-    let mockDebugState: raft.RaftDebugState;
+    let mockDebugState: RaftDebugState;
     let mockDispatch = (action: Action) => {
       mockDebugState = reducer(mockDebugState, action);
     };
-    let refreshRaft = (): Promise<void> => {
-      return raft.refreshRaft()(mockDispatch, () => {
+    let refresh = (): Promise<void> => {
+      return raft.refresh()(mockDispatch, () => {
         return {raft: mockDebugState};
       });
     };
 
     beforeEach(function() {
-      mockDebugState = new raft.RaftDebugState();
+      mockDebugState = new CachedDataReducerState<RaftDebugResponseMessage>();
     });
 
     afterEach(fetchMock.restore);
@@ -101,17 +106,17 @@ describe("raft reducer", function() {
       });
 
       // Dispatch several requests.
-      let p = refreshRaft();
+      let p = refresh();
       assert.isTrue(mockDebugState.inFlight);
       return p.then((): Promise<void> => {
         assert.isNull(mockDebugState.lastError);
-        assert.isTrue(mockDebugState.isValid);
+        assert.isTrue(mockDebugState.valid);
         assert.isNotTrue(mockDebugState.inFlight);
 
-        mockDebugState.isValid = false;
+        mockDebugState.valid = false;
 
         // second request should throw an error
-        let p2 = refreshRaft();
+        let p2 = refresh();
         assert.isTrue(mockDebugState.inFlight);
         return p2;
       }).then(() => {

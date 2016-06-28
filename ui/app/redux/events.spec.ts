@@ -1,29 +1,31 @@
 import { assert } from "chai";
 
 import * as protos from "../js/protos";
-import reducer, * as events from "./events";
+import { eventsReducerObj as events, EventsState } from "./apiReducers";
+
+let reducer = events.reducer;
 
 describe("events reducer", function() {
   describe("actions", function() {
-    it("requestEvents() creates the correct action type.", function() {
-      assert.equal(events.requestEvents().type, events.REQUEST);
+    it("requestData() creates the correct action type.", function() {
+      assert.equal(events.requestData().type, events.REQUEST);
     });
 
-    it("receiveEvents() creates the correct action type.", function() {
-      assert.equal(events.receiveEvents(null).type, events.RECEIVE);
+    it("receiveData() creates the correct action type.", function() {
+      assert.equal(events.receiveData(null).type, events.RECEIVE);
     });
 
-    it("errorEvents() creates the correct action type.", function() {
-      assert.equal(events.errorEvents(null).type, events.ERROR);
+    it("errorData() creates the correct action type.", function() {
+      assert.equal(events.errorData(null).type, events.ERROR);
     });
 
-    it("invalidateEvents() creates the correct action type.", function() {
-      assert.equal(events.invalidateEvents().type, events.INVALIDATE);
+    it("invalidateData() creates the correct action type.", function() {
+      assert.equal(events.invalidateData().type, events.INVALIDATE);
     });
   });
 
   describe("reducer", function() {
-    let state: events.EventsState;
+    let state: EventsState;
 
     beforeEach(() => {
       state = reducer(undefined, { type: "unknown" });
@@ -37,8 +39,8 @@ describe("events reducer", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch requestEvents", function () {
-      state = reducer(state, events.requestEvents());
+    it("should correctly dispatch requestData", function () {
+      state = reducer(state, events.requestData());
       let expected = {
         inFlight: true,
         valid: false,
@@ -46,10 +48,10 @@ describe("events reducer", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch receiveEvents", function () {
+    it("should correctly dispatch receiveData", function () {
       let e = new protos.cockroach.server.serverpb.EventsResponse();
 
-      state = reducer(state, events.receiveEvents(e));
+      state = reducer(state, events.receiveData(e));
       let expected = {
         inFlight: false,
         valid: true,
@@ -59,10 +61,10 @@ describe("events reducer", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch errorEvents", function() {
+    it("should correctly dispatch errorData", function() {
       let e = new Error();
 
-      state = reducer(state, events.errorEvents(e));
+      state = reducer(state, events.errorData(e));
       let expected = {
         inFlight: false,
         valid: false,
@@ -71,8 +73,8 @@ describe("events reducer", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch invalidateEvents", function() {
-      state = reducer(state, events.invalidateEvents());
+    it("should correctly dispatch invalidateData", function() {
+      state = reducer(state, events.invalidateData());
       let expected = {
         inFlight: false,
         valid: false,

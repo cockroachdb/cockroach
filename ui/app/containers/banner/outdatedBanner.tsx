@@ -5,7 +5,7 @@ import moment = require("moment");
 import _ = require("lodash");
 import Banner from "./banner";
 import { refreshVersion } from "../../redux/version";
-import { refreshCluster } from "../../redux/cluster";
+import { refreshCluster } from "../../redux/apiReducers";
 import { refreshNodes } from "../../redux/nodes";
 import { VERSION_DISMISSED_KEY, loadUIData, saveUIData } from "../../redux/uiData";
 import { VersionList } from "../../interfaces/cockroachlabs";
