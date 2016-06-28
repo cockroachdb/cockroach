@@ -108,6 +108,9 @@ message ProcessorSpec {
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
 // computation consisting of processors and streams.
 message FlowSpec {
-  repeated ProcessorSpec processors = 1 [(gogoproto.nullable) = false];
-  // TODO(radu): mailbox specs will go here.
+  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "FlowID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+
+  repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
 }
