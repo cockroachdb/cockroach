@@ -290,7 +290,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	defer bq.mu.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl, cfg)
 	if err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
-		bq.eventLog.Error(errors.Wrapf(err, "unable to add to %s", repl))
+		bq.eventLog.Error(errors.Wrapf(err, "unable to add %s", repl))
 	}
 }
 
@@ -438,11 +438,11 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		defer sp.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {
-			if _, harmless := err.GetDetail().(*roachpb.NotLeaderError); !harmless {
-				return errors.Wrap(err.GoError(), "could not obtain lease")
+			if _, harmless := err.GetDetail().(*roachpb.NotLeaderError); harmless {
+				bq.eventLog.VInfof(log.V(3), "%s: not holding lease; skipping", repl)
+				return nil
 			}
-			bq.eventLog.VInfof(log.V(3), "%s: not holding lease; skipping", repl)
-			return nil
+			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
 		}
 	}
 
@@ -475,7 +475,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 		return
 	}
 
-	bq.eventLog.VInfof(log.V(2), "%s (purgatory): error: %v", repl, err)
+	bq.eventLog.Error(errors.Wrapf(err, "(purgatory) on %s", repl))
 
 	item := &replicaItem{value: repl}
 	bq.mu.replicas[repl.RangeID] = item
