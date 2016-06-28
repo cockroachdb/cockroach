@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 )
 
@@ -39,6 +40,10 @@ const (
 	// ReplicaGCQueueInactivityThreshold is the inactivity duration after which
 	// a range will be considered for garbage collection. Exported for testing.
 	ReplicaGCQueueInactivityThreshold = 10 * 24 * time.Hour // 10 days
+	// ReplicaGCQueueCandidateTimeout is the duration after which a range in
+	// candidate Raft state (which is a typical sign of having been removed
+	// from the group) will be considered for garbage collection.
+	ReplicaGCQueueCandidateTimeout = 10 * time.Second
 )
 
 // replicaGCQueue manages a queue of replicas to be considered for garbage
@@ -74,14 +79,53 @@ func (*replicaGCQueue) shouldQueue(now hlc.Timestamp, rng *Replica, _ config.Sys
 		log.Errorf("could not read last replica GC timestamp: %s", err)
 		return false, 0
 	}
+
+	lastActivity := hlc.ZeroTimestamp.Add(rng.store.startedAt, 0)
+
+	lease, nextLease := rng.getLeaderLease()
+	if lease != nil {
+		lastActivity.Forward(lease.Expiration)
+	}
+	if nextLease != nil {
+		lastActivity.Forward(nextLease.Expiration)
+	}
+
+	var isCandidate bool
+	if raftStatus := rng.RaftStatus(); raftStatus != nil {
+		isCandidate = (raftStatus.SoftState.RaftState == raft.StateCandidate)
+	}
+	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isCandidate)
+}
+
+func replicaGCShouldQueueImpl(
+	now, lastCheck, lastActivity hlc.Timestamp, isCandidate bool,
+) (bool, float64) {
 	// Return false immediately if the previous check was less than the
 	// check interval in the past.
 	if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
 		return false, 0
 	}
+
+	timeout := ReplicaGCQueueInactivityThreshold
+	var priority float64
+
+	if isCandidate {
+		// If the range is a candidate (which happens if its former replica set
+		// ignores it), let it expire much earlier. Note that if processing
+		// results in the replica in fact not fit for gc, that is marked on the
+		// replica and the scanner will leave it alone for the full usual
+		// interval (see above).
+		timeout = ReplicaGCQueueCandidateTimeout
+		priority++
+	}
+	shouldQ := lastActivity.Add(timeout.Nanoseconds(), 0).Less(now)
+	if !shouldQ {
+		return false, 0
+	}
+
 	// Return whether or not lease activity occurred within the inactivity threshold.
-	lease, _ := rng.getLeaderLease()
-	return lease.Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now), 0
+	return shouldQ, priority
+
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are
@@ -132,7 +176,7 @@ func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.Syste
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
-		// If we get a different  range ID back, then the range has been merged
+		// If we get a different range ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
