@@ -1,0 +1,142 @@
+import { assert } from "chai";
+import _ = require("lodash");
+import { CachedDataReducer, CachedDataReducerState } from "./cachedDataReducer";
+import { Action } from "../interfaces/action";
+
+class Request {
+  constructor(public request: string) { };
+}
+
+class Response {
+  constructor(public response: string) { };
+}
+
+let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, reject) => resolve(new Response(req.request)));
+
+describe("reducerObj", function () {
+  let namespace = "test";
+  let testReducerObj = new CachedDataReducer<Request, Response>(apiEndpointMock, namespace);
+
+  describe("actions", function () {
+    it("requestData() creates the correct action type.", function() {
+      assert.equal(testReducerObj.requestData().type, testReducerObj.REQUEST);
+    });
+
+    it("receiveData() creates the correct action type.", function() {
+      assert.equal(testReducerObj.receiveData(null).type, testReducerObj.RECEIVE);
+    });
+
+    it("errorData() creates the correct action type.", function() {
+      assert.equal(testReducerObj.errorData(null).type, testReducerObj.ERROR);
+    });
+
+    it("invalidateData() creates the correct action type.", function() {
+      assert.equal(testReducerObj.invalidateData().type, testReducerObj.INVALIDATE);
+    });
+  });
+
+  let reducer = testReducerObj.reducer;
+
+  describe("reducer", function() {
+    let state: CachedDataReducerState<Response>;
+    beforeEach(() => {
+      state = reducer(undefined, { type: "unknown" });
+    });
+
+    it("should have the correct default value.", function() {
+      let expected = {
+        inFlight: false,
+        valid: false,
+      };
+      assert.deepEqual(state, expected);
+    });
+
+    it("should correctly dispatch requestData", function () {
+      state = reducer(state, testReducerObj.requestData());
+      let expected = {
+        inFlight: true,
+        valid: false,
+      };
+      assert.deepEqual(state, expected);
+    });
+
+    it("should correctly dispatch receiveData", function () {
+      let r = new Response("test string");
+
+      state = reducer(state, testReducerObj.receiveData(r));
+      let expected = {
+        inFlight: false,
+        valid: true,
+        data: r,
+        lastError: <Error>null,
+      };
+      assert.deepEqual(state, expected);
+    });
+
+    it("should correctly dispatch errorData", function() {
+      let e = new Error();
+
+      state = reducer(state, testReducerObj.errorData(e));
+      let expected = {
+        inFlight: false,
+        valid: false,
+        lastError: e,
+      };
+      assert.deepEqual(state, expected);
+    });
+
+    it("should correctly dispatch invalidateData", function() {
+      state = reducer(state, testReducerObj.invalidateData());
+      let expected = {
+        inFlight: false,
+        valid: false,
+      };
+      assert.deepEqual(state, expected);
+    });
+  });
+
+  describe("refresh", function () {
+    let state: {
+      cachedData: {
+        test: CachedDataReducerState<Response>;
+      };
+    };
+
+    let dispatch = (action: Action) => {
+      state.cachedData.test = testReducerObj.reducer(state.cachedData.test, action);
+    };
+
+    it("correctly dispatches refresh", function () {
+      state = {
+        cachedData: {
+          test: new CachedDataReducerState<Response>(),
+        },
+      };
+
+      let testString = "refresh test string";
+
+      return testReducerObj.refresh(new Request(testString))(dispatch, () => state).then(() => {
+        assert.deepEqual(state.cachedData.test, {
+          inFlight: false,
+          valid: true,
+          data: new Response(testString),
+          lastError: null,
+        });
+      });
+
+    });
+  });
+});
+
+describe("multiple reducer objects", function () {
+  it("should throw an error if the same namespace is used twice", function () {
+    new CachedDataReducer<Request, Response>(apiEndpointMock, "duplicatenamespace");
+    try {
+      new CachedDataReducer<Request, Response>(apiEndpointMock, "duplicatenamespace");
+    } catch (e) {
+      assert(_.isError(e));
+      return;
+    }
+    assert.fail("Expected to fail after registering a duplicate namespace.");
+  });
+});
