@@ -49,6 +49,23 @@ var (
 	TypeTuple Datum = &DTuple{}
 )
 
+// dividerDatum is used during normalization to determine which Datums
+// are possible valid second operands to an arithmetic divide. See
+// CanBeZeroDivider() for an example.
+// Ensure this is implemented appropriately if/when new numeric types
+// are added.
+type dividerDatum interface {
+	dividerDatum()
+}
+
+var _ dividerDatum = TypeInt
+var _ dividerDatum = TypeFloat
+var _ dividerDatum = TypeDecimal
+
+func (*DInt) dividerDatum()     {}
+func (*DFloat) dividerDatum()   {}
+func (*DDecimal) dividerDatum() {}
+
 // SemaContext defines the context in which to perform semantic analysis on an
 // expression syntax tree.
 type SemaContext struct {
