@@ -142,7 +142,7 @@ func (p *planner) Insert(
 		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
 	}
 
-	fkTables := TablesNeededForFKs(en.tableDesc, CheckInserts)
+	fkTables := TablesNeededForFKs(*en.tableDesc, CheckInserts)
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			fkTables := TablesNeededForFKs(en.tableDesc, CheckUpdates)
+			fkTables := TablesNeededForFKs(*en.tableDesc, CheckUpdates)
 			if err := p.fillFKTableMap(fkTables); err != nil {
 				return nil, err
 			}

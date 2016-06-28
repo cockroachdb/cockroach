@@ -46,7 +46,7 @@ const (
 // in planner, should fill the map's values by acquiring leases. This function
 // is essentially just returning a slice of IDs, but the empty map can be filled
 // in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table *sqlbase.TableDescriptor, usage FKCheck) TablesByID {
+func TablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) TablesByID {
 	var ret TablesByID
 	for _, idx := range table.AllNonDropIndexes() {
 		if usage != CheckDeletes && idx.ForeignKey != nil {
@@ -74,7 +74,7 @@ type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -136,7 +136,7 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -173,6 +173,10 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			return err
 		}
 		if found != nil {
+			if row == nil {
+				return fmt.Errorf("foreign key violation: non-empty columns %s referenced in table %q",
+					fk.writeIdx.ColumnNames, fk.searchTable.Name)
+			}
 			fkValues := make(parser.DTuple, len(fk.searchIdx.ColumnIDs))
 			for i := range fk.searchIdx.ColumnIDs {
 				fkValues[i] = row[fk.ids[fk.searchIdx.ColumnIDs[i]]]
@@ -180,6 +184,7 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			return fmt.Errorf("foreign key violation: value(s) %v in columns %s referenced in table %q",
 				fkValues, fk.writeIdx.ColumnNames, fk.searchTable.Name)
 		}
+
 	}
 	return nil
 }
@@ -190,7 +195,7 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table *sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error
@@ -263,12 +268,16 @@ func makeBaseFKHelper(
 
 // TODO(dt): Batch checks of many rows.
 func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
-	keyBytes, _, err := sqlbase.EncodeIndexKey(f.searchIdx, f.ids, values, f.searchPrefix)
-	if err != nil {
-		return nil, err
+	var key roachpb.Key
+	if values != nil {
+		keyBytes, _, err := sqlbase.EncodeIndexKey(f.searchIdx, f.ids, values, f.searchPrefix)
+		if err != nil {
+			return nil, err
+		}
+		key = roachpb.Key(keyBytes)
+	} else {
+		key = roachpb.Key(f.searchPrefix)
 	}
-	key := roachpb.Key(keyBytes)
-
 	spans := sqlbase.Spans{sqlbase.Span{Start: key, End: key.PrefixEnd()}}
 	if err := f.rf.StartScan(f.txn, spans, 1); err != nil {
 		return nil, err

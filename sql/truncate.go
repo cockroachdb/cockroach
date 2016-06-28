@@ -44,6 +44,17 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		if err := truncateTable(&tableDesc, p.txn); err != nil {
 			return nil, err
 		}
+
+		fkTables := TablesNeededForFKs(tableDesc, CheckDeletes)
+		if err := p.fillFKTableMap(fkTables); err != nil {
+			return nil, err
+		}
+		colMap := colIDtoRowIndexFromCols(tableDesc.Columns)
+		if helper, err := makeFKDeleteHelper(p.txn, tableDesc, fkTables, colMap); err != nil {
+			return nil, err
+		} else if err = helper.checkAll(nil); err != nil {
+			return nil, err
+		}
 	}
 
 	return &emptyNode{}, nil

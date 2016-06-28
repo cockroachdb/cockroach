@@ -175,7 +175,7 @@ func makeRowInserter(
 
 	if checkFKs {
 		var err error
-		if ri.fks, err = makeFKInsertHelper(txn, tableDesc, fkTables, ri.insertColIDtoRowIndex); err != nil {
+		if ri.fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.insertColIDtoRowIndex); err != nil {
 			return ri, err
 		}
 	}
@@ -498,7 +498,7 @@ func makeRowUpdater(
 	}
 
 	var err error
-	if ru.fks, err = makeFKUpdateHelper(txn, tableDesc, fkTables, ru.fetchColIDtoRowIndex); err != nil {
+	if ru.fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.fetchColIDtoRowIndex); err != nil {
 		return rowUpdater{}, err
 	}
 	return ru, nil
@@ -790,7 +790,7 @@ func makeRowDeleter(
 	}
 	if checkFKs {
 		var err error
-		if rd.fks, err = makeFKDeleteHelper(txn, tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
+		if rd.fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
 			return rowDeleter{}, nil
 		}
 	}

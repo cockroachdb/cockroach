@@ -107,6 +107,9 @@ INSERT INTO scans (scanned) VALUES ('867072000006'), ('missing'), ('885155001450
 statement error foreign key violation: value\(s\) \['867072000006'\] in columns \[upc\] referenced in table "scans"
 DELETE FROM products WHERE sku = 'VP-W9QH-W44L'
 
+statement error foreign key violation: non-empty
+TRUNCATE products
+
 # Blanking a field nobody cares about is fine.
 statement ok
 UPDATE products SET vendor = '' WHERE sku = '780'
@@ -128,7 +131,7 @@ statement error foreign key violation: value\(s\) \['885155001450'\] in columns 
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
 statement ok
-DELETE FROM orders
+TRUNCATE orders
 
 # Changing now non-referenced and secondary field is fine.
 statement ok
@@ -141,11 +144,14 @@ UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 statement error foreign key violation: value\(s\) \['885155001450'\] in columns \[upc\] referenced in table "scans"
 DELETE FROM products WHERE sku = '750'
 
-statement ok
-DELETE FROM scans
+statement error foreign key violation: non-empty columns \[upc\] referenced in table "scans"
+TRUNCATE products
 
 statement ok
-DELETE FROM products WHERE sku = '750'
+TRUNCATE scans
+
+statement ok
+TRUNCATE products
 
 statement error "products_upc_key" is referenced by foreign key from table "scans"
 DROP INDEX products@products_upc_key

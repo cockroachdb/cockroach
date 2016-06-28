@@ -268,7 +268,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 
 		updateCols := append(added, dropped...)
-		fkTables := TablesNeededForFKs(tableDesc, CheckUpdates)
+		fkTables := TablesNeededForFKs(*tableDesc, CheckUpdates)
 		for k := range fkTables {
 			if fkTables[k], err = getTableDescFromID(txn, k); err != nil {
 				return err
