@@ -1335,6 +1335,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "bool",
                                     "name": "frozen",
                                     "id": 8
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
+                                    "name": "last_verification",
+                                    "id": 9,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
