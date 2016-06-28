@@ -24,6 +24,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"unsafe"
 
@@ -188,6 +189,7 @@ func (r *RocksDB) Open() error {
 			wal_ttl_seconds: C.uint64_t(envutil.EnvOrDefaultDuration("rocksdb_wal_ttl", 0).Seconds()),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
+			num_cpu:         C.int(runtime.NumCPU()),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Errorf("could not open rocksdb instance: %s", err)

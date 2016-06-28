@@ -1353,15 +1353,8 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // increased read amplification.
   table_options.block_size = db_opts.block_size;
 
-  rocksdb::ColumnFamilyOptions cf_options;
-  cf_options.OptimizeLevelStyleCompaction(db_opts.memtable_budget);
-  // OptimizeLevelStyleCompaction sets no-compression for L0 and
-  // L1. Current benchmarks and tests show no benefit to doing this.
-  for (int i = 0; i < cf_options.compression_per_level.size(); i++) {
-    cf_options.compression_per_level[i] = rocksdb::kSnappyCompression;
-  }
-
-  rocksdb::Options options(rocksdb::DBOptions(), cf_options);
+  rocksdb::Options options(rocksdb::GetOptions(db_opts.memtable_budget));
+  options.IncreaseParallelism(db_opts.num_cpu);
   options.allow_os_buffer = db_opts.allow_os_buffer;
   options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
@@ -1374,10 +1367,13 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   // File size settings: TODO(marc): investigate and determine better long-term settings:
   // https://github.com/cockroachdb/cockroach/issues/5852
+  options.level_compaction_dynamic_level_bytes = true;
   options.target_file_size_base = 64 << 20;
   options.target_file_size_multiplier = 8;
   options.max_bytes_for_level_base = 512 << 20;
   options.max_bytes_for_level_multiplier = 8;
+  // Merge two memtables when flushing to L0.
+  options.min_write_buffer_number_to_merge = 2;
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
