@@ -736,6 +736,7 @@ func (t *tableState) purgeOldLeases(
 // LeaseStoreTestingKnobs contains testing knobs.
 type LeaseStoreTestingKnobs struct {
 	// Called after a lease is removed from the store, with any operation error.
+	// Check out LeaseReleaseWaiter.
 	LeaseReleasedEvent func(lease *LeaseState, err error)
 }
 

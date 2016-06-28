@@ -124,14 +124,14 @@ func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
 	return t.node(nodeID).Release(lease)
 }
 
-// If leaseReleaseWaiter is not nil, it will be used to block until the lease is
+// If LeaseReleaseWaiter is not nil, it will be used to block until the lease is
 // released from the store. If the lease is not supposed to be released from the
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
 	nodeID uint32,
 	lease *csql.LeaseState,
-	leaseReleaseWaiter *leaseReleaseWaiter,
+	leaseReleaseWaiter *csql.LeaseReleaseWaiter,
 ) {
 	if leaseReleaseWaiter != nil {
 		leaseReleaseWaiter.PrepareToWait(lease)
@@ -173,42 +173,10 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 	return mgr
 }
 
-// leaseReleaseWaiter can be used to wait for a lease to be removed from the
-// store (leases are removed from the store async w.r.t. LeaseManager
-// operations).
-// To use it, its LeaseReleasedNotification method must be hooked up to
-// LeaseStoreTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
-// for a lease, call PrepareToWait() before calling LeaseManager.Release(), and
-// then call Wait() for the actual blocking.
-type leaseReleaseWaiter struct {
-	waitingFor *csql.LeaseState
-	doneSem    chan error
-}
-
-func (w *leaseReleaseWaiter) PrepareToWait(lease *csql.LeaseState) {
-	w.waitingFor = lease
-	w.doneSem = make(chan error, 1)
-}
-
-func (w *leaseReleaseWaiter) Wait() error {
-	if w.waitingFor == nil {
-		panic("wasn't told what to wait for")
-	}
-	return <-w.doneSem
-}
-
-func (w *leaseReleaseWaiter) LeaseReleasedNotification(
-	lease *csql.LeaseState, err error,
-) {
-	if lease == w.waitingFor {
-		w.doneSem <- err
-	}
-}
-
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
-	var releaseWaiter leaseReleaseWaiter
+	var releaseWaiter csql.LeaseReleaseWaiter
 	ctx.TestingKnobs = base.TestingKnobs{
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
@@ -310,7 +278,7 @@ func TestLeaseManager(testingT *testing.T) {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
-	var releaseWaiter leaseReleaseWaiter
+	var releaseWaiter csql.LeaseReleaseWaiter
 	ctx.TestingKnobs = base.TestingKnobs{
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
