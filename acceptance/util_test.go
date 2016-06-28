@@ -109,7 +109,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	if !prefixRE.MatchString(prefix) {
 		t.Fatalf("farmer prefix must match regex %s", prefixRE)
 	}
-	dt := timeutil.Now().Format("20060102-1504")
+	dt := timeutil.Now().Format("20060102-150405")
 	f := &terrafarm.Farmer{
 		Output:  os.Stderr,
 		Cwd:     *flagCwd,
