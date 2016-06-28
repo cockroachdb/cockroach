@@ -3,1218 +3,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
     "package": "cockroach",
     "messages": [
         {
-            "name": "server",
-            "fields": [],
-            "messages": [
-                {
-                    "name": "serverpb",
-                    "fields": [],
-                    "options": {
-                        "go_package": "serverpb"
-                    },
-                    "messages": [
-                        {
-                            "name": "DatabasesRequest",
-                            "fields": []
-                        },
-                        {
-                            "name": "DatabasesResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "string",
-                                    "name": "databases",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "DatabaseDetailsRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "database",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "DatabaseDetailsResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "Grant",
-                                    "name": "grants",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "string",
-                                    "name": "table_names",
-                                    "id": 2
-                                }
-                            ],
-                            "messages": [
-                                {
-                                    "name": "Grant",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "user",
-                                            "id": 1
-                                        },
-                                        {
-                                            "rule": "repeated",
-                                            "type": "string",
-                                            "name": "privileges",
-                                            "id": 2
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                        {
-                            "name": "TableDetailsRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "database",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "table",
-                                    "id": 2
-                                }
-                            ]
-                        },
-                        {
-                            "name": "TableDetailsResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "Grant",
-                                    "name": "grants",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "Column",
-                                    "name": "columns",
-                                    "id": 2,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "Index",
-                                    "name": "indexes",
-                                    "id": 3,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "range_count",
-                                    "id": 4
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "create_table_statement",
-                                    "id": 5
-                                }
-                            ],
-                            "messages": [
-                                {
-                                    "name": "Grant",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "user",
-                                            "id": 1
-                                        },
-                                        {
-                                            "rule": "repeated",
-                                            "type": "string",
-                                            "name": "privileges",
-                                            "id": 2
-                                        }
-                                    ]
-                                },
-                                {
-                                    "name": "Column",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "name",
-                                            "id": 1
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "type",
-                                            "id": 2
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "bool",
-                                            "name": "nullable",
-                                            "id": 3
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "default_value",
-                                            "id": 4
-                                        }
-                                    ]
-                                },
-                                {
-                                    "name": "Index",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "name",
-                                            "id": 1
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "bool",
-                                            "name": "unique",
-                                            "id": 2
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "int64",
-                                            "name": "seq",
-                                            "id": 3
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "column",
-                                            "id": 4
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "direction",
-                                            "id": 5
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "bool",
-                                            "name": "storing",
-                                            "id": 6
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                        {
-                            "name": "UsersRequest",
-                            "fields": []
-                        },
-                        {
-                            "name": "UsersResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "User",
-                                    "name": "users",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ],
-                            "messages": [
-                                {
-                                    "name": "User",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "username",
-                                            "id": 1
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                        {
-                            "name": "EventsRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "type",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "target_id",
-                                    "id": 2
-                                }
-                            ]
-                        },
-                        {
-                            "name": "EventsResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "Event",
-                                    "name": "events",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ],
-                            "messages": [
-                                {
-                                    "name": "Event",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "Timestamp",
-                                            "name": "timestamp",
-                                            "id": 1,
-                                            "options": {
-                                                "(gogoproto.nullable)": false
-                                            }
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "event_type",
-                                            "id": 2
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "int64",
-                                            "name": "target_id",
-                                            "id": 3,
-                                            "options": {
-                                                "(gogoproto.customname)": "TargetID"
-                                            }
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "int64",
-                                            "name": "reporting_id",
-                                            "id": 4,
-                                            "options": {
-                                                "(gogoproto.customname)": "ReportingID"
-                                            }
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
-                                            "name": "info",
-                                            "id": 5
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "bytes",
-                                            "name": "unique_id",
-                                            "id": 6,
-                                            "options": {
-                                                "(gogoproto.customname)": "UniqueID"
-                                            }
-                                        }
-                                    ],
-                                    "messages": [
-                                        {
-                                            "name": "Timestamp",
-                                            "fields": [
-                                                {
-                                                    "rule": "optional",
-                                                    "type": "int64",
-                                                    "name": "sec",
-                                                    "id": 1
-                                                },
-                                                {
-                                                    "rule": "optional",
-                                                    "type": "uint32",
-                                                    "name": "nsec",
-                                                    "id": 2
-                                                }
-                                            ]
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                        {
-                            "name": "SetUIDataRequest",
-                            "fields": [
-                                {
-                                    "rule": "map",
-                                    "type": "bytes",
-                                    "keytype": "string",
-                                    "name": "key_values",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "SetUIDataResponse",
-                            "fields": []
-                        },
-                        {
-                            "name": "GetUIDataRequest",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "string",
-                                    "name": "keys",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "GetUIDataResponse",
-                            "fields": [
-                                {
-                                    "rule": "map",
-                                    "type": "Value",
-                                    "keytype": "string",
-                                    "name": "key_values",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ],
-                            "messages": [
-                                {
-                                    "name": "Timestamp",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "int64",
-                                            "name": "sec",
-                                            "id": 1
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "uint32",
-                                            "name": "nsec",
-                                            "id": 2
-                                        }
-                                    ]
-                                },
-                                {
-                                    "name": "Value",
-                                    "fields": [
-                                        {
-                                            "rule": "optional",
-                                            "type": "bytes",
-                                            "name": "value",
-                                            "id": 1
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "Timestamp",
-                                            "name": "last_updated",
-                                            "id": 2,
-                                            "options": {
-                                                "(gogoproto.nullable)": false
-                                            }
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                        {
-                            "name": "ClusterRequest",
-                            "fields": []
-                        },
-                        {
-                            "name": "ClusterResponse",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "cluster_id",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.customname)": "ClusterID"
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "DrainRequest",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "int32",
-                                    "name": "on",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "int32",
-                                    "name": "off",
-                                    "id": 2
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "bool",
-                                    "name": "shutdown",
-                                    "id": 3
-                                }
-                            ]
-                        },
-                        {
-                            "name": "DrainResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "int32",
-                                    "name": "on",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "HealthRequest",
-                            "fields": []
-                        },
-                        {
-                            "name": "HealthResponse",
-                            "fields": []
-                        },
-                        {
-                            "name": "ClusterFreezeRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "bool",
-                                    "name": "freeze",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "ClusterFreezeResponse",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "ranges_affected",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "message",
-                                    "id": 2
-                                }
-                            ]
-                        },
-                        {
-                            "name": "DetailsRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "DetailsResponse",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "int32",
-                                    "name": "node_id",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.customname)": "NodeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "util.UnresolvedAddr",
-                                    "name": "address",
-                                    "id": 2,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "build.Info",
-                                    "name": "build_info",
-                                    "id": 3,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "NodesRequest",
-                            "fields": []
-                        },
-                        {
-                            "name": "NodesResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "status.NodeStatus",
-                                    "name": "nodes",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "NodeRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RangeInfo",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "PrettySpan",
-                                    "name": "span",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "raft_state",
-                                    "id": 2
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "storage.storagebase.RangeInfo",
-                                    "name": "state",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RangesRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RangesResponse",
-                            "fields": [
-                                {
-                                    "rule": "repeated",
-                                    "type": "RangeInfo",
-                                    "name": "ranges",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "GossipRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "JSONResponse",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "bytes",
-                                    "name": "data",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "LogsRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "level",
-                                    "id": 2
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "start_time",
-                                    "id": 3
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "end_time",
-                                    "id": 4
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "max",
-                                    "id": 5
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "pattern",
-                                    "id": 6
-                                }
-                            ]
-                        },
-                        {
-                            "name": "LogFilesListRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "LogFileRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "file",
-                                    "id": 2
-                                }
-                            ]
-                        },
-                        {
-                            "name": "StacksRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "MetricsRequest",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "node_id",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RaftRangeNode",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "int32",
-                                    "name": "node_id",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.customname)": "NodeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "RangeInfo",
-                                    "name": "range",
-                                    "id": 2,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RaftRangeError",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "message",
-                                    "id": 1
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RaftRangeStatus",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "range_id",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.customname)": "RangeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
-                                    }
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "RaftRangeError",
-                                    "name": "errors",
-                                    "id": 2,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "RaftRangeNode",
-                                    "name": "nodes",
-                                    "id": 3,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "RaftDebugRequest",
-                            "fields": []
-                        },
-                        {
-                            "name": "RaftDebugResponse",
-                            "fields": [
-                                {
-                                    "rule": "map",
-                                    "type": "RaftRangeStatus",
-                                    "keytype": "int64",
-                                    "name": "ranges",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false,
-                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "name": "PrettySpan",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "start_key",
-                                    "id": 1
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "string",
-                                    "name": "end_key",
-                                    "id": 2
-                                }
-                            ]
-                        }
-                    ],
-                    "enums": [
-                        {
-                            "name": "DrainMode",
-                            "values": [
-                                {
-                                    "name": "CLIENT",
-                                    "id": 0
-                                },
-                                {
-                                    "name": "LEADERSHIP",
-                                    "id": 1
-                                }
-                            ]
-                        }
-                    ],
-                    "services": [
-                        {
-                            "name": "Admin",
-                            "options": {},
-                            "rpc": {
-                                "Users": {
-                                    "request": "UsersRequest",
-                                    "response": "UsersResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/users"
-                                    }
-                                },
-                                "Databases": {
-                                    "request": "DatabasesRequest",
-                                    "response": "DatabasesResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/databases"
-                                    }
-                                },
-                                "DatabaseDetails": {
-                                    "request": "DatabaseDetailsRequest",
-                                    "response": "DatabaseDetailsResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/databases/{database}"
-                                    }
-                                },
-                                "TableDetails": {
-                                    "request": "TableDetailsRequest",
-                                    "response": "TableDetailsResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/databases/{database}/tables/{table}"
-                                    }
-                                },
-                                "Events": {
-                                    "request": "EventsRequest",
-                                    "response": "EventsResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/events"
-                                    }
-                                },
-                                "SetUIData": {
-                                    "request": "SetUIDataRequest",
-                                    "response": "SetUIDataResponse",
-                                    "options": {
-                                        "(google.api.http).post": "/_admin/v1/uidata",
-                                        "(google.api.http).body": "*"
-                                    }
-                                },
-                                "GetUIData": {
-                                    "request": "GetUIDataRequest",
-                                    "response": "GetUIDataResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/uidata"
-                                    }
-                                },
-                                "Cluster": {
-                                    "request": "ClusterRequest",
-                                    "response": "ClusterResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/cluster"
-                                    }
-                                },
-                                "Health": {
-                                    "request": "HealthRequest",
-                                    "response": "HealthResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_admin/v1/health"
-                                    }
-                                },
-                                "Drain": {
-                                    "request": "DrainRequest",
-                                    "response": "DrainResponse",
-                                    "options": {
-                                        "(google.api.http).post": "/_admin/v1/drain",
-                                        "(google.api.http).body": "*"
-                                    }
-                                },
-                                "ClusterFreeze": {
-                                    "request": "ClusterFreezeRequest",
-                                    "response": "ClusterFreezeResponse",
-                                    "options": {
-                                        "(google.api.http).post": "/_admin/v1/cluster/freeze",
-                                        "(google.api.http).body": "*"
-                                    }
-                                }
-                            }
-                        },
-                        {
-                            "name": "Status",
-                            "options": {},
-                            "rpc": {
-                                "Details": {
-                                    "request": "DetailsRequest",
-                                    "response": "DetailsResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_status/details/{node_id}",
-                                        "(google.api.http).additional_bindings.get": "/health"
-                                    }
-                                },
-                                "Nodes": {
-                                    "request": "NodesRequest",
-                                    "response": "NodesResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_status/nodes"
-                                    }
-                                },
-                                "Node": {
-                                    "request": "NodeRequest",
-                                    "response": "status.NodeStatus",
-                                    "options": {
-                                        "(google.api.http).get": "/_status/nodes/{node_id}"
-                                    }
-                                },
-                                "RaftDebug": {
-                                    "request": "RaftDebugRequest",
-                                    "response": "RaftDebugResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_status/raft"
-                                    }
-                                },
-                                "Ranges": {
-                                    "request": "RangesRequest",
-                                    "response": "RangesResponse",
-                                    "options": {
-                                        "(google.api.http).get": "/_status/ranges/{node_id}"
-                                    }
-                                },
-                                "Gossip": {
-                                    "request": "GossipRequest",
-                                    "response": "gossip.InfoStatus",
-                                    "options": {
-                                        "(google.api.http).get": "/_status/gossip/{node_id}"
-                                    }
-                                },
-                                "Stacks": {
-                                    "request": "StacksRequest",
-                                    "response": "JSONResponse",
-                                    "options": {}
-                                },
-                                "Metrics": {
-                                    "request": "MetricsRequest",
-                                    "response": "JSONResponse",
-                                    "options": {}
-                                },
-                                "Logs": {
-                                    "request": "LogsRequest",
-                                    "response": "JSONResponse",
-                                    "options": {}
-                                },
-                                "LogFilesList": {
-                                    "request": "LogFilesListRequest",
-                                    "response": "JSONResponse",
-                                    "options": {}
-                                },
-                                "LogFile": {
-                                    "request": "LogFileRequest",
-                                    "response": "JSONResponse",
-                                    "options": {}
-                                }
-                            }
-                        }
-                    ]
-                },
-                {
-                    "name": "status",
-                    "fields": [],
-                    "options": {
-                        "go_package": "status"
-                    },
-                    "messages": [
-                        {
-                            "name": "StoreStatus",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "roachpb.StoreDescriptor",
-                                    "name": "desc",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "map",
-                                    "type": "double",
-                                    "keytype": "string",
-                                    "name": "metrics",
-                                    "id": 2
-                                }
-                            ]
-                        },
-                        {
-                            "name": "NodeStatus",
-                            "fields": [
-                                {
-                                    "rule": "optional",
-                                    "type": "roachpb.NodeDescriptor",
-                                    "name": "desc",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "build.Info",
-                                    "name": "build_info",
-                                    "id": 2,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "started_at",
-                                    "id": 3,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "int64",
-                                    "name": "updated_at",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "map",
-                                    "type": "double",
-                                    "keytype": "string",
-                                    "name": "metrics",
-                                    "id": 5
-                                },
-                                {
-                                    "rule": "repeated",
-                                    "type": "StoreStatus",
-                                    "name": "store_statuses",
-                                    "id": 6,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "build",
-            "fields": [],
-            "options": {
-                "go_package": "build"
-            },
-            "messages": [
-                {
-                    "name": "Info",
-                    "fields": [
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "go_version",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "tag",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "time",
-                            "id": 3,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "dependencies",
-                            "id": 4,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "cgo_compiler",
-                            "id": 5,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "string",
-                            "name": "platform",
-                            "id": 6,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             "name": "util",
             "fields": [],
             "options": {
@@ -2576,6 +1364,1337 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 3
                                 }
                             ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "config",
+            "fields": [],
+            "options": {
+                "go_package": "config"
+            },
+            "messages": [
+                {
+                    "name": "GCPolicy",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "ttl_seconds",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "TTLSeconds"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "ZoneConfig",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "roachpb.Attributes",
+                            "name": "replica_attrs",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.moretags)": "yaml:\\\"replicas,omitempty\\\""
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "range_min_bytes",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.moretags)": "yaml:\\\"range_min_bytes\\\""
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "range_max_bytes",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.moretags)": "yaml:\\\"range_max_bytes\\\""
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "GCPolicy",
+                            "name": "gc",
+                            "id": 4,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "GC"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "SystemConfig",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "roachpb.KeyValue",
+                            "name": "values",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "server",
+            "fields": [],
+            "messages": [
+                {
+                    "name": "serverpb",
+                    "fields": [],
+                    "options": {
+                        "go_package": "serverpb"
+                    },
+                    "messages": [
+                        {
+                            "name": "DatabasesRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "DatabasesResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "string",
+                                    "name": "databases",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DatabaseDetailsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "database",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DatabaseDetailsResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "Grant",
+                                    "name": "grants",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "string",
+                                    "name": "table_names",
+                                    "id": 2
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "Grant",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "user",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "string",
+                                            "name": "privileges",
+                                            "id": 2
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "TableDetailsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "database",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "table",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "TableDetailsResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "Grant",
+                                    "name": "grants",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "Column",
+                                    "name": "columns",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "Index",
+                                    "name": "indexes",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "range_count",
+                                    "id": 4
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "create_table_statement",
+                                    "id": 5
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "config.ZoneConfig",
+                                    "name": "zone_config",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "ZoneConfigurationLevel",
+                                    "name": "zone_config_level",
+                                    "id": 7
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "Grant",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "user",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "string",
+                                            "name": "privileges",
+                                            "id": 2
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Column",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "name",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "type",
+                                            "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "nullable",
+                                            "id": 3
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "default_value",
+                                            "id": 4
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Index",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "name",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "unique",
+                                            "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "seq",
+                                            "id": 3
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "column",
+                                            "id": 4
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "direction",
+                                            "id": 5
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "storing",
+                                            "id": 6
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "UsersRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "UsersResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "User",
+                                    "name": "users",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "User",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "username",
+                                            "id": 1
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "EventsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "type",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "target_id",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "EventsResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "Event",
+                                    "name": "events",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "Event",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "Timestamp",
+                                            "name": "timestamp",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "event_type",
+                                            "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "target_id",
+                                            "id": 3,
+                                            "options": {
+                                                "(gogoproto.customname)": "TargetID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "reporting_id",
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.customname)": "ReportingID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "info",
+                                            "id": 5
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bytes",
+                                            "name": "unique_id",
+                                            "id": 6,
+                                            "options": {
+                                                "(gogoproto.customname)": "UniqueID"
+                                            }
+                                        }
+                                    ],
+                                    "messages": [
+                                        {
+                                            "name": "Timestamp",
+                                            "fields": [
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "int64",
+                                                    "name": "sec",
+                                                    "id": 1
+                                                },
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "uint32",
+                                                    "name": "nsec",
+                                                    "id": 2
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "SetUIDataRequest",
+                            "fields": [
+                                {
+                                    "rule": "map",
+                                    "type": "bytes",
+                                    "keytype": "string",
+                                    "name": "key_values",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "SetUIDataResponse",
+                            "fields": []
+                        },
+                        {
+                            "name": "GetUIDataRequest",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "string",
+                                    "name": "keys",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "GetUIDataResponse",
+                            "fields": [
+                                {
+                                    "rule": "map",
+                                    "type": "Value",
+                                    "keytype": "string",
+                                    "name": "key_values",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "Timestamp",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "sec",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint32",
+                                            "name": "nsec",
+                                            "id": 2
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Value",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "bytes",
+                                            "name": "value",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "Timestamp",
+                                            "name": "last_updated",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ClusterRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "ClusterResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "cluster_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "ClusterID"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DrainRequest",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "int32",
+                                    "name": "on",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "int32",
+                                    "name": "off",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "bool",
+                                    "name": "shutdown",
+                                    "id": 3
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DrainResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "int32",
+                                    "name": "on",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "HealthRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "HealthResponse",
+                            "fields": []
+                        },
+                        {
+                            "name": "ClusterFreezeRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "bool",
+                                    "name": "freeze",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ClusterFreezeResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "ranges_affected",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "message",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DetailsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DetailsResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "node_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "NodeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.UnresolvedAddr",
+                                    "name": "address",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "build.Info",
+                                    "name": "build_info",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "NodesRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "NodesResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "status.NodeStatus",
+                                    "name": "nodes",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "NodeRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RangeInfo",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "PrettySpan",
+                                    "name": "span",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "raft_state",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "storage.storagebase.RangeInfo",
+                                    "name": "state",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RangesRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RangesResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "RangeInfo",
+                                    "name": "ranges",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "GossipRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "JSONResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "bytes",
+                                    "name": "data",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "LogsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "level",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "start_time",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "end_time",
+                                    "id": 4
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "max",
+                                    "id": 5
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "pattern",
+                                    "id": 6
+                                }
+                            ]
+                        },
+                        {
+                            "name": "LogFilesListRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "LogFileRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "file",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "StacksRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "MetricsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftRangeNode",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "node_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "NodeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "RangeInfo",
+                                    "name": "range",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftRangeError",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "message",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftRangeStatus",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "range_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "RangeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "RaftRangeError",
+                                    "name": "errors",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "RaftRangeNode",
+                                    "name": "nodes",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "RaftDebugRequest",
+                            "fields": []
+                        },
+                        {
+                            "name": "RaftDebugResponse",
+                            "fields": [
+                                {
+                                    "rule": "map",
+                                    "type": "RaftRangeStatus",
+                                    "keytype": "int64",
+                                    "name": "ranges",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "PrettySpan",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "start_key",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "end_key",
+                                    "id": 2
+                                }
+                            ]
+                        }
+                    ],
+                    "enums": [
+                        {
+                            "name": "ZoneConfigurationLevel",
+                            "values": [
+                                {
+                                    "name": "UNKNOWN",
+                                    "id": 0
+                                },
+                                {
+                                    "name": "CLUSTER",
+                                    "id": 1
+                                },
+                                {
+                                    "name": "DATABASE",
+                                    "id": 2
+                                },
+                                {
+                                    "name": "TABLE",
+                                    "id": 3
+                                }
+                            ]
+                        },
+                        {
+                            "name": "DrainMode",
+                            "values": [
+                                {
+                                    "name": "CLIENT",
+                                    "id": 0
+                                },
+                                {
+                                    "name": "LEADERSHIP",
+                                    "id": 1
+                                }
+                            ]
+                        }
+                    ],
+                    "services": [
+                        {
+                            "name": "Admin",
+                            "options": {},
+                            "rpc": {
+                                "Users": {
+                                    "request": "UsersRequest",
+                                    "response": "UsersResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/users"
+                                    }
+                                },
+                                "Databases": {
+                                    "request": "DatabasesRequest",
+                                    "response": "DatabasesResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/databases"
+                                    }
+                                },
+                                "DatabaseDetails": {
+                                    "request": "DatabaseDetailsRequest",
+                                    "response": "DatabaseDetailsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/databases/{database}"
+                                    }
+                                },
+                                "TableDetails": {
+                                    "request": "TableDetailsRequest",
+                                    "response": "TableDetailsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/databases/{database}/tables/{table}"
+                                    }
+                                },
+                                "Events": {
+                                    "request": "EventsRequest",
+                                    "response": "EventsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/events"
+                                    }
+                                },
+                                "SetUIData": {
+                                    "request": "SetUIDataRequest",
+                                    "response": "SetUIDataResponse",
+                                    "options": {
+                                        "(google.api.http).post": "/_admin/v1/uidata",
+                                        "(google.api.http).body": "*"
+                                    }
+                                },
+                                "GetUIData": {
+                                    "request": "GetUIDataRequest",
+                                    "response": "GetUIDataResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/uidata"
+                                    }
+                                },
+                                "Cluster": {
+                                    "request": "ClusterRequest",
+                                    "response": "ClusterResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/cluster"
+                                    }
+                                },
+                                "Health": {
+                                    "request": "HealthRequest",
+                                    "response": "HealthResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/health"
+                                    }
+                                },
+                                "Drain": {
+                                    "request": "DrainRequest",
+                                    "response": "DrainResponse",
+                                    "options": {
+                                        "(google.api.http).post": "/_admin/v1/drain",
+                                        "(google.api.http).body": "*"
+                                    }
+                                },
+                                "ClusterFreeze": {
+                                    "request": "ClusterFreezeRequest",
+                                    "response": "ClusterFreezeResponse",
+                                    "options": {
+                                        "(google.api.http).post": "/_admin/v1/cluster/freeze",
+                                        "(google.api.http).body": "*"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Status",
+                            "options": {},
+                            "rpc": {
+                                "Details": {
+                                    "request": "DetailsRequest",
+                                    "response": "DetailsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/details/{node_id}",
+                                        "(google.api.http).additional_bindings.get": "/health"
+                                    }
+                                },
+                                "Nodes": {
+                                    "request": "NodesRequest",
+                                    "response": "NodesResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/nodes"
+                                    }
+                                },
+                                "Node": {
+                                    "request": "NodeRequest",
+                                    "response": "status.NodeStatus",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/nodes/{node_id}"
+                                    }
+                                },
+                                "RaftDebug": {
+                                    "request": "RaftDebugRequest",
+                                    "response": "RaftDebugResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/raft"
+                                    }
+                                },
+                                "Ranges": {
+                                    "request": "RangesRequest",
+                                    "response": "RangesResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/ranges/{node_id}"
+                                    }
+                                },
+                                "Gossip": {
+                                    "request": "GossipRequest",
+                                    "response": "gossip.InfoStatus",
+                                    "options": {
+                                        "(google.api.http).get": "/_status/gossip/{node_id}"
+                                    }
+                                },
+                                "Stacks": {
+                                    "request": "StacksRequest",
+                                    "response": "JSONResponse",
+                                    "options": {}
+                                },
+                                "Metrics": {
+                                    "request": "MetricsRequest",
+                                    "response": "JSONResponse",
+                                    "options": {}
+                                },
+                                "Logs": {
+                                    "request": "LogsRequest",
+                                    "response": "JSONResponse",
+                                    "options": {}
+                                },
+                                "LogFilesList": {
+                                    "request": "LogFilesListRequest",
+                                    "response": "JSONResponse",
+                                    "options": {}
+                                },
+                                "LogFile": {
+                                    "request": "LogFileRequest",
+                                    "response": "JSONResponse",
+                                    "options": {}
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "status",
+                    "fields": [],
+                    "options": {
+                        "go_package": "status"
+                    },
+                    "messages": [
+                        {
+                            "name": "StoreStatus",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "roachpb.StoreDescriptor",
+                                    "name": "desc",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "map",
+                                    "type": "double",
+                                    "keytype": "string",
+                                    "name": "metrics",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "NodeStatus",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "roachpb.NodeDescriptor",
+                                    "name": "desc",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "build.Info",
+                                    "name": "build_info",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "started_at",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "updated_at",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "map",
+                                    "type": "double",
+                                    "keytype": "string",
+                                    "name": "metrics",
+                                    "id": 5
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "StoreStatus",
+                                    "name": "store_statuses",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "build",
+            "fields": [],
+            "options": {
+                "go_package": "build"
+            },
+            "messages": [
+                {
+                    "name": "Info",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "go_version",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "tag",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "time",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "dependencies",
+                            "id": 4,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "cgo_compiler",
+                            "id": 5,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "platform",
+                            "id": 6,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
                         }
                     ]
                 }
