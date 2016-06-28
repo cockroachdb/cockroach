@@ -90,6 +90,19 @@ func (s *LeaseState) Refcount() int {
 	return s.refcount
 }
 
+func (s *LeaseState) incRefcount() {
+	s.mu.Lock()
+	s.incRefcountLocked()
+	defer s.mu.Unlock()
+}
+func (s *LeaseState) incRefcountLocked() {
+	s.refcount++
+	if log.V(3) {
+		log.Infof("LeaseState.incRef: descID=%d name=%q version=%d refcount=%d",
+			s.ID, s.Name, s.Version, s.refcount)
+	}
+}
+
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
@@ -520,13 +533,7 @@ func (t *tableState) checkLease(
 	if !skipLifeCheck && !lease.hasSomeLifeLeft(clock) {
 		return nil
 	}
-	lease.mu.Lock()
-	lease.refcount++
-	lease.mu.Unlock()
-	if log.V(3) {
-		log.Infof("acquire: descID=%d name=%q version=%d refcount=%d",
-			lease.ID, lease.Name, lease.Version, lease.refcount)
-	}
+	lease.incRefcount()
 	return lease
 }
 
@@ -637,16 +644,27 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	if s == nil {
 		return errors.Errorf("table %d version %d not found", lease.ID, lease.Version)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.refcount--
-	if log.V(3) {
-		log.Infof("release: descID=%d name:%q version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
+	// Returns true if refcount drops to 0.
+	decrementAndMaybeMarkUnused := func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.refcount--
+		if log.V(3) {
+			log.Infof("release: descID=%d name:%q version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
+		}
+		if s.refcount < 0 {
+			panic(fmt.Sprintf("negative ref count: descID=%d(%q) version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount))
+		}
+		if s.refcount == 0 && t.deleted {
+			s.released = true
+		}
+		return s.refcount == 0
 	}
-	if s.refcount < 0 {
-		panic(fmt.Sprintf("negative ref count: descID=%d(%q) version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount))
-	}
-	if s.refcount == 0 {
+	if notInUse := decrementAndMaybeMarkUnused(); notInUse {
+		// Release from the store if the lease is not for the latest version. Only
+		// leases for the latest version can be acquired. Except if the table has
+		// been deleted, release regardles of version; no leases can be acquired any
+		// more.
 		if t.deleted {
 			t.removeLease(s, store)
 			return nil
@@ -668,9 +686,7 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 }
 
 // t.mu needs to be locked.
-// lease.mu needs to be locked.
 func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
-	lease.released = true
 	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
 	// Release to the store asynchronously, without the tableState lock.
@@ -811,8 +827,7 @@ func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock
 		// this cache entry soon.
 		return nil
 	}
-	lease.refcount++
-
+	lease.incRefcountLocked()
 	return lease
 }
 
@@ -862,7 +877,11 @@ func (c *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNa
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
 // handles resolving table names to descriptor IDs.
+//
 // Exported only for testing.
+//
+// The locking order is:
+// LeaseManager.mu > tableState.mu > tableNameCache.mu > LeaseState.mu
 type LeaseManager struct {
 	LeaseStore
 	mu     sync.Mutex
@@ -1033,9 +1052,7 @@ func (m *LeaseManager) acquireFreshestFromStore(
 	if lease == nil {
 		panic("no lease in active set after having just acquired one")
 	}
-	lease.mu.Lock()
-	lease.refcount++
-	lease.mu.Unlock()
+	lease.incRefcount()
 	return lease, nil
 }
 
@@ -1104,8 +1121,8 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 							continue
 						}
 						if log.V(2) {
-							log.Infof("%s: refreshing lease table: %d (%s), version: %d",
-								kv.Key, table.ID, table.Name, table.Version)
+							log.Infof("%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
+								kv.Key, table.ID, table.Name, table.Version, table.Deleted())
 						}
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */, nil); t != nil {
