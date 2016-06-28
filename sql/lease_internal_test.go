@@ -333,3 +333,125 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 }
+
+// Test that there's no deadlock between AcquireByName and Release.
+// We used to have one due to lock inversion between the tableNameCache lock and
+// the leaseState lock, triggered when the same lease was Release()d after the
+// table had been deleted (which means it's removed from the tableNameCache) and
+// AcquireByName()d at the same time.
+func TestReleaseAcquireByNameDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	s, sqlDB, kvDB, cleanup := sqlutils.SetupServerWithParams(
+		t, testingshim.TestServerParams{Knobs: testingKnobs})
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Populate the name cache.
+	var lease *LeaseState
+	if err := kvDB.Txn(func(txn *client.Txn) error {
+		var err error
+		lease, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := leaseManager.Release(lease); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pretend the table has been deleted, so that when we release leases on it,
+	// they are removed from the tableNameCache too.
+	tableState := leaseManager.findTableState(tableDesc.ID, true)
+	tableState.deleted = true
+
+	// Try to trigger the race repeatedly: race an AcquireByName against a
+	// Release.
+	// leaseChan acts as a barrier, synchornizing the two routines at every
+	// iteration.
+	leaseChan := make(chan *LeaseState)
+	errChan := make(chan error)
+	go func() {
+		for lease := range leaseChan {
+			// Move errors to the main goroutine.
+			errChan <- leaseManager.Release(lease)
+		}
+	}()
+
+	for i := 0; i < 50; i++ {
+		var leaseByName *LeaseState
+		if err := kvDB.Txn(func(txn *client.Txn) error {
+			var err error
+			lease, err := leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// This test will need to wait until leases are removed from the store
+			// before creating new leases because the jitter used in the leases'
+			// expiration causes duplicate key errors when trying to create new
+			// leases. This is not a problem in production, since leases are not
+			// removed from the store until they expire, and the jitter is small
+			// compared to their lifetime, but it is a problem in this test because
+			// we churn through leases quickly.
+			tracker := removalTracker.TrackRemoval(lease)
+			// Start the race: signal the other guy to release, and we do another
+			// acquire at the same time.
+			leaseChan <- lease
+			leaseByName, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tracker2 := removalTracker.TrackRemoval(leaseByName)
+			// See if there was an error releasing lease.
+			err = <-errChan
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Depending on how the race went, there are two cases - either the
+			// AcquireByName ran first, and got the same lease as we already had,
+			// or the Release ran first and so we got a new lease.
+			if leaseByName == lease {
+				if lease.Refcount() != 1 {
+					t.Fatalf("expected refcount 1, got %d", lease.Refcount())
+				}
+				if err := leaseManager.Release(lease); err != nil {
+					t.Fatal(err)
+				}
+				if err := tracker.WaitForRemoval(); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if lease.Refcount() != 0 {
+					t.Fatalf("expected refcount 0, got %d", lease.Refcount())
+				}
+				if err := leaseManager.Release(leaseByName); err != nil {
+					t.Fatal(err)
+				}
+				if err := tracker2.WaitForRemoval(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(leaseChan)
+}
