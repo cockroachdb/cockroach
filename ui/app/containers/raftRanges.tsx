@@ -4,7 +4,7 @@ import * as ReactPaginate from "react-paginate";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 
-import { refreshRaft } from "../redux/raft";
+import { refreshRaft } from "../redux/apiReducers";
 import { ToolTip } from "../components/toolTip";
 
 /******************************
@@ -68,7 +68,9 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   componentWillReceiveProps(props: RangesMainProps) {
     // Refresh ranges when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    props.refreshRaft();
+    if (!props.rangeStatuses) {
+      props.refreshRaft();
+    }
   }
 
   renderPagination(pageNum: number): React.ReactNode {
@@ -217,7 +219,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
  */
 
 // Base selectors to extract data from redux state.
-let rangeStatuses = (state: any): cockroach.server.serverpb.RaftDebugResponse => state.raft.statuses;
+let rangeStatuses = (state: any): cockroach.server.serverpb.RaftDebugResponse => state.cachedData.raft.data;
 
 // Connect the RangesMain class with our redux store.
 let rangesMainConnected = connect(

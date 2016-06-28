@@ -4,7 +4,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps } from "react-router";
 import _ = require("lodash");
 
-import { refreshNodes } from "../redux/nodes";
+import { refreshNodes } from "../redux/apiReducers";
 import { NodeStatus, MetricConstants } from  "../util/proto";
 import { Bytes, Percentage } from "../util/format";
 
@@ -117,7 +117,7 @@ function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: cockroa
 }
 
 let currentNode = createSelector(
-  (state: any, props: RouteComponentProps<any, any>): NodeStatus[] => state.nodes.statuses,
+  (state: any, props: RouteComponentProps<any, any>): NodeStatus[] => state.cachedData.nodes.data,
   (state: any, props: RouteComponentProps<any, any>): number => parseInt(props.params.node_id, 10),
   (nodes, id) => {
     if (!nodes || !id) {
