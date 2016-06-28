@@ -23,12 +23,95 @@ type normalizableExpr interface {
 	normalize(*normalizeVisitor) TypedExpr
 }
 
+func (expr *CastExpr) normalize(v *normalizeVisitor) TypedExpr {
+	if expr.Expr == DNull {
+		return DNull
+	}
+	return expr
+}
+
+func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
+	val := expr.TypedInnerExpr()
+
+	if val == DNull {
+		return val
+	}
+
+	switch expr.Operator {
+	case UnaryPlus:
+		// +a -> a
+		return val
+	case UnaryMinus:
+		// -0 -> 0 (except for float which has negative zero)
+		if !val.ReturnType().TypeEqual(TypeFloat) && IsNumericZero(val) {
+			return val
+		}
+		switch b := val.(type) {
+		// -(a - b) -> (b - a)
+		case *BinaryExpr:
+			if b.Operator == Minus {
+				exprCopy := *b
+				b = &exprCopy
+				b.Left, b.Right = b.Right, b.Left
+				b.memoizeFn()
+				return b
+			}
+		// - (- a) -> a
+		case *UnaryExpr:
+			if b.Operator == UnaryMinus {
+				return b.TypedInnerExpr()
+			}
+		}
+	}
+
+	return expr
+}
+
 func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
+	expectedType := expr.ReturnType()
 
 	if left == DNull || right == DNull {
 		return DNull
+	}
+
+	switch expr.Operator {
+	case Plus:
+		if IsNumericZero(right) {
+			return ReType(left, expectedType)
+		}
+		if IsNumericZero(left) {
+			return ReType(right, expectedType)
+		}
+	case Minus:
+		if IsNumericZero(right) {
+			return ReType(left, expectedType)
+		}
+	case Mult:
+		if IsNumericOne(right) {
+			return ReType(left, expectedType)
+		}
+		if IsNumericOne(left) {
+			return ReType(right, expectedType)
+		}
+		if IsNumericZero(left) || IsNumericZero(right) {
+			return SameTypeZero(expectedType)
+		}
+	case Div, FloorDiv:
+		if IsNumericOne(right) {
+			return ReType(left, expectedType)
+		}
+		if IsNumericZero(left) && !CanBeNumericZero(right) {
+			return ReType(left, expectedType)
+		}
+	case Mod:
+		if IsNumericOne(right) {
+			return SameTypeZero(expectedType)
+		}
+		if (IsNumericOne(left) || IsNumericZero(left)) && !CanBeNumericZero(right) {
+			return ReType(left, expectedType)
+		}
 	}
 
 	return expr
@@ -68,7 +151,7 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 			return expr
 		}
 		if right != DNull {
-			if d, err := GetBool(expr.Right.(Datum)); err == nil {
+			if d, err := GetBool(right.(Datum)); err == nil {
 				if !d {
 					return right
 				}
@@ -87,10 +170,6 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
-		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
-			return DNull
-		}
-
 		// We want var nodes (VariableExpr, QualifiedName, etc) to be immediate
 		// children of the comparison expression and not second or third
 		// children. That is, we want trees that look like:
@@ -114,6 +193,10 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 		// tree or we would not have entered this code path.
 		exprCopied := false
 		for {
+			if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+				return DNull
+			}
+
 			if v.isConst(expr.Left) {
 				switch expr.Right.(type) {
 				case *BinaryExpr, VariableExpr:
@@ -130,6 +213,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					expr = &exprCopy
 					exprCopied = true
 				}
+
 				expr = NewTypedComparisonExpr(
 					invertComparisonOp(expr.Operator),
 					expr.TypedRight(),
@@ -156,6 +240,22 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				//    [+-/]   2  ->  a   [-+*]
 				//   /     \            /     \
 				//  a       1          2       1
+				var op BinaryOperator
+				switch left.Operator {
+				case Plus:
+					op = Minus
+				case Minus:
+					op = Plus
+				case Div:
+					op = Mult
+				}
+
+				newBinExpr := newBinExprIfValidOverload(op,
+					expr.TypedRight(), left.TypedRight())
+				if newBinExpr == nil {
+					// Substitution is not possible type-wise. Nothing else to do.
+					break
+				}
 
 				if !exprCopied {
 					exprCopy := *expr
@@ -163,26 +263,12 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					exprCopied = true
 				}
 
-				leftCopy := *left
-				left = &leftCopy
-
-				switch left.Operator {
-				case Plus:
-					left.Operator = Minus
-				case Minus:
-					left.Operator = Plus
-				case Div:
-					left.Operator = Mult
-				}
-
 				expr.Left = left.Left
-				left.Left = expr.Right
-
-				left.memoizeFn()
-				expr.Right, v.err = left.Eval(v.ctx)
+				expr.Right, v.err = newBinExpr.Eval(v.ctx)
 				if v.err != nil {
 					return nil
 				}
+
 				expr.memoizeFn()
 				if !isVar(expr.Left) {
 					// Continue as long as the left side of the comparison is not a
@@ -197,30 +283,42 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				//   /    \           /    \
 				//  1      a         1      2
 
+				op := expr.Operator
+				var newBinExpr *BinaryExpr
+
+				switch left.Operator {
+				case Plus:
+					//
+					// (A + X) cmp B => X cmp (B - C)
+					//
+					newBinExpr = newBinExprIfValidOverload(Minus,
+						expr.TypedRight(), left.TypedLeft())
+				case Minus:
+					//
+					// (A - X) cmp B => X cmp' (A - B)
+					//
+					newBinExpr = newBinExprIfValidOverload(Minus,
+						left.TypedLeft(), expr.TypedRight())
+					op = invertComparisonOp(op)
+				}
+
+				if newBinExpr == nil {
+					break
+				}
+
 				if !exprCopied {
 					exprCopy := *expr
 					expr = &exprCopy
 					exprCopied = true
 				}
 
-				leftCopy := *left
-				left = &leftCopy
-
-				// Clear the function caches; we're about to change stuff.
-				left.Right, expr.Right = expr.Right, left.Right
-				if left.Operator == Plus {
-					left.Operator = Minus
-					left.Left, left.Right = left.Right, left.Left
-				} else {
-					expr.Operator = invertComparisonOp(expr.Operator)
-				}
-
-				left.memoizeFn()
-				expr.Left, v.err = left.Eval(v.ctx)
+				expr.Operator = op
+				expr.Left = left.Right
+				expr.Right, v.err = newBinExpr.Eval(v.ctx)
 				if v.err != nil {
 					return nil
 				}
-				expr.Left, expr.Right = expr.Right, expr.Left
+
 				expr.memoizeFn()
 				if !isVar(expr.Left) {
 					// Continue as long as the left side of the comparison is not a
@@ -307,7 +405,11 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 }
 
 func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
-	return expr.TypedInnerExpr()
+	newExpr := expr.TypedInnerExpr()
+	if normalizeable, ok := newExpr.(normalizableExpr); ok {
+		newExpr = normalizeable.normalize(v)
+	}
+	return newExpr
 }
 
 func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
@@ -319,16 +421,16 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	if expr.Not {
 		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
 		return NewTypedOrExpr(
-			NewTypedComparisonExpr(LT, left, from),
-			NewTypedComparisonExpr(GT, left, to),
-		)
+			NewTypedComparisonExpr(LT, left, from).normalize(v),
+			NewTypedComparisonExpr(GT, left, to).normalize(v),
+		).normalize(v)
 	}
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
 	return NewTypedAndExpr(
-		NewTypedComparisonExpr(GE, left, from),
-		NewTypedComparisonExpr(LE, left, to),
-	)
+		NewTypedComparisonExpr(GE, left, from).normalize(v),
+		NewTypedComparisonExpr(LE, left, to).normalize(v),
+	).normalize(v)
 }
 
 // NormalizeExpr normalizes a typed expression, simplifying where possible,
@@ -364,25 +466,7 @@ func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		return false, expr
 	}
 
-	// Normalize expressions that know how to normalize themselves.
-	if normalizeable, ok := expr.(normalizableExpr); ok {
-		expr = normalizeable.normalize(v)
-		if v.err != nil {
-			return false, expr
-		}
-	}
-
 	switch expr.(type) {
-	case *CaseExpr, *IfExpr, *NullIfExpr, *CoalesceExpr:
-		// Conditional expressions need to be evaluated during the downward
-		// traversal in order to avoid evaluating sub-expressions which should
-		// not be evaluated due to the case/conditional.
-		if v.isConst(expr) {
-			expr, v.err = expr.(TypedExpr).Eval(v.ctx)
-			if v.err != nil {
-				return false, expr
-			}
-		}
 	case *Subquery:
 		// Avoid normalizing subqueries. We need the subquery to be expanded in
 		// order to do so properly.
@@ -495,4 +579,85 @@ func ContainsVars(expr Expr) bool {
 	v := containsVarsVisitor{containsVars: false}
 	WalkExprConst(&v, expr)
 	return v.containsVars
+}
+
+var DecimalZero DDecimal
+var DecimalOne DDecimal
+
+func init() {
+	DecimalOne.Dec.SetUnscaled(1).SetScale(0)
+	DecimalZero.Dec.SetUnscaled(0).SetScale(0)
+}
+
+// IsNumericZero returns true if the datum is a number and equal to
+// zero.
+func IsNumericZero(expr TypedExpr) bool {
+	if d, ok := expr.(Datum); ok {
+		switch t := d.(type) {
+		case *DDecimal:
+			return t.Dec.Cmp(&DecimalZero.Dec) == 0
+		case *DFloat:
+			return *t == 0
+		case *DInt:
+			return *t == 0
+		}
+	}
+	return false
+}
+
+// CanBeNumericZero returns true if the expr may be a number and
+// equal to zero.
+func CanBeNumericZero(expr TypedExpr) bool {
+	if d, ok := expr.(Datum); ok {
+		switch t := d.(type) {
+		case *DDecimal:
+			return t.Dec.Cmp(&DecimalZero.Dec) == 0
+		case *DFloat:
+			return *t == 0
+		case *DInt:
+			return *t == 0
+		}
+	}
+	return true
+}
+
+// IsNumericOne returns true if the datum is a number and equal to
+// one.
+func IsNumericOne(expr TypedExpr) bool {
+	if d, ok := expr.(Datum); ok {
+		switch t := d.(type) {
+		case *DDecimal:
+			return t.Dec.Cmp(&DecimalOne.Dec) == 0
+		case *DFloat:
+			return *t == 1.0
+		case *DInt:
+			return *t == 1
+		}
+	}
+	return false
+}
+
+// SameTypeZero returns a datum of equivalent type with value zero.
+// The argument must be a datum of a numeric type.
+func SameTypeZero(d Datum) TypedExpr {
+	switch d.(type) {
+	case *DDecimal:
+		return &DecimalZero
+	case *DFloat:
+		return NewDFloat(0.0)
+	case *DInt:
+		return NewDInt(0)
+	}
+	panic("zero not defined here")
+}
+
+// ReType ensures that the given numeric expression evaluates
+// to the requested type, inserting a cast if necessary.
+func ReType(expr TypedExpr, wantedType Datum) TypedExpr {
+	if expr.ReturnType().TypeEqual(wantedType) {
+		return expr
+	}
+	res := &CastExpr{Expr: expr, Type: DatumTypeToColumnType(wantedType)}
+	res.typ = wantedType
+	return res
 }

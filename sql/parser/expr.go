@@ -967,6 +967,24 @@ func (node *BinaryExpr) memoizeFn() {
 	node.fn = fn
 }
 
+// newBinExprIfValidOverloads constructs a new BinaryExpr if and only
+// if the pair of arguments have a valid implementation.
+func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExpr) *BinaryExpr {
+	leftRet, rightRet := left.ReturnType(), right.ReturnType()
+	fn, ok := BinOps[op].lookupImpl(leftRet, rightRet)
+	if ok {
+		expr := &BinaryExpr{
+			Operator: op,
+			Left:     left,
+			Right:    right,
+			fn:       fn,
+		}
+		expr.typ = fn.ReturnType
+		return expr
+	}
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	binExprFmtWithParen(buf, f, node.Left, node.Operator.String(), node.Right)
@@ -1011,6 +1029,11 @@ func (node *UnaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Operator.String())
 	buf.WriteByte(' ')
 	exprFmtWithParen(buf, f, node.Expr)
+}
+
+// TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.
+func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
 }
 
 // FuncExpr represents a function call.
