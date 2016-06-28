@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestLeaseSet(t *testing.T) {
@@ -331,5 +332,124 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 	if err := leaseManager.Release(lease); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Test that there's no deadlock between AcquireByName and Release.
+// We used to have one due to lock inversion between the tableNameCache lock and
+// the leaseState lock, triggered when the same lease was Release()d after the
+// table had been deleted (which means it's removed from the tableNameCache) and
+// AcquireByName()d at the same time.
+func TestReleaseAcquireByNameDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	releaseWaiter := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: releaseWaiter.LeaseReleasedNotification,
+			},
+		},
+	}
+	s, sqlDB, kvDB, cleanup := sqlutils.SetupServerWithParams(
+		t, testingshim.TestServerParams{Knobs: testingKnobs})
+	defer cleanup()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Populate the name cache.
+	var lease *LeaseState
+	if err := kvDB.Txn(func(txn *client.Txn) error {
+		var err error
+		lease, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := leaseManager.Release(lease); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pretend the table has been deleted, so that when we release leases on it,
+	// they are removed from the tableNameCache too.
+	tableState := leaseManager.findTableState(tableDesc.ID, true)
+	tableState.deleted = true
+
+	// Try to trigger the race repeatedly: race an AcquireByName against a
+	// Release.
+	// leaseChan acts as a semaphore, synchornizing the two routines at every
+	// iteration.
+	leaseChan := make(chan *LeaseState)
+	go func() {
+		for i := 0; i < 50; i++ {
+			var leaseByName *LeaseState
+			if err := kvDB.Txn(func(txn *client.Txn) error {
+				var err error
+				lease, err := leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+				if err != nil {
+					panic(err)
+				}
+				// This test will need to wait until leases are removed from the store
+				// before creating new leases because the jitter used in the leases'
+				// expiration causes duplicate key errors when trying to create new
+				// leases. This is not a problem in production, since leases are not
+				// removed from the store until they expire, and the jitter is small
+				// compared to their lifetime, but it is a problem in this test because
+				// we churn through leases quickly.
+				tracker := releaseWaiter.TrackRelease(lease)
+				// Start the race: signal the other guy to release, and we do another
+				// acquire at the same time.
+				leaseChan <- lease
+				leaseByName, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+				if err != nil {
+					panic(err)
+				}
+				tracker2 := releaseWaiter.TrackRelease(leaseByName)
+				// Wait until `lease` was released.
+				<-leaseChan
+
+				// Depending on how the race went, there's two cases - either the
+				// AcquireByName ran first, and got the same lease as we already had,
+				// or the Release ran first and so we got a new lease.
+				if leaseByName == lease {
+					if lease.Refcount() != 1 {
+						log.Fatalf("expected refcount 1, got %d", lease.Refcount())
+					}
+					if err := leaseManager.Release(lease); err != nil {
+						panic(err)
+					}
+					if err := tracker.WaitForRelease(); err != nil {
+						panic(err)
+					}
+				} else {
+					if lease.Refcount() != 0 {
+						log.Fatalf("expected refcount 0, got %d", lease.Refcount())
+					}
+					if err := leaseManager.Release(leaseByName); err != nil {
+						panic(err)
+					}
+					if err := tracker2.WaitForRelease(); err != nil {
+						panic(err)
+					}
+				}
+				return nil
+			}); err != nil {
+				panic(err)
+			}
+		}
+		close(leaseChan)
+	}()
+	for lease := range leaseChan {
+		if err := leaseManager.Release(lease); err != nil {
+			panic(err)
+		}
+		leaseChan <- nil
 	}
 }
