@@ -408,7 +408,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// this new incarnation.
 	if previousReplicaID != 0 {
 		// propose pending commands under new replicaID
-		if err := r.refreshPendingCmdsLocked(); err != nil {
+		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged); err != nil {
 			return err
 		}
 	}
@@ -1489,7 +1489,7 @@ func (r *Replica) handleRaftReady() error {
 	}
 	if shouldReproposeCmds {
 		r.mu.Lock()
-		err := r.refreshPendingCmdsLocked()
+		err := r.refreshPendingCmdsLocked(reasonEmptyEntry)
 		r.mu.Unlock()
 		if err != nil {
 			return err
@@ -1523,7 +1523,7 @@ func (r *Replica) tick() error {
 		// didn't go through.
 		//
 		// TODO(tamird/bdarnell): Add unit tests.
-		if err := r.refreshPendingCmdsLocked(); err != nil {
+		if err := r.refreshPendingCmdsLocked(reasonTicks); err != nil {
 			return err
 		}
 	}
@@ -1539,7 +1539,17 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 	return s[i].raftCmd.MaxLeaseIndex < s[j].raftCmd.MaxLeaseIndex
 }
 
-func (r *Replica) refreshPendingCmdsLocked() error {
+//go:generate stringer -type refreshRaftReason
+type refreshRaftReason int
+
+const (
+	noReason refreshRaftReason = iota
+	reasonEmptyEntry
+	reasonReplicaIDChanged
+	reasonTicks
+)
+
+func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
 	// Note that we can't use the commit index here (which is typically a
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
@@ -1559,8 +1569,10 @@ func (r *Replica) refreshPendingCmdsLocked() error {
 		}
 	}
 	if log.V(1) && origNum > 0 {
-		log.Infof("range %d: refurbished %d, reproposing %d commands after empty entry at %d (%d)",
-			r.mu.state.Desc.RangeID, origNum-len(reproposals), len(reproposals), r.mu.state.RaftAppliedIndex, r.mu.state.LeaseAppliedIndex)
+		log.Infof("range %d: pending commands: refurbished %d, reproposing %d (at %d.%d); %s",
+			r.mu.state.Desc.RangeID, origNum-len(reproposals),
+			len(reproposals), r.mu.state.RaftAppliedIndex,
+			r.mu.state.LeaseAppliedIndex, reason)
 	}
 
 	// Reproposals are those commands which we weren't able to refurbish (since
