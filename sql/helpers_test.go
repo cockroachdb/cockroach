@@ -16,42 +16,69 @@
 
 package sql
 
-// LeaseRemovalTracker can be used to wait for a lease to be removed from the
+import "sync"
+
+// LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
 // operations).
-// To use it, its LeaseReleasedNotification method must be hooked up to
+// To use it, its LeaseRemovedNotification method must be hooked up to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
-// for a lease, call PrepareToWait() before calling LeaseManager.Release(), and
-// then call Wait() for the actual blocking.
+// for a lease, get a tracker object through TrackRemoval() before calling
+// LeaseManager.Release(), and then call WaitForRemoval() on the tracker to
+// block for the removal from the store.
+//
+// All methods are thread-safe.
 type LeaseRemovalTracker struct {
-	waitingFor *LeaseState
-	doneSem    chan error
+	mu sync.Mutex
+	// map from a lease whose release we're waiting for to a tracker for that
+	// lease.
+	tracking map[*LeaseState]RemovalTracker
 }
 
-// PrepareToWait regisers the lease that WaitForRelease() will later be called
-// for. This should be called before triggering the operation that releases
-// (asynchronously) the lease.
-func (w *LeaseRemovalTracker) PrepareToWait(lease *LeaseState) {
-	w.waitingFor = lease
-	w.doneSem = make(chan error, 1)
+type RemovalTracker struct {
+	removed chan struct{}
+	// Pointer to a shared err. *err is written when removed is closed.
+	err *error
 }
 
-// WaitForRelease blockes until the lease previously registered with
-// PrepareToWait() has been removed from the store.
-func (w *LeaseRemovalTracker) Wait() error {
-	if w.waitingFor == nil {
-		panic("wasn't told what to wait for")
+// NewLeaseRemovalTracker creates a LeaseRemovalTracker.
+func NewLeaseRemovalTracker() *LeaseRemovalTracker {
+	return &LeaseRemovalTracker{
+		tracking: make(map[*LeaseState]RemovalTracker),
 	}
-	return <-w.doneSem
 }
 
-// LeaseReleasedNotification has to be called after a lease is removed from the
+// TrackRemoval starts monitoring lease removals for a particular lease.
+// This should be called before triggering the operation that (asynchronously)
+// removes the lease.
+func (w *LeaseRemovalTracker) TrackRemoval(lease *LeaseState) RemovalTracker {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if tracker, ok := w.tracking[lease]; ok {
+		return tracker
+	}
+	tracker := RemovalTracker{removed: make(chan struct{}), err: new(error)}
+	w.tracking[lease] = tracker
+	return tracker
+}
+
+// WaitForRemoval blocks until the lease is removed from the store.
+func (t RemovalTracker) WaitForRemoval() error {
+	<-t.removed
+	return *t.err
+}
+
+// LeaseRemovedNotification has to be called after a lease is removed from the
 // store. This should be hooked up as a callback to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent.
-func (w *LeaseRemovalTracker) LeaseReleasedNotification(
+func (w *LeaseRemovalTracker) LeaseRemovedNotification(
 	lease *LeaseState, err error,
 ) {
-	if lease == w.waitingFor {
-		w.doneSem <- err
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if tracker, ok := w.tracking[lease]; ok {
+		*tracker.err = err
+		close(tracker.removed)
+		delete(w.tracking, lease)
 	}
 }
