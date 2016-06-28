@@ -124,23 +124,23 @@ func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
 	return t.node(nodeID).Release(lease)
 }
 
-// If leaseReleaseWaiter is not nil, it will be used to block until the lease is
+// If LeaseRemovalTracker is not nil, it will be used to block until the lease is
 // released from the store. If the lease is not supposed to be released from the
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
 	nodeID uint32,
 	lease *csql.LeaseState,
-	leaseReleaseWaiter *leaseReleaseWaiter,
+	leaseRemovalTracker *csql.LeaseRemovalTracker,
 ) {
-	if leaseReleaseWaiter != nil {
-		leaseReleaseWaiter.PrepareToWait(lease)
+	if leaseRemovalTracker != nil {
+		leaseRemovalTracker.PrepareToWait(lease)
 	}
 	if err := t.release(nodeID, lease); err != nil {
 		t.Fatal(err)
 	}
-	if leaseReleaseWaiter != nil {
-		if err := leaseReleaseWaiter.Wait(); err != nil {
+	if leaseRemovalTracker != nil {
+		if err := leaseRemovalTracker.Wait(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -174,46 +174,14 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 	return mgr
 }
 
-// leaseReleaseWaiter can be used to wait for a lease to be removed from the
-// store (leases are removed from the store async w.r.t. LeaseManager
-// operations).
-// To use it, its LeaseReleasedNotification method must be hooked up to
-// LeaseStoreTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
-// for a lease, call PrepareToWait() before calling LeaseManager.Release(), and
-// then call Wait() for the actual blocking.
-type leaseReleaseWaiter struct {
-	waitingFor *csql.LeaseState
-	doneSem    chan error
-}
-
-func (w *leaseReleaseWaiter) PrepareToWait(lease *csql.LeaseState) {
-	w.waitingFor = lease
-	w.doneSem = make(chan error, 1)
-}
-
-func (w *leaseReleaseWaiter) Wait() error {
-	if w.waitingFor == nil {
-		panic("wasn't told what to wait for")
-	}
-	return <-w.doneSem
-}
-
-func (w *leaseReleaseWaiter) LeaseReleasedNotification(
-	lease *csql.LeaseState, err error,
-) {
-	if lease == w.waitingFor {
-		w.doneSem <- err
-	}
-}
-
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
-	var releaseWaiter leaseReleaseWaiter
+	var releaseTracker csql.LeaseRemovalTracker
 	ctx.TestingKnobs = base.TestingKnobs{
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
-				LeaseReleasedEvent: releaseWaiter.LeaseReleasedNotification,
+				LeaseReleasedEvent: releaseTracker.LeaseReleasedNotification,
 			},
 		},
 	}
@@ -263,7 +231,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// When the last local reference on the old version is released the node
 	// lease is also released.
-	t.mustRelease(1, l2, &releaseWaiter)
+	t.mustRelease(1, l2, &releaseTracker)
 	t.expectLeases(descID, "/2/1")
 
 	// It is an error to acquire a lease for an old version once a new version
@@ -293,15 +261,15 @@ func TestLeaseManager(testingT *testing.T) {
 	l8 := t.mustAcquire(2, descID, 3)
 	t.expectLeases(descID, "/2/1 /2/2 /3/1 /3/2")
 
-	t.mustRelease(1, l5, &releaseWaiter)
+	t.mustRelease(1, l5, &releaseTracker)
 	t.expectLeases(descID, "/2/2 /3/1 /3/2")
-	t.mustRelease(2, l6, &releaseWaiter)
+	t.mustRelease(2, l6, &releaseTracker)
 	t.expectLeases(descID, "/3/1 /3/2")
 
 	// Wait for version 4 to be published.
 	wg.Wait()
 	l9 := t.mustAcquire(1, descID, 4)
-	t.mustRelease(1, l7, &releaseWaiter)
+	t.mustRelease(1, l7, &releaseTracker)
 	t.mustRelease(2, l8, nil)
 	t.expectLeases(descID, "/3/2 /4/1")
 	t.mustRelease(1, l9, nil)
@@ -311,11 +279,11 @@ func TestLeaseManager(testingT *testing.T) {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
-	var releaseWaiter leaseReleaseWaiter
+	var releaseTracker csql.LeaseRemovalTracker
 	ctx.TestingKnobs = base.TestingKnobs{
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
-				LeaseReleasedEvent: releaseWaiter.LeaseReleasedNotification,
+				LeaseReleasedEvent: releaseTracker.LeaseReleasedNotification,
 			},
 		},
 	}
@@ -360,7 +328,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t.expectLeases(descID, "/1/1 /1/1")
 
 	t.mustRelease(1, l1, nil)
-	t.mustRelease(1, l2, &releaseWaiter)
+	t.mustRelease(1, l2, &releaseTracker)
 	t.mustRelease(1, l3, nil)
 }
 
