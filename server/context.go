@@ -44,12 +44,12 @@ const (
 	defaultMaxOffset     = 250 * time.Millisecond
 	defaultCacheSize     = 512 << 20 // 512 MB
 	// defaultMemtableBudget controls how much memory can be used for memory
-	// tables. The way we initialize RocksDB, 150% (24 MB) of this setting can be
-	// used for memory tables and each memory table will be 25% of the size (4
+	// tables. The way we initialize RocksDB, 100% (32 MB) of this setting can be
+	// used for memory tables and each memory table will be 25% of the size (8
 	// MB). This corresponds to the default RocksDB memtable size. Note that
 	// larger values do not necessarily improve performance, so benchmark any
 	// changes to this value.
-	defaultMemtableBudget           = 16 << 20 // 16 MB
+	defaultMemtableBudget           = 32 << 20 // 32 MB
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 5 * time.Second
