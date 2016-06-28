@@ -140,7 +140,7 @@ func (t *leaseTest) mustRelease(
 		t.Fatal(err)
 	}
 	if leaseReleaseWaiter != nil {
-		if err := leaseReleaseWaiter.Wait(); err != nil {
+		if err := leaseReleaseWaiter.WaitForRelease(lease); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -176,7 +176,7 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
-	var releaseWaiter csql.LeaseReleaseWaiter
+	releaseWaiter := csql.NewLeaseReleaseWaiter()
 	ctx.TestingKnobs = base.TestingKnobs{
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
@@ -230,7 +230,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// When the last local reference on the old version is released the node
 	// lease is also released.
-	t.mustRelease(1, l2, &releaseWaiter)
+	t.mustRelease(1, l2, releaseWaiter)
 	t.expectLeases(descID, "/2/1")
 
 	// It is an error to acquire a lease for an old version once a new version
@@ -260,15 +260,15 @@ func TestLeaseManager(testingT *testing.T) {
 	l8 := t.mustAcquire(2, descID, 3)
 	t.expectLeases(descID, "/2/1 /2/2 /3/1 /3/2")
 
-	t.mustRelease(1, l5, &releaseWaiter)
+	t.mustRelease(1, l5, releaseWaiter)
 	t.expectLeases(descID, "/2/2 /3/1 /3/2")
-	t.mustRelease(2, l6, &releaseWaiter)
+	t.mustRelease(2, l6, releaseWaiter)
 	t.expectLeases(descID, "/3/1 /3/2")
 
 	// Wait for version 4 to be published.
 	wg.Wait()
 	l9 := t.mustAcquire(1, descID, 4)
-	t.mustRelease(1, l7, &releaseWaiter)
+	t.mustRelease(1, l7, releaseWaiter)
 	t.mustRelease(2, l8, nil)
 	t.expectLeases(descID, "/3/2 /4/1")
 	t.mustRelease(1, l9, nil)
@@ -278,7 +278,7 @@ func TestLeaseManager(testingT *testing.T) {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	ctx := server.MakeTestContext()
-	var releaseWaiter csql.LeaseReleaseWaiter
+	releaseWaiter := csql.NewLeaseReleaseWaiter()
 	ctx.TestingKnobs = base.TestingKnobs{
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
@@ -327,7 +327,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t.expectLeases(descID, "/1/1 /1/1")
 
 	t.mustRelease(1, l1, nil)
-	t.mustRelease(1, l2, &releaseWaiter)
+	t.mustRelease(1, l2, releaseWaiter)
 	t.mustRelease(1, l3, nil)
 }
 

@@ -16,33 +16,59 @@
 
 package sql
 
-// LeaseReleaseWaiter can be used to wait for a lease to be removed from the
+import (
+	"fmt"
+	"sync"
+)
+
+// LeaseReleaseWaiter can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
 // operations).
 // To use it, its LeaseReleasedNotification method must be hooked up to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
 // for a lease, call PrepareToWait() before calling LeaseManager.Release(), and
-// then call Wait() for the actual blocking.
+// then call WaitForRelease() for the actual blocking.
+//
+// All methods are thread-safe.
 type LeaseReleaseWaiter struct {
-	waitingFor *LeaseState
-	doneSem    chan error
+	mu sync.Mutex
+	// map from a lease whose release we're waiting for to a channel on which the
+	// result of the release will be sent.
+	waitingFor map[*LeaseState]chan error
 }
 
-// PrepareToWait regisers the lease that WaitForRelease() will later be called
+// NewLeaseReleaseWaiter createa a LeaseReleaseWaiter.
+func NewLeaseReleaseWaiter() *LeaseReleaseWaiter {
+	return &LeaseReleaseWaiter{
+		waitingFor: make(map[*LeaseState]chan error),
+	}
+}
+
+// PrepareToWait regisers a lease that WaitForRelease() will later be called
 // for. This should be called before triggering the operation that releases
 // (asynchronously) the lease.
 func (w *LeaseReleaseWaiter) PrepareToWait(lease *LeaseState) {
-	w.waitingFor = lease
-	w.doneSem = make(chan error, 1)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.waitingFor[lease]; ok {
+		// Already prepared to wait for this lease.
+		return
+	}
+	w.waitingFor[lease] = make(chan error, 1)
 }
 
-// WaitForRelease blockes until the lease previously registered with
+// WaitForRelease blocks until a lease previously registered with
 // PrepareToWait() has been removed from the store.
-func (w *LeaseReleaseWaiter) Wait() error {
-	if w.waitingFor == nil {
-		panic("wasn't told what to wait for")
+// It's illegal to wait twice on the same lease.
+func (w *LeaseReleaseWaiter) WaitForRelease(lease *LeaseState) error {
+	w.mu.Lock()
+	ch, ok := w.waitingFor[lease]
+	if !ok {
+		w.mu.Unlock()
+		panic(fmt.Sprintf("wasn't prepared to wait for %s", lease))
 	}
-	return <-w.doneSem
+	w.mu.Unlock()
+	return <-ch
 }
 
 // LeaseReleasedNotification has to be called after a lease is removed from the
@@ -51,7 +77,10 @@ func (w *LeaseReleaseWaiter) Wait() error {
 func (w *LeaseReleaseWaiter) LeaseReleasedNotification(
 	lease *LeaseState, err error,
 ) {
-	if lease == w.waitingFor {
-		w.doneSem <- err
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if ch, ok := w.waitingFor[lease]; ok {
+		ch <- err
 	}
+	delete(w.waitingFor, lease)
 }
