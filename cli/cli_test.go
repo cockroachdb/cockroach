@@ -154,6 +154,16 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 }
 
 func (c cliTest) RunWithArgs(a []string) {
+	args := c.GetArgs(a)
+
+	fmt.Fprintf(os.Stderr, "%s\n", args)
+	fmt.Println(strings.Join(a, " "))
+	if err := Run(args); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (c cliTest) GetArgs(a []string) []string {
 	sqlCtx.execStmts = nil
 
 	var args []string
@@ -178,11 +188,7 @@ func (c cliTest) RunWithArgs(a []string) {
 	args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
 	args = append(args, a[1:]...)
 
-	fmt.Fprintf(os.Stderr, "%s\n", args)
-	fmt.Println(strings.Join(a, " "))
-	if err := Run(args); err != nil {
-		fmt.Println(err)
-	}
+	return args
 }
 
 func TestQuit(t *testing.T) {
