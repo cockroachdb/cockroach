@@ -25,10 +25,15 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T): Promise<R> {
   });
 }
 
+export interface VersionCheckRequest {
+  clusterID: string;
+  buildtag: string;
+}
+
 /**
  * COCKROACH LABS ENDPOINTS
  */
 
-export function versionCheck(clusterID: string, buildtag: string): Promise<VersionList> {
-  return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/updates?uuid=${clusterID}&version=${buildtag}`);
+export function versionCheck(request: VersionCheckRequest): Promise<VersionList> {
+  return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/updates?uuid=${request.clusterID}&version=${request.buildtag}`);
 }
