@@ -4,9 +4,7 @@ import { createSelector } from "reselect";
 import moment = require("moment");
 import _ = require("lodash");
 import Banner from "./banner";
-import { refreshVersion } from "../../redux/version";
-import { refreshCluster } from "../../redux/cluster";
-import { refreshNodes } from "../../redux/nodes";
+import { refreshNodes, refreshCluster, refreshVersion } from "../../redux/apiReducers";
 import { VERSION_DISMISSED_KEY, loadUIData, saveUIData } from "../../redux/uiData";
 import { VersionList } from "../../interfaces/cockroachlabs";
 import { NodeStatus } from "../../util/proto";
@@ -49,7 +47,7 @@ class OutdatedBanner extends React.Component<OutdatedBannerProps, OutdatedBanner
     }
 
     if (props.clusterID && props.buildtag) {
-      props.refreshVersion(props.clusterID, props.buildtag);
+      props.refreshVersion({ clusterID: props.clusterID, buildtag: props.buildtag });
     }
   }
 
@@ -95,9 +93,9 @@ class OutdatedBanner extends React.Component<OutdatedBannerProps, OutdatedBanner
   }
 }
 
-let nodeStatuses = (state: any): NodeStatus[] => state.nodes.statuses;
-let newerVersions = (state: any): VersionList => state.version.valid ? state.version.data : null;
-let clusterID = (state: any): string => state.cluster.data && state.cluster.data.cluster_id;
+let nodeStatuses = (state: any): NodeStatus[] => state.cachedData.nodes.data;
+let newerVersions = (state: any): VersionList => state.cachedData.version.valid ? state.cachedData.version.data : null;
+let clusterID = (state: any): string => state.cachedData.cluster.data && state.cachedData.cluster.data.cluster_id;
 
 // TODO(maxlang): change the way uiData stores data so we don't need an added check to see if the value was fetched
 // TODO(maxlang): determine whether they dismissed a node version mismatch or an upstream version check

@@ -4,7 +4,6 @@
 
 import * as _ from "lodash";
 import "whatwg-fetch";
-
 import * as protos from "../js/protos";
 
 let serverpb = protos.cockroach.server.serverpb;
@@ -135,7 +134,7 @@ export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessag
   return Fetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`);
 }
 
-// getNodes gets node data
+// getNodes gets node status data
 export function getNodes(): Promise<NodesResponseMessage> {
   return Fetch(serverpb.NodesResponse, `/_status/nodes`);
 }
