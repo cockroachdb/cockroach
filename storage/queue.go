@@ -18,7 +18,6 @@ package storage
 
 import (
 	"container/heap"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -100,6 +100,11 @@ var (
 	errReplicaNotAddable = errors.New("replica shouldn't be added to queue")
 )
 
+func isExpectedQueueError(err error) bool {
+	cause := errors.Cause(err)
+	return err == nil || cause == errQueueDisabled || cause == errReplicaNotAddable
+}
+
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
@@ -133,9 +138,10 @@ func (l queueLog) VInfof(logv bool, format string, a ...interface{}) {
 	l.traceLog.Printf(format, a...)
 }
 
-func (l queueLog) Errorf(format string, a ...interface{}) {
-	log.ErrorfDepth(1, l.prefix+format, a...)
-	l.traceLog.Errorf(format, a...)
+func (l queueLog) Error(err error) {
+	const format = "%s"
+	log.ErrorfDepth(1, l.prefix+format, err)
+	l.traceLog.Errorf(format, err)
 }
 
 func (l queueLog) Finish() {
@@ -283,8 +289,8 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl, cfg)
-	if err := bq.addInternal(repl, should, priority); err != nil {
-		bq.eventLog.VInfof(log.V(3), "unable to add %s: %s", repl, err)
+	if err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
+		bq.eventLog.Error(errors.Wrapf(err, "unable to add to %s", repl))
 	}
 }
 
@@ -432,7 +438,10 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		defer sp.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {
-			bq.eventLog.VInfof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
+			if _, harmless := err.GetDetail().(*roachpb.NotLeaderError); !harmless {
+				return errors.Wrap(err.GoError(), "could not obtain lease")
+			}
+			bq.eventLog.VInfof(log.V(3), "%s: not holding lease; skipping", repl)
 			return nil
 		}
 	}
@@ -455,7 +464,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper) {
 	// Check whether the failure is a purgatory error and whether the queue supports it.
 	if _, ok := err.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
-		bq.eventLog.Errorf("%s: error: %v", repl, err)
+		bq.eventLog.Error(errors.Wrapf(err, "on %s", repl))
 		return
 	}
 	bq.mu.Lock()
@@ -522,7 +531,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 				}
 				bq.mu.Unlock()
 				for errStr, count := range errMap {
-					bq.eventLog.Errorf("%d replicas failing with %q", count, errStr)
+					bq.eventLog.Error(errors.Errorf("%d replicas failing with %q", count, errStr))
 				}
 			case <-stopper.ShouldStop():
 				return
@@ -563,7 +572,7 @@ func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
 	bq.mu.Unlock()
 	for repl != nil {
 		if err := bq.processReplica(repl, clock); err != nil {
-			bq.eventLog.Errorf("failed processing replica %s: %s", repl, err)
+			bq.eventLog.Error(errors.Wrapf(err, "failed processing replica %s", repl))
 		}
 		bq.mu.Lock()
 		repl = bq.pop()
