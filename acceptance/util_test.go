@@ -55,7 +55,8 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
-var flagTFKeepCluster = flag.Bool("tf.keep-cluster", false, "do not destroy Terraform cluster after test finishes")
+var flagTFKeepCluster = flag.Bool("tf.keep-cluster", false, "do not destroy Terraform cluster after test finishes, has precedence over flagTFKeepClusterFail")
+var flagTFKeepClusterFail = flag.Bool("tf.keep-cluster-on-fail", false, "do not destroy Terraform cluster after test finishes only if the cluster has failed")
 
 // TODO(cuongdo): These should be refactored so that they're not allocator
 // test-specific when we have more than one kind of system test that uses these
@@ -124,6 +125,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		StateFile:            prefix + "-" + dt + ".tfstate",
 		AddVars:              make(map[string]string),
 		KeepClusterAfterTest: *flagTFKeepCluster,
+		KeepClusterAfterFail: *flagTFKeepClusterFail,
 	}
 	log.Infof("logging to %s", logDir)
 	return f
