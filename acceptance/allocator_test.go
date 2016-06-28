@@ -89,9 +89,6 @@ type allocatorTest struct {
 	// Prefix is the prefix that will be prepended to all resources created by
 	// Terraform.
 	Prefix string
-	// RebalanceTimeout is the max time we'll wait for the cluster to finish
-	// rebalancing.
-	RebalanceTimeout time.Duration
 	// CockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
 	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
 	// Terraform configs. This must be in GB, because Terraform only accepts
@@ -285,7 +282,6 @@ func (at *allocatorTest) WaitForRebalance() error {
 		_ = db.Close()
 	}()
 
-	timeoutTimer := time.After(at.RebalanceTimeout)
 	var timer timeutil.Timer
 	defer timer.Stop()
 	timer.Reset(0)
@@ -304,8 +300,6 @@ func (at *allocatorTest) WaitForRebalance() error {
 				}
 				return nil
 			}
-		case <-timeoutTimer:
-			return errors.New("timeout expired")
 		case <-stopper:
 			return errors.New("interrupted")
 		}
@@ -318,11 +312,10 @@ func (at *allocatorTest) WaitForRebalance() error {
 // containing 10 GiB of data and growing to 3 nodes.
 func TestUpreplicate1to3Small(t *testing.T) {
 	at := allocatorTest{
-		StartNodes:       1,
-		EndNodes:         3,
-		StoreURL:         archivedStoreURL + "/1node-10g-262ranges",
-		Prefix:           "uprep-1to3-small",
-		RebalanceTimeout: time.Hour,
+		StartNodes: 1,
+		EndNodes:   3,
+		StoreURL:   archivedStoreURL + "/1node-10g-262ranges",
+		Prefix:     "uprep-1to3-small",
 	}
 	at.Run(t)
 }
@@ -331,11 +324,10 @@ func TestUpreplicate1to3Small(t *testing.T) {
 // containing 10 GiB of data) and growing to 5 nodes.
 func TestRebalance3to5Small(t *testing.T) {
 	at := allocatorTest{
-		StartNodes:       3,
-		EndNodes:         5,
-		StoreURL:         archivedStoreURL + "/3nodes-10g-262ranges",
-		Prefix:           "rebal-3to5-small",
-		RebalanceTimeout: time.Hour,
+		StartNodes: 3,
+		EndNodes:   5,
+		StoreURL:   archivedStoreURL + "/3nodes-10g-262ranges",
+		Prefix:     "rebal-3to5-small",
 	}
 	at.Run(t)
 }
@@ -348,7 +340,6 @@ func TestUpreplicate1To3Medium(t *testing.T) {
 		EndNodes:            3,
 		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
 		Prefix:              "uprep-1to3-med",
-		RebalanceTimeout:    4 * time.Hour,
 		CockroachDiskSizeGB: 250, // GB
 	}
 	at.Run(t)

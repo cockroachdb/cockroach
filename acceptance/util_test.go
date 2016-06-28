@@ -109,16 +109,19 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	if !prefixRE.MatchString(prefix) {
 		t.Fatalf("farmer prefix must match regex %s", prefixRE)
 	}
+	dt := timeutil.Now().Format("20060102-1504")
 	f := &terrafarm.Farmer{
 		Output:  os.Stderr,
 		Cwd:     *flagCwd,
 		LogDir:  logDir,
 		KeyName: *flagKeyName,
 		Stores:  stores,
-		Prefix:  prefix,
-		// Prepend Terraform resource names and state file name with date/time to
-		// allow concurrent runs of the same test.
-		StateFile:            timeutil.Now().Format("20060102-150405-") + prefix + ".tfstate",
+		// We concatenate the current date/time to the prefix (for Terraform
+		// resource names) to allow multiple instances of the same test to run
+		// concurrently. The prefix is also used as the name of the Terraform state
+		// file.
+		Prefix:               prefix + "-" + dt,
+		StateFile:            prefix + "-" + dt + ".tfstate",
 		AddVars:              make(map[string]string),
 		KeepClusterAfterTest: *flagTFKeepCluster,
 	}
