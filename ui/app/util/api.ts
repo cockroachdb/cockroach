@@ -4,7 +4,7 @@
 
 import * as _ from "lodash";
 import "whatwg-fetch";
-
+import { NodeStatus, RollupStoreMetrics } from "../util/proto";
 import * as protos from "../js/protos";
 
 let serverpb = protos.cockroach.server.serverpb;
@@ -135,9 +135,14 @@ export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessag
   return Fetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`);
 }
 
-// getNodes gets node data
-export function getNodes(): Promise<NodesResponseMessage> {
-  return Fetch(serverpb.NodesResponse, `/_status/nodes`);
+// getNodes gets node status data
+export function getNodes(): Promise<NodeStatus[]> {
+  return Fetch(serverpb.NodesResponse, `/_status/nodes`).then((r: NodesResponseMessage) => {
+  return _.map(r.nodes, (node) => {
+      RollupStoreMetrics(node);
+      return node;
+    });
+  });
 }
 
 // raftDebug returns raft debug information.
