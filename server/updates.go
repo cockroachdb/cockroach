@@ -30,13 +30,26 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
-	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
 const baseReportingURL = `https://register.cockroachdb.com/api/report`
+
+var updatesURL, reportingURL *url.URL
+
+func init() {
+	var err error
+	updatesURL, err = url.Parse(baseUpdatesURL)
+	if err != nil {
+		panic(err)
+	}
+	reportingURL, err = url.Parse(baseReportingURL)
+	if err != nil {
+		panic(err)
+	}
+}
 
 const updateCheckFrequency = time.Hour * 24
 const updateCheckJitterSeconds = 120
@@ -69,29 +82,9 @@ type storeInfo struct {
 	RangeCount int             `json:"range_count"`
 }
 
-// SetupReportingURLs parses the phone-home for version updates URL and should
-// be called before a server starts.
-// Where update checks are not useful (eg in tests), skipping this call, or
-// setting env var COCKROACH_SKIP_UPDATE_CHECK=1, skips the acutal network calls
-// (note though the check is treated as having succeeded, meaning the cluster
-// will wait until the next scheduled check to try again).
-func (s *Server) SetupReportingURLs() error {
-	if envutil.EnvOrDefaultBool("skip_update_check", false) {
-		return nil
-	}
-	var err error
-	s.parsedUpdatesURL, err = url.Parse(baseUpdatesURL)
-	if err != nil {
-		return err
-	}
-	s.parsedReportingURL, err = url.Parse(baseReportingURL)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *Server) periodicallyCheckForUpdates() {
+// PeriodicallyCheckForUpdates starts a background worker that periodically
+// phones home to check for updates and report usage.
+func (s *Server) PeriodicallyCheckForUpdates() {
 	s.stopper.RunWorker(func() {
 		startup := timeutil.Now()
 
@@ -173,17 +166,12 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 }
 
 func (s *Server) checkForUpdates() {
-	// Don't phone home in tests (SetupReportingURLs is called in cli/start.go).
-	if s.parsedUpdatesURL == nil {
-		return
-	}
-
-	q := s.parsedUpdatesURL.Query()
+	q := updatesURL.Query()
 	q.Set("version", build.GetInfo().Tag)
 	q.Set("uuid", s.node.ClusterID.String())
-	s.parsedUpdatesURL.RawQuery = q.Encode()
+	updatesURL.RawQuery = q.Encode()
 
-	res, err := http.Get(s.parsedUpdatesURL.String())
+	res, err := http.Get(updatesURL.String())
 	if err != nil {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
@@ -266,23 +254,18 @@ func (s *Server) getReportingInfo() reportingInfo {
 }
 
 func (s *Server) reportUsage() {
-	// Don't phone home in tests (SetupReportingURLs is called in cli/start.go).
-	if s.parsedReportingURL == nil {
-		return
-	}
-
 	b := new(bytes.Buffer)
 	if err := json.NewEncoder(b).Encode(s.getReportingInfo()); err != nil {
 		log.Warning(err)
 		return
 	}
 
-	q := s.parsedReportingURL.Query()
+	q := reportingURL.Query()
 	q.Set("version", build.GetInfo().Tag)
 	q.Set("uuid", s.node.ClusterID.String())
-	s.parsedReportingURL.RawQuery = q.Encode()
+	reportingURL.RawQuery = q.Encode()
 
-	_, err := http.Post(s.parsedReportingURL.String(), "application/json", b)
+	_, err := http.Post(reportingURL.String(), "application/json", b)
 	if err != nil && log.V(2) {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
