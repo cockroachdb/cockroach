@@ -48,6 +48,7 @@ type Farmer struct {
 	// AddVars are additional Terraform variables to be set during calls to Add.
 	AddVars              map[string]string
 	KeepClusterAfterTest bool
+	KeepClusterAfterFail bool
 	nodes, writers       []string
 }
 
