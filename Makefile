@@ -50,6 +50,8 @@ export PATH := $(GOPATH)/bin:$(PATH)
 SHELL := $(shell which bash)
 export GIT_PAGER :=
 
+export COCKROACH_SKIP_UPDATE_CHECK := 1
+
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
