@@ -33,6 +33,7 @@ github.com/codahale/hdrhistogram f8ad88b59a584afeee9d334eff879b104439117b
 github.com/coreos/etcd fb64c8ccfeb9408b80c3f657a52ec6cad2fdb3f8
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/docker/distribution ffbe9b7c635082432c4adb0395b7426ed5081cff
+github.com/docker/docker 03003619af04d62c9d02b79031bdd26d0254f3cb
 github.com/docker/engine-api f90ecdb1e989f834dabbd91807e891094aa069fe
 github.com/docker/go-connections 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
 github.com/docker/go-units f2d77a61e3c169b43402a0a1e84f06daf29b8190
