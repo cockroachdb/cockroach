@@ -171,7 +171,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := leaseManager.findTableState(tableDesc.ID, false, nil)
+	ts := leaseManager.findTableState(tableDesc.ID, false)
 	if numLeases := getNumLeases(ts); numLeases != 3 {
 		t.Fatalf("found %d leases instead of 3", numLeases)
 	}
