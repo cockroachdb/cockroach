@@ -99,7 +99,7 @@ func (k taskKey) String() string {
 //
 // Stopping occurs in two phases: the first is the request to stop, which moves
 // the stopper into a draining phase. While draining, calls to RunTask() &
-// RunAsyncTask() don't execute the function passed in and return false.
+// RunAsyncTask() don't execute the function passed in and return errStopperStopping.
 // When all outstanding tasks have been completed, the stopper
 // closes its stopper channel, which signals all live workers that it's safe to
 // shut down. When all workers have shutdown, the stopper is complete.
