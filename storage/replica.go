@@ -182,6 +182,7 @@ type Replica struct {
 	store        *Store
 	systemDBHash []byte      // sha1 hash of the system config @ last gossip
 	abortCache   *AbortCache // Avoids anomalous reads after abort
+	raftSender   RaftSender
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -306,9 +307,12 @@ var _ client.Sender = &Replica{}
 // descriptor.
 func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID) (*Replica, error) {
 	r := &Replica{
+		RangeID:    desc.RangeID,
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
-		RangeID:    desc.RangeID,
+		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
+			log.Warningf("range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
+		}),
 	}
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
@@ -1612,21 +1616,12 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, rangeID, fromErr)
 		return
 	}
-	err := r.store.ctx.Transport.Send(&RaftMessageRequest{
+	if !r.raftSender.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   toReplica,
 		FromReplica: fromReplica,
 		Message:     msg,
-	})
-	if err != nil {
-		if log.V(1) {
-			// This is extremely spammy when a node is down, and the message
-			// is always "queue is full" instead of anything helpful
-			// (helpful messages, if any, are logged from the transport
-			// itself).
-			log.Warningf("group %s on store %s failed to send message to %s: %s", rangeID,
-				r.store.StoreID(), toReplica.StoreID, err)
-		}
+	}) {
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
 			raftGroup.ReportUnreachable(msg.To)
 			return nil
