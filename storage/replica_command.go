@@ -2666,7 +2666,7 @@ func (r *Replica) ChangeReplicas(
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
-		if err := r.store.ctx.Transport.Send(&RaftMessageRequest{
+		r.raftSender.SendAsync(&RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: *fromReplica,
 			ToReplica:   replica,
@@ -2676,9 +2676,7 @@ func (r *Replica) ChangeReplicas(
 				From:     uint64(fromReplica.ReplicaID),
 				Snapshot: snap,
 			},
-		}); err != nil {
-			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
-		}
+		})
 
 		replica.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++

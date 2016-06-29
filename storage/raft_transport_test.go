@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -169,8 +170,12 @@ func TestSendAndReceive(t *testing.T) {
 				req := baseReq
 				req.Message.Type = messageType
 
-				if err := transports[fromNodeID].Send(&req); err != nil {
-					t.Errorf("unable to send %s from %d to %d: %s", req.Message.Type, fromNodeID, toNodeID, err)
+				if !transports[fromNodeID].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+					if err != nil && !grpcutil.IsClosedConnection(err) {
+						panic(err)
+					}
+				}).SendAsync(&req) {
+					t.Errorf("unable to send %s from %d to %d", req.Message.Type, fromNodeID, toNodeID)
 				}
 				messageTypeCounts[toStoreID][req.Message.Type]++
 			}
@@ -248,8 +253,12 @@ func TestSendAndReceive(t *testing.T) {
 			ReplicaID: replicaIDs[toStoreID],
 		},
 	}
-	if err := transports[storeNodes[fromStoreID]].Send(expReq); err != nil {
-		t.Errorf("unable to send message from %d to %d: %s", fromStoreID, toStoreID, err)
+	if !transports[storeNodes[fromStoreID]].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		if err != nil && !grpcutil.IsClosedConnection(err) {
+			panic(err)
+		}
+	}).SendAsync(expReq) {
+		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	if req := <-channels[toStoreID].ch; !proto.Equal(req, expReq) {
 		t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
@@ -315,8 +324,12 @@ func TestInOrderDelivery(t *testing.T) {
 				ReplicaID: roachpb.ReplicaID(clientNodeID),
 			},
 		}
-		if err := clientTransport.Send(req); err != nil {
-			t.Errorf("failed to send message %d: %s", i, err)
+		if !clientTransport.MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+			if err != nil && !grpcutil.IsClosedConnection(err) {
+				panic(err)
+			}
+		}).SendAsync(req) {
+			t.Errorf("failed to send message %d", i)
 		}
 	}
 
