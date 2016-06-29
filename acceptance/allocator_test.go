@@ -32,7 +32,7 @@ package acceptance
 //
 // make acceptance \
 //   TESTFLAGS="-v --remote -key-name google_compute_engine -cwd=allocator_terraform" \
-//   TESTS="TestUpreplicate1to3Small" \
+//   TESTS="TestUpreplicate_1To3Small" \
 //   TESTTIMEOUT="24h"
 //
 // Things to note:
@@ -312,38 +312,38 @@ func (at *allocatorTest) WaitForRebalance() error {
 	}
 }
 
-// TestUpreplicate1To3Small tests up-replication, starting with 1 node
+// TestUpreplicate_1To3Small tests up-replication, starting with 1 node
 // containing 10 GiB of data and growing to 3 nodes.
-func TestUpreplicate1to3Small(t *testing.T) {
+func TestUpreplicate_1To3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   3,
 		StoreURL:   archivedStoreURL + "/1node-10g-262ranges",
-		Prefix:     "uprep-1to3-small",
+		Prefix:     "u1to3s",
 	}
 	at.Run(t)
 }
 
 // TestRebalance3to5Small tests rebalancing, starting with 3 nodes (each
 // containing 10 GiB of data) and growing to 5 nodes.
-func TestRebalance3to5Small(t *testing.T) {
+func TestRebalance_3To5Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 3,
 		EndNodes:   5,
 		StoreURL:   archivedStoreURL + "/3nodes-10g-262ranges",
-		Prefix:     "rebal-3to5-small",
+		Prefix:     "r3to5s",
 	}
 	at.Run(t)
 }
 
-// TestUpreplicate1To3Medium tests up-replication, starting with 1 node
+// TestUpreplicate_1To3Medium tests up-replication, starting with 1 node
 // containing 108 GiB of data and growing to 3 nodes.
-func TestUpreplicate1To3Medium(t *testing.T) {
+func TestUpreplicate_1To3Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            3,
 		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
-		Prefix:              "uprep-1to3-med",
+		Prefix:              "u1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
 	at.Run(t)
