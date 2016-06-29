@@ -7,7 +7,6 @@ machine:
     # Matches the docker daemon version in use.
     # See https://docs.docker.com/engine/reference/api/docker_remote_api/
     DOCKER_API_VERSION: v1.22
-    JSPM_GITHUB_AUTH_TOKEN: 763c42afb2d31eb7bc150da33402a24d0e081aef
 
   services:
     - docker

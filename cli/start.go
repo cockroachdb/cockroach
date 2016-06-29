@@ -337,13 +337,14 @@ func runStart(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
 
-	// We don't do this in NewServer since we don't want it in tests.
-	if err := s.SetupReportingURLs(); err != nil {
-		return err
-	}
-
 	if err := s.Start(); err != nil {
 		return fmt.Errorf("cockroach server exited with error: %s", err)
+	}
+
+	// We don't do this in (*server.Server).Start() because we don't want it
+	// in tests.
+	if !envutil.EnvOrDefaultBool("skip_update_check", false) {
+		s.PeriodicallyCheckForUpdates()
 	}
 
 	initCheckpointing(serverCtx.Engines)

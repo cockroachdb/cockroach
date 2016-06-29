@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-export COCKROACH_SKIP_UPDATE_CHECK=1
 CIRCLE_NODE_INDEX="${CIRCLE_NODE_INDEX-0}"
 CIRCLE_NODE_TOTAL="${CIRCLE_NODE_TOTAL-1}"
 
@@ -114,9 +113,6 @@ trap prepare_artifacts EXIT
 function is_shard() {
   test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
 }
-
-# Enable dumping of all goroutine stacks due to unrecovered panics.
-export GOTRACEBACK=all
 
 # Note that the order of the is_shard tests is a bit odd. It would be
 # more natural to check shard 0, then 1, and then 2. The odd ordering
