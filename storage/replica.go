@@ -1595,23 +1595,23 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
-	groupID := r.RangeID
+	rangeID := r.RangeID
 
 	r.store.mu.Lock()
-	toReplica, toErr := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
-	fromReplica, fromErr := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
+	toReplica, toErr := r.store.replicaDescriptorLocked(rangeID, roachpb.ReplicaID(msg.To))
+	fromReplica, fromErr := r.store.replicaDescriptorLocked(rangeID, roachpb.ReplicaID(msg.From))
 	r.store.mu.Unlock()
 
 	if toErr != nil {
-		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, toErr)
+		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, rangeID, toErr)
 		return
 	}
 	if fromErr != nil {
-		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, fromErr)
+		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, rangeID, fromErr)
 		return
 	}
 	err := r.store.ctx.Transport.Send(&RaftMessageRequest{
-		GroupID:     groupID,
+		RangeID:     rangeID,
 		ToReplica:   toReplica,
 		FromReplica: fromReplica,
 		Message:     msg,
@@ -1622,7 +1622,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			// is always "queue is full" instead of anything helpful
 			// (helpful messages, if any, are logged from the transport
 			// itself).
-			log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
+			log.Warningf("group %s on store %s failed to send message to %s: %s", rangeID,
 				r.store.StoreID(), toReplica.StoreID, err)
 		}
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
