@@ -1140,13 +1140,13 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Wait for the removal to be processed.
 	util.SucceedsSoon(t, func() error {
-		_, err := mtc.stores[1].GetReplica(rangeID)
-		if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-			return nil
-		} else if err != nil {
-			return err
+		for _, s := range mtc.stores[1:] {
+			_, err := s.GetReplica(rangeID)
+			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+				return errors.Wrapf(err, "range %d not yet removed from %s", rangeID, s)
+			}
 		}
-		return errors.Errorf("range still exists")
+		return nil
 	})
 
 	replica1 := roachpb.ReplicaDescriptor{
@@ -1167,7 +1167,8 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 			From: uint64(replica2.ReplicaID),
 			To:   uint64(replica1.ReplicaID),
 			Type: raftpb.MsgHeartbeat,
-		}}); err != nil {
+		},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// Execute another replica change to ensure that raft has processed
