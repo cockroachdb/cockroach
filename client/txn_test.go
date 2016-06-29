@@ -36,12 +36,12 @@ var (
 	testKey     = roachpb.Key("a")
 	testTS      = hlc.Timestamp{WallTime: 1, Logical: 1}
 	testPutResp = roachpb.PutResponse{}
+	txnKey      = roachpb.Key("test-txn")
 )
 
 // TestSender mocks out some of the txn coordinator sender's
 // functionality. It responds to PutRequests using testPutResp.
 func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
-	txnKey := roachpb.Key("test-txn")
 	txnID := uuid.NewV4()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -426,6 +426,54 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		if !reflect.DeepEqual(expCalls, calls) {
 			t.Fatalf("expected %v, got %v", expCalls, calls)
 		}
+	}
+}
+
+// TestTransactionKeyNotChangedInRestart verifies that if the transaction already has a key (we're
+// in a restart), the key in the begin transaction request is not changed.
+func TestTransactionKeyNotChangedInRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	firstTry := true
+	db := NewDB(newTestSender(nil, func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		var bt *roachpb.BeginTransactionRequest
+		for _, ru := range ba.Requests {
+			args := ru.GetInner()
+			var ok bool
+			bt, ok = args.(*roachpb.BeginTransactionRequest)
+			if ok {
+				break
+			}
+		}
+		if bt == nil {
+			t.Fatal("failed to find a begin transaction request")
+		}
+
+		var expectedKey roachpb.Key
+		if firstTry {
+			expectedKey = testKey
+		} else {
+			expectedKey = txnKey
+		}
+		if !reflect.DeepEqual(expectedKey, bt.Key) {
+			t.Fatalf("expected transaction key %v, got %v", expectedKey, bt.Key)
+		}
+
+		return ba.CreateReply(), nil
+	}))
+
+	if err := db.Txn(func(txn *Txn) error {
+		b := txn.NewBatch()
+		b.Put("a", "b")
+		if err := txn.Run(b); err != nil {
+			t.Fatal(err)
+		}
+		if firstTry {
+			firstTry = false
+			return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn.Proto).GoError()
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
 	}
 }
 
