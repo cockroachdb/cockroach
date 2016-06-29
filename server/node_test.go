@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -112,7 +113,7 @@ func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net
 	if err := node.start(addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForInitialSplits(node.ctx.DB); err != nil {
+	if err := WaitForInitialSplits(node.ctx.DB, ExpectedInitialRangeCount()); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
@@ -598,7 +599,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	// Increment metrics on the first store.
 	store1 = expectedStoreStatuses[roachpb.StoreID(1)].Metrics
-	store1["replicas"]++
+	store1["replicas"] += 1 + float64(sqlbase.NumNewSystemTablesSchema)
 	store1["ranges.leader"]++
 	store1["ranges.available"]++
 	store1["ranges.replicated"]++

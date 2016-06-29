@@ -28,8 +28,9 @@ func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
 	return bits&priv.Mask() != 0
 }
 
-// findUserIndex looks for a given user and returns its
-// index in the User array if found. Returns -1 otherwise.
+// findUserIndex looks for a given user and returns its index in the User
+// array if found. Returns -1 otherwise. The implementation assumes the Users
+// list is sorted by user name.
 func (p PrivilegeDescriptor) findUserIndex(user string) int {
 	idx := sort.Search(len(p.Users), func(i int) bool {
 		return p.Users[i].User >= user
@@ -79,8 +80,7 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 	p.Users = append(p.Users[:idx], p.Users[idx+1:]...)
 }
 
-// NewPrivilegeDescriptor returns a privilege descriptor for the given
-// user with the specified list of privileges.
+// NewPrivilegeDescriptor returns a privilege descriptor for the given ID.
 func NewPrivilegeDescriptor(id ID) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		Users: []UserPrivileges{
@@ -224,11 +224,17 @@ func (p PrivilegeDescriptor) Show() []UserPrivilegeString {
 func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bool {
 	userPriv, ok := p.findUser(user)
 	if !ok {
+		// User "node" has all privileges.
+		if user == security.NodeUser {
+			return true
+		}
 		return false
 	}
+
 	// ALL is always good.
 	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		return true
 	}
+
 	return isPrivilegeSet(userPriv.Privileges, priv)
 }

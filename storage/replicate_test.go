@@ -34,7 +34,7 @@ func TestEagerReplication(t *testing.T) {
 	// path that occurs after splits.
 	store.SetReplicaScannerDisabled(true)
 
-	if err := server.WaitForInitialSplits(store.DB()); err != nil {
+	if err := server.WaitForInitialSplits(store.DB(), server.ExpectedInitialRangeCount()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -270,21 +270,35 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount() int {
-	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemDescriptors + 1
+	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemConfigDescriptors + 1
+}
+
+// TODO (in this PR): convert into a testing knob
+var allSystemTableRangeSplits = false
+
+// AllSystemTableRangeSplits sets allSystemTableRangeSplits.
+func AllSystemTableRangeSplits() func() {
+	allSystemTableRangeSplits = true
+	return func() {
+		allSystemTableRangeSplits = false
+	}
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
 func (ts *TestServer) WaitForInitialSplits() error {
-	return WaitForInitialSplits(ts.DB())
+	expectedRangeCount := ExpectedInitialRangeCount()
+	if allSystemTableRangeSplits {
+		expectedRangeCount += sqlbase.NumNewSystemTablesSchema
+	}
+	return WaitForInitialSplits(ts.DB(), expectedRangeCount)
 }
 
 // WaitForInitialSplits waits for the expected number of initial ranges to be
 // populated in the meta2 table. If the expected range count is not reached
 // within a configured timeout, an error is returned.
-func WaitForInitialSplits(db *client.DB) error {
-	expectedRanges := ExpectedInitialRangeCount()
+func WaitForInitialSplits(db *client.DB, expectedRanges int) error {
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)

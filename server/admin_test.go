@@ -606,13 +606,13 @@ func TestAdminAPIEvents(t *testing.T) {
 		eventType sql.EventLogType
 		expCount  int
 	}{
-		{"", 7},
+		{"", 7 + sqlbase.NumNewSystemTablesSchema},
 		{sql.EventLogNodeJoin, 1},
 		{sql.EventLogNodeRestart, 0},
 		{sql.EventLogDropDatabase, 0},
 		{sql.EventLogCreateDatabase, 1},
 		{sql.EventLogDropTable, 2},
-		{sql.EventLogCreateTable, 3},
+		{sql.EventLogCreateTable, 3 + sqlbase.NumNewSystemTablesSchema},
 	}
 	for i, tc := range testcases {
 		var url string

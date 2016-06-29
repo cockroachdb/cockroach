@@ -245,7 +245,9 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 	// Inherit permissions from the database descriptor.
-	desc.Privileges = n.dbDesc.GetPrivileges()
+	if desc.Privileges == nil {
+		desc.Privileges = n.dbDesc.GetPrivileges()
+	}
 
 	if len(desc.PrimaryIndex.ColumnNames) == 0 {
 		// Ensure a Primary Key exists.

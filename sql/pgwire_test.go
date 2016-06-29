@@ -409,7 +409,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Results("users", "primary", true, 1, "username", "ASC", false),
 		},
 		"SHOW TABLES FROM system": {
-			base.Results("descriptor").Others(7),
+			base.Results("descriptor").Others(8),
 		},
 		"SHOW TIME ZONE": {
 			base.Results("UTC"),

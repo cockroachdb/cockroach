@@ -75,6 +75,7 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 // as new tables get created.
 func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer server.AllSystemTableRangeSplits()()
 	ctx := getFastScanContext()
 	s, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(s, sqlDB)
@@ -125,8 +126,8 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		return nil
 	})
 
-	// Verify the actual splits.
-	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.RKeyMax}
+	// Verify the actual splits. Also include splits caused by the creation of new system tables.
+	splits = []roachpb.RKey{keys.MakeTablePrefix(15), keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)

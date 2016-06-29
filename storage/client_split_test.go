@@ -707,7 +707,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	verifySplitsAtTablePrefixes(userTableMax)
 
-	numTotalValues := keys.MaxSystemConfigDescID + 5
+	numTotalValues := keys.MaxSystemConfigDescID + 5 + sqlbase.NumNewSystemTablesSchema
 
 	// Write another, disjoint descriptor for a user table.
 	if err := store.DB().Txn(func(txn *client.Txn) error {

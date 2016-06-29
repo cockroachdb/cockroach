@@ -138,7 +138,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	// Exhaustively grant/revoke all privileges.
 	// Due to the way validation is done after Grant/Revoke,
 	// we need to revert the just-performed change after errors.
-	descriptor := NewPrivilegeDescriptor(1)
+	descriptor := NewPrivilegeDescriptor(id)
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
