@@ -94,12 +94,12 @@ $(REPO_ROOT)/build/npm.installed: $(REPO_ROOT)/build/package.json
 
 PBJS_ARGS = --path $(ORG_ROOT) $(GW_PROTOS)
 
-$(REPO_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GW_PROTOS)
+$(REPO_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs -t commonjs $(PBJS_ARGS) >> $@
 
-$(REPO_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/npm.installed $(GW_PROTOS)
+$(REPO_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs $(PBJS_ARGS) > $@
 
 $(REPO_ROOT)/ui/generated/protos.d.ts: $(REPO_ROOT)/ui/generated/protos.json
