@@ -231,7 +231,7 @@ func TestSendAndReceive(t *testing.T) {
 	fromStoreID := roachpb.StoreID(3)
 	toStoreID := roachpb.StoreID(5)
 	expReq := &storage.RaftMessageRequest{
-		GroupID: 1,
+		RangeID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
 			From: uint64(replicaIDs[fromStoreID]),
@@ -298,7 +298,7 @@ func TestInOrderDelivery(t *testing.T) {
 
 	for i := 0; i < numMessages; i++ {
 		req := &storage.RaftMessageRequest{
-			GroupID: 1,
+			RangeID: 1,
 			Message: raftpb.Message{
 				To:     uint64(nodeID),
 				From:   uint64(clientNodeID),

@@ -25,8 +25,8 @@ import weak "gogoproto/gogo.proto";
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
 message RaftMessageRequest {
-  optional uint64 group_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "GroupID",
+  optional uint64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
 
   optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
