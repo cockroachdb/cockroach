@@ -58,4 +58,5 @@ message RangeInfo {
   // The highest (and last) index in the Raft log.
   uint64 lastIndex = 2;
   uint64 num_pending = 3;
+  util.hlc.Timestamp last_verification = 4 [(gogoproto.nullable) = false];
 }
