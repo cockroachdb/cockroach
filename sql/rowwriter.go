@@ -184,18 +184,20 @@ func makeRowInserter(
 
 // insertCPutFn is used by insertRow when conflicts should be respected.
 // logValue is used for pretty printing.
-func insertCPutFn(b *client.Batch, key *roachpb.Key, value interface{}, logValue interface{}) {
+func insertCPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
+	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
+	// client.Batch wrapper instead of inlining it everywhere.
 	if log.V(2) {
-		log.InfofDepth(1, "CPut %s -> %v", *key, logValue)
+		log.InfofDepth(1, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
 	b.CPut(key, value, nil)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 // logValue is used for pretty printing.
-func insertPutFn(b *client.Batch, key *roachpb.Key, value interface{}, logValue interface{}) {
+func insertPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
 	if log.V(2) {
-		log.InfofDepth(1, "Put %s -> %v", *key, logValue)
+		log.InfofDepth(1, "Put %s -> %s", *key, value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
@@ -259,7 +261,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 				// the row exists.
 
 				ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-				putFn(b, &ri.key, &ri.marshalled[idx], values[idx])
+				putFn(b, &ri.key, &ri.marshalled[idx])
 				ri.key = nil
 			}
 
@@ -308,7 +310,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 
 		if family.ID == 0 || len(ri.valueBuf) > 0 {
 			ri.value.SetTuple(ri.valueBuf)
-			putFn(b, &ri.key, &ri.value, &ri.value)
+			putFn(b, &ri.key, &ri.value)
 		}
 
 		ri.key = nil
@@ -316,7 +318,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum, ignoreC
 
 	for i := range secondaryIndexEntries {
 		e := &secondaryIndexEntries[i]
-		putFn(b, &e.Key, &e.Value, &e.Value)
+		putFn(b, &e.Key, &e.Value)
 	}
 
 	return nil
@@ -622,7 +624,7 @@ func (ru *rowUpdater) updateRow(
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 			if log.V(2) {
-				log.Infof("Put %s -> %v", ru.key, updateValues[idx])
+				log.Infof("Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.marshalled[idx])
 			ru.key = nil
@@ -680,7 +682,7 @@ func (ru *rowUpdater) updateRow(
 		} else {
 			ru.value.SetTuple(ru.valueBuf)
 			if log.V(2) {
-				log.Infof("Put %s -> %v", ru.key, &ru.value)
+				log.Infof("Put %s -> %v", ru.key, ru.value.PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.value)
 		}
@@ -704,7 +706,7 @@ func (ru *rowUpdater) updateRow(
 			// Do not update Indexes in the DELETE_ONLY state.
 			if _, ok := ru.deleteOnlyIndex[i]; !ok {
 				if log.V(2) {
-					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value)
+					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
 				}
 				b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
 			}
