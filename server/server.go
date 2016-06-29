@@ -24,7 +24,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -75,32 +74,30 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	Tracer             opentracing.Tracer
-	ctx                Context
-	mux                *http.ServeMux
-	clock              *hlc.Clock
-	rpcContext         *rpc.Context
-	grpc               *grpc.Server
-	gossip             *gossip.Gossip
-	storePool          *storage.StorePool
-	distSender         *kv.DistSender
-	db                 *client.DB
-	kvDB               *kv.DBServer
-	pgServer           *pgwire.Server
-	distSQLServer      *distsql.ServerImpl
-	node               *Node
-	recorder           *status.MetricsRecorder
-	runtime            status.RuntimeStatSampler
-	admin              adminServer
-	status             *statusServer
-	tsDB               *ts.DB
-	tsServer           ts.Server
-	raftTransport      *storage.RaftTransport
-	stopper            *stop.Stopper
-	sqlExecutor        *sql.Executor
-	leaseMgr           *sql.LeaseManager
-	parsedUpdatesURL   *url.URL
-	parsedReportingURL *url.URL
+	Tracer        opentracing.Tracer
+	ctx           Context
+	mux           *http.ServeMux
+	clock         *hlc.Clock
+	rpcContext    *rpc.Context
+	grpc          *grpc.Server
+	gossip        *gossip.Gossip
+	storePool     *storage.StorePool
+	distSender    *kv.DistSender
+	db            *client.DB
+	kvDB          *kv.DBServer
+	pgServer      *pgwire.Server
+	distSQLServer *distsql.ServerImpl
+	node          *Node
+	recorder      *status.MetricsRecorder
+	runtime       status.RuntimeStatSampler
+	admin         adminServer
+	status        *statusServer
+	tsDB          *ts.DB
+	tsServer      ts.Server
+	raftTransport *storage.RaftTransport
+	stopper       *stop.Stopper
+	sqlExecutor   *sql.Executor
+	leaseMgr      *sql.LeaseManager
 }
 
 // NewServer creates a Server from a server.Context.
@@ -423,8 +420,6 @@ func (s *Server) Start() error {
 		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChangeManager.(*sql.SchemaChangeManagerTestingKnobs)
 	}
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
-
-	s.periodicallyCheckForUpdates()
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)

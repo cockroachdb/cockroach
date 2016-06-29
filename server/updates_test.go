@@ -27,18 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestSetupReportingURLs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := new(Server) // don't actually need a testserver here
-
-	if err := s.SetupReportingURLs(); err != nil {
-		t.Fatal(err)
-	}
-	if s.parsedReportingURL == nil {
-		t.Fatal("reporting url should be set")
-	}
-	if s.parsedUpdatesURL == nil {
-		t.Fatal("updates url should be set")
+func stubURL(target **url.URL, stubURL *url.URL) func() {
+	realURL := *target
+	*target = stubURL
+	return func() {
+		*target = realURL
 	}
 }
 
@@ -55,9 +48,13 @@ func TestCheckVersion(t *testing.T) {
 		uuid = r.URL.Query().Get("uuid")
 		version = r.URL.Query().Get("version")
 	}))
+	u, err := url.Parse(recorder.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stubURL(&updatesURL, u)()
 
 	s := StartTestServer(t)
-	s.parsedUpdatesURL, _ = url.Parse(recorder.URL)
 	s.checkForUpdates()
 	recorder.Close()
 	s.Stop()
@@ -90,6 +87,11 @@ func TestReportUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}))
+	u, err := url.Parse(recorder.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stubURL(&reportingURL, u)()
 
 	ctx := MakeTestContext()
 	s := TestServer{
@@ -99,7 +101,6 @@ func TestReportUsage(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatalf("failed to start test server: %s", err)
 	}
-	s.parsedReportingURL, _ = url.Parse(recorder.URL)
 
 	if err := s.WaitForInitialSplits(); err != nil {
 		t.Fatal(err)
