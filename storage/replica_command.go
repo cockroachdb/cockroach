@@ -2667,7 +2667,7 @@ func (r *Replica) ChangeReplicas(
 		}
 
 		if err := r.store.ctx.Transport.Send(&RaftMessageRequest{
-			GroupID:     r.RangeID,
+			RangeID:     r.RangeID,
 			FromReplica: *fromReplica,
 			ToReplica:   replica,
 			Message: raftpb.Message{

@@ -1160,7 +1160,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   mtc.stores[2].StoreID(),
 	}
 	if err := mtc.transports[2].Send(&storage.RaftMessageRequest{
-		GroupID:     0,
+		RangeID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Message: raftpb.Message{
@@ -1487,7 +1487,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	}
 	// Simulate an election triggered by the removed node.
 	if err := mtc.transports[0].Send(&storage.RaftMessageRequest{
-		GroupID:     rangeID,
+		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
 		Message: raftpb.Message{
