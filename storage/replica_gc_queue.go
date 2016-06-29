@@ -35,7 +35,7 @@ const (
 	replicaGCQueueMaxSize = 100
 
 	// replicaGCQueueTimerDuration is the duration between GCs of queued replicas.
-	replicaGCQueueTimerDuration = 10 * time.Second
+	replicaGCQueueTimerDuration = 50 * time.Millisecond
 
 	// ReplicaGCQueueInactivityThreshold is the inactivity duration after which
 	// a range will be considered for garbage collection. Exported for testing.
@@ -43,7 +43,7 @@ const (
 	// ReplicaGCQueueCandidateTimeout is the duration after which a range in
 	// candidate Raft state (which is a typical sign of having been removed
 	// from the group) will be considered for garbage collection.
-	ReplicaGCQueueCandidateTimeout = 10 * time.Second
+	ReplicaGCQueueCandidateTimeout = 1 * time.Second
 )
 
 // replicaGCQueue manages a queue of replicas to be considered for garbage
