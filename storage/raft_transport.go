@@ -215,8 +215,6 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roac
 			}
 			if err != nil {
 				return err
-			} else if log.V(2) || log.V(1) && req.Message.Type == raftpb.MsgSnap {
-				log.Infof("successfully sent %s to %s at %s", req.Message.Type, req.ToReplica, addr)
 			}
 		}
 	}
