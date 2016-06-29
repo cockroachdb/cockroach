@@ -756,7 +756,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	msg := storage.RaftMessageRequest{
-		GroupID:     rangeID,
+		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Message: raftpb.Message{
