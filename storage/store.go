@@ -72,8 +72,6 @@ const (
 	// cannot be recovered through other means if evicted)?
 	maxReplicaDescCacheSize = 1000
 
-	raftReqBufferSize = 100
-
 	// leaderLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	leaderLeaseRaftElectionTimeoutMultiplier = 3
@@ -304,7 +302,6 @@ type Store struct {
 	startedAt               int64
 	nodeDesc                *roachpb.NodeDescriptor
 	initComplete            sync.WaitGroup // Signaled by async init tasks
-	raftRequestChan         chan *RaftMessageRequest
 	bookie                  *bookie
 
 	// This is 1 if there is an active raft snapshot. This field must be checked
@@ -690,14 +687,13 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 
 	s := &Store{
-		ctx:             ctx,
-		db:              ctx.DB, // TODO(tschottdorf) remove redundancy.
-		engine:          eng,
-		allocator:       MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
-		nodeDesc:        nodeDesc,
-		wakeRaftLoop:    make(chan struct{}, 1),
-		raftRequestChan: make(chan *RaftMessageRequest, raftReqBufferSize),
-		metrics:         newStoreMetrics(),
+		ctx:          ctx,
+		db:           ctx.DB, // TODO(tschottdorf) remove redundancy.
+		engine:       eng,
+		allocator:    MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
+		nodeDesc:     nodeDesc,
+		wakeRaftLoop: make(chan struct{}, 1),
+		metrics:      newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
 	s.drainLeadership.Store(false)
@@ -967,7 +963,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage)
+	s.ctx.Transport.Listen(s.StoreID(), s.handleRaftMessage)
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
@@ -2046,28 +2042,12 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
-// enqueueRaftMessage enqueues a request for eventual processing. It
-// returns an error to conform to the RPC interface but it always
-// returns nil without waiting for the message to be processed.
-//
-// TODO(bdarnell): is this buffering necessary? sufficient? It's
-// tempting to move handleRaftMessage off the processRaft goroutine
-// and rely on processRaftMu instead. However, the interaction with
-// the stopper is tricky. Run handleRaftMessage as a task and we see
-// intent resolutions hang during test shutdown because they expect to
-// be able to make progress during the draining phase. Run it without
-// a task and it may run while the stopper is shutting down. It needs
-// to be run from within a Worker and processRaft is a convenient one
-// to use.
-func (s *Store) enqueueRaftMessage(req *RaftMessageRequest) error {
-	s.raftRequestChan <- req
-	return nil
-}
-
-// handleRaftMessage dispatches a raft message to the appropriate
-// Replica. It requires that processRaftMu is held and that s.mu is
-// not held.
+// handleRaftMessage dispatches a raft message to the appropriate Replica. It
+// requires that s.processRaftMu and s.mu are not held.
 func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
+	s.processRaftMu.Lock()
+	defer s.processRaftMu.Unlock()
+
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
 	s.mu.Lock()
@@ -2082,14 +2062,10 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 				break
 			}
 		}
-		// It's not a current member of the group. Is it from the future
-		// or the past?
+		// It's not a current member of the group. Is it from the past?
 		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			if log.V(2) {
-				log.Infof("range %s: discarding message from %+v, older than NextReplicaID %d",
-					req.RangeID, req.FromReplica, desc.NextReplicaID)
-			}
-			return nil
+			return errors.Errorf("range %s: discarding message from %+v, older than NextReplicaID %d",
+				req.RangeID, req.FromReplica, desc.NextReplicaID)
 		}
 	}
 
@@ -2116,19 +2092,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
 	if err != nil {
-		// If getOrCreateReplicaLocked returns an error, log it at V(1)
-		// instead of returning it (where the caller will log it as
-		// Error). Errors here generally mean that the sender is out of
-		// date, and it may remain so until replicaGCQueue runs, so when
-		// these messages occur they will repeat many times.
-		// TODO(bdarnell): if we had a better way to report errors to the
-		// sender then we could prompt the sender to GC this replica
-		// immediately.
-		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %s",
-				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica, err)
-		}
-		return nil
+		return err
 	}
 
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
@@ -2197,13 +2161,6 @@ func (s *Store) processRaft() {
 
 			select {
 			case <-s.wakeRaftLoop:
-
-			case req := <-s.raftRequestChan:
-				s.processRaftMu.Lock()
-				if err := s.handleRaftMessage(req); err != nil {
-					log.Errorf("error handling raft message: %s", err)
-				}
-				s.processRaftMu.Unlock()
 
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
 				s.processRaftMu.Lock()
