@@ -19,6 +19,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,6 +88,10 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
+// The amount of concurrency to allow in processing replicas on a per-store
+// basis.
+var storeConcurrency = 2 * runtime.NumCPU()
+
 // TestStoreContext has some fields initialized with values relevant
 // in tests.
 func TestStoreContext() StoreContext {
@@ -100,6 +105,20 @@ func TestStoreContext() StoreContext {
 		ConsistencyCheckPanicOnFailure: true,
 		BlockingSnapshotDuration:       100 * time.Millisecond,
 	}
+}
+
+type semaphore chan struct{}
+
+func makeSemaphore(n int) semaphore {
+	return make(semaphore, n)
+}
+
+func (s semaphore) acquire() {
+	s <- struct{}{}
+}
+
+func (s semaphore) release() {
+	<-s
 }
 
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
@@ -1492,9 +1511,9 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
-// MergeRange expands the subsuming range to absorb the subsumed range.
-// This merge operation will fail if the two ranges are not collocated
-// on the same store. Must be called from the processRaft goroutine.
+// MergeRange expands the subsuming range to absorb the subsumed range. This
+// merge operation will fail if the two ranges are not collocated on the same
+// store. Must be called (perhaps indirectly) from the processRaft goroutine.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
@@ -1514,8 +1533,9 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
-	// Remove and destroy the subsumed range. Note that we are on the
-	// processRaft goroutine so we can call removeReplicaImpl directly.
+	// Remove and destroy the subsumed range. Note that we were called
+	// (indirectly) from the processRaft goroutine so we must call
+	// removeReplicaImpl directly to avoid deadlocking on processRaftMu.
 	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc, false); err != nil {
 		return errors.Errorf("cannot remove range %s", err)
 	}
@@ -2140,6 +2160,8 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 // appropriate range. This method starts a goroutine to process Raft
 // commands indefinitely or until the stopper signals.
 func (s *Store) processRaft() {
+	sem := makeSemaphore(storeConcurrency)
+
 	s.stopper.RunWorker(func() {
 		defer s.ctx.Transport.Stop(s.StoreID())
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
@@ -2159,11 +2181,20 @@ func (s *Store) processRaft() {
 			}
 			s.pendingRaftGroups.Unlock()
 			s.mu.Unlock()
+
+			var wg sync.WaitGroup
+			wg.Add(len(replicas))
 			for _, r := range replicas {
-				if err := r.handleRaftReady(); err != nil {
-					panic(err) // TODO(bdarnell)
-				}
+				sem.acquire()
+				go func(r *Replica) {
+					if err := r.handleRaftReady(); err != nil {
+						panic(err) // TODO(bdarnell)
+					}
+					wg.Done()
+					sem.release()
+				}(r)
 			}
+			wg.Wait()
 			s.processRaftMu.Unlock()
 
 			select {
