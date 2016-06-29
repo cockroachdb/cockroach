@@ -75,6 +75,8 @@ const (
 	// put operations will possibly be optimized by determining whether
 	// the key space being written is starting out empty.
 	optimizePutThreshold = 10
+
+	replicaChangeTxnName = "change-replica"
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -1331,8 +1333,8 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special
 			// because raft needs to understand it; it cannot simply be an
 			// opaque command.
-			log.Infof("raft: proposing %s %+v for range %d", crt.ChangeType,
-				crt.Replica, p.raftCmd.RangeID)
+			log.Infof("raft: proposing %s %+v for range %d: %+v", crt.ChangeType,
+				crt.Replica, p.raftCmd.RangeID, crt.UpdatedReplicas)
 
 			ctx := ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -1850,6 +1852,13 @@ func (r *Replica) applyRaftCommand(
 		batch, ms, br, intents, rErr = r.applyRaftCommandInBatch(ctx, idKey,
 			originReplica, ba)
 	}
+
+	// TODO(tschottdorf): remove when #7224 is cleared.
+	if ba.Txn != nil && ba.Txn.Name == replicaChangeTxnName {
+		log.Infof("range %d: applied part of replica change txn: %s, pErr=%v",
+			r.RangeID, ba, rErr)
+	}
+
 	defer batch.Close()
 
 	// The only remaining use of the batch is for range-local keys which we know
