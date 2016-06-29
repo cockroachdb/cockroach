@@ -2123,6 +2123,15 @@ getNumPending?() : Long;
 
 
 
+last_verification?: util.hlc.Timestamp;
+		
+
+getLastVerification?() : util.hlc.Timestamp;
+		setLastVerification?(lastVerification : util.hlc.Timestamp): void;
+		
+
+
+
 }
 	
 	export interface RangeInfoMessage extends RangeInfo {
