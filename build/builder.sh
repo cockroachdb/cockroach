@@ -69,10 +69,10 @@ cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 # into the container because it is architecture-independent, and /pkg/
 # because every subdirectory is tagged with its architecture. We also
 # map certain subdirectories of ${GOPATH}/pkg into ${GOROOT}/pkg so
-# they can be used to cache race and netgo builds of the standard
-# library. /bin/ is mapped separately to avoid clobbering the host's
-# binaries. Note that the path used for the /bin/ mapping is also used
-# in the defaultBinary function of localcluster.go.
+# they can be used to cache builds of the standard library. /bin/ is
+# mapped separately to avoid clobbering the host's binaries. Note that
+# the path used for the /bin/ mapping is also used in the defaultBinary
+# function of localcluster.go.
 #
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
