@@ -19,7 +19,6 @@ package sql_test
 
 import (
 	gosql "database/sql"
-	"flag"
 	"fmt"
 	"testing"
 
@@ -29,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
-
-var multinode = flag.Bool("multinode", false, "specifies whether or not to run multinode tests")
 
 // Starts up a cluster made of up `nodes` in-memory testing servers,
 // creates database `name and returns open gosql.DB connections to each
@@ -86,9 +83,6 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (server.Mul
 func TestMultinodeCockroach(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer tracing.Disable()()
-	if !*multinode {
-		t.Skip()
-	}
 
 	testCluster, conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
 	if err := testCluster.WaitForFullReplication(); err != nil {
