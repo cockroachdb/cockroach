@@ -130,3 +130,25 @@ query III
 SELECT * FROM unsorted_colids
 ----
 1 2 3
+
+# Check that family bookkeeping correctly tracks column renames
+statement ok
+CREATE TABLE rename_col (a INT PRIMARY KEY, b INT, c STRING, FAMILY (a, b), FAMILY (c))
+
+statement ok
+ALTER TABLE rename_col RENAME b TO d
+
+statement ok
+ALTER TABLE rename_col RENAME c TO e
+
+query TT
+SHOW CREATE TABLE rename_col
+----
+rename_col CREATE TABLE rename_col (
+  a INT NOT NULL,
+  d INT NULL,
+  e STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (a),
+  FAMILY fam_0_a_b (a, d),
+  FAMILY fam_1_c (e)
+)
