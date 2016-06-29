@@ -1355,6 +1355,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   rocksdb::Options options(rocksdb::GetOptions(db_opts.memtable_budget));
   options.IncreaseParallelism(db_opts.num_cpu);
+  options.max_subcompactions = std::max<int>(db_opts.num_cpu / 2, 1);
   options.allow_os_buffer = db_opts.allow_os_buffer;
   options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
