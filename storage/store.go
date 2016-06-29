@@ -1581,7 +1581,7 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 // from the sorted replicasByKey btree. The version of the replica
 // descriptor that was used to make the removal decision is passed in,
 // and the removal is aborted if the replica ID has changed since
-// then. If `destroy` is true, all data beloing to the replica will be
+// then. If `destroy` is true, all data belonging to the replica will be
 // deleted. In either case a tombstone record will be written.
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	s.processRaftMu.Lock()
