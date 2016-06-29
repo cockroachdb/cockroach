@@ -25,6 +25,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"reflect"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -2695,6 +2696,18 @@ func (r *Replica) ChangeReplicas(
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
 	if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
+		txn.Proto.Name = replicaChangeTxnName
+		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
+		// Remove when that has been solved. The failure mode is likely based on
+		// prior divergence of the Replica (in which case the check below does not
+		// fire because everything reads from the local, diverged, set of data),
+		// so we don't expect to see this fail in practice ever.
+		oldDesc := new(roachpb.RangeDescriptor)
+		if err := txn.GetProto(descKey, oldDesc); err != nil {
+			return err
+		}
+		log.Infof("change replicas of %d: read existing descriptor %+v", rangeID, oldDesc)
+
 		b := txn.NewBatch()
 
 		// Important: the range descriptor must be the first thing touched in the transaction
@@ -2732,7 +2745,17 @@ func (r *Replica) ChangeReplicas(
 				},
 			},
 		})
-		return txn.Run(b)
+		if err := txn.Run(b); err != nil {
+			return err
+		}
+
+		if oldDesc.RangeID != 0 && !reflect.DeepEqual(oldDesc, desc) {
+			// We read the previous value, it wasn't what we supposedly used in
+			// the CPut, but we still overwrote in the CPut above.
+			panic(fmt.Sprintf("committed replica change, but oldDesc != assumedOldDesc:\n%+v\n%+v\nnew desc:\n%+v",
+				oldDesc, desc, updatedDesc))
+		}
+		return nil
 	}); pErr != nil {
 		return errors.Errorf("change replicas of %d failed: %s", rangeID, pErr)
 	}
