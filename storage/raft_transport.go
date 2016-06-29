@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -220,45 +219,60 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roac
 	}
 }
 
-// Send a message to the recipient specified in the request.
-func (t *RaftTransport) Send(req *RaftMessageRequest) error {
+type errHandler func(error, roachpb.ReplicaDescriptor)
+
+// RaftSender is a wrapper around RaftTransport that provides an error
+// handler.
+type RaftSender struct {
+	transport *RaftTransport
+	onError   errHandler
+}
+
+// MakeSender constructs a RaftSender with the provided error handler.
+func (t *RaftTransport) MakeSender(onError errHandler) RaftSender {
+	return RaftSender{transport: t, onError: onError}
+}
+
+// SendAsync sends a message to the recipient specified in the request. It
+// returns false if the outgoing queue is full and calls s.onError when the
+// recipient closes the stream.
+func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 	isSnap := req.Message.Type == raftpb.MsgSnap
-	t.mu.Lock()
+	toReplica := req.ToReplica
+	s.transport.mu.Lock()
 	// We use two queues; one will be used for snapshots, the other for all other
 	// traffic. This is done to prevent snapshots from blocking other traffic.
-	queues, ok := t.mu.queues[isSnap]
+	queues, ok := s.transport.mu.queues[isSnap]
 	if !ok {
 		queues = make(map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
-		t.mu.queues[isSnap] = queues
+		s.transport.mu.queues[isSnap] = queues
 	}
-	ch, ok := queues[req.ToReplica]
+	ch, ok := queues[toReplica]
 	if !ok {
 		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
-		queues[req.ToReplica] = ch
+		queues[toReplica] = ch
 	}
-	t.mu.Unlock()
+	s.transport.mu.Unlock()
 
 	if !ok {
 		// Starting workers in a task prevents data races during shutdown.
-		if err := t.rpcContext.Stopper.RunTask(func() {
-			t.rpcContext.Stopper.RunWorker(func() {
-				if err := t.processQueue(ch, req.ToReplica); err != nil {
-					log.Error(err)
-				}
+		if err := s.transport.rpcContext.Stopper.RunTask(func() {
+			s.transport.rpcContext.Stopper.RunWorker(func() {
+				s.onError(s.transport.processQueue(ch, toReplica), toReplica)
 
-				t.mu.Lock()
-				delete(queues, req.ToReplica)
-				t.mu.Unlock()
+				s.transport.mu.Lock()
+				delete(queues, toReplica)
+				s.transport.mu.Unlock()
 			})
 		}); err != nil {
-			return err
+			s.onError(err, toReplica)
 		}
 	}
 
 	select {
 	case ch <- req:
-		return nil
+		return true
 	default:
-		return errors.Errorf("outbound raft transport queue for %s is full", req.ToReplica)
+		return false
 	}
 }
