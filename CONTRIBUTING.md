@@ -26,8 +26,8 @@ regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate
 
 We advise to run `go generate` using our embedded Docker setup.
 `build/builder.sh` is a wrapper script designed to make this convenient. You can
-run `build/builder.sh go generate ./...` from the repository root to get the
-intended result.
+run `build/builder.sh env SKIP_BOOTSTRAP=0 go generate ./...` from the repository
+root to get the intended result.
 
 If you want to run it outside of Docker, `go generate` requires a collection of
 Node.js modules which are installed via npm.
