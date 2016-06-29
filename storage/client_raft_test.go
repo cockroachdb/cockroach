@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -1159,8 +1160,12 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	if err := mtc.transports[2].Send(&storage.RaftMessageRequest{
-		RangeID:     0,
+	mtc.transports[2].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		if err != nil && !grpcutil.IsClosedConnection(err) {
+			panic(err)
+		}
+	}).SendAsync(&storage.RaftMessageRequest{
+		RangeID:     0, // TODO(bdarnell): wtf is this testing?
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Message: raftpb.Message{
@@ -1168,9 +1173,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 			To:   uint64(replica1.ReplicaID),
 			Type: raftpb.MsgHeartbeat,
 		},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	mtc.replicateRange(roachpb.RangeID(1), 1)
@@ -1487,7 +1490,11 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		StoreID:   mtc.stores[1].StoreID(),
 	}
 	// Simulate an election triggered by the removed node.
-	if err := mtc.transports[0].Send(&storage.RaftMessageRequest{
+	mtc.transports[0].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		if !testutils.IsError(err, "older than NextReplicaID") {
+			panic(err)
+		}
+	}).SendAsync(&storage.RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -1497,9 +1504,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	// Wait a bit for the message to be processed.
 	// TODO(bdarnell): This will be easier to test without waiting
