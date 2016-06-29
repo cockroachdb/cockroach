@@ -2636,7 +2636,7 @@ func (r *Replica) ChangeReplicas(
 			rangeID,
 			r.GetMVCCStats().Total(),
 		); err != nil {
-			return errors.Errorf("change replicas of %d failed: %s", rangeID, err)
+			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
 		// Send a pre-emptive snapshot. Note that the replica to which this
@@ -2658,12 +2658,12 @@ func (r *Replica) ChangeReplicas(
 
 		snap, err := r.GetSnapshot()
 		if err != nil {
-			return errors.Errorf("change replicas of %d failed: %s", rangeID, err)
+			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
 		fromReplica, err := r.GetReplica()
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
 		if err := r.store.ctx.Transport.Send(&RaftMessageRequest{
@@ -2677,7 +2677,7 @@ func (r *Replica) ChangeReplicas(
 				Snapshot: snap,
 			},
 		}); err != nil {
-			return errors.Errorf("change replicas of %d failed: %s", rangeID, err)
+			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
 		replica.ReplicaID = updatedDesc.NextReplicaID
@@ -2695,7 +2695,7 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	if pErr := r.store.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
 		// Remove when that has been solved. The failure mode is likely based on
@@ -2757,7 +2757,7 @@ func (r *Replica) ChangeReplicas(
 		}
 		return nil
 	}); pErr != nil {
-		return errors.Errorf("change replicas of %d failed: %s", rangeID, pErr)
+		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 	}
 	return nil
 }
