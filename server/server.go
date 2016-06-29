@@ -157,7 +157,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	// succeed because the only server has been shut down; thus, thus the
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = stopper.ShouldDrain()
+	retryOpts.Closer = s.stopper.ShouldDrain()
 	s.distSender = kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
@@ -172,7 +172,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.grpc = rpc.NewServer(s.rpcContext)
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, stopper)
+	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
@@ -180,7 +180,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	if ctx.TestingKnobs.SQLLeaseManager != nil {
 		lmKnobs = *ctx.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
-	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs)
+	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs, s.stopper)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Set up the DistSQL server

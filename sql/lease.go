@@ -466,6 +466,7 @@ type tableState struct {
 	id sqlbase.ID
 	// The cache is updated every time we acquire or release a lease.
 	tableNameCache *tableNameCache
+	stopper        *stop.Stopper
 	// Protects both active and acquiring.
 	mu sync.Mutex
 	// The active leases for the table: sorted by their version and expiration
@@ -690,11 +691,12 @@ func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
 	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
 	// Release to the store asynchronously, without the tableState lock.
-	go func() {
+	// Ignore errors.
+	_ = t.stopper.RunAsyncTask(func() {
 		if err := store.Release(lease); err != nil {
 			log.Warningf("Error releasing lease %q: %s", lease, err)
 		}
-	}()
+	})
 }
 
 // purgeOldLeases refreshes the leases on a table. Unused leases older than
@@ -893,18 +895,22 @@ type LeaseManager struct {
 	// Not protected by mu.
 	tableNames   tableNameCache
 	testingKnobs LeaseManagerTestingKnobs
+	stopper      *stop.Stopper
 }
 
 // NewLeaseManager creates a new LeaseManager.
-// Args:
-//  testingLeasesRefreshedEvent: if not nil, a callback called after the leases
-//  are refreshed as a result of a gossip update.
+//
+// stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
 	nodeID uint32,
 	db client.DB,
 	clock *hlc.Clock,
 	testingKnobs LeaseManagerTestingKnobs,
+	stopper *stop.Stopper,
 ) *LeaseManager {
+	if stopper == nil {
+		stopper = stop.NewStopper()
+	}
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
 			db:           db,
@@ -917,6 +923,7 @@ func NewLeaseManager(
 		tableNames: tableNameCache{
 			tables: make(map[tableNameCacheKey]*LeaseState),
 		},
+		stopper: stopper,
 	}
 	return lm
 }
@@ -1028,7 +1035,7 @@ func (m *LeaseManager) resolveName(
 func (m *LeaseManager) Acquire(
 	txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*LeaseState, error) {
-	t := m.findTableState(tableID, true, &m.tableNames)
+	t := m.findTableState(tableID, true, &m.tableNames, m.stopper)
 	return t.acquire(txn, version, m.LeaseStore)
 }
 
@@ -1041,7 +1048,7 @@ func (m *LeaseManager) Acquire(
 func (m *LeaseManager) acquireFreshestFromStore(
 	txn *client.Txn, tableID sqlbase.ID,
 ) (*LeaseState, error) {
-	t := m.findTableState(tableID, true, &m.tableNames)
+	t := m.findTableState(tableID, true, &m.tableNames, m.stopper)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := t.acquireFromStoreLocked(
@@ -1058,7 +1065,7 @@ func (m *LeaseManager) acquireFreshestFromStore(
 
 // Release releases a previously acquired read lease.
 func (m *LeaseManager) Release(lease *LeaseState) error {
-	t := m.findTableState(lease.ID, false, nil)
+	t := m.findTableState(lease.ID, false /* create */, nil, nil)
 	if t == nil {
 		return errors.Errorf("table %d not found", lease.ID)
 	}
@@ -1071,13 +1078,15 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	return t.release(lease, m.LeaseStore)
 }
 
-// If create is set, cache needs to be set as well.
-func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool, cache *tableNameCache) *tableState {
+// If create is set, cache and stopper need to be set as well.
+func (m *LeaseManager) findTableState(
+	tableID sqlbase.ID, create bool, cache *tableNameCache, stopper *stop.Stopper,
+) *tableState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.tables[tableID]
 	if t == nil && create {
-		t = &tableState{id: tableID, tableNameCache: cache}
+		t = &tableState{id: tableID, tableNameCache: cache, stopper: stopper}
 		m.tables[tableID] = t
 	}
 	return t
@@ -1125,7 +1134,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 								kv.Key, table.ID, table.Name, table.Version, table.Deleted())
 						}
 						// Try to refresh the table lease to one >= this version.
-						if t := m.findTableState(table.ID, false /* create */, nil); t != nil {
+						if t := m.findTableState(table.ID, false /* create */, nil, nil); t != nil {
 							if err := t.purgeOldLeases(
 								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
 								log.Warningf("error purging leases for table %d(%s): %s",

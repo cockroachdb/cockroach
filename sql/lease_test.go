@@ -167,6 +167,7 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 			nodeID, *t.server.DB(),
 			t.server.Clock(),
 			t.leaseManagerTestingKnobs,
+			nil, // stopper
 		)
 		t.nodes[nodeID] = mgr
 	}

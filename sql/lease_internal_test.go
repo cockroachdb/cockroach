@@ -172,7 +172,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := leaseManager.findTableState(tableDesc.ID, false, nil)
+	ts := leaseManager.findTableState(tableDesc.ID, false, nil, nil)
 	if numLeases := getNumLeases(ts); numLeases != 3 {
 		t.Fatalf("found %d leases instead of 3", numLeases)
 	}
@@ -377,7 +377,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Pretend the table has been deleted, so that when we release leases on it,
 	// they are removed from the tableNameCache too.
-	tableState := leaseManager.findTableState(tableDesc.ID, true, &leaseManager.tableNames)
+	tableState := leaseManager.findTableState(
+		tableDesc.ID, true, &leaseManager.tableNames, leaseManager.stopper)
 	tableState.deleted = true
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
