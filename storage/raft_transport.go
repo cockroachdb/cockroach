@@ -35,10 +35,9 @@ import (
 )
 
 const (
-	// Outgoing messages are queued on a per-node basis on a channel of
-	// this size.
-	raftSendBufferSize = 500
-	// When no message has been sent to a Node for that duration, the
+	// Outgoing messages are queued per-replica on a channel of this size.
+	raftSendBufferSize = 100
+	// When no message has been sent to a Node for this duration, the
 	// corresponding instance of processQueue will shut down.
 	raftIdleTimeout = time.Minute
 )
@@ -73,7 +72,7 @@ type RaftTransport struct {
 	mu struct {
 		sync.Mutex
 		handlers map[roachpb.StoreID]raftMessageHandler
-		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
+		queues   map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
 	}
 }
 
@@ -92,7 +91,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
-	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
+	t.mu.queues = make(map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -162,8 +161,8 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 // TODO(tschottdorf) should let raft know if the node is down;
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
-func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, nodeID roachpb.NodeID) error {
-	addr, err := t.resolver(nodeID)
+func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roachpb.ReplicaDescriptor) error {
+	addr, err := t.resolver(toReplica.NodeID)
 	if err != nil {
 		return err
 	}
@@ -231,13 +230,13 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 	// traffic. This is done to prevent snapshots from blocking other traffic.
 	queues, ok := t.mu.queues[isSnap]
 	if !ok {
-		queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
+		queues = make(map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
 		t.mu.queues[isSnap] = queues
 	}
-	ch, ok := queues[req.ToReplica.NodeID]
+	ch, ok := queues[req.ToReplica]
 	if !ok {
 		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
-		queues[req.ToReplica.NodeID] = ch
+		queues[req.ToReplica] = ch
 	}
 	t.mu.Unlock()
 
@@ -245,12 +244,12 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 		// Starting workers in a task prevents data races during shutdown.
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
-				if err := t.processQueue(ch, req.ToReplica.NodeID); err != nil {
+				if err := t.processQueue(ch, req.ToReplica); err != nil {
 					log.Error(err)
 				}
 
 				t.mu.Lock()
-				delete(queues, req.ToReplica.NodeID)
+				delete(queues, req.ToReplica)
 				t.mu.Unlock()
 			})
 		}); err != nil {
@@ -262,6 +261,6 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 	case ch <- req:
 		return nil
 	default:
-		return errors.Errorf("queue for node %d is full", req.ToReplica.NodeID)
+		return errors.Errorf("outbound raft transport queue for %s is full", req.ToReplica)
 	}
 }
