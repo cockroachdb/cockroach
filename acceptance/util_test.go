@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 	_ "github.com/cockroachdb/pq"
 )
 
@@ -107,22 +106,26 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	for j := 1; j < *flagStores; j++ {
 		stores += " --store=data" + strconv.Itoa(j)
 	}
-	if !prefixRE.MatchString(prefix) {
-		t.Fatalf("farmer prefix must match regex %s", prefixRE)
+
+	// We concatenate a random name to the prefix (for Terraform resource
+	// names) to allow multiple instances of the same test to run concurrently.
+	// The prefix is also used as the name of the Terraform state file.
+	if prefix != "" {
+		prefix += "-"
 	}
-	dt := timeutil.Now().Format("20060102-150405")
+	prefix += getRandomName()
+
+	if !prefixRE.MatchString(prefix) {
+		t.Fatalf("farmer prefix '%s' must match regex %s", prefix, prefixRE)
+	}
 	f := &terrafarm.Farmer{
-		Output:  os.Stderr,
-		Cwd:     *flagCwd,
-		LogDir:  logDir,
-		KeyName: *flagKeyName,
-		Stores:  stores,
-		// We concatenate the current date/time to the prefix (for Terraform
-		// resource names) to allow multiple instances of the same test to run
-		// concurrently. The prefix is also used as the name of the Terraform state
-		// file.
-		Prefix:               prefix + "-" + dt,
-		StateFile:            prefix + "-" + dt + ".tfstate",
+		Output:               os.Stderr,
+		Cwd:                  *flagCwd,
+		LogDir:               logDir,
+		KeyName:              *flagKeyName,
+		Stores:               stores,
+		Prefix:               prefix,
+		StateFile:            prefix + ".tfstate",
 		AddVars:              make(map[string]string),
 		KeepClusterAfterTest: *flagTFKeepCluster,
 		KeepClusterAfterFail: *flagTFKeepClusterFail,
@@ -230,7 +233,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 		completed = true
 		return l
 	}
-	f := farmer(t, "acceptance")
+	f := farmer(t, "")
 	c = f
 	if err := f.Resize(*flagNodes, 0); err != nil {
 		t.Fatal(err)
