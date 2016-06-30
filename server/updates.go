@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -181,6 +182,16 @@ func (s *Server) checkForUpdates() {
 		return
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Warning("Error checking for updates: ", err)
+		} else {
+			log.Warningf("Error checking for updates: %s: %s", res.Status, b)
+		}
+		return
+	}
 
 	decoder := json.NewDecoder(res.Body)
 	r := struct {
