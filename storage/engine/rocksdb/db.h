@@ -220,6 +220,18 @@ typedef struct {
 
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
 
+typedef struct {
+  int level;
+  uint64_t size;
+  DBKey start_key;
+  DBKey end_key;
+} DBSSTable;
+
+// Retrieve stats about all of the live sstables. Note that the tables
+// array must be freed along with the start_key and end_key of each
+// table.
+DBSSTable* DBGetSSTables(DBEngine* db, int* n);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
