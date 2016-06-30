@@ -2132,6 +2132,15 @@ getLastVerification?() : util.hlc.Timestamp;
 
 
 
+num_dropped?: Long;
+		
+
+getNumDropped?() : Long;
+		setNumDropped?(numDropped : Long): void;
+		
+
+
+
 }
 	
 	export interface RangeInfoMessage extends RangeInfo {

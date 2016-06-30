@@ -1371,6 +1371,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "num_dropped",
+                                    "id": 5
                                 }
                             ]
                         }

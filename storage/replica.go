@@ -234,6 +234,9 @@ type Replica struct {
 
 		// Counts calls to Replica.tick()
 		ticks int
+
+		// Counts Raft messages refused due to queue congestion.
+		droppedMessages int
 	}
 }
 
@@ -748,6 +751,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if ri.LastVerification, err = r.getLastVerificationTimestamp(); err != nil {
 		log.Warning(err)
 	}
+	ri.NumDropped = uint64(r.mu.droppedMessages)
 
 	return ri
 }
@@ -1620,6 +1624,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		FromReplica: fromReplica,
 		Message:     msg,
 	}) {
+		r.mu.Lock()
+		r.mu.droppedMessages++
+		r.mu.Unlock()
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
 			raftGroup.ReportUnreachable(msg.To)
 			return nil
