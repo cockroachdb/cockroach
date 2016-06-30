@@ -1367,8 +1367,6 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 }
 
 func (r *Replica) handleRaftReady() error {
-	// TODO(bram): #4562 There is a lot of locking and unlocking of the replica,
-	// consider refactoring this.
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
