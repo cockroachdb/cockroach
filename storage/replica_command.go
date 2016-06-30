@@ -790,7 +790,20 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 		if ct.GetModifiedSpanTrigger() != nil {
 			if ct.ModifiedSpanTrigger.SystemConfigSpan {
 				// Check if we need to gossip the system config.
-				batch.Defer(r.maybeGossipSystemConfig)
+				// NOTE: System config gossiping can only execute correctly if
+				// the transaction record is located on the range that contains
+				// the system span. If a transaction is created which modifies
+				// both system *and* non-system data, it should be ensured that
+				// the transaction record itself is on the system span. This can
+				// be done by making sure a system key is the first key touched
+				// in the transaction.
+				if !r.ContainsKey(keys.SystemConfigSpan.Key) {
+					log.Errorc(ctx, "System configuration span was modified, but the "+
+						"modification trigger is executing on a non-system range. Configuration "+
+						"changes will not be gossiped.")
+				} else {
+					batch.Defer(r.maybeGossipSystemConfig)
+				}
 			}
 		}
 		return nil

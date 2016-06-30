@@ -41,6 +41,16 @@ const (
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
+	// EventLogAlterTable is recorded when an ALTER TABLE statement is
+	// executed.
+	EventLogAlterTable EventLogType = "alter_table"
+	// EventLogReverseSchemaChange is recorded when an in-progress schema change
+	// encounters a problem and is reversed.
+	EventLogReverseSchemaChange EventLogType = "reverse_schema_change"
+	// EventLogFinishSchemaChange is recorded when a previously initiated schema
+	// change has completed.
+	EventLogFinishSchemaChange EventLogType = "finish_schema_change"
+
 	// EventLogNodeJoin is recorded when a node joins the cluster.
 	EventLogNodeJoin EventLogType = "node_join"
 	// EventLogNodeRestart is recorded when an existing node rejoins the cluster

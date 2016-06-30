@@ -187,6 +187,13 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTransactionRequest.
+//
+// NOTE: The system db trigger will only execute correctly if the transaction
+// record is located on the range that contains the system span. If a
+// transaction is created which modifies both system *and* non-system data, it
+// should be ensured that the transaction record itself is on the system span.
+// This can be done by making sure a system key is the first key touched in the
+// transaction.
 func (txn *Txn) SetSystemConfigTrigger() {
 	txn.systemConfigTrigger = true
 }

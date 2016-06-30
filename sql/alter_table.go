@@ -242,6 +242,22 @@ func (n *alterTableNode) Start() error {
 	if err := n.p.writeTableDesc(n.tableDesc); err != nil {
 		return err
 	}
+
+	// Log "Alter Table" event.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogAlterTable,
+		int32(n.tableDesc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			TableName  string
+			Statement  string
+			User       string
+			MutationID uint32
+		}{n.tableDesc.Name, n.n.String(), n.p.session.User, uint32(mutationID)},
+	); err != nil {
+		return err
+	}
+
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
 
 	return nil
