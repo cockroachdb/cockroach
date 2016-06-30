@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -31,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/pkg/errors"
 )
 
 func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
@@ -75,7 +77,12 @@ func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.Sys
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now hlc.Timestamp, r *Replica, _ config.SystemConfig) error {
+func (tq *testQueueImpl) process(
+	_ context.Context,
+	now hlc.Timestamp,
+	r *Replica,
+	_ config.SystemConfig,
+) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
@@ -254,17 +261,21 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
 	r1 := &Replica{RangeID: 1}
 	if err := r1.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
+	r1.store = tc.store
 	r2 := &Replica{RangeID: 2}
 	if err := r2.setDesc(&roachpb.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
+	r2.store = tc.store
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
@@ -273,10 +284,10 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
+	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq.Start(clock, tc.stopper)
 
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
@@ -349,8 +360,10 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
 	dataMaxAddr, err := keys.Addr(keys.SystemConfigTableDataMax)
 	if err != nil {
@@ -366,6 +379,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	neverSplits.store = tc.store
 
 	// This range will need to be split after user db/table entries are created.
 	willSplit := &Replica{RangeID: 2}
@@ -376,6 +390,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	willSplit.store = tc.store
 
 	var queued int32
 	testQueue := &testQueueImpl{
@@ -386,13 +401,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
+	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq.Start(clock, tc.stopper)
 
 	// Check our config.
-	sysCfg, ok := g.GetSystemConfig()
+	sysCfg, ok := tc.gossip.GetSystemConfig()
 	if !ok {
 		t.Fatal("config not set")
 	}
@@ -465,8 +480,10 @@ func (*testError) purgatoryErrorMarker() {
 // the purgatory channel causes the replicas to be reprocessed.
 func TestBaseQueuePurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
@@ -479,16 +496,17 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		err:   &testError{},
 	}
 	replicaCount := 10
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: replicaCount})
+	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: replicaCount})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq.Start(clock, tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
 		r := &Replica{RangeID: roachpb.RangeID(i)}
 		if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i)}); err != nil {
 			t.Fatal(err)
 		}
+		r.store = tc.store
 		bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	}
 

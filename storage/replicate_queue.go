@@ -17,14 +17,17 @@
 package storage
 
 import (
+	"fmt"
 	"time"
+
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -103,6 +106,7 @@ func (rq *replicateQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 }
 
 func (rq *replicateQueue) process(
+	ctx context.Context,
 	now hlc.Timestamp,
 	repl *Replica,
 	sysCfg config.SystemConfig,
@@ -126,6 +130,7 @@ func (rq *replicateQueue) process(
 
 	switch action {
 	case AllocatorAdd:
+		log.Trace(ctx, "adding a new replica")
 		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
 		if err != nil {
 			return err
@@ -134,20 +139,24 @@ func (rq *replicateQueue) process(
 			NodeID:  newStore.Node.NodeID,
 			StoreID: newStore.StoreID,
 		}
+
 		if log.V(1) {
-			log.Infof("adding replica for under-replicated RangeID:%d to %+v", repl.RangeID, newReplica)
+			log.Infof("adding replica for under-replicated range %d to %+v", repl.RangeID, newReplica)
 		}
+		log.Trace(ctx, fmt.Sprintf("adding replica for under-replicated to %+v", newReplica))
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorRemove:
+		log.Trace(ctx, "removing a replica")
 		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas)
 		if err != nil {
 			return err
 		}
 		if log.V(1) {
-			log.Infof("removing replica for over-replicated RangeID:%d from %+v", repl.RangeID, removeReplica)
+			log.Infof("removing replica for over-replicated range %d from %+v", repl.RangeID, removeReplica)
 		}
+		log.Trace(ctx, fmt.Sprintf("removing replica for over-replicated from %+v", removeReplica))
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
@@ -156,6 +165,7 @@ func (rq *replicateQueue) process(
 			return nil
 		}
 	case AllocatorRemoveDead:
+		log.Trace(ctx, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
 				log.Warningf("Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
@@ -163,19 +173,22 @@ func (rq *replicateQueue) process(
 			break
 		}
 		if log.V(1) {
-			log.Infof("removing replica from dead store RangeID:%d from %+v", repl.RangeID, deadReplicas[0])
+			log.Infof("removing replica from dead store range %d from %+v", repl.RangeID, deadReplicas[0])
 		}
+		log.Trace(ctx, fmt.Sprintf("removing replica from dead store from %+v", deadReplicas[0]))
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, deadReplicas[0], desc); err != nil {
 			return err
 		}
 	case AllocatorNoop:
+		log.Trace(ctx, "considering a rebalance")
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
 		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
 			if log.V(1) {
-				log.Infof("no suitable rebalance target for RangeID:%d", repl.RangeID)
+				log.Infof("no suitable rebalance target for range %d", repl.RangeID)
 			}
+			log.Trace(ctx, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
 			return nil
@@ -185,8 +198,9 @@ func (rq *replicateQueue) process(
 			StoreID: rebalanceStore.StoreID,
 		}
 		if log.V(1) {
-			log.Infof("rebalancing RangeID:%d to %+v", repl.RangeID, rebalanceReplica)
+			log.Infof("rebalancing range %d to %+v", repl.RangeID, rebalanceReplica)
 		}
+		log.Trace(ctx, fmt.Sprintf("rebalancing to %+v", rebalanceReplica))
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
