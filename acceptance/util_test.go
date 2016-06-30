@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	_ "github.com/cockroachdb/pq"
 )
 
@@ -70,6 +72,24 @@ var flagATCockroachEnv = flag.String("at.cockroach-env", "",
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
 var stopper = make(chan struct{})
+
+func runTests(m *testing.M) {
+	randutil.SeedForTests()
+	go func() {
+		// Shut down tests when interrupted (for example CTRL+C).
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt)
+		<-sig
+		select {
+		case <-stopper:
+		default:
+			// There is a very tiny race here: the cluster might be closing
+			// the stopper simultaneously.
+			close(stopper)
+		}
+	}()
+	os.Exit(m.Run())
+}
 
 // prefixRE is based on a Terraform error message regarding invalid resource
 // names. We perform this check to make sure that when we prepend the name
