@@ -191,6 +191,13 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		}
 
 		reply, err := client.client.Batch(ctx, &client.args)
+		if reply != nil {
+			for i := range reply.Responses {
+				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
+					log.Error(err)
+				}
+			}
+		}
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
 }
