@@ -145,6 +145,8 @@ func DecodeUint32Descending(b []byte) ([]byte, uint32, error) {
 	return leftover, ^v, err
 }
 
+const uint64AscendingEncodedLength = 8
+
 // EncodeUint64Ascending encodes the uint64 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
@@ -1171,6 +1173,8 @@ func EncodeIntValue(appendTo []byte, colID uint32, i int64) []byte {
 	return EncodeNonsortingVarint(appendTo, i)
 }
 
+const floatValueEncodedLength = uint64AscendingEncodedLength
+
 // EncodeFloatValue encodes a float value, appends it to the supplied buffer,
 // and returns the final buffer.
 func EncodeFloatValue(appendTo []byte, colID uint32, f float64) []byte {
@@ -1419,7 +1423,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		_, n, _, err := DecodeNonsortingVarint(b)
 		return typeOffset, dataOffset + n, err
 	case Float:
-		return typeOffset, dataOffset + 8, nil
+		return typeOffset, dataOffset + floatValueEncodedLength, nil
 	case Bytes, Decimal:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
@@ -1431,6 +1435,38 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	default:
 		return 0, 0, errors.Errorf("unknown type %s", typ)
+	}
+}
+
+// UpperBoundValueEncodingSize returns the maximum encoded size of the given
+// datum type using the "value" encoding, including the tag. If the size is
+// unbounded, false is returned.
+func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
+	encodedTag := encodeValueTag(nil, colID, typ)
+	switch typ {
+	case Null, True, False:
+		// The data is encoded in the type.
+		return len(encodedTag), true
+	case Int:
+		return len(encodedTag) + maxVarintSize, true
+	case Float:
+		return len(encodedTag) + uint64AscendingEncodedLength, true
+	case Bytes:
+		if size > 0 {
+			return len(encodedTag) + maxVarintSize + size, true
+		}
+		return 0, false
+	case Decimal:
+		if size > 0 {
+			return len(encodedTag) + maxVarintSize + upperBoundNonsortingDecimalUnscaledSize(size), true
+		}
+		return 0, false
+	case Time:
+		return len(encodedTag) + 2*maxVarintSize, true
+	case Duration:
+		return len(encodedTag) + 3*maxVarintSize, true
+	default:
+		panic(fmt.Errorf("unknown type: %s", typ))
 	}
 }
 

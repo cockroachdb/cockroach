@@ -475,6 +475,21 @@ func TestDigitsLookupTable(t *testing.T) {
 	}
 }
 
+func TestUpperBoundNonsortingDecimalUnscaledSize(t *testing.T) {
+	x := make([]byte, 100)
+	u := new(big.Int)
+	for i := 0; i < len(x); i++ {
+		u.SetString(string(x[:i]), 10)
+		d := inf.NewDecBig(u, 0)
+		reference := UpperBoundNonsortingDecimalSize(d)
+		bound := upperBoundNonsortingDecimalUnscaledSize(i)
+		if bound < reference || bound > reference+bigWordSize {
+			t.Errorf("%d: got a bound of %d but expected between %d and %d", i, bound, reference, reference+bigWordSize)
+		}
+		x[i] = '1'
+	}
+}
+
 // randDecimal generates a random decimal with exponent in the
 // range [minExp, maxExp].
 func randDecimal(rng *rand.Rand, minExp, maxExp int) *inf.Dec {
