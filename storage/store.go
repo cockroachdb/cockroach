@@ -2460,6 +2460,10 @@ func (s *Store) ComputeMetrics() error {
 	}
 	s.metrics.updateRocksDBStats(*stats)
 
+	// If we're using RocksDB log the sstable overview.
+	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
+		log.Infof("store %d sstables\n%s", s.StoreID(), rocksdb.GetSSTables())
+	}
 	return nil
 }
 

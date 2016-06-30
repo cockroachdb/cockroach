@@ -300,3 +300,53 @@ func TestCheckpoint(t *testing.T) {
 		}
 	}()
 }
+
+func TestSSTableInfosString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	info := func(level int, size int64) SSTableInfo {
+		return SSTableInfo{
+			Level: level,
+			Size:  size,
+		}
+	}
+	tables := SSTableInfos{
+		info(1, 7<<20),
+		info(1, 1<<20),
+		info(1, 63<<10),
+		info(2, 10<<20),
+		info(2, 8<<20),
+		info(2, 13<<20),
+		info(2, 31<<20),
+		info(2, 13<<20),
+		info(2, 30<<20),
+		info(2, 5<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 9<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 93<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 122<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 129<<20),
+		info(3, 24<<20),
+		info(3, 18<<20),
+	}
+	expected := `1 [   8M]: 7M 1M 63K
+2 [ 110M]: 10M 8M 13M 31M 13M 30M 5M
+3 [   2G]: 129M 129M 129M 9M 129M 129M 129M 93M 129M 129M 122M 129M 129M 129M 129M 129M 129M 24M 18M
+`
+	s := tables.String()
+	if expected != s {
+		t.Fatalf("expected\n%s\ngot\n%s", expected, s)
+	}
+}

@@ -696,6 +696,32 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	return db.Compact()
 }
 
+var debugSSTablesCmd = &cobra.Command{
+	Use:   "sstables [directory]",
+	Short: "list the sstables in a store",
+	Long: `
+List the sstables in a store.
+`,
+	RunE: runDebugSSTables,
+}
+
+func runDebugSSTables(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	if len(args) != 1 {
+		return errors.New("one argument is required")
+	}
+
+	db, err := openStore(cmd, args[0], stopper)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s", db.GetSSTables())
+	return nil
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 }
@@ -708,6 +734,7 @@ var debugCmds = []*cobra.Command{
 	debugGCCmd,
 	debugCheckStoreCmd,
 	debugCompactCmd,
+	debugSSTablesCmd,
 	kvCmd,
 	rangeCmd,
 	debugEnvCmd,
