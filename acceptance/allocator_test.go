@@ -30,10 +30,11 @@ package acceptance
 //
 // Example use:
 //
-// make acceptance \
-//   TESTFLAGS="-v --remote -key-name google_compute_engine -cwd=allocator_terraform" \
-//   TESTS="TestUpreplicate_1To3Small" \
-//   TESTTIMEOUT="24h"
+// make test \
+//	 TESTTIMEOUT=48h \
+//	 PKG=./acceptance \
+//	 TESTS=Rebalance_3To5Small \
+//	 TESTFLAGS='-v --remote --key-name google_compute_engine --cwd=allocator_terraform -w' \
 //
 // Things to note:
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
