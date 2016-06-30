@@ -319,7 +319,7 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 		StartNodes: 1,
 		EndNodes:   3,
 		StoreURL:   archivedStoreURL + "/1node-10g-262ranges",
-		Prefix:     "u1to3s",
+		Prefix:     "uprep-1to3s",
 	}
 	at.Run(t)
 }
@@ -331,7 +331,7 @@ func TestRebalance_3To5Small(t *testing.T) {
 		StartNodes: 3,
 		EndNodes:   5,
 		StoreURL:   archivedStoreURL + "/3nodes-10g-262ranges",
-		Prefix:     "r3to5s",
+		Prefix:     "rebal-3to5s",
 	}
 	at.Run(t)
 }
@@ -343,7 +343,7 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 		StartNodes:          1,
 		EndNodes:            3,
 		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
-		Prefix:              "u1to3m",
+		Prefix:              "uprep-1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
 	at.Run(t)
