@@ -1892,10 +1892,7 @@ func (r *Replica) applyRaftCommand(
 	// stats now, for they might've been changed during triggers due to side
 	// effects.
 	// TODO(tschottdorf): refactor that for clarity.
-	r.mu.Lock()
-	oldMS := r.mu.state.Stats
-	r.mu.Unlock()
-	newMS := oldMS
+	newMS := r.GetMVCCStats()
 	newMS.Add(ms)
 	if err := setMVCCStats(writer, r.RangeID, newMS); err != nil {
 		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
