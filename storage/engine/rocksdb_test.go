@@ -300,3 +300,50 @@ func TestCheckpoint(t *testing.T) {
 		}
 	}()
 }
+
+func TestSSTableInfosString(t *testing.T) {
+	info := func(level int, mb int64) SSTableInfo {
+		return SSTableInfo{
+			Level: level,
+			Size:  mb << 20,
+		}
+	}
+	tables := SSTableInfos{
+		info(1, 7),
+		info(1, 1),
+		info(2, 10),
+		info(2, 8),
+		info(2, 13),
+		info(2, 31),
+		info(2, 13),
+		info(2, 30),
+		info(2, 5),
+		info(3, 129),
+		info(3, 129),
+		info(3, 129),
+		info(3, 9),
+		info(3, 129),
+		info(3, 129),
+		info(3, 129),
+		info(3, 93),
+		info(3, 129),
+		info(3, 129),
+		info(3, 122),
+		info(3, 129),
+		info(3, 129),
+		info(3, 129),
+		info(3, 129),
+		info(3, 129),
+		info(3, 129),
+		info(3, 24),
+		info(3, 18),
+	}
+	expected := `1 [   8M]: 7M 1M
+2 [ 110M]: 10M 8M 13M 31M 13M 30M 5M
+3 [   2G]: 129M 129M 129M 9M 129M 129M 129M 93M 129M 129M 122M 129M 129M 129M 129M 129M 129M 24M 18M
+`
+	s := tables.String()
+	if expected != s {
+		t.Fatalf("expected\n%s\ngot\n%s", expected, s)
+	}
+}
