@@ -19,7 +19,7 @@ package distsql
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"

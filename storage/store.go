@@ -34,9 +34,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlutil"

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"

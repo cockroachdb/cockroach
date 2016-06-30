@@ -21,7 +21,7 @@ import (
 	gosql "database/sql"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/testingshim"
 )

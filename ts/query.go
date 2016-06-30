@@ -22,7 +22,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/pkg/errors"

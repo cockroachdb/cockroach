@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"

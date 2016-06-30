@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
