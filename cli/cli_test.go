@@ -113,6 +113,14 @@ func (c cliTest) Run(line string) {
 // errors in executing c, because those will be caught when the test verifies
 // the output of c.
 func (c cliTest) RunWithCapture(line string) (out string, err error) {
+	return captureOutput(func() {
+		c.Run(line)
+	})
+}
+
+// captureOutput runs f and returns a string containing the output and any
+// error that may have occurred capturing the output.
+func captureOutput(f func()) (out string, err error) {
 	// Heavily inspired by Go's testing/example.go:runExample().
 
 	// Funnel stdout into a pipe.
@@ -149,7 +157,7 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 	}()
 
 	// Run the command. The output will be returned in the defer block.
-	c.Run(line)
+	f()
 	return
 }
 

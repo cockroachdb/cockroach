@@ -32,7 +32,8 @@ const errUnterminated = "unterminated string"
 const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
 
-type scanner struct {
+// Scanner lexes SQL statements.
+type Scanner struct {
 	in          string
 	pos         int
 	tokBuf      sqlSymType
@@ -47,13 +48,14 @@ type scanner struct {
 	initialized bool
 }
 
-func makeScanner(str string, syntax Syntax) scanner {
-	var s scanner
+// MakeScanner makes a Scanner from str.
+func MakeScanner(str string, syntax Syntax) Scanner {
+	var s Scanner
 	s.init(str, syntax)
 	return s
 }
 
-func (s *scanner) init(str string, syntax Syntax) {
+func (s *Scanner) init(str string, syntax Syntax) {
 	if s.initialized {
 		panic("scanner already initialized; a scanner cannot be reused.")
 	}
@@ -69,7 +71,19 @@ func (s *scanner) init(str string, syntax Syntax) {
 	}
 }
 
-func (s *scanner) Lex(lval *sqlSymType) int {
+// Tokens calls f on all tokens of the input until an EOF is encountered.
+func (s *Scanner) Tokens(f func(token int)) {
+	for {
+		t := s.Lex(&s.tokBuf)
+		if t == 0 {
+			return
+		}
+		f(t)
+	}
+}
+
+// Lex lexes a token from input.
+func (s *Scanner) Lex(lval *sqlSymType) int {
 	// The core lexing takes place in scan(). Here we do a small bit of post
 	// processing of the lexical tokens so that the grammar only requires
 	// one-token lookahead despite SQL requiring multi-token lookahead in some
@@ -116,7 +130,7 @@ func (s *scanner) Lex(lval *sqlSymType) int {
 	return lval.id
 }
 
-func (s *scanner) Error(e string) {
+func (s *Scanner) Error(e string) {
 	var buf bytes.Buffer
 	if s.lastTok.id == ERROR {
 		fmt.Fprintf(&buf, "%s", s.lastTok.str)
@@ -142,7 +156,7 @@ func (s *scanner) Error(e string) {
 	s.lastError = buf.String()
 }
 
-func (s *scanner) scan(lval *sqlSymType) {
+func (s *Scanner) scan(lval *sqlSymType) {
 	lval.id = 0
 	lval.pos = s.pos
 	lval.str = "EOF"
@@ -378,14 +392,14 @@ func (s *scanner) scan(lval *sqlSymType) {
 	// lval for above.
 }
 
-func (s *scanner) peek() int {
+func (s *Scanner) peek() int {
 	if s.pos >= len(s.in) {
 		return eof
 	}
 	return int(s.in[s.pos])
 }
 
-func (s *scanner) peekN(n int) int {
+func (s *Scanner) peekN(n int) int {
 	pos := s.pos + n
 	if pos >= len(s.in) {
 		return eof
@@ -393,7 +407,7 @@ func (s *scanner) peekN(n int) int {
 	return int(s.in[pos])
 }
 
-func (s *scanner) next() int {
+func (s *Scanner) next() int {
 	ch := s.peek()
 	if ch != eof {
 		s.pos++
@@ -401,7 +415,7 @@ func (s *scanner) next() int {
 	return ch
 }
 
-func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
+func (s *Scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
 	newline = false
 	for {
 		ch := s.peek()
@@ -426,7 +440,7 @@ func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline,
 	return newline, true
 }
 
-func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
+func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	start := s.pos
 	ch := s.peek()
 
@@ -493,7 +507,7 @@ func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *scanner) scanIdent(lval *sqlSymType, ch int) {
+func (s *Scanner) scanIdent(lval *sqlSymType, ch int) {
 	start := s.pos - 1
 	for {
 		ch := s.peek()
@@ -512,7 +526,7 @@ func (s *scanner) scanIdent(lval *sqlSymType, ch int) {
 	lval.id = IDENT
 }
 
-func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
+func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 	start := s.pos - 1
 	isHex := false
 	hasDecimal := ch == '.'
@@ -600,7 +614,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	}
 }
 
-func (s *scanner) scanPlaceholder(lval *sqlSymType) {
+func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 	start := s.pos
 	for isDigit(s.peek()) {
 		s.pos++
@@ -623,7 +637,7 @@ func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	lval.id = PLACEHOLDER
 }
 
-func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
+func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 	var buf []byte
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
