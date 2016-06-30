@@ -148,10 +148,9 @@ func (t *leaseTest) mustRelease(
 }
 
 func (t *leaseTest) publish(nodeID uint32, descID sqlbase.ID) error {
-	_, err := t.node(nodeID).Publish(descID,
-		func(*sqlbase.TableDescriptor) error {
-			return nil
-		})
+	_, err := t.node(nodeID).Publish(descID, func(*sqlbase.TableDescriptor) error {
+		return nil
+	}, nil)
 	return err
 }
 
@@ -369,7 +368,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 			// a new version.
 			<-n1update
 			return nil
-		})
+		}, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -382,7 +381,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		<-n2start
 		_, err := n2.Publish(descID, func(*sqlbase.TableDescriptor) error {
 			return nil
-		})
+		}, nil)
 		if err != nil {
 			panic(err)
 		}

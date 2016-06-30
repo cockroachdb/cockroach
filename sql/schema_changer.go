@@ -259,7 +259,7 @@ func (sc SchemaChanger) exec(
 		_, err = sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 			desc.Renames = nil
 			return nil
-		})
+		}, nil)
 		if err != nil {
 			return err
 		}
@@ -290,7 +290,7 @@ func (sc SchemaChanger) exec(
 	// errors that are resolved by retrying the backfill.
 	if sqlbase.IsIntegrityConstraintError(err) {
 		log.Warningf("reversing schema change due to irrecoverable error: %s", err)
-		if errReverse := sc.reverseMutations(); errReverse != nil {
+		if errReverse := sc.reverseMutations(err); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation
 			// and made a decision to reverse the mutations,
 			// reverseMutations() failed. If exec() is called again the entire
@@ -327,7 +327,7 @@ func (sc *SchemaChanger) MaybeIncrementVersion() (*sqlbase.Descriptor, error) {
 		desc.UpVersion = false
 		// Publish() will increment the version.
 		return nil
-	})
+	}, nil)
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -376,7 +376,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 			return errDidntUpdateDescriptor
 		}
 		return nil
-	}); err != nil {
+	}, nil); err != nil {
 		return err
 	}
 	// wait for the state change to propagate to all leases.
@@ -427,6 +427,18 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]
 		return nil
+	}, func(txn *client.Txn) error {
+		// Log "Finish Schema Change" event. Only the table ID and mutation ID
+		// are logged; this can be correlated with the DDL statement that
+		// initiated the change using the mutation id.
+		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(txn,
+			EventLogFinishSchemaChange,
+			int32(sc.tableID),
+			int32(sc.evalCtx.NodeID),
+			struct {
+				MutationID uint32
+			}{uint32(sc.mutationID)},
+		)
 	})
 }
 
@@ -460,7 +472,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 // mutationID. This is called after hitting an irrecoverable error while
 // applying a schema change. If a column being added is reversed and dropped,
 // all new indexes referencing the column will also be dropped.
-func (sc *SchemaChanger) reverseMutations() error {
+func (sc *SchemaChanger) reverseMutations(causingError error) error {
 	// Reverse the flow of the state machine.
 	_, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
@@ -491,8 +503,22 @@ func (sc *SchemaChanger) reverseMutations() error {
 		if len(columns) > 0 {
 			sc.deleteIndexMutationsWithReversedColumns(desc, columns)
 		}
+
 		// Publish() will increment the version.
 		return nil
+	}, func(txn *client.Txn) error {
+		// Log "Reverse Schema Change" event. Only the causing error and the
+		// mutation ID are logged; this can be correlated with the DDL statement
+		// that initiated the change using the mutation id.
+		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(txn,
+			EventLogReverseSchemaChange,
+			int32(sc.tableID),
+			int32(sc.evalCtx.NodeID),
+			struct {
+				Error      string
+				MutationID uint32
+			}{fmt.Sprintf("%+v", causingError), uint32(sc.mutationID)},
+		)
 	})
 	return err
 }

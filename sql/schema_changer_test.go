@@ -989,7 +989,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Ensure that sql is using the correct table lease.
 		if len(cols) != len(expectedCols) {
-			return errors.Errorf("incorrect columns: %v", cols)
+			return errors.Errorf("incorrect columns: %v, expected: %v", cols, expectedCols)
 		}
 		if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
 			t.Fatalf("incorrect columns: %v", cols)
