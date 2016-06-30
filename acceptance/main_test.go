@@ -23,27 +23,8 @@
 
 package acceptance
 
-import (
-	"os"
-	"os/signal"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/util/randutil"
-)
+import "testing"
 
 func TestMain(m *testing.M) {
-	randutil.SeedForTests()
-	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-		<-sig
-		select {
-		case <-stopper:
-		default:
-			// There is a very tiny race here: the cluster might be closing
-			// the stopper simultaneously.
-			close(stopper)
-		}
-	}()
-	os.Exit(m.Run())
+	runTests(m)
 }
