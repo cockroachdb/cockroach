@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -35,8 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -273,7 +273,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.gossip)
-	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -494,7 +494,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -592,7 +592,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.gossip)
-	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg, nil); err != nil {
 		t.Fatal(err)
 	}
 

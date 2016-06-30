@@ -17,7 +17,12 @@
 package storage
 
 import (
+	"fmt"
 	"time"
+
+	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -26,8 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -129,7 +132,12 @@ func replicaGCShouldQueueImpl(
 
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
-func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.SystemConfig) error {
+func (q *replicaGCQueue) process(
+	now hlc.Timestamp,
+	rng *Replica,
+	_ config.SystemConfig,
+	tracingCtx context.Context,
+) error {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
 	// StartKey (and avoid rng.GetReplica() for the same reason).
@@ -171,6 +179,7 @@ func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.Syste
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", desc.RangeID)
 		}
+		log.Trace(tracingCtx, fmt.Sprintf("destroying local data from range %d", desc.RangeID))
 		if err := rng.store.RemoveReplica(rng, replyDesc, true); err != nil {
 			return err
 		}
@@ -182,6 +191,7 @@ func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.Syste
 		if log.V(1) {
 			log.Infof("removing merged range %d", desc.RangeID)
 		}
+		log.Trace(tracingCtx, fmt.Sprintf("removing merged range %d", desc.RangeID))
 		if err := rng.store.RemoveReplica(rng, replyDesc, false); err != nil {
 			return err
 		}

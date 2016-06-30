@@ -19,6 +19,8 @@ package storage
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -51,7 +53,12 @@ func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 }
 
 // process() is called on every range for which this node is a leader.
-func (q *replicaConsistencyQueue) process(_ hlc.Timestamp, rng *Replica, _ config.SystemConfig) error {
+func (q *replicaConsistencyQueue) process(
+	_ hlc.Timestamp,
+	rng *Replica,
+	_ config.SystemConfig,
+	_ context.Context,
+) error {
 	req := roachpb.CheckConsistencyRequest{}
 	_, pErr := rng.CheckConsistency(req, rng.Desc())
 	if pErr != nil {

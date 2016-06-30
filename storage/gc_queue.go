@@ -22,10 +22,9 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
@@ -286,8 +285,12 @@ func processAbortCache(
 // 6) scan the abort cache table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(now hlc.Timestamp, repl *Replica,
-	sysCfg config.SystemConfig) error {
+func (gcq *gcQueue) process(
+	now hlc.Timestamp,
+	repl *Replica,
+	sysCfg config.SystemConfig,
+	_ context.Context,
+) error {
 	ctx := repl.context(context.TODO())
 
 	snap := repl.store.Engine().NewSnapshot()

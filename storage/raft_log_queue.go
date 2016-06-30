@@ -20,14 +20,16 @@ import (
 	"math"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -123,7 +125,12 @@ func (*raftLogQueue) shouldQueue(
 // process truncates the raft log of the range if the replica is the raft
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
-func (rlq *raftLogQueue) process(now hlc.Timestamp, r *Replica, _ config.SystemConfig) error {
+func (rlq *raftLogQueue) process(
+	now hlc.Timestamp,
+	r *Replica,
+	_ config.SystemConfig,
+	tracingCtx context.Context,
+) error {
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(r)
 	if err != nil {
 		return err

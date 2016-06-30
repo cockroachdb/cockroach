@@ -19,6 +19,8 @@ package storage
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -80,8 +82,12 @@ func (*verifyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 // process iterates through all keys and values in a range. The very
 // act of scanning keys verifies on-disk checksums, as each block
 // checksum is checked on load.
-func (*verifyQueue) process(now hlc.Timestamp, rng *Replica,
-	_ config.SystemConfig) error {
+func (*verifyQueue) process(
+	now hlc.Timestamp,
+	rng *Replica,
+	_ config.SystemConfig,
+	_ context.Context,
+) error {
 
 	snap := rng.store.Engine().NewSnapshot()
 	iter := NewReplicaDataIterator(rng.Desc(), snap, false /* !replicatedOnly */)

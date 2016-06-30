@@ -17,8 +17,10 @@
 package storage
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -27,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -86,8 +87,12 @@ func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 }
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(now hlc.Timestamp, rng *Replica,
-	sysCfg config.SystemConfig) error {
+func (sq *splitQueue) process(
+	now hlc.Timestamp,
+	rng *Replica,
+	sysCfg config.SystemConfig,
+	tracingCtx context.Context,
+) error {
 	ctx := rng.context(context.TODO())
 
 	// First handle case of splitting due to zone config maps.
@@ -95,6 +100,7 @@ func (sq *splitQueue) process(now hlc.Timestamp, rng *Replica,
 	splitKeys := sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
 	if len(splitKeys) > 0 {
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
+		log.Trace(tracingCtx, fmt.Sprintf("splitting %s at keys %v", rng, splitKeys))
 		for _, splitKey := range splitKeys {
 			if err := sq.db.AdminSplit(splitKey.AsRawKey()); err != nil {
 				return errors.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
@@ -112,6 +118,7 @@ func (sq *splitQueue) process(now hlc.Timestamp, rng *Replica,
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, size, zone.RangeMaxBytes)
+		log.Trace(tracingCtx, fmt.Sprintf("splitting %s size=%d max=%d", rng, size, zone.RangeMaxBytes))
 		if _, pErr := client.SendWrappedWith(rng, ctx, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{

@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -31,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/pkg/errors"
 )
 
 func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
@@ -75,7 +77,12 @@ func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.Sys
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now hlc.Timestamp, r *Replica, _ config.SystemConfig) error {
+func (tq *testQueueImpl) process(
+	now hlc.Timestamp,
+	r *Replica,
+	_ config.SystemConfig,
+	_ context.Context,
+) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
