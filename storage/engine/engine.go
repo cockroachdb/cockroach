@@ -199,7 +199,7 @@ type Batch interface {
 	// were performed before the Distinct batch was created. That is, the
 	// returned batch will not read its own writes, but it will read writes to
 	// the parent batch performed before the call to Distinct(). The returned
-	// batch needs to be closed before using the parent patch again. This is used
+	// batch needs to be closed before using the parent batch again. This is used
 	// as an optimization to avoid flushing mutations buffered by the batch in
 	// situations where we know all of the batched operations are for distinct
 	// keys.
