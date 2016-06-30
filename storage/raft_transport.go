@@ -36,8 +36,12 @@ import (
 const (
 	// Outgoing messages are queued per-replica on a channel of this size.
 	raftSendBufferSize = 100
+
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
+	//
+	// TODO(tamird): make culling of outbound streams more evented, so that we
+	// need not rely on this timeout to shut things down.
 	raftIdleTimeout = time.Minute
 )
 
@@ -63,6 +67,17 @@ type RaftSnapshotStatus struct {
 }
 
 // RaftTransport handles the rpc messages for raft.
+//
+// The raft transport is asynchronous with respect to the caller, and
+// internally multiplexes outbound messages. Internally, each message is
+// queued on a per-destination queue before being asynchronously delivered.
+//
+// Callers are required to construct a RaftSender before being able to
+// dispatch messages, and must provide an error handler which will be invoked
+// asynchronously in the event that the recipient of any message closes its
+// inbound RPC stream. This callback is asynchronous with respect to the
+// outbound message which caused the remote to hang up; all that is known is
+// which remote hung up.
 type RaftTransport struct {
 	resolver           NodeAddressResolver
 	rpcContext         *rpc.Context
