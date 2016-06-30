@@ -20,11 +20,13 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 	"unsafe"
 
@@ -58,6 +60,94 @@ const (
 
 func init() {
 	rocksdb.Logger = log.Infof
+}
+
+// SSTableInfo contains metadata about a single RocksDB sstable.
+type SSTableInfo struct {
+	Level int
+	Size  int64
+	Start MVCCKey
+	End   MVCCKey
+}
+
+// SSTableInfos is a slice of SSTableInfo structures.
+type SSTableInfos []SSTableInfo
+
+func (s SSTableInfos) Len() int {
+	return len(s)
+}
+
+func (s SSTableInfos) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s SSTableInfos) Less(i, j int) bool {
+	switch {
+	case s[i].Level < s[j].Level:
+		return true
+	case s[i].Level > s[j].Level:
+		return false
+	default:
+		return s[i].Start.Less(s[j].Start)
+	}
+}
+
+func (s SSTableInfos) String() string {
+	const (
+		KB = 1 << 10
+		MB = 1 << 20
+		GB = 1 << 30
+		TB = 1 << 40
+	)
+
+	roundTo := func(val, to int64) int64 {
+		return (val + to/2) / to
+	}
+
+	// We're intentionally not using humanizeutil here as we want a slightly more
+	// compact representation.
+	humanize := func(size int64) string {
+		switch {
+		case size < MB:
+			return fmt.Sprintf("%dK", roundTo(size, KB))
+		case size < GB:
+			return fmt.Sprintf("%dM", roundTo(size, MB))
+		case size < TB:
+			return fmt.Sprintf("%dG", roundTo(size, GB))
+		default:
+			return fmt.Sprintf("%dT", roundTo(size, TB))
+		}
+	}
+
+	level := -1
+	var buf bytes.Buffer
+
+	maybeFlush := func(newLevel, i int) {
+		if level == newLevel {
+			return
+		}
+		if buf.Len() > 0 {
+			buf.WriteString("\n")
+		}
+		level = newLevel
+		if level >= 0 {
+			var sum int64
+			for j := i; j < len(s); j++ {
+				if s[j].Level == level {
+					sum += s[j].Size
+				}
+			}
+			fmt.Fprintf(&buf, "%d [%5s]:", level, humanize(sum))
+		}
+	}
+
+	for i, t := range s {
+		maybeFlush(t.Level, i)
+		fmt.Fprintf(&buf, " %s", humanize(t.Size))
+	}
+
+	maybeFlush(-1, 0)
+	return buf.String()
 }
 
 // RocksDBCache is a wrapper around C.DBCache
@@ -406,7 +496,32 @@ func (r *RocksDB) NewBatch() Batch {
 	return newRocksDBBatch(r)
 }
 
-// GetStats retrieves stats from this Engine's RocksDB instance and
+// GetSSTables retrieves metadata about this engine's live sstables.
+func (r *RocksDB) GetSSTables() SSTableInfos {
+	var n C.int
+	tables := C.DBGetSSTables(r.rdb, &n)
+	// We can't index into tables because it is a pointer, not a slice. The
+	// hackery below treats the pointer as an array and then constructs a slice
+	// from it.
+	const maxLen = 0x7fffffff
+	tableSlice := (*[maxLen]C.DBSSTable)(unsafe.Pointer(tables))[:n:n]
+
+	res := make(SSTableInfos, n)
+	for i := 0; i < int(n); i++ {
+		res[i].Level = int(tableSlice[i].level)
+		res[i].Size = int64(tableSlice[i].size)
+		res[i].Start = cToGoKey(tableSlice[i].start_key)
+		res[i].End = cToGoKey(tableSlice[i].end_key)
+		C.free(unsafe.Pointer(tableSlice[i].start_key.key.data))
+		C.free(unsafe.Pointer(tableSlice[i].end_key.key.data))
+	}
+	C.free(unsafe.Pointer(tables))
+
+	sort.Sort(res)
+	return res
+}
+
+// GetStats retrieves stats from this engine's RocksDB instance and
 // returns it in a new instance of Stats.
 func (r *RocksDB) GetStats() (*Stats, error) {
 	var s C.DBStatsResult

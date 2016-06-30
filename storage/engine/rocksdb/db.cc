@@ -63,6 +63,8 @@ struct DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(bool prefix) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
+
+  DBSSTable* GetSSTables(int* n);
 };
 
 struct DBImpl : public DBEngine {
@@ -294,6 +296,15 @@ DBString ToDBString(const rocksdb::Slice& s) {
   result.data = static_cast<char*>(malloc(result.len));
   memcpy(result.data, s.data(), s.size());
   return result;
+}
+
+DBKey ToDBKey(const rocksdb::Slice& s) {
+  DBKey key = {{nullptr, 0}, 0, 0};
+  rocksdb::Slice tmp;
+  if (DecodeKey(s, &tmp, &key.wall_time, &key.logical)) {
+    key.key = ToDBSlice(tmp);
+  }
+  return key;
 }
 
 DBStatus ToDBStatus(const rocksdb::Status& status) {
@@ -1312,6 +1323,35 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 
 }  // namespace
 
+DBSSTable* DBEngine::GetSSTables(int* n) {
+  std::vector<rocksdb::LiveFileMetaData> metadata;
+  rep->GetLiveFilesMetaData(&metadata);
+  *n = metadata.size();
+  // We malloc the result so it can be deallocated by the caller using free().
+  const int size = metadata.size() * sizeof(DBSSTable);
+  DBSSTable *tables = reinterpret_cast<DBSSTable*>(malloc(size));
+  memset(tables, 0, size);
+  for (int i = 0; i < metadata.size(); i++) {
+    tables[i].level = metadata[i].level;
+    tables[i].size = metadata[i].size;
+
+    rocksdb::Slice tmp;
+    if (DecodeKey(metadata[i].smallestkey, &tmp,
+                  &tables[i].start_key.wall_time, &tables[i].start_key.logical)) {
+      // This is a bit ugly because we want DBKey.key to be allocated
+      // and not refer to the memory in metadata[i].smallestkey.
+      DBString str = ToDBString(tmp);
+      tables[i].start_key.key = *reinterpret_cast<DBSlice*>(&str);
+    }
+    if (DecodeKey(metadata[i].largestkey, &tmp,
+                  &tables[i].end_key.wall_time, &tables[i].end_key.logical)) {
+      DBString str = ToDBString(tmp);
+      tables[i].end_key.key = *reinterpret_cast<DBSlice*>(&str);
+    }
+  }
+  return tables;
+}
+
 DBBatch::DBBatch(DBEngine* db)
     : DBEngine(db->rep),
       batch(&kComparator),
@@ -1910,4 +1950,8 @@ MVCCStatsResult MVCCComputeStats(
 // write them to the provided DBStatsResult instance.
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
   return db->GetStats(stats);
+}
+
+DBSSTable* DBGetSSTables(DBEngine* db, int* n) {
+  return db->GetSSTables(n);
 }
