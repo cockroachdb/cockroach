@@ -24,6 +24,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// streamID identifies a stream that crosses machine boundaries. The identifier
+// can only be used in the context of a specific flow.
+type streamID int
+
+// localStreamID identifies a stream that is local to a flow. The identifier can
+// only be used in the context of a specific flow.
+type localStreamID int
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
 	evalCtx            *parser.EvalContext

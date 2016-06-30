@@ -110,3 +110,8 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 ) {
 	return nil, errors.Errorf("not implemented")
 }
+
+// FlowStream is part of the DistSQLServer interface.
+func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
+	return errors.Errorf("not implemented")
+}
