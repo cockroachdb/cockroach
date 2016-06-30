@@ -1353,15 +1353,16 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // increased read amplification.
   table_options.block_size = db_opts.block_size;
 
-  rocksdb::ColumnFamilyOptions cf_options;
-  cf_options.OptimizeLevelStyleCompaction(db_opts.memtable_budget);
-  // OptimizeLevelStyleCompaction sets no-compression for L0 and
-  // L1. Current benchmarks and tests show no benefit to doing this.
-  for (int i = 0; i < cf_options.compression_per_level.size(); i++) {
-    cf_options.compression_per_level[i] = rocksdb::kSnappyCompression;
-  }
-
-  rocksdb::Options options(rocksdb::DBOptions(), cf_options);
+  // Use the rocksdb options builder to configure the base options
+  // using our memtable budget.
+  rocksdb::Options options(rocksdb::GetOptions(db_opts.memtable_budget));
+  // Increase parallelism for compactions based on the number of
+  // cpus. This will use 1 high priority thread for flushes and
+  // num_cpu-1 low priority threads for compactions.
+  options.IncreaseParallelism(db_opts.num_cpu);
+  // Enable subcompactions which will use multiple threads to speed up
+  // a single compaction. The value of num_cpu/2 has not been tuned.
+  options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
   options.allow_os_buffer = db_opts.allow_os_buffer;
   options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
@@ -1372,11 +1373,22 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
-  // File size settings: TODO(marc): investigate and determine better long-term settings:
-  // https://github.com/cockroachdb/cockroach/issues/5852
+  // Merge two memtables when flushing to L0.
+  options.min_write_buffer_number_to_merge = 2;
+  // Enable dynamic level sizing which reduces both size and write
+  // amplification. This causes RocksDB to pick the target size of
+  // each level dynamically.
+  options.level_compaction_dynamic_level_bytes = true;
+  // TODO(peter): The target_file_size_* settings diverge from the
+  // RocksDB recommendation of max_bytes_for_level_base/10. But using
+  // that recommendation appears to lower performance in block_writer
+  // benchmarks. Need to figure out why.
   options.target_file_size_base = 64 << 20;
   options.target_file_size_multiplier = 8;
-  options.max_bytes_for_level_base = 512 << 20;
+  // Follow the RocksDB recommendation to configure the size of L1 to
+  // be the same as the estimated size of L0.
+  options.max_bytes_for_level_base = options.write_buffer_size *
+      options.min_write_buffer_number_to_merge * options.level0_file_num_compaction_trigger;
   options.max_bytes_for_level_multiplier = 8;
 
   // Register listener for tracking RocksDB stats.
