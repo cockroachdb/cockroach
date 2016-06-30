@@ -37,7 +37,7 @@ github.com/docker/engine-api f90ecdb1e989f834dabbd91807e891094aa069fe
 github.com/docker/go-connections 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
 github.com/docker/go-units f2d77a61e3c169b43402a0a1e84f06daf29b8190
 github.com/dustin/go-humanize fef948f2d241bd1fd0631108ecc2c9553bae60bf
-github.com/elastic/gosigar f42b670971458b6dd33dedff713c0de3c020fabb
+github.com/elastic/gosigar 61dfed4a9eb484b8248fe22e5ff5346dc18e4332
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/gengo/grpc-gateway 04d03d2c0176f9060cc3da4945a71abc759648bc
 github.com/go-sql-driver/mysql 3654d25ec346ee8ce71a68431025458d52a38ac0
