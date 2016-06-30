@@ -1627,6 +1627,10 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
 		r.mu.Unlock()
+
+		// TODO(tamird): is this the right thing to do? What does it mean to
+		// "report unreachable"? Now that we have richer error semantics, do
+		// we want to be more careful about doing this?
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
 			raftGroup.ReportUnreachable(msg.To)
 			return nil
