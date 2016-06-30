@@ -689,7 +689,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 stmt_block:
   stmt_list
   {
-    sqllex.(*scanner).stmts = $1.stmts()
+    sqllex.(*Scanner).stmts = $1.stmts()
   }
 
 stmt_list:
