@@ -16,7 +16,7 @@
 
 package sqlutil
 
-import "github.com/cockroachdb/cockroach/client"
+import "github.com/cockroachdb/cockroach/internal/client"
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
 // nevertheless want to execute SQL queries (presumably against system tables).

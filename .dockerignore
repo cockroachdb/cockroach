@@ -7,6 +7,5 @@ cockroach
 */*.test
 */*/*.test
 */*/*/*.test
-client/client_bench_*
 storage/engine/mvcc_scan_*
 certs
