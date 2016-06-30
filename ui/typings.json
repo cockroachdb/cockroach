@@ -21,7 +21,7 @@
     "chai": "registry:npm/chai#3.5.0+20160415060238",
     "d3": "registry:npm/d3#3.0.0+20160211003958",
     "enzyme": "registry:npm/enzyme#2.2.0+20160322031343",
-    "fetch-mock": "registry:npm/fetch-mock#4.1.1+20160310030142",
+    "fetch-mock": "github:asvetliakov/typings-fetch-mock#308703edebf10abbde727d2d46933b26002da0bb",
     "moment": "registry:npm/moment#2.10.5+20160211003958",
     "nvd3": "registry:npm/nvd3#1.8.3+20160501004949",
     "object-assign": "registry:npm/object-assign#4.0.1+20160301180549",

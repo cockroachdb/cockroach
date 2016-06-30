@@ -436,8 +436,7 @@ describe("databases reducers", function () {
         return Promise.all(_.map([DB1, DB2], (db: string) => {
           let response: DatabaseDetailsResponseMessage;
 
-          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
-          (fetchMock as any).reMock(re, "get", (url: string, requestObj: RequestInit) => {
+          fetchMock.reMock(re, "get", (url: string, requestObj: RequestInit) => {
             let database = url.match(re)[1];
 
             assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
@@ -468,8 +467,7 @@ describe("databases reducers", function () {
         let re = new RegExp("/_admin/v1/databases/(.+)");
 
         return Promise.all(_.map([DB1, DB2], (db: string) => {
-          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
-          (fetchMock as any).reMock(re, "get", (url: string, requestObj: RequestInit) => {
+          fetchMock.reMock(re, "get", (url: string, requestObj: RequestInit) => {
             let database = url.match(re)[1];
 
             assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
@@ -540,8 +538,7 @@ describe("databases reducers", function () {
         return Promise.all(_.map(tableList, (id: TableID) => {
           let response: TableDetailsResponseMessage;
 
-          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
-          (fetchMock as any).reMock(re, "get", (url: string, requestObj: RequestInit) => {
+          fetchMock.reMock(re, "get", (url: string, requestObj: RequestInit) => {
             let result = url.match(re);
             let database = result[1];
             let table = result[2];
@@ -573,8 +570,7 @@ describe("databases reducers", function () {
         let error = new Error();
 
         return Promise.all(_.map(tableList, (id: TableID) => {
-          // TODO(tamird): https://github.com/asvetliakov/typings-fetch-mock/pull/1
-          (fetchMock as any).reMock(new RegExp("/_admin/v1/databases/.+/tables/.+"), "get", (url: string, requestObj: RequestInit) => {
+          fetchMock.reMock(new RegExp("/_admin/v1/databases/.+/tables/.+"), "get", (url: string, requestObj: RequestInit) => {
             assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
 
             return { throws: error };
