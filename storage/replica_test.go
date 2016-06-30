@@ -4865,12 +4865,13 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	defer tc.Stop()
 
 	ba := roachpb.BatchRequest{}
+	// This one succeeds.
 	ba.Add(&roachpb.PutRequest{
 		Span:  roachpb.Span{Key: roachpb.Key("k")},
 		Value: roachpb.MakeValueFromString("not nil"),
 	})
-	// This one fails with a ConditionalPutError, which implements
-	// roachpb.IndexedError.
+	// This one fails with a ConditionalPutError, which will populate the
+	// returned error's index.
 	ba.Add(&roachpb.ConditionalPutRequest{
 		Span:     roachpb.Span{Key: roachpb.Key("k")},
 		Value:    roachpb.MakeValueFromString("irrelevant"),
@@ -4886,7 +4887,6 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsPError(pErr, "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", pErr)
 	}
-
 }
 
 // TestReplicaLoadSystemConfigSpanIntent verifies that intents on the SystemConfigSpan
