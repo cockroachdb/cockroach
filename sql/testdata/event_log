@@ -57,6 +57,74 @@ WHERE eventType = 'create_table'
 ----
 0
 
+# Alter the table. Expect "alter_table" and "finish_schema_change" events.
+##################
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'alter_table'
+----
+
+statement ok
+ALTER TABLE test.a ADD val INT
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'alter_table'
+----
+51 1
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'finish_schema_change'
+----
+51 0
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'reverse_schema_change'
+----
+
+# Verify the contents of the 'Info' field of each log message using a LIKE
+# statement.
+##################
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'alter_table'
+  AND info LIKE '%ALTER TABLE test.a%'
+----
+51 1
+
+# Add a UNIQUE constraint to the table in a way that will ensure the schema 
+# change is reversed.
+##################
+
+statement ok
+INSERT INTO test.a VALUES (1, 1), (2, 1)
+
+statement error pq: duplicate key value \(val\)=\(1\) violates unique constraint \"foo\"
+ALTER TABLE test.a ADD CONSTRAINT foo UNIQUE(val)
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'alter_table'
+----
+51 1
+51 1
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'finish_schema_change'
+----
+51 0
+51 0
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'reverse_schema_change'
+----
+51 0
+
 
 # Drop both tables + superfluous "IF EXISTS"
 ##################
