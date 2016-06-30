@@ -182,6 +182,7 @@ type Replica struct {
 	store        *Store
 	systemDBHash []byte      // sha1 hash of the system config @ last gossip
 	abortCache   *AbortCache // Avoids anomalous reads after abort
+	raftSender   RaftSender
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -233,6 +234,9 @@ type Replica struct {
 
 		// Counts calls to Replica.tick()
 		ticks int
+
+		// Counts Raft messages refused due to queue congestion.
+		droppedMessages int
 	}
 }
 
@@ -306,9 +310,12 @@ var _ client.Sender = &Replica{}
 // descriptor.
 func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID) (*Replica, error) {
 	r := &Replica{
+		RangeID:    desc.RangeID,
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
-		RangeID:    desc.RangeID,
+		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
+			log.Warningf("range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
+		}),
 	}
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
@@ -744,6 +751,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if ri.LastVerification, err = r.getLastVerificationTimestamp(); err != nil {
 		log.Warning(err)
 	}
+	ri.NumDropped = uint64(r.mu.droppedMessages)
 
 	return ri
 }
@@ -1595,36 +1603,34 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
-	groupID := r.RangeID
+	rangeID := r.RangeID
 
 	r.store.mu.Lock()
-	toReplica, toErr := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
-	fromReplica, fromErr := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
+	toReplica, toErr := r.store.replicaDescriptorLocked(rangeID, roachpb.ReplicaID(msg.To))
+	fromReplica, fromErr := r.store.replicaDescriptorLocked(rangeID, roachpb.ReplicaID(msg.From))
 	r.store.mu.Unlock()
 
 	if toErr != nil {
-		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, toErr)
+		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, rangeID, toErr)
 		return
 	}
 	if fromErr != nil {
-		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, fromErr)
+		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, rangeID, fromErr)
 		return
 	}
-	err := r.store.ctx.Transport.Send(&RaftMessageRequest{
-		GroupID:     groupID,
+	if !r.raftSender.SendAsync(&RaftMessageRequest{
+		RangeID:     rangeID,
 		ToReplica:   toReplica,
 		FromReplica: fromReplica,
 		Message:     msg,
-	})
-	if err != nil {
-		if log.V(1) {
-			// This is extremely spammy when a node is down, and the message
-			// is always "queue is full" instead of anything helpful
-			// (helpful messages, if any, are logged from the transport
-			// itself).
-			log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
-				r.store.StoreID(), toReplica.StoreID, err)
-		}
+	}) {
+		r.mu.Lock()
+		r.mu.droppedMessages++
+		r.mu.Unlock()
+
+		// TODO(tamird): is this the right thing to do? What does it mean to
+		// "report unreachable"? Now that we have richer error semantics, do
+		// we want to be more careful about doing this?
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
 			raftGroup.ReportUnreachable(msg.To)
 			return nil

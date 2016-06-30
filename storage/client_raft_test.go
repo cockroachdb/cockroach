@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -737,7 +738,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
-	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of \d+ failed`) {
+	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of range \d+ failed`) {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
@@ -1140,13 +1141,13 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Wait for the removal to be processed.
 	util.SucceedsSoon(t, func() error {
-		_, err := mtc.stores[1].GetReplica(rangeID)
-		if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-			return nil
-		} else if err != nil {
-			return err
+		for _, s := range mtc.stores[1:] {
+			_, err := s.GetReplica(rangeID)
+			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+				return errors.Wrapf(err, "range %d not yet removed from %s", rangeID, s)
+			}
 		}
-		return errors.Errorf("range still exists")
+		return nil
 	})
 
 	replica1 := roachpb.ReplicaDescriptor{
@@ -1159,17 +1160,20 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	if err := mtc.transports[2].Send(&storage.RaftMessageRequest{
-		GroupID:     0,
+	mtc.transports[2].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		if err != nil && !grpcutil.IsClosedConnection(err) {
+			panic(err)
+		}
+	}).SendAsync(&storage.RaftMessageRequest{
+		RangeID:     0, // TODO(bdarnell): wtf is this testing?
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Message: raftpb.Message{
 			From: uint64(replica2.ReplicaID),
 			To:   uint64(replica1.ReplicaID),
 			Type: raftpb.MsgHeartbeat,
-		}}); err != nil {
-		t.Fatal(err)
-	}
+		},
+	})
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	mtc.replicateRange(roachpb.RangeID(1), 1)
@@ -1486,8 +1490,11 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		StoreID:   mtc.stores[1].StoreID(),
 	}
 	// Simulate an election triggered by the removed node.
-	if err := mtc.transports[0].Send(&storage.RaftMessageRequest{
-		GroupID:     rangeID,
+	errChan := make(chan error)
+	mtc.transports[0].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		errChan <- err
+	}).SendAsync(&storage.RaftMessageRequest{
+		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
 		Message: raftpb.Message{
@@ -1496,14 +1503,11 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 
-	// Wait a bit for the message to be processed.
-	// TODO(bdarnell): This will be easier to test without waiting
-	// when #5789 is done.
-	time.Sleep(10 * time.Millisecond)
+	if err := <-errChan; !testutils.IsError(err, "older than NextReplicaID") {
+		t.Fatalf("got unexpected error: %v", err)
+	}
 
 	// The message should have been discarded without triggering an
 	// election or changing the term.

@@ -119,12 +119,12 @@ func (r *raftLogger) Panicf(format string, v ...interface{}) {
 
 var logRaftReadyMu sync.Mutex
 
-func logRaftReady(storeID roachpb.StoreID, groupID roachpb.RangeID, ready raft.Ready) {
+func logRaftReady(storeID roachpb.StoreID, rangeID roachpb.RangeID, ready raft.Ready) {
 	if log.V(5) {
 		// Globally synchronize to avoid interleaving different sets of logs in tests.
 		logRaftReadyMu.Lock()
 		defer logRaftReadyMu.Unlock()
-		log.Infof("store %s: group %s raft ready", storeID, groupID)
+		log.Infof("store %s: group %s raft ready", storeID, rangeID)
 		if ready.SoftState != nil {
 			log.Infof("SoftState updated: %+v", *ready.SoftState)
 		}

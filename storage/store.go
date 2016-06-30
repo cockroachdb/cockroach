@@ -72,8 +72,6 @@ const (
 	// cannot be recovered through other means if evicted)?
 	maxReplicaDescCacheSize = 1000
 
-	raftReqBufferSize = 100
-
 	// leaderLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	leaderLeaseRaftElectionTimeoutMultiplier = 3
@@ -274,7 +272,7 @@ func (rs *storeRangeSet) EstimatedCount() int {
 }
 
 type replicaDescCacheKey struct {
-	groupID   roachpb.RangeID
+	rangeID   roachpb.RangeID
 	replicaID roachpb.ReplicaID
 }
 
@@ -304,7 +302,6 @@ type Store struct {
 	startedAt               int64
 	nodeDesc                *roachpb.NodeDescriptor
 	initComplete            sync.WaitGroup // Signaled by async init tasks
-	raftRequestChan         chan *RaftMessageRequest
 	bookie                  *bookie
 
 	// This is 1 if there is an active raft snapshot. This field must be checked
@@ -690,14 +687,13 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 
 	s := &Store{
-		ctx:             ctx,
-		db:              ctx.DB, // TODO(tschottdorf) remove redundancy.
-		engine:          eng,
-		allocator:       MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
-		nodeDesc:        nodeDesc,
-		wakeRaftLoop:    make(chan struct{}, 1),
-		raftRequestChan: make(chan *RaftMessageRequest, raftReqBufferSize),
-		metrics:         newStoreMetrics(),
+		ctx:          ctx,
+		db:           ctx.DB, // TODO(tschottdorf) remove redundancy.
+		engine:       eng,
+		allocator:    MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
+		nodeDesc:     nodeDesc,
+		wakeRaftLoop: make(chan struct{}, 1),
+		metrics:      newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
 	s.drainLeadership.Store(false)
@@ -967,7 +963,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage)
+	s.ctx.Transport.Listen(s.StoreID(), s.handleRaftMessage)
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
@@ -2046,32 +2042,16 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
-// enqueueRaftMessage enqueues a request for eventual processing. It
-// returns an error to conform to the RPC interface but it always
-// returns nil without waiting for the message to be processed.
-//
-// TODO(bdarnell): is this buffering necessary? sufficient? It's
-// tempting to move handleRaftMessage off the processRaft goroutine
-// and rely on processRaftMu instead. However, the interaction with
-// the stopper is tricky. Run handleRaftMessage as a task and we see
-// intent resolutions hang during test shutdown because they expect to
-// be able to make progress during the draining phase. Run it without
-// a task and it may run while the stopper is shutting down. It needs
-// to be run from within a Worker and processRaft is a convenient one
-// to use.
-func (s *Store) enqueueRaftMessage(req *RaftMessageRequest) error {
-	s.raftRequestChan <- req
-	return nil
-}
-
-// handleRaftMessage dispatches a raft message to the appropriate
-// Replica. It requires that processRaftMu is held and that s.mu is
-// not held.
+// handleRaftMessage dispatches a raft message to the appropriate Replica. It
+// requires that s.processRaftMu and s.mu are not held.
 func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
+	s.processRaftMu.Lock()
+	defer s.processRaftMu.Unlock()
+
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
 	s.mu.Lock()
-	r, ok := s.mu.replicas[req.GroupID]
+	r, ok := s.mu.replicas[req.RangeID]
 	s.mu.Unlock()
 	if ok {
 		found := false
@@ -2082,20 +2062,16 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 				break
 			}
 		}
-		// It's not a current member of the group. Is it from the future
-		// or the past?
+		// It's not a current member of the group. Is it from the past?
 		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			if log.V(2) {
-				log.Infof("range %s: discarding message from %+v, older than NextReplicaID %d",
-					req.GroupID, req.FromReplica, desc.NextReplicaID)
-			}
-			return nil
+			return errors.Errorf("range %s: discarding message from %+v, older than NextReplicaID %d",
+				req.RangeID, req.FromReplica, desc.NextReplicaID)
 		}
 	}
 
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
-		if !s.canApplySnapshot(req.GroupID, req.Message.Snapshot) {
+		if !s.canApplySnapshot(req.RangeID, req.Message.Snapshot) {
 			// If the storage cannot accept the snapshot, drop it before
 			// passing it to RawNode.Step, since our error handling
 			// options past that point are limited.
@@ -2107,28 +2083,16 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	}
 
 	s.mu.Lock()
-	s.cacheReplicaDescriptorLocked(req.GroupID, req.FromReplica)
-	s.cacheReplicaDescriptorLocked(req.GroupID, req.ToReplica)
+	s.cacheReplicaDescriptorLocked(req.RangeID, req.FromReplica)
+	s.cacheReplicaDescriptorLocked(req.RangeID, req.ToReplica)
 	// Lazily create the group.
-	r, err := s.getOrCreateReplicaLocked(req.GroupID, req.ToReplica.ReplicaID,
+	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID,
 		req.FromReplica)
 	// TODO(bdarnell): is it safe to release the store lock here?
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
 	if err != nil {
-		// If getOrCreateReplicaLocked returns an error, log it at V(1)
-		// instead of returning it (where the caller will log it as
-		// Error). Errors here generally mean that the sender is out of
-		// date, and it may remain so until replicaGCQueue runs, so when
-		// these messages occur they will repeat many times.
-		// TODO(bdarnell): if we had a better way to report errors to the
-		// sender then we could prompt the sender to GC this replica
-		// immediately.
-		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v: %s",
-				req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
-		}
-		return nil
+		return err
 	}
 
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
@@ -2137,7 +2101,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		return err
 	}
 
-	s.enqueueRaftUpdateCheck(req.GroupID)
+	s.enqueueRaftUpdateCheck(req.RangeID)
 	return nil
 }
 
@@ -2198,17 +2162,10 @@ func (s *Store) processRaft() {
 			select {
 			case <-s.wakeRaftLoop:
 
-			case req := <-s.raftRequestChan:
-				s.processRaftMu.Lock()
-				if err := s.handleRaftMessage(req); err != nil {
-					log.Errorf("error handling raft message: %s", err)
-				}
-				s.processRaftMu.Unlock()
-
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
 				s.processRaftMu.Lock()
 				s.mu.Lock()
-				if r, ok := s.mu.replicas[st.Req.GroupID]; ok {
+				if r, ok := s.mu.replicas[st.Req.RangeID]; ok {
 					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
 				}
 				s.mu.Unlock()
@@ -2245,8 +2202,8 @@ func (s *Store) processRaft() {
 // getOrCreateReplicaLocked returns a replica for the given RangeID,
 // creating an uninitialized replica if necessary. The caller must
 // hold the store's lock.
-func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica roachpb.ReplicaDescriptor) (*Replica, error) {
-	r, ok := s.mu.replicas[groupID]
+func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica roachpb.ReplicaDescriptor) (*Replica, error) {
+	r, ok := s.mu.replicas[rangeID]
 	if ok {
 		if err := r.setReplicaID(replicaID); err != nil {
 			return nil, err
@@ -2256,7 +2213,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 
 	// Before creating the group, see if there is a tombstone which
 	// would indicate that this is a stale message.
-	tombstoneKey := keys.RaftTombstoneKey(groupID)
+	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
 	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone); err != nil {
 		return nil, err
@@ -2268,7 +2225,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 
 	var err error
 	r, err = NewReplica(&roachpb.RangeDescriptor{
-		RangeID: groupID,
+		RangeID: rangeID,
 		// TODO(bdarnell): other fields are unknown; need to populate them from
 		// snapshot.
 	}, s, replicaID)
@@ -2289,19 +2246,19 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 
 // ReplicaDescriptor returns the replica descriptor for the given
 // range and replica, if known.
-func (s *Store) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+func (s *Store) ReplicaDescriptor(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.replicaDescriptorLocked(groupID, replicaID)
+	return s.replicaDescriptorLocked(rangeID, replicaID)
 }
 
 // replicaDescriptorLocked returns the replica descriptor for the given
 // range and replica, if known.
-func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	if rep, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
+func (s *Store) replicaDescriptorLocked(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+	if rep, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{rangeID, replicaID}); ok {
 		return rep.(roachpb.ReplicaDescriptor), nil
 	}
-	rep, err := s.getReplicaLocked(groupID)
+	rep, err := s.getReplicaLocked(rangeID)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -2309,7 +2266,7 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	s.cacheReplicaDescriptorLocked(groupID, rd)
+	s.cacheReplicaDescriptorLocked(rangeID, rd)
 
 	return rd, nil
 }
@@ -2318,18 +2275,18 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 // to be used by replicaDescriptorLocked.
 // cacheReplicaDescriptorLocked requires that the store lock is held.
 func (s *Store) cacheReplicaDescriptorLocked(
-	groupID roachpb.RangeID, replicaDesc roachpb.ReplicaDescriptor,
+	rangeID roachpb.RangeID, replicaDesc roachpb.ReplicaDescriptor,
 ) {
-	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaDesc.ReplicaID}); ok {
+	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{rangeID, replicaDesc.ReplicaID}); ok {
 		if old != replicaDesc {
-			rpl, _ := s.getReplicaLocked(groupID)
+			rpl, _ := s.getReplicaLocked(rangeID)
 			log.Fatalf("store %+v, range %d: clobbering %+v with %+v "+
 				"in replicaDescCache; have replica %+v", s.Ident,
-				groupID, old, replicaDesc, rpl)
+				rangeID, old, replicaDesc, rpl)
 		}
 		return
 	}
-	s.mu.replicaDescCache.Add(replicaDescCacheKey{groupID, replicaDesc.ReplicaID}, replicaDesc)
+	s.mu.replicaDescCache.Add(replicaDescCacheKey{rangeID, replicaDesc.ReplicaID}, replicaDesc)
 }
 
 // canApplySnapshot returns true if the snapshot can be applied to
