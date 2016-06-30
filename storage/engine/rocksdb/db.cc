@@ -1420,17 +1420,31 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // amplification. This causes RocksDB to pick the target size of
   // each level dynamically.
   options.level_compaction_dynamic_level_bytes = true;
-  // TODO(peter): The target_file_size_* settings diverge from the
-  // RocksDB recommendation of max_bytes_for_level_base/10. But using
-  // that recommendation appears to lower performance in block_writer
-  // benchmarks. Need to figure out why.
-  options.target_file_size_base = 64 << 20;
-  options.target_file_size_multiplier = 8;
   // Follow the RocksDB recommendation to configure the size of L1 to
   // be the same as the estimated size of L0.
   options.max_bytes_for_level_base = options.write_buffer_size *
       options.min_write_buffer_number_to_merge * options.level0_file_num_compaction_trigger;
-  options.max_bytes_for_level_multiplier = 8;
+  options.max_bytes_for_level_multiplier = 10;
+  // Target the base file size as 1/4 of the base size which will give
+  // us ~4 files in the base level (level 0). Each additional level
+  // grows the file size by 2. If max_bytes_for_level_base is 16 MB,
+  // this translates into the following target level and file sizes
+  // for each level:
+  //
+  //       level-size  file-size  max-files
+  //   L1:      16 MB       4 MB          4
+  //   L2:     160 MB       8 MB         20
+  //   L3:     1.6 GB      16 MB        100
+  //   L4:      16 GB      32 MB        500
+  //   L5:     156 GB      64 MB       2500
+  //   L6:     1.6 TB     128 MB      12500
+  //
+  // We don't want the target file size to be too large, otherwise
+  // individual compactions become more expensive. We don't want the
+  // target file size to be too small or else we get an overabundance
+  // of sstables.
+  options.target_file_size_base = options.max_bytes_for_level_base / 4;
+  options.target_file_size_multiplier = 2;
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
