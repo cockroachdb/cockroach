@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -31,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/pkg/errors"
 )
 
 func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
@@ -75,9 +77,18 @@ func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.Sys
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now hlc.Timestamp, r *Replica, _ config.SystemConfig) error {
+func (tq *testQueueImpl) process(
+	_ context.Context,
+	now hlc.Timestamp,
+	r *Replica,
+	_ config.SystemConfig,
+) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
+}
+
+func (tq *testQueueImpl) getProcessed() int {
+	return int(atomic.LoadInt32(&tq.processed))
 }
 
 func (tq *testQueueImpl) timer() time.Duration {
@@ -140,13 +151,10 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer stopper.Stop()
 
 	r1 := &Replica{RangeID: 1}
-	if err := r1.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
-		t.Fatal(err)
-	}
+	r1.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
 	r2 := &Replica{RangeID: 2}
-	if err := r2.setDesc(&roachpb.RangeDescriptor{RangeID: 2}); err != nil {
-		t.Fatal(err)
-	}
+	r2.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 2})
+
 	shouldAddMap := map[*Replica]bool{
 		r1: true,
 		r2: true,
@@ -229,9 +237,8 @@ func TestBaseQueueAdd(t *testing.T) {
 	defer stopper.Stop()
 
 	r := &Replica{RangeID: 1}
-	if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
-		t.Fatal(err)
-	}
+	r.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
+
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return false, 0.0
@@ -254,17 +261,16 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
-	r1 := &Replica{RangeID: 1}
-	if err := r1.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
-		t.Fatal(err)
-	}
-	r2 := &Replica{RangeID: 2}
-	if err := r2.setDesc(&roachpb.RangeDescriptor{RangeID: 2}); err != nil {
-		t.Fatal(err)
-	}
+	r1 := &Replica{RangeID: 1, store: tc.store}
+	r1.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
+	r2 := &Replica{RangeID: 2, store: tc.store}
+	r2.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 2})
+
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
@@ -273,20 +279,18 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: 2})
+	bq.Start(tc.clock, tc.stopper)
 
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
-	if pc := atomic.LoadInt32(&testQueue.processed); pc != 0 {
+	if pc := testQueue.getProcessed(); pc != 0 {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
 
 	testQueue.blocker <- struct{}{}
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(1) {
+		if pc := testQueue.getProcessed(); pc != 1 {
 			return errors.Errorf("expected %d processed replicas; got %d", 1, pc)
 		}
 		return nil
@@ -294,7 +298,7 @@ func TestBaseQueueProcess(t *testing.T) {
 
 	testQueue.blocker <- struct{}{}
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc < int32(2) {
+		if pc := testQueue.getProcessed(); pc < 2 {
 			return errors.Errorf("expected >= %d processed replicas; got %d", 2, pc)
 		}
 		return nil
@@ -313,9 +317,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	defer stopper.Stop()
 
 	r := &Replica{RangeID: 1}
-	if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
-		t.Fatal(err)
-	}
+	r.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
@@ -340,7 +342,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 		bq.incoming <- struct{}{}
 	}
 
-	if pc := atomic.LoadInt32(&testQueue.processed); pc > 0 {
+	if pc := testQueue.getProcessed(); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
 	}
 }
@@ -349,8 +351,10 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
 	dataMaxAddr, err := keys.Addr(keys.SystemConfigTableDataMax)
 	if err != nil {
@@ -358,24 +362,20 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := &Replica{RangeID: 1}
-	if err := neverSplits.setDesc(&roachpb.RangeDescriptor{
+	neverSplits := &Replica{RangeID: 1, store: tc.store}
+	neverSplits.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
 		EndKey:   dataMaxAddr,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := &Replica{RangeID: 2}
-	if err := willSplit.setDesc(&roachpb.RangeDescriptor{
+	willSplit := &Replica{RangeID: 2, store: tc.store}
+	willSplit.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{
 		RangeID:  2,
 		StartKey: dataMaxAddr,
 		EndKey:   roachpb.RKeyMax,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	var queued int32
 	testQueue := &testQueueImpl{
@@ -386,13 +386,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: 2})
+	bq.Start(tc.clock, tc.stopper)
 
 	// Check our config.
-	sysCfg, ok := g.GetSystemConfig()
+	sysCfg, ok := tc.gossip.GetSystemConfig()
 	if !ok {
 		t.Fatal("config not set")
 	}
@@ -411,7 +409,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
 
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(2) {
+		if pc := testQueue.getProcessed(); pc != 2 {
 			return errors.Errorf("expected %d processed replicas; got %d", 2, pc)
 		}
 		return nil
@@ -440,7 +438,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
 
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(3) {
+		if pc := testQueue.getProcessed(); pc != 3 {
 			return errors.Errorf("expected %d processed replicas; got %d", 3, pc)
 		}
 		return nil
@@ -465,8 +463,10 @@ func (*testError) purgatoryErrorMarker() {
 // the purgatory channel causes the replicas to be reprocessed.
 func TestBaseQueuePurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tsc := TestStoreContext()
+	tc := testContext{}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
@@ -478,35 +478,30 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		pChan: make(chan struct{}, 1),
 		err:   &testError{},
 	}
+
 	replicaCount := 10
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: replicaCount})
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: replicaCount})
+	bq.Start(tc.clock, tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
-		r := &Replica{RangeID: roachpb.RangeID(i)}
-		if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i)}); err != nil {
-			t.Fatal(err)
-		}
+		r := &Replica{RangeID: roachpb.RangeID(i), store: tc.store}
+		r.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i)})
 		bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	}
 
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount) {
+		if pc := testQueue.getProcessed(); pc != replicaCount {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
 		}
 		// We have to loop checking the following conditions because the increment
 		// of testQueue.processed does not happen atomically with the replica being
 		// placed in purgatory.
-		bq.mu.Lock() // Protect access to purgatory and priorityQ.
-		defer bq.mu.Unlock()
 		// Verify that the size of the purgatory map is correct.
-		if l := len(bq.mu.purgatory); l != replicaCount {
+		if l := bq.PurgatoryLength(); l != replicaCount {
 			return errors.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
 		}
 		// ...and priorityQ should be empty.
-		if l := len(bq.mu.priorityQ); l != 0 {
+		if l := bq.Length(); l != 0 {
 			return errors.Errorf("expected empty priorityQ; got %d", l)
 		}
 		return nil
@@ -516,20 +511,18 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	testQueue.pChan <- struct{}{}
 
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*2) {
+		if pc := testQueue.getProcessed(); pc != replicaCount*2 {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
 		}
 		// We have to loop checking the following conditions because the increment
 		// of testQueue.processed does not happen atomically with the replica being
 		// placed in purgatory.
-		bq.mu.Lock() // Protect access to purgatory and priorityQ.
-		defer bq.mu.Unlock()
 		// Verify the replicas are still in purgatory.
-		if l := len(bq.mu.purgatory); l != replicaCount {
+		if l := bq.PurgatoryLength(); l != replicaCount {
 			return errors.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
 		}
 		// ...and priorityQ should be empty.
-		if l := len(bq.mu.priorityQ); l != 0 {
+		if l := bq.Length(); l != 0 {
 			return errors.Errorf("expected empty priorityQ; got %d", l)
 		}
 		return nil
@@ -540,20 +533,18 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	testQueue.pChan <- struct{}{}
 
 	util.SucceedsSoon(t, func() error {
-		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*3) {
+		if pc := testQueue.getProcessed(); pc != replicaCount*3 {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
 		}
 		return nil
 	})
 
-	bq.mu.Lock() // Protect access to purgatory and priorityQ.
 	// Verify the replicas are no longer in purgatory.
-	if l := len(bq.mu.purgatory); l != 0 {
+	if l := bq.PurgatoryLength(); l != 0 {
 		t.Errorf("expected purgatory size of 0; got %d", l)
 	}
 	// ...and priorityQ should be empty.
-	if l := len(bq.mu.priorityQ); l != 0 {
+	if l := bq.Length(); l != 0 {
 		t.Errorf("expected empty priorityQ; got %d", l)
 	}
-	bq.mu.Unlock()
 }
