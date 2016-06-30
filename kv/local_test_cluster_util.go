@@ -22,8 +22,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"

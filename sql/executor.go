@@ -27,9 +27,9 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"

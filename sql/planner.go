@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/pkg/errors"

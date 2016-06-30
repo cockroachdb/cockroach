@@ -19,7 +19,7 @@ package storage_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"

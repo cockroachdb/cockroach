@@ -25,8 +25,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"

@@ -41,8 +41,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
-	roachClient "github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	roachClient "github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"

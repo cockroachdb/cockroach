@@ -31,8 +31,8 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
