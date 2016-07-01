@@ -59,7 +59,7 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// Count the number of split events.
-	initialSplits := server.ExpectedInitialRangeCount() - 1
+	initialSplits := server.ExpectedInitialRangeCount(false /*fastScanner*/) - 1
 	if a, e := countSplits(), initialSplits; a != e {
 		t.Fatalf("expected %d initial splits, found %d", e, a)
 	}

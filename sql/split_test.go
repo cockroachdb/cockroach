@@ -19,7 +19,6 @@ package sql_test
 import (
 	"bytes"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -29,14 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/pkg/errors"
 )
-
-// getFastScanContext returns a test context with fast scan.
-func getFastScanContext() server.Context {
-	c := server.MakeTestContext()
-	c.ScanInterval = time.Millisecond
-	c.ScanMaxIdleTime = time.Millisecond
-	return c
-}
 
 // getRangeKeys returns the end keys of all ranges.
 func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
@@ -75,11 +66,12 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 // as new tables get created.
 func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := getFastScanContext()
+	ctx := server.MakeFastScanContext()
+
 	s, sqlDB, kvDB := setupWithContext(t, &ctx)
 	defer cleanup(s, sqlDB)
 
-	expectedInitialRanges := server.ExpectedInitialRangeCount()
+	expectedInitialRanges := server.ExpectedInitialRangeCount(true /*fastScanner*/)
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
@@ -125,7 +117,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		return nil
 	})
 
-	// Verify the actual splits.
+	// Verify the actual splits. Also include splits caused by the creation of new system tables.
 	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
