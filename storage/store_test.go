@@ -104,11 +104,11 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
 	ba.RangeID = rng.RangeID
-	replica, err := rng.GetReplica()
+	repDesc, err := rng.GetReplicaDescriptor()
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	ba.Replica = *replica
+	ba.Replica = repDesc
 	br, pErr := db.store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(db.store, br))
@@ -368,24 +368,31 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng1, err := store.GetReplica(1)
+	rep, err := store.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	origDesc := rng1.Desc()
+
+	// First try and fail with a stale descriptor.
+	origDesc := rep.Desc()
 	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
-	_, newRep := newDesc.FindReplica(store.StoreID())
-	newRep.ReplicaID++
-	newDesc.NextReplicaID++
-	if err := rng1.setDesc(newDesc); err != nil {
+	for i := range newDesc.Replicas {
+		if newDesc.Replicas[i].StoreID == store.StoreID() {
+			newDesc.Replicas[i].ReplicaID++
+			newDesc.NextReplicaID++
+			break
+		}
+	}
+
+	if err := rep.setDesc(newDesc); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveReplica(rng1, *origDesc, true); !testutils.IsError(err, "replica ID has changed") {
+	if err := store.RemoveReplica(rep, *origDesc, true); !testutils.IsError(err, "replica ID has changed") {
 		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
 	}
 
-	// Now try the latest descriptor and succeed.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	// Now try a fresh descriptor and succeed.
+	if err := store.RemoveReplica(rep, *rep.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 }

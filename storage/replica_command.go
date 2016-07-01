@@ -1509,7 +1509,7 @@ func (r *Replica) LeaderLease(
 	effectiveStart := args.Lease.Start
 
 	// Verify that requisition replica is part of the current replica set.
-	if idx, _ := r.mu.state.Desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+	if _, ok := r.mu.state.Desc.GetReplicaDescriptor(args.Lease.Replica.StoreID); !ok {
 		rErr.Message = "replica not found"
 		return reply, rErr
 	}
@@ -2601,17 +2601,17 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) ChangeReplicas(
-	changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor,
+	changeType roachpb.ReplicaChangeType, repDesc roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor,
 ) error {
 
-	replicaIdx := -1  // tracks NodeID && StoreID
+	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
-		nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
+		nodeUsed = nodeUsed || existingRep.NodeID == repDesc.NodeID
 
-		if existingRep.NodeID == replica.NodeID && existingRep.StoreID == replica.StoreID {
-			replicaIdx = i
-			replica.ReplicaID = existingRep.ReplicaID
+		if existingRep.NodeID == repDesc.NodeID && existingRep.StoreID == repDesc.StoreID {
+			repDescIdx = i
+			repDesc.ReplicaID = existingRep.ReplicaID
 			break
 		}
 	}
@@ -2625,14 +2625,14 @@ func (r *Replica) ChangeReplicas(
 		// If the replica exists on the remote node, no matter in which store,
 		// abort the replica add.
 		if nodeUsed {
-			return errors.Errorf("adding replica %v which is already present in range %d", replica, rangeID)
+			return errors.Errorf("adding replica %v which is already present in range %d", repDesc, rangeID)
 		}
 
 		// Before we try to add a new replica, we first need to secure a
 		// reservation for the replica on the receiving store.
 		if err := r.store.allocator.storePool.reserve(
 			r.store.Ident,
-			replica.StoreID,
+			repDesc.StoreID,
 			rangeID,
 			r.GetMVCCStats().Total(),
 		); err != nil {
@@ -2661,33 +2661,33 @@ func (r *Replica) ChangeReplicas(
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
-		fromReplica, err := r.GetReplica()
+		fromRepDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
 		r.raftSender.SendAsync(&RaftMessageRequest{
 			RangeID:     r.RangeID,
-			FromReplica: *fromReplica,
-			ToReplica:   replica,
+			FromReplica: fromRepDesc,
+			ToReplica:   repDesc,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				To:       uint64(replica.ReplicaID),
-				From:     uint64(fromReplica.ReplicaID),
+				To:       uint64(repDesc.ReplicaID),
+				From:     uint64(fromRepDesc.ReplicaID),
 				Snapshot: snap,
 			},
 		})
 
-		replica.ReplicaID = updatedDesc.NextReplicaID
+		repDesc.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
-		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+		updatedDesc.Replicas = append(updatedDesc.Replicas, repDesc)
 	case roachpb.REMOVE_REPLICA:
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
-		if replicaIdx == -1 {
-			return errors.Errorf("removing replica %v which is not present in range %d", replica, rangeID)
+		if repDescIdx == -1 {
+			return errors.Errorf("removing replica %v which is not present in range %d", repDesc, rangeID)
 		}
-		updatedDesc.Replicas[replicaIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
+		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
 
@@ -2725,7 +2725,7 @@ func (r *Replica) ChangeReplicas(
 		}
 
 		// Log replica change into range event log.
-		if err := r.store.logChange(txn, changeType, replica, updatedDesc); err != nil {
+		if err := r.store.logChange(txn, changeType, repDesc, updatedDesc); err != nil {
 			return err
 		}
 
@@ -2737,7 +2737,7 @@ func (r *Replica) ChangeReplicas(
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
-					Replica:         replica,
+					Replica:         repDesc,
 					UpdatedReplicas: updatedDesc.Replicas,
 					NextReplicaID:   updatedDesc.NextReplicaID,
 				},

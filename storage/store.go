@@ -926,7 +926,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
 	err = IterateRangeDescriptors(s.engine, func(desc roachpb.RangeDescriptor) (bool, error) {
-		if _, repDesc := desc.FindReplica(s.StoreID()); repDesc == nil {
+		if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 			// We are no longer a member of the range, but we didn't GC
 			// the replica before shutting down. Destroy the replica now
 			// to avoid creating a new replica without a valid replica ID
@@ -1608,10 +1608,9 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, de
 // It requires that s.processRaftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	desc := rep.Desc()
-	_, rd := desc.FindReplica(s.StoreID())
-	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
+	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
-			rep, rd.ReplicaID, origDesc.NextReplicaID)
+			rep, repDesc.ReplicaID, origDesc.NextReplicaID)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2274,21 +2273,30 @@ func (s *Store) ReplicaDescriptor(rangeID roachpb.RangeID, replicaID roachpb.Rep
 
 // replicaDescriptorLocked returns the replica descriptor for the given
 // range and replica, if known.
-func (s *Store) replicaDescriptorLocked(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	if rep, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{rangeID, replicaID}); ok {
-		return rep.(roachpb.ReplicaDescriptor), nil
+func (s *Store) replicaDescriptorLocked(
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+) (roachpb.ReplicaDescriptor, error) {
+	if repDesc, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{
+		rangeID, replicaID,
+	}); ok {
+		return repDesc.(roachpb.ReplicaDescriptor), nil
 	}
-	rep, err := s.getReplicaLocked(rangeID)
+	replica, err := s.getReplicaLocked(rangeID)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	rd, err := rep.ReplicaDescriptor(replicaID)
-	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+	for _, repDesc := range replica.Desc().Replicas {
+		if repDesc.ReplicaID == replicaID {
+			s.cacheReplicaDescriptorLocked(rangeID, repDesc)
+			return repDesc, nil
+		}
 	}
-	s.cacheReplicaDescriptorLocked(rangeID, rd)
-
-	return rd, nil
+	return roachpb.ReplicaDescriptor{}, errors.Errorf(
+		"replica %d not found in range %d",
+		replicaID,
+		rangeID,
+	)
 }
 
 // cacheReplicaDescriptorLocked adds the given replica descriptor to a cache
@@ -2458,12 +2466,12 @@ func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 // parameter is false) or unfrozen (otherwise). It makes no attempt to prevent
 // new data being rebalanced to the Store, and thus does not guarantee that the
 // Store remains in the reported state.
-func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescriptor) {
+func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDescriptor) {
 	newStoreRangeSet(s).Visit(func(r *Replica) bool {
 		if !r.IsInitialized() {
 			return true
 		}
-		desc, err := r.GetReplica()
+		repDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
 			if _, ok := err.(*errReplicaNotInRange); ok {
 				return true
@@ -2472,7 +2480,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (descs []roachpb.ReplicaDescrip
 		}
 		r.mu.Lock()
 		if r.mu.state.Frozen == collectFrozen {
-			descs = append(descs, *desc)
+			repDescs = append(repDescs, repDesc)
 		}
 		r.mu.Unlock()
 		return true // want more

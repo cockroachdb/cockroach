@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -94,9 +95,11 @@ func TestStoresVisitStores(t *testing.T) {
 		}
 	}
 
-	err = ls.VisitStores(func(s *Store) error { return errors.New("") })
-	if err == nil {
-		t.Errorf("expected visit error")
+	errBoom := errors.New("boom")
+	if err := ls.VisitStores(func(s *Store) error {
+		return errBoom
+	}); err != errBoom {
+		t.Errorf("got unexpected error %v", err)
 	}
 }
 
@@ -164,24 +167,34 @@ func TestStoresLookupReplica(t *testing.T) {
 		ls.AddStore(s[i])
 	}
 
-	if _, r, err := ls.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
+	if _, r, err := ls.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); err != nil {
+		t.Error(err)
+	} else if r.StoreID != s[0].Ident.StoreID {
+		t.Errorf("expected store %d; got %d", s[0].Ident.StoreID, r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
+	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), nil); err != nil {
+		t.Error(err)
+	} else if r.StoreID != s[0].Ident.StoreID {
+		t.Errorf("expected store %d; got %d", s[0].Ident.StoreID, r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); r != nil || err == nil {
-		t.Errorf("expected store 0 and error got %d", r.StoreID)
+	if _, _, err := ls.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); !testutils.IsError(err, "outside of bounds of range") {
+		t.Errorf("got unexpected error %v", err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); r.StoreID != s[1].Ident.StoreID {
-		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
+	if _, r, err := ls.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); err != nil {
+		t.Error(err)
+	} else if r.StoreID != s[1].Ident.StoreID {
+		t.Errorf("expected store %d; got %d", s[1].Ident.StoreID, r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
+	if _, r, err := ls.lookupReplica(roachpb.RKey("y"), nil); err != nil {
+		t.Error(err)
+	} else if r.StoreID != s[1].Ident.StoreID {
+		t.Errorf("expected store %d; got %d", s[1].Ident.StoreID, r.StoreID)
 	}
 
-	if desc, err := ls.FirstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
-		t.Fatalf("first range not as expected: error=%v, desc=%+v", err, desc)
+	if desc, err := ls.FirstRange(); err != nil {
+		t.Error(err)
+	} else if !reflect.DeepEqual(desc, d[0]) {
+		t.Fatalf("expected first range %+v; got %+v", desc, d[0])
 	}
 }
 

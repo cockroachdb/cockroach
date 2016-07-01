@@ -61,7 +61,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if i, _ := r.Desc().FindReplica(2); i >= 0 {
+				if _, ok := r.Desc().GetReplicaDescriptor(2); ok {
 					return errors.New("expected second node gone from first node's known replicas")
 				}
 				return nil
