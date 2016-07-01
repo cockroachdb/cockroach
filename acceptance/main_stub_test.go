@@ -24,14 +24,12 @@
 package acceptance
 
 import (
-	"flag"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestMain(m *testing.M) {
-	flag.Parse()
 	if !*flagRemote {
 		log.Infof("not running with `acceptance` build tag or against remote cluster; skipping")
 		return
