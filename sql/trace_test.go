@@ -25,7 +25,6 @@ import (
 	"testing"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -83,8 +82,6 @@ func prettyPrint(m [][]string) string {
 
 func TestExplainTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer config.TestingDisableTableSplits()()
-
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 

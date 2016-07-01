@@ -38,7 +38,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
@@ -924,18 +923,16 @@ func (t *logicTest) execQuery(query logicQuery) error {
 						if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
 							t.signalIgnoredError(fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql)
 							return nil
-						} else {
-							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 						}
+						return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'R':
 					if valT != reflect.Float64 && valT != reflect.Slice {
 						if *flexTypes && (valT == reflect.Int64) {
 							t.signalIgnoredError(fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql)
 							return nil
-						} else {
-							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v", query.pos, i, val, val)
 						}
+						return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'B':
 					if valT != reflect.Bool {
@@ -1046,10 +1043,6 @@ func (t *logicTest) traceStop() {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// TODO(marc): splitting ranges at table boundaries causes
-	// a blocked task and won't drain. Investigate and fix.
-	defer config.TestingDisableTableSplits()()
 
 	var globs []string
 	if *bigtest {
