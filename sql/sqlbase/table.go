@@ -41,6 +41,11 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	}
 	desc.Name = p.Table.Table()
 	desc.ParentID = parentID
+	// All system tables have their IDs pre-allocated.
+	if parentID == keys.SystemDatabaseID {
+		desc.ID = systemTableID(desc.Name)
+		desc.Privileges = NewDefaultPrivilegeDescriptor()
+	}
 	desc.FormatVersion = FamilyFormatVersion
 	// We don't use version 0.
 	desc.Version = 1

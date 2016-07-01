@@ -34,7 +34,8 @@ func TestEagerReplication(t *testing.T) {
 	// path that occurs after splits.
 	store.SetReplicaScannerDisabled(true)
 
-	if err := server.WaitForInitialSplits(store.DB()); err != nil {
+	const fastScanner = false
+	if err := server.WaitForInitialSplits(store.DB(), fastScanner); err != nil {
 		t.Fatal(err)
 	}
 
@@ -47,7 +48,7 @@ func TestEagerReplication(t *testing.T) {
 		// After the initial splits have been performed, all of the resulting ranges
 		// should be present in replicate queue purgatory (because we only have a
 		// single store in the test and thus replication cannot succeed).
-		expected := server.ExpectedInitialRangeCount()
+		expected := server.ExpectedInitialRangeCount(fastScanner)
 		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
 			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
 		}

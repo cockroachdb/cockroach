@@ -112,7 +112,7 @@ func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net
 	if err := node.start(addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForInitialSplits(node.ctx.DB); err != nil {
+	if err := WaitForInitialSplits(node.ctx.DB, false /*fastScanner*/); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
@@ -439,7 +439,9 @@ func TestStatusSummaries(t *testing.T) {
 	// ========================================
 	// Start test server and wait for full initialization.
 	// ========================================
-	ctx := MakeTestContext()
+
+	// Use a fast scan context so that all initial range splits are completed.
+	ctx := MakeFastScanContext()
 	ts := TestServer{
 		Ctx:           &ctx,
 		StoresPerNode: 3,
@@ -466,7 +468,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	// Wait for full replication of initial ranges.
-	initialRanges := ExpectedInitialRangeCount()
+	initialRanges := ExpectedInitialRangeCount(true /*fastScanner*/)
 	util.SucceedsSoon(t, func() error {
 		for i := 1; i <= int(initialRanges); i++ {
 			if s.RaftStatus(roachpb.RangeID(i)) == nil {

@@ -59,6 +59,9 @@ func TestQueryCounts(t *testing.T) {
 		{"SET database = system", 2, 4, 2, 1, 1, 4, 2, 2, 0},
 	}
 
+	// Read the first DDL count.
+	initialDDLCount := s.MustGetSQLCounter("ddl.count")
+
 	for _, tc := range testcases {
 		if tc.query != "" {
 			if _, err := sqlDB.Exec(tc.query); err != nil {
@@ -76,7 +79,7 @@ func TestQueryCounts(t *testing.T) {
 		checkCounterEQ(t, s, "update.count", tc.updateCount)
 		checkCounterEQ(t, s, "insert.count", tc.insertCount)
 		checkCounterEQ(t, s, "delete.count", tc.deleteCount)
-		checkCounterEQ(t, s, "ddl.count", tc.ddlCount)
+		checkCounterEQ(t, s, "ddl.count", tc.ddlCount+initialDDLCount)
 		checkCounterEQ(t, s, "misc.count", tc.miscCount)
 		checkCounterEQ(t, s, "txn.commit.count", tc.txnCommitCount)
 		checkCounterEQ(t, s, "txn.rollback.count", tc.txnRollbackCount)

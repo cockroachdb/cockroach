@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -318,6 +319,9 @@ func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var base preparedQueryTest
 
+	// Do not count the system database descriptor and the "descriptor" descriptor; thus -2
+	numSystemTables := server.GetBootstrapSchema().DescriptorCount() + sqlbase.NumNewSystemTables - 2
+
 	queryTests := map[string][]preparedQueryTest{
 		"SELECT $1 > 0": {
 			base.SetArgs(1).Results(true),
@@ -409,7 +413,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Results("users", "primary", true, 1, "username", "ASC", false),
 		},
 		"SHOW TABLES FROM system": {
-			base.Results("descriptor").Others(7),
+			base.Results("descriptor").Others(numSystemTables),
 		},
 		"SHOW TIME ZONE": {
 			base.Results("UTC"),

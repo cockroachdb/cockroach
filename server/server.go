@@ -45,11 +45,13 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
@@ -505,7 +507,49 @@ func (s *Server) Start() error {
 		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
 	}
 
+	// Upgrade the system tables schema.
+	if err := s.stopper.RunAsyncTask(func() {
+		upgradeSystemTablesSchema(s.sqlExecutor)
+	}); err != nil {
+		return errors.Wrap(err, "failed to invoke upgrade of system tables")
+	}
 	return nil
+
+}
+
+// checkQueryResults performs basic tests on the provided query results and
+// returns the first error that was found.
+func checkQueryResults(results []sql.Result, numResults int) error {
+	if a, e := len(results), numResults; a != e {
+		return errors.Errorf("# of results %d != expected %d", a, e)
+	}
+
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
+
+	return nil
+}
+
+// upgradeSystemTablesSchema creates new system tables. In the future we might
+// run schema changes on system tables, but that should be carefully
+// considered, because schema change execution is much more complex than table
+// creation and might not make sense to run from low level code.
+func upgradeSystemTablesSchema(exec *sql.Executor) {
+	// System tables are created by user "node" which is an internal user.
+	session := sql.NewSession(sql.SessionArgs{User: security.NodeUser}, exec, nil)
+	for _, table := range sqlbase.NewSystemTablesSchema {
+		for {
+			r := exec.ExecuteStatements(context.Background(), session, table, nil)
+			err := checkQueryResults(r.ResultList, 1)
+			if err == nil {
+				break
+			}
+			log.Warningf("err: %s, Unable to create system table: %s", err, table)
+		}
+	}
 }
 
 func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.DrainMode, error) {
