@@ -924,18 +924,16 @@ func (t *logicTest) execQuery(query logicQuery) error {
 						if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
 							t.signalIgnoredError(fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql)
 							return nil
-						} else {
-							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 						}
+						return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'R':
 					if valT != reflect.Float64 && valT != reflect.Slice {
 						if *flexTypes && (valT == reflect.Int64) {
 							t.signalIgnoredError(fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql)
 							return nil
-						} else {
-							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v", query.pos, i, val, val)
 						}
+						return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'B':
 					if valT != reflect.Bool {
