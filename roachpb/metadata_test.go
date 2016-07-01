@@ -68,17 +68,22 @@ func TestRangeDescriptorFindReplica(t *testing.T) {
 			{NodeID: 3, StoreID: 3},
 		},
 	}
-	for i, r := range desc.Replicas {
-		if i2, r2 := desc.FindReplica(r.StoreID); r2.NodeID != r.NodeID || i2 != i {
-			t.Errorf("%d: expected to find node %d for store %d; got %d", i, r.NodeID, r.StoreID, r2.StoreID)
+	for i, e := range desc.Replicas {
+		if a, ok := desc.GetReplicaDescriptor(e.StoreID); !ok {
+			t.Errorf("%d: expected to find %+v in %+v for store %d", i, e, desc, e.StoreID)
+		} else if a != e {
+			t.Errorf("%d: expected to find %+v in %+v for store %d; got %+v", i, e, desc, e.StoreID, a)
 		}
 	}
 }
 
 func TestRangeDescriptorMissingReplica(t *testing.T) {
 	desc := RangeDescriptor{}
-	i, r := desc.FindReplica(0)
-	if i >= 0 || r != nil {
-		t.Fatalf("unexpected return (%d, %s) on missing replica", i, r)
+	r, ok := desc.GetReplicaDescriptor(0)
+	if ok {
+		t.Fatalf("unexpectedly found missing replica: %s", r)
+	}
+	if (r != ReplicaDescriptor{}) {
+		t.Fatalf("unexpectedly got nontrivial return: %s", r)
 	}
 }
