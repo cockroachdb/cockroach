@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -159,8 +158,7 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // AddEventLogToMetadataSchema adds the range event log table to the supplied
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	schema.AddTable(keys.RangeEventTableID, storage.RangeEventTableSchema,
-		privilege.List{privilege.ALL})
+	schema.AddTable(keys.RangeEventTableID, storage.RangeEventTableSchema)
 }
 
 // bootstrapCluster bootstraps a multiple stores using the provided
