@@ -122,7 +122,7 @@ export default class extends React.Component<{}, {}> {
 
             <LineGraph title="CGo Calls">
               <Axis format={ d3.format(".1") }>
-                <Metric name="cr.node.sys.cgocalls" title="CGo Calls" />
+                <Metric name="cr.node.sys.cgocalls" title="CGo Calls" nonNegativeRate />
               </Axis>
             </LineGraph>
 
