@@ -33,6 +33,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -6163,7 +6164,10 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
-	if _, err := firstRng.applySnapshot(snap); err != nil {
+
+	// Run a (failing) attempt to apply the snapshot (which will still fill the
+	// reservation).
+	if _, err := firstRng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(err, "empty HardState") {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
