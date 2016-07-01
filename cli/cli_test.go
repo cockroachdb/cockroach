@@ -828,6 +828,7 @@ Available Commands:
   user           get, set, list and remove users
   zone           get, set, list and remove zones
   node           list nodes and show their status
+  dump           dump sql tables
 
   gen            generate manpages and bash completion file
   version        output version information
