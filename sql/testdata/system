@@ -87,6 +87,24 @@ nodeID     INT       false NULL
 expiration TIMESTAMP false NULL
 
 query TTBT
+SHOW COLUMNS FROM system.ui;
+----
+key          STRING     false  NULL
+value        BYTES      true   NULL
+lastUpdated  TIMESTAMP  false  NULL
+
+query TTBT
+SHOW COLUMNS FROM system.rangelog;
+----
+timestamp     TIMESTAMP  false  NULL
+rangeID       INT        false  NULL
+storeID       INT        false  NULL
+eventType     STRING     false  NULL
+otherRangeID  INT        true   NULL
+info          STRING     true   NULL
+uniqueID      INT        false  unique_rowid()
+
+query TTBT
 SHOW COLUMNS FROM system.users;
 ----
 username       STRING false NULL
@@ -123,6 +141,21 @@ query TTT
 SHOW GRANTS ON system.zones
 ----
 zones root DELETE,GRANT,INSERT,SELECT,UPDATE
+
+query TTT
+SHOW GRANTS ON system.lease
+----
+lease root ALL
+
+query TTT
+SHOW GRANTS ON system.ui
+----
+ui root ALL
+
+query TTT
+SHOW GRANTS ON system.rangelog
+----
+rangelog root ALL
 
 # Non-root users can have privileges on system objects, but limited to GRANT, SELECT.
 statement error user testuser must not have ALL privileges on system objects
