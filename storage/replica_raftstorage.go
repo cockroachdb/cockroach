@@ -511,9 +511,14 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
-// applySnapshot updates the replica based on the given snapshot.
+// applySnapshot updates the replica based on the given snapshot and
+// corresponding HardState. When the Replica's replicaID is zero, the
+// supplied HardState must be empty - we are applying a preemptive snapshot
+// and will be synthesizing our HardState.
+// Otherwise, the HardState must be nonempty and is persisted along with the
+// snapshot.
 // Returns the new last index.
-func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
+func (r *Replica) applySnapshot(snap raftpb.Snapshot, hs raftpb.HardState) (uint64, error) {
 	// We use a separate batch to apply the snapshot since the Replica (and in
 	// particular the last index) is updated after the batch commits. Using a
 	// separate batch also allows for future optimization (such as using a
@@ -529,6 +534,9 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
+	// Fill the reservation if there was any one for this range, regardless of
+	// whether the application succeeded.
+	defer r.store.bookie.Fill(desc.RangeID)
 
 	r.mu.Lock()
 	replicaID := r.mu.replicaID
@@ -597,11 +605,18 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	}
 
 	if replicaID == 0 {
+		if !raft.IsEmptyHardState(hs) {
+			return 0, errors.Errorf("cannot apply HardState on preemptive snapshot")
+		}
 		// The replica is not part of the Raft group so we need to write the Raft
 		// hard state for the replica in order for the Raft state machine to start
 		// correctly.
 		if err := updateHardState(batch, s); err != nil {
 			return 0, err
+		}
+	} else {
+		if raft.IsEmptyHardState(hs) {
+			return 0, errors.Errorf("cannot apply empty HardState on non-preemptive snapshot")
 		}
 	}
 
@@ -634,10 +649,6 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	if err := r.updateRangeInfo(&desc); err != nil {
 		panic(err)
 	}
-
-	// Fill the reservation if there was any one for this range.
-	r.store.bookie.Fill(desc.RangeID)
-
 	// Update the range descriptor. This is done last as this is the step that
 	// makes the Replica visible in the Store.
 	if err := r.setDesc(&desc); err != nil {
