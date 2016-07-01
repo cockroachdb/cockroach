@@ -879,7 +879,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // already in the queue. Returns a cleanup function to be called when the
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
-func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error {
+func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
 	var cmd *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -888,12 +888,33 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 		for i, union := range ba.Requests {
 			spans[i] = union.GetInner().Header()
 		}
-		var wg sync.WaitGroup
 		r.mu.Lock()
-		r.mu.cmdQ.getWait(readOnly, &wg, spans...)
+		chans := r.mu.cmdQ.getWait(readOnly, spans...)
 		cmd = r.mu.cmdQ.add(readOnly, spans...)
 		r.mu.Unlock()
-		wg.Wait()
+
+		ctxDone := ctx.Done()
+		for i, ch := range chans {
+			select {
+			case <-ch:
+			case <-ctxDone:
+				// The command is moot, so we don't need to bother executing.
+				// However, the command queue assumes that commands don't drop
+				// out before their prerequisites, so we still have to wait it
+				// out.
+				//
+				// TODO(tamird): this can be done asynchronously, allowing the
+				// caller to return immediatelly. For now, we're keeping it
+				// simple to avoid unexpected surprises.
+				for _, ch := range chans[i:] {
+					<-ch
+				}
+				r.mu.Lock()
+				r.mu.cmdQ.remove(cmd)
+				r.mu.Unlock()
+				return nil, ctx.Err()
+			}
+		}
 	}
 
 	// Update the incoming timestamp if unset. Wait until after any
@@ -915,7 +936,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 
 	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 		return r.endCmds(cmd, ba, br, pErr)
-	}
+	}, nil
 }
 
 // endCmds removes pending commands from the command queue and updates
@@ -1104,7 +1125,10 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
 	log.Trace(ctx, "command queue")
-	endCmdsFunc := r.beginCmds(&ba)
+	endCmdsFunc, err := r.beginCmds(ctx, &ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
@@ -1171,7 +1195,10 @@ func (r *Replica) addWriteCmd(
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
 	log.Trace(ctx, "command queue")
-	endCmdsFunc := r.beginCmds(&ba)
+	endCmdsFunc, err := r.beginCmds(ctx, &ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Guarantee we remove the commands from the command queue. This is
 	// wrapped to delay pErr evaluation to its value when returning.
