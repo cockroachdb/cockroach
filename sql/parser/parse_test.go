@@ -154,6 +154,8 @@ func TestParse(t *testing.T) {
 		{`SHOW COLUMNS FROM a.b.c`},
 		{`SHOW INDEXES FROM a`},
 		{`SHOW INDEXES FROM a.b.c`},
+		{`SHOW CONSTRAINTS FROM a`},
+		{`SHOW CONSTRAINTS FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
 
 		// Tables are the default, but can also be specified with
@@ -673,6 +675,8 @@ func TestParse2(t *testing.T) {
 			`SELECT RTRIM('xyxtrimyyx')`},
 		{`SHOW INDEX FROM t`,
 			`SHOW INDEXES FROM t`},
+		{`SHOW CONSTRAINT FROM t`,
+			`SHOW CONSTRAINTS FROM t`},
 		{`SHOW KEYS FROM t`,
 			`SHOW INDEXES FROM t`},
 		{`BEGIN`,

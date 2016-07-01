@@ -44,6 +44,7 @@ var keywords = map[string]int{
 	"COMMITTED":         COMMITTED,
 	"CONFLICT":          CONFLICT,
 	"CONSTRAINT":        CONSTRAINT,
+	"CONSTRAINTS":       CONSTRAINTS,
 	"COVERING":          COVERING,
 	"CREATE":            CREATE,
 	"CROSS":             CROSS,

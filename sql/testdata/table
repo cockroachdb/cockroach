@@ -234,3 +234,6 @@ test.named_constraints  CREATE TABLE "test.named_constraints" (
                         CONSTRAINT ck2 CHECK (LENGTH(nickname) < LENGTH(name)),
                         CONSTRAINT ck1 CHECK (LENGTH(nickname) < 10)
                         )
+
+query error unknown statement type
+SHOW CONSTRAINTS FROM test.named_constraints

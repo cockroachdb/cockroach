@@ -542,7 +542,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
-%token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT
+%token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
 %token <str>   COVERING CREATE
 %token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -1389,6 +1389,14 @@ show_stmt:
 | SHOW INDEXES FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.qname()}
+  }
+| SHOW CONSTRAINT FROM var_name
+  {
+    $$.val = &ShowConstraints{Table: $4.qname()}
+  }
+| SHOW CONSTRAINTS FROM var_name
+  {
+    $$.val = &ShowConstraints{Table: $4.qname()}
   }
 | SHOW KEYS FROM var_name
   {
@@ -4314,6 +4322,7 @@ unreserved_keyword:
 | COMMIT
 | COMMITTED
 | CONFLICT
+| CONSTRAINTS
 | COVERING
 | CUBE
 | CURRENT
