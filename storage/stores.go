@@ -137,12 +137,12 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		rangeID, repl, err := ls.lookupReplica(rs.Key, rs.EndKey)
+		rangeID, repDesc, err := ls.lookupReplica(rs.Key, rs.EndKey)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		ba.RangeID = rangeID
-		ba.Replica = *repl
+		ba.Replica = repDesc
 	}
 
 	ctx = log.Add(ctx,
@@ -187,11 +187,12 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // This is only for testing usage; performance doesn't matter.
-func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
+func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *Replica
 	var partialDesc *roachpb.RangeDescriptor
+	var repDescFound bool
 	for _, store := range ls.storeMap {
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
@@ -203,34 +204,37 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			}
 			continue
 		}
-		if replica == nil {
+		if !repDescFound {
 			rangeID = rng.RangeID
-			replica, err = rng.GetReplica()
+			repDesc, err = rng.GetReplicaDescriptor()
 			if err != nil {
 				if _, ok := err.(*errReplicaNotInRange); !ok {
-					return 0, nil, err
+					return 0, roachpb.ReplicaDescriptor{}, err
 				}
+			} else {
+				repDescFound = true
 			}
 			continue
 		}
 		// Should never happen outside of tests.
-		return 0, nil, errors.Errorf(
-			"range %+v exists on additional store: %+v", rng, store)
+		return 0, roachpb.ReplicaDescriptor{}, errors.Errorf(
+			"range %+v exists on additional store: %+v", rng, store,
+		)
 	}
-	if replica == nil {
+	if !repDescFound {
 		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), partialDesc)
 	}
-	return rangeID, replica, err
+	return rangeID, repDesc, err
 }
 
 // FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
 func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
-	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
+	_, repDesc, err := ls.lookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
 		return nil, err
 	}
-	store, err := ls.GetStore(replica.StoreID)
+	store, err := ls.GetStore(repDesc.StoreID)
 	if err != nil {
 		return nil, err
 	}

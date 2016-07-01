@@ -358,8 +358,8 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 	if replicaID == 0 {
-		_, repDesc := desc.FindReplica(r.store.StoreID())
-		if repDesc == nil {
+		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
+		if !ok {
 			// This is intentionally not an error and is the code path exercised
 			// during preemptive snapshots. The replica ID will be sent when the
 			// actual raft replica change occurs.
@@ -380,9 +380,9 @@ func (r *Replica) String() string {
 // command an error and cleans up all data associated with this range.
 func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	desc := r.Desc()
-	if _, rd := desc.FindReplica(r.store.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
+	if repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
-			r, rd.ReplicaID, origDesc.NextReplicaID)
+			r, repDesc.ReplicaID, origDesc.NextReplicaID)
 	}
 
 	// Clear the pending command queue.
@@ -475,11 +475,18 @@ func (r *Replica) getLeaderLease() (*roachpb.Lease, *roachpb.Lease) {
 func (r *Replica) newNotLeaderError(
 	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
 ) error {
-	err := &roachpb.NotLeaderError{}
-	if l != nil && l.Replica.ReplicaID != 0 {
-		err.RangeID = r.RangeID
-		_, err.Replica = rangeDesc.FindReplica(originStoreID)
-		_, err.Leader = rangeDesc.FindReplica(l.Replica.StoreID)
+	err := &roachpb.NotLeaderError{
+		RangeID: r.RangeID,
+	}
+	if repDesc, ok := rangeDesc.GetReplicaDescriptor(originStoreID); ok {
+		err.Replica = &repDesc
+	}
+	if l != nil {
+		// TODO(tamird): why is this not the same as `err.Leader = &l.Replica`?
+		// Making that change causes tests to fail. See #3670.
+		if repDesc, ok := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID); ok {
+			err.Leader = &repDesc
+		}
 	}
 	return err
 }
@@ -631,33 +638,18 @@ func (e *errReplicaNotInRange) Error() string {
 		e.StoreID, e.RangeDesc)
 }
 
-// GetReplica returns the replica for this range from the range descriptor.
-// Returns nil, *errReplicaNotInRange if the replica is not found. No other
-// errors are returned.
-func (r *Replica) GetReplica() (*roachpb.ReplicaDescriptor, error) {
+// GetReplicaDescriptor returns the replica for this range from the range
+// descriptor. Returns nil, *errReplicaNotInRange if the replica is not found.
+// No other errors are returned.
+func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
 	rangeDesc := r.Desc()
-	_, replica := rangeDesc.FindReplica(r.store.StoreID())
-	if replica == nil {
-		return nil, &errReplicaNotInRange{
-			StoreID: r.store.StoreID(), RangeDesc: *rangeDesc}
+	if repDesc, ok := rangeDesc.GetReplicaDescriptor(r.store.StoreID()); ok {
+		return repDesc, nil
 	}
-	return replica, nil
-}
-
-// ReplicaDescriptor returns information about the given member of
-// this replica's range.
-func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	desc := r.mu.state.Desc
-	for _, repAddress := range desc.Replicas {
-		if repAddress.ReplicaID == replicaID {
-			return repAddress, nil
-		}
+	return roachpb.ReplicaDescriptor{}, &errReplicaNotInRange{
+		RangeDesc: *rangeDesc,
+		StoreID:   r.store.StoreID(),
 	}
-	return roachpb.ReplicaDescriptor{}, errors.Errorf("replica %d not found in range %d",
-		replicaID, desc.RangeID)
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
@@ -1310,11 +1302,11 @@ func (r *Replica) proposeRaftCommand(
 	if r.mu.destroyed != nil {
 		return nil, nil, r.mu.destroyed
 	}
-	_, replica := r.mu.state.Desc.FindReplica(r.store.StoreID())
-	if replica == nil {
+	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+	if !ok {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
-	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), *replica, ba)
+	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 	r.insertRaftCommandLocked(pCmd)
 
 	if err := r.proposePendingCmdLocked(pCmd); err != nil {
