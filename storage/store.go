@@ -813,38 +813,54 @@ func IterateRangeDescriptors(
 	return err
 }
 
-// MIGRATION(tschottdorf): As of #7310, we make sure that a Replica
-// always has a complete Raft state on disk. Prior versions may not
-// have that, which causes issues due to the fact that we used to
-// synthesize a TruncatedState and do so no more. To make up for
-// that, write a missing TruncatedState here. That key is in the
-// replicated state, but since during a cluster upgrade, all nodes
-// do it, it's fine (and we never CPut on that key, so anything in
-// the Raft pipeline will simply overwrite it).
+// MIGRATION(tschottdorf): As of #7310, we make sure that a Replica always has
+// a complete Raft state on disk. Prior versions may not have that, which
+// causes issues due to the fact that we used to synthesize a TruncatedState
+// and do so no more. To make up for that, write a missing TruncatedState here.
+// That key is in the replicated state, but since during a cluster upgrade, all
+// nodes do it, it's fine (and we never CPut on that key, so anything in the
+// Raft pipeline will simply overwrite it).
 //
-// TODO(tschottdorf): test this method.
-func (s *Store) migrate7310(desc roachpb.RangeDescriptor) {
+// Migration(tschottdorf): See #6991. It's possible that the HardState is
+// missing after a snapshot was applied (so there is a TruncatedState). In this
+// case, synthesize a HardState (simply setting everything that was in the
+// snapshot to committed). Having lost the original HardState can theoretically
+// mean that the replica was further ahead or had voted, and so there's no
+// guarantee that this will be correct. But it will be correct in the majority
+// of cases, and some state *has* to be recovered.
+func (s *Store) migrate7310And6991(desc roachpb.RangeDescriptor) {
 	if !desc.IsInitialized() {
 		log.Fatalf("found uninitialized descriptor on range: %+v", desc)
 	}
 	batch := s.engine.NewBatch()
 	state, err := loadState(batch, &desc)
 	if err != nil {
-		log.Fatalf("could not migrate truncated state: %s", err)
+		log.Fatal(errors.Wrap(err, "could not migrate TruncatedState: %s"))
 	}
-	if (*state.TruncatedState != roachpb.RaftTruncatedState{}) {
-		return
+	if (*state.TruncatedState == roachpb.RaftTruncatedState{}) {
+		state.TruncatedState.Term = raftInitialLogTerm
+		state.TruncatedState.Index = raftInitialLogIndex
+		if _, err := saveState(batch, state); err != nil {
+			log.Fatal(errors.Wrap(err, "could not migrate TruncatedState"))
+		}
+		defer log.Warningf("migration: synthesized TruncatedState for %+v", desc)
 	}
 
-	state.TruncatedState.Term = raftInitialLogTerm
-	state.TruncatedState.Index = raftInitialLogIndex
-	if _, err := saveState(batch, state); err != nil {
-		log.Fatalf("could not migrate truncated state: %s", err)
+	hs, err := loadHardState(batch, desc.RangeID)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "could not migrate TruncatedState"))
 	}
+	if raft.IsEmptyHardState(hs) && state.TruncatedState.Index != 0 {
+		// We could attempt to set a fake Vote here as well, but let's keep the
+		// playing fast and loose to a minimum.
+		hs.Commit = state.TruncatedState.Index
+		hs.Term = state.TruncatedState.Term
+		defer log.Warningf("migration: synthesized HardState for %+v", desc)
+	}
+
 	if err := batch.Commit(); err != nil {
-		log.Fatalf("could not migrate truncated state: %s", err)
+		log.Fatalf("could not migrate Raft state: %s", err)
 	}
-	log.Warningf("migration: synthesized truncated state for %+v", desc)
 }
 
 // Start the engine, set the GC and read the StoreIdent.
@@ -934,7 +950,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			return false, s.destroyReplicaData(&desc)
 		}
 
-		s.migrate7310(desc)
+		s.migrate7310And6991(desc)
 
 		rng, err := NewReplica(&desc, s, 0)
 		if err != nil {
