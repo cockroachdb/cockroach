@@ -96,18 +96,15 @@ var (
 	zonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
 
 	// SystemAllowedPrivileges describes the privileges allowed for each
-	// system object. No user may have more than those privileges, and
-	// the root user must have exactly those privileges.
-	// CREATE|DROP|ALL should always be denied.
+	// system config object. No user may have more than those privileges, and
+	// the root user must have exactly those privileges. CREATE|DROP|ALL
+	// should always be denied.
 	SystemAllowedPrivileges = map[ID]privilege.List{
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
 		keys.UsersTableID:      privilege.ReadWriteData,
 		keys.ZonesTableID:      privilege.ReadWriteData,
-		keys.LeaseTableID:      privilege.ReadWriteData,
-		keys.RangeEventTableID: privilege.ReadWriteData,
-		keys.UITableID:         privilege.ReadWriteData,
 	}
 
 	// NumSystemDescriptors should be set to the number of system descriptors
