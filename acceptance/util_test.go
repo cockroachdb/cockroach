@@ -42,6 +42,10 @@ import (
 	_ "github.com/cockroachdb/pq"
 )
 
+func init() {
+	flag.Parse()
+}
+
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
 var flagNodes = flag.Int("nodes", 3, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")

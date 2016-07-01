@@ -23,8 +23,17 @@
 
 package acceptance
 
-import "testing"
+import (
+	"fmt"
+	"os"
+	"testing"
+)
 
 func TestMain(m *testing.M) {
+	if *flagRemote {
+		fmt.Fprintln(os.Stderr, "use `make test [...]` instead of `make acceptance [...]` when running remote cluster")
+		os.Exit(1)
+	}
+
 	runTests(m)
 }
