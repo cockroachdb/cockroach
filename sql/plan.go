@@ -294,6 +294,8 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.ShowGrants(n)
 	case *parser.ShowIndex:
 		return p.ShowIndex(n)
+	case *parser.ShowConstraints:
+		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Truncate:
@@ -331,6 +333,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 		return p.ShowGrants(n)
 	case *parser.ShowIndex:
 		return p.ShowIndex(n)
+	case *parser.ShowConstraints:
+		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Update:
