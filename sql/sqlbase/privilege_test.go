@@ -119,12 +119,12 @@ func TestPrivilegeValidate(t *testing.T) {
 	}
 }
 
-// TestSystemPrivilegeValidate exercises validation for system descriptors.
-// We use 1 (the system database ID).
+// TestSystemPrivilegeValidate exercises validation for system config
+// descriptors. We use 1 (the system database ID).
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	id := ID(1)
-	allowedPrivileges := SystemAllowedPrivileges[id]
+	allowedPrivileges := systemConfigAllowedPrivileges[id]
 
 	hasPrivilege := func(pl privilege.List, p privilege.Kind) bool {
 		for _, i := range pl {

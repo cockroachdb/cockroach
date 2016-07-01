@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/pkg/errors"
@@ -63,7 +62,7 @@ CREATE TABLE system.eventlog (
 // AddEventLogToMetadataSchema adds the event log table to the supplied
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	schema.AddTable(keys.EventLogTableID, eventTableSchema, privilege.List{privilege.ALL})
+	schema.AddTable(keys.EventLogTableID, eventTableSchema)
 }
 
 // An EventLogger exposes methods used to record events to the event table.

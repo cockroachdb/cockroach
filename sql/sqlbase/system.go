@@ -80,26 +80,26 @@ var (
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
 		Privileges: NewPrivilegeDescriptor(security.RootUser,
-			SystemAllowedPrivileges[keys.SystemDatabaseID]),
+			systemConfigAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
 	// namespaceTable is the descriptor for the namespace table.
-	namespaceTable = createSystemTable(keys.NamespaceTableID, namespaceTableSchema)
+	namespaceTable = createSystemConfigTable(keys.NamespaceTableID, namespaceTableSchema)
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
+	DescriptorTable = createSystemConfigTable(keys.DescriptorTableID, descriptorTableSchema)
 
 	// usersTable is the descriptor for the users table.
-	usersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
+	usersTable = createSystemConfigTable(keys.UsersTableID, usersTableSchema)
 
 	// zonesTable is the descriptor for the zones table.
-	zonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
+	zonesTable = createSystemConfigTable(keys.ZonesTableID, zonesTableSchema)
 
-	// SystemAllowedPrivileges describes the privileges allowed for each
+	// SystemConfigAllowedPrivileges describes the privileges allowed for each
 	// system config object. No user may have more than those privileges, and
 	// the root user must have exactly those privileges. CREATE|DROP|ALL
 	// should always be denied.
-	SystemAllowedPrivileges = map[ID]privilege.List{
+	systemConfigAllowedPrivileges = map[ID]privilege.List{
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
@@ -115,13 +115,13 @@ var (
 	NumSystemDescriptors = 1
 )
 
-func createSystemTable(id ID, schema string) TableDescriptor {
+func createSystemConfigTable(id ID, schema string) TableDescriptor {
 	NumSystemDescriptors++
 
-	// System tables have the system database as a parent, with privileges from
-	// the SystemAllowedPrivileges table assigned to the root user.
+	// System tables have the system database as a parent, with privileges
+	// from the SystemAllowedPrivileges table assigned to the root user.
 	return createTableDescriptor(id, keys.SystemDatabaseID, schema,
-		NewPrivilegeDescriptor(security.RootUser, SystemAllowedPrivileges[id]))
+		NewPrivilegeDescriptor(security.RootUser, systemConfigAllowedPrivileges[id]))
 }
 
 func createTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
@@ -175,8 +175,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
 
 	// Add other system tables.
-	target.AddTable(keys.LeaseTableID, leaseTableSchema, privilege.List{privilege.ALL})
-	target.AddTable(keys.UITableID, uiTableSchema, privilege.List{privilege.ALL})
+	target.AddTable(keys.LeaseTableID, leaseTableSchema)
+	target.AddTable(keys.UITableID, uiTableSchema)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
