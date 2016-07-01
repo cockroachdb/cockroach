@@ -81,12 +81,12 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
-func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescriptor {
+func NewPrivilegeDescriptor(id ID) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		Users: []UserPrivileges{
 			{
-				User:       user,
-				Privileges: priv.ToBitField(),
+				User:       security.RootUser,
+				Privileges: (SystemConfigAllowedPrivileges[id]).ToBitField(),
 			},
 		},
 	}
@@ -173,7 +173,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	}
 	if IsSystemConfigID(id) {
 		// System databases and tables have custom maximum allowed privileges.
-		objectPrivileges, ok := SystemAllowedPrivileges[id]
+		objectPrivileges, ok := SystemConfigAllowedPrivileges[id]
 		if !ok {
 			return fmt.Errorf("no allowed privileges found for system object with ID=%d", id)
 		}

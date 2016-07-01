@@ -119,12 +119,12 @@ func TestPrivilegeValidate(t *testing.T) {
 	}
 }
 
-// TestSystemPrivilegeValidate exercises validation for system descriptors.
-// We use 1 (the system database ID).
+// TestSystemPrivilegeValidate exercises validation for system config
+// descriptors. We use 1 (the system database ID).
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	id := ID(1)
-	allowedPrivileges := SystemAllowedPrivileges[id]
+	allowedPrivileges := SystemConfigAllowedPrivileges[id]
 
 	hasPrivilege := func(pl privilege.List, p privilege.Kind) bool {
 		for _, i := range pl {
@@ -138,7 +138,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	// Exhaustively grant/revoke all privileges.
 	// Due to the way validation is done after Grant/Revoke,
 	// we need to revert the just-performed change after errors.
-	descriptor := NewPrivilegeDescriptor(security.RootUser, allowedPrivileges)
+	descriptor := NewPrivilegeDescriptor(1)
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
