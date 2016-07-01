@@ -33,7 +33,7 @@ func TestInitialKeys(t *testing.T) {
 
 	ms := MakeMetadataSchema()
 	kv := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+NumSystemDescriptors)
+	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+NumSystemConfigDescriptors)
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}

@@ -63,7 +63,7 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb
 }
 
 func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	minAffected := int64(server.ExpectedInitialRangeCount())
+	minAffected := int64(server.ExpectedInitialRangeCount(false /*fastScanner*/))
 
 	const long = time.Minute
 	const short = 10 * time.Second

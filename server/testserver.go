@@ -314,24 +314,38 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper, StartParams StartP
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after initial (asynchronous) splits have been completed,
-// assuming no additional information is added outside of the normal bootstrap
-// process.
-func ExpectedInitialRangeCount() int {
-	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemDescriptors + 1
+// assuming no additional information (other than new system table creation)
+// is added outside of the normal bootstrap process.
+func ExpectedInitialRangeCount(fastScanner bool) int {
+	numNewSystemTableRanges := 0
+	if fastScanner {
+		numNewSystemTableRanges = sqlbase.NumNewSystemTables
+	}
+	return GetBootstrapSchema().TableCount() + numNewSystemTableRanges + 1
+}
+
+// MakeFastScanContext returns a test context with a fast (frequent) replica
+// scanner.
+func MakeFastScanContext() Context {
+	c := MakeTestContext()
+	c.ScanInterval = time.Millisecond
+	c.ScanMaxIdleTime = time.Millisecond
+	return c
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
 func (ts *TestServer) WaitForInitialSplits() error {
-	return WaitForInitialSplits(ts.DB())
+	fastScanner := ts.Ctx.ScanInterval == time.Millisecond
+	return WaitForInitialSplits(ts.DB(), fastScanner)
 }
 
 // WaitForInitialSplits waits for the expected number of initial ranges to be
 // populated in the meta2 table. If the expected range count is not reached
 // within a configured timeout, an error is returned.
-func WaitForInitialSplits(db *client.DB) error {
-	expectedRanges := ExpectedInitialRangeCount()
+func WaitForInitialSplits(db *client.DB, fastScanner bool) error {
+	expectedRanges := ExpectedInitialRangeCount(fastScanner)
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)

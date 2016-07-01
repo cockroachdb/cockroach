@@ -87,11 +87,13 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 		return false, fmt.Errorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
 	}
 
-	// Increment unique descriptor counter.
-	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
-		descriptor.SetID(sqlbase.ID(ir.ValueInt() - 1))
-	} else {
-		return false, err
+	// Allocate a descriptor ID.
+	if descriptor.GetID() == 0 {
+		if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
+			descriptor.SetID(sqlbase.ID(ir.ValueInt() - 1))
+		} else {
+			return false, err
+		}
 	}
 
 	// TODO(pmattis): The error currently returned below is likely going to be

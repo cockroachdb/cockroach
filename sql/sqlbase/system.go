@@ -71,6 +71,16 @@ CREATE TABLE system.ui (
 	value       BYTES,
 	lastUpdated TIMESTAMP NOT NULL
 );`
+
+	jobsTableSchema = `
+CREATE TABLE IF NOT EXISTS system.jobs (
+	jobID        INT PRIMARY KEY,
+	typeID       INT,
+	name         STRING,
+	value        BYTES,
+	startTime    TIMESTAMP,
+	lastUpdated  TIMESTAMP
+);`
 )
 
 var (
@@ -107,16 +117,24 @@ var (
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
 
-	// NumSystemDescriptors should be set to the number of system descriptors
+	// NumSystemConfigDescriptors should be set to the number of system descriptors
 	// above (SystemDB and each system table). This is used by tests which need
 	// to know the number of system descriptors intended for installation; it starts at
 	// 1 for the SystemDB descriptor created above, and is incremented by every
 	// call to createSystemTable().
-	NumSystemDescriptors = 1
+	NumSystemConfigDescriptors = 1
+
+	// NewSystemTablesSchema is the collection of system tables that need to
+	// be created on legacy clusters without going through the bootstrapping
+	// process.
+	NewSystemTablesSchema = []string{jobsTableSchema}
+	// NumNewSystemTables is the number of system tables created outside of
+	// the bootstrapping process.
+	NumNewSystemTables = len(NewSystemTablesSchema)
 )
 
 func createSystemConfigTable(id ID, schema string) TableDescriptor {
-	NumSystemDescriptors++
+	NumSystemConfigDescriptors++
 
 	// System tables have the system database as a parent, with privileges
 	// from the SystemAllowedPrivileges table assigned to the root user.
@@ -177,6 +195,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add other system tables.
 	target.AddTable(keys.LeaseTableID, leaseTableSchema)
 	target.AddTable(keys.UITableID, uiTableSchema)
+	// Do not add new system tables here. All new tables should be added to
+	// NewSystemTablesSchema.
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
@@ -184,4 +204,37 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 // IsSystemConfigID returns true if this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
+}
+
+// systemTableID returns an ID for a named system table.
+func systemTableID(name string) ID {
+	switch name {
+	case "namespace":
+		return keys.NamespaceTableID
+
+	case "descriptor":
+		return keys.DescriptorTableID
+
+	case "users":
+		return keys.UsersTableID
+
+	case "zones":
+		return keys.ZonesTableID
+
+	case "lease":
+		return keys.LeaseTableID
+
+	case "eventlog":
+		return keys.EventLogTableID
+
+	case "rangelog":
+		return keys.RangeEventTableID
+
+	case "ui":
+		return keys.UITableID
+
+	case "jobs":
+		return keys.JobsTableID
+	}
+	return 0
 }

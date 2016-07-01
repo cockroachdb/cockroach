@@ -602,17 +602,19 @@ func TestAdminAPIEvents(t *testing.T) {
 
 	var zeroTimestamp serverpb.EventsResponse_Event_Timestamp
 
+	numCreates := 3 + sqlbase.NumNewSystemTables
+
 	testcases := []struct {
 		eventType sql.EventLogType
 		expCount  int
 	}{
-		{"", 7},
+		{"", 4 + numCreates},
 		{sql.EventLogNodeJoin, 1},
 		{sql.EventLogNodeRestart, 0},
 		{sql.EventLogDropDatabase, 0},
 		{sql.EventLogCreateDatabase, 1},
 		{sql.EventLogDropTable, 2},
-		{sql.EventLogCreateTable, 3},
+		{sql.EventLogCreateTable, numCreates},
 	}
 	for i, tc := range testcases {
 		var url string

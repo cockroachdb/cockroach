@@ -80,7 +80,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		if a, e := len(kvs), server.GetBootstrapSchema().DescriptorCount(); a != e {
+		if a, e := len(kvs), server.GetBootstrapSchema().DescriptorCount()+sqlbase.NumNewSystemTables; a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
 	}
