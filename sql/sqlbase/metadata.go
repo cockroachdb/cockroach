@@ -22,8 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
 )
@@ -103,14 +101,14 @@ func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 }
 
 // AddTable adds a new table to the system database.
-func (ms *MetadataSchema) AddTable(id ID, definition string, privileges privilege.List) {
+func (ms *MetadataSchema) AddTable(id ID, definition string) {
 	if id > keys.MaxReservedDescID {
 		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
 	ms.tables = append(ms.tables, metadataTable{
 		id:         id,
 		definition: definition,
-		privileges: NewPrivilegeDescriptor(security.RootUser, privileges),
+		privileges: NewDefaultPrivilegeDescriptor(),
 	})
 }
 
