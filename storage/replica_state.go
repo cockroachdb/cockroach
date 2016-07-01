@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -34,44 +36,67 @@ import (
 // RangeDescriptor under the convention that that is the latest committed
 // version.
 func loadState(
-	reader engine.Reader, desc *roachpb.RangeDescriptor,
+	reader engine.Reader, desc *roachpb.RangeDescriptor, shouldAssert bool,
 ) (storagebase.ReplicaState, error) {
 	var s storagebase.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
-	// Read the leader lease.
+
+	exists := desc.IsInitialized()
+	assert := func(curExists bool) {
+		if shouldAssert && exists != curExists {
+			log.Fatalf("%+v", errors.Errorf(
+				"expected value: %t, got value: %t", exists, curExists))
+		}
+	}
+
 	var err error
-	if s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
+	var curExists bool
+	if _, s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
-	if s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
+	if curExists, s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
+	if curExists, s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
+	if curExists, s.RaftAppliedIndex, err = loadAppliedIndex(
 		reader,
 		desc.RangeID,
 	); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
-	if s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+	if curExists, s.LeaseAppliedIndex, err = loadLeaseAppliedIndex(
+		reader,
+		desc.RangeID,
+	); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	assert(curExists)
 
+	if curExists, s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+		return storagebase.ReplicaState{}, err
+	}
+	assert(curExists)
+
+	var truncState roachpb.RaftTruncatedState
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
-	truncState, err := loadTruncatedState(reader, desc.RangeID)
+	curExists, truncState, err = loadTruncatedState(reader, desc.RangeID)
 	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 	s.TruncatedState = &truncState
+	assert(curExists)
 
 	return s, nil
 }
@@ -112,15 +137,15 @@ func saveState(
 	return state.Stats, nil
 }
 
-func loadLease(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+func loadLease(reader engine.Reader, rangeID roachpb.RangeID) (bool, *roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	_, err := engine.MVCCGetProto(context.Background(), reader,
+	found, err := engine.MVCCGetProto(context.Background(), reader,
 		keys.RangeLeaderLeaseKey(rangeID), hlc.ZeroTimestamp,
 		true, nil, lease)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
-	return lease, nil
+	return found, lease, nil
 }
 
 func setLease(
@@ -138,36 +163,39 @@ func setLease(
 		hlc.ZeroTimestamp, nil, lease)
 }
 
-func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, uint64, error) {
+func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (bool, uint64, error) {
 	var appliedIndex uint64
 	v, _, err := engine.MVCCGet(context.Background(), reader, keys.RaftAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
-		return 0, 0, err
+		return false, 0, err
 	}
 	if v != nil {
 		int64AppliedIndex, err := v.GetInt()
 		if err != nil {
-			return 0, 0, err
+			return false, 0, err
 		}
 		appliedIndex = uint64(int64AppliedIndex)
 	}
-	// TODO(tschottdorf): code duplication.
+	return v != nil, appliedIndex, nil
+}
+
+func loadLeaseAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (bool, uint64, error) {
 	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(context.Background(), reader, keys.LeaseAppliedIndexKey(rangeID),
+	v, _, err := engine.MVCCGet(context.Background(), reader, keys.LeaseAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
-		return 0, 0, err
+		return false, 0, err
 	}
 	if v != nil {
 		int64LeaseAppliedIndex, err := v.GetInt()
 		if err != nil {
-			return 0, 0, err
+			return false, 0, err
 		}
 		leaseAppliedIndex = uint64(int64LeaseAppliedIndex)
 	}
 
-	return appliedIndex, leaseAppliedIndex, nil
+	return v != nil, leaseAppliedIndex, nil
 }
 
 func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
@@ -191,14 +219,15 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 
 func loadTruncatedState(
 	reader engine.Reader, rangeID roachpb.RangeID,
-) (roachpb.RaftTruncatedState, error) {
+) (bool, roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(context.Background(), reader,
+	found, err := engine.MVCCGetProto(context.Background(), reader,
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, true,
-		nil, &truncState); err != nil {
-		return roachpb.RaftTruncatedState{}, err
+		nil, &truncState)
+	if err != nil {
+		return false, roachpb.RaftTruncatedState{}, err
 	}
-	return truncState, nil
+	return found, truncState, nil
 }
 
 func setTruncatedState(
@@ -211,11 +240,14 @@ func setTruncatedState(
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
 }
 
-func loadGCThreshold(reader engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
+func loadGCThreshold(reader engine.Reader, rangeID roachpb.RangeID) (bool, hlc.Timestamp, error) {
 	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(context.Background(), reader, keys.RangeLastGCKey(rangeID),
+	found, err := engine.MVCCGetProto(context.Background(), reader, keys.RangeLastGCKey(rangeID),
 		hlc.ZeroTimestamp, true, nil, &t)
-	return t, err
+	if err != nil {
+		return false, hlc.ZeroTimestamp, err
+	}
+	return found, t, err
 }
 
 func setGCThreshold(
@@ -225,12 +257,13 @@ func setGCThreshold(
 		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
 
-func loadMVCCStats(reader engine.Reader, rangeID roachpb.RangeID) (enginepb.MVCCStats, error) {
+func loadMVCCStats(reader engine.Reader, rangeID roachpb.RangeID) (bool, enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), reader, rangeID, &ms); err != nil {
-		return enginepb.MVCCStats{}, err
+	found, err := engine.MVCCGetRangeStats(context.Background(), reader, rangeID, &ms)
+	if err != nil {
+		return false, enginepb.MVCCStats{}, err
 	}
-	return ms, nil
+	return found, ms, nil
 }
 
 func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb.MVCCStats) error {
@@ -246,16 +279,23 @@ func setFrozenStatus(
 		keys.RangeFrozenStatusKey(rangeID), hlc.ZeroTimestamp, val, nil)
 }
 
-func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, error) {
-	val, _, err := engine.MVCCGet(context.Background(), reader, keys.RangeFrozenStatusKey(rangeID),
-		hlc.ZeroTimestamp, true, nil)
+func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, bool, error) {
+	val, _, err := engine.MVCCGet(
+		context.Background(), reader,
+		keys.RangeFrozenStatusKey(rangeID),
+		hlc.ZeroTimestamp, true, nil,
+	)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	if val == nil {
-		return false, nil
+		return false, false, nil
 	}
-	return val.GetBool()
+	frozen, err := val.GetBool()
+	if err != nil {
+		return false, false, err
+	}
+	return true, frozen, err
 }
 
 // The rest is not technically part of ReplicaState.
@@ -264,30 +304,30 @@ func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, erro
 // with its TruncatedState) but are different in that they are not consistently
 // updated through Raft.
 
-func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, error) {
+func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (bool, uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(context.Background(), reader,
 		keys.RaftLastIndexKey(rangeID),
 		hlc.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
-		return 0, err
+		return false, 0, err
 	}
 	if v != nil {
 		int64LastIndex, err := v.GetInt()
 		if err != nil {
-			return 0, err
+			return false, 0, err
 		}
 		lastIndex = uint64(int64LastIndex)
 	} else {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away.
-		lastEnt, err := raftTruncatedState(reader, rangeID)
+		_, lastEnt, err := loadTruncatedState(reader, rangeID)
 		if err != nil {
-			return 0, err
+			return false, 0, err
 		}
 		lastIndex = lastEnt.Index
 	}
-	return lastIndex, nil
+	return v != nil, lastIndex, nil
 }
 
 func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint64) error {
@@ -302,15 +342,15 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 
 func loadHardState(
 	reader engine.Reader, rangeID roachpb.RangeID,
-) (raftpb.HardState, error) {
+) (bool, raftpb.HardState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(context.Background(), reader,
 		keys.RaftHardStateKey(rangeID), hlc.ZeroTimestamp, true, nil, &hs)
 
-	if !found || err != nil {
-		return raftpb.HardState{}, err
+	if err != nil {
+		return false, raftpb.HardState{}, err
 	}
-	return hs, nil
+	return found, hs, nil
 }
 
 func setHardState(
@@ -353,7 +393,7 @@ func writeInitialState(
 	// information about cast votes. For example, during a Split for which
 	// another node's new right-hand side has contacted us before our left-hand
 	// side called in here to create the group.
-	oldHS, err := loadHardState(eng, rangeID)
+	_, oldHS, err := loadHardState(eng, rangeID)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

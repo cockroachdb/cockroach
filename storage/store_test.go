@@ -287,6 +287,10 @@ func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Re
 		}},
 		NextReplicaID: 2,
 	}
+	if _, err := writeInitialState(s.Engine(), enginepb.MVCCStats{}, *desc); err != nil {
+		log.Fatal(err)
+	}
+
 	r, err := NewReplica(desc, s, 0)
 	if err != nil {
 		log.Fatal(err)
@@ -1907,7 +1911,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		repl.mu.Lock()
 		frozen := repl.mu.state.Frozen
 		repl.mu.Unlock()
-		pFrozen, err := loadFrozenStatus(store.Engine(), 1)
+		_, pFrozen, err := loadFrozenStatus(store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2046,7 +2050,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
 		repl.mu.Unlock()
-		pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
+		_, pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}

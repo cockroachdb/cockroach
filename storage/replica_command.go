@@ -1908,7 +1908,7 @@ func (r *Replica) ChangeFrozen(
 
 	desc := r.Desc()
 
-	frozen, err := loadFrozenStatus(batch, desc.RangeID)
+	_, frozen, err := loadFrozenStatus(batch, desc.RangeID)
 	if err != nil || frozen == args.Frozen {
 		// Something went wrong or we're already in the right frozen state. In
 		// the latter case, we avoid writing the "same thing" because "we"
@@ -2516,7 +2516,7 @@ func (r *Replica) mergeTrigger(
 	// Add in stats for right half of merge, excluding system-local stats, which
 	// will need to be recomputed.
 	var rightMS enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMS); err != nil {
+	if _, err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMS); err != nil {
 		return err
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0

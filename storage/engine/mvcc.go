@@ -416,9 +416,8 @@ func MVCCGetRangeStats(
 	engine Reader,
 	rangeID roachpb.RangeID,
 	ms *enginepb.MVCCStats,
-) error {
-	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, ms)
-	return err
+) (bool, error) {
+	return MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, ms)
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
@@ -2120,7 +2119,7 @@ func MVCCFindSplitKey(
 
 	// Get range size from stats.
 	var ms enginepb.MVCCStats
-	if err := MVCCGetRangeStats(ctx, engine, rangeID, &ms); err != nil {
+	if _, err := MVCCGetRangeStats(ctx, engine, rangeID, &ms); err != nil {
 		return nil, err
 	}
 

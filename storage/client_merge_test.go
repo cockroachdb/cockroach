@@ -384,10 +384,10 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	var msA, msB enginepb.MVCCStats
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, aDesc.RangeID, &msA); err != nil {
+	if _, err := engine.MVCCGetRangeStats(context.Background(), snap, aDesc.RangeID, &msA); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, bDesc.RangeID, &msB); err != nil {
+	if _, err := engine.MVCCGetRangeStats(context.Background(), snap, bDesc.RangeID, &msB); err != nil {
 		t.Fatal(err)
 	}
 
@@ -412,7 +412,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
 	var msMerged enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngMerged.RangeID, &msMerged); err != nil {
+	if _, err := engine.MVCCGetRangeStats(context.Background(), snap, rngMerged.RangeID, &msMerged); err != nil {
 		t.Fatal(err)
 	}
 
