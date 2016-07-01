@@ -41,7 +41,7 @@ func TestBuildBabyCluster(t *testing.T) {
 // has passed.
 func TestFiveNodesAndWriters(t *testing.T) {
 	deadline := time.After(*flagDuration)
-	f := farmer(t, "5n5w")
+	f := farmer(t, "write-5n5w")
 	defer f.MustDestroy()
 	const size = 5
 	if err := f.Resize(size, size); err != nil {
