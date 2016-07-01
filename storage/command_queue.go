@@ -19,7 +19,6 @@ package storage
 import (
 	"container/heap"
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/interval"
@@ -60,8 +59,8 @@ type cmd struct {
 	id       int64
 	key      interval.Range
 	readOnly bool
-	expanded bool              // have the children been added
-	pending  []*sync.WaitGroup // pending commands gated on cmd
+	expanded bool          // have the children been added
+	pending  chan struct{} // closed when complete
 	children []cmd
 }
 
@@ -104,7 +103,7 @@ func prepareSpans(spans ...roachpb.Span) {
 // confirmation that all gating commands have completed or failed, and then
 // call add() to add the keys to the command queue. readOnly is true if the
 // requester is a read-only command; false for read-write.
-func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
+func (cq *CommandQueue) getWait(readOnly bool, spans ...roachpb.Span) (chans []<-chan struct{}) {
 	prepareSpans(spans...)
 
 	for i := 0; i < len(spans); i++ {
@@ -215,8 +214,7 @@ func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 				// this current command to the combined RangeGroup.
 				cq.rwRg.Add(keyRange)
 				if !cq.wRg.Overlaps(keyRange) {
-					cmd.pending = append(cmd.pending, wg)
-					wg.Add(1)
+					chans = append(chans, cmd.pending)
 				}
 			} else {
 				// If the current overlap is a write, pick which RangeGroup will be used to determine necessary
@@ -237,8 +235,7 @@ func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 				// dependency established with a dependent of the current overlap, meaning we already established
 				// an implicit transitive dependency to the current overlap.
 				if !overlapRg.Overlaps(keyRange) {
-					cmd.pending = append(cmd.pending, wg)
-					wg.Add(1)
+					chans = append(chans, cmd.pending)
 				}
 
 				// The current command is a write, so add it to the write RangeGroup and observe if the group grows.
@@ -273,6 +270,7 @@ func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		cq.wRg.Clear()
 		cq.rwRg.Clear()
 	}
+	return chans
 }
 
 // getOverlaps returns a slice of values which overlap the specified
@@ -383,6 +381,7 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 	}
 	cmd.readOnly = readOnly
 	cmd.expanded = false
+	cmd.pending = make(chan struct{})
 
 	if len(spans) > 1 {
 		// Populate the covering entry's children.
@@ -396,6 +395,7 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 			}
 			child.readOnly = readOnly
 			child.expanded = true
+			child.pending = make(chan struct{})
 		}
 	}
 
@@ -422,9 +422,7 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 		if d := n - cq.tree.Len(); d != 1 {
 			panic(fmt.Sprintf("%d: expected 1 deletion, found %d", cmd.id, d))
 		}
-		for _, wg := range cmd.pending {
-			wg.Done()
-		}
+		close(cmd.pending)
 	} else {
 		for i := range cmd.children {
 			child := &cmd.children[i]
@@ -435,9 +433,7 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 			if d := n - cq.tree.Len(); d != 1 {
 				panic(fmt.Sprintf("%d: expected 1 deletion, found %d", child.id, d))
 			}
-			for _, wg := range child.pending {
-				wg.Done()
-			}
+			close(child.pending)
 		}
 	}
 }
