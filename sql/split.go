@@ -142,8 +142,8 @@ func (n *splitNode) Values() parser.DTuple {
 	}
 }
 
-func (*splitNode) Columns() []ResultColumn {
-	return []ResultColumn{
+func (*splitNode) Columns() ResultColumns {
+	return ResultColumns{
 		{
 			Name: "key",
 			Typ:  parser.TypeBytes,
@@ -155,6 +155,7 @@ func (*splitNode) Columns() []ResultColumn {
 	}
 }
 
+func (*splitNode) Close()                              {}
 func (*splitNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (*splitNode) ExplainTypes(_ func(string, string)) {}
 func (*splitNode) SetLimitHint(_ int64, _ bool)        {}
