@@ -98,7 +98,8 @@ func (n *createDatabaseNode) Start() error {
 }
 
 func (n *createDatabaseNode) Next() (bool, error)                 { return false, nil }
-func (n *createDatabaseNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createDatabaseNode) Close()                              {}
+func (n *createDatabaseNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createDatabaseNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createDatabaseNode) DebugValues() debugValues            { return debugValues{} }
@@ -216,7 +217,8 @@ func (n *createIndexNode) Start() error {
 }
 
 func (n *createIndexNode) Next() (bool, error)                 { return false, nil }
-func (n *createIndexNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createIndexNode) Close()                              {}
+func (n *createIndexNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createIndexNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createIndexNode) DebugValues() debugValues            { return debugValues{} }
@@ -270,6 +272,10 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 
 	var selectPlan planNode
 	if n.As() {
+		// The selectPlan is needed to determine the set of columns to use
+		// to populate the new table descriptor in Start() below. We
+		// instantiate the selectPlan as early as here so that EXPLAIN has
+		// something useful to show about CREATE TABLE .. AS ...
 		selectPlan, err = p.getSelectPlan(n)
 		if err != nil {
 			return nil, err
@@ -285,14 +291,14 @@ func removeParens(sel parser.SelectStatement) (parser.SelectStatement, error) {
 	case *parser.ParenSelect:
 		return removeParens(ps.Select.Select)
 	default:
-		return nil, errors.Errorf("Invalid Select type.")
+		return nil, errors.Errorf("invalid select type %T", sel)
 	}
 }
 
 func (p *planner) getSelectPlan(n *parser.CreateTable) (planNode, error) {
 	selNoParens, err := removeParens(n.AsSource.Select)
 	if err != nil {
-		return nil, errors.Errorf("Invalid Select type.")
+		return nil, err
 	}
 	s, err := p.SelectClause(selNoParens.(*parser.SelectClause), n.AsSource.OrderBy, n.AsSource.Limit, []parser.Datum{}, 0)
 	if err != nil {
@@ -486,6 +492,17 @@ func (n *createTableNode) Start() error {
 		if err != nil {
 			return err
 		}
+
+		// TODO(knz): Ideally we would want to plug the selectPlan which
+		// was already computed as a data source into the insertNode. Now
+		// unfortunately this is not so easy: when this point is reached,
+		// selectPlan.expandPlan() has already been called, and
+		// insertPlan.expandPlan() below would cause a 2nd invocation and
+		// cause a panic. So instead we close this selectPlan and let the
+		// insertNode create it anew from the AsSource syntax node.
+		n.selectPlan.Close()
+		n.selectPlan = nil
+
 		desiredTypesFromSelect := make([]parser.Datum, len(resultColumns))
 		for i, col := range resultColumns {
 			desiredTypesFromSelect[i] = col.Typ
@@ -496,12 +513,10 @@ func (n *createTableNode) Start() error {
 			return err
 		}
 		n.insertPlan = insertPlan
-		err = insertPlan.expandPlan()
-		if err != nil {
+		if err := insertPlan.expandPlan(); err != nil {
 			return err
 		}
-		err = insertPlan.Start()
-		if err != nil {
+		if err = insertPlan.Start(); err != nil {
 			return err
 		}
 		// This loop is done here instead of in the Next method
@@ -516,11 +531,14 @@ func (n *createTableNode) Start() error {
 	return nil
 }
 
-func (n *createTableNode) Next() (bool, error) {
-	return false, nil
+func (n *createTableNode) Close() {
+	if n.insertPlan != nil {
+		n.insertPlan.Close()
+	}
 }
 
-func (n *createTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createTableNode) Next() (bool, error)                 { return false, nil }
+func (n *createTableNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createTableNode) DebugValues() debugValues            { return debugValues{} }

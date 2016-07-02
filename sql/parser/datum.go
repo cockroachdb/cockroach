@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"gopkg.in/inf.v0"
 
@@ -82,6 +83,11 @@ type Datum interface {
 	// IsMin returns true if the datum is equal to the minimum value the datum
 	// type can hold.
 	IsMin() bool
+
+	// Size returns a lower bound on the Datum's size, in bytes.  The
+	// second return value indicates whether the size is dependent on
+	// the particular value.
+	Size() (uintptr, bool)
 }
 
 // DBool is the boolean Datum.
@@ -199,6 +205,11 @@ func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(strconv.FormatBool(bool(*d)))
 }
 
+// Size implements the Datum interface.
+func (d *DBool) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DInt is the int Datum.
 type DInt int64
 
@@ -289,6 +300,11 @@ func (d *DInt) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(strconv.FormatInt(int64(*d), 10))
+}
+
+// Size implements the Datum interface.
+func (d *DInt) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DFloat is the float Datum.
@@ -392,6 +408,11 @@ func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// Size implements the Datum interface.
+func (d *DFloat) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DDecimal is the decimal Datum.
 type DDecimal struct {
 	inf.Dec
@@ -475,6 +496,12 @@ func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.Dec.String())
 }
 
+// Size implements the Datum interface.
+func (d *DDecimal) Size() (uintptr, bool) {
+	intVal := d.Dec.UnscaledBig()
+	return unsafe.Sizeof(*d) + unsafe.Sizeof(*intVal) + unsafe.Sizeof(intVal.Bits()), true
+}
+
 // DString is the string Datum.
 type DString string
 
@@ -555,6 +582,11 @@ func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLString(buf, string(*d))
 }
 
+// Size implements the Datum interface.
+func (d *DString) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), true
+}
+
 // DBytes is the bytes Datum. The underlying type is a string because we want
 // the immutability, but this may contain arbitrary bytes.
 type DBytes string
@@ -633,6 +665,11 @@ func (d *DBytes) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLBytes(buf, string(*d))
+}
+
+// Size implements the Datum interface.
+func (d *DBytes) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), true
 }
 
 // DDate is the date Datum represented as the number of days after
@@ -754,6 +791,11 @@ func (d *DDate) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
+}
+
+// Size implements the Datum interface.
+func (d *DDate) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DTimestamp is the timestamp Datum.
@@ -878,6 +920,11 @@ func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
 }
 
+// Size implements the Datum interface.
+func (d *DTimestamp) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
 type DTimestampTZ struct {
 	time.Time
@@ -970,6 +1017,11 @@ func (d *DTimestampTZ) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
+}
+
+// Size implements the Datum interface.
+func (d *DTimestampTZ) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DInterval is the interval Datum.
@@ -1113,6 +1165,11 @@ func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else {
 		buf.WriteString((time.Duration(d.Duration.Nanos) * time.Nanosecond).String())
 	}
+}
+
+// Size implements the Datum interface.
+func (d *DInterval) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DTuple is the tuple Datum.
@@ -1280,6 +1337,16 @@ func (d *DTuple) makeUnique() {
 	*d = (*d)[:n]
 }
 
+// Size implements the Datum interface.
+func (d *DTuple) Size() (uintptr, bool) {
+	sz := unsafe.Sizeof(*d)
+	for _, e := range *d {
+		dsz, _ := e.Size()
+		sz += dsz
+	}
+	return sz, true
+}
+
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
 func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
@@ -1362,6 +1429,11 @@ func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("NULL")
 }
 
+// Size implements the Datum interface.
+func (d dNull) Size() (uintptr, bool) {
+	return unsafe.Sizeof(d), false
+}
+
 var _ VariableExpr = &DPlaceholder{}
 
 // DPlaceholder is the named placeholder Datum.
@@ -1436,6 +1508,11 @@ func (*DPlaceholder) IsMin() bool {
 func (d *DPlaceholder) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('$')
 	buf.WriteString(d.name)
+}
+
+// Size implements the Datum interface.
+func (d *DPlaceholder) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d) + unsafe.Sizeof(d.name), true
 }
 
 // Temporary workaround for #3633, allowing comparisons between

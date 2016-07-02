@@ -20,12 +20,11 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 )
@@ -43,7 +42,7 @@ type explainTraceNode struct {
 	lastPos   int
 }
 
-var traceColumns = append([]ResultColumn{
+var traceColumns = append(ResultColumns{
 	{Name: "Cumulative Time", Typ: parser.TypeString},
 	{Name: "Duration", Typ: parser.TypeString},
 	{Name: "Span Pos", Typ: parser.TypeInt},
@@ -56,25 +55,44 @@ var traceOrdering = sqlbase.ColumnOrdering{
 	{ColIdx: 2, Direction: encoding.Ascending},                 /* Span pos */
 }
 
-func makeTraceNode(plan planNode, txn *client.Txn) planNode {
+func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 	return &selectTopNode{
 		source: &explainTraceNode{
 			plan: plan,
 			txn:  txn,
 		},
 		sort: &sortNode{
-			// Don't use the planner context: this sort node is sorting the
-			// trace events themselves; we don't want any events from this sort
-			// node to show up in the EXPLAIN TRACE output.
-			ctx:      context.Background(),
+			// Generally, sortNode uses its ctx field to log sorting
+			// details.  However the user of EXPLAIN(TRACE) only wants
+			// details about the traced statement, not about the sortNode
+			// that does work on behalf of the EXPLAIN statement itself.  So
+			// we connect this sortNode to a different context, so its log
+			// messages do not go to the planner's context which will be
+			// responsible to collect the trace.
+
+			// TODO(andrei): I think ideally we would also use the planner's
+			// Span, but create a sub-span for the Sorting with a special
+			// tag that is ignored by the EXPLAIN TRACE logic. This way,
+			// this sorting would still appear in our debug tracing, it just
+			// wouldn't be reported. Of course, currently statements under
+			// EXPLAIN TRACE are not present in our normal debug tracing at
+			// all since we override the tracer, but I'm hoping to stop
+			// doing that. And even then I'm not completely sure how this
+			// would work exactly, since the sort node "wraps" the inner
+			// select node, but we can probably do something using
+			// opentracing's "follows-from" spans as opposed to
+			// "parent-child" spans when expressing this relationship
+			// between the sort and the select.
+			ctx:      opentracing.ContextWithSpan(tracing.WithTracer(p.ctx(), nil), nil),
+			p:        p,
 			ordering: traceOrdering,
 			columns:  traceColumns,
 		},
 	}
 }
 
-func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
-func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*explainTraceNode) Columns() ResultColumns { return traceColumns }
+func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *explainTraceNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
@@ -86,6 +104,7 @@ func (n *explainTraceNode) expandPlan() error {
 }
 
 func (n *explainTraceNode) Start() error { return n.plan.Start() }
+func (n *explainTraceNode) Close()       { n.plan.Close() }
 
 func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil

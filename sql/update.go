@@ -284,6 +284,10 @@ func (u *updateNode) Start() error {
 	return u.run.tw.init(u.p.txn)
 }
 
+func (u *updateNode) Close() {
+	u.run.rows.Close()
+}
+
 func (u *updateNode) Next() (bool, error) {
 	next, err := u.run.rows.Next()
 	if !next {
@@ -381,7 +385,7 @@ func fillDefault(
 	return expr
 }
 
-func (u *updateNode) Columns() []ResultColumn {
+func (u *updateNode) Columns() ResultColumns {
 	return u.rh.columns
 }
 

@@ -224,8 +224,12 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	defer session.Finish()
+
 	query := "CREATE DATABASE " + testdb
 	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
+	defer createRes.Close()
+
 	if createRes.ResultList[0].Err != nil {
 		t.Fatal(createRes.ResultList[0].Err)
 	}
@@ -255,6 +259,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
 	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(session, grantQuery, nil)
+	defer grantRes.Close()
 	if grantRes.ResultList[0].Err != nil {
 		t.Fatal(grantRes.ResultList[0].Err)
 	}
@@ -349,6 +354,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	defer session.Finish()
+
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		`
@@ -365,6 +372,7 @@ CREATE TABLE test.tbl (
 
 	for _, q := range setupQueries {
 		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
+		defer res.Close()
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -443,6 +451,7 @@ CREATE TABLE test.tbl (
 		)
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
+		defer resSet.Close()
 		res := resSet.ResultList[0]
 		if res.Err != nil {
 			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
@@ -450,7 +459,7 @@ CREATE TABLE test.tbl (
 
 		scanner := makeResultScanner(res.Columns)
 		var createStmt string
-		if err := scanner.Scan(res.Rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
 			t.Fatal(err)
 		}
 
@@ -515,7 +524,10 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 
 		session := sql.NewSession(
 			context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		defer session.Finish()
+
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
+		defer resSet.Close()
 		res := resSet.ResultList[0]
 		if res.Err != nil {
 			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
@@ -523,7 +535,7 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 
 		scanner := makeResultScanner(res.Columns)
 		var createStmt string
-		if err := scanner.Scan(res.Rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
 			t.Fatal(err)
 		}
 
@@ -542,12 +554,15 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 	// Create database and table.
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	defer session.Finish()
+
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		"CREATE TABLE test.tbl (val STRING)",
 	}
 	for _, q := range setupQueries {
 		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
+		defer res.Close()
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -581,6 +596,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
 		res := ts.sqlExecutor.ExecuteStatements(session, query, params)
+		defer res.Close()
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
 		}
@@ -620,10 +636,13 @@ func TestAdminAPIUsers(t *testing.T) {
 	// Create sample users.
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	defer session.Finish()
+
 	query := `
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	res := ts.sqlExecutor.ExecuteStatements(session, query, nil)
+	defer res.Close()
 	if a, e := len(res.ResultList), 1; a != e {
 		t.Fatalf("len(results) %d != %d", a, e)
 	} else if res.ResultList[0].Err != nil {
@@ -659,6 +678,8 @@ func TestAdminAPIEvents(t *testing.T) {
 
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	defer session.Finish()
+
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
 		"CREATE TABLE api_test.tbl1 (a INT)",
@@ -669,6 +690,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 	for _, q := range setupQueries {
 		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
+		defer res.Close()
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
