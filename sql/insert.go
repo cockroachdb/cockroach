@@ -258,6 +258,10 @@ func (n *insertNode) Next() (bool, error) {
 		return false, err
 	}
 
+	if n.run.explain == explainDebug {
+		return true, nil
+	}
+
 	rowVals := n.run.rows.Values()
 
 	// The values for the row may be shorter than the number of columns being
@@ -451,6 +455,10 @@ func (n *insertNode) Values() parser.DTuple {
 }
 
 func (n *insertNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.run.explain = mode
 	n.run.rows.MarkDebug(mode)
 }
 

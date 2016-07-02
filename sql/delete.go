@@ -108,7 +108,8 @@ func (d *deleteNode) Start() error {
 	// TODO(dt): We could probably be smarter when presented with an index-join,
 	// but this goes away anyway once we push-down more of SQL.
 	sel := d.run.rows.(*selectTopNode).source.(*selectNode)
-	if scan, ok := sel.source.plan.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
+	if scan, ok := sel.source.plan.(*scanNode); ok &&
+		d.run.explain != explainDebug && canDeleteWithoutScan(d.n, scan, &d.tw) {
 		d.run.fastPath = true
 		err := d.fastDelete(scan)
 		return err
@@ -136,6 +137,10 @@ func (d *deleteNode) Next() (bool, error) {
 			err = d.tw.finalize()
 		}
 		return false, err
+	}
+
+	if d.run.explain == explainDebug {
+		return true, nil
 	}
 
 	rowVals := d.run.rows.Values()
@@ -204,6 +209,10 @@ func (d *deleteNode) Values() parser.DTuple {
 }
 
 func (d *deleteNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	d.run.explain = mode
 	d.run.rows.MarkDebug(mode)
 }
 
