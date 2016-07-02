@@ -43,7 +43,7 @@ type explainTraceNode struct {
 	lastPos   int
 }
 
-var traceColumns = append([]ResultColumn{
+var traceColumns = append(ResultColumns{
 	{Name: "Cumulative Time", Typ: parser.TypeString},
 	{Name: "Duration", Typ: parser.TypeString},
 	{Name: "Span Pos", Typ: parser.TypeInt},
@@ -56,25 +56,30 @@ var traceOrdering = sqlbase.ColumnOrdering{
 	{ColIdx: 2, Direction: encoding.Ascending},                 /* Span pos */
 }
 
-func makeTraceNode(plan planNode, txn *client.Txn) planNode {
+func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 	return &selectTopNode{
 		source: &explainTraceNode{
 			plan: plan,
 			txn:  txn,
 		},
 		sort: &sortNode{
-			// Don't use the planner context: this sort node is sorting the
-			// trace events themselves; we don't want any events from this sort
-			// node to show up in the EXPLAIN TRACE output.
+			// Generally, sortNode uses its ctx field to log sorting
+			// details.  However the user of EXPLAIN(TRACE) only wants
+			// details about the traced statement, not about the sortNode
+			// that does work on behalf of the EXPLAIN statement itself.  So
+			// we connect this sortNode to a different context, so its log
+			// messages do not go to the planner's context which will be
+			// responsible to collect the trace.
 			ctx:      context.Background(),
+			p:        p,
 			ordering: traceOrdering,
 			columns:  traceColumns,
 		},
 	}
 }
 
-func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
-func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*explainTraceNode) Columns() ResultColumns { return traceColumns }
+func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *explainTraceNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
@@ -86,6 +91,7 @@ func (n *explainTraceNode) expandPlan() error {
 }
 
 func (n *explainTraceNode) Start() error { return n.plan.Start() }
+func (n *explainTraceNode) Close()       { n.plan.Close() }
 
 func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil

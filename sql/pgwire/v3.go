@@ -598,7 +598,10 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		return c.sendInternalError(fmt.Sprintf("expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
 	}
 	// Create the new PreparedPortal in the connection's Session.
-	portal := c.session.PreparedPortals.New(portalName, stmt, qargs)
+	portal, err := c.session.PreparedPortals.New(portalName, stmt, qargs)
+	if err != nil {
+		return err
+	}
 	// Attach pgwire-specific metadata to the PreparedPortal.
 	portal.ProtocolMeta = preparedPortalMeta{outFormats: columnFormatCodes}
 	c.writeBuf.initMsg(serverMsgBindComplete)
@@ -639,6 +642,7 @@ func (c *v3Conn) executeStatements(
 ) error {
 	tracing.AnnotateTrace()
 	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
+	defer results.Close()
 
 	tracing.AnnotateTrace()
 	if results.Empty {
@@ -709,6 +713,7 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToS
 	return c.wr.Flush()
 }
 
+// sendResponse sends the results as a query response.
 func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int) error {
 	if len(results) == 0 {
 		return c.sendCommandComplete(nil)
@@ -720,8 +725,8 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 			}
 			break
 		}
-		if limit != 0 && len(result.Rows) > limit {
-			if err := c.sendInternalError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, len(result.Rows))); err != nil {
+		if limit != 0 && result.Rows != nil && result.Rows.Len() > limit {
+			if err := c.sendInternalError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, result.Rows.Len())); err != nil {
 				return err
 			}
 			break
@@ -752,10 +757,12 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 			}
 
 			// Send DataRows.
-			for _, row := range result.Rows {
+			nRows := result.Rows.Len()
+			for rowIdx := 0; rowIdx < nRows; rowIdx++ {
+				row := result.Rows.At(rowIdx)
 				c.writeBuf.initMsg(serverMsgDataRow)
-				c.writeBuf.putInt16(int16(len(row.Values)))
-				for i, col := range row.Values {
+				c.writeBuf.putInt16(int16(len(row)))
+				for i, col := range row {
 					fmtCode := formatText
 					if formatCodes != nil {
 						fmtCode = formatCodes[i]
@@ -776,7 +783,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 
 			// Send CommandComplete.
 			tag = append(tag, ' ')
-			tag = strconv.AppendUint(tag, uint64(len(result.Rows)), 10)
+			tag = strconv.AppendUint(tag, uint64(result.Rows.Len()), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}

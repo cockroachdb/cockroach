@@ -98,6 +98,13 @@ type StatementResults struct {
 	Empty bool
 }
 
+// Close ensures that the resources claimed by the results are released.
+func (s *StatementResults) Close() {
+	for _, r := range s.ResultList {
+		r.Close()
+	}
+}
+
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
 	Err error
@@ -111,12 +118,15 @@ type Result struct {
 	// the names and types of the columns returned in the result set in the order
 	// specified in the SQL statement. The number of columns will equal the number
 	// of values in each Row.
-	Columns []ResultColumn
+	Columns ResultColumns
 	// Rows will be populated if the statement type is "Rows". It will contain
 	// the result set of the result.
 	// TODO(nvanbenschoten): Can this be streamed from the planNode?
-	Rows []ResultRow
+	Rows *RowContainer
 }
+
+// Close ensures that the resources claimed by the result are released.
+func (r *Result) Close() { r.Rows.Close() }
 
 // ResultColumn contains the name and type of a SQL "cell".
 type ResultColumn struct {
@@ -127,10 +137,9 @@ type ResultColumn struct {
 	hidden bool
 }
 
-// ResultRow is a collection of values representing a row in a result.
-type ResultRow struct {
-	Values []parser.Datum
-}
+// ResultColumns is the type used throughout the sql module to
+// describe the column types of a table.
+type ResultColumns []ResultColumn
 
 // An Executor executes SQL statements.
 // Executor is thread-safe.
@@ -343,7 +352,7 @@ func (e *Executor) Prepare(
 	query string,
 	session *Session,
 	pinfo parser.PlaceholderTypes,
-) ([]ResultColumn, error) {
+) (ResultColumns, error) {
 	if log.V(2) {
 		log.Infof(session.Ctx(), "preparing: %s", query)
 	} else if traceSQL {
@@ -388,6 +397,7 @@ func (e *Executor) Prepare(
 	if plan == nil {
 		return nil, nil
 	}
+	defer plan.Close()
 	cols := plan.Columns()
 	for _, c := range cols {
 		if err := checkResultDatum(c.Typ); err != nil {
@@ -995,6 +1005,8 @@ func (e *Executor) execStmtInOpenTxn(
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
 	result, err := e.execStmt(stmt, planMaker, autoCommit)
 	if err != nil {
+		result.Rows.Close()
+		result.Rows = nil
 		if traceSQL {
 			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
 		}
@@ -1009,7 +1021,7 @@ func (e *Executor) execStmtInOpenTxn(
 		case parser.RowsAffected:
 			tResult.count = result.RowsAffected
 		case parser.Rows:
-			tResult.count = len(result.Rows)
+			tResult.count = result.Rows.Len()
 		}
 		txnState.tr.LazyLog(tResult, false)
 		if traceSQL {
@@ -1107,6 +1119,8 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 
+	defer plan.Close()
+
 	if testDistSQL != 0 {
 		if err := hackPlanToUseDistSQL(plan, testDistSQL == 1); err != nil {
 			return result, err
@@ -1135,9 +1149,10 @@ func (e *Executor) execStmt(
 				return result, err
 			}
 		}
+		result.Rows = planMaker.NewRowContainer(result.Columns, 0)
 
 		// valuesAlloc is used to allocate the backing storage for the
-		// ResultRow.Values slices in chunks.
+		// result row slices in chunks.
 		var valuesAlloc []parser.Datum
 		const maxChunkSize = 64 // Arbitrary, could use tuning.
 		chunkSize := 4          // Arbitrary as well.
@@ -1149,21 +1164,23 @@ func (e *Executor) execStmt(
 
 			n := len(values)
 			if len(valuesAlloc) < n {
-				valuesAlloc = make([]parser.Datum, len(result.Columns)*chunkSize)
+				valuesAlloc = make(parser.DTuple, len(result.Columns)*chunkSize)
 				if chunkSize < maxChunkSize {
 					chunkSize *= 2
 				}
 			}
-			row := ResultRow{Values: valuesAlloc[:0:n]}
+			row := valuesAlloc[:0:n]
 			valuesAlloc = valuesAlloc[n:]
 
 			for _, val := range values {
 				if err := checkResultDatum(val); err != nil {
 					return result, err
 				}
-				row.Values = append(row.Values, val)
+				row = append(row, val)
 			}
-			result.Rows = append(result.Rows, row)
+			if err := result.Rows.AddRow(row); err != nil {
+				return result, err
+			}
 		}
 		if err != nil {
 			return result, err
@@ -1288,8 +1305,8 @@ func checkResultDatum(datum parser.Datum) error {
 }
 
 // makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
-	cols := make([]ResultColumn, 0, len(colDescs))
+func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) ResultColumns {
+	cols := make(ResultColumns, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
 		typ := colDesc.Type.ToDatumType()

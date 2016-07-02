@@ -20,7 +20,9 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
@@ -28,25 +30,30 @@ import (
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
 	plan planNode
+	p    *planner
 	top  *selectTopNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
 	// Encoding of the columnsInOrder columns for the previous row.
-	prefixSeen []byte
+	prefixSeen      []byte
+	prefixAllocSpan mon.AllocationSpan
+
 	// Encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
-	suffixSeen map[string]struct{}
-	explain    explainMode
-	debugVals  debugValues
+	suffixSeen      map[string]struct{}
+	suffixAllocSpan mon.AllocationSpan
+
+	explain   explainMode
+	debugVals debugValues
 }
 
 // distinct constructs a distinctNode.
-func (*planner) Distinct(n *parser.SelectClause) *distinctNode {
+func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 	if !n.Distinct {
 		return nil
 	}
-	return &distinctNode{}
+	return &distinctNode{p: p}
 }
 
 // wrap connects the distinctNode to its source planNode.
@@ -103,7 +110,7 @@ func (n *distinctNode) setTop(top *selectTopNode) {
 	}
 }
 
-func (n *distinctNode) Columns() []ResultColumn {
+func (n *distinctNode) Columns() ResultColumns {
 	if n.plan != nil {
 		return n.plan.Columns()
 	}
@@ -129,6 +136,15 @@ func (n *distinctNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
+func (n *distinctNode) addSuffixSeen(sKey string) error {
+	sz := int64(unsafe.Sizeof(sKey))
+	if err := n.p.session.ExtendSpan(&n.suffixAllocSpan, sz); err != nil {
+		return err
+	}
+	n.suffixSeen[sKey] = struct{}{}
+	return nil
+}
+
 func (n *distinctNode) Next() (bool, error) {
 	for {
 		next, err := n.plan.Next()
@@ -152,11 +168,17 @@ func (n *distinctNode) Next() (bool, error) {
 			// The prefix of the row which is ordered differs from the last row;
 			// reset our seen set.
 			if len(n.suffixSeen) > 0 {
+				n.p.session.ResetSpan(&n.suffixAllocSpan)
 				n.suffixSeen = make(map[string]struct{})
+			}
+			if err := n.p.session.ResetSpanAndAlloc(&n.prefixAllocSpan, int64(len(prefix))); err != nil {
+				return false, err
 			}
 			n.prefixSeen = prefix
 			if suffix != nil {
-				n.suffixSeen[string(suffix)] = struct{}{}
+				if err := n.addSuffixSeen(string(suffix)); err != nil {
+					return false, err
+				}
 			}
 			return true, nil
 		}
@@ -166,7 +188,9 @@ func (n *distinctNode) Next() (bool, error) {
 		if suffix != nil {
 			sKey := string(suffix)
 			if _, ok := n.suffixSeen[sKey]; !ok {
-				n.suffixSeen[sKey] = struct{}{}
+				if err := n.addSuffixSeen(sKey); err != nil {
+					return false, err
+				}
 				return true, nil
 			}
 		}
@@ -222,4 +246,12 @@ func (n *distinctNode) ExplainTypes(_ func(string, string)) {}
 func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 	// Any limit becomes a "soft" limit underneath.
 	n.plan.SetLimitHint(numRows, true)
+}
+
+func (n *distinctNode) Close() {
+	n.plan.Close()
+	n.prefixSeen = nil
+	n.suffixSeen = nil
+	n.p.session.CloseSpan(&n.suffixAllocSpan)
+	n.p.session.CloseSpan(&n.prefixAllocSpan)
 }

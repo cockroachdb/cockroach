@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -66,6 +67,10 @@ type Session struct {
 	Trace                 trace.Trace
 	context               context.Context
 	cancel                context.CancelFunc
+
+	// mon tracks memory usage for SQL activity within this session.
+	// See the comments at the start of session_mem_usage.go for more details.
+	mon mon.MemoryUsageMonitor
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -100,6 +105,10 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	s.Trace = trace.New("sql."+args.User, remoteStr)
 	s.Trace.SetMaxEvents(100)
 	s.context, s.cancel = context.WithCancel(ctx)
+	if remoteStr != "" {
+		s.context = log.WithLogTag(s.context, "remote=", remoteStr)
+	}
+	s.mon.StartMonitor()
 	return s
 }
 
@@ -109,6 +118,13 @@ func (s *Session) Finish() {
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
+	for _, p := range s.PreparedPortals.portals {
+		s.CloseSpan(&p.allocSpan)
+	}
+	for _, p := range s.PreparedStatements.stmts {
+		s.CloseSpan(&p.allocSpan)
+	}
+	s.mon.StopMonitor(s.Ctx())
 	if s.Trace != nil {
 		s.Trace.Finish()
 		s.Trace = nil
