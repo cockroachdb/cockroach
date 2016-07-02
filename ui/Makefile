@@ -60,10 +60,6 @@ lint: npm.installed typings.installed
 test: protobuf npm.installed typings.installed jspm.installed
 	karma start
 
-.PHONY: watch
-watch: npm.installed
-	gulp watch
-
 GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png index.html
 
 $(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
@@ -77,11 +73,14 @@ $(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS
 	jspm bundle-sfx app/app build/app.js
 
 # TODO(tamird/matt/max): write a systemjs stylus plugin.
+.PHONY: watch
+watch: STYLFLAGS += --watch
+watch: $(CSS_TARGET)
+
+$(CSS_TARGET): STYLFLAGS += --include-css
+$(CSS_TARGET): STYLFLAGS += --use nib
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed
-	stylus $(STYL_ROOT)/app.styl \
-	       --include-css \
-	       --use nib \
-	       --out $@
+	stylus $(STYL_ROOT)/app.styl $(STYLFLAGS) --out $@
 
 npm.installed: package.json npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
