@@ -201,7 +201,7 @@ export function singleTableDetailsReducer(state: TableDetailsState = new TableDe
   }
 }
 
-export default combineReducers({
+export default combineReducers<DatabaseInfoState>({
   databases: databasesReducer,
   databaseDetails: allDatabaseDetailsReducer,
   tableDetails: allTablesDetailsReducer,
@@ -315,8 +315,8 @@ export function invalidateTableDetails(db: string, table: string): PayloadAction
  * list. Dispatching it will attempt to asynchronously refresh the database list
  * if its results are no longer considered valid.
  */
-export function refreshDatabases() {
-  return (dispatch: Dispatch, getState: () => any) => {
+export function refreshDatabases<S>() {
+  return (dispatch: Dispatch<S>, getState: () => any) => {
     let { databaseInfo }: {databaseInfo: DatabaseInfoState} = getState();
 
     // TODO: Currently we only refresh when the page is revisited. Eventually
@@ -342,8 +342,8 @@ export function refreshDatabases() {
   };
 }
 
-export function refreshDatabaseDetails(id: string) {
-  return (dispatch: Dispatch, getState: () => any) => {
+export function refreshDatabaseDetails<S>(id: string) {
+  return (dispatch: Dispatch<S>, getState: () => any) => {
     let { databaseInfo }: {databaseInfo: DatabaseInfoState} = getState();
 
     // Don't refresh if a request is already in flight
@@ -367,8 +367,8 @@ export function refreshDatabaseDetails(id: string) {
   };
 }
 
-export function refreshTableDetails(database: string, table: string) {
-  return (dispatch: Dispatch, getState: () => any) => {
+export function refreshTableDetails<S>(database: string, table: string) {
+  return (dispatch: Dispatch<S>, getState: () => any) => {
     let { databaseInfo }: {databaseInfo: DatabaseInfoState} = getState();
 
     let id = generateTableID(database, table);

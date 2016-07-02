@@ -1,9 +1,12 @@
-import * as React from "react";
-import { Link } from "react-router";
 import * as _ from "lodash";
+import * as React from "react";
+import { Link, IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
+import { databaseName } from "../../util/constants";
+
+import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshDatabaseDetails } from "../../redux/databaseInfo";
 
@@ -148,17 +151,10 @@ interface DatabaseMainActions {
 }
 
 /**
- * This augments DatabaseMainProps to add known values from the route.
- */
-interface DatabaseSpecified {
-  params: { database_name: string; };
-}
-
-/**
  * DatabaseMainProps is the type of the props object that must be passed to
  * DatabaseMain component.
  */
-type DatabaseMainProps = DatabaseMainData & DatabaseMainActions & DatabaseSpecified;
+type DatabaseMainProps = DatabaseMainData & DatabaseMainActions & IInjectedProps;
 
 /**
  * DatabaseMain renders the main content of the database details page, which is primarily a
@@ -175,7 +171,7 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
       return _.map(tablesColumnDescriptors, (cd): SortableColumn => {
         return {
           title: cd.title,
-          cell: (index) => cd.cell(tables[index], this.props.params.database_name),
+          cell: (index) => cd.cell(tables[index], this.props.params[databaseName]),
           sortKey: cd.sort ? cd.key : undefined,
         };
       });
@@ -197,8 +193,8 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
       });
     });
 
-  static title(props: any) {
-    return <h2><Link to="/databases" >Databases </Link>: { props.params.database_name }</h2>;
+  static title(props: IInjectedProps) {
+    return <h2><Link to="/databases" >Databases </Link>: { props.params[databaseName] }</h2>;
   }
 
   // Callback when the user elects to change the table table sort setting.
@@ -213,7 +209,7 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
 
   // refresh when the component is mounted
   componentWillMount() {
-    this.props.refreshDatabaseDetails(this.props.params.database_name);
+    this.props.refreshDatabaseDetails(this.props.params[databaseName]);
   }
 
   render() {
@@ -244,17 +240,16 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
  */
 
 // Helper function that gets a DatabaseDetailsResponseMessage given a state and props
-function getDatabaseDetails(state: any, props: DatabaseMainProps): DatabaseDetailsResponseMessage {
-  let details = state.databaseInfo.databaseDetails &&
-    state.databaseInfo.databaseDetails[props && props.params && props.params.database_name];
+function getDatabaseDetails(state: AdminUIState, props: IInjectedProps): DatabaseDetailsResponseMessage {
+  let details = state.databaseInfo.databaseDetails[props.params[databaseName]];
   return details && details.data;
 }
 
 // Base selectors to extract data from redux state.
-let tables = (state: any, props: any): string[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).table_names : [];
-let grants = (state: any, props: any): Grant[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).grants : [];
-let tablesSortSetting = (state: any): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
-let grantsSortSetting = (state: any): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
+let tables = (state: AdminUIState, props: IInjectedProps): string[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).table_names : [];
+let grants = (state: AdminUIState, props: IInjectedProps): Grant[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).grants : [];
+let tablesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
+let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
 
 // Selectors which sorts statuses according to current sort setting.
 let tablesSortFunctionLookup = _(tablesColumnDescriptors).keyBy("key").mapValues<(s: string) => any>("sort").value();

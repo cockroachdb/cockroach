@@ -6,6 +6,7 @@ import { createSelector } from "reselect";
 import * as d3 from "d3";
 import * as moment from "moment";
 
+import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import { setUISetting } from "../redux/ui";
 import { SortableTable, SortableColumn, SortSetting } from "../components/sortabletable";
@@ -267,9 +268,9 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
  */
 
 // Base selectors to extract data from redux state.
-let nodeQueryValid = (state: any): boolean => state.cachedData.nodes.valid;
-let nodeStatuses = (state: any): NodeStatus[] => state.cachedData.nodes.data;
-let sortSetting = (state: any): SortSetting => state.ui[UI_NODES_SORT_SETTING_KEY] || {};
+let nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.valid;
+let nodeStatuses = (state: AdminUIState): NodeStatus[] => state.cachedData.nodes.data;
+let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_SORT_SETTING_KEY] || {};
 
 // Selector which sorts statuses according to current sort setting.
 let sortFunctionLookup = _.reduce(

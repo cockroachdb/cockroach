@@ -1,6 +1,6 @@
 import * as React from "react";
 import _ = require("lodash");
-import { RouteComponentProps } from "react-router";
+import { IInjectedProps } from "react-router";
 
 import { TitledComponent } from "../interfaces/layout";
 import SideBar from "../components/layoutSidebar";
@@ -18,7 +18,7 @@ function isTitledComponent(obj: Object | TitledComponent): obj is TitledComponen
  *
  * Individual pages provide their content via react-router.
  */
-export default class extends React.Component<RouteComponentProps<any, any>, {}> {
+export default class extends React.Component<IInjectedProps, {}> {
   render() {
     // Responsibility for rendering a title is decided based on the route;
     // specifically, the most specific current route for which that route's
