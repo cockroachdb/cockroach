@@ -36,12 +36,12 @@ var (
 	testKey     = roachpb.Key("a")
 	testTS      = hlc.Timestamp{WallTime: 1, Logical: 1}
 	testPutResp = roachpb.PutResponse{}
+	txnKey      = roachpb.Key("test-txn")
 )
 
 // TestSender mocks out some of the txn coordinator sender's
 // functionality. It responds to PutRequests using testPutResp.
 func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
-	txnKey := roachpb.Key("test-txn")
 	txnID := uuid.NewV4()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -426,6 +426,55 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		if !reflect.DeepEqual(expCalls, calls) {
 			t.Fatalf("expected %v, got %v", expCalls, calls)
 		}
+	}
+}
+
+// TestTransactionKeyNotChangedInRestart verifies that if the transaction already has a key (we're
+// in a restart), the key in the begin transaction request is not changed.
+func TestTransactionKeyNotChangedInRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tries := 0
+	db := NewDB(newTestSender(nil, func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		var bt *roachpb.BeginTransactionRequest
+		if args, ok := ba.GetArg(roachpb.BeginTransaction); ok {
+			bt = args.(*roachpb.BeginTransactionRequest)
+		} else {
+			t.Fatal("failed to find a begin transaction request")
+		}
+
+		// In the first try, the transaction key is the key of the first write command. Before the
+		// second try, the transaction key is set to txnKey by the test sender. In the second try, the
+		// transaction key is txnKey.
+		var expectedKey roachpb.Key
+		if tries == 1 {
+			expectedKey = testKey
+		} else {
+			expectedKey = txnKey
+		}
+		if !bt.Key.Equal(expectedKey) {
+			t.Fatalf("expected transaction key %v, got %v", expectedKey, bt.Key)
+		}
+
+		return ba.CreateReply(), nil
+	}))
+
+	if err := db.Txn(func(txn *Txn) error {
+		tries++
+		b := txn.NewBatch()
+		b.Put("a", "b")
+		if err := txn.Run(b); err != nil {
+			t.Fatal(err)
+		}
+		if tries == 1 {
+			return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn.Proto).GoError()
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+	minimumTries := 2
+	if tries < minimumTries {
+		t.Errorf("expected try count >= %d, got %d", minimumTries, tries)
 	}
 }
 
