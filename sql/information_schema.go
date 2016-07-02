@@ -95,9 +95,9 @@ CREATE TABLE information_schema.columns (
   DATETIME_PRECISION INT
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum)) error {
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				// Table descriptors already holds columns in-order.
 				visible := 0
 				for _, column := range table.Columns {
@@ -105,7 +105,7 @@ CREATE TABLE information_schema.columns (
 						continue
 					}
 					visible++
-					addRow(
+					if err := addRow(
 						defString,                                    // table_catalog
 						parser.NewDString(db.Name),                   // table_schema
 						parser.NewDString(table.Name),                // table_name
@@ -119,8 +119,11 @@ CREATE TABLE information_schema.columns (
 						numericPrecision(column.Type),                // numeric_precision
 						numericScale(column.Type),                    // numeric_scale
 						datetimePrecision(column.Type),               // datetime_precision
-					)
+					); err != nil {
+						return err
+					}
 				}
+				return nil
 			},
 		)
 	},
@@ -160,12 +163,12 @@ CREATE TABLE information_schema.table_privileges (
 	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum)) error {
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				for _, u := range table.Privileges.Show() {
 					for _, privilege := range u.Privileges {
-						addRow(
+						if err := addRow(
 							parser.DNull,                  // grantor
 							parser.NewDString(u.User),     // grantee
 							defString,                     // table_catalog,
@@ -174,9 +177,12 @@ CREATE TABLE information_schema.table_privileges (
 							parser.NewDString(privilege),  // privilege_type
 							parser.DNull,                  // is_grantable
 							parser.DNull,                  // with_hierarchy
-						)
+						); err != nil {
+							return err
+						}
 					}
 				}
+				return nil
 			},
 		)
 	},
@@ -190,9 +196,9 @@ CREATE TABLE information_schema.schemata (
   DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
   SQL_PATH STRING
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum)) error {
-		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) {
-			addRow(
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
+			return addRow(
 				defString,                  // catalog_name
 				parser.NewDString(db.Name), // schema_name
 				parser.DNull,               // default_character_set_name
@@ -212,19 +218,22 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum)) error {
-		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) {
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.Privileges.Show() {
 				for _, privilege := range u.Privileges {
-					addRow(
+					if err := addRow(
 						parser.NewDString(u.User),    // grantee
 						defString,                    // table_catalog,
 						parser.NewDString(db.Name),   // table_schema
 						parser.NewDString(privilege), // privilege_type
 						parser.DNull,                 // is_grantable
-					)
+					); err != nil {
+						return err
+					}
 				}
 			}
+			return nil
 		})
 	},
 }
@@ -247,9 +256,9 @@ CREATE TABLE information_schema.table_constraints (
   TABLE_NAME STRING NOT NULL DEFAULT '',
   CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum)) error {
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				type constraint struct {
 					name string
 					typ  parser.Datum
@@ -279,15 +288,18 @@ CREATE TABLE information_schema.table_constraints (
 					})
 				}
 				for _, c := range constraints {
-					addRow(
+					if err := addRow(
 						defString,                     // constraint_catalog
 						parser.NewDString(db.Name),    // constraint_schema
 						dStringOrNull(c.name),         // constraint_name
 						parser.NewDString(db.Name),    // table_schema
 						parser.NewDString(table.Name), // table_name
 						c.typ, // constraint_type
-					)
+					); err != nil {
+						return err
+					}
 				}
+				return nil
 			},
 		)
 	},
@@ -307,14 +319,14 @@ CREATE TABLE information_schema.tables (
   TABLE_TYPE STRING NOT NULL DEFAULT '',
   VERSION INT
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum)) error {
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				tableType := tableTypeBaseTable
 				if isVirtualDescriptor(table) {
 					tableType = tableTypeSystemView
 				}
-				addRow(
+				return addRow(
 					defString,                     // table_catalog
 					parser.NewDString(db.Name),    // table_schema
 					parser.NewDString(table.Name), // table_name
@@ -339,7 +351,7 @@ func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name 
 // will call fn with its descriptor.
 func forEachDatabaseDesc(
 	p *planner,
-	fn func(*sqlbase.DatabaseDescriptor),
+	fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
 	// Handle real schemas
 	dbDescs, err := p.getAllDatabaseDescs()
@@ -355,7 +367,9 @@ func forEachDatabaseDesc(
 	sort.Sort(sortedDBDescs(dbDescs))
 	for _, db := range dbDescs {
 		if userCanSeeDatabase(db, p.session.User) {
-			fn(db)
+			if err := fn(db); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -367,7 +381,7 @@ func forEachDatabaseDesc(
 // database and table descriptor.
 func forEachTableDesc(
 	p *planner,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor),
+	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
 	type dbDescTables struct {
 		desc   *sqlbase.DatabaseDescriptor
@@ -435,7 +449,9 @@ func forEachTableDesc(
 		for _, tableName := range dbTableNames {
 			tableDesc := db.tables[tableName]
 			if userCanSeeTable(tableDesc, p.session.User) {
-				fn(db.desc, tableDesc)
+				if err := fn(db.desc, tableDesc); err != nil {
+					return err
+				}
 			}
 		}
 	}

@@ -200,7 +200,7 @@ func (n *limitNode) setTop(top *selectTopNode) {
 	}
 }
 
-func (n *limitNode) Columns() []ResultColumn {
+func (n *limitNode) Columns() ResultColumns {
 	if n.plan != nil {
 		return n.plan.Columns()
 	}
@@ -279,6 +279,10 @@ func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {
 		subplans = n.p.collectSubqueryPlans(n.offsetExpr, subplans)
 	}
 	return "limit", buf.String(), subplans
+}
+
+func (n *limitNode) Close() {
+	n.plan.Close()
 }
 
 // getLimit computes the actual number of rows to request from the

@@ -149,7 +149,8 @@ func (n *dropDatabaseNode) Start() error {
 }
 
 func (n *dropDatabaseNode) Next() (bool, error)                 { return false, nil }
-func (n *dropDatabaseNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *dropDatabaseNode) Close()                              {}
+func (n *dropDatabaseNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *dropDatabaseNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *dropDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropDatabaseNode) DebugValues() debugValues            { return debugValues{} }
@@ -294,7 +295,8 @@ func (n *dropIndexNode) Start() error {
 }
 
 func (n *dropIndexNode) Next() (bool, error)                 { return false, nil }
-func (n *dropIndexNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *dropIndexNode) Close()                              {}
+func (n *dropIndexNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *dropIndexNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *dropIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropIndexNode) DebugValues() debugValues            { return debugValues{} }
@@ -459,7 +461,8 @@ func (n *dropTableNode) Start() error {
 }
 
 func (n *dropTableNode) Next() (bool, error)                 { return false, nil }
-func (n *dropTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *dropTableNode) Close()                              {}
+func (n *dropTableNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *dropTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *dropTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *dropTableNode) ExplainTypes(_ func(string, string)) {}

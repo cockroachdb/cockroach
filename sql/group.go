@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -190,7 +191,7 @@ type groupNode struct {
 	explain explainMode
 }
 
-func (n *groupNode) Columns() []ResultColumn {
+func (n *groupNode) Columns() ResultColumns {
 	return n.values.Columns()
 }
 
@@ -303,7 +304,7 @@ func (n *groupNode) Next() (bool, error) {
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
-			if err := n.funcs[i].add(encoded, value); err != nil {
+			if err := n.funcs[i].add(n.planner.session, encoded, value); err != nil {
 				return false, err
 			}
 		}
@@ -326,7 +327,7 @@ func (n *groupNode) computeAggregates() error {
 	}
 
 	// Render the results.
-	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
+	n.values.rows = n.planner.NewRowContainer(n.values.Columns(), len(n.buckets))
 	for k := range n.buckets {
 		n.currentBucket = k
 
@@ -351,7 +352,9 @@ func (n *groupNode) computeAggregates() error {
 			row = append(row, res)
 		}
 
-		n.values.rows = append(n.values.rows, row)
+		if err := n.values.rows.AddRow(row); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -389,6 +392,15 @@ func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
+
+func (n *groupNode) Close() {
+	n.plan.Close()
+	for _, f := range n.funcs {
+		f.close(n.planner.session)
+	}
+	n.values.Close()
+	n.buckets = nil
+}
 
 // wrap the supplied planNode with the groupNode if grouping/aggregation is required.
 func (n *groupNode) wrap(plan planNode) planNode {
@@ -501,13 +513,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				return false, expr
 			}
 
-			f := &aggregateFuncHolder{
-				expr:    t,
-				arg:     argExpr.(parser.TypedExpr),
-				create:  agg,
-				group:   v.n,
-				buckets: make(map[string]parser.AggregateFunc),
-			}
+			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
 			if t.Type == parser.Distinct {
 				f.seen = make(map[string]struct{})
 			}
@@ -520,13 +526,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				t.colRef.get().Name)
 			return true, expr
 		}
-		f := &aggregateFuncHolder{
-			expr:    t,
-			arg:     t,
-			create:  parser.NewIdentAggregate,
-			group:   v.n,
-			buckets: make(map[string]parser.AggregateFunc),
-		}
+		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
 		v.n.funcs = append(v.n.funcs, f)
 		return false, f
 	}
@@ -566,15 +566,38 @@ var _ parser.TypedExpr = &aggregateFuncHolder{}
 var _ parser.VariableExpr = &aggregateFuncHolder{}
 
 type aggregateFuncHolder struct {
-	expr    parser.TypedExpr
-	arg     parser.TypedExpr
-	create  func() parser.AggregateFunc
-	group   *groupNode
-	buckets map[string]parser.AggregateFunc
-	seen    map[string]struct{}
+	expr          parser.TypedExpr
+	arg           parser.TypedExpr
+	create        func() parser.AggregateFunc
+	group         *groupNode
+	buckets       map[string]parser.AggregateFunc
+	bucketsMemAcc mon.MemoryAccount
+	seen          map[string]struct{}
 }
 
-func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
+func (n *groupNode) newAggregateFuncHolder(
+	expr, arg parser.TypedExpr,
+	create func() parser.AggregateFunc,
+) *aggregateFuncHolder {
+	res := &aggregateFuncHolder{
+		expr:          expr,
+		arg:           arg,
+		create:        create,
+		group:         n,
+		buckets:       make(map[string]parser.AggregateFunc),
+		bucketsMemAcc: n.planner.session.mon.OpenAccount(n.planner.session.Ctx()),
+	}
+	return res
+}
+
+func (a *aggregateFuncHolder) close(s *Session) {
+	a.buckets = nil
+	a.seen = nil
+	a.group = nil
+	a.bucketsMemAcc.Close(s.Ctx())
+}
+
+func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
@@ -586,6 +609,9 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 		if _, ok := a.seen[string(encoded)]; ok {
 			// skip
 			return nil
+		}
+		if err := a.bucketsMemAcc.Grow(s.Ctx(), int64(len(encoded))); err != nil {
+			return err
 		}
 		a.seen[string(encoded)] = struct{}{}
 	}
@@ -621,8 +647,7 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 
 	datum := found.Result()
 
-	// This is almost certainly the identity. Oh well.
-	return datum.Eval(ctx)
+	return datum, nil
 }
 
 func (a *aggregateFuncHolder) ReturnType() parser.Datum {
