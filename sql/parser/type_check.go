@@ -687,11 +687,11 @@ func typeCheckComparisonOp(
 	}
 
 	leftExpr, rightExpr := typedSubExprs[0], typedSubExprs[1]
-	leftReturn := leftExpr.(TypedExpr).ReturnType()
-	rightReturn := rightExpr.(TypedExpr).ReturnType()
 	if switched {
 		leftExpr, rightExpr = rightExpr, leftExpr
 	}
+	leftReturn := leftExpr.(TypedExpr).ReturnType()
+	rightReturn := rightExpr.(TypedExpr).ReturnType()
 	if leftReturn == DNull || rightReturn == DNull {
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
