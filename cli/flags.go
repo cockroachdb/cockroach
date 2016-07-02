@@ -317,7 +317,7 @@ func init() {
 		varFlag(f, &serverCtx.JoinList, cliflags.Join)
 
 		// Engine flags.
-		setDefaultCacheSize(&serverCtx)
+		initDependentParameters(&serverCtx)
 		cacheSize = newBytesValue(&serverCtx.CacheSize)
 		varFlag(f, cacheSize, cliflags.Cache)
 	}

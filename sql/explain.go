@@ -102,29 +102,39 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return &explainDebugNode{plan}, nil
 
 	case explainTypes:
+		columns := ResultColumns{
+			{Name: "Level", Typ: parser.TypeInt},
+			{Name: "Type", Typ: parser.TypeString},
+			{Name: "Element", Typ: parser.TypeString},
+			{Name: "Description", Typ: parser.TypeString},
+		}
 		node := &explainTypesNode{
 			plan:     plan,
 			expanded: expanded,
-			results: &valuesNode{
-				columns: []ResultColumn{
-					{Name: "Level", Typ: parser.TypeInt},
-					{Name: "Type", Typ: parser.TypeString},
-					{Name: "Element", Typ: parser.TypeString},
-					{Name: "Description", Typ: parser.TypeString},
-				},
-			},
+			results:  p.newContainerValuesNode(columns, 0),
 		}
 		return node, nil
 
 	case explainPlan:
+		columns := ResultColumns{
+			{Name: "Level", Typ: parser.TypeInt},
+			{Name: "Type", Typ: parser.TypeString},
+			{Name: "Description", Typ: parser.TypeString},
+		}
+		if verbose {
+			columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
+			columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
+		}
+
 		node := &explainPlanNode{
 			verbose: verbose,
 			plan:    plan,
+			results: p.newContainerValuesNode(columns, 0),
 		}
 		return node, nil
 
 	case explainTrace:
-		return makeTraceNode(plan, p.txn), nil
+		return p.makeTraceNode(plan, p.txn), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
@@ -139,7 +149,8 @@ type explainTypesNode struct {
 
 func (e *explainTypesNode) ExplainTypes(fn func(string, string)) {}
 func (e *explainTypesNode) Next() (bool, error)                  { return e.results.Next() }
-func (e *explainTypesNode) Columns() []ResultColumn              { return e.results.Columns() }
+func (e *explainTypesNode) Close()                               { e.results.Close() }
+func (e *explainTypesNode) Columns() ResultColumns               { return e.results.Columns() }
 func (e *explainTypesNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
@@ -164,11 +175,10 @@ func (e *explainTypesNode) expandPlan() error {
 }
 
 func (e *explainTypesNode) Start() error {
-	populateTypes(e.results, e.plan, 0)
-	return nil
+	return populateTypes(e.results, e.plan, 0)
 }
 
-func formatColumns(cols []ResultColumn, printTypes bool) string {
+func formatColumns(cols ResultColumns, printTypes bool) string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
 	for i, rCol := range cols {
@@ -188,7 +198,7 @@ func formatColumns(cols []ResultColumn, printTypes bool) string {
 	return buf.String()
 }
 
-func populateTypes(v *valuesNode, plan planNode, level int) {
+func populateTypes(v *valuesNode, plan planNode, level int) error {
 	name, _, children := plan.ExplainPlan(true)
 
 	// Format the result column types.
@@ -198,24 +208,39 @@ func populateTypes(v *valuesNode, plan planNode, level int) {
 		parser.NewDString("result"),
 		parser.NewDString(formatColumns(plan.Columns(), true)),
 	}
-	v.rows = append(v.rows, row)
+	if err := v.rows.AddRow(row); err != nil {
+		return err
+	}
 
 	// Format the node's typing details.
+	var err error
 	regType := func(elt string, desc string) {
+		if err != nil {
+			return
+		}
+
 		row := parser.DTuple{
 			parser.NewDInt(parser.DInt(level)),
 			parser.NewDString(name),
 			parser.NewDString(elt),
 			parser.NewDString(desc),
 		}
-		v.rows = append(v.rows, row)
+		err = v.rows.AddRow(row)
 	}
 	plan.ExplainTypes(regType)
 
+	if err != nil {
+		return err
+	}
+
 	// Recurse into sub-nodes.
 	for _, child := range children {
-		populateTypes(v, child, level+1)
+		if err := populateTypes(v, child, level+1); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 type explainPlanNode struct {
@@ -226,24 +251,14 @@ type explainPlanNode struct {
 
 func (e *explainPlanNode) ExplainTypes(fn func(string, string)) {}
 func (e *explainPlanNode) Next() (bool, error)                  { return e.results.Next() }
-func (e *explainPlanNode) Columns() []ResultColumn              { return e.results.Columns() }
+func (e *explainPlanNode) Close()                               { e.results.Close() }
+func (e *explainPlanNode) Columns() ResultColumns               { return e.results.Columns() }
 func (e *explainPlanNode) Ordering() orderingInfo               { return e.results.Ordering() }
 func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues             { return debugValues{} }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
 func (e *explainPlanNode) MarkDebug(mode explainMode)           {}
 func (e *explainPlanNode) expandPlan() error {
-	columns := []ResultColumn{
-		{Name: "Level", Typ: parser.TypeInt},
-		{Name: "Type", Typ: parser.TypeString},
-		{Name: "Description", Typ: parser.TypeString},
-	}
-	if e.verbose {
-		columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
-		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
-	}
-	e.results = &valuesNode{columns: columns}
-
 	if err := e.plan.expandPlan(); err != nil {
 		return err
 	}
@@ -259,11 +274,10 @@ func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 func (e *explainPlanNode) Start() error {
-	populateExplain(e.verbose, e.results, e.plan, 0)
-	return nil
+	return populateExplain(e.verbose, e.results, e.plan, 0)
 }
 
-func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) {
+func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) error {
 	name, description, children := plan.ExplainPlan(verbose)
 
 	row := parser.DTuple{
@@ -275,11 +289,16 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) {
 		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
 		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
 	}
-	v.rows = append(v.rows, row)
+	if err := v.rows.AddRow(row); err != nil {
+		return err
+	}
 
 	for _, child := range children {
-		populateExplain(verbose, v, child, level+1)
+		if err := populateExplain(verbose, v, child, level+1); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 type debugValueType int
@@ -359,15 +378,15 @@ type explainDebugNode struct {
 }
 
 // Columns for explainDebug mode.
-var debugColumns = []ResultColumn{
+var debugColumns = ResultColumns{
 	{Name: "RowIdx", Typ: parser.TypeInt},
 	{Name: "Key", Typ: parser.TypeString},
 	{Name: "Value", Typ: parser.TypeString},
 	{Name: "Disposition", Typ: parser.TypeString},
 }
 
-func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
-func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*explainDebugNode) Columns() ResultColumns { return debugColumns }
+func (*explainDebugNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *explainDebugNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
@@ -379,6 +398,7 @@ func (n *explainDebugNode) expandPlan() error {
 
 func (n *explainDebugNode) Start() error        { return n.plan.Start() }
 func (n *explainDebugNode) Next() (bool, error) { return n.plan.Next() }
+func (n *explainDebugNode) Close()              { n.plan.Close() }
 
 func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	return n.plan.ExplainPlan(v)

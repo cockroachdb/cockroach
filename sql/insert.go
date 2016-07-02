@@ -20,8 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -257,8 +255,12 @@ func (n *insertNode) Start() error {
 	return n.run.tw.init(n.p.txn)
 }
 
+func (n *insertNode) Close() {
+	n.run.rows.Close()
+}
+
 func (n *insertNode) Next() (bool, error) {
-	ctx := context.TODO()
+	ctx := n.editNodeBase.p.ctx()
 	if next, err := n.run.rows.Next(); !next {
 		if err == nil {
 			// We're done. Finish the batch.
@@ -463,7 +465,7 @@ func makeDefaultExprs(
 	return defaultExprs, nil
 }
 
-func (n *insertNode) Columns() []ResultColumn {
+func (n *insertNode) Columns() ResultColumns {
 	return n.rh.columns
 }
 

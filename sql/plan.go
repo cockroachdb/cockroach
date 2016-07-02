@@ -122,7 +122,7 @@ type planNode interface {
 	// Stable after expandPlan() (or makePlan).
 	// Available after newPlan(), but may change on intermediate plan
 	// nodes during expandPlan() due to index selection.
-	Columns() []ResultColumn
+	Columns() ResultColumns
 
 	// The indexes of the columns the output is ordered by.
 	//
@@ -171,6 +171,10 @@ type planNode interface {
 	// Available after Next() and MarkDebug(explainDebug), see
 	// explain.go.
 	DebugValues() debugValues
+
+	// Close terminates the planNode execution and suggests its
+	// resources can be released.
+	Close()
 }
 
 // planNodeFastPath is implemented by nodes that can perform all their
@@ -206,9 +210,12 @@ var _ planNode = &dropTableNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &joinNode{}
+var _ planNode = &distSQLNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
+	p.mon.StartMonitor(p.ctx(), stmt)
+
 	plan, err := p.newPlan(stmt, nil, autoCommit)
 	if err != nil {
 		return nil, err

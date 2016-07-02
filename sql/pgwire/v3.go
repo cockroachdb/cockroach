@@ -720,8 +720,8 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 			}
 			break
 		}
-		if limit != 0 && len(result.Rows) > limit {
-			if err := c.sendInternalError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, len(result.Rows))); err != nil {
+		if limit != 0 && result.Rows.Len() > limit {
+			if err := c.sendInternalError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, result.Rows.Len())); err != nil {
 				return err
 			}
 			break
@@ -752,10 +752,12 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 			}
 
 			// Send DataRows.
-			for _, row := range result.Rows {
+			nRows := result.Rows.Len()
+			for rowIdx := 0; rowIdx < nRows; rowIdx++ {
+				row := result.Rows.At(rowIdx)
 				c.writeBuf.initMsg(serverMsgDataRow)
-				c.writeBuf.putInt16(int16(len(row.Values)))
-				for i, col := range row.Values {
+				c.writeBuf.putInt16(int16(len(row)))
+				for i, col := range row {
 					fmtCode := formatText
 					if formatCodes != nil {
 						fmtCode = formatCodes[i]
@@ -776,10 +778,11 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 
 			// Send CommandComplete.
 			tag = append(tag, ' ')
-			tag = strconv.AppendUint(tag, uint64(len(result.Rows)), 10)
+			tag = strconv.AppendUint(tag, uint64(result.Rows.Len()), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
+			result.Rows.Close()
 
 		case parser.Ack, parser.DDL:
 			if err := c.sendCommandComplete(tag); err != nil {

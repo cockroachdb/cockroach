@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/pkg/errors"
@@ -66,6 +67,8 @@ type planner struct {
 	nameResolutionVisitor       nameResolutionVisitor
 
 	execCfg *ExecutorConfig
+
+	mon mon.MemoryUsageMonitor
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
@@ -221,6 +224,10 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		plan.Close()
+		p.mon.StopMonitor()
+	}()
 	if err := plan.Start(); err != nil {
 		return nil, err
 	}
@@ -244,6 +251,10 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer func() {
+		plan.Close()
+		p.mon.StopMonitor()
+	}()
 	if err := plan.Start(); err != nil {
 		return 0, err
 	}

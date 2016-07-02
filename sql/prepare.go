@@ -27,7 +27,7 @@ import (
 type PreparedStatement struct {
 	Query       string
 	SQLTypes    parser.PlaceholderTypes
-	Columns     []ResultColumn
+	Columns     ResultColumns
 	portalNames map[string]struct{}
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.

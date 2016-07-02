@@ -620,6 +620,13 @@ type buffer struct {
 
 var logging loggingT
 
+// SetGlobalVerbosity provides a mechanism for tests that need to
+// exercise the logging logic to force enable log output, even when
+// `-verbosity` is not provided in the test command-line.
+func SetGlobalVerbosity(verbosity level) {
+	logging.verbosity.set(verbosity)
+}
+
 // setVState sets a consistent state for V logging.
 // l.mu is held.
 func (l *loggingT) setVState(verbosity level, filter []modulePat, setFilter bool) {

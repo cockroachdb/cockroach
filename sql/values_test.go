@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 func TestValues(t *testing.T) {
@@ -123,6 +124,7 @@ func TestValues(t *testing.T) {
 				t.Errorf("%d: unexpected error in expandPlan: %v", i, err)
 				continue
 			}
+			p.mon.StartMonitor(context.Background(), tc.stmt)
 			if err := plan.Start(); err != nil {
 				t.Errorf("%d: unexpected error in Start: %v", i, err)
 				continue
@@ -136,6 +138,7 @@ func TestValues(t *testing.T) {
 				t.Error(err)
 				continue
 			}
+			p.mon.StopMonitor()
 			if !reflect.DeepEqual(rows, tc.rows) {
 				t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
 			}

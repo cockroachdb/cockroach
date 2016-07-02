@@ -98,7 +98,8 @@ func (n *createDatabaseNode) Start() error {
 }
 
 func (n *createDatabaseNode) Next() (bool, error)                 { return false, nil }
-func (n *createDatabaseNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createDatabaseNode) Close()                              {}
+func (n *createDatabaseNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createDatabaseNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createDatabaseNode) DebugValues() debugValues            { return debugValues{} }
@@ -216,7 +217,8 @@ func (n *createIndexNode) Start() error {
 }
 
 func (n *createIndexNode) Next() (bool, error)                 { return false, nil }
-func (n *createIndexNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createIndexNode) Close()                              {}
+func (n *createIndexNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createIndexNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createIndexNode) DebugValues() debugValues            { return debugValues{} }
@@ -444,7 +446,8 @@ func (n *createTableNode) Start() error {
 }
 
 func (n *createTableNode) Next() (bool, error)                 { return false, nil }
-func (n *createTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createTableNode) Close()                              {}
+func (n *createTableNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createTableNode) DebugValues() debugValues            { return debugValues{} }

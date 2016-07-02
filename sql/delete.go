@@ -133,6 +133,10 @@ func (d *deleteNode) Start() error {
 	return d.run.tw.init(d.p.txn)
 }
 
+func (d *deleteNode) Close() {
+	d.run.rows.Close()
+}
+
 func (d *deleteNode) FastPathResults() (int, bool) {
 	if d.run.fastPath {
 		return d.rh.rowCount, true
@@ -213,7 +217,7 @@ func (d *deleteNode) fastDelete(scan *scanNode) error {
 	return nil
 }
 
-func (d *deleteNode) Columns() []ResultColumn {
+func (d *deleteNode) Columns() ResultColumns {
 	return d.rh.columns
 }
 

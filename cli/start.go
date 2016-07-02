@@ -106,7 +106,7 @@ uninitialized, specify the --join flag to point to any healthy node
 	RunE:         runStart,
 }
 
-func setDefaultCacheSize(ctx *server.Context) {
+func initDependentParameters(ctx *server.Context) {
 	if size, err := server.GetTotalMemory(); err == nil {
 		// Default the cache size to 1/4 of total memory. A larger cache size
 		// doesn't necessarily improve performance as this is memory that is
