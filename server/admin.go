@@ -654,7 +654,7 @@ func (s *adminServer) Health(ctx context.Context, req *serverpb.HealthRequest) (
 	return &serverpb.HealthResponse{}, nil
 }
 
-func (s *adminServer) Drain(ctx context.Context, req *serverpb.DrainRequest) (*serverpb.DrainResponse, error) {
+func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	on := make([]serverpb.DrainMode, len(req.On))
 	for i := range req.On {
 		on[i] = serverpb.DrainMode(req.On[i])
@@ -668,21 +668,31 @@ func (s *adminServer) Drain(ctx context.Context, req *serverpb.DrainRequest) (*s
 
 	nowOn, err := s.server.Drain(on)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	nowOnInts := make([]int32, len(nowOn))
+	res := serverpb.DrainResponse{
+		On: make([]int32, len(nowOn)),
+	}
 	for i := range nowOn {
-		nowOnInts[i] = int32(nowOn[i])
+		res.On[i] = int32(nowOn[i])
 	}
+	if err := stream.Send(&res); err != nil {
+		return err
+	}
+
 	if req.Shutdown {
-		s.server.stopper.Quiesce()
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			s.server.stopper.Stop()
-		}()
+		go s.server.stopper.Stop()
 	}
-	return &serverpb.DrainResponse{On: nowOnInts}, nil
+
+	ctx := stream.Context()
+
+	select {
+	case <-s.server.stopper.IsStopped():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // waitForStoreFrozen polls the given stores until they all report having no
