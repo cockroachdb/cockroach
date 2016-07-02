@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -64,6 +65,10 @@ type Session struct {
 	DefaultIsolationLevel enginepb.IsolationType
 	context               context.Context
 	cancel                context.CancelFunc
+
+	// mon tracks memory usage for SQL activity within this session.
+	// See the comments at the start of session_mem_usage.go for more details.
+	mon mon.MemoryUsageMonitor
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -101,6 +106,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	s.context, s.cancel = context.WithCancel(ctx)
 
+	s.mon.StartMonitor()
 	return s
 }
 
@@ -111,6 +117,8 @@ func (s *Session) Finish() {
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
 	log.FinishEventLog(s.context)
+	s.ClearStatementsAndPortals()
+	s.mon.StopMonitor(s.Ctx())
 	s.cancel()
 }
 
