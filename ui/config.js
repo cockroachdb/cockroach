@@ -56,6 +56,9 @@ System.config({
   },
 
   meta: {
+    "moment": {
+      "typings": "moment.d.ts"
+    },
     "reselect": {
       "typings": "src/reselect.d.ts"
     }

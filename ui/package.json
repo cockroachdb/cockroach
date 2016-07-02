@@ -54,6 +54,13 @@
           "react/lib/ExecutionEnvironment": "@empty",
           "react/lib/ReactContext": "@empty"
         }
+      },
+      "npm:moment@2.13.0": {
+        "files": [
+          "moment.js",
+          "moment.d.ts",
+          "locale"
+        ]
       }
     }
   }
