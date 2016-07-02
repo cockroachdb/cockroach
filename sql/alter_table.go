@@ -290,7 +290,8 @@ func (n *alterTableNode) Start() error {
 }
 
 func (n *alterTableNode) Next() (bool, error)                 { return false, nil }
-func (n *alterTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *alterTableNode) Close()                              {}
+func (n *alterTableNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *alterTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *alterTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *alterTableNode) DebugValues() debugValues            { return debugValues{} }
