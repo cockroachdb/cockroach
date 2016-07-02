@@ -69,14 +69,6 @@ all: build test check
 .PHONY: release
 release: build
 
-# The uidebug build tag is used to turn off embedding of UI assets into the
-# cockroach binary, loading them from the local filesystem at run time instead.
-# This build target is intended for use by UI developers, as it provides a
-# faster iteration cycle which doesn't require recompilation of the binary.
-.PHONY: uidebug
-uidebug: TAGS += uidebug
-uidebug: build
-
 .PHONY: build
 build: GOFLAGS += -i -o cockroach
 build: BUILDMODE = build

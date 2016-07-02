@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/elazarl/go-bindata-assetfs"
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -51,7 +52,9 @@ import (
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -62,8 +65,6 @@ import (
 )
 
 var (
-	uiFileSystem http.FileSystem
-
 	// Allocation pool for gzip writers.
 	gzipWriterPool sync.Pool
 
@@ -476,6 +477,17 @@ func (s *Server) Start() error {
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
+		}
+	}
+
+	var uiFileSystem http.FileSystem
+	if envutil.EnvOrDefaultBool("debug_ui", false) {
+		uiFileSystem = http.Dir("ui")
+	} else {
+		uiFileSystem = &assetfs.AssetFS{
+			Asset:     ui.Asset,
+			AssetDir:  ui.AssetDir,
+			AssetInfo: ui.AssetInfo,
 		}
 	}
 
