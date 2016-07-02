@@ -273,10 +273,17 @@ func (s *Server) reportUsage() {
 	q.Set("uuid", s.node.ClusterID.String())
 	reportingURL.RawQuery = q.Encode()
 
-	_, err := http.Post(reportingURL.String(), "application/json", b)
+	res, err := http.Post(reportingURL.String(), "application/json", b)
 	if err != nil && log.V(2) {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
-		log.Warning("Error checking reporting node usage metrics: ", err)
+		log.Warning("Failed checking reporting node usage metrics: ", err)
+		return
+	}
+
+	if res.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(res.Body)
+		log.Warningf("Failed checking reporting node usage metrics: status: %s, body: %s, "+
+			"error: %v", res.Status, b, err)
 	}
 }
