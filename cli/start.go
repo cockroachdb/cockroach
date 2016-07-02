@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
@@ -494,19 +495,51 @@ func runQuit(_ *cobra.Command, _ []string) error {
 
 	ctx := stopperContext(stopper)
 
-	if _, err := c.Drain(ctx, &serverpb.DrainRequest{
-		On:       onModes,
-		Shutdown: true,
-	}); err != nil {
-		fmt.Printf("graceful shutdown failed, proceeding with hard shutdown: %v\n", err)
-		if _, err := c.Drain(ctx, &serverpb.DrainRequest{
-			Shutdown: true,
-		}); err != nil {
-			return err
+	waitForShutdown := func(stream serverpb.Admin_DrainClient) error {
+		for {
+			if _, err := stream.Recv(); !grpcutil.IsClosedConnection(err) {
+				return err
+			}
+			return nil
 		}
 	}
-	fmt.Println("ok")
-	return nil
+
+	{
+		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+			On:       onModes,
+			Shutdown: true,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = stream.Recv()
+		if err == nil {
+			err = waitForShutdown(stream)
+			if err == nil {
+				fmt.Println("ok")
+			}
+			return err
+		}
+		fmt.Printf("graceful shutdown failed, proceeding with hard shutdown: %v\n", err)
+	}
+
+	{
+		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+			Shutdown: true,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = stream.Recv()
+		if err == nil {
+			err = waitForShutdown(stream)
+			if err == nil {
+				fmt.Println("ok")
+			}
+			return err
+		}
+		return fmt.Errorf("hard shutdown failed: %v", err)
+	}
 }
 
 // freezeClusterCmd command issues a cluster-wide freeze.
