@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -176,11 +177,18 @@ func (s *Server) checkForUpdates() {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
 		if log.V(2) {
-			log.Warning("Error checking for updates: ", err)
+			log.Warning("Failed to check for updates: ", err)
 		}
 		return
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(res.Body)
+		log.Warningf("Failed to check for updates: status: %s, body: %s, error: %v",
+			res.Status, b, err)
+		return
+	}
 
 	decoder := json.NewDecoder(res.Body)
 	r := struct {
@@ -265,10 +273,17 @@ func (s *Server) reportUsage() {
 	q.Set("uuid", s.node.ClusterID.String())
 	reportingURL.RawQuery = q.Encode()
 
-	_, err := http.Post(reportingURL.String(), "application/json", b)
+	res, err := http.Post(reportingURL.String(), "application/json", b)
 	if err != nil && log.V(2) {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
-		log.Warning("Error checking reporting node usage metrics: ", err)
+		log.Warning("Failed to report node usage metrics: ", err)
+		return
+	}
+
+	if res.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(res.Body)
+		log.Warningf("Failed to report node usage metrics: status: %s, body: %s, "+
+			"error: %v", res.Status, b, err)
 	}
 }
