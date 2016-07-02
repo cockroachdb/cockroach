@@ -4,6 +4,7 @@ import * as _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
+import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshDatabaseDetails } from "../../redux/databaseInfo";
 
@@ -244,17 +245,17 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
  */
 
 // Helper function that gets a DatabaseDetailsResponseMessage given a state and props
-function getDatabaseDetails(state: any, props: DatabaseMainProps): DatabaseDetailsResponseMessage {
+function getDatabaseDetails(state: AdminUIState, props: DatabaseMainProps): DatabaseDetailsResponseMessage {
   let details = state.databaseInfo.databaseDetails &&
     state.databaseInfo.databaseDetails[props && props.params && props.params.database_name];
   return details && details.data;
 }
 
 // Base selectors to extract data from redux state.
-let tables = (state: any, props: any): string[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).table_names : [];
-let grants = (state: any, props: any): Grant[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).grants : [];
-let tablesSortSetting = (state: any): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
-let grantsSortSetting = (state: any): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
+let tables = (state: AdminUIState, props: any): string[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).table_names : [];
+let grants = (state: AdminUIState, props: any): Grant[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).grants : [];
+let tablesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
+let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
 
 // Selectors which sorts statuses according to current sort setting.
 let tablesSortFunctionLookup = _(tablesColumnDescriptors).keyBy("key").mapValues<(s: string) => any>("sort").value();

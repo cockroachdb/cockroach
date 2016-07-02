@@ -4,6 +4,7 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { Link } from "react-router";
 
+import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshTableDetails, generateTableID } from "../../redux/databaseInfo";
 
@@ -377,7 +378,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
  */
 
 // Helper function that gets a TableDetailsResponseMessage given a state and props
-function getTableDetails(state: any, props: TableMainProps): TableDetailsResponseMessage {
+function getTableDetails(state: AdminUIState, props: TableMainProps): TableDetailsResponseMessage {
   let db = props && props.params && props.params.database_name;
   let table = props && props.params && props.params.table_name;
   let details = state.databaseInfo.tableDetails &&
@@ -386,12 +387,12 @@ function getTableDetails(state: any, props: TableMainProps): TableDetailsRespons
 }
 
 // Base selectors to extract data from redux state.
-let columns = (state: any, props: any): Column[] => getTableDetails(state, props) ? getTableDetails(state, props).getColumns() : [];
-let indexes = (state: any, props: any): Index[] => getTableDetails(state, props) ? getTableDetails(state, props).getIndexes() : [];
-let grants = (state: any, props: any): Grant[] => getTableDetails(state, props) ? getTableDetails(state, props).getGrants() : [];
-let columnsSortSetting = (state: any): SortSetting => state.ui[UI_TABLE_COLUMNS_SORT_SETTING_KEY] || {};
-let indexesSortSetting = (state: any): SortSetting => state.ui[UI_TABLE_INDEXES_SORT_SETTING_KEY] || {};
-let grantsSortSetting = (state: any): SortSetting => state.ui[UI_TABLE_GRANTS_SORT_SETTING_KEY] || {};
+let columns = (state: AdminUIState, props: any): Column[] => getTableDetails(state, props) ? getTableDetails(state, props).getColumns() : [];
+let indexes = (state: AdminUIState, props: any): Index[] => getTableDetails(state, props) ? getTableDetails(state, props).getIndexes() : [];
+let grants = (state: AdminUIState, props: any): Grant[] => getTableDetails(state, props) ? getTableDetails(state, props).getGrants() : [];
+let columnsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_TABLE_COLUMNS_SORT_SETTING_KEY] || {};
+let indexesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_TABLE_INDEXES_SORT_SETTING_KEY] || {};
+let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_TABLE_GRANTS_SORT_SETTING_KEY] || {};
 
 // Selector which sorts statuses according to current sort setting.
 let columnsSortFunctionLookup = _(columnsColumnDescriptors).keyBy("key").mapValues<(s: Column) => any>("sort").value();

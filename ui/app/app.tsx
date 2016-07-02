@@ -43,19 +43,12 @@ import "build/app.css!";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { createStore, combineReducers, applyMiddleware, compose } from "redux";
 import { Provider } from "react-redux";
-import { Router, Route, IndexRoute, IndexRedirect, hashHistory } from "react-router";
-import { syncHistoryWithStore, routerReducer } from "react-router-redux";
-import thunk from "redux-thunk";
+import { Router, Route, IndexRoute, IndexRedirect } from "react-router";
 
-import uiReducer from "./redux/ui";
-import uiDataReducer from "./redux/uiData";
-import metricsReducer from "./redux/metrics";
-import timeWindowReducer from "./redux/timewindow";
-import databaseInfoReducer from "./redux/databaseInfo";
-import { apiReducers } from "./redux/apiReducers";
+import { nodeID } from "./util/constants";
 
+import { store, history } from "./redux/state";
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
 import ClusterOverview from "./containers/clusterOverview";
@@ -75,32 +68,6 @@ import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 
-// TODO(mrtracy): Redux now provides official typings, and their Store
-// definition is generic. That would let us enforce that the store actually has
-// the shape of the AdminUIStore interface (defined in /interfaces/store.d.ts).
-// However, that typings file is currently incompatible with any available
-// typings for react-redux.
-const store = createStore(
-  combineReducers({
-    routing: routerReducer,
-    ui: uiReducer,
-    uiData: uiDataReducer,
-    metrics: metricsReducer,
-    timewindow: timeWindowReducer,
-    databaseInfo: databaseInfoReducer,
-    cachedData: apiReducers,
-  }),
-  compose(
-    applyMiddleware(thunk),
-    // Support for redux dev tools
-    // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
-    (window as any).devToolsExtension ? (window as any).devToolsExtension() : (f: any): any => f
-  )
-);
-
-// Connect react-router history with redux.
-const history = syncHistoryWithStore(hashHistory, store);
-
 ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
@@ -119,7 +86,7 @@ ReactDOM.render(
           // This path has to match the "nodes" route for the purpose of
           // highlighting links, but the page does not render as a child of the
           // Nodes component.
-          <Route path=":node_id" component={ Node }>
+          <Route path={ `:${nodeID}` } component={ Node }>
             <IndexRoute component={ NodeOverview } />
             <Route path="graphs" component={ NodeGraphs } />
             <Route path="logs" component={ NodeLogs } />
