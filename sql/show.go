@@ -32,24 +32,31 @@ import (
 func (p *planner) Show(n *parser.Show) (planNode, error) {
 	name := strings.ToUpper(n.Name)
 
-	v := &valuesNode{columns: []ResultColumn{{Name: name, Typ: parser.TypeString}}}
+	v := p.newContainerValuesNode(ResultColumns{{Name: name, Typ: parser.TypeString}}, 0)
 
+	var newRow parser.DTuple
 	switch name {
 	case `DATABASE`:
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.session.Database)})
+		newRow = parser.DTuple{parser.NewDString(p.session.Database)}
 	case `TIME ZONE`:
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.session.Location.String())})
+		newRow = parser.DTuple{parser.NewDString(p.session.Location.String())}
 	case `SYNTAX`:
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(parser.Syntax(p.session.Syntax).String())})
+		newRow = parser.DTuple{parser.NewDString(parser.Syntax(p.session.Syntax).String())}
 	case `DEFAULT_TRANSACTION_ISOLATION`:
 		level := p.session.DefaultIsolationLevel.String()
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(level)})
+		newRow = parser.DTuple{parser.NewDString(level)}
 	case `TRANSACTION ISOLATION LEVEL`:
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.txn.Proto.Isolation.String())})
+		newRow = parser.DTuple{parser.NewDString(p.txn.Proto.Isolation.String())}
 	case `TRANSACTION PRIORITY`:
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.txn.UserPriority.String())})
+		newRow = parser.DTuple{parser.NewDString(p.txn.UserPriority.String())}
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
+	}
+	if newRow != nil {
+		if err := v.rows.AddRow(newRow); err != nil {
+			v.rows.Close()
+			return nil, err
+		}
 	}
 
 	return v, nil
@@ -73,26 +80,29 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		return nil, err
 	}
 
-	v := &valuesNode{
-		columns: []ResultColumn{
-			{Name: "Field", Typ: parser.TypeString},
-			{Name: "Type", Typ: parser.TypeString},
-			{Name: "Null", Typ: parser.TypeBool},
-			{Name: "Default", Typ: parser.TypeString},
-		},
+	columns := ResultColumns{
+		{Name: "Field", Typ: parser.TypeString},
+		{Name: "Type", Typ: parser.TypeString},
+		{Name: "Null", Typ: parser.TypeBool},
+		{Name: "Default", Typ: parser.TypeString},
 	}
+	v := p.newContainerValuesNode(columns, 0)
 
 	for i, col := range desc.Columns {
 		defaultExpr := parser.DNull
 		if e := desc.Columns[i].DefaultExpr; e != nil {
 			defaultExpr = parser.NewDString(*e)
 		}
-		v.rows = append(v.rows, []parser.Datum{
+		newRow := parser.DTuple{
 			parser.NewDString(desc.Columns[i].Name),
 			parser.NewDString(col.Type.SQLString()),
 			parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
 			defaultExpr,
-		})
+		}
+		if err := v.rows.AddRow(newRow); err != nil {
+			v.rows.Close()
+			return nil, err
+		}
 	}
 	return v, nil
 }
@@ -134,12 +144,11 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	v := &valuesNode{
-		columns: []ResultColumn{
-			{Name: "Table", Typ: parser.TypeString},
-			{Name: "CreateTable", Typ: parser.TypeString},
-		},
+	columns := ResultColumns{
+		{Name: "Table", Typ: parser.TypeString},
+		{Name: "CreateTable", Typ: parser.TypeString},
 	}
+	v := p.newContainerValuesNode(columns, 0)
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s (", quoteNames(n.Table.String()))
@@ -212,16 +221,20 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	}
 
 	buf.WriteString("\n)")
+
 	interleave, err := p.showCreateInterleave(&desc.PrimaryIndex)
 	if err != nil {
 		return nil, err
 	}
 	buf.WriteString(interleave)
 
-	v.rows = append(v.rows, []parser.Datum{
+	if err := v.rows.AddRow(parser.DTuple{
 		parser.NewDString(n.Table.String()),
 		parser.NewDString(buf.String()),
-	})
+	}); err != nil {
+		v.rows.Close()
+		return nil, err
+	}
 	return v, nil
 }
 
@@ -250,9 +263,11 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &valuesNode{columns: []ResultColumn{{Name: "Database", Typ: parser.TypeString}}}
+	v := p.newContainerValuesNode(ResultColumns{{Name: "Database", Typ: parser.TypeString}}, 0)
 	for db := range virtualSchemaMap {
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(db)})
+		if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
+			return nil, err
+		}
 	}
 	for _, row := range sr {
 		_, name, err := encoding.DecodeUnsafeStringAscending(
@@ -260,7 +275,10 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(name)})
+		if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
+			v.rows.Close()
+			return nil, err
+		}
 	}
 	return v, nil
 }
@@ -284,13 +302,12 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		objectType = "Table"
 	}
 
-	v := &valuesNode{
-		columns: []ResultColumn{
-			{Name: objectType, Typ: parser.TypeString},
-			{Name: "User", Typ: parser.TypeString},
-			{Name: "Privileges", Typ: parser.TypeString},
-		},
+	columns := ResultColumns{
+		{Name: objectType, Typ: parser.TypeString},
+		{Name: "User", Typ: parser.TypeString},
+		{Name: "Privileges", Typ: parser.TypeString},
 	}
+	v := p.newContainerValuesNode(columns, 0)
 	var wantedUsers map[string]struct{}
 	if len(n.Grantees) != 0 {
 		wantedUsers = make(map[string]struct{})
@@ -307,11 +324,14 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 					continue
 				}
 			}
-			v.rows = append(v.rows, []parser.Datum{
+			newRow := parser.DTuple{
 				parser.NewDString(descriptor.GetName()),
 				parser.NewDString(userPriv.User),
 				parser.NewDString(userPriv.Privileges),
-			})
+			}
+			if err := v.rows.AddRow(newRow); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return v, nil
@@ -335,21 +355,20 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		return nil, err
 	}
 
-	v := &valuesNode{
-		columns: []ResultColumn{
-			{Name: "Table", Typ: parser.TypeString},
-			{Name: "Name", Typ: parser.TypeString},
-			{Name: "Unique", Typ: parser.TypeBool},
-			{Name: "Seq", Typ: parser.TypeInt},
-			{Name: "Column", Typ: parser.TypeString},
-			{Name: "Direction", Typ: parser.TypeString},
-			{Name: "Storing", Typ: parser.TypeBool},
-		},
+	columns := ResultColumns{
+		{Name: "Table", Typ: parser.TypeString},
+		{Name: "Name", Typ: parser.TypeString},
+		{Name: "Unique", Typ: parser.TypeBool},
+		{Name: "Seq", Typ: parser.TypeInt},
+		{Name: "Column", Typ: parser.TypeString},
+		{Name: "Direction", Typ: parser.TypeString},
+		{Name: "Storing", Typ: parser.TypeBool},
 	}
+	v := p.newContainerValuesNode(columns, 0)
 
 	appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
-		direction string, isStored bool) {
-		v.rows = append(v.rows, []parser.Datum{
+		direction string, isStored bool) error {
+		newRow := parser.DTuple{
 			parser.NewDString(tn.Table()),
 			parser.NewDString(index.Name),
 			parser.MakeDBool(parser.DBool(index.Unique)),
@@ -357,17 +376,22 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			parser.NewDString(colName),
 			parser.NewDString(direction),
 			parser.MakeDBool(parser.DBool(isStored)),
-		})
+		}
+		return v.rows.AddRow(newRow)
 	}
 
 	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		sequence := 1
 		for i, col := range index.ColumnNames {
-			appendRow(index, col, sequence, index.ColumnDirections[i].String(), false)
+			if err := appendRow(index, col, sequence, index.ColumnDirections[i].String(), false); err != nil {
+				return nil, err
+			}
 			sequence++
 		}
 		for _, col := range index.StoreColumnNames {
-			appendRow(index, col, sequence, "N/A", true)
+			if err := appendRow(index, col, sequence, "N/A", true); err != nil {
+				return nil, err
+			}
 			sequence++
 		}
 	}
@@ -392,17 +416,16 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 		return nil, err
 	}
 
-	v := &valuesNode{
-		columns: []ResultColumn{
-			{Name: "Table", Typ: parser.TypeString},
-			{Name: "Name", Typ: parser.TypeString},
-			{Name: "Type", Typ: parser.TypeString},
-			{Name: "Column(s)", Typ: parser.TypeString},
-			{Name: "Details", Typ: parser.TypeString},
-		},
+	columns := ResultColumns{
+		{Name: "Table", Typ: parser.TypeString},
+		{Name: "Name", Typ: parser.TypeString},
+		{Name: "Type", Typ: parser.TypeString},
+		{Name: "Column(s)", Typ: parser.TypeString},
+		{Name: "Details", Typ: parser.TypeString},
 	}
+	v := p.newContainerValuesNode(columns, 0)
 
-	appendRow := func(name, typ, columns, details string) {
+	appendRow := func(name, typ, columns, details string) error {
 		detailsDatum := parser.DNull
 		if details != "" {
 			detailsDatum = parser.NewDString(details)
@@ -411,20 +434,25 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 		if columns != "" {
 			columnsDatum = parser.NewDString(columns)
 		}
-		v.rows = append(v.rows, []parser.Datum{
+		newRow := []parser.Datum{
 			parser.NewDString(tn.Table()),
 			parser.NewDString(name),
 			parser.NewDString(typ),
 			columnsDatum,
 			detailsDatum,
-		})
+		}
+		return v.rows.AddRow(newRow)
 	}
 
 	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		if index.ID == desc.PrimaryIndex.ID {
-			appendRow(index.Name, "PRIMARY KEY", fmt.Sprintf("%+v", index.ColumnNames), "")
+			if err := appendRow(index.Name, "PRIMARY KEY", fmt.Sprintf("%+v", index.ColumnNames), ""); err != nil {
+				return nil, err
+			}
 		} else if index.Unique {
-			appendRow(index.Name, "UNIQUE", fmt.Sprintf("%+v", index.ColumnNames), "")
+			if err := appendRow(index.Name, "UNIQUE", fmt.Sprintf("%+v", index.ColumnNames), ""); err != nil {
+				return nil, err
+			}
 		}
 		if index.ForeignKey.IsSet() {
 			other, err := p.getTableLeaseByID(index.ForeignKey.Table)
@@ -437,23 +465,32 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 				return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
 					index.ForeignKey.Index, other.Name)
 			}
-			appendRow(index.ForeignKey.Name, "FOREIGN KEY", fmt.Sprintf("%v", index.ColumnNames),
-				fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames))
+			if err := appendRow(index.ForeignKey.Name, "FOREIGN KEY", fmt.Sprintf("%v", index.ColumnNames),
+				fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)); err != nil {
+				return nil, err
+			}
 		}
 	}
 	for _, c := range desc.Checks {
-		appendRow(c.Name, "CHECK", "", c.Expr)
+		if err := appendRow(c.Name, "CHECK", "", c.Expr); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, c := range desc.Columns {
 		if c.DefaultExprConstraintName != "" {
-			appendRow(c.DefaultExprConstraintName, "DEFAULT", c.Name, *c.DefaultExpr)
+			if err := appendRow(c.DefaultExprConstraintName, "DEFAULT", c.Name, *c.DefaultExpr); err != nil {
+				return nil, err
+			}
 		}
 		if c.NullableConstraintName != "" {
 			if c.Nullable {
-				appendRow(c.NullableConstraintName, "NULL", c.Name, "")
+				err = appendRow(c.NullableConstraintName, "NULL", c.Name, "")
 			} else {
-				appendRow(c.NullableConstraintName, "NOT NULL", c.Name, "")
+				err = appendRow(c.NullableConstraintName, "NOT NULL", c.Name, "")
+			}
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -461,6 +498,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 	// Sort the results by constraint name.
 	sort := &sortNode{
 		ctx: p.ctx(),
+		p:   p,
 		ordering: sqlbase.ColumnOrdering{
 			{ColIdx: 0, Direction: encoding.Ascending},
 			{ColIdx: 1, Direction: encoding.Ascending},
@@ -497,9 +535,11 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &valuesNode{columns: []ResultColumn{{Name: "Table", Typ: parser.TypeString}}}
+	v := p.newContainerValuesNode(ResultColumns{{Name: "Table", Typ: parser.TypeString}}, len(tableNames))
 	for _, name := range tableNames {
-		v.rows = append(v.rows, []parser.Datum{parser.NewDString(name.Table())})
+		if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name.Table())}); err != nil {
+			return nil, err
+		}
 	}
 
 	return v, nil

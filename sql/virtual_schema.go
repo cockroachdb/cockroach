@@ -44,7 +44,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(p *planner, addRow func(...parser.Datum)) error
+	populate func(p *planner, addRow func(...parser.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -93,19 +93,20 @@ type virtualTableEntry struct {
 // getValuesNode returns a new valuesNode for the virtual table using the
 // provided planner.
 func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
-	v := &valuesNode{}
+	var columns ResultColumns
 	for _, col := range e.desc.Columns {
-		v.columns = append(v.columns, ResultColumn{
+		columns = append(columns, ResultColumn{
 			Name: col.Name,
 			Typ:  col.Type.ToDatumType(),
 		})
 	}
+	v := p.newContainerValuesNode(columns, 0)
 
-	err := e.tableDef.populate(p, func(datum ...parser.Datum) {
+	err := e.tableDef.populate(p, func(datum ...parser.Datum) error {
 		if r, c := len(datum), len(v.columns); r != c {
 			panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
 		}
-		v.rows = append(v.rows, datum)
+		return v.rows.AddRow(datum)
 	})
 	if err != nil {
 		return nil, err

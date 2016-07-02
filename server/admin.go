@@ -175,10 +175,12 @@ func (s *adminServer) Databases(
 	}
 
 	var resp serverpb.DatabasesResponse
-	for _, row := range r.ResultList[0].Rows {
-		dbname, ok := row.Values[0].(*parser.DString)
+	nRows := r.ResultList[0].Rows.Len()
+	for i := 0; i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		dbname, ok := row[0].(*parser.DString)
 		if !ok {
-			return nil, s.serverErrorf("type assertion failed on db name: %T", row.Values[0])
+			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
 		resp.Databases = append(resp.Databases, string(*dbname))
 	}
@@ -217,7 +219,9 @@ func (s *adminServer) DatabaseDetails(
 		)
 
 		scanner := makeResultScanner(r.ResultList[0].Columns)
-		for _, row := range r.ResultList[0].Rows {
+		nRows := r.ResultList[0].Rows.Len()
+		for i := 0; i < nRows; i++ {
+			row := r.ResultList[0].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.DatabaseDetailsResponse_Grant
 			var privileges string
@@ -239,7 +243,9 @@ func (s *adminServer) DatabaseDetails(
 		if a, e := len(r.ResultList[1].Columns), 1; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
-		for _, row := range r.ResultList[1].Rows {
+		nRows := r.ResultList[1].Rows.Len()
+		for i := 0; i < nRows; i++ {
+			row := r.ResultList[1].Rows.At(i)
 			var tableName string
 			if err := scanner.Scan(row, tableCol, &tableName); err != nil {
 				return nil, err
@@ -290,7 +296,9 @@ func (s *adminServer) TableDetails(
 			defaultCol = "Default"
 		)
 		scanner := makeResultScanner(r.ResultList[0].Columns)
-		for _, row := range r.ResultList[0].Rows {
+		nRows := r.ResultList[0].Rows.Len()
+		for i := 0; i < nRows; i++ {
+			row := r.ResultList[0].Rows.At(i)
 			var col serverpb.TableDetailsResponse_Column
 			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
 				return nil, err
@@ -325,7 +333,9 @@ func (s *adminServer) TableDetails(
 			storingCol   = "Storing"
 		)
 		scanner := makeResultScanner(r.ResultList[1].Columns)
-		for _, row := range r.ResultList[1].Rows {
+		nRows := r.ResultList[1].Rows.Len()
+		for i := 0; i < nRows; i++ {
+			row := r.ResultList[1].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var index serverpb.TableDetailsResponse_Index
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
@@ -357,7 +367,9 @@ func (s *adminServer) TableDetails(
 			privilegesCol = "Privileges"
 		)
 		scanner := makeResultScanner(r.ResultList[2].Columns)
-		for _, row := range r.ResultList[2].Rows {
+		nRows := r.ResultList[2].Rows.Len()
+		for i := 0; i < nRows; i++ {
+			row := r.ResultList[2].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.TableDetailsResponse_Grant
 			var privileges string
@@ -376,13 +388,13 @@ func (s *adminServer) TableDetails(
 	{
 		const createTableCol = "CreateTable"
 		showResult := r.ResultList[3]
-		if len(showResult.Rows) != 1 {
+		if showResult.Rows.Len() != 1 {
 			return nil, s.serverErrorf("CreateTable response not available.")
 		}
 
 		scanner := makeResultScanner(showResult.Columns)
 		var createStmt string
-		if err := scanner.Scan(showResult.Rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(showResult.Rows.At(0), createTableCol, &createStmt); err != nil {
 			return nil, err
 		}
 
@@ -573,8 +585,10 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 	}
 
 	var resp serverpb.UsersResponse
-	for _, row := range r.ResultList[0].Rows {
-		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(*row.Values[0].(*parser.DString))})
+	nRows := r.ResultList[0].Rows.Len()
+	for i := 0; i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(*row[0].(*parser.DString))})
 	}
 	return &resp, nil
 }
@@ -612,7 +626,9 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 	// Marshal response.
 	var resp serverpb.EventsResponse
 	scanner := makeResultScanner(r.ResultList[0].Columns)
-	for _, row := range r.ResultList[0].Rows {
+	nRows := r.ResultList[0].Rows.Len()
+	for i := 0; i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
 		var event serverpb.EventsResponse_Event
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
@@ -667,18 +683,20 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 
 	// Marshal results.
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
-	for _, row := range r.ResultList[0].Rows {
-		dKey, ok := row.Values[0].(*parser.DString)
+	nRows := r.ResultList[0].Rows.Len()
+	for i := 0; i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		dKey, ok := row[0].(*parser.DString)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI key: %T", row.Values[0])
+			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
 		}
-		dValue, ok := row.Values[1].(*parser.DBytes)
+		dValue, ok := row[1].(*parser.DBytes)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI value: %T", row.Values[1])
+			return nil, s.serverErrorf("unexpected type for UI value: %T", row[1])
 		}
-		dLastUpdated, ok := row.Values[2].(*parser.DTimestamp)
+		dLastUpdated, ok := row[2].(*parser.DTimestamp)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[2])
+			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row[2])
 		}
 
 		resp.KeyValues[string(*dKey)] = serverpb.GetUIDataResponse_Value{
@@ -1124,17 +1142,17 @@ func makeResultScanner(cols []sql.ResultColumn) resultScanner {
 
 // IsNull returns whether the specified column of the given row contains
 // a SQL NULL value.
-func (rs resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
+func (rs resultScanner) IsNull(row parser.DTuple, col string) (bool, error) {
 	idx, ok := rs.colNameToIdx[col]
 	if !ok {
 		return false, errors.Errorf("result is missing column %s", col)
 	}
-	return row.Values[idx] == parser.DNull, nil
+	return row[idx] == parser.DNull, nil
 }
 
 // ScanIndex scans the given column index of the given row into dst.
-func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{}) error {
-	src := row.Values[index]
+func (rs resultScanner) ScanIndex(row parser.DTuple, index int, dst interface{}) error {
+	src := row[index]
 
 	switch d := dst.(type) {
 	case *string:
@@ -1196,7 +1214,7 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 }
 
 // Scan scans the column with the given name from the given row into dst.
-func (rs resultScanner) Scan(row sql.ResultRow, colName string, dst interface{}) error {
+func (rs resultScanner) Scan(row parser.DTuple, colName string, dst interface{}) error {
 	idx, ok := rs.colNameToIdx[colName]
 	if !ok {
 		return errors.Errorf("result is missing column %s", colName)
@@ -1228,13 +1246,13 @@ func (s *adminServer) queryZone(
 	}
 
 	result := r.ResultList[0]
-	if len(result.Rows) == 0 {
+	if result.Rows.Len() == 0 {
 		return config.ZoneConfig{}, false, nil
 	}
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
-	err := scanner.ScanIndex(result.Rows[0], 0, &zoneBytes)
+	err := scanner.ScanIndex(result.Rows.At(0), 0, &zoneBytes)
 	if err != nil {
 		return config.ZoneConfig{}, false, err
 	}
@@ -1276,13 +1294,13 @@ func (s *adminServer) queryNamespaceID(
 	}
 
 	result := r.ResultList[0]
-	if len(result.Rows) == 0 {
+	if result.Rows.Len() == 0 {
 		return 0, errors.Errorf("namespace %s with ParentID %d not found", name, parentID)
 	}
 
 	var id int64
 	scanner := resultScanner{}
-	err := scanner.ScanIndex(result.Rows[0], 0, &id)
+	err := scanner.ScanIndex(result.Rows.At(0), 0, &id)
 	if err != nil {
 		return 0, err
 	}

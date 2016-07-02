@@ -464,7 +464,7 @@ CREATE TABLE test.tbl (
 
 		scanner := makeResultScanner(res.Columns)
 		var createStmt string
-		if err := scanner.Scan(res.Rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
 			t.Fatal(err)
 		}
 
