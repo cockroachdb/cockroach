@@ -26,7 +26,7 @@ import (
 type returningHelper struct {
 	p *planner
 	// Expected columns.
-	columns []ResultColumn
+	columns ResultColumns
 	// Processed copies of expressions from ReturningExprs.
 	exprs    []parser.TypedExpr
 	qvals    qvalMap
@@ -53,7 +53,7 @@ func (p *planner) makeReturningHelper(
 		}
 	}
 
-	rh.columns = make([]ResultColumn, 0, len(r))
+	rh.columns = make(ResultColumns, 0, len(r))
 	aliasTableName := parser.TableName{TableName: parser.Name(alias)}
 	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
 	rh.qvals = make(qvalMap)

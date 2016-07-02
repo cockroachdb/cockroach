@@ -152,7 +152,7 @@ func (n *selectTopNode) ExplainPlan(v bool) (name, description string, subplans 
 	return "select", "", subplans
 }
 
-func (n *selectTopNode) Columns() []ResultColumn {
+func (n *selectTopNode) Columns() ResultColumns {
 	// sort, window, group and source may have different ideas about the
 	// result columns. Ask them in turn.
 	// (We cannot ask n.plan because it may not be connected yet.)
@@ -180,3 +180,8 @@ func (n *selectTopNode) Start() error               { return n.plan.Start() }
 func (n *selectTopNode) Next() (bool, error)        { return n.plan.Next() }
 func (n *selectTopNode) Values() parser.DTuple      { return n.plan.Values() }
 func (n *selectTopNode) DebugValues() debugValues   { return n.plan.DebugValues() }
+func (n *selectTopNode) Close() {
+	if n.plan != nil {
+		n.plan.Close()
+	}
+}

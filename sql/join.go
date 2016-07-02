@@ -118,7 +118,7 @@ func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan
 	}, indexScan
 }
 
-func (n *indexJoinNode) Columns() []ResultColumn {
+func (n *indexJoinNode) Columns() ResultColumns {
 	return n.table.Columns()
 }
 
@@ -243,4 +243,9 @@ func (n *indexJoinNode) ExplainTypes(_ func(string, string)) {}
 
 func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	n.index.SetLimitHint(numRows, soft)
+}
+
+func (n *indexJoinNode) Close() {
+	n.index.Close()
+	n.table.Close()
 }

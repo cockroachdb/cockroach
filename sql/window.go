@@ -20,7 +20,9 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -119,6 +121,9 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	if err := window.constructWindowDefinitions(n, s); err != nil {
 		return nil, err
 	}
+
+	window.wrappedValues = p.NewRowContainer(s.columns, 0)
+
 	return window, nil
 }
 
@@ -234,7 +239,7 @@ type windowNode struct {
 
 	// The "wrapped" node (which returns un-windowed results).
 	plan          planNode
-	wrappedValues []parser.DTuple
+	wrappedValues *RowContainer
 
 	// A sparse array holding renders specific to this windowNode. This will contain
 	// nil entries for renders that do not contain window functions, and which therefore
@@ -251,10 +256,12 @@ type windowNode struct {
 	windowValues [][]parser.Datum
 	curRowIdx    int
 
+	windowsAcc mon.MemoryAccount
+
 	explain explainMode
 }
 
-func (n *windowNode) Columns() []ResultColumn {
+func (n *windowNode) Columns() ResultColumns {
 	return n.values.Columns()
 }
 
@@ -340,7 +347,9 @@ func (n *windowNode) Next() (bool, error) {
 		values := n.plan.Values()
 		valuesCopy := make(parser.DTuple, len(values))
 		copy(valuesCopy, values)
-		n.wrappedValues = append(n.wrappedValues, valuesCopy)
+		if err := n.wrappedValues.AddRow(valuesCopy); err != nil {
+			return false, err
+		}
 
 		if n.explain == explainDebug {
 			// Emit a "buffered" row.
@@ -398,10 +407,18 @@ type peerGroupChecker interface {
 // computeWindows populates n.windowValues, adding a column of values to the
 // 2D-slice for each window function in n.funcs.
 func (n *windowNode) computeWindows() error {
-	rowCount := len(n.wrappedValues)
-	n.windowValues = make([][]parser.Datum, rowCount)
-
+	rowCount := n.wrappedValues.Len()
 	windowCount := len(n.funcs)
+
+	sz := int64(uintptr(rowCount) *
+		(unsafe.Sizeof([][]parser.Datum{}) /* windowValues */ +
+			uintptr(windowCount)*unsafe.Sizeof([]parser.Datum{}) /* windowAlloc */ +
+			unsafe.Sizeof(parser.Datum(nil)) /* scratchDatum */))
+	if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+		return err
+	}
+
+	n.windowValues = make([][]parser.Datum, rowCount)
 	windowAlloc := make([]parser.Datum, rowCount*windowCount)
 	for i := range n.windowValues {
 		n.windowValues[i] = windowAlloc[i*windowCount : (i+1)*windowCount]
@@ -411,6 +428,17 @@ func (n *windowNode) computeWindows() error {
 	scratchDatum := make(parser.DTuple, 0, rowCount)
 	for windowIdx, windowFn := range n.funcs {
 		partitions := make(map[string][]partitionEntry)
+
+		if len(windowFn.partitionIdxs) == 0 {
+			// If no partition indexes are included for the window function, all
+			// rows are added to the same partition, which need to be pre-allocated.
+			sz := int64(uintptr(rowCount) * unsafe.Sizeof(partitionEntry{}))
+			if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+				return err
+			}
+			partitions[""] = make([]partitionEntry, rowCount)
+		}
+
 		scratchDatum = scratchDatum[:len(windowFn.partitionIdxs)]
 
 		// Partition rows into separate partitions based on hash values of the
@@ -419,14 +447,12 @@ func (n *windowNode) computeWindows() error {
 		// TODO(nvanbenschoten) Window functions with the same window definition
 		// can share partition and sorting work.
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
-		for rowI, row := range n.wrappedValues {
+		for rowI := 0; rowI < rowCount; rowI++ {
+			row := n.wrappedValues.At(rowI)
 			entry := partitionEntry{idx: rowI, datum: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
-				if rowI == 0 {
-					partitions[""] = make([]partitionEntry, len(n.wrappedValues))
-				}
 				partitions[""][rowI] = entry
 			} else {
 				// If the window function has partition indexes, we hash the values of each
@@ -440,6 +466,10 @@ func (n *windowNode) computeWindows() error {
 					return err
 				}
 
+				sz := int64(uintptr(len(encoded)) + unsafe.Sizeof(entry))
+				if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+					return err
+				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
 				scratch = encoded[:0]
 			}
@@ -506,6 +536,12 @@ func (n *windowNode) computeWindows() error {
 
 				// Set aggregate result for entire peer group.
 				res := agg.Result()
+
+				sz, _ := res.Size()
+				if err := n.windowsAcc.Grow(n.planner.session.Ctx(), int64(sz)); err != nil {
+					return err
+				}
+
 				for ; peerGroupSize > 0; peerGroupSize-- {
 					row := partition[rowIdx-peerGroupSize]
 					n.windowValues[row.idx][windowIdx] = res
@@ -520,23 +556,29 @@ func (n *windowNode) computeWindows() error {
 // populateValues populates n.values with final datum values after computing
 // window result values in n.windowValues.
 func (n *windowNode) populateValues() error {
-	rowCount := len(n.wrappedValues)
-	n.values.rows = make([]parser.DTuple, rowCount)
+	rowCount := n.wrappedValues.Len()
+	n.values.rows = n.planner.NewRowContainer(n.values.columns, rowCount)
 
 	rowWidth := len(n.windowRender)
+
+	sz := int64(uintptr(rowCount*rowWidth) * unsafe.Sizeof(parser.DTuple{}))
+	if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+		return err
+	}
+
 	rowsAlloc := make(parser.DTuple, rowCount*rowWidth)
-	for i := range n.values.rows {
+	for i := 0; i < rowCount; i++ {
+		wrappedRow := n.wrappedValues.At(i)
 		curRow := rowsAlloc[i*rowWidth : (i+1)*rowWidth]
-		n.values.rows[i] = curRow
 
 		n.curRowIdx = i // Point all windowFuncHolders to the correct row values.
 		curColIdx := 0
 		curFnIdx := 0
-		for j := range n.values.rows[i] {
+		for j := 0; j < rowWidth; j++ {
 			if curWindowRender := n.windowRender[j]; curWindowRender == nil {
 				// If the windowRender at this index is nil, propagate the datum
 				// directly from the wrapped planNode. It wasn't changed by windowNode.
-				curRow[j] = n.wrappedValues[i][curColIdx]
+				curRow[j] = wrappedRow[curColIdx]
 				curColIdx++
 			} else {
 				// If the windowRender is not nil, ignore 0 or more columns from the wrapped
@@ -559,7 +601,18 @@ func (n *windowNode) populateValues() error {
 				curRow[j] = res
 			}
 		}
+
+		if err := n.values.rows.AddRow(curRow); err != nil {
+			return err
+		}
 	}
+
+	// Done using the output of computeWindows, release memory and clear
+	// accounts.
+	n.wrappedValues.Close()
+	n.wrappedValues = nil
+	n.windowValues = nil
+	n.windowsAcc.Close(n.planner.session.Ctx())
 
 	return nil
 }
@@ -592,6 +645,19 @@ func (n *windowNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*windowNode) SetLimitHint(_ int64, _ bool) {}
+
+func (n *windowNode) Close() {
+	n.plan.Close()
+	if n.wrappedValues != nil {
+		n.wrappedValues.Close()
+		n.wrappedValues = nil
+	}
+	if n.windowValues != nil {
+		n.windowValues = nil
+		n.windowsAcc.Close(n.planner.session.Ctx())
+	}
+	n.values.Close()
+}
 
 // wrap the supplied planNode with the windowNode if windowing is required.
 func (n *windowNode) wrap(plan planNode) planNode {

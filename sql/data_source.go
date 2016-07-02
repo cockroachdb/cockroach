@@ -112,7 +112,7 @@ import (
 type dataSourceInfo struct {
 	// sourceColumns match the plan.Columns() 1-to-1. However the column
 	// names might be different if the statement renames them using AS.
-	sourceColumns []ResultColumn
+	sourceColumns ResultColumns
 
 	// sourceAliases indicates to which table alias column ranges
 	// belong.
@@ -153,7 +153,7 @@ func fillColumnRange(firstIdx, lastIdx int) columnRange {
 
 // newSourceInfoForSingleTable creates a simple dataSourceInfo
 // which maps the same tableAlias to all columns.
-func newSourceInfoForSingleTable(tn parser.TableName, columns []ResultColumn) *dataSourceInfo {
+func newSourceInfoForSingleTable(tn parser.TableName, columns ResultColumns) *dataSourceInfo {
 	norm := sqlbase.NormalizeTableName(tn)
 	return &dataSourceInfo{
 		sourceColumns: columns,
@@ -294,7 +294,7 @@ func (p *planner) getDataSource(
 
 		if len(colAlias) > 0 {
 			// Make a copy of the slice since we are about to modify the contents.
-			src.info.sourceColumns = append([]ResultColumn(nil), src.info.sourceColumns...)
+			src.info.sourceColumns = append(ResultColumns(nil), src.info.sourceColumns...)
 
 			// The column aliases can only refer to explicit columns.
 			for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
@@ -328,7 +328,7 @@ func (p *planner) getDataSource(
 // expressions that correspond to the expansion of a star.
 func (src *dataSourceInfo) expandStar(
 	v parser.VarName, qvals qvalMap,
-) (columns []ResultColumn, exprs []parser.TypedExpr, err error) {
+) (columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	if len(src.sourceColumns) == 0 {
 		return nil, nil, fmt.Errorf("cannot use %q without a FROM clause", v)
 	}
@@ -598,7 +598,7 @@ func concatDataSourceInfos(left *dataSourceInfo, right *dataSourceInfo) (*dataSo
 		aliases[k] = v
 	}
 
-	columns := make([]ResultColumn, 0, len(left.sourceColumns)+len(right.sourceColumns))
+	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns))
 	columns = append(columns, left.sourceColumns...)
 	columns = append(columns, right.sourceColumns...)
 
