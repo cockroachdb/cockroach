@@ -41,7 +41,7 @@ type explainTraceNode struct {
 	lastPos   int
 }
 
-var traceColumns = append([]ResultColumn{
+var traceColumns = append(ResultColumns{
 	{Name: "Cumulative Time", Typ: parser.TypeString},
 	{Name: "Duration", Typ: parser.TypeString},
 	{Name: "Span Pos", Typ: parser.TypeInt},
@@ -67,8 +67,8 @@ func makeTraceNode(plan planNode, txn *client.Txn) planNode {
 	}
 }
 
-func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
-func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*explainTraceNode) Columns() ResultColumns { return traceColumns }
+func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *explainTraceNode) expandPlan() error {
 	if err := n.plan.expandPlan(); err != nil {
@@ -80,6 +80,7 @@ func (n *explainTraceNode) expandPlan() error {
 }
 
 func (n *explainTraceNode) Start() error { return n.plan.Start() }
+func (n *explainTraceNode) Close()       { n.plan.Close() }
 
 func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil

@@ -59,7 +59,7 @@ type selectNode struct {
 	// groupNode copies/extends the render array defined by initTargets()
 	// will add extra selectNode renders for the aggregation sources.
 	render  []parser.TypedExpr
-	columns []ResultColumn
+	columns ResultColumns
 
 	// The number of initial columns - before adding any internal render
 	// targets for grouping, filtering or ordering. The original columns
@@ -88,10 +88,7 @@ type selectNode struct {
 	row parser.DTuple
 }
 
-func (s *selectNode) Columns() []ResultColumn {
-	if s.explain == explainDebug {
-		return debugColumns
-	}
+func (s *selectNode) Columns() ResultColumns {
 	return s.columns
 }
 
@@ -212,6 +209,10 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 
 func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
+}
+
+func (s *selectNode) Close() {
+	s.source.plan.Close()
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
@@ -489,7 +490,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 // ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
-) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
+) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	qname, ok := target.Expr.(*parser.QualifiedName)
 	if !ok {
 		return false, nil, nil, nil

@@ -18,12 +18,14 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -64,6 +66,10 @@ type planner struct {
 	qnameVisitor                qnameVisitor
 
 	execCtx *ExecutorContext
+
+	// curAllocated tracks the amount of memory allocated for in-memory
+	// row storage.
+	curAllocated int64
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
@@ -214,6 +220,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	if err != nil {
 		return nil, err
 	}
+	defer plan.Close()
 	if err := plan.Start(); err != nil {
 		return nil, err
 	}
@@ -240,6 +247,7 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer plan.Close()
 	if err := plan.Start(); err != nil {
 		return 0, err
 	}
@@ -304,4 +312,27 @@ func (p *planner) fillFKTableMap(m TablesByID) error {
 		}
 	}
 	return nil
+}
+
+// ReserveMemory implements the parser.MemoryUsageMonitor interface.
+func (p *planner) ReserveMemory(x int64) error {
+	// FIXME(knz) see separate RFC on policy
+	if p.curAllocated+x > 10000000 {
+		return fmt.Errorf("memory budget exceeded: %d requested, %d already allocated", x, p.curAllocated)
+	}
+	p.curAllocated += x
+	if p.curAllocated > 10000 {
+		if int(math.Log2(float64(p.curAllocated))) != int(math.Log2(float64(p.curAllocated-x))) {
+			log.Infof("%p' memory usage for SQL row data increases to %d bytes (+%d)", p, p.curAllocated, x)
+		}
+	}
+	return nil
+}
+
+// ReleaseMemory implements the parser.MemoryUsageMonitor interface.
+func (p *planner) ReleaseMemory(x int64) {
+	if p.curAllocated < x {
+		panic(fmt.Sprintf("over-allocation: current %d, free %d", p.curAllocated, x))
+	}
+	p.curAllocated -= x
 }

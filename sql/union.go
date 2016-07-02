@@ -136,8 +136,8 @@ type unionNode struct {
 	debugVals   debugValues
 }
 
-func (n *unionNode) Columns() []ResultColumn { return n.left.Columns() }
-func (n *unionNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (n *unionNode) Columns() ResultColumns { return n.left.Columns() }
+func (n *unionNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *unionNode) Values() parser.DTuple {
 	switch {
@@ -208,6 +208,7 @@ func (n *unionNode) readRight() (bool, error) {
 	}
 
 	n.rightDone = true
+	n.right.Close()
 	return n.readLeft()
 }
 
@@ -242,6 +243,7 @@ func (n *unionNode) readLeft() (bool, error) {
 		return false, err
 	}
 	n.leftDone = true
+	n.left.Close()
 	return false, nil
 }
 
@@ -267,6 +269,15 @@ func (n *unionNode) Next() (bool, error) {
 		return n.readLeft()
 	default:
 		return false, nil
+	}
+}
+
+func (n *unionNode) Close() {
+	switch {
+	case !n.rightDone:
+		n.right.Close()
+	case !n.leftDone:
+		n.left.Close()
 	}
 }
 

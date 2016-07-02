@@ -190,7 +190,7 @@ type groupNode struct {
 	explain explainMode
 }
 
-func (n *groupNode) Columns() []ResultColumn {
+func (n *groupNode) Columns() ResultColumns {
 	return n.values.Columns()
 }
 
@@ -329,7 +329,7 @@ func (n *groupNode) computeAggregates() error {
 	n.populated = true
 
 	// Render the results.
-	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
+	n.values.rows = parser.NewRowContainer(n.planner, n.values.Columns(), len(n.buckets))
 	for k := range n.buckets {
 		n.currentBucket = k
 
@@ -354,7 +354,9 @@ func (n *groupNode) computeAggregates() error {
 			row = append(row, res)
 		}
 
-		n.values.rows = append(n.values.rows, row)
+		if err := n.values.rows.AddRow(row); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -392,6 +394,12 @@ func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
+
+func (n *groupNode) Close() {
+	n.plan.Close()
+	n.values.Close()
+	n.buckets = nil
+}
 
 // wrap the supplied planNode with the groupNode if grouping/aggregation is required.
 func (n *groupNode) wrap(plan planNode) planNode {

@@ -48,7 +48,7 @@ type joinNode struct {
 	pred joinPredicate
 
 	// columns contains the metadata for the results of this node.
-	columns []ResultColumn
+	columns ResultColumns
 
 	// output contains the last generated row of results from this node.
 	output parser.DTuple
@@ -56,6 +56,7 @@ type joinNode struct {
 	// rightRows contains a copy of all rows from the data source on the
 	// right of the join.
 	rightRows *valuesNode
+
 	// rightMatched remembers which of the right rows have matched in a
 	// full outer join.
 	rightMatched []bool
@@ -282,7 +283,7 @@ func (p *usingPredicate) prepareRow(result parser.DTuple, leftRow parser.DTuple,
 // pickUsingColumn searches for a column whose name matches colName.
 // The column index and type are returned if found, otherwise an error
 // is reported.
-func pickUsingColumn(cols []ResultColumn, colName string, context string) (int, parser.Datum, error) {
+func pickUsingColumn(cols ResultColumns, colName string, context string) (int, parser.Datum, error) {
 	idx := invalidColIdx
 	for j, col := range cols {
 		if col.hidden {
@@ -315,7 +316,7 @@ func (p *planner) makeUsingPredicate(
 		usedRight[i] = invalidColIdx
 	}
 	seenNames := make(map[string]struct{})
-	columns := make([]ResultColumn, 0, len(left.sourceColumns)+len(right.sourceColumns)-len(colNames))
+	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns)-len(colNames))
 
 	// Find out which columns are involved in the USING clause.
 	for i, colName := range colNames {
@@ -491,12 +492,13 @@ func (p *planner) makeJoin(
 	return planDataSource{
 		info: info,
 		plan: &joinNode{
-			joinType: typ,
-			left:     left.plan,
-			right:    right.plan,
-			pred:     pred,
-			columns:  info.sourceColumns,
-			swapped:  swapped,
+			joinType:  typ,
+			left:      left.plan,
+			right:     right.plan,
+			pred:      pred,
+			columns:   info.sourceColumns,
+			swapped:   swapped,
+			rightRows: p.newContainerValuesNode(right.plan.Columns(), 0),
 		},
 	}, nil
 }
@@ -556,7 +558,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 }
 
 // Columns implements the planNode interface.
-func (n *joinNode) Columns() []ResultColumn { return n.columns }
+func (n *joinNode) Columns() ResultColumns { return n.columns }
 
 // Ordering implements the planNode interface.
 func (n *joinNode) Ordering() orderingInfo { return n.left.Ordering() }
@@ -581,22 +583,25 @@ func (n *joinNode) Start() error {
 	}
 
 	// Load all the rows from the right side in memory.
-	v := &valuesNode{}
 	for {
 		hasRow, err := n.right.Next()
 		if err != nil {
 			return err
 		}
 		if !hasRow {
+			n.right.Close()
 			break
 		}
 		row := n.right.Values()
 		newRow := make([]parser.Datum, len(row))
 		copy(newRow, row)
-		v.rows = append(v.rows, newRow)
+		if err := n.rightRows.rows.AddRow(newRow); err != nil {
+			return err
+		}
 	}
-	if len(v.rows) > 0 {
-		n.rightRows = v
+	if n.rightRows.Len() == 0 {
+		n.rightRows.Close()
+		n.rightRows = nil
 	}
 
 	// Pre-allocate the space for output rows.
@@ -613,7 +618,7 @@ func (n *joinNode) Start() error {
 	// If needed, allocate an array of booleans to remember which
 	// right rows have matched.
 	if n.joinType == joinTypeOuterFull && n.rightRows != nil {
-		n.rightMatched = make([]bool, len(n.rightRows.rows))
+		n.rightMatched = make([]bool, n.rightRows.rows.Len())
 		n.emptyLeft = make(parser.DTuple, len(n.left.Columns()))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
@@ -635,7 +640,7 @@ func (n *joinNode) Next() (bool, error) {
 		}
 		nRightRows = 0
 	} else {
-		nRightRows = len(n.rightRows.rows)
+		nRightRows = n.rightRows.Len()
 	}
 
 	// We fetch one row at a time until we find one that passes the filter.
@@ -651,7 +656,7 @@ func (n *joinNode) Next() (bool, error) {
 					continue
 				}
 				leftRow = n.emptyLeft
-				rightRow = n.rightRows.rows[curRightIdx]
+				rightRow = n.rightRows.rows.At(curRightIdx)
 				break
 			} else {
 				// Both right and left exhausted.
@@ -667,6 +672,7 @@ func (n *joinNode) Next() (bool, error) {
 
 			if !leftHasRow && n.rightMatched != nil {
 				// Go through the remaining right rows.
+				n.left.Close()
 				n.rightIdx = -1
 				continue
 			}
@@ -696,7 +702,7 @@ func (n *joinNode) Next() (bool, error) {
 
 		emptyRight := false
 		if nRightRows > 0 {
-			rightRow = n.rightRows.rows[curRightIdx]
+			rightRow = n.rightRows.rows.At(curRightIdx)
 			n.rightIdx = curRightIdx + 1
 		} else {
 			emptyRight = true
@@ -736,4 +742,14 @@ func (n *joinNode) DebugValues() debugValues {
 	// TODO(knz): not so clear yet how to report DebugValues()
 	// for JOIN.
 	return debugValues{}
+}
+
+// Close implements the planNode interface.
+func (n *joinNode) Close() {
+	if n.rightRows != nil {
+		n.rightRows.Close()
+	}
+	n.rightMatched = nil
+	n.right.Close()
+	n.left.Close()
 }

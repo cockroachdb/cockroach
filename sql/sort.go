@@ -33,8 +33,9 @@ import (
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
+	p        *planner
 	plan     planNode
-	columns  []ResultColumn
+	columns  ResultColumns
 	ordering sqlbase.ColumnOrdering
 
 	needSort     bool
@@ -147,7 +148,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
 	}
 
-	return &sortNode{columns: columns, ordering: ordering}, nil
+	return &sortNode{p: p, columns: columns, ordering: ordering}, nil
 }
 
 // colIndex takes an expression that refers to a column using an integer, verifies it refers to a
@@ -177,7 +178,7 @@ func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
 	}
 }
 
-func (n *sortNode) Columns() []ResultColumn {
+func (n *sortNode) Columns() ResultColumns {
 	return n.columns
 }
 
@@ -217,7 +218,7 @@ func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []pla
 	}
 
 	var buf bytes.Buffer
-	var columns []ResultColumn
+	var columns ResultColumns
 	if n.plan != nil {
 		columns = n.plan.Columns()
 	}
@@ -243,7 +244,8 @@ func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	} else {
 		// The special value math.MaxInt64 means "no limit".
 		if numRows != math.MaxInt64 {
-			v := &valuesNode{ordering: n.ordering}
+			v := n.p.newContainerValuesNode(n.plan.Columns(), int(numRows))
+			v.ordering = n.ordering
 			if soft {
 				n.sortStrategy = newIterativeSortStrategy(v)
 			} else {
@@ -306,7 +308,8 @@ func (n *sortNode) Next() (bool, error) {
 			n.needSort = false
 			break
 		} else if n.sortStrategy == nil {
-			v := &valuesNode{ordering: n.ordering}
+			v := n.p.newContainerValuesNode(n.plan.Columns(), 0)
+			v.ordering = n.ordering
 			n.sortStrategy = newSortAllStrategy(v)
 		}
 
@@ -333,7 +336,9 @@ func (n *sortNode) Next() (bool, error) {
 		}
 
 		values := n.plan.Values()
-		n.sortStrategy.Add(values)
+		if err := n.sortStrategy.Add(values); err != nil {
+			return false, err
+		}
 
 		if n.explain == explainDebug {
 			// Emit a "buffered" row.
@@ -355,6 +360,11 @@ func (n *sortNode) Next() (bool, error) {
 	return true, nil
 }
 
+func (n *sortNode) Close() {
+	n.sortStrategy.Close()
+	n.valueIter.Close()
+}
+
 // valueIterator provides iterative access to a value source's values and
 // debug values. It is a subset of the planNode interface, so all methods
 // should conform to the comments expressed in the planNode definition.
@@ -362,6 +372,7 @@ type valueIterator interface {
 	Next() (bool, error)
 	Values() parser.DTuple
 	DebugValues() debugValues
+	Close()
 }
 
 type sortingStrategy interface {
@@ -369,7 +380,7 @@ type sortingStrategy interface {
 	// Add adds a single value to the sortingStrategy. It guarantees that
 	// if it decided to store the provided value, that it will make a deep
 	// copy of it.
-	Add(parser.DTuple)
+	Add(parser.DTuple) error
 	// Finish terminates the sorting strategy, allowing for postprocessing
 	// after all values have been provided to the strategy. The method should
 	// not be called more than once, and should only be called after all Add
@@ -392,10 +403,10 @@ func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *sortAllStrategy) Add(values parser.DTuple) {
+func (ss *sortAllStrategy) Add(values parser.DTuple) error {
 	valuesCopy := make(parser.DTuple, len(values))
 	copy(valuesCopy, values)
-	ss.vNode.rows = append(ss.vNode.rows, valuesCopy)
+	return ss.vNode.rows.AddRow(valuesCopy)
 }
 
 func (ss *sortAllStrategy) Finish() {
@@ -412,6 +423,10 @@ func (ss *sortAllStrategy) Values() parser.DTuple {
 
 func (ss *sortAllStrategy) DebugValues() debugValues {
 	return ss.vNode.DebugValues()
+}
+
+func (ss *sortAllStrategy) Close() {
+	ss.vNode.Close()
 }
 
 // iterativeSortStrategy reads in all values into the wrapped valuesNode
@@ -436,10 +451,10 @@ func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *iterativeSortStrategy) Add(values parser.DTuple) {
+func (ss *iterativeSortStrategy) Add(values parser.DTuple) error {
 	valuesCopy := make(parser.DTuple, len(values))
 	copy(valuesCopy, values)
-	ss.vNode.rows = append(ss.vNode.rows, valuesCopy)
+	return ss.vNode.rows.AddRow(valuesCopy)
 }
 
 func (ss *iterativeSortStrategy) Finish() {
@@ -466,6 +481,10 @@ func (ss *iterativeSortStrategy) DebugValues() debugValues {
 		value:  ss.lastVal.String(),
 		output: debugValueRow,
 	}
+}
+
+func (ss *iterativeSortStrategy) Close() {
+	ss.vNode.Close()
 }
 
 // sortTopKStrategy creates a max-heap in its wrapped valuesNode and keeps
@@ -498,24 +517,29 @@ func newSortTopKStrategy(vNode *valuesNode, topK int64) sortingStrategy {
 	return ss
 }
 
-func (ss *sortTopKStrategy) Add(values parser.DTuple) {
+func (ss *sortTopKStrategy) Add(values parser.DTuple) error {
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
 		valuesCopy := make(parser.DTuple, len(values))
 		copy(valuesCopy, values)
 
-		ss.vNode.PushValues(valuesCopy)
-	case ss.vNode.ValuesLess(values, ss.vNode.rows[0]):
+		if err := ss.vNode.PushValues(valuesCopy); err != nil {
+			return err
+		}
+	case ss.vNode.ValuesLess(values, ss.vNode.rows.At(0)):
 		// Once the heap is full, only replace the top
 		// value if a new value is less than it. If so
 		// replace and fix the heap.
 		valuesCopy := make(parser.DTuple, len(values))
 		copy(valuesCopy, values)
 
-		ss.vNode.rows[0] = valuesCopy
+		if err := ss.vNode.rows.Replace(0, valuesCopy); err != nil {
+			return err
+		}
 		heap.Fix(ss.vNode, 0)
 	}
+	return nil
 }
 
 func (ss *sortTopKStrategy) Finish() {
@@ -526,7 +550,7 @@ func (ss *sortTopKStrategy) Finish() {
 	for ss.vNode.Len() > 0 {
 		heap.Pop(ss.vNode)
 	}
-	ss.vNode.rows = ss.vNode.rows[:origLen]
+	ss.vNode.rows.ResetLen(origLen)
 }
 
 func (ss *sortTopKStrategy) Next() (bool, error) {
@@ -539,6 +563,10 @@ func (ss *sortTopKStrategy) Values() parser.DTuple {
 
 func (ss *sortTopKStrategy) DebugValues() debugValues {
 	return ss.vNode.DebugValues()
+}
+
+func (ss *sortTopKStrategy) Close() {
+	ss.vNode.Close()
 }
 
 // TODO(pmattis): If the result set is large, we might need to perform the
