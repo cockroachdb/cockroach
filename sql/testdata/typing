@@ -53,6 +53,9 @@ SELECT * FROM d;
 statement ok
 CREATE TABLE s (x STRING);
 
+query error unsupported comparison operator: <string> > <bytes>
+SELECT * FROM s WHERE x > b'\x00'
+
 statement ok
 INSERT INTO s(x) VALUES (b'qwe'), ('start' || b'end');
 
