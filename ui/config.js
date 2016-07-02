@@ -69,19 +69,19 @@ System.config({
     "d3": "npm:d3@3.5.17",
     "enzyme": "npm:enzyme@2.3.0",
     "es6-promise": "npm:es6-promise@3.2.1",
-    "fetch-mock": "npm:fetch-mock@4.5.4",
+    "fetch-mock": "npm:fetch-mock@4.6.0",
     "lodash": "npm:lodash@4.13.1",
     "long": "npm:long@3.1.0",
     "moment": "npm:moment@2.13.0",
     "nvd3": "npm:nvd3@1.8.3",
     "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
-    "react": "npm:react@15.1.0",
-    "react-addons-test-utils": "npm:react-addons-test-utils@15.1.0",
-    "react-dom": "npm:react-dom@15.1.0",
+    "react": "npm:react@15.2.0",
+    "react-addons-test-utils": "npm:react-addons-test-utils@15.2.0",
+    "react-dom": "npm:react-dom@15.2.0",
     "react-paginate": "npm:react-paginate@2.1.1",
     "react-redux": "npm:react-redux@4.4.5",
-    "react-router": "npm:react-router@2.5.1",
+    "react-router": "npm:react-router@2.5.2",
     "react-router-redux": "npm:react-router-redux@4.0.5",
     "redux": "npm:redux@3.5.2",
     "redux-thunk": "npm:redux-thunk@2.1.0",
@@ -542,7 +542,7 @@ System.config({
       "object-is": "npm:object-is@1.0.1",
       "object.assign": "npm:object.assign@4.0.3",
       "object.values": "npm:object.values@1.0.3",
-      "react": "npm:react@15.1.0"
+      "react": "npm:react@15.2.0"
     },
     "npm:es-abstract@1.5.1": {
       "es-to-primitive": "npm:es-to-primitive@1.1.1",
@@ -588,10 +588,12 @@ System.config({
       "promise": "npm:promise@7.1.1",
       "ua-parser-js": "npm:ua-parser-js@0.7.10"
     },
-    "npm:fetch-mock@4.5.4": {
+    "npm:fetch-mock@4.6.0": {
       "http": "github:jspm/nodelibs-http@1.7.1",
       "node-fetch": "npm:node-fetch@1.5.3",
+      "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
+      "protips": "npm:protips@1.1.0",
       "stream": "github:jspm/nodelibs-stream@0.1.0"
     },
     "npm:forever-agent@0.6.1": {
@@ -941,6 +943,13 @@ System.config({
       "asap": "npm:asap@2.0.4",
       "fs": "github:jspm/nodelibs-fs@0.1.2"
     },
+    "npm:protips@1.1.0": {
+      "chalk": "npm:chalk@1.1.3",
+      "fs": "github:jspm/nodelibs-fs@0.1.2",
+      "marked": "npm:marked@0.3.5",
+      "path": "github:jspm/nodelibs-path@0.1.0",
+      "process": "github:jspm/nodelibs-process@0.1.2"
+    },
     "npm:protobufjs@5.0.1": {
       "ascli": "npm:ascli@1.0.0",
       "assert": "github:jspm/nodelibs-assert@0.1.0",
@@ -972,22 +981,22 @@ System.config({
       "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
-    "npm:react-addons-create-fragment@15.1.0": {
-      "react": "npm:react@15.1.0"
+    "npm:react-addons-create-fragment@15.2.0": {
+      "react": "npm:react@15.2.0"
     },
-    "npm:react-addons-test-utils@15.1.0": {
-      "react": "npm:react@15.1.0"
+    "npm:react-addons-test-utils@15.2.0": {
+      "react": "npm:react@15.2.0"
     },
-    "npm:react-dom@15.1.0": {
-      "react": "npm:react@15.1.0"
+    "npm:react-dom@15.2.0": {
+      "react": "npm:react@15.2.0"
     },
     "npm:react-paginate@2.1.1": {
       "classnames": "npm:classnames@1.2.2",
       "fs": "github:jspm/nodelibs-fs@0.1.2",
       "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react-addons-create-fragment": "npm:react-addons-create-fragment@15.1.0",
-      "react-dom": "npm:react-dom@15.1.0",
+      "react-addons-create-fragment": "npm:react-addons-create-fragment@15.2.0",
+      "react-dom": "npm:react-dom@15.2.0",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },
     "npm:react-redux@4.4.5": {
@@ -996,19 +1005,19 @@ System.config({
       "lodash": "npm:lodash@4.13.1",
       "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react": "npm:react@15.1.0",
+      "react": "npm:react@15.2.0",
       "redux": "npm:redux@3.5.2"
     },
-    "npm:react-router@2.5.1": {
+    "npm:react-router@2.5.2": {
       "history": "npm:history@2.1.2",
       "hoist-non-react-statics": "npm:hoist-non-react-statics@1.2.0",
       "invariant": "npm:invariant@2.2.1",
       "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react": "npm:react@15.1.0",
+      "react": "npm:react@15.2.0",
       "warning": "npm:warning@2.1.0"
     },
-    "npm:react@15.1.0": {
+    "npm:react@15.2.0": {
       "fbjs": "npm:fbjs@0.8.3",
       "loose-envify": "npm:loose-envify@1.2.0",
       "object-assign": "npm:object-assign@4.1.0",

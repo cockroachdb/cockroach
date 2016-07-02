@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "gulp": "^3.9.1",
     "jspm": "^0.16.33",
     "karma": "^0.13.22",
     "karma-jspm": "^2.1.1",
