@@ -8,10 +8,10 @@
  */
 
 import * as React from "react";
-import { Link, RouterOnContext } from "react-router";
+import { Link, IRouter } from "react-router";
 
 interface ListLinkContext {
-  router: RouterOnContext;
+  router: IRouter;
 }
 
 export interface LinkProps {

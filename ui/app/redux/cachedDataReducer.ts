@@ -128,8 +128,8 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    *   - its results are not considered valid OR
    *   - it has no invalidation period (otherwise the data would never be invalidated)
    */
-  refresh = (req?: TRequest) => {
-    return (dispatch: Dispatch, getState: () => any) => {
+  refresh = <S>(req?: TRequest) => {
+    return (dispatch: Dispatch<S>, getState: () => any) => {
       let state: CachedDataReducerState<TResponseMessage> = getState().cachedData[this.actionNamespace];
 
       if (state && (state.inFlight || (_.isNumber(this.invalidationPeriodMillis) && state.valid))) {

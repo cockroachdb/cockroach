@@ -1,6 +1,8 @@
 import * as React from "react";
 import _ = require("lodash");
 import { connect } from "react-redux";
+
+import { AdminUIState } from "../redux/state";
 import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData } from "../redux/uiData";
 import { setUISetting } from "../redux/ui";
 import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
@@ -95,7 +97,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
   }
 }
 
-let optinAttributes = (state: any): OptInAttributes => state && state.uiData && state.uiData.data && state.uiData.data[KEY_HELPUS];
+let optinAttributes = (state: AdminUIState): OptInAttributes => state && state.uiData && state.uiData.data && state.uiData.data[KEY_HELPUS];
 
 // Connect the HelpUs class with our redux store.
 let helpusConnected = connect(

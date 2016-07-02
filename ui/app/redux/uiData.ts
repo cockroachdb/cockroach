@@ -124,8 +124,8 @@ export interface KeyValue {
  * the values have been successfully persisted to the server, they are updated
  * in the local UIDataSet store.
  */
-export function saveUIData(...values: KeyValue[]) {
-  return (dispatch: Dispatch, getState: () => any): Promise<void> => {
+export function saveUIData<S>(...values: KeyValue[]) {
+  return (dispatch: Dispatch<S>, getState: () => S): Promise<void> => {
     dispatch(fetchUIData());
 
     // Encode data for each UIData key. Each object is stringified and written
@@ -151,8 +151,8 @@ export function saveUIData(...values: KeyValue[]) {
 /**
  * loadUIData loads the values of the give UIData keys from the server.
  */
-export function loadUIData(...keys: string[]) {
-  return (dispatch: Dispatch, getState: () => any): Promise<void> => {
+export function loadUIData<S>(...keys: string[]) {
+  return (dispatch: Dispatch<S>, getState: () => S): Promise<void> => {
     dispatch(fetchUIData());
 
     return getUIData({ keys }).then((response) => {

@@ -4,6 +4,7 @@ import * as _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
+import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
@@ -152,8 +153,8 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
  */
 
 // Base selectors to extract data from redux state.
-let databases = (state: any): string[] => state.databaseInfo && state.databaseInfo.databases && state.databaseInfo.databases.data  && state.databaseInfo.databases.data.databases;
-let sortSetting = (state: any): SortSetting => state.ui[UI_DATABASES_SORT_SETTING_KEY] || {};
+let databases = (state: AdminUIState): string[] => state.databaseInfo && state.databaseInfo.databases && state.databaseInfo.databases.data  && state.databaseInfo.databases.data.databases;
+let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASES_SORT_SETTING_KEY] || {};
 
 // Selector which sorts statuses according to current sort setting.
 let sortFunctionLookup = _(columnDescriptors).keyBy("key").mapValues<(s: string) => any>("sort").value();
