@@ -119,15 +119,15 @@ func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 	return r.RSpan().ContainsKeyRange(start, end)
 }
 
-// FindReplica returns the replica which matches the specified store
-// ID. If no replica matches, (-1, nil) is returned.
-func (r RangeDescriptor) FindReplica(storeID StoreID) (int, *ReplicaDescriptor) {
-	for i := range r.Replicas {
-		if r.Replicas[i].StoreID == storeID {
-			return i, &r.Replicas[i]
+// GetReplicaDescriptor returns the replica which matches the specified store
+// ID.
+func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
+	for _, repDesc := range r.Replicas {
+		if repDesc.StoreID == storeID {
+			return repDesc, true
 		}
 	}
-	return -1, nil
+	return ReplicaDescriptor{}, false
 }
 
 // IsInitialized returns false if this descriptor represents an
