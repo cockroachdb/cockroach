@@ -171,8 +171,8 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Error {
 	// Propose a Raft command to get a lease for this replica.
 	desc := r.mu.state.Desc
-	_, replica := desc.FindReplica(r.store.StoreID())
-	if replica == nil {
+	repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
+	if !ok {
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 		return llChan
@@ -184,5 +184,5 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		r, *replica, timestamp, desc.StartKey.AsRawKey())
+		r, repDesc, timestamp, desc.StartKey.AsRawKey())
 }

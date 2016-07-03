@@ -157,16 +157,7 @@ func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.Syste
 	}
 
 	replyDesc := reply.Ranges[0]
-	currentMember := false
-	storeID := rng.store.StoreID()
-	for _, rep := range replyDesc.Replicas {
-		if rep.StoreID == storeID {
-			currentMember = true
-			break
-		}
-	}
-
-	if !currentMember {
+	if _, currentMember := replyDesc.GetReplicaDescriptor(rng.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", desc.RangeID)
