@@ -10,6 +10,7 @@ var keywords = map[string]int{
 	"ANALYSE":           ANALYSE,
 	"ANALYZE":           ANALYZE,
 	"AND":               AND,
+	"ANNOTATE_TYPE":     ANNOTATE_TYPE,
 	"ANY":               ANY,
 	"ARRAY":             ARRAY,
 	"AS":                AS,

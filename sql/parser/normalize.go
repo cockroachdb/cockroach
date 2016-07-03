@@ -310,6 +310,12 @@ func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr.TypedInnerExpr()
 }
 
+func (expr *AnnotateTypeExpr) normalize(v *normalizeVisitor) TypedExpr {
+	// Type annotations have no runtime effect, so they can be removed after
+	// semantic analysis.
+	return expr.TypedInnerExpr()
+}
+
 func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	left, from, to := expr.TypedLeft(), expr.TypedFrom(), expr.TypedTo()
 	if left == DNull || from == DNull || to == DNull {

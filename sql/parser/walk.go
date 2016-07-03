@@ -133,6 +133,17 @@ func (expr *CastExpr) Walk(v Visitor) Expr {
 	return expr
 }
 
+// Walk implements the Expr interface.
+func (expr *AnnotateTypeExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *CoalesceExpr) CopyNode() *CoalesceExpr {
 	exprCopy := *expr
