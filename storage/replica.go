@@ -883,11 +883,10 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	var cmd *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		spans := make([]roachpb.Span, 0, len(ba.Requests))
 		readOnly := ba.IsReadOnly()
-		for _, union := range ba.Requests {
-			h := union.GetInner().Header()
-			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
+		spans := make([]roachpb.Span, len(ba.Requests))
+		for i, union := range ba.Requests {
+			spans[i] = union.GetInner().Header()
 		}
 		var wg sync.WaitGroup
 		r.mu.Lock()
