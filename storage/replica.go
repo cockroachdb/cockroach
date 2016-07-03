@@ -906,6 +906,11 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 			select {
 			case <-ch:
 			case <-ctxDone:
+				err := ctx.Err()
+				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
+				log.Warning(errStr)
+				log.Trace(ctx, errStr)
+				defer log.Trace(ctx, "removed from command queue")
 				// The command is moot, so we don't need to bother executing.
 				// However, the command queue assumes that commands don't drop
 				// out before their prerequisites, so we still have to wait it
@@ -920,7 +925,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 				r.mu.Lock()
 				r.mu.cmdQ.remove(cmd)
 				r.mu.Unlock()
-				return nil, ctx.Err()
+				return nil, err
 			}
 		}
 	}
