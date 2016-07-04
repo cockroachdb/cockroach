@@ -30,11 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-<<<<<<< HEAD
-	"github.com/cockroachdb/cockroach/server/testingshim"
-=======
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
->>>>>>> 436e7c9... testutils/serverutils: combine TestServer utils
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
