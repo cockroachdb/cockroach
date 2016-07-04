@@ -23,14 +23,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/pkg/errors"
@@ -179,10 +180,10 @@ func checkEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 // TestingCommandFilter.
 // TODO(andrei): this function is not used consistently by SQL tests. Figure out
 // if the EndTransaction checks are important.
-func createTestServerParams() (testingshim.TestServerParams, *CommandFilters) {
+func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
-	params := testingshim.TestServerParams{}
+	params := base.TestServerArgs{}
 	params.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingCommandFilter: cmdFilters.runFilters,
 	}
@@ -192,6 +193,6 @@ func createTestServerParams() (testingshim.TestServerParams, *CommandFilters) {
 func TestMain(m *testing.M) {
 	security.SetReadFileFn(securitytest.Asset)
 	randutil.SeedForTests()
-	testingshim.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

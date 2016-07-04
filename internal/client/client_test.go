@@ -38,10 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -153,7 +152,7 @@ func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, pr
 // transaction's value to be written after all retries are complete.
 func TestClientRetryNonTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	s.(*server.TestServer).SetRangeRetryOptions(retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
@@ -279,7 +278,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 // semantics.
 func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	dbCtx := client.DefaultDBContext()
 	dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
@@ -341,7 +340,7 @@ func TestClientRunTransaction(t *testing.T) {
 // client's convenience methods.
 func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -372,7 +371,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 // methods.
 func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -394,7 +393,7 @@ func TestClientGetAndPut(t *testing.T) {
 
 func TestClientPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -421,7 +420,7 @@ func TestClientPutInline(t *testing.T) {
 // as equivalent and elides zero-valued defaults on decode.
 func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -450,7 +449,7 @@ func TestClientEmptyValues(t *testing.T) {
 // results.
 func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -705,7 +704,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 // https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
 func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -722,7 +721,7 @@ func TestConcurrentIncrements(t *testing.T) {
 // TestClientPermissions verifies permission enforcement.
 func TestClientPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	// NodeUser certs are required for all KV operations.
@@ -826,7 +825,7 @@ func TestInconsistentReads(t *testing.T) {
 // deadline.
 func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -849,7 +848,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 // TestTxn_ReverseScan a simple test for Txn.ReverseScan
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 

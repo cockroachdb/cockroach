@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 )
 
 func init() {
@@ -31,7 +31,7 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
-	testingshim.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }
 

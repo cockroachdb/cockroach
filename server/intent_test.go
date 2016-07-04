@@ -26,10 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -114,7 +113,7 @@ func TestIntentResolution(t *testing.T) {
 					return nil
 				}
 
-			s, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{
+			s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			defer s.Stopper().Stop()
 			// Split the Range. This should not have any asynchronous intents.

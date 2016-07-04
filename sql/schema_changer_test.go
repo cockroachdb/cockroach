@@ -32,7 +32,7 @@ import (
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -51,7 +51,7 @@ func schemaChangeManagerDisabled() error {
 func TestSchemaChangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -138,7 +138,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
@@ -304,7 +304,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -526,7 +526,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -700,7 +700,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -787,7 +787,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -902,7 +902,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			AsyncSchemaChangerExecQuickly: true,
 		},
 	}
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	// Create a k-v table.

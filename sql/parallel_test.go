@@ -39,8 +39,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -57,7 +57,7 @@ type testDB struct {
 
 type parallelTest struct {
 	*testing.T
-	srv     testingshim.TestServerInterface
+	srv     serverutils.TestServerInterface
 	clients []testDB
 }
 
@@ -155,7 +155,7 @@ func (t *parallelTest) run(dir string) {
 }
 
 func (t *parallelTest) setup() {
-	params := testingshim.TestServerParams{
+	params := base.TestServerArgs{
 		MaxOffset: logicMaxOffset,
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -164,7 +164,7 @@ func (t *parallelTest) setup() {
 			},
 		},
 	}
-	t.srv, _, _ = sqlutils.SetupServer(t, params)
+	t.srv, _, _ = serverutils.StartServer(t, params)
 }
 
 func TestParallel(t *testing.T) {

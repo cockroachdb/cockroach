@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
@@ -35,7 +35,7 @@ func ResetTest() {
 
 func TestMain(m *testing.M) {
 	ResetTest()
-	testingshim.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }
 

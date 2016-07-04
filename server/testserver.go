@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -88,7 +88,7 @@ func makeTestContext() Context {
 }
 
 // makeTestContextFromParams creates a Context from a TestServerParams.
-func makeTestContextFromParams(params testingshim.TestServerParams) Context {
+func makeTestContextFromParams(params base.TestServerArgs) Context {
 	ctx := makeTestContext()
 	ctx.TestingKnobs = params.Knobs
 	if ctx.JoinUsing != "" {
@@ -117,6 +117,7 @@ func makeTestContextFromParams(params testingshim.TestServerParams) Context {
 	if params.SSLCertKey != "" {
 		ctx.SSLCertKey = params.SSLCertKey
 	}
+	ctx.JoinUsing = params.JoinAddr
 	return ctx
 }
 
@@ -191,7 +192,7 @@ func (ts *TestServer) DB() *client.DB {
 // TestServer.ServingAddr() after Start() for client connections.
 // Use TestServer.Stopper.Stop() to shutdown the server after the test
 // completes.
-func (ts *TestServer) Start(params testingshim.TestServerParams) error {
+func (ts *TestServer) Start(params base.TestServerArgs) error {
 	if ts.Ctx == nil {
 		panic("Ctx not set")
 	}
@@ -361,8 +362,6 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	return c
 }
 
-var _ testingshim.TestServerInterface = &TestServer{}
-
 // KVClient is part of TestServerInterface.
 func (ts *TestServer) KVClient() interface{} { return ts.db }
 
@@ -377,12 +376,11 @@ func (ts *TestServer) LeaseManager() interface{} {
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to testingshim.InitTestServerFactory
-var TestServerFactory testingshim.TestServerFactory = testServerFactoryImpl{}
+var TestServerFactory = testServerFactoryImpl{}
 
-// New is part of TestServerInterface.
 func (testServerFactoryImpl) New(
-	params testingshim.TestServerParams,
-) testingshim.TestServerInterface {
+	params base.TestServerArgs,
+) interface{} {
 	ctx := makeTestContextFromParams(params)
 	return &TestServer{Ctx: &ctx}
 }

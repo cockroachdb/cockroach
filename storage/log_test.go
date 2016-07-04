@@ -22,13 +22,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/pq"
@@ -36,7 +37,7 @@ import (
 
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	countSplits := func() int {
@@ -130,7 +131,7 @@ func TestLogSplits(t *testing.T) {
 
 func TestLogRebalances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, db := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	// Use a client to get the RangeDescriptor for the first range. We will use

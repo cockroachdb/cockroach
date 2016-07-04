@@ -24,10 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -36,7 +35,7 @@ import (
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	counter := int64(keys.MaxReservedDescID + 1)
@@ -131,7 +130,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// renameUnblocked is used to block the rename schema change until the test
 	// doesn't need the old name->id mapping to exist anymore.
 	renameUnblocked := make(chan interface{})
-	serverParams := testingshim.TestServerParams{
+	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
 				SyncSchemaChangersRenameOldNameNotInUseNotification: func() {
@@ -161,7 +160,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 				}
 			}
 		}
-	s, db, kvDB := sqlutils.SetupServer(t, serverParams)
+	s, db, kvDB := serverutils.StartServer(t, serverParams)
 	defer s.Stopper().Stop()
 
 	sql := `
@@ -246,7 +245,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 // better or worse.
 func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	sql := `
@@ -287,7 +286,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 // series of renames in a transaction.
 func TestSeriesOfRenames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	sql := `

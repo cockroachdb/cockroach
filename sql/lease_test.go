@@ -31,11 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -43,15 +42,15 @@ import (
 
 type leaseTest struct {
 	*testing.T
-	server                   testingshim.TestServerInterface
+	server                   serverutils.TestServerInterface
 	db                       *gosql.DB
 	kvDB                     *client.DB
 	nodes                    map[uint32]*csql.LeaseManager
 	leaseManagerTestingKnobs csql.LeaseManagerTestingKnobs
 }
 
-func newLeaseTest(t *testing.T, params testingshim.TestServerParams) *leaseTest {
-	s, db, kvDB := sqlutils.SetupServer(t, params)
+func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
+	s, db, kvDB := serverutils.StartServer(t, params)
 	leaseTest := &leaseTest{
 		T:      t,
 		server: s,
@@ -548,7 +547,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	s, db, kvDB := sqlutils.SetupServer(t, params)
+	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	sql := `
@@ -625,7 +624,7 @@ func TestTxnObeysLeaseExpiration(t *testing.T) {
 	csql.LeaseDuration = 2 * csql.MinLeaseDuration
 
 	params, _ := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -32,7 +32,7 @@ import (
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -157,7 +157,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -211,7 +211,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -300,7 +300,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -337,7 +337,7 @@ func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	params.UseDatabase = "test"
-	s, db, _ := sqlutils.SetupServer(t, params)
+	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {

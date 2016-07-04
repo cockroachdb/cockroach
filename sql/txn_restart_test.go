@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -209,7 +209,7 @@ func TestTxnRestart(t *testing.T) {
 	params, cmdFilters := createTestServerParams()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	// Make sure all the commands we send in this test are sent over the same connection.
@@ -443,7 +443,7 @@ func TestTxnUserRestart(t *testing.T) {
 
 	params, cmdFilters := createTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -528,7 +528,7 @@ func TestCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
@@ -563,7 +563,7 @@ func TestErrorOnCommitResultsInRollback(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -610,7 +610,7 @@ func TestCommitFinalizesTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, cmdFilters := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -676,7 +676,7 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	// ROLLBACK TO SAVEPOINT without a transaction
@@ -714,7 +714,7 @@ func TestNonRetriableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -756,7 +756,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, cmdFilters := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -803,7 +803,7 @@ func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, cmdFilters := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	testKey := []byte("test_key")
@@ -842,7 +842,7 @@ func TestNonRetryableErrorFromCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, cmdFilters := createTestServerParams()
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	hitError := false
@@ -903,7 +903,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	params.Knobs.Store = testingKnobs
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	var restartDone int32

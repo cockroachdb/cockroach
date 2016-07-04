@@ -32,14 +32,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/server/testingshim"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -55,7 +55,7 @@ import (
 // via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	// Verify match with at least two goroutine stacks.
@@ -78,7 +78,7 @@ func TestStatusLocalStacks(t *testing.T) {
 // The content type of the responses is always util.JSONContentType.
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -125,7 +125,7 @@ func TestStatusJson(t *testing.T) {
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	var data gossip.InfoStatus
@@ -155,7 +155,7 @@ var retryOptions = retry.Options{
 // getRequestReader returns the io.ReadCloser from a get request to the test
 // server with the given path. The returned closer should be closed by the
 // caller.
-func getRequestReader(t *testing.T, ts testingshim.TestServerInterface, path string) io.ReadCloser {
+func getRequestReader(t *testing.T, ts serverutils.TestServerInterface, path string) io.ReadCloser {
 	httpClient, err := ts.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func getRequestReader(t *testing.T, ts testingshim.TestServerInterface, path str
 
 // getRequest returns the results of a get request to the test server with
 // the given path. It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts testingshim.TestServerInterface, path string) []byte {
+func getRequest(t *testing.T, ts serverutils.TestServerInterface, path string) []byte {
 	respBody := getRequestReader(t, ts, path)
 	defer respBody.Close()
 	body, err := ioutil.ReadAll(respBody)
@@ -209,7 +209,7 @@ func getRequest(t *testing.T, ts testingshim.TestServerInterface, path string) [
 
 // getRequestProto unmarshals the result of a get request to the test server
 // with the given path.
-func getRequestProto(t *testing.T, ts testingshim.TestServerInterface, path string, v proto.Message) error {
+func getRequestProto(t *testing.T, ts serverutils.TestServerInterface, path string, v proto.Message) error {
 	respBody := getRequestReader(t, ts, path)
 	defer respBody.Close()
 	return jsonpb.Unmarshal(respBody, v)
@@ -218,8 +218,8 @@ func getRequestProto(t *testing.T, ts testingshim.TestServerInterface, path stri
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-func startServer(t *testing.T) testingshim.TestServerInterface {
-	ts, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{StoresPerNode: 3})
+func startServer(t *testing.T) serverutils.TestServerInterface {
+	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 3})
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
@@ -447,7 +447,7 @@ func TestNodeStatusResponse(t *testing.T) {
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		MetricsSampleInterval: 5 * time.Millisecond})
 	defer s.Stopper().Stop()
 

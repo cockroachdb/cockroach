@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/pkg/errors"
@@ -73,7 +73,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	// We want fast scan.
 	params.ScanInterval = time.Millisecond
 	params.ScanMaxIdleTime = time.Millisecond
-	s, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	expectedInitialRanges := server.ExpectedInitialRangeCount()

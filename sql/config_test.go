@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -89,7 +89,7 @@ func TestGetZoneConfig(t *testing.T) {
 	// to be able to match.
 	defer config.TestingDisableTableSplits()()
 	params, _ := createTestServerParams()
-	srv, sqlDB, _ := sqlutils.SetupServer(t, params)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop()
 	s := srv.(*server.TestServer)
 

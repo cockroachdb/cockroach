@@ -34,15 +34,15 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -80,7 +80,7 @@ func getJSON(url string) (interface{}, error) {
 }
 
 // debugURL returns the root debug URL.
-func debugURL(s testingshim.TestServerInterface) string {
+func debugURL(s serverutils.TestServerInterface) string {
 	return s.AdminURL() + debugEndpoint
 }
 
@@ -88,7 +88,7 @@ func debugURL(s testingshim.TestServerInterface) string {
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	jI, err := getJSON(debugURL(s) + "vars")
@@ -108,7 +108,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 // available via the /debug/metrics link.
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	jI, err := getJSON(debugURL(s) + "metrics")
@@ -128,7 +128,7 @@ func TestAdminDebugMetrics(t *testing.T) {
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	body, err := getText(debugURL(s) + "pprof/block")
@@ -144,7 +144,7 @@ func TestAdminDebugPprof(t *testing.T) {
 // via /debug/{requests,events}.
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	tc := []struct {
@@ -169,7 +169,7 @@ func TestAdminDebugTrace(t *testing.T) {
 // incorrect /debug/ paths.
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	expURL := debugURL(s)
@@ -209,7 +209,7 @@ func TestAdminDebugRedirect(t *testing.T) {
 
 // apiGet issues a GET to the provided server using the given API path and
 // marshals the result into response.
-func apiGet(s testingshim.TestServerInterface, path string, response proto.Message) error {
+func apiGet(s serverutils.TestServerInterface, path string, response proto.Message) error {
 	apiPath := apiEndpoint + path
 	client, err := s.GetHTTPClient()
 	if err != nil {
@@ -220,7 +220,7 @@ func apiGet(s testingshim.TestServerInterface, path string, response proto.Messa
 
 // apiPost issues a POST to the provided server using the given API path and
 // request, marshalling the result into response.
-func apiPost(s testingshim.TestServerInterface, path string, request, response proto.Message) error {
+func apiPost(s serverutils.TestServerInterface, path string, request, response proto.Message) error {
 	apiPath := apiEndpoint + path
 	client, err := s.GetHTTPClient()
 	if err != nil {
@@ -231,7 +231,7 @@ func apiPost(s testingshim.TestServerInterface, path string, request, response p
 
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -300,7 +300,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	if err := apiGet(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, "database.+does not exist") {
@@ -310,7 +310,7 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	const fakedb = "system;DROP DATABASE system;"
@@ -323,7 +323,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 
 func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	const fakename = "I_DO_NOT_EXIST"
@@ -342,7 +342,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 
 func TestAdminAPITableSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	const fakeTable = "users;DROP DATABASE system;"
@@ -355,7 +355,7 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 
 func TestAdminAPITableDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -472,7 +472,7 @@ CREATE TABLE test.tbl (
 
 func TestAdminAPITableDetailsZone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -549,7 +549,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 
 func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -588,7 +588,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 
 func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -672,7 +672,7 @@ func TestAdminAPIEvents(t *testing.T) {
 
 func TestAdminAPIUIData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	start := timeutil.Now()
@@ -773,9 +773,9 @@ func TestAdminAPIUIData(t *testing.T) {
 	expectValueEquals("bin", buf.Bytes())
 }
 
-func TestCluster(t *testing.T) {
+func TestClusterAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	// We need to retry, because the cluster ID isn't set until after
@@ -794,7 +794,7 @@ func TestCluster(t *testing.T) {
 
 func TestClusterFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	for _, freeze := range []bool{true, false} {

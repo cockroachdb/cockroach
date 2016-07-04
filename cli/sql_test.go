@@ -21,10 +21,10 @@ import (
 	"testing"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -32,7 +32,7 @@ import (
 func TestSQLLex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{Insecure: true})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
 
 	pgurl, err := s.(*server.TestServer).Ctx.PGURL("")

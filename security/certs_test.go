@@ -21,10 +21,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -138,12 +138,12 @@ func TestUseCerts(t *testing.T) {
 
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
-	params := testingshim.TestServerParams{
+	params := base.TestServerArgs{
 		SSLCA:      filepath.Join(certsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(certsDir, security.EmbeddedNodeCert),
 		SSLCertKey: filepath.Join(certsDir, security.EmbeddedNodeKey),
 	}
-	s, _, _ := sqlutils.SetupServer(t, params)
+	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	// Insecure mode.

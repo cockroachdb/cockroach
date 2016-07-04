@@ -137,7 +137,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		rangeID, repl, err := ls.lookupReplica(rs.Key, rs.EndKey)
+		rangeID, repl, err := ls.LookupReplica(rs.Key, rs.EndKey)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -182,12 +182,13 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	return br, pErr
 }
 
-// lookupReplica looks up replica by key [range]. Lookups are done
-// by consulting each store in turn via Store.LookupRange(key).
+// LookupReplica looks up replica by key [range]. Lookups are done
+// by consulting each store in turn via Store.LookupReplica(key).
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
+// If end is nil, a replica containing start is looked up.
 // This is only for testing usage; performance doesn't matter.
-func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
+func (ls *Stores) LookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *Replica
@@ -226,7 +227,7 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 // FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
 func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
-	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
+	_, replica, err := ls.LookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +243,9 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return rpl.Desc(), nil
 }
 
-// RangeLookup implements the RangeDescriptorDB interface. It looks up
-// the descriptors for the given (meta) key.
+// RangeLookup implements the RangeDescriptorDB interface.
+// This implementation of RangeDescriptorDB seems to only be used by
+// LocalTestCluster.
 func (ls *Stores) RangeLookup(
 	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {

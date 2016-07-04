@@ -29,7 +29,7 @@ import (
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -198,7 +198,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -376,7 +376,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -499,7 +499,7 @@ func TestOperationsWithUniqueColumnMutation(t *testing.T) {
 	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	// Create a table with column i and an index on v and i.
@@ -647,7 +647,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -860,7 +860,7 @@ func TestTableMutationQueue(t *testing.T) {
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 		},
 	}
-	server, sqlDB, kvDB := sqlutils.SetupServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
 	// Create a table with column i and an index on v and i.

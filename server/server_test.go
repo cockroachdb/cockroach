@@ -37,10 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -54,7 +53,7 @@ var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 // been specified.
 func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, err := testingshim.StartServerRaw(testingshim.TestServerParams{})
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +63,7 @@ func TestSelfBootstrap(t *testing.T) {
 // TestHealth verifies that health endpoint returns an empty JSON response.
 func TestHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	u := s.AdminURL() + healthPath
@@ -87,7 +86,7 @@ func TestHealth(t *testing.T) {
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// The default context uses embedded certs.
 		Insecure: true,
 	})
@@ -118,7 +117,7 @@ func TestPlainHTTPServer(t *testing.T) {
 
 func TestSecureHTTPRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
@@ -166,7 +165,7 @@ func TestSecureHTTPRedirect(t *testing.T) {
 // it conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	client, err := s.GetHTTPClient()
 	if err != nil {
@@ -220,7 +219,7 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 	retryOpts := base.DefaultRetryOptions()
@@ -317,7 +316,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop()
 		ts := s.(*TestServer)
 		retryOpts := base.DefaultRetryOptions()
@@ -366,7 +365,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 

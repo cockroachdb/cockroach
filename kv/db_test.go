@@ -27,10 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -57,7 +56,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -162,7 +161,7 @@ func TestKVDBCoverage(t *testing.T) {
 
 func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	testCases := []roachpb.Request{
@@ -208,7 +207,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -255,7 +254,7 @@ func TestKVDBTransaction(t *testing.T) {
 // TestAuthentication tests authentication for the KV endpoint.
 func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	var b1 client.Batch

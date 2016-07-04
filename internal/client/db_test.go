@@ -22,15 +22,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/server/testingshim"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func setup(t *testing.T) (testingshim.TestServerInterface, *client.DB) {
-	s, _, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+func setup(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	return s, kvDB
 }
 
@@ -308,7 +308,7 @@ func TestTxn_Commit(t *testing.T) {
 
 func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, db := sqlutils.SetupServer(t, testingshim.TestServerParams{Insecure: true})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
 
 	if err := db.Put("aa", "1"); err != nil {

@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/server/testingshim"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -44,19 +44,19 @@ func SetupMultinodeTestCluster(
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
-	var servers []testingshim.TestServerInterface
+	var servers []serverutils.TestServerInterface
 	var conns []*gosql.DB
-	first, conn, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{
+	first, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: name,
 	})
 	servers = append(servers, first)
 	conns = append(conns, conn)
-	params := testingshim.TestServerParams{}
+	params := base.TestServerArgs{}
 	params.JoinAddr = first.ServingAddr()
 	params.UseDatabase = name
 	params.Stopper = first.Stopper()
 	for i := 1; i < nodes; i++ {
-		s, conn, _ := sqlutils.SetupServer(t, params)
+		s, conn, _ := serverutils.StartServer(t, params)
 		servers = append(servers, s)
 		conns = append(conns, conn)
 	}

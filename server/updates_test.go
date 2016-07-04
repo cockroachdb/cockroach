@@ -22,10 +22,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server/testingshim"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -56,7 +56,7 @@ func TestCheckVersion(t *testing.T) {
 	}
 	defer stubURL(&updatesURL, u)()
 
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	s.(*TestServer).checkForUpdates()
 	recorder.Close()
 	s.Stopper().Stop()
@@ -95,8 +95,8 @@ func TestReportUsage(t *testing.T) {
 	}
 	defer stubURL(&reportingURL, u)()
 
-	params := testingshim.TestServerParams{StoresPerNode: 2}
-	s, _, _ := sqlutils.SetupServer(t, params)
+	params := base.TestServerArgs{StoresPerNode: 2}
+	s, _, _ := serverutils.StartServer(t, params)
 	ts := s.(*TestServer)
 
 	if err := ts.WaitForInitialSplits(); err != nil {

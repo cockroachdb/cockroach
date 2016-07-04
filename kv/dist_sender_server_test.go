@@ -30,13 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -55,7 +54,7 @@ import (
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -87,7 +86,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // The caller is responsible for stopping the server and
 // closing the client.
 func setupMultipleRanges(
-	t *testing.T, ts testingshim.TestServerInterface, splitAt ...string,
+	t *testing.T, ts serverutils.TestServerInterface, splitAt ...string,
 ) *client.DB {
 	db := createTestClient(t, ts.Stopper(), ts.ServingAddr())
 
@@ -129,7 +128,7 @@ func checkScanResults(t *testing.T, results []client.Result, expResults [][]stri
 
 func TestMultiRangeBatchBoundedScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a", "aa", "aaa", "b", "bb", "cc", "d", "dd", "ff"} {
@@ -155,7 +154,7 @@ func TestMultiRangeBatchBoundedScans(t *testing.T) {
 
 func TestMultiRangeBoundedBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
@@ -200,7 +199,7 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := setupMultipleRanges(t, s, "c", "d")
 
@@ -220,7 +219,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 // DeleteRange and ResolveIntentRange work across ranges.
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := setupMultipleRanges(t, s, "b")
 
@@ -275,7 +274,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := setupMultipleRanges(t, s, "b")
 
@@ -343,7 +342,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 }
 
-func initReverseScanTestEnv(s testingshim.TestServerInterface, t *testing.T) *client.DB {
+func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *client.DB {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Set up multiple ranges:
@@ -367,7 +366,7 @@ func initReverseScanTestEnv(s testingshim.TestServerInterface, t *testing.T) *cl
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := initReverseScanTestEnv(s, t)
 
@@ -405,7 +404,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := initReverseScanTestEnv(s, t)
 
@@ -427,7 +426,7 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := initReverseScanTestEnv(s, t)
 
@@ -458,7 +457,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
@@ -489,7 +488,7 @@ func TestBadRequest(t *testing.T) {
 // higher-level version of TestSequenceCacheShouldCache.
 func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := setupMultipleRanges(t, s, "b", "c")
 
@@ -545,8 +544,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 			return nil
 		}
-	s, _, _ := sqlutils.SetupServer(t,
-		testingshim.TestServerParams{
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storeKnobs,
 			}})
@@ -626,7 +625,7 @@ func assertTransactionPushErrorWithTxnIDSet(t *testing.T, e error) *uuid.UUID {
 // TransactionPushError.
 func TestPropagateTxnOnPushError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := setupMultipleRanges(t, s, "b")
 
@@ -719,7 +718,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 // should be willing to get rid of it.
 func TestRequestToUninitializedRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	srv, _, _ := sqlutils.SetupServer(t, testingshim.TestServerParams{StoresPerNode: 2})
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 2})
 	defer srv.Stopper().Stop()
 	s := srv.(*server.TestServer)
 

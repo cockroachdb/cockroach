@@ -42,9 +42,9 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -332,7 +332,7 @@ type logicQuery struct {
 type logicTest struct {
 	*testing.T
 	// the database server instantiated for this input file.
-	srv testingshim.TestServerInterface
+	srv serverutils.TestServerInterface
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -455,7 +455,7 @@ func (t *logicTest) setup() {
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
-	params := testingshim.TestServerParams{
+	params := base.TestServerArgs{
 		MaxOffset: logicMaxOffset,
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -464,7 +464,7 @@ func (t *logicTest) setup() {
 			},
 		},
 	}
-	t.srv, _, _ = sqlutils.SetupServer(t.T, params)
+	t.srv, _, _ = serverutils.StartServer(t.T, params)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().

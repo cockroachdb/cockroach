@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -38,7 +38,7 @@ func TestAsOfTime(t *testing.T) {
 	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
 		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
 	}
-	s, db, _ := sqlutils.SetupServer(t, params)
+	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	const val1 = 1
@@ -161,7 +161,7 @@ func TestAsOfRetry(t *testing.T) {
 	params, cmdFilters := createTestServerParams()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
-	s, sqlDB, _ := sqlutils.SetupServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	const val1 = 1

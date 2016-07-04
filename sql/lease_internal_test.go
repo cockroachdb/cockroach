@@ -26,9 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -125,7 +124,7 @@ func TestPurgeOldLeases(t *testing.T) {
 	// We're going to block gossip so it doesn't come randomly and clear up the
 	// leases we're artificially setting up.
 	gossipSem := make(chan struct{}, 1)
-	serverParams := testingshim.TestServerParams{
+	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &LeaseManagerTestingKnobs{
 				GossipUpdateEvent: func(cfg config.SystemConfig) {
@@ -135,7 +134,7 @@ func TestPurgeOldLeases(t *testing.T) {
 			},
 		},
 	}
-	s, db, kvDB := sqlutils.SetupServer(t, serverParams)
+	s, db, kvDB := serverutils.StartServer(t, serverParams)
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 	// Block gossip.
@@ -195,7 +194,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Test that changing a descriptor's name updates the name cache.
 func TestNameCacheIsUpdated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
@@ -266,7 +265,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Tests that a name cache entry with by an expired lease is not returned.
 func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
@@ -306,7 +305,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Test that table names are not treated as case sensitive by the name cache.
 func TestTableNameNotCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 

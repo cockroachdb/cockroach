@@ -33,11 +33,12 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/server/testingshim"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -64,7 +65,7 @@ func newCLITest() cliTest {
 
 	osStderr = os.Stdout
 
-	s, err := testingshim.StartServerRaw(testingshim.TestServerParams{})
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
@@ -298,8 +299,8 @@ func Example_quoted() {
 }
 
 func Example_insecure() {
-	s, err := testingshim.StartServerRaw(
-		testingshim.TestServerParams{Insecure: true})
+	s, err := serverutils.StartServerRaw(
+		base.TestServerArgs{Insecure: true})
 	if err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
