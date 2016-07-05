@@ -292,6 +292,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		if err != nil {
 			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
+			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
@@ -511,9 +512,16 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
+type snapshotType int
+
+const (
+	normalSnapshot snapshotType = iota
+	preemptiveSnapshot
+)
+
 // applySnapshot updates the replica based on the given snapshot.
 // Returns the new last index.
-func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
+func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType) (uint64, error) {
 	// We use a separate batch to apply the snapshot since the Replica (and in
 	// particular the last index) is updated after the batch commits. Using a
 	// separate batch also allows for future optimization (such as using a
@@ -642,6 +650,15 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	// makes the Replica visible in the Store.
 	if err := r.setDesc(&desc); err != nil {
 		panic(err)
+	}
+
+	switch typ {
+	case normalSnapshot:
+		r.store.metrics.rangeSnapshotsApplied.Inc(1)
+	case preemptiveSnapshot:
+		r.store.metrics.rangeSnapshotsPreemptiveApplied.Inc(1)
+	default:
+		panic("not reached")
 	}
 	return lastIndex, nil
 }
