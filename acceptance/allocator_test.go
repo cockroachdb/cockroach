@@ -36,13 +36,6 @@ package acceptance
 //	 TESTS=Rebalance_3To5Small \
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster-fail' \
 //
-// If you're deploying a local binary, note that the location has to be specified
-// relative to `./acceptance/allocator_terraform` and that the binary is
-// a linux binary (i.e. built via `./build/builder.sh make build` unless
-// when running Linux locally):
-//
-//	 -at.cockroach-binary=../../cockroach'
-//
 // Things to note:
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
 //    ~/.ssh/google_compute_engine
@@ -59,6 +52,8 @@ package acceptance
 //   of Terrafarm and allocator tests, respectively. For example, you can add
 //   "-at.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
+//   Note that the location has to be specified relative to the terraform
+//   working directory, so typically `-at.cockroach-binary=../../cockroach`.
 
 import (
 	gosql "database/sql"
@@ -125,7 +120,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 		at.f.MustDestroy()
 		if err := os.Remove(filepath.Join(baseDir, at.f.StateFile)); err != nil {
-			log.Warning(err)
+			t.Log(err)
 		}
 	}()
 
@@ -154,6 +149,16 @@ func (at *allocatorTest) Run(t *testing.T) {
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
 	at.f.Assert(t)
 	log.Info("initial cluster is up")
+
+	// We must stop the cluster because a) `nodetool` pokes at the data directory
+	// and, more importantly, b) we don't want the cluster above and the cluster
+	// below to ever talk to each other (see #7224).
+	log.Info("stopping cluster")
+	for i := 0; i < at.f.NumNodes(); i++ {
+		if err := at.f.Kill(i); err != nil {
+			t.Fatalf("error stopping node %d: %s", i, err)
+		}
+	}
 
 	log.Info("downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
