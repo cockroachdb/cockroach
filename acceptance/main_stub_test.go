@@ -16,18 +16,26 @@
 
 // +build !acceptance
 
-// Acceptance tests are comparatively slow to run, so we use the above build
-// tag to separate invocations of `go test` which are intended to run the
-// acceptance tests from those which are not. The corollary file to this one
-// is main_test.go
+// Our Docker-based acceptance tests are comparatively slow to run, so we use
+// the above build tag to separate invocations of `go test` which are intended
+// to run the acceptance tests from those which are not. The corollary file to
+// this one is main_test.go. Acceptance tests against remote clusters (which
+// aren't run unless `-remote` is passed explicitly) are run through this file
+// via the standard facilities (i.e. `make test` and without `acceptance` build
+// tag).
 
 package acceptance
 
 import (
-	"os"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(0)
+	if !*flagRemote {
+		log.Infof("not running with `acceptance` build tag or against remote cluster; skipping")
+		return
+	}
+	runTests(m)
 }

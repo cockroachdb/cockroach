@@ -24,26 +24,16 @@
 package acceptance
 
 import (
+	"fmt"
 	"os"
-	"os/signal"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestMain(m *testing.M) {
-	randutil.SeedForTests()
-	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-		<-sig
-		select {
-		case <-stopper:
-		default:
-			// There is a very tiny race here: the cluster might be closing
-			// the stopper simultaneously.
-			close(stopper)
-		}
-	}()
-	os.Exit(m.Run())
+	if *flagRemote {
+		fmt.Fprintln(os.Stderr, "use `make test [...]` instead of `make acceptance [...]` when running remote cluster")
+		os.Exit(1)
+	}
+
+	runTests(m)
 }
