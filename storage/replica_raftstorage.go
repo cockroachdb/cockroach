@@ -292,6 +292,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		if err != nil {
 			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
 		} else {
+			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
@@ -520,6 +521,8 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) (uint64, error) {
 	// Distinct() batch).
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
+
+	r.store.metrics.rangeSnapshotsApplied.Inc(1)
 
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)

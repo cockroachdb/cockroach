@@ -1323,6 +1323,22 @@ func TestStoreRangeRebalance(t *testing.T) {
 			mtc.stores[1].ForceReplicationScanAndProcess()
 		}
 	}
+
+	var generated int64
+	var applied int64
+	var preemptive int64
+	for _, s := range mtc.stores {
+		r := s.Registry()
+		generated += r.GetCounter("range.snapshots.generated").Count()
+		applied += r.GetCounter("range.snapshots.applied").Count()
+		preemptive += r.GetCounter("range.snapshots.preemptive-applied").Count()
+	}
+	if generated != applied {
+		t.Fatalf("expected %d applied snapshots, but found %d", generated, applied)
+	}
+	if applied != preemptive {
+		t.Fatalf("expected %d preemptive snapshots, but found %d", applied, preemptive)
+	}
 }
 
 // TestReplicateRogueRemovedNode ensures that a rogue removed node
