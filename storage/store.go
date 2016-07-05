@@ -502,6 +502,7 @@ type storeMetrics struct {
 	rdbFlushes                  *metric.Gauge
 	rdbCompactions              *metric.Gauge
 	rdbTableReadersMemEstimate  *metric.Gauge
+	rdbReadAmplification        *metric.Gauge
 
 	// Range event metrics.
 	rangeSplits  *metric.Counter
@@ -558,6 +559,7 @@ func newStoreMetrics() *storeMetrics {
 		rdbFlushes:                  storeRegistry.Gauge("rocksdb.flushes"),
 		rdbCompactions:              storeRegistry.Gauge("rocksdb.compactions"),
 		rdbTableReadersMemEstimate:  storeRegistry.Gauge("rocksdb.table-readers-mem-estimate"),
+		rdbReadAmplification:        storeRegistry.Gauge("rocksdb.read-amplification"),
 
 		// Range event metrics.
 		rangeSplits:  storeRegistry.Counter("range.splits"),
@@ -2447,7 +2449,9 @@ func (s *Store) ComputeMetrics() error {
 
 	// If we're using RocksDB, log the sstable overview.
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
-		log.Infof("store %d sstables\n%s", s.StoreID(), rocksdb.GetSSTables())
+		sstables := rocksdb.GetSSTables()
+		log.Infof("store %d sstables\n%s", s.StoreID(), sstables)
+		s.metrics.rdbReadAmplification.Update(int64(sstables.ReadAmplification()))
 	}
 	return nil
 }
