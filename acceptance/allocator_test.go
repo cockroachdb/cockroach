@@ -36,6 +36,13 @@ package acceptance
 //	 TESTS=Rebalance_3To5Small \
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster-fail' \
 //
+// If you're deploying a local binary, note that the location has to be specified
+// relative to `./acceptance/allocator_terraform` and that the binary is
+// a linux binary (i.e. built via `./build/builder.sh make build` unless
+// when running Linux locally):
+//
+//	 -at.cockroach-binary=../../cockroach'
+//
 // Things to note:
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
 //    ~/.ssh/google_compute_engine
@@ -59,6 +66,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -105,11 +113,20 @@ func (at *allocatorTest) Run(t *testing.T) {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
+		wd, err := os.Getwd()
+		if err != nil {
+			wd = "acceptance"
+		}
+		baseDir := filepath.Join(wd, at.f.Cwd)
 		if t.Failed() && at.f.KeepClusterAfterFail {
-			t.Log("test has failed, not destroying")
+			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -state %s)",
+				baseDir, at.f.StateFile)
 			return
 		}
 		at.f.MustDestroy()
+		if err := os.Remove(filepath.Join(baseDir, at.f.StateFile)); err != nil {
+			log.Warning(err)
+		}
 	}()
 
 	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
