@@ -78,6 +78,28 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
+func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
+	if err := c.ensureConn(); err != nil {
+		return nil, err
+	}
+	rows, err := c.conn.Query(query, args)
+	if err == driver.ErrBadConn {
+		c.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	vals := make([]driver.Value, len(rows.Columns()))
+	if err := rows.Next(vals); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	return vals, nil
+}
+
 func (c *sqlConn) Next() (*sqlRows, error) {
 	if c.conn == nil {
 		return nil, driver.ErrBadConn
