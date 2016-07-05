@@ -26,30 +26,35 @@ import (
 func TestLeaderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	lc := newLeaderCache(3)
-	if r := lc.Lookup(12); r.StoreID != 0 {
-		t.Fatalf("lookup of missing key returned replica: %v", r)
+	if repDesc, ok := lc.Lookup(12); ok {
+		t.Errorf("lookup of missing key returned: %+v", repDesc)
 	}
+	rangeID := roachpb.RangeID(5)
 	replica := roachpb.ReplicaDescriptor{StoreID: 1}
-	lc.Update(5, replica)
-	if r := lc.Lookup(5); r.StoreID != 1 {
-		t.Errorf("expected %v, got %v", replica, r)
+	lc.Update(rangeID, replica)
+	if repDesc, ok := lc.Lookup(rangeID); !ok {
+		t.Fatalf("expected %+v", replica)
+	} else if repDesc != replica {
+		t.Errorf("expected %+v, got %+v", replica, repDesc)
 	}
 	newReplica := roachpb.ReplicaDescriptor{StoreID: 7}
-	lc.Update(5, newReplica)
-	r := lc.Lookup(5)
-	if r.StoreID != 7 {
-		t.Errorf("expected %v, got %v", newReplica, r)
+	lc.Update(rangeID, newReplica)
+	if repDesc, ok := lc.Lookup(rangeID); !ok {
+		t.Fatalf("expected %+v", replica)
+	} else if repDesc != newReplica {
+		t.Errorf("expected %+v, got %+v", newReplica, repDesc)
 	}
-	lc.Update(5, roachpb.ReplicaDescriptor{})
-	r = lc.Lookup(5)
-	if r.StoreID != 0 {
-		t.Fatalf("evicted leader returned: %v", r)
+	lc.Update(rangeID, roachpb.ReplicaDescriptor{})
+	if repDesc, ok := lc.Lookup(rangeID); ok {
+		t.Errorf("lookup of evicted key returned: %+v", repDesc)
 	}
 
 	for i := 10; i < 20; i++ {
 		lc.Update(roachpb.RangeID(i), replica)
 	}
-	if lc.Lookup(16).StoreID != 0 || lc.Lookup(17).StoreID == 0 {
-		t.Errorf("unexpected policy used in cache")
+	_, ok16 := lc.Lookup(16)
+	_, ok17 := lc.Lookup(17)
+	if ok16 || !ok17 {
+		t.Fatalf("unexpected policy used in cache")
 	}
 }

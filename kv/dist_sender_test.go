@@ -534,9 +534,11 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	if first {
 		t.Errorf("The command did not retry")
 	}
-	if cur := ds.leaderCache.Lookup(2); cur.StoreID != leader.StoreID {
-		t.Errorf("leader cache was not updated: expected %v, got %v",
-			&leader, cur)
+	rangeID := roachpb.RangeID(2)
+	if cur, ok := ds.leaderCache.Lookup(rangeID); !ok {
+		t.Errorf("leader cache was not updated: expected %+v", leader)
+	} else if cur.StoreID != leader.StoreID {
+		t.Errorf("leader cache was not updated: expected %+v, got %+v", leader, cur)
 	}
 }
 
@@ -639,8 +641,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, errString) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
-		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
-			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
+		if _, ok := ds.leaderCache.Lookup(1); ok != !tc.shouldClearLeader {
+			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %t", i, tc.shouldClearLeader, ok)
 		}
 		if _, cachedDesc, err := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */); err != nil {
 			t.Error(err)

@@ -28,7 +28,7 @@ import (
 )
 
 // init installs an adapter to use clog for log messages from raft which
-// don't belong to any raft group.
+// don't belong to any range.
 func init() {
 	raft.SetLogger(&raftLogger{})
 }
@@ -45,15 +45,15 @@ func init() {
 // This file is named raft.go instead of something like logger.go because this
 // file's name is used to determine the vmodule parameter: --vmodule=raft=1
 type raftLogger struct {
-	group uint64
+	rangeID roachpb.RangeID
 }
 
 // logPrefix returns a string that will prefix logs emitted by
 // raftLogger. Bad things will happen if this method returns a string
 // containing unescaped '%' characters.
 func (r *raftLogger) logPrefix() string {
-	if r.group != 0 {
-		return fmt.Sprintf("[group %d] ", r.group)
+	if r.rangeID != 0 {
+		return fmt.Sprintf("[range %d] ", r.rangeID)
 	}
 	return ""
 }
@@ -124,7 +124,7 @@ func logRaftReady(storeID roachpb.StoreID, rangeID roachpb.RangeID, ready raft.R
 		// Globally synchronize to avoid interleaving different sets of logs in tests.
 		logRaftReadyMu.Lock()
 		defer logRaftReadyMu.Unlock()
-		log.Infof("store %s: group %s raft ready", storeID, rangeID)
+		log.Infof("store %d: range %d raft ready", storeID, rangeID)
 		if ready.SoftState != nil {
 			log.Infof("SoftState updated: %+v", *ready.SoftState)
 		}
