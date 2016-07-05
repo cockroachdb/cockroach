@@ -71,6 +71,20 @@ type ShowTables struct {
 	Name *QualifiedName
 }
 
+// ShowConstraints represents a SHOW CONSTRAINTS statement.
+type ShowConstraints struct {
+	Table *QualifiedName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowConstraints) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW CONSTRAINTS")
+	if node.Table != nil {
+		buf.WriteString(" FROM ")
+		FormatNode(buf, f, node.Table)
+	}
+}
+
 // Format implements the NodeFormatter interface.
 func (node *ShowTables) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW TABLES")
