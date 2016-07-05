@@ -59,6 +59,14 @@ fi
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 
+# We want our docker builds to use different go pkg/bin directories
+# than the host OS so that conflicting C++ toolchains do not cause
+# problems. See https://github.com/cockroachdb/cockroach/issues/7477.
+goos="linux"
+if "$(go env GOOS)" == "linux"; then
+  goos="linux_docker"
+fi
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
@@ -79,8 +87,8 @@ cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/src:/go/src" \
   --volume="${gopath0}/pkg:/go/pkg" \
-  --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
-  --volume="${gopath0}/bin/linux_amd64:/go/bin" \
+  --volume="${gopath0}/pkg/${goos}_amd64_race:/usr/src/go/pkg/${goos}_amd64_race" \
+  --volume="${gopath0}/bin/${goos}_amd64:/go/bin" \
   --volume="${HOME}/.jspm:/root/.jspm" \
   --volume="${HOME}/.npm:/root/.npm" \
   --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
