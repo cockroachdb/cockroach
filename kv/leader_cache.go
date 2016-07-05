@@ -23,8 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 )
 
-// A leaderCache is a cache used to keep track of the leader
-// replica of Raft consensus groups.
+// A leaderCache is a cache of replica descriptors keyed by range ID.
 type leaderCache struct {
 	mu    sync.Mutex
 	cache *cache.UnorderedCache
@@ -44,26 +43,25 @@ func newLeaderCache(size int) *leaderCache {
 	}
 }
 
-// Lookup consults the cache for the replica cached as the leader of
-// the given Raft consensus group.
-func (lc *leaderCache) Lookup(group roachpb.RangeID) roachpb.ReplicaDescriptor {
+// Lookup returns the cached leader of the given range ID.
+func (lc *leaderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDescriptor, bool) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
-	v, ok := lc.cache.Get(group)
-	if !ok || v == nil {
-		return roachpb.ReplicaDescriptor{}
+	if v, ok := lc.cache.Get(rangeID); ok {
+		return v.(roachpb.ReplicaDescriptor), true
 	}
-	return *(v.(*roachpb.ReplicaDescriptor))
+	return roachpb.ReplicaDescriptor{}, false
 }
 
-// Update invalidates the cached leader for the given Raft group.
-// If a replica is passed in, it is inserted into the cache.
-// A StoreID of 0 (empty replica) means evict.
-func (lc *leaderCache) Update(group roachpb.RangeID, r roachpb.ReplicaDescriptor) {
+// Update invalidates the cached leader for the given range ID. If an empty
+// replica descriptor is passed, the cached leader is evicted. Otherwise, the
+// passed-in replica descriptor is cached.
+func (lc *leaderCache) Update(rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
-	lc.cache.Del(group)
-	if r.StoreID != 0 {
-		lc.cache.Add(group, &r)
+	if (repDesc == roachpb.ReplicaDescriptor{}) {
+		lc.cache.Del(rangeID)
+	} else {
+		lc.cache.Add(rangeID, repDesc)
 	}
 }
