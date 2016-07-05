@@ -548,8 +548,26 @@ func (desc *TableDescriptor) Validate() error {
 		return ErrMissingColumns
 	}
 
-	columnNames := map[string]ColumnID{}
-	columnIDs := map[ColumnID]string{}
+	constraintNames := make(map[string]struct{}, len(desc.Columns))
+	columnNames := make(map[string]ColumnID, len(desc.Columns))
+	columnIDs := make(map[ColumnID]string, len(desc.Columns))
+	uniqConstraint := func(s string) error {
+		s = strings.ToLower(s)
+		if s != "" {
+			if _, ok := constraintNames[s]; ok {
+				return fmt.Errorf("duplicate constraint name: %q", s)
+			}
+			constraintNames[s] = struct{}{}
+		}
+		return nil
+	}
+
+	for _, check := range desc.Checks {
+		if err := uniqConstraint(check.Name); err != nil {
+			return err
+		}
+	}
+
 	for _, column := range desc.allNonDropColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
@@ -574,6 +592,12 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
 		}
+		if err := uniqConstraint(column.DefaultExprConstraintName); err != nil {
+			return err
+		}
+		if err := uniqConstraint(column.NullableConstraintName); err != nil {
+			return err
+		}
 	}
 
 	for _, m := range desc.Mutations {
@@ -581,13 +605,25 @@ func (desc *TableDescriptor) Validate() error {
 		switch desc := m.Descriptor_.(type) {
 		case *DescriptorMutation_Column:
 			col := desc.Column
+			if err := uniqConstraint(col.DefaultExprConstraintName); err != nil {
+				return err
+			}
+			if err := uniqConstraint(col.NullableConstraintName); err != nil {
+				return err
+			}
 			if unSetEnums {
 				return errors.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
 			}
 			columnIDs[col.ID] = col.Name
 		case *DescriptorMutation_Index:
+			idx := desc.Index
+			if idx.Unique {
+				// TODO(dt): Should probably add a separate constraintName to the idx.
+				if err := uniqConstraint(idx.Name); err != nil {
+					return err
+				}
+			}
 			if unSetEnums {
-				idx := desc.Index
 				return errors.Errorf("mutation in state %s, direction %s, index %s, id %v", m.State, m.Direction, idx.Name, idx.ID)
 			}
 		default:
@@ -677,6 +713,13 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
 		indexNames[normName] = struct{}{}
+
+		if index.Unique {
+			// TODO(dt): Should probably add a separate constraintName to the idx.
+			if err := uniqConstraint(index.Name); err != nil {
+				return err
+			}
+		}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
