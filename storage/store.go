@@ -2385,8 +2385,11 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	s.cacheReplicaDescriptorLocked(req.RangeID, req.FromReplica)
 	s.cacheReplicaDescriptorLocked(req.RangeID, req.ToReplica)
 	// Lazily create the replica.
-	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID,
-		req.FromReplica)
+	r, err := s.getOrCreateReplicaLocked(
+		req.RangeID,
+		req.ToReplica.ReplicaID,
+		req.FromReplica,
+	)
 	// TODO(bdarnell): is it safe to release the store lock here?
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
@@ -2394,7 +2397,11 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		return err
 	}
 
-	if req.ToReplica.ReplicaID == 0 {
+	r.mu.Lock()
+	replicaID := r.mu.replicaID
+	r.mu.Unlock()
+
+	if replicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
 			// Allow snapshots to be applied to replicas before they are
 			// members of the raft group (i.e. replicas with an ID of 0). This
