@@ -504,9 +504,12 @@ type storeMetrics struct {
 	rdbTableReadersMemEstimate  *metric.Gauge
 
 	// Range event metrics.
-	rangeSplits  *metric.Counter
-	rangeAdds    *metric.Counter
-	rangeRemoves *metric.Counter
+	rangeSplits                     *metric.Counter
+	rangeAdds                       *metric.Counter
+	rangeRemoves                    *metric.Counter
+	rangeSnapshotsGenerated         *metric.Counter
+	rangeSnapshotsNormalApplied     *metric.Counter
+	rangeSnapshotsPreemptiveApplied *metric.Counter
 
 	// Stats for efficient merges.
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
@@ -560,9 +563,12 @@ func newStoreMetrics() *storeMetrics {
 		rdbTableReadersMemEstimate:  storeRegistry.Gauge("rocksdb.table-readers-mem-estimate"),
 
 		// Range event metrics.
-		rangeSplits:  storeRegistry.Counter("range.splits"),
-		rangeAdds:    storeRegistry.Counter("range.adds"),
-		rangeRemoves: storeRegistry.Counter("range.removes"),
+		rangeSplits:                     storeRegistry.Counter("range.splits"),
+		rangeAdds:                       storeRegistry.Counter("range.adds"),
+		rangeRemoves:                    storeRegistry.Counter("range.removes"),
+		rangeSnapshotsGenerated:         storeRegistry.Counter("range.snapshots.generated"),
+		rangeSnapshotsNormalApplied:     storeRegistry.Counter("range.snapshots.normal-applied"),
+		rangeSnapshotsPreemptiveApplied: storeRegistry.Counter("range.snapshots.preemptive-applied"),
 	}
 }
 
@@ -2100,7 +2106,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// the raft group (i.e. replicas with an ID of 0). This is the only
 			// operation that can be performed on a replica before it is part of the
 			// raft group.
-			_, err := r.applySnapshot(req.Message.Snapshot)
+			_, err := r.applySnapshot(req.Message.Snapshot, preemptiveSnapshot)
 			return err
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
