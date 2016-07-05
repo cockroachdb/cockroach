@@ -32,7 +32,7 @@ statement ok
 CREATE TABLE orders (
   id INT PRIMARY KEY,
   product STRING REFERENCES products,
-  customer INT REFERENCES customers (id),
+  customer INT CONSTRAINT valid_customer REFERENCES customers (id),
   INDEX (product),
   INDEX (customer)
 );
@@ -152,6 +152,14 @@ TRUNCATE scans
 
 statement ok
 TRUNCATE products
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM orders
+----
+Table   Name                        Type         Column(s)   Details
+orders  fk_product_ref_products_sku FOREIGN KEY  [product]   products.[sku]
+orders  primary                     PRIMARY KEY  [id]        NULL
+orders  valid_customer              FOREIGN KEY  [customer]  customers.[id]
 
 statement error "products_upc_key" is referenced by foreign key from table "scans"
 DROP INDEX products@products_upc_key
