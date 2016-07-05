@@ -52,6 +52,8 @@ package acceptance
 //   of Terrafarm and allocator tests, respectively. For example, you can add
 //   "-at.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
+//   Note that the location has to be specified relative to the terraform
+//   working directory, so typically `-at.cockroach-binary=../../cockroach`.
 
 import (
 	gosql "database/sql"
@@ -59,6 +61,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -105,11 +108,20 @@ func (at *allocatorTest) Run(t *testing.T) {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
+		wd, err := os.Getwd()
+		if err != nil {
+			wd = "acceptance"
+		}
+		baseDir := filepath.Join(wd, at.f.Cwd)
 		if t.Failed() && at.f.KeepClusterAfterFail {
-			t.Log("test has failed, not destroying")
+			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -state %s)",
+				baseDir, at.f.StateFile)
 			return
 		}
 		at.f.MustDestroy()
+		if err := os.Remove(filepath.Join(baseDir, at.f.StateFile)); err != nil {
+			t.Log(err)
+		}
 	}()
 
 	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
