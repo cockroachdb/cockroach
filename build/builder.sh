@@ -79,8 +79,9 @@ cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/src:/go/src" \
   --volume="${gopath0}/pkg:/go/pkg" \
-  --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
-  --volume="${gopath0}/bin/linux_amd64:/go/bin" \
+  --volume="${gopath0}/pkg/docker_amd64:/usr/src/go/pkg/linux_amd64" \
+  --volume="${gopath0}/pkg/docker_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
+  --volume="${gopath0}/bin/docker_amd64:/go/bin" \
   --volume="${HOME}/.jspm:/root/.jspm" \
   --volume="${HOME}/.npm:/root/.npm" \
   --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
