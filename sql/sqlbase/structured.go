@@ -548,8 +548,26 @@ func (desc *TableDescriptor) Validate() error {
 		return ErrMissingColumns
 	}
 
-	columnNames := map[string]ColumnID{}
-	columnIDs := map[ColumnID]string{}
+	constraintNames := make(map[string]struct{}, len(desc.Columns))
+	uniqConstraint := func(s string) error {
+		s = strings.ToLower(s)
+		if s != "" {
+			if _, ok := constraintNames[s]; ok {
+				return fmt.Errorf("duplicate constraint name: %q", s)
+			}
+			constraintNames[s] = struct{}{}
+		}
+		return nil
+	}
+
+	for _, check := range desc.Checks {
+		if err := uniqConstraint(check.Name); err != nil {
+			return err
+		}
+	}
+
+	columnNames := make(map[string]ColumnID, len(desc.Columns))
+	columnIDs := make(map[ColumnID]string, len(desc.Columns))
 	for _, column := range desc.allNonDropColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
@@ -573,6 +591,12 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID >= desc.NextColumnID {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
+		}
+		if err := uniqConstraint(column.DefaultExprConstraintName); err != nil {
+			return err
+		}
+		if err := uniqConstraint(column.NullableConstraintName); err != nil {
+			return err
 		}
 	}
 
@@ -677,6 +701,13 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
 		indexNames[normName] = struct{}{}
+
+		if index.Unique {
+			// TODO(dt): Should probably add a separate constraintName to the idx.
+			if err := uniqConstraint(index.Name); err != nil {
+				return err
+			}
+		}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
