@@ -1224,6 +1224,6 @@ func (desc *Descriptor) GetName() string {
 }
 
 // IndexKeyPrefix returns the prefix for the table-index reference.
-func (t TableAndIndexID) IndexKeyPrefix() []byte {
+func (t ForeignKeyReference) IndexKeyPrefix() []byte {
 	return MakeIndexKeyPrefix(t.Table, t.Index)
 }

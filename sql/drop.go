@@ -322,7 +322,7 @@ func (n *dropTableNode) expandPlan() error {
 }
 
 func (p *planner) canRemoveFK(
-	from string, ref *sqlbase.TableAndIndexID, behavior parser.DropBehavior,
+	from string, ref *sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
 	table, err := getTableDescFromID(p.txn, ref.Table)
 	if err != nil {
@@ -337,7 +337,7 @@ func (p *planner) canRemoveFK(
 	return table, nil
 }
 
-func (p *planner) removeFK(ref *sqlbase.TableAndIndexID, table *sqlbase.TableDescriptor) error {
+func (p *planner) removeFK(ref *sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor) error {
 	if table == nil {
 		var err error
 		table, err = getTableDescFromID(p.txn, ref.Table)

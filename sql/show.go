@@ -375,7 +375,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 				return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
 					index.ForeignKey.Index, other.Name)
 			}
-			appendRow("", "FOREIGN KEY", fmt.Sprintf("%v", index.ColumnNames),
+			appendRow(index.ForeignKey.Name, "FOREIGN KEY", fmt.Sprintf("%v", index.ColumnNames),
 				fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames))
 		}
 	}
