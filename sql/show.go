@@ -317,6 +317,93 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	return v, nil
 }
 
+// ShowConstraints returns all the constraints for a table.
+// Privileges: None.
+//   Notes: postgres does not have a SHOW CONSTRAINTS statement.
+//          mysql requires some privilege for any column.
+func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
+	desc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
+	}
+
+	v := &valuesNode{
+		columns: []ResultColumn{
+			{Name: "Table", Typ: parser.TypeString},
+			{Name: "Name", Typ: parser.TypeString},
+			{Name: "Type", Typ: parser.TypeString},
+			{Name: "Column(s)", Typ: parser.TypeString},
+			{Name: "Details", Typ: parser.TypeString},
+		},
+	}
+
+	appendRow := func(name, typ, columns, details string) {
+		detailsDatum := parser.DNull
+		if details != "" {
+			detailsDatum = parser.NewDString(details)
+		}
+		columnsDatum := parser.DNull
+		if columns != "" {
+			columnsDatum = parser.NewDString(columns)
+		}
+		v.rows = append(v.rows, []parser.Datum{
+			parser.NewDString(n.Table.Table()),
+			parser.NewDString(name),
+			parser.NewDString(typ),
+			columnsDatum,
+			detailsDatum,
+		})
+	}
+
+	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
+		if index.ID == desc.PrimaryIndex.ID {
+			appendRow(index.Name, "PRIMARY KEY", fmt.Sprintf("%+v", index.ColumnNames), "")
+		} else if index.Unique {
+			appendRow(index.Name, "UNIQUE", fmt.Sprintf("%+v", index.ColumnNames), "")
+		}
+		if index.ForeignKey != nil {
+			other, err := p.getTableLeaseByID(index.ForeignKey.Table)
+			if err != nil {
+				return nil, errors.Errorf("error resolving table %d referenced in foreign key",
+					index.ForeignKey.Table)
+			}
+			otherIdx, err := other.FindIndexByID(index.ForeignKey.Index)
+			if err != nil {
+				return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
+					index.ForeignKey.Index, other.Name)
+			}
+			appendRow("", "FOREIGN KEY", fmt.Sprintf("%v", index.ColumnNames),
+				fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames))
+		}
+	}
+	for _, c := range desc.Checks {
+		appendRow(c.Name, "CHECK", "", c.Expr)
+	}
+
+	for _, c := range desc.Columns {
+		if c.DefaultExprConstraintName != "" {
+			appendRow(c.DefaultExprConstraintName, "DEFAULT", c.Name, *c.DefaultExpr)
+		}
+		if c.NullableConstraintName != "" {
+			if c.Nullable {
+				appendRow(c.NullableConstraintName, "NULL", c.Name, "")
+			} else {
+				appendRow(c.NullableConstraintName, "NOT NULL", c.Name, "")
+			}
+		}
+	}
+
+	// Sort the results by constraint name.
+	sort := &sortNode{
+		ordering: sqlbase.ColumnOrdering{{0, encoding.Ascending}, {1, encoding.Ascending}},
+		columns:  v.columns,
+	}
+	return &selectTopNode{source: v, sort: sort}, nil
+}
+
 // ShowTables returns all the tables.
 // Privileges: None.
 //   Notes: postgres does not have a SHOW TABLES statement.
