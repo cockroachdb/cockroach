@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -347,6 +348,7 @@ func updateHardState(eng engine.ReadWriter, s storagebase.ReplicaState) error {
 		newHS.Vote = oldHS.Vote
 	}
 
+	log.Warningf("SHS %+v", newHS)
 	return setHardState(eng, rangeID, newHS)
 }
 

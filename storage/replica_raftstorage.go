@@ -618,6 +618,9 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, hs raftpb.HardState) (uint
 		if raft.IsEmptyHardState(hs) {
 			return 0, errors.Errorf("cannot apply empty HardState on non-preemptive snapshot")
 		}
+		if err := setHardState(batch, desc.RangeID, hs); err != nil {
+			return 0, errors.Wrap(err, "unable to write HardState")
+		}
 	}
 
 	if err := batch.Commit(); err != nil {
