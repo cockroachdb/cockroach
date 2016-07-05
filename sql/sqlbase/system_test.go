@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -40,9 +39,7 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	ms.AddTable(keys.MaxSystemConfigDescID+1,
-		"CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
-		privilege.List{privilege.ALL})
+	ms.AddTable(keys.MaxSystemConfigDescID+1, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)")
 	kv = ms.GetInitialValues()
 	expected = nonDescKeys + keysPerDesc*ms.DescriptorCount()
 	if actual := len(kv); actual != expected {
