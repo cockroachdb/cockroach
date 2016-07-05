@@ -709,6 +709,12 @@ func (desc *TableDescriptor) Validate() error {
 			}
 		}
 
+		if index.ForeignKey != nil {
+			if err := uniqConstraint(index.ForeignKey.Name); err != nil {
+				return err
+			}
+		}
+
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
 				index.Name, other, index.ID)
@@ -1255,6 +1261,6 @@ func (desc *Descriptor) GetName() string {
 }
 
 // IndexKeyPrefix returns the prefix for the table-index reference.
-func (t TableAndIndexID) IndexKeyPrefix() []byte {
+func (t ForeignKeyReference) IndexKeyPrefix() []byte {
 	return MakeIndexKeyPrefix(t.Table, t.Index)
 }

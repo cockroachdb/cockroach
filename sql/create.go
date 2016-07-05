@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -274,17 +275,31 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
+	// FKs are resolved after the descriptor is otherwise complete and IDs have
+	// been allocated since the FKs will reference those IDs.
 	var fkTargets []fkTargetUpdate
 	for _, def := range n.n.Defs {
 		if col, ok := def.(*parser.ColumnTableDef); ok {
 			if col.References.Table != nil {
-				modified, err := n.resolveColFK(&desc, string(col.Name), col.References.Table, string(col.References.Col))
+				modified, err := n.resolveColFK(&desc, col.Name, col.References.Table, col.References.Col, col.References.ConstraintName)
 				if err != nil {
 					return err
 				}
 				fkTargets = append(fkTargets, modified)
 			}
 		}
+	}
+
+	// We need to validate again after adding the FKs, but the desc still doesn't
+	// have a valid ID, so we briefly set it to something to get past validation.
+	savedID := desc.ID
+	if desc.ID == 0 {
+		desc.ID = keys.MaxReservedDescID + 1
+	}
+	err = desc.Validate()
+	desc.ID = savedID
+	if err != nil {
+		return err
 	}
 
 	created, err := n.p.createDescriptor(tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
@@ -339,12 +354,13 @@ type fkTargetUpdate struct {
 
 func (n *createTableNode) resolveColFK(
 	tbl *sqlbase.TableDescriptor,
-	fromCol string,
+	fromCol parser.Name,
 	targetTable *parser.QualifiedName,
-	targetColName string,
+	targetColName parser.Name,
+	constraintName parser.Name,
 ) (fkTargetUpdate, error) {
 	var ret fkTargetUpdate
-	src, err := tbl.FindActiveColumnByName(fromCol)
+	src, err := tbl.FindActiveColumnByName(string(fromCol))
 	if err != nil {
 		return ret, err
 	}
@@ -366,10 +382,10 @@ func (n *createTableNode) resolveColFK(
 		if len(target.PrimaryIndex.ColumnNames) != 1 {
 			return ret, errors.Errorf("must specify a single unique column to reference %q", targetTable.String())
 		}
-		targetColName = target.PrimaryIndex.ColumnNames[0]
+		targetColName = parser.Name(target.PrimaryIndex.ColumnNames[0])
 	}
 
-	targetCol, err := target.FindActiveColumnByName(targetColName)
+	targetCol, err := target.FindActiveColumnByName(string(targetColName))
 	if err != nil {
 		return ret, err
 	}
@@ -397,7 +413,11 @@ func (n *createTableNode) resolveColFK(
 		return ret, fmt.Errorf("foreign key requires a unique index on %s.%s", targetTable.String(), targetCol.Name)
 	}
 
-	ref := &sqlbase.TableAndIndexID{Table: target.ID, Index: ret.targetIdx}
+	if constraintName == "" {
+		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s_%s", fromCol, target.Name, targetColName))
+	}
+
+	ref := &sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
 
 	found = false
 	if tbl.PrimaryIndex.ColumnIDs[0] == src.ID {
@@ -443,7 +463,7 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 			return err
 		}
 		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy,
-			&sqlbase.TableAndIndexID{Table: desc.ID, Index: t.srcIdx})
+			&sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx})
 
 		if t.target == desc {
 			srcIdx, err := desc.FindIndexByID(t.srcIdx)
