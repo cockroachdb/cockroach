@@ -198,6 +198,12 @@ export default class extends React.Component<{}, {}> {
               </Axis>
             </LineGraph>
 
+            <LineGraph title="Read Amplification">
+              <Axis format={ d3.format(".1") }>
+                <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
+
           </GraphGroup>
       </div>
     </div>;

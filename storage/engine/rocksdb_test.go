@@ -350,3 +350,49 @@ func TestSSTableInfosString(t *testing.T) {
 		t.Fatalf("expected\n%s\ngot\n%s", expected, s)
 	}
 }
+
+func TestReadAmplification(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	info := func(level int, size int64) SSTableInfo {
+		return SSTableInfo{
+			Level: level,
+			Size:  size,
+		}
+	}
+
+	tables1 := SSTableInfos{
+		info(0, 0),
+		info(0, 0),
+		info(0, 0),
+		info(1, 0),
+	}
+	if a, e := tables1.ReadAmplification(), 4; a != e {
+		t.Errorf("got %d, expected %d", a, e)
+	}
+
+	tables2 := SSTableInfos{
+		info(0, 0),
+		info(1, 0),
+		info(2, 0),
+		info(3, 0),
+	}
+	if a, e := tables2.ReadAmplification(), 4; a != e {
+		t.Errorf("got %d, expected %d", a, e)
+	}
+
+	tables3 := SSTableInfos{
+		info(1, 0),
+		info(0, 0),
+		info(0, 0),
+		info(0, 0),
+		info(1, 0),
+		info(1, 0),
+		info(2, 0),
+		info(3, 0),
+		info(6, 0),
+	}
+	if a, e := tables3.ReadAmplification(), 7; a != e {
+		t.Errorf("got %d, expected %d", a, e)
+	}
+}
