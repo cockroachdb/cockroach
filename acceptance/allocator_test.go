@@ -155,6 +155,16 @@ func (at *allocatorTest) Run(t *testing.T) {
 	at.f.Assert(t)
 	log.Info("initial cluster is up")
 
+	// We must stop the cluster because a) `nodetool` pokes at the data directory
+	// and, more importantly, b) we don't want the cluster above and the cluster
+	// below to ever talk to each other (see #7224).
+	log.Info("stopping cluster")
+	for i := 0; i < at.f.NumNodes(); i++ {
+		if err := at.f.Kill(i); err != nil {
+			t.Fatalf("error stopping node %d: %s", i, err)
+		}
+	}
+
 	log.Info("downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
