@@ -633,10 +633,10 @@ bool MergeTimeSeriesValues(
 
 // ConsolidateTimeSeriesValue processes a single value which contains
 // InternalTimeSeriesData messages. This method will sort the sample collection
-// of the value, combining any samples with duplicate offsets. This method is
-// the single-value equivalent of MergeTimeSeriesValues, and is used in the case
-// where the first value is merged into the key. Returns true if the merge is
-// successful.
+// of the value, keeping only the last of any samples with duplicate offsets.
+// This method is the single-value equivalent of MergeTimeSeriesValues, and is
+// used in the case where the first value is merged into the key. Returns true
+// if the merge is successful.
 bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData val_ts;
@@ -656,19 +656,18 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
                    val_ts.mutable_samples()->pointer_end(),
                    TimeSeriesSampleOrdering);
 
-  // Merge sample values of left and right into new_ts.
+  // Consolidate sample values from the ts value with duplicate offsets.
   auto front = val_ts.samples().begin();
   auto end = val_ts.samples().end();
 
   // Loop until samples have been exhausted.
   while (front != end) {
-    // Create an empty sample in the output collection with the selected
-    // offset.  Accumulate data from all samples at the front of the sample
-    // collection which match the selected timestamp. This behavior is
-    // needed because even a single value may have duplicated offsets.
+    // Create an empty sample in the output collection.
     cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
     ns->set_offset(front->offset());
     while (front != end && front->offset() == ns->offset()) {
+      // Only the last sample in the value's repeated samples field with a given
+      // offset is kept in the case of multiple samples with identical offsets.
       ns->CopyFrom(*front);
       ++front;
     }
