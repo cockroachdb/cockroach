@@ -946,7 +946,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Add this range and its stats to our counter.
 		s.metrics.replicaCount.Inc(1)
 		s.metrics.addMVCCStats(rng.GetMVCCStats())
-		// TODO(bdarnell): lazily create raft groups to make the following comment true again.
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
 		// election-related traffic in a cold start.
@@ -2084,7 +2083,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	s.mu.Lock()
 	s.cacheReplicaDescriptorLocked(req.RangeID, req.FromReplica)
 	s.cacheReplicaDescriptorLocked(req.RangeID, req.ToReplica)
-	// Lazily create the group.
+	// Lazily create the replica.
 	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID,
 		req.FromReplica)
 	// TODO(bdarnell): is it safe to release the store lock here?
@@ -2107,7 +2106,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
 		// the only way we can get here is if the replica did not previously exist.
 		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for group %d from %+v to %+v",
+			log.Infof("refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
 		}
 		return errors.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
@@ -2230,7 +2229,7 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 		return r, nil
 	}
 
-	// Before creating the group, see if there is a tombstone which
+	// Before creating the replica, see if there is a tombstone which
 	// would indicate that this is a stale message.
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone

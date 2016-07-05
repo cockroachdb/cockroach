@@ -269,7 +269,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 			MaxSizePerMsg:   1024 * 1024,
 			MaxInflightMsgs: 256,
 			CheckQuorum:     true,
-			Logger:          &raftLogger{group: uint64(r.RangeID)},
+			Logger:          &raftLogger{rangeID: r.RangeID},
 		}, nil)
 		if err != nil {
 			return err
@@ -1645,11 +1645,11 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.store.mu.Unlock()
 
 	if toErr != nil {
-		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, rangeID, toErr)
+		log.Warningf("failed to look up recipient replica %d in range %d: %s", msg.To, rangeID, toErr)
 		return
 	}
 	if fromErr != nil {
-		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, rangeID, fromErr)
+		log.Warningf("failed to look up sender replica %d in range %d: %s", msg.From, rangeID, fromErr)
 		return
 	}
 	if !r.raftSender.SendAsync(&RaftMessageRequest{

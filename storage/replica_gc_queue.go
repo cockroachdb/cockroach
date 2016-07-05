@@ -180,7 +180,7 @@ func (q *replicaGCQueue) process(now hlc.Timestamp, rng *Replica, _ config.Syste
 		// TODO(bdarnell): remove raft logs and other metadata (while leaving a
 		// tombstone). Add tests for GC of merged ranges.
 	} else {
-		// This range is a current member of the raft group. Set the last replica
+		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
 		if err := rng.setLastReplicaGCTimestamp(now); err != nil {
 			return err
