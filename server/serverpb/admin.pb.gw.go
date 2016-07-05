@@ -175,7 +175,7 @@ func request_Admin_Health_0(ctx context.Context, marshaler runtime.Marshaler, cl
 
 }
 
-func request_Admin_Drain_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_Drain_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (Admin_DrainClient, runtime.ServerMetadata, error) {
 	var protoReq DrainRequest
 	var metadata runtime.ServerMetadata
 
@@ -183,8 +183,16 @@ func request_Admin_Drain_0(ctx context.Context, marshaler runtime.Marshaler, cli
 		return nil, metadata, grpc.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := client.Drain(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
-	return msg, metadata, err
+	stream, err := client.Drain(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
 
 }
 
@@ -515,7 +523,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 			return
 		}
 
-		forward_Admin_Drain_0(ctx, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Admin_Drain_0(ctx, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -593,7 +601,7 @@ var (
 
 	forward_Admin_Health_0 = runtime.ForwardResponseMessage
 
-	forward_Admin_Drain_0 = runtime.ForwardResponseMessage
+	forward_Admin_Drain_0 = runtime.ForwardResponseStream
 
 	forward_Admin_ClusterFreeze_0 = runtime.ForwardResponseStream
 )

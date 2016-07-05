@@ -24,7 +24,7 @@ import weak "google/api/annotations.proto";
 
 // ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
 // the object level at which the configuration is defined. This is needed
-// because objects without a specifically indicated Zone Configuration will 
+// because objects without a specifically indicated Zone Configuration will
 // inherit the configuration of their "parent".
 enum ZoneConfigurationLevel {
   UNKNOWN = 0;
@@ -405,7 +405,7 @@ service Admin {
 
   // Drain puts the node into the specified drain mode(s) and optionally
   // instructs the process to terminate.
-  rpc Drain(DrainRequest) returns (DrainResponse) {
+  rpc Drain(DrainRequest) returns (stream DrainResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/drain"
       body: "*"
