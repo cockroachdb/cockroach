@@ -114,7 +114,7 @@ func TestIntentResolution(t *testing.T) {
 			ctx := MakeTestContext()
 			ctx.TestingKnobs.Store = &storeKnobs
 
-			s := StartTestServerWithContext(t, &ctx)
+			s := StartTestServerWithContext(t, &ctx, StartParams{Nodes: 1})
 			defer s.Stop()
 			// Split the Range. This should not have any asynchronous intents.
 			if err := s.db.AdminSplit(splitKey); err != nil {
