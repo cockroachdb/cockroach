@@ -151,6 +151,26 @@ func (s SSTableInfos) String() string {
 	return buf.String()
 }
 
+// ReadAmplification returns RocksDB's read amplification, which is the number
+// of level-0 sstables plus the number of levels, other than level 0, with at
+// least one sstable.
+//
+// This definition comes from here:
+// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#level-style-compaction
+func (s SSTableInfos) ReadAmplification() int {
+	var readAmp int
+	seenLevel := make(map[int]bool)
+	for _, t := range s {
+		if t.Level == 0 {
+			readAmp++
+		} else if !seenLevel[t.Level] {
+			readAmp++
+			seenLevel[t.Level] = true
+		}
+	}
+	return readAmp
+}
+
 // RocksDBCache is a wrapper around C.DBCache
 type RocksDBCache struct {
 	cache *C.DBCache
