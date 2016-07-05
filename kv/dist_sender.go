@@ -99,8 +99,7 @@ type DistSender struct {
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache           *rangeDescriptorCache
 	rangeLookupMaxRanges int32
-	// leaderCache caches the last known leader replica for range
-	// consensus groups.
+	// leaderCache caches range leaders by range ID.
 	leaderCache      *leaderCache
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
@@ -449,7 +448,7 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID)); leader.StoreID > 0 {
+		if leader, ok := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
 			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 			}
@@ -1038,14 +1037,21 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 	return false
 }
 
-// updateLeaderCache updates the cached leader for the given range,
-// evicting any previous value in the process.
-func (ds *DistSender) updateLeaderCache(rid roachpb.RangeID, leader roachpb.ReplicaDescriptor) {
-	oldLeader := ds.leaderCache.Lookup(rid)
-	if leader.StoreID != oldLeader.StoreID {
-		if log.V(1) {
-			log.Infof("range %d: new cached leader store %d (old: %d)", rid, leader.StoreID, oldLeader.StoreID)
+// updateLeaderCache updates the cached leader for the given range.
+func (ds *DistSender) updateLeaderCache(
+	rangeID roachpb.RangeID,
+	newLeader roachpb.ReplicaDescriptor,
+) {
+	if log.V(1) {
+		if oldLeader, ok := ds.leaderCache.Lookup(rangeID); ok {
+			if newLeader.ReplicaID == 0 {
+				log.Infof("range %d: evicting cached leader %+v", rangeID, oldLeader)
+			} else if newLeader != oldLeader {
+				log.Infof("range %d: replacing cached leader %+v with %+v", rangeID, oldLeader, newLeader)
+			}
+		} else {
+			log.Infof("range %d: caching new leader %+v", rangeID, newLeader)
 		}
-		ds.leaderCache.Update(rid, leader)
 	}
+	ds.leaderCache.Update(rangeID, newLeader)
 }
