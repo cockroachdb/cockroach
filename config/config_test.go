@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -226,10 +225,8 @@ func TestComputeSplits(t *testing.T) {
 	userSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real SQL system with reserved non-system tables.
-	schema.AddTable(reservedStart+1, "CREATE TABLE system.test1 (i INT PRIMARY KEY)",
-		privilege.List{privilege.ALL})
-	schema.AddTable(reservedStart+2, "CREATE TABLE system.test2 (i INT PRIMARY KEY)",
-		privilege.List{privilege.ALL})
+	schema.AddTable(reservedStart+1, "CREATE TABLE system.test1 (i INT PRIMARY KEY)")
+	schema.AddTable(reservedStart+2, "CREATE TABLE system.test2 (i INT PRIMARY KEY)")
 	reservedSql := schema.GetInitialValues()
 	// Real SQL system with reserved non-system and user database.
 	allSql := append(schema.GetInitialValues(),
