@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -141,7 +142,10 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	db := server.DB()
-	leaseMgr := csql.NewLeaseManager(0, *db, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{})
+	stopper := stop.NewStopper()
+	leaseMgr := csql.NewLeaseManager(
+		0, *db, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{}, stopper)
+	defer stopper.Stop()
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *db, leaseMgr)
 
 	if _, err := sqlDB.Exec(`
