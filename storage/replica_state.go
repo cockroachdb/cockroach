@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/protoutil"
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -321,33 +321,56 @@ func setHardState(
 		hlc.ZeroTimestamp, nil, &st)
 }
 
-func updateHardState(eng engine.ReadWriter, s storagebase.ReplicaState) error {
-	// Load a potentially existing HardState as we may need to preserve
-	// information about cast votes. For example, during a Split for which
-	// another node's new right-hand side has contacted us before our left-hand
-	// side called in here to create the group.
-	rangeID := s.Desc.RangeID
-	oldHS, err := loadHardState(eng, rangeID)
+// updateHardState synthesizes a HardState from the given ReplicaState and
+// updates it from any existing on-disk HardState in the context of a snapshot,
+// while verifying that the application of the snapshot does not violate Raft
+// invariants.
+//
+// The HardState is Raft's view of term and acknowledged log entries, and so we
+// must be very careful touching it manually. Normally, Raft itself produces
+// valid HardStates, but we don't have that luxury when applying a snapshot
+// (which could happen out-of-band, for instance during preemptive snapshots).
+// In particular, the snapshot we're applying might hit upon some previous
+// state. For example, a preemptive snapshot might arrive late, after the Range
+// has already been created and caught up by vanilla Raft. In that case it's
+// very likely that we must _refuse_ the snapshot at this point since it would
+// otherwise violate Raft invariants. On the other hand, when the existing
+// HardState is simply a replica which hasn't ever received any log entries but
+// only managed to cast a vote or take a note of a Term compatible with the
+// snapshot, we want to apply it - this is the case during splits, when the
+// right-hand side of a split can be created early by other Replicas' messages
+// to it, but which is unable to make any progress (since it would need to
+// receive a snapshot, which we prevent due to overlap with the still-existing
+// left-hand side).
+func updateHardStateOnSnapshot(eng engine.ReadWriter, s storagebase.ReplicaState) error {
+	oldHS, err := loadHardState(eng, s.Desc.RangeID)
 	if err != nil {
 		return err
 	}
 
 	newHS := raftpb.HardState{
-		Term:   s.TruncatedState.Term,
+		Term: s.TruncatedState.Term,
+		// Note that when applying a Raft snapshot, the applied index is
+		// equal to the Commit index represented by the snapshot.
 		Commit: s.RaftAppliedIndex,
 	}
 
-	if !raft.IsEmptyHardState(oldHS) {
-		if oldHS.Commit > newHS.Commit {
-			newHS.Commit = oldHS.Commit
-		}
-		if oldHS.Term > newHS.Term {
-			newHS.Term = oldHS.Term
-		}
+	if oldHS.Commit > newHS.Commit {
+		return errors.Errorf("can't decrease HardState.Commit from %d to %d",
+			oldHS.Commit, newHS.Commit)
+	}
+	if oldHS.Term > newHS.Term {
+		// The existing HardState is allowed to be ahead of us (and in fact we
+		// need this). We already checked above that we're not rewinding the
+		// acknowledged index, and we haven't updated votes yet.
+		newHS.Term = oldHS.Term
+	}
+	// If the existing HardState voted, remember that.
+	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
 	}
 
-	return setHardState(eng, rangeID, newHS)
+	return setHardState(eng, s.Desc.RangeID, newHS)
 }
 
 // writeInitialState bootstraps a new Raft group (i.e. it is called when we
@@ -378,7 +401,7 @@ func writeInitialState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	if err := updateHardState(eng, s); err != nil {
+	if err := updateHardStateOnSnapshot(eng, s); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 

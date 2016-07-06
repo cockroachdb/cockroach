@@ -1432,7 +1432,7 @@ func (r *Replica) handleRaftReady() error {
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		var err error
-		lastIndex, err = r.applySnapshot(rd.Snapshot, normalSnapshot, rd.HardState)
+		lastIndex, err = r.applySnapshot(rd.Snapshot, rd.HardState)
 		if err != nil {
 			return err
 		}

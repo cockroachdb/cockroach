@@ -6172,7 +6172,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 
 	// Run a (failing) attempt to apply the snapshot (which will still fill the
 	// reservation).
-	if _, err := firstRng.applySnapshot(snap, normalSnapshot, raftpb.HardState{}); !testutils.IsError(err, "empty HardState") {
+	if _, err := firstRng.applySnapshot(snap, raftpb.HardState{} /* illegal! */); !testutils.IsError(err, "empty HardState") {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)

@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -512,21 +513,13 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
-type snapshotType int
-
-const (
-	normalSnapshot snapshotType = iota
-	preemptiveSnapshot
-)
-
 // applySnapshot updates the replica based on the given snapshot and
-// corresponding HardState. When the Replica's replicaID is zero, the
-// supplied HardState must be empty - we are applying a preemptive snapshot
-// and will be synthesizing our HardState.
-// Otherwise, the HardState must be nonempty and is persisted along with the
-// snapshot.
-// Returns the new last index.
-func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType, hs raftpb.HardState) (uint64, error) {
+// corresponding HardState. The supplied HardState must be empty if and only
+// if we are applying a preemptive snapshot (which is the case if and only if
+// the ReplicaID is zero) and will be synthesized.
+// In both cases, the final HardState is persisted along with the applied
+// snapshot and the new last index returned.
+func (r *Replica) applySnapshot(snap raftpb.Snapshot, hs raftpb.HardState) (uint64, error) {
 	// We use a separate batch to apply the snapshot since the Replica (and in
 	// particular the last index) is updated after the batch commits. Using a
 	// separate batch also allows for future optimization (such as using a
@@ -550,13 +543,22 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType, hs raftp
 	replicaID := r.mu.replicaID
 	r.mu.Unlock()
 
-	log.Infof("replica %d received snapshot for range %d at index %d. "+
-		"encoded size=%d, %d KV pairs, %d log entries",
-		replicaID, desc.RangeID, snap.Metadata.Index,
+	isPreemptive := replicaID == 0
+
+	replicaIDStr := "[?]"
+	snapType := "preemptive"
+	if !isPreemptive {
+		replicaIDStr = strconv.FormatInt(int64(replicaID), 10)
+		snapType = "Raft"
+	}
+
+	log.Infof("replica %s applying %s snapshot for range %d at index %d "+
+		"(encoded size=%d, %d KV pairs, %d log entries)",
+		replicaIDStr, snapType, desc.RangeID, snap.Metadata.Index,
 		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %d applied snapshot for range %d in %s",
-			replicaID, desc.RangeID, timeutil.Since(start))
+		log.Infof("replica %s applied %s snapshot for range %d in %s",
+			replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
@@ -612,20 +614,16 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType, hs raftp
 			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
-	if replicaID == 0 {
-		if !raft.IsEmptyHardState(hs) {
-			return 0, errors.Errorf("cannot apply HardState on preemptive snapshot")
-		}
-		// The replica is not part of the Raft group so we need to write the Raft
-		// hard state for the replica in order for the Raft state machine to start
-		// correctly.
-		if err := updateHardState(batch, s); err != nil {
-			return 0, err
-		}
-	} else {
-		if raft.IsEmptyHardState(hs) {
-			return 0, errors.Errorf("cannot apply empty HardState on non-preemptive snapshot")
-		}
+	if isPreemptive && !raft.IsEmptyHardState(hs) {
+		return 0, errors.Errorf("cannot apply HardState on preemptive snapshot")
+	}
+	if !isPreemptive && raft.IsEmptyHardState(hs) {
+		return 0, errors.Errorf("cannot apply empty HardState on non-preemptive snapshot")
+	}
+
+	// Update and error check the HardState (see comments within).
+	if err := updateHardStateOnSnapshot(batch, s); err != nil {
+		return 0, errors.Wrap(err, "unable to write synthesized HardState")
 	}
 
 	if err := batch.Commit(); err != nil {
@@ -663,13 +661,10 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType, hs raftp
 		panic(err)
 	}
 
-	switch typ {
-	case normalSnapshot:
+	if !isPreemptive {
 		r.store.metrics.rangeSnapshotsNormalApplied.Inc(1)
-	case preemptiveSnapshot:
+	} else {
 		r.store.metrics.rangeSnapshotsPreemptiveApplied.Inc(1)
-	default:
-		panic("not reached")
 	}
 	return lastIndex, nil
 }
