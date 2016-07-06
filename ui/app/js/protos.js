@@ -327,6 +327,31 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
+                    "name": "StoreDeadReplicas",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "store_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "StoreID",
+                                "(gogoproto.casttype)": "StoreID"
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "ReplicaIdent",
+                            "name": "replicas",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
                     "name": "Span",
                     "options": {
                         "(gogoproto.populate)": true
