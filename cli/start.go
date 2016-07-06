@@ -480,6 +480,39 @@ completed, the server exits.
 	RunE:         runQuit,
 }
 
+// waitForShutdown waits until the gRPC streams is closed by the
+// remote end.
+func waitForShutdown(stream serverpb.Admin_DrainClient) error {
+	for {
+		if _, err := stream.Recv(); !grpcutil.IsClosedConnection(err) {
+			return err
+		}
+		return nil
+	}
+}
+
+// doShutdown attempts to trigger server shutdown. The
+// bool return value indicates whether the state is uncertain
+// and thus whether it makes sense to retry the shutdown.
+func doShutdown(c serverpb.AdminClient, ctx context.Context, onModes []int32) (bool, error) {
+	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+		On:       onModes,
+		Shutdown: true,
+	})
+	if err != nil {
+		return false, err
+	}
+	_, err = stream.Recv()
+	if err == nil {
+		err = waitForShutdown(stream)
+		if err == nil {
+			fmt.Println("ok")
+		}
+		return false, err
+	}
+	return true, err
+}
+
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) error {
 	onModes := make([]int32, len(server.GracefulDrainModes))
@@ -495,53 +528,18 @@ func runQuit(_ *cobra.Command, _ []string) error {
 
 	ctx := stopperContext(stopper)
 
-	waitForShutdown := func(stream serverpb.Admin_DrainClient) error {
-		for {
-			if _, err := stream.Recv(); !grpcutil.IsClosedConnection(err) {
-				return err
-			}
-			return nil
-		}
-	}
+	retry, err := doShutdown(c, ctx, onModes)
+	if retry {
+		fmt.Fprintf(os.Stderr, "graceful shutdown failed, proceeding with hard shutdown: %v\n", err)
 
-	{
-		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-			On:       onModes,
-			Shutdown: true,
-		})
-		if err != nil {
-			return err
-		}
-		_, err = stream.Recv()
-		if err == nil {
-			err = waitForShutdown(stream)
-			if err == nil {
-				fmt.Println("ok")
-			}
-			return err
-		}
-		fmt.Printf("graceful shutdown failed, proceeding with hard shutdown: %v\n", err)
-	}
-
-	{
-		// Not passing drain modes so the server doesn't bother and goes
+		// Not passing drain modes tells the server to not bother and go
 		// straight to shutdown.
-		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-			Shutdown: true,
-		})
+		_, err := doShutdown(c, ctx, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("hard shutdown failed: %v", err)
 		}
-		_, err = stream.Recv()
-		if err == nil {
-			err = waitForShutdown(stream)
-			if err == nil {
-				fmt.Println("ok")
-			}
-			return err
-		}
-		return fmt.Errorf("hard shutdown failed: %v", err)
 	}
+	return err
 }
 
 // freezeClusterCmd command issues a cluster-wide freeze.
