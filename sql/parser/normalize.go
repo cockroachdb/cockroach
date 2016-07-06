@@ -247,7 +247,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 			expr = &exprCopy
 			expr.Right = &tupleCopy
 		}
-	case SimilarTo, NotSimilarTo, Like, NotLike, NE:
+	case SimilarTo, NotSimilarTo, Like, NotLike, ILike, NotILike, NE:
 		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
 			return DNull
 		}
