@@ -5,22 +5,26 @@ console. These files are embedded into the cockroach binary via the
 [go-bindata](https://github.com/jteeuwen/go-bindata) package, which is used to
 generate the `embedded.go` file in this directory.
 
+## Getting Started
+
+To get started with the UI, be sure you're able to build and run the
+CockroachDB server. Instructions for this are located in the top-level README.
+
+To bootstrap local development, you'll need to run `make` in this directory;
+this will download the dependencies, run the tests, and build the web console
+assets.
+
+Next, confirm that you can load the UI in debug mode by running the server
+with the environment variable `COCKROACH_DEBUG_UI` set to a truthy value, e.g.
+`COCKROACH_DEBUG_UI=1` (though any value accepted by
+[strconv.ParseBool](https://godoc.org/strconv#ParseBool) will work) and
+navigating to the web console.
+
 ## Modification
 
-If any modifications are made to the contents of this directory, run `make` in
-this directory to generate a new `embedded.go`, which should _then be
-committed along with the original files_. The generated file is committed
-because compiling our web admin resource requires
-[additional non-go dependencies](#dependencies).
-
-## Development
-
-While actively developing the user interface, be sure to run the CockroachDB
-server with the environment variable `COCKROACH_DEBUG_UI` set to a truthy
-value, e.g. `COCKROACH_DEBUG_UI=1` (though any value accepted by
-[strconv.ParseBool](https://godoc.org/strconv#ParseBool) will work). This will
-cause the CockroachDB server to serve assets directly from the disk, rather
-than use the compiled-in assets.
+As mentioned above, be sure to run the CockroachDB server in UI debug mode
+while developing the web console. This causes the CockroachDB server to serve
+assets directly from the disk, rather than use the compiled-in assets.
 
 In order to regenerate the on-disk assets, be sure to run `make` in this
 directory. This will regenerate `build/app.{css,js}` as well as embedded.go.
@@ -39,6 +43,9 @@ Regardless of the workflow you choose, always be sure to run `make` in this
 directory before committing, so that your commit includes the updated
 `embedded.go`. This is enforced by our build system, but forgetting to do this
 will result in wasted time waiting for the build.
+
+We commit the generated file so that CockroachDB can be compiled with minimal
+[non-go dependencies](#dependencies).
 
 ## Dependencies
 
