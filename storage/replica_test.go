@@ -4414,7 +4414,7 @@ func TestReplicaCorruption(t *testing.T) {
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return roachpb.NewError(newReplicaCorruptionError())
+				return roachpb.NewError(NewReplicaCorruptionError())
 			}
 			return nil
 		}
@@ -4429,11 +4429,34 @@ func TestReplicaCorruption(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	key := roachpb.Key("boom")
+
 	// maybeSetCorrupt should have been called.
-	args = putArgs(roachpb.Key("boom"), []byte("value"))
+	args = putArgs(key, []byte("value"))
 	_, pErr := tc.SendWrapped(&args)
 	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
 		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Verify replica destroyed was set.
+	rkey, err := keys.Addr(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := tc.store.LookupReplica(rkey, rkey)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
+		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
+	}
+
+	// Verify destroyed error was persisted.
+	pErr, err = loadReplicaDestroyedError(r.store.Engine(), r.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
+		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
 	}
 
 	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
@@ -5504,8 +5527,8 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 		errStruct *roachpb.ReplicaCorruptionError
 		expErr    string
 	}{
-		{newReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil), "replica corruption (processed=false): foo (caused by bar)"},
-		{newReplicaCorruptionError(nil, nil, nil), "replica corruption (processed=false)"},
+		{NewReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil), "replica corruption (processed=false): foo (caused by bar)"},
+		{NewReplicaCorruptionError(nil, nil, nil), "replica corruption (processed=false)"},
 	} {
 		// This uses fmt.Sprint because that ends up calling Error() and is the
 		// intended use. A previous version of this test called String() directly
@@ -6205,7 +6228,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		RangeSize: 10,
 	}
 
-	if !tc.store.Reserve(req).Reserved {
+	if !tc.store.Reserve(context.Background(), req).Reserved {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)

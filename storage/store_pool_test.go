@@ -393,7 +393,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 
 	sg.GossipStores(stores, t)
 
-	deadReplicas := sp.deadReplicas(replicas)
+	deadReplicas := sp.deadReplicas(0, replicas)
 	if len(deadReplicas) > 0 {
 		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
 	}
@@ -403,7 +403,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	// Resurrect all stores except for 4 and 5.
 	sg.GossipStores(stores[:3], t)
 
-	deadReplicas = sp.deadReplicas(replicas)
+	deadReplicas = sp.deadReplicas(0, replicas)
 	if a, e := deadReplicas, replicas[3:]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("findDeadReplicas did not return expected values; got \n%v, expected \n%v", a, e)
 	}
@@ -421,7 +421,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 	stopper, _, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 
-	if dead := sp.deadReplicas([]roachpb.ReplicaDescriptor{{StoreID: 1}}); len(dead) > 0 {
+	if dead := sp.deadReplicas(0, []roachpb.ReplicaDescriptor{{StoreID: 1}}); len(dead) > 0 {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
