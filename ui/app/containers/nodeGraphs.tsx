@@ -203,6 +203,11 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
               </Axis>
             </LineGraph>
 
+            <LineGraph title="Read Amplification" sources={sources}>
+              <Axis format={ d3.format(".1") }>
+                <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" />
+              </Axis>
+            </LineGraph>
           </GraphGroup>
       </div>
     </div>;
