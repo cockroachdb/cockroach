@@ -644,8 +644,12 @@ var benchmarkLikePatterns = []string{
 	`also\%`,
 }
 
-func benchmarkLike(b *testing.B, ctx *EvalContext) {
-	likeFn, _ := CmpOps[Like].lookupImpl(TypeString, TypeString)
+func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
+	op := Like
+	if caseInsensitive {
+		op = ILike
+	}
+	likeFn, _ := CmpOps[op].lookupImpl(TypeString, TypeString)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
 			if _, err := likeFn.fn(ctx, NewDString("test"), NewDString(p)); err != nil {
@@ -662,9 +666,17 @@ func benchmarkLike(b *testing.B, ctx *EvalContext) {
 }
 
 func BenchmarkLikeWithCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))})
+	benchmarkLike(b, &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))}, false)
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{})
+	benchmarkLike(b, &EvalContext{}, false)
+}
+
+func BenchmarkILikeWithCache(b *testing.B) {
+	benchmarkLike(b, &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))}, true)
+}
+
+func BenchmarkILikeWithoutCache(b *testing.B) {
+	benchmarkLike(b, &EvalContext{}, true)
 }
