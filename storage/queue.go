@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
@@ -33,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -112,8 +112,7 @@ type queueImpl interface {
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it.
-	// TODO(nvanbenschoten) this should take a context.Context.
-	process(hlc.Timestamp, *Replica, config.SystemConfig) error
+	process(context.Context, hlc.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -204,7 +203,12 @@ type baseQueue struct {
 // maxSize doesn't prevent new replicas from being added, it just
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
-func makeBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, cfg queueConfig) baseQueue {
+func makeBaseQueue(
+	name string,
+	impl queueImpl,
+	gossip *gossip.Gossip,
+	cfg queueConfig,
+) baseQueue {
 	bq := baseQueue{
 		name:        name,
 		impl:        impl,
@@ -429,13 +433,15 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		return nil
 	}
 
+	sp := repl.store.Tracer().StartSpan(bq.name)
+	ctx := opentracing.ContextWithSpan(repl.context(context.Background()), sp)
+	log.Trace(ctx, fmt.Sprintf("queue start for range %d", repl.RangeID))
+	defer sp.Finish()
+
 	// If the queue requires a replica to have the range leader lease in
 	// order to be processed, check whether this replica has leader lease
 	// and renew or acquire if necessary.
 	if bq.needsLeaderLease {
-		sp := repl.store.Tracer().StartSpan(bq.name)
-		ctx := opentracing.ContextWithSpan(repl.context(context.Background()), sp)
-		defer sp.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {
 			if _, harmless := err.GetDetail().(*roachpb.NotLeaderError); harmless {
@@ -444,14 +450,16 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 			}
 			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
 		}
+		log.Trace(ctx, "got range lease")
 	}
 
 	bq.eventLog.VInfof(log.V(3), "%s: processing", repl)
 	start := timeutil.Now()
-	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
+	if err := bq.impl.process(ctx, clock.Now(), repl, cfg); err != nil {
 		return err
 	}
 	bq.eventLog.VInfof(log.V(2), "%s: done: %s", repl, timeutil.Since(start))
+	log.Trace(ctx, "done")
 	return nil
 }
 
