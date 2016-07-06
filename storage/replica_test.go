@@ -6168,7 +6168,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
-	if _, err := firstRng.applySnapshot(snap); err != nil {
+	if _, err := firstRng.applySnapshot(snap, normalSnapshot); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
