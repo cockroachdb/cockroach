@@ -26,7 +26,7 @@ fi
 # Relative path from the top-level cockroach directory to the current script.
 relative_path_to_self="$(basename $(cd $(dirname $0); pwd))/$(basename $0)"
 
-# Build the cockroach and test binaries.
+# Build the CockroachDB binary.
 $(dirname $0)/builder.sh ${relative_path_to_self} docker
 
 # Build the image.
