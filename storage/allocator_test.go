@@ -184,23 +184,31 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	return stopper, g, storePool, a, manualClock
 }
 
-// mockStorePool sets up a collection of a alive and dead stores in the
-// store pool for testing purposes.
-func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID) {
+// mockStorePool sets up a collection of a alive and dead stores in the store
+// pool for testing purposes. It also adds dead replicas to the stores and
+// ranges in deadReplicas.
+func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID, deadReplicas []roachpb.ReplicaIdent) {
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
 	storePool.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
-		storePool.mu.stores[storeID] = &storeDetail{
-			dead: false,
-			desc: &roachpb.StoreDescriptor{StoreID: storeID},
-		}
+		detail := newStoreDetail()
+		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		storePool.mu.stores[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
-		storePool.mu.stores[storeID] = &storeDetail{
-			dead: true,
-			desc: &roachpb.StoreDescriptor{StoreID: storeID},
+		detail := newStoreDetail()
+		detail.dead = true
+		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		storePool.mu.stores[storeID] = detail
+	}
+	for storeID, detail := range storePool.mu.stores {
+		for _, replica := range deadReplicas {
+			if storeID != replica.Replica.StoreID {
+				continue
+			}
+			detail.deadReplicas[replica.RangeID] = append(detail.deadReplicas[replica.RangeID], replica.Replica)
 		}
 	}
 }
@@ -576,8 +584,19 @@ func TestAllocatorComputeAction(t *testing.T) {
 	stopper, _, sp, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
-	// Set up seven stores. Stores six and seven are marked as dead.
-	mockStorePool(sp, []roachpb.StoreID{1, 2, 3, 4, 5}, []roachpb.StoreID{6, 7})
+	// Set up eight stores. Stores six and seven are marked as dead. Replica eight
+	// is dead.
+	mockStorePool(sp,
+		[]roachpb.StoreID{1, 2, 3, 4, 5, 8},
+		[]roachpb.StoreID{6, 7},
+		[]roachpb.ReplicaIdent{{
+			RangeID: 0,
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    8,
+				StoreID:   8,
+				ReplicaID: 8,
+			},
+		}})
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
@@ -586,7 +605,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
-		// Needs Three replicas, two are on dead stores.
+		// Needs three replicas, two are on dead stores.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -624,7 +643,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorRemoveDead,
 		},
-		// Needs Three replicas, one is on a dead store.
+		// Needs three replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -657,6 +676,44 @@ func TestAllocatorComputeAction(t *testing.T) {
 						StoreID:   6,
 						NodeID:    6,
 						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: AllocatorRemoveDead,
+		},
+		// Needs three replicas, one is dead.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []roachpb.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   8,
+						NodeID:    8,
+						ReplicaID: 8,
 					},
 				},
 			},
@@ -968,7 +1025,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
 		}
-		if tcase.expectedAction != AllocatorNoop && priority >= lastPriority {
+		if tcase.expectedAction != AllocatorNoop && priority > lastPriority {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority

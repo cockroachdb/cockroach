@@ -139,6 +139,31 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
+                    "name": "ReplicaIdent",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int64",
+                            "name": "range_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "RangeID",
+                                "(gogoproto.casttype)": "RangeID"
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "ReplicaDescriptor",
+                            "name": "replica",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
                     "name": "RangeDescriptor",
                     "fields": [
                         {
@@ -295,6 +320,31 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "type": "StoreCapacity",
                             "name": "capacity",
                             "id": 4,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "StoreDeadReplicas",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "store_id",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.customname)": "StoreID",
+                                "(gogoproto.casttype)": "StoreID"
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "ReplicaIdent",
+                            "name": "replicas",
+                            "id": 2,
                             "options": {
                                 "(gogoproto.nullable)": false
                             }
