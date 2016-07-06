@@ -575,6 +575,77 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	})
 }
 
+// TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
+// will notice corrupted replicas and replace them.
+func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	store0 := mtc.stores[0]
+	store2 := mtc.stores[2]
+
+	store2.TestingKnobs().TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
+				return roachpb.NewError(storage.NewReplicaCorruptionError(errors.New("test")))
+			}
+			return nil
+		}
+
+	// Initialize the gossip network.
+	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
+	for _, s := range mtc.stores {
+		desc, err := s.Descriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		storeDescs = append(storeDescs, desc)
+	}
+	for _, g := range mtc.gossips {
+		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
+	}
+
+	// Once we know our peers, trigger a scan.
+	store0.ForceReplicationScanAndProcess()
+
+	// The range and descriptor should become available on every node.
+	util.SucceedsSoon(t, func() error {
+		for _, s := range mtc.stores {
+			r := s.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
+			if r == nil {
+				return errors.Errorf("expected replica for keys \"a\" - \"b\"")
+			}
+			if _, err := r.GetReplicaDescriptor(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	corruptRep, err := store2.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	args := putArgs(roachpb.Key("boom"), []byte("value"))
+	if _, err := client.SendWrapped(rg1(store0), nil, &args); err != nil {
+		t.Fatal(err)
+	}
+	// maybeSetCorrupt should have been called.
+
+	util.SucceedsSoon(t, func() error {
+		store0.ForceReplicationScanAndProcess()
+		reps := store0.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).Desc().Replicas
+		for _, rep := range reps {
+			if rep == corruptRep {
+				return errors.Errorf("expected corrupt replica %+v to be removed from %+v", rep, reps)
+			}
+		}
+		return nil
+	})
+}
+
 // getRangeMetadata retrieves the current range descriptor for the target
 // range.
 func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roachpb.RangeDescriptor {

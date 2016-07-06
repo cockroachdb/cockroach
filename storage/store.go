@@ -2174,7 +2174,10 @@ func (s *Store) processRaft() {
 				sem.acquire()
 				go func(r *Replica) {
 					if err := r.handleRaftReady(); err != nil {
-						panic(err) // TODO(bdarnell)
+						// Silently ignore corruption errors.
+						if _, ok := err.(*roachpb.ReplicaCorruptionError); !ok {
+							panic(err) // TODO(bdarnell)
+						}
 					}
 					wg.Done()
 					sem.release()
