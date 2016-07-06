@@ -299,6 +299,9 @@ func (e *Executor) Prepare(
 	session *Session,
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
+	if log.V(2) {
+		log.Infof("preparing statement: %s", query)
+	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
