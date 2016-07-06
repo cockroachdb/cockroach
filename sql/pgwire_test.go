@@ -765,13 +765,14 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
-			"CREATE TABLE d.types (i int, f float, s string, b bytes, d date, m timestamp, n interval, o bool, e decimal)",
+			"CREATE TABLE d.types (i int, f float, s string, b bytes, d date, m timestamp, z timestamp with time zone, n interval, o bool, e decimal)",
 			[]preparedExecTest{
 				base,
 			},
 		},
 		{
-			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+			// TODO(dt, nvanbenschoten): can we avoid this cast? #7647
+			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7::timetamptz, $8, $9, $10)",
 			[]preparedExecTest{
 				base.RowsAffected(1).SetArgs(
 					int64(0),
@@ -780,6 +781,7 @@ func TestPGPreparedExec(t *testing.T) {
 					[]byte{},
 					time.Time{}, // date
 					time.Time{}, // timestamp
+					time.Time{}, // timestamptz
 					time.Hour.String(),
 					true,
 					"0.0", // decimal

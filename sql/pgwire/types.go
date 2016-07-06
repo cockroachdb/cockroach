@@ -373,20 +373,21 @@ var (
 		oid.T_numeric:     parser.TypeDecimal,
 		oid.T_text:        parser.TypeString,
 		oid.T_timestamp:   parser.TypeTimestamp,
-		oid.T_timestamptz: parser.TypeTimestamp,
+		oid.T_timestamptz: parser.TypeTimestampTZ,
 		oid.T_varchar:     parser.TypeString,
 	}
 	// Using reflection to support unhashable types.
 	datumToOid = map[reflect.Type]oid.Oid{
-		reflect.TypeOf(parser.TypeBool):      oid.T_bool,
-		reflect.TypeOf(parser.TypeBytes):     oid.T_bytea,
-		reflect.TypeOf(parser.TypeDate):      oid.T_date,
-		reflect.TypeOf(parser.TypeFloat):     oid.T_float8,
-		reflect.TypeOf(parser.TypeInt):       oid.T_int8,
-		reflect.TypeOf(parser.TypeInterval):  oid.T_interval,
-		reflect.TypeOf(parser.TypeDecimal):   oid.T_numeric,
-		reflect.TypeOf(parser.TypeString):    oid.T_text,
-		reflect.TypeOf(parser.TypeTimestamp): oid.T_timestamptz,
+		reflect.TypeOf(parser.TypeBool):        oid.T_bool,
+		reflect.TypeOf(parser.TypeBytes):       oid.T_bytea,
+		reflect.TypeOf(parser.TypeDate):        oid.T_date,
+		reflect.TypeOf(parser.TypeFloat):       oid.T_float8,
+		reflect.TypeOf(parser.TypeInt):         oid.T_int8,
+		reflect.TypeOf(parser.TypeInterval):    oid.T_interval,
+		reflect.TypeOf(parser.TypeDecimal):     oid.T_numeric,
+		reflect.TypeOf(parser.TypeString):      oid.T_text,
+		reflect.TypeOf(parser.TypeTimestamp):   oid.T_timestamp,
+		reflect.TypeOf(parser.TypeTimestampTZ): oid.T_timestamptz,
 	}
 )
 
