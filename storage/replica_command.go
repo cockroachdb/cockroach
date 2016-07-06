@@ -2262,7 +2262,7 @@ func (r *Replica) splitTrigger(
 	// from it below.
 	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
 	if err != nil {
-		return errors.Errorf("unable to write initial state: %s", err)
+		return errors.Wrap(err, "unable to write initial state")
 	}
 
 	rightMS := deltaMS
