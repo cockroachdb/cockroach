@@ -78,7 +78,7 @@ func defaultBinary() string {
 	if len(gopath) == 0 {
 		return ""
 	}
-	return gopath[0] + "/bin/linux_amd64/cockroach"
+	return gopath[0] + "/bin/docker_amd64/cockroach"
 }
 
 func exists(path string) bool {
