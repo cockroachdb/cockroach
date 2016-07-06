@@ -496,19 +496,21 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount) {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
 		}
+		// We have to loop checking the following conditions because the increment
+		// of testQueue.processed does not happen atomically with the replica being
+		// placed in purgatory.
+		bq.mu.Lock() // Protect access to purgatory and priorityQ.
+		defer bq.mu.Unlock()
+		// Verify that the size of the purgatory map is correct.
+		if l := len(bq.mu.purgatory); l != replicaCount {
+			return errors.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
+		}
+		// ...and priorityQ should be empty.
+		if l := len(bq.mu.priorityQ); l != 0 {
+			return errors.Errorf("expected empty priorityQ; got %d", l)
+		}
 		return nil
 	})
-
-	bq.mu.Lock() // Protect access to purgatory and priorityQ.
-	// Verify that the size of the purgatory map is correct.
-	if l := len(bq.mu.purgatory); l != replicaCount {
-		t.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
-	}
-	// ...and priorityQ should be empty.
-	if l := len(bq.mu.priorityQ); l != 0 {
-		t.Errorf("expected empty priorityQ; got %d", l)
-	}
-	bq.mu.Unlock()
 
 	// Now, signal that purgatoried replicas should retry.
 	testQueue.pChan <- struct{}{}
@@ -517,19 +519,21 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*2) {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
 		}
+		// We have to loop checking the following conditions because the increment
+		// of testQueue.processed does not happen atomically with the replica being
+		// placed in purgatory.
+		bq.mu.Lock() // Protect access to purgatory and priorityQ.
+		defer bq.mu.Unlock()
+		// Verify the replicas are still in purgatory.
+		if l := len(bq.mu.purgatory); l != replicaCount {
+			return errors.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
+		}
+		// ...and priorityQ should be empty.
+		if l := len(bq.mu.priorityQ); l != 0 {
+			return errors.Errorf("expected empty priorityQ; got %d", l)
+		}
 		return nil
 	})
-
-	bq.mu.Lock() // Protect access to purgatory and priorityQ.
-	// Verify the replicas are still in purgatory.
-	if l := len(bq.mu.purgatory); l != replicaCount {
-		t.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
-	}
-	// ...and priorityQ should be empty.
-	if l := len(bq.mu.priorityQ); l != 0 {
-		t.Errorf("expected empty priorityQ; got %d", l)
-	}
-	bq.mu.Unlock()
 
 	// Remove error and reprocess.
 	testQueue.err = nil
