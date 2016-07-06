@@ -1,7 +1,7 @@
-statement error unknown statement type: \*parser.Prepare
+statement error unimplemented: Prepared statements are supported only via the Postgres wire protocol (see issue https://github.com/cockroachdb/cockroach/issues/7568)
 PREPARE a AS SELECT 1
 
-statement error unknown statement type: \*parser.Execute
+statement error unimplemented: Executing prepared statements is supported only via the Postgres wire protocol (see issue https://github.com/cockroachdb/cockroach/issues/7568)
 EXECUTE a
 
 # TODO(nvanbenschoten) This deserves more robust testing, but that is hard
