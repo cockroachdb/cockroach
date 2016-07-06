@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -887,6 +888,16 @@ func (e *Executor) execStmtInOpenTxn(
 			// txn in a different state.
 			err = errNotRetriable
 		}
+		txnState.updateStateAndCleanupOnErr(err, e)
+		return Result{Err: err}, err
+	case *parser.Prepare:
+		err := util.UnimplementedWithIssueErrorf(7568,
+			"Prepared statements are supported only via the Postgres wire protocol")
+		txnState.updateStateAndCleanupOnErr(err, e)
+		return Result{Err: err}, err
+	case *parser.Execute:
+		err := util.UnimplementedWithIssueErrorf(7568,
+			"Executing prepared statements is supported only via the Postgres wire protocol")
 		txnState.updateStateAndCleanupOnErr(err, e)
 		return Result{Err: err}, err
 	case *parser.Deallocate:
