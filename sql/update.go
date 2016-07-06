@@ -62,6 +62,8 @@ type editNodeRun struct {
 	rows      planNode
 	tw        tableWriter
 	resultRow parser.DTuple
+
+	explain explainMode
 }
 
 func (r *editNodeRun) initEditNode(en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Datum) error {
@@ -287,6 +289,10 @@ func (u *updateNode) Next() (bool, error) {
 		return false, err
 	}
 
+	if u.run.explain == explainDebug {
+		return true, nil
+	}
+
 	tracing.AnnotateTrace()
 
 	oldValues := u.run.rows.Values()
@@ -379,6 +385,10 @@ func (u *updateNode) Values() parser.DTuple {
 }
 
 func (u *updateNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	u.run.explain = mode
 	u.run.rows.MarkDebug(mode)
 }
 
