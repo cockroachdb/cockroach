@@ -67,6 +67,7 @@ type storeDetail struct {
 	throttledUntil  time.Time
 	lastUpdatedTime hlc.Timestamp // This is also the priority for the queue.
 	index           int           // index of the item in the heap, required for heap.Interface
+	deadReplicas    map[roachpb.RangeID][]roachpb.ReplicaDescriptor
 }
 
 // markDead sets the storeDetail to dead(inactive).
@@ -230,6 +231,8 @@ func NewStorePool(
 	heap.Init(&sp.mu.queue)
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
+	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
+	g.RegisterCallback(deadReplicasRegex, sp.deadReplicasGossipUpdate)
 	sp.start(stopper)
 
 	return sp
@@ -246,14 +249,27 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	// Does this storeDetail exist yet?
-	detail, ok := sp.mu.stores[storeDesc.StoreID]
-	if !ok {
-		// Setting index to -1 ensures this gets added to the queue.
-		detail = &storeDetail{index: -1}
-		sp.mu.stores[storeDesc.StoreID] = detail
-	}
+	detail := sp.getStoreDetailLocked(storeDesc.StoreID)
 	detail.markAlive(sp.clock.Now(), &storeDesc)
 	sp.mu.queue.enqueue(detail)
+}
+
+// deadReplicasGossipUpdate is the gossip callback used to keep the StorePool up to date.
+func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
+	var replicas roachpb.StoreDeadReplicas
+	if err := content.GetProto(&replicas); err != nil {
+		log.Error(err)
+		return
+	}
+
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	detail := sp.getStoreDetailLocked(replicas.StoreID)
+	deadReplicas := make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor)
+	for _, r := range replicas.Replicas {
+		deadReplicas[r.RangeID] = append(deadReplicas[r.RangeID], r.Replica)
+	}
+	detail.deadReplicas = deadReplicas
 }
 
 // start will run continuously and mark stores as offline if they haven't been
@@ -297,10 +313,19 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 	})
 }
 
+// newStoreDetail makes a new storeDetail struct. It sets index to be -1 to
+// ensure that it will be processed by a queue immediately.
+func newStoreDetail() *storeDetail {
+	return &storeDetail{
+		index:        -1,
+		deadReplicas: make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor),
+	}
+}
+
 // getStoreDetailLocked returns the store detail for the given storeID.
 // The lock must be held *in write mode* even though this looks like a
 // read-only method.
-func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) storeDetail {
+func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail {
 	detail, ok := sp.mu.stores[storeID]
 	if !ok {
 		// We don't have this store yet (this is normal when we're
@@ -308,13 +333,13 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) storeDetail {
 		// network). The first time this occurs, presume the store is
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
-		detail = &storeDetail{index: -1}
+		detail = newStoreDetail()
 		sp.mu.stores[storeID] = detail
 		detail.markAlive(sp.clock.Now(), nil)
 		sp.mu.queue.enqueue(detail)
 	}
 
-	return *detail
+	return detail
 }
 
 // getStoreDescriptor returns the latest store descriptor for the given
@@ -332,15 +357,26 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) *roachpb.StoreD
 }
 
 // deadReplicas returns any replicas from the supplied slice that are
-// located on dead stores.
-func (sp *StorePool) deadReplicas(repls []roachpb.ReplicaDescriptor) []roachpb.ReplicaDescriptor {
+// located on dead stores or dead replicas for the provided rangeID.
+func (sp *StorePool) deadReplicas(rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor) []roachpb.ReplicaDescriptor {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
 	var deadReplicas []roachpb.ReplicaDescriptor
+outer:
 	for _, repl := range repls {
-		if sp.getStoreDetailLocked(repl.StoreID).dead {
+		detail := sp.getStoreDetailLocked(repl.StoreID)
+		// Mark replica as dead if store is dead.
+		if detail.dead {
 			deadReplicas = append(deadReplicas, repl)
+			continue
+		}
+
+		for _, deadRepl := range detail.deadReplicas[rangeID] {
+			if deadRepl.ReplicaID == repl.ReplicaID {
+				deadReplicas = append(deadReplicas, repl)
+				continue outer
+			}
 		}
 	}
 	return deadReplicas
