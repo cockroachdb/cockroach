@@ -28,11 +28,12 @@ import (
 func TestDataKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		name        string
-		source      string
-		timestamp   int64
-		resolution  Resolution
-		expectedLen int
+		name           string
+		source         string
+		timestamp      int64
+		resolution     Resolution
+		expectedLen    int
+		expectedPretty string
 	}{
 		{
 			"test.metric",
@@ -40,6 +41,7 @@ func TestDataKeys(t *testing.T) {
 			0,
 			Resolution10s,
 			30,
+			"/System/tsd/test.metric/testsource/10s/1970-01-01T00:00:00Z",
 		},
 		{
 			"test.no.source",
@@ -47,6 +49,7 @@ func TestDataKeys(t *testing.T) {
 			1429114700000000000,
 			Resolution10s,
 			26,
+			"/System/tsd/test.no.source//10s/2015-04-15T16:00:00Z",
 		},
 		{
 			"",
@@ -54,16 +57,17 @@ func TestDataKeys(t *testing.T) {
 			-1429114700000000000,
 			Resolution10s,
 			12,
+			"/System/tsd///10s/1924-09-18T08:00:00Z",
 		},
 	}
 
 	for i, tc := range testCases {
 		encoded := MakeDataKey(tc.name, tc.source, tc.resolution, tc.timestamp)
 		if !bytes.HasPrefix(encoded, keys.TimeseriesPrefix) {
-			t.Errorf("case %d, encoded key %v did not have time series data prefix", i, encoded)
+			t.Errorf("%d: encoded key %v did not have time series data prefix", i, encoded)
 		}
 		if a, e := len(encoded), tc.expectedLen; a != e {
-			t.Errorf("case %d, encoded length %d did not match expected %d", i, a, e)
+			t.Errorf("%d: encoded length %d did not match expected %d", i, a, e)
 		}
 
 		// Normalize timestamp of test case; we expect MakeDataKey to
@@ -78,7 +82,10 @@ func TestDataKeys(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(d, tc) {
-			t.Errorf("case %d, decoded values %v did not match expected %v", i, d, tc)
+			t.Errorf("%d: decoded values %v did not match expected %v", i, d, tc)
+		}
+		if pretty := keys.PrettyPrint(encoded); tc.expectedPretty != pretty {
+			t.Errorf("%d: expected %s, but got %s", i, tc.expectedPretty, pretty)
 		}
 	}
 }
