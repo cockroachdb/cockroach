@@ -566,6 +566,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 	testCases := []struct {
 		zone           config.ZoneConfig
 		desc           roachpb.RangeDescriptor
+		deadReplicas   []roachpb.ReplicaDescriptor
 		expectedAction AllocatorAction
 	}{
 		// Needs Three replicas, two are on dead stores.
@@ -640,6 +641,51 @@ func TestAllocatorComputeAction(t *testing.T) {
 						NodeID:    6,
 						ReplicaID: 6,
 					},
+				},
+			},
+			expectedAction: AllocatorRemoveDead,
+		},
+		// Needs Three replicas, one is dead.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []roachpb.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			deadReplicas: []roachpb.ReplicaDescriptor{
+				{
+					StoreID:   3,
+					NodeID:    3,
+					ReplicaID: 3,
 				},
 			},
 			expectedAction: AllocatorRemoveDead,
@@ -945,12 +991,12 @@ func TestAllocatorComputeAction(t *testing.T) {
 
 	lastPriority := float64(999999999)
 	for i, tcase := range testCases {
-		action, priority := a.ComputeAction(tcase.zone, &tcase.desc)
+		action, priority := a.ComputeAction(tcase.zone, &tcase.desc, tcase.deadReplicas)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
 		}
-		if tcase.expectedAction != AllocatorNoop && priority >= lastPriority {
+		if tcase.expectedAction != AllocatorNoop && priority > lastPriority {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority
@@ -962,7 +1008,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	a := MakeAllocator(nil /* storePool */, AllocatorOptions{})
-	action, priority := a.ComputeAction(config.ZoneConfig{}, nil)
+	action, priority := a.ComputeAction(config.ZoneConfig{}, nil, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
 	}

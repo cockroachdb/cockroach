@@ -96,7 +96,7 @@ func (rq *replicateQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(*zone, desc)
+	action, priority := rq.allocator.ComputeAction(*zone, desc, repl.deadReplicas())
 	if action != AllocatorNoop {
 		return true, priority
 	}
@@ -117,11 +117,12 @@ func (rq *replicateQueue) process(
 	if err != nil {
 		return err
 	}
-	action, _ := rq.allocator.ComputeAction(*zone, desc)
+	deadReplicas := repl.deadReplicas()
+	action, _ := rq.allocator.ComputeAction(*zone, desc, deadReplicas)
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas := rq.allocator.storePool.deadReplicas(desc.Replicas)
+	deadReplicas = append(deadReplicas, rq.allocator.storePool.deadReplicas(desc.Replicas)...)
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {
@@ -174,9 +175,9 @@ func (rq *replicateQueue) process(
 		}
 		deadReplica := deadReplicas[0]
 		if log.V(1) {
-			log.Infof("range %d: removing replica %+v from dead store", repl.RangeID, deadReplica)
+			log.Infof("range %d: removing dead replica %+v from store", repl.RangeID, deadReplicas)
 		}
-		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
+		log.Trace(ctx, fmt.Sprintf("removing dead replica %+v from store", deadReplica))
 		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
