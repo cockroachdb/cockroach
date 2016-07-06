@@ -354,6 +354,9 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 
 // releaseLeases implements the SchemaAccessor interface.
 func (p *planner) releaseLeases() {
+	if log.V(2) {
+		log.Infof("planner releasing leases")
+	}
 	if p.leases != nil {
 		for _, lease := range p.leases {
 			if err := p.leaseMgr.Release(lease); err != nil {
