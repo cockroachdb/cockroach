@@ -437,6 +437,12 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 
+	pErr, err := loadReplicaDestroyedError(r.store.Engine(), r.RangeID)
+	if err != nil {
+		return err
+	}
+	r.mu.destroyed = pErr.GetDetail()
+
 	if r.isInitializedLocked() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
@@ -2049,7 +2055,7 @@ func (r *Replica) applyRaftCommand(
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return nil, proposalResult{}, roachpb.NewError(newReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
+		return nil, proposalResult{}, roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
@@ -2108,7 +2114,7 @@ func (r *Replica) applyRaftCommand(
 	// TODO(tschottdorf): with proposer-eval'ed KV, the batch would not be
 	// committed at this point. Instead, it would be added to propResult.
 	if err := batch.Commit(); err != nil {
-		rErr = roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
+		rErr = roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
 		r.mu.Lock()
 		// Update cached appliedIndex if we were able to set the applied index
@@ -2201,7 +2207,7 @@ func (r *Replica) checkIfTxnAborted(
 	var entry roachpb.AbortCacheEntry
 	aborted, err := r.abortCache.Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not read from abort cache"), err))
+		return roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("could not read from abort cache"), err))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
@@ -2681,9 +2687,9 @@ func (r *Replica) maybeGossipSystemConfig() {
 	r.systemDBHash = hash
 }
 
-// newReplicaCorruptionError creates a new error indicating a corrupt replica,
+// NewReplicaCorruptionError creates a new error indicating a corrupt replica,
 // with the supplied list of errors given as history.
-func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
+func NewReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 	var errMsg string
 	for i := range errs {
 		err := errs[len(errs)-i-1]
@@ -2714,9 +2720,20 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // to just recompute its stats in the background when one occurs.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		log.Errorf(context.TODO(), "%s: stalling replica due to: %s", r, cErr.ErrorMsg)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+
+		log.Errorc(context.TODO(), "%s: stalling replica due to: %s", r, cErr.ErrorMsg)
 		cErr.Processed = true
-		return roachpb.NewError(cErr)
+		r.mu.destroyed = cErr
+		pErr = roachpb.NewError(cErr)
+
+		// Try to persist the destroyed error message. If the underlying store is
+		// corrupted the error won't be processed and a panic will occur.
+		if err := setReplicaDestroyedError(r.store.Engine(), r.RangeID, pErr); err != nil {
+			cErr.Processed = false
+			return roachpb.NewError(cErr)
+		}
 	}
 	return pErr
 }

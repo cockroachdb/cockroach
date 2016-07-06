@@ -509,7 +509,9 @@ func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stoppe
 		log.Infof(context.TODO(), "bootstrapped store %s", s)
 		// Done regularly in Node.startGossip, but this cuts down the time
 		// until this store is used for range allocations.
-		s.GossipStore()
+		if err := s.GossipStore(ctx); err != nil {
+			log.Warningc(ctx, "error doing initial gossiping: %s", err)
+		}
 	}
 	// write a new status summary after all stores have been bootstrapped; this
 	// helps the UI remain responsive when new nodes are added.
@@ -576,10 +578,11 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 	})
 }
 
-// gossipStores broadcasts each store to the gossip network.
+// gossipStores broadcasts each store and dead replica to the gossip network.
 func (n *Node) gossipStores() {
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
 		s.GossipStore()
+		s.GossipDeadReplicas()
 		return nil
 	}); err != nil {
 		panic(err)
@@ -836,7 +839,7 @@ func (n *Node) Reserve(
 	resp := &roachpb.ReservationResponse{}
 	err := n.execStoreCommand(req.StoreRequestHeader,
 		func(s *storage.Store) error {
-			*resp = s.Reserve(*req)
+			*resp = s.Reserve(ctx, *req)
 			return nil
 		})
 	return resp, err

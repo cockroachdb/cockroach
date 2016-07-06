@@ -99,3 +99,12 @@ message StoreDescriptor {
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
 }
+
+// StoreDeadReplicas holds a storeID and a list of dead replicas on that store.
+// Used to let the range lease holder know about corrupted or otherwise
+// destroyed replicas that should be transferred to a different store.
+message StoreDeadReplicas {
+  optional int32 store_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+  repeated ReplicaIdent replicas = 2 [(gogoproto.nullable) = false];
+}

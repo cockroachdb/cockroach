@@ -78,7 +78,6 @@ func (sg *StoreGossiper) GossipWithFunction(storeIDs []roachpb.StoreID, gossipFn
 	for _, storeID := range storeIDs {
 		storeKey := gossip.MakeStoreKey(storeID)
 		sg.storeKeyMap[storeKey] = struct{}{}
-
 	}
 
 	gossipFn()

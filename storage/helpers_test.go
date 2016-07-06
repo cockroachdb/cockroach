@@ -156,3 +156,8 @@ func (r *Replica) GetLastFromReplicaDesc() roachpb.ReplicaDescriptor {
 	defer r.mu.Unlock()
 	return r.mu.lastFromReplica
 }
+
+// GetDeadReplicas exports s.deadReplicas for tests.
+func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
+	return s.deadReplicas()
+}

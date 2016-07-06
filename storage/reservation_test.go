@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -58,11 +60,16 @@ func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedB
 	if e, a := reservations, int(b.metrics.reservedReplicaCount.Count()); e != a {
 		t.Error(errors.Errorf("expected total reservations to be %d, got %d", e, a))
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if e, a := queueLen, len(b.mu.queue); e != a {
+	if e, a := queueLen, bookieQueueLen(b); e != a {
 		t.Error(errors.Errorf("expected total queue length to be %d, got %d", e, a))
 	}
+}
+
+// bookieQueueLen returns the length of the bookie queue.
+func bookieQueueLen(b *bookie) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.mu.queue)
 }
 
 // TestBookieReserve ensures that you can never have more than one reservation
@@ -75,11 +82,12 @@ func TestBookieReserve(t *testing.T) {
 
 	testCases := []struct {
 		rangeID         int
-		reserve         bool  // true for reserve, false for fill
-		expSuc          bool  // is the operation expected to succeed
-		expOut          int   // expected number of reserved replicas
-		expBytes        int64 // expected number of bytes being reserved
-		expReservations int   // expected number of reservations held in the bookie's queue
+		reserve         bool                   // true for reserve, false for fill
+		expSuc          bool                   // is the operation expected to succeed
+		expOut          int                    // expected number of reserved replicas
+		expBytes        int64                  // expected number of bytes being reserved
+		expReservations int                    // expected number of reservations held in the bookie's queue
+		deadReplicas    []roachpb.ReplicaIdent // dead replicas that we should not reserve over
 	}{
 		{rangeID: 1, reserve: true, expSuc: true, expOut: 1, expBytes: 1, expReservations: 1},
 		{rangeID: 1, reserve: true, expSuc: false, expOut: 1, expBytes: 1, expReservations: 1},
@@ -94,6 +102,9 @@ func TestBookieReserve(t *testing.T) {
 		{rangeID: 3, reserve: false, expSuc: true, expOut: 1, expBytes: 1, expReservations: 4},
 		{rangeID: 1, reserve: false, expSuc: true, expOut: 0, expBytes: 0, expReservations: 4},
 		{rangeID: 2, reserve: false, expSuc: false, expOut: 0, expBytes: 0, expReservations: 4},
+		{rangeID: 0, reserve: true, expSuc: false, expOut: 0, expBytes: 0, expReservations: 4, deadReplicas: []roachpb.ReplicaIdent{{RangeID: 0}}},
+		{rangeID: 0, reserve: true, expSuc: true, expOut: 1, expBytes: 0, expReservations: 5, deadReplicas: []roachpb.ReplicaIdent{{RangeID: 1}}},
+		{rangeID: 0, reserve: false, expSuc: true, expOut: 0, expBytes: 0, expReservations: 5},
 	}
 
 	for i, testCase := range testCases {
@@ -107,7 +118,7 @@ func TestBookieReserve(t *testing.T) {
 				RangeID:   roachpb.RangeID(testCase.rangeID),
 				RangeSize: int64(testCase.rangeID),
 			}
-			if resp := b.Reserve(req); resp.Reserved != testCase.expSuc {
+			if resp := b.Reserve(context.Background(), req, testCase.deadReplicas); resp.Reserved != testCase.expSuc {
 				if testCase.expSuc {
 					t.Errorf("%d: expected a successful reservation, was rejected", i)
 				} else {
@@ -138,12 +149,14 @@ func TestBookieReserve(t *testing.T) {
 		RangeID:   100,
 		RangeSize: 100,
 	}
+	queueLen := bookieQueueLen(b)
 	for i := 1; i < 10; i++ {
-		if !b.Reserve(repeatReq).Reserved {
+		if !b.Reserve(context.Background(), repeatReq, nil).Reserved {
 			t.Errorf("%d: could not add repeated reservation", i)
 		}
-		verifyBookie(t, b, 1, 4+i, 100)
+		verifyBookie(t, b, 1, queueLen+i, 100)
 	}
+	queueLen = bookieQueueLen(b)
 
 	// Test rejecting a reservation due to disk space constraints.
 	overfilledReq := roachpb.ReservationRequest{
@@ -160,11 +173,10 @@ func TestBookieReserve(t *testing.T) {
 	b.metrics.available.Update(b.mu.size + (2 * overfilledReq.RangeSize) - 1)
 	b.mu.Unlock()
 
-	if b.Reserve(overfilledReq).Reserved {
+	if b.Reserve(context.Background(), overfilledReq, nil).Reserved {
 		t.Errorf("expected reservation to fail due to disk space constraints, but it succeeded")
 	}
-	verifyBookie(t, b, 1, 13, 100) // The same numbers from the last call to verifyBookie.
-
+	verifyBookie(t, b, 1, queueLen, 100) // The same numbers from the last call to verifyBookie.
 }
 
 // TestBookieReserveMaxRanges ensures that over-booking doesn't occur when there
@@ -187,7 +199,7 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 			RangeID:   roachpb.RangeID(i),
 			RangeSize: 1,
 		}
-		if !b.Reserve(req).Reserved {
+		if !b.Reserve(context.Background(), req, nil).Reserved {
 			t.Errorf("%d: could not add reservation", i)
 		}
 		verifyBookie(t, b, i, i, int64(i))
@@ -201,7 +213,7 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 		RangeID:   roachpb.RangeID(previousReserved + 1),
 		RangeSize: 1,
 	}
-	if b.Reserve(overbookedReq).Reserved {
+	if b.Reserve(context.Background(), overbookedReq, nil).Reserved {
 		t.Errorf("expected reservation to fail due to too many already existing reservations, but it succeeded")
 	}
 	// The same numbers from the last call to verifyBookie.
@@ -228,7 +240,7 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 			RangeID:   roachpb.RangeID(i),
 			RangeSize: 1,
 		}
-		if !b.Reserve(req).Reserved {
+		if !b.Reserve(context.Background(), req, nil).Reserved {
 			t.Errorf("%d: could not add reservation", i)
 		}
 		verifyBookie(t, b, i, i, int64(i))
@@ -242,7 +254,7 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 		RangeID:   roachpb.RangeID(previousReservedBytes + 1),
 		RangeSize: 1,
 	}
-	if b.Reserve(overbookedReq).Reserved {
+	if b.Reserve(context.Background(), overbookedReq, nil).Reserved {
 		t.Errorf("expected reservation to fail due to too many already existing reservations, but it succeeded")
 	}
 	// The same numbers from the last call to verifyBookie.
@@ -289,14 +301,14 @@ func TestReservationQueue(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		// Ensure all the reservations expire 100 nanoseconds apart.
 		mc.Increment(100)
-		if !b.Reserve(roachpb.ReservationRequest{
+		if !b.Reserve(context.Background(), roachpb.ReservationRequest{
 			StoreRequestHeader: roachpb.StoreRequestHeader{
 				StoreID: roachpb.StoreID(i),
 				NodeID:  roachpb.NodeID(i),
 			},
 			RangeID:   roachpb.RangeID(i),
 			RangeSize: bytesPerReservation,
-		}).Reserved {
+		}, nil).Reserved {
 			t.Fatalf("could not book a reservation for reservation number %d", i)
 		}
 	}
@@ -334,40 +346,40 @@ func TestReservationQueue(t *testing.T) {
 	// timed out, and 6, which has been filled by not timed out. Only increment
 	// by 10 here to ensure we don't expire any of the other reservations.
 	mc.Increment(10)
-	if !b.Reserve(roachpb.ReservationRequest{
+	if !b.Reserve(context.Background(), roachpb.ReservationRequest{
 		StoreRequestHeader: roachpb.StoreRequestHeader{
 			StoreID: roachpb.StoreID(11),
 			NodeID:  roachpb.NodeID(11),
 		},
 		RangeID:   roachpb.RangeID(1),
 		RangeSize: bytesPerReservation,
-	}).Reserved {
+	}, nil).Reserved {
 		t.Fatalf("could not book a reservation for reservation number 1 (second pass)")
 	}
 	verifyBookie(t, b, 6 /*reservations*/, 7 /*queue*/, 6*bytesPerReservation /*bytes*/)
 
 	mc.Increment(10)
-	if !b.Reserve(roachpb.ReservationRequest{
+	if !b.Reserve(context.Background(), roachpb.ReservationRequest{
 		StoreRequestHeader: roachpb.StoreRequestHeader{
 			StoreID: roachpb.StoreID(12),
 			NodeID:  roachpb.NodeID(12),
 		},
 		RangeID:   roachpb.RangeID(2),
 		RangeSize: bytesPerReservation,
-	}).Reserved {
+	}, nil).Reserved {
 		t.Fatalf("could not book a reservation for reservation number 2 (second pass)")
 	}
 	verifyBookie(t, b, 7 /*reservations*/, 8 /*queue*/, 7*bytesPerReservation /*bytes*/)
 
 	mc.Increment(10)
-	if !b.Reserve(roachpb.ReservationRequest{
+	if !b.Reserve(context.Background(), roachpb.ReservationRequest{
 		StoreRequestHeader: roachpb.StoreRequestHeader{
 			StoreID: roachpb.StoreID(13),
 			NodeID:  roachpb.NodeID(13),
 		},
 		RangeID:   roachpb.RangeID(6),
 		RangeSize: bytesPerReservation,
-	}).Reserved {
+	}, nil).Reserved {
 		t.Fatalf("could not book a reservation for reservation number 6 (second pass)")
 	}
 	verifyBookie(t, b, 8 /*reservations*/, 9 /*queue*/, 8*bytesPerReservation /*bytes*/)
