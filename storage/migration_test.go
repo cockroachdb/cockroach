@@ -20,11 +20,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/coreos/etcd/raft/raftpb"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/coreos/etcd/raft/raftpb"
 )
 
 func TestMigrate7310And6991(t *testing.T) {
@@ -35,21 +37,21 @@ func TestMigrate7310And6991(t *testing.T) {
 
 	desc := *testRangeDescriptor()
 
-	if err := migrate7310And6991(eng, desc); err != nil {
+	if err := migrate7310And6991(context.Background(), eng, desc); err != nil {
 		t.Fatal(err)
 	}
 
-	ts, err := loadTruncatedState(eng, desc.RangeID)
+	ts, err := loadTruncatedState(context.Background(), eng, desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	hs, err := loadHardState(eng, desc.RangeID)
+	hs, err := loadHardState(context.Background(), eng, desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rApplied, lApplied, err := loadAppliedIndex(eng, desc.RangeID)
+	rApplied, lApplied, err := loadAppliedIndex(context.Background(), eng, desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
