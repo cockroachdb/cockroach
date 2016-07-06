@@ -126,7 +126,7 @@ func (rq *replicateQueue) process(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas := rq.allocator.storePool.deadReplicas(desc.Replicas)
+	deadReplicas := rq.allocator.storePool.deadReplicas(repl.RangeID, desc.Replicas)
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {
@@ -184,9 +184,9 @@ func (rq *replicateQueue) process(
 		}
 		deadReplica := deadReplicas[0]
 		if log.V(1) {
-			log.Infof(context.TODO(), "%s: removing replica %+v from dead store", repl, deadReplica)
+			log.Infof(context.TODO(), "%s: removing dead replica %+v from store", repl, deadReplica)
 		}
-		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
+		log.Trace(ctx, fmt.Sprintf("removing dead replica %+v from store", deadReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}

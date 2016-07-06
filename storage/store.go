@@ -1352,20 +1352,34 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 }
 
 // GossipStore broadcasts the store on the gossip network.
-func (s *Store) GossipStore() {
-	ctx := s.context(context.TODO())
-
+func (s *Store) GossipStore(ctx context.Context) error {
 	storeDesc, err := s.Descriptor()
 	if err != nil {
-		log.Warningf(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
-		return
+		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
-		log.Warningf(ctx, "%s", err)
+		return err
 	}
+	return nil
+}
+
+// GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
+func (s *Store) GossipDeadReplicas(ctx context.Context) error {
+	deadReplicas := s.deadReplicas()
+	// Don't gossip if there's nothing to gossip.
+	if len(deadReplicas.Replicas) == 0 {
+		return nil
+	}
+	// Unique gossip key per store.
+	key := gossip.MakeDeadReplicasKey(s.StoreID())
+	// Gossip dead replicas.
+	if err := s.ctx.Gossip.AddInfoProto(key, &deadReplicas, ttlStoreGossip); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -1940,6 +1954,35 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
 	}, nil
+}
+
+func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deadReplicas []roachpb.ReplicaIdent
+	for rangeID, repl := range s.mu.replicas {
+		repl.mu.Lock()
+		destroyed := repl.mu.destroyed
+		replicaID := repl.mu.replicaID
+		repl.mu.Unlock()
+
+		if destroyed != nil {
+			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
+				RangeID: rangeID,
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    s.Ident.NodeID,
+					StoreID:   s.Ident.StoreID,
+					ReplicaID: replicaID,
+				},
+			})
+		}
+	}
+
+	return roachpb.StoreDeadReplicas{
+		StoreID:  s.StoreID(),
+		Replicas: deadReplicas,
+	}
 }
 
 // ReplicaCount returns the number of replicas contained by this store.

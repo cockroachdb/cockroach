@@ -27,6 +27,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -589,6 +590,86 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 			r := s.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 			if r == nil {
 				return errors.Errorf("expected replica for keys \"a\" - \"b\"")
+			}
+		}
+		return nil
+	})
+}
+
+// TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
+// will notice corrupted replicas and replace them.
+func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	store0 := mtc.stores[0]
+	store2 := mtc.stores[2]
+
+	store2.TestingKnobs().TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
+				return roachpb.NewError(storage.NewReplicaCorruptionError(errors.New("test")))
+			}
+			return nil
+		}
+
+	// Initialize the gossip network.
+	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
+	for _, s := range mtc.stores {
+		desc, err := s.Descriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		storeDescs = append(storeDescs, desc)
+	}
+	for _, g := range mtc.gossips {
+		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
+	}
+
+	// Once we know our peers, trigger a scan.
+	store0.ForceReplicationScanAndProcess()
+
+	var corruptRep roachpb.ReplicaDescriptor
+	var err error
+	util.SucceedsSoon(t, func() error {
+		r := store2.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
+		if r == nil {
+			return errors.New("replica is not available yet")
+		}
+		corruptRep, err = r.GetReplicaDescriptor()
+		return err
+	})
+
+	args := putArgs(roachpb.Key("boom"), []byte("value"))
+	if _, err := client.SendWrapped(rg1(store0), nil, &args); err != nil {
+		t.Fatal(err)
+	}
+	// maybeSetCorrupt should have been called.
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		for {
+			// Gossip the dead replicas periodically since the messages aren't guaranteed
+			// to be delivered the first time.
+			if err := store2.GossipDeadReplicas(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			// Force the replication queue to process.
+			store0.ForceReplicationScanAndProcess()
+			select {
+			case <-ticker.C:
+			case <-store2.Stopper().ShouldStop():
+				return
+			}
+		}
+	}()
+
+	util.SucceedsSoon(t, func() error {
+		reps := store0.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).Desc().Replicas
+		for _, rep := range reps {
+			if proto.Equal(&rep, &corruptRep) {
+				return errors.Errorf("expected corrupt replica %+v to be removed from %+v", rep, reps)
 			}
 		}
 		return nil
@@ -1253,7 +1334,9 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
 	for _, s := range mtc.stores {
-		s.GossipStore()
+		if err := s.GossipStore(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
@@ -1279,8 +1362,12 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			mtc.manualClock.Increment(int64(tickerDur))
 
 			// Keep gossiping the alive stores.
-			mtc.stores[0].GossipStore()
-			mtc.stores[1].GossipStore()
+			if err := mtc.stores[0].GossipStore(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if err := mtc.stores[1].GossipStore(context.Background()); err != nil {
+				t.Fatal(err)
+			}
 
 			// Force the repair queues on all alive stores to run.
 			mtc.stores[0].ForceReplicationScanAndProcess()
