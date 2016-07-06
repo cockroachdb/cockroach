@@ -76,6 +76,14 @@ type joinNode struct {
 	// emptyLeft contains tuples of NULL values to use
 	// on the left for full outer joins when the filter fails.
 	emptyLeft parser.DTuple
+
+	// explain indicates whether this node is running on behalf of
+	// EXPLAIN(DEBUG).
+	explain explainMode
+
+	// doneReadingRight is used by debugNext() and DebugValues() when
+	// explain == explainDebug.
+	doneReadingRight bool
 }
 
 type joinPredicate interface {
@@ -563,6 +571,10 @@ func (n *joinNode) Ordering() orderingInfo { return n.left.Ordering() }
 
 // MarkDebug implements the planNode interface.
 func (n *joinNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
 	n.left.MarkDebug(mode)
 	n.right.MarkDebug(mode)
 }
@@ -580,23 +592,25 @@ func (n *joinNode) Start() error {
 		return err
 	}
 
-	// Load all the rows from the right side in memory.
-	v := &valuesNode{}
-	for {
-		hasRow, err := n.right.Next()
-		if err != nil {
-			return err
+	if n.explain != explainDebug {
+		// Load all the rows from the right side in memory.
+		v := &valuesNode{}
+		for {
+			hasRow, err := n.right.Next()
+			if err != nil {
+				return err
+			}
+			if !hasRow {
+				break
+			}
+			row := n.right.Values()
+			newRow := make([]parser.Datum, len(row))
+			copy(newRow, row)
+			v.rows = append(v.rows, newRow)
 		}
-		if !hasRow {
-			break
+		if len(v.rows) > 0 {
+			n.rightRows = v
 		}
-		row := n.right.Values()
-		newRow := make([]parser.Datum, len(row))
-		copy(newRow, row)
-		v.rows = append(v.rows, newRow)
-	}
-	if len(v.rows) > 0 {
-		n.rightRows = v
 	}
 
 	// Pre-allocate the space for output rows.
@@ -623,8 +637,27 @@ func (n *joinNode) Start() error {
 	return nil
 }
 
+func (n *joinNode) debugNext() (bool, error) {
+	if !n.doneReadingRight {
+		hasRightRow, err := n.right.Next()
+		if err != nil {
+			return false, err
+		}
+		if hasRightRow {
+			return true, nil
+		}
+		n.doneReadingRight = true
+	}
+
+	return n.left.Next()
+}
+
 // Next implements the planNode interface.
 func (n *joinNode) Next() (bool, error) {
+	if n.explain == explainDebug {
+		return n.debugNext()
+	}
+
 	var leftRow, rightRow parser.DTuple
 	var nRightRows int
 
@@ -733,7 +766,14 @@ func (n *joinNode) Values() parser.DTuple {
 
 // DebugValues implements the planNode interface.
 func (n *joinNode) DebugValues() debugValues {
-	// TODO(knz): not so clear yet how to report DebugValues()
-	// for JOIN.
-	return debugValues{}
+	var res debugValues
+	if !n.doneReadingRight {
+		res = n.right.DebugValues()
+	} else {
+		res = n.left.DebugValues()
+	}
+	if res.output == debugValueRow {
+		res.output = debugValueBuffered
+	}
+	return res
 }

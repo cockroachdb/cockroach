@@ -209,3 +209,65 @@ EXPLAIN (DEBUG) SELECT * FROM ab WHERE a > 1 INTERSECT SELECT * FROM ab WHERE b 
 1  /ab/primary/2/2  NULL  ROW
 2  /ab/primary/2/6  NULL  ROW
 3  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) INSERT INTO ab(a, b) VALUES (42, 51)
+----
+0 0 (42, 51) ROW
+
+query ITTT
+EXPLAIN (DEBUG) INSERT INTO ab(a, b) SELECT a+1, b+1 FROM ab WHERE b > 6
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) UPDATE ab SET a = a + 1 WHERE b > 6
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) DELETE FROM ab WHERE b > 6
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) DELETE FROM ab
+----
+0  /ab/primary/1/4  NULL  ROW
+1  /ab/primary/1/5  NULL  ROW
+2  /ab/primary/2/1  NULL  ROW
+3  /ab/primary/2/2  NULL  ROW
+4  /ab/primary/2/6  NULL  ROW
+5  /ab/primary/3/9  NULL  ROW
+
+statement ok
+UPDATE abc SET c = 1.1 WHERE a = 1
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM ab, abc WHERE abc.a+ab.b = abc.a*ab.a
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   BUFFERED
+1  /abc/primary/2/'two'    NULL  BUFFERED
+2  /abc/primary/3/'three'  NULL  BUFFERED
+0  /ab/primary/1/4         NULL  BUFFERED
+1  /ab/primary/1/5         NULL  BUFFERED
+2  /ab/primary/2/1         NULL  BUFFERED
+3  /ab/primary/2/2         NULL  BUFFERED
+4  /ab/primary/2/6         NULL  BUFFERED
+5  /ab/primary/3/9         NULL  BUFFERED
