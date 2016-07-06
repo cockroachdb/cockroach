@@ -52,6 +52,8 @@ package acceptance
 //   of Terrafarm and allocator tests, respectively. For example, you can add
 //   "-at.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
+//   Note that the location has to be specified relative to the terraform
+//   working directory, so typically `-at.cockroach-binary=../../cockroach`.
 
 import (
 	gosql "database/sql"
@@ -59,6 +61,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -105,11 +108,20 @@ func (at *allocatorTest) Run(t *testing.T) {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
+		wd, err := os.Getwd()
+		if err != nil {
+			wd = "acceptance"
+		}
+		baseDir := filepath.Join(wd, at.f.Cwd)
 		if t.Failed() && at.f.KeepClusterAfterFail {
-			t.Log("test has failed, not destroying")
+			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -state %s)",
+				baseDir, at.f.StateFile)
 			return
 		}
 		at.f.MustDestroy()
+		if err := os.Remove(filepath.Join(baseDir, at.f.StateFile)); err != nil {
+			t.Log(err)
+		}
 	}()
 
 	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
@@ -137,6 +149,16 @@ func (at *allocatorTest) Run(t *testing.T) {
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
 	at.f.Assert(t)
 	log.Info("initial cluster is up")
+
+	// We must stop the cluster because a) `nodectl` pokes at the data directory
+	// and, more importantly, b) we don't want the cluster above and the cluster
+	// below to ever talk to each other (see #7224).
+	log.Info("stopping cluster")
+	for i := 0; i < at.f.NumNodes(); i++ {
+		if err := at.f.Kill(i); err != nil {
+			t.Fatalf("error stopping node %d: %s", i, err)
+		}
+	}
 
 	log.Info("downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
