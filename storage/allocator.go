@@ -144,15 +144,15 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 // ComputeAction determines the exact operation needed to repair the supplied
 // range, as governed by the supplied zone configuration. It returns the
 // required action that should be taken and a replica on which the action should
-// be performed.
-func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDescriptor) (
+// be performed. Providing deadReplicas will return AllocatorRemoveDead.
+func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDescriptor, deadReplicas []roachpb.ReplicaDescriptor) (
 	AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
 
-	deadReplicas := a.storePool.deadReplicas(desc.Replicas)
+	deadReplicas = append(deadReplicas, a.storePool.deadReplicas(desc.Replicas)...)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
 		// Adjust the priority by the number of dead replicas the range has.

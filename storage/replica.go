@@ -25,6 +25,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -246,6 +247,9 @@ type Replica struct {
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
+
+		// Remote replicas that have had raft errors and should be migrated to a different node.
+		deadReplicas map[roachpb.ReplicaDescriptor]struct{}
 	}
 }
 
@@ -253,9 +257,7 @@ type Replica struct {
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	if r.mu.destroyed != nil {
-		// Silently ignore all operations on destroyed replicas. We can't return an
-		// error here as all errors returned from this method are considered fatal.
-		return nil
+		return r.mu.destroyed
 	}
 	if r.mu.replicaID == 0 {
 		// The replica's raft group has not yet been configured (i.e. the replica
@@ -327,10 +329,15 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 		RangeID:    desc.RangeID,
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
-		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
-			log.Warningf("range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
-		}),
 	}
+	r.raftSender = store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
+		log.Warningf("range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
+
+		if IsReplicaCorruptionError(err) {
+			log.Warningf("range %d: replica corruption error received from %s: %v", desc.RangeID, toReplica, err)
+			r.markDeadReplica(toReplica)
+		}
+	})
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
@@ -348,6 +355,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
+	r.mu.deadReplicas = map[roachpb.ReplicaDescriptor]struct{}{}
 
 	var err error
 
@@ -359,6 +367,12 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if err != nil {
 		return err
 	}
+
+	pErr, err := loadReplicaDestroyedError(r.store.Engine(), r.RangeID)
+	if err != nil {
+		return err
+	}
+	r.mu.destroyed = pErr.GetDetail()
 
 	if r.isInitializedLocked() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
@@ -1911,7 +1925,7 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Unlock()
 
 	if index != oldIndex+1 {
-		return nil, roachpb.NewError(newReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
+		return nil, roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
@@ -1979,7 +1993,7 @@ func (r *Replica) applyRaftCommand(
 		r.mu.Unlock()
 	})
 	if err := batch.Commit(); err != nil {
-		rErr = roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
+		rErr = roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
 	}
 
 	// On successful write commands handle write-related triggers including
@@ -2064,7 +2078,7 @@ func (r *Replica) checkIfTxnAborted(
 	var entry roachpb.AbortCacheEntry
 	aborted, err := r.abortCache.Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not read from abort cache"), err))
+		return roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("could not read from abort cache"), err))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
@@ -2525,9 +2539,9 @@ func (r *Replica) maybeGossipSystemConfig() {
 	r.systemDBHash = hash
 }
 
-// newReplicaCorruptionError creates a new error indicating a corrupt replica,
+// NewReplicaCorruptionError creates a new error indicating a corrupt replica,
 // with the supplied list of errors given as history.
-func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
+func NewReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 	var errMsg string
 	for i := range errs {
 		err := errs[len(errs)-i-1]
@@ -2543,6 +2557,20 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 	return &roachpb.ReplicaCorruptionError{ErrorMsg: errMsg}
 }
 
+var replicaCorruptionErrorRegex = regexp.MustCompile(`replica corruption \(processed=(true|false)\)`)
+
+// IsReplicaCorruptionError returns whether the provided error is a
+// roachpb.ReplicaCorruptionError or the error text contains it.
+func IsReplicaCorruptionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if _, ok := err.(*roachpb.ReplicaCorruptionError); ok {
+		return true
+	}
+	return replicaCorruptionErrorRegex.MatchString(err.Error())
+}
+
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
 // failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
 // Currently any error is passed through, but prospectively it should stop the
@@ -2551,9 +2579,19 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // range, store, node or cluster with corresponding actions taken.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		log.Errorc(r.context(context.TODO()), "stalling replica due to: %s", cErr.ErrorMsg)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+
+		log.Errorc(r.context(context.TODO()), "stalling replica=%d due to: %s", r.mu.replicaID, cErr.ErrorMsg)
 		cErr.Processed = true
-		return roachpb.NewError(cErr)
+		r.mu.destroyed = cErr
+		pErr = roachpb.NewError(cErr)
+
+		// Try to persist the destroyed error message. If the underlying store is
+		// corrupted this will fail and the error won't be processed.
+		if err := setReplicaDestroyedError(r.store.Engine(), r.RangeID, pErr); err != nil {
+			return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, cErr.ErrorMsg)))
+		}
 	}
 	return pErr
 }
@@ -2610,4 +2648,46 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+// markDeadReplica marks a replica dead so it can be transferred to a different
+// store.
+func (r *Replica) markDeadReplica(repl roachpb.ReplicaDescriptor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.mu.deadReplicas[repl] = struct{}{}
+}
+
+// gcDeadReplicasLocked cleans up any dead replicas that have since been removed
+// from the range descriptor. Must have the replica lock.
+func (r *Replica) gcDeadReplicasLocked() {
+Loop:
+	for deadR := range r.mu.deadReplicas {
+		// Check if dead replica still needs to be migrated.
+		for _, desc := range r.mu.state.Desc.Replicas {
+			if desc == deadR {
+				continue Loop
+			}
+		}
+
+		// Dead replica has been removed from range descriptor.
+		delete(r.mu.deadReplicas, deadR)
+	}
+}
+
+// deadReplicas returns all dead replicas that this store knows about and cleans
+// up any old ones that aren't needed.
+func (r *Replica) deadReplicas() []roachpb.ReplicaDescriptor {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.gcDeadReplicasLocked()
+
+	replicas := make([]roachpb.ReplicaDescriptor, 0, len(r.mu.deadReplicas))
+	for deadR := range r.mu.deadReplicas {
+		replicas = append(replicas, deadR)
+	}
+
+	return replicas
 }
