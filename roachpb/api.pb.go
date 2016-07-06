@@ -130,6 +130,7 @@
 		StoreCapacity
 		NodeDescriptor
 		StoreDescriptor
+		StoreDeadReplicas
 */
 package roachpb
 

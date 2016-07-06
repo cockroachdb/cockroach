@@ -301,6 +301,29 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 		nil /* txn */)
 }
 
+// loadReplicaDestroyedError loads the replica destroyed error for the specified
+// range. If there is no error, nil is returned.
+func loadReplicaDestroyedError(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Error, error) {
+	var v roachpb.Error
+	found, err := engine.MVCCGetProto(context.Background(), reader,
+		keys.RangeReplicaDestroyedErrorKey(rangeID),
+		hlc.ZeroTimestamp, true /* consistent */, nil, &v)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	return &v, nil
+}
+
+// setReplicaDestroyedError sets an error indicating that the replica has been
+// destroyed.
+func setReplicaDestroyedError(eng engine.ReadWriter, rangeID roachpb.RangeID, err *roachpb.Error) error {
+	return engine.MVCCPutProto(context.Background(), eng, nil,
+		keys.RangeReplicaDestroyedErrorKey(rangeID), hlc.ZeroTimestamp, nil /* txn */, err)
+}
+
 func loadHardState(
 	reader engine.Reader, rangeID roachpb.RangeID,
 ) (raftpb.HardState, error) {
