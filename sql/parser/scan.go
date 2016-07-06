@@ -115,7 +115,7 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 		}
 	case NOT:
 		switch s.nextTok.id {
-		case BETWEEN, IN, LIKE, SIMILAR:
+		case BETWEEN, IN, LIKE, ILIKE, SIMILAR:
 			lval.id = NOT_LA
 		}
 
