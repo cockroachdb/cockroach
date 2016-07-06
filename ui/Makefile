@@ -83,7 +83,7 @@ $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed
 	stylus $(STYL_ROOT)/app.styl $(STYLFLAGS) --out $@
 
 npm.installed: package.json npm-shrinkwrap.json
-	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
+	rm -rf $(NODE_MODULES)
 	npm install --no-progress
 	touch $@
 
