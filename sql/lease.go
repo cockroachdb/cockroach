@@ -90,6 +90,22 @@ func (s *LeaseState) Refcount() int {
 	return s.refcount
 }
 
+func (s *LeaseState) incRefcount() {
+	s.mu.Lock()
+	s.incRefcountLocked()
+	s.mu.Unlock()
+}
+func (s *LeaseState) incRefcountLocked() {
+	if s.released {
+		panic(fmt.Sprintf("trying to incRefcount on released lease: %+v", s))
+	}
+	s.refcount++
+	if log.V(3) {
+		log.Infof("LeaseState.incRef: descID=%d name=%q version=%d refcount=%d",
+			s.ID, s.Name, s.Version, s.refcount)
+	}
+}
+
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
@@ -453,6 +469,7 @@ type tableState struct {
 	id sqlbase.ID
 	// The cache is updated every time we acquire or release a lease.
 	tableNameCache *tableNameCache
+	stopper        *stop.Stopper
 	// Protects both active and acquiring.
 	mu sync.Mutex
 	// The active leases for the table: sorted by their version and expiration
@@ -520,13 +537,7 @@ func (t *tableState) checkLease(
 	if !skipLifeCheck && !lease.hasSomeLifeLeft(clock) {
 		return nil
 	}
-	lease.mu.Lock()
-	lease.refcount++
-	lease.mu.Unlock()
-	if log.V(3) {
-		log.Infof("acquire: descID=%d name=%q version=%d refcount=%d",
-			lease.ID, lease.Name, lease.Version, lease.refcount)
-	}
+	lease.incRefcount()
 	return lease
 }
 
@@ -637,48 +648,56 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	if s == nil {
 		return errors.Errorf("table %d version %d not found", lease.ID, lease.Version)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.refcount--
-	if log.V(3) {
-		log.Infof("release: descID=%d name:%q version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
-	}
-	if s.refcount < 0 {
-		panic(fmt.Sprintf("negative ref count: descID=%d(%q) version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount))
-	}
-	if s.refcount == 0 {
+	// Decrements the refcount and returns true if the lease has to be removed
+	// from the store.
+	decRefcount := func(s *LeaseState) bool {
+		// Figure out if we'd like to remove the lease from the store asap (i.e. when
+		// the refcount drops to 0). If so, we'll need to mark the lease as released.
+		removeOnceDereferenced := false
+		// Release from the store if the table has been deleted; no leases can be
+		// acquired any more.
 		if t.deleted {
-			t.removeLease(s, store)
-			return nil
+			removeOnceDereferenced = true
 		}
-		n := t.active.findNewest(0)
-		if s != n {
-			if s.Version < n.Version {
-				// TODO(pmattis): If an active transaction is releasing the lease for
-				// an older version, hold on to it for a few seconds in anticipation of
-				// another operation being performed within the transaction. If we
-				// release the lease immediately the transaction will necessarily abort
-				// on the next operation due to not being able to get the lease.
-			}
-			t.removeLease(s, store)
-			return nil
+		// Release from the store if the lease is not for the latest version; only
+		// leases for the latest version can be acquired.
+		if s != t.active.findNewest(0) {
+			removeOnceDereferenced = true
 		}
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.refcount--
+		if log.V(3) {
+			log.Infof("release: descID=%d name:%q version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
+		}
+		if s.refcount < 0 {
+			panic(fmt.Sprintf("negative ref count: descID=%d(%q) version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount))
+		}
+		if s.refcount == 0 && removeOnceDereferenced {
+			s.released = true
+		}
+		return s.released
+	}
+	if decRefcount(s) {
+		t.removeLease(s, store)
 	}
 	return nil
 }
 
 // t.mu needs to be locked.
-// lease.mu needs to be locked.
 func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
-	lease.released = true
 	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
 	// Release to the store asynchronously, without the tableState lock.
-	go func() {
+	err := t.stopper.RunAsyncTask(func() {
 		if err := store.Release(lease); err != nil {
-			log.Warningf("Error releasing lease %q: %s", lease, err)
+			log.Warningf("error releasing lease %q: %s", lease, err)
 		}
-	}()
+	})
+	if log.V(1) && err != nil {
+		log.Warningf("error removing lease from store: %s", err)
+	}
 }
 
 // purgeOldLeases refreshes the leases on a table. Unused leases older than
@@ -736,6 +755,7 @@ func (t *tableState) purgeOldLeases(
 // LeaseStoreTestingKnobs contains testing knobs.
 type LeaseStoreTestingKnobs struct {
 	// Called after a lease is removed from the store, with any operation error.
+	// See LeaseRemovalTracker.
 	LeaseReleasedEvent func(lease *LeaseState, err error)
 }
 
@@ -810,8 +830,7 @@ func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock
 		// this cache entry soon.
 		return nil
 	}
-	lease.refcount++
-
+	lease.incRefcountLocked()
 	return lease
 }
 
@@ -842,7 +861,11 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	key := c.makeCacheKey(lease.ParentID, lease.Name)
 	existing, ok := c.tables[key]
 	if !ok {
-		panic(fmt.Sprintf("table for lease not found in table name cache: %s", lease))
+		// Table for lease not found in table name cache. This can happen if we had
+		// a more recent lease on the table in the tableNameCache, then the table
+		// gets deleted, then the more recent lease is remove()d - which clears the
+		// cache.
+		return
 	}
 	// If this was the lease that the cache had for the table name, remove it.
 	// If the cache had some other lease, this remove is a no-op.
@@ -857,7 +880,11 @@ func (c *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNa
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
 // handles resolving table names to descriptor IDs.
+//
 // Exported only for testing.
+//
+// The locking order is:
+// LeaseManager.mu > tableState.mu > tableNameCache.mu > LeaseState.mu
 type LeaseManager struct {
 	LeaseStore
 	mu     sync.Mutex
@@ -869,17 +896,18 @@ type LeaseManager struct {
 	// Not protected by mu.
 	tableNames   tableNameCache
 	testingKnobs LeaseManagerTestingKnobs
+	stopper      *stop.Stopper
 }
 
 // NewLeaseManager creates a new LeaseManager.
-// Args:
-//  testingLeasesRefreshedEvent: if not nil, a callback called after the leases
-//  are refreshed as a result of a gossip update.
+//
+// stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
 	nodeID uint32,
 	db client.DB,
 	clock *hlc.Clock,
 	testingKnobs LeaseManagerTestingKnobs,
+	stopper *stop.Stopper,
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
@@ -893,6 +921,7 @@ func NewLeaseManager(
 		tableNames: tableNameCache{
 			tables: make(map[tableNameCacheKey]*LeaseState),
 		},
+		stopper: stopper,
 	}
 	return lm
 }
@@ -1004,7 +1033,7 @@ func (m *LeaseManager) resolveName(
 func (m *LeaseManager) Acquire(
 	txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*LeaseState, error) {
-	t := m.findTableState(tableID, true, &m.tableNames)
+	t := m.findTableState(tableID, true)
 	return t.acquire(txn, version, m.LeaseStore)
 }
 
@@ -1017,7 +1046,7 @@ func (m *LeaseManager) Acquire(
 func (m *LeaseManager) acquireFreshestFromStore(
 	txn *client.Txn, tableID sqlbase.ID,
 ) (*LeaseState, error) {
-	t := m.findTableState(tableID, true, &m.tableNames)
+	t := m.findTableState(tableID, true)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := t.acquireFromStoreLocked(
@@ -1028,15 +1057,13 @@ func (m *LeaseManager) acquireFreshestFromStore(
 	if lease == nil {
 		panic("no lease in active set after having just acquired one")
 	}
-	lease.mu.Lock()
-	lease.refcount++
-	lease.mu.Unlock()
+	lease.incRefcount()
 	return lease, nil
 }
 
 // Release releases a previously acquired read lease.
 func (m *LeaseManager) Release(lease *LeaseState) error {
-	t := m.findTableState(lease.ID, false, nil)
+	t := m.findTableState(lease.ID, false /* create */)
 	if t == nil {
 		return errors.Errorf("table %d not found", lease.ID)
 	}
@@ -1049,13 +1076,13 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	return t.release(lease, m.LeaseStore)
 }
 
-// If create is set, cache needs to be set as well.
-func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool, cache *tableNameCache) *tableState {
+// If create is set, cache and stopper need to be set as well.
+func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.tables[tableID]
 	if t == nil && create {
-		t = &tableState{id: tableID, tableNameCache: cache}
+		t = &tableState{id: tableID, tableNameCache: &m.tableNames, stopper: m.stopper}
 		m.tables[tableID] = t
 	}
 	return t
@@ -1099,11 +1126,11 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 							continue
 						}
 						if log.V(2) {
-							log.Infof("%s: refreshing lease table: %d (%s), version: %d",
-								kv.Key, table.ID, table.Name, table.Version)
+							log.Infof("%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
+								kv.Key, table.ID, table.Name, table.Version, table.Deleted())
 						}
 						// Try to refresh the table lease to one >= this version.
-						if t := m.findTableState(table.ID, false /* create */, nil); t != nil {
+						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
 								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
 								log.Warningf("error purging leases for table %d(%s): %s",
