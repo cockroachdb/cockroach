@@ -143,6 +143,8 @@ var (
 		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffix},
 		{name: "RangeLeaderLease", suffix: LocalRangeLeaderLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
+		{name: "RangeFrozenStatus", suffix: LocalRangeFrozenStatusSuffix},
+		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
 	}
 
 	rangeSuffixDict = []struct {
