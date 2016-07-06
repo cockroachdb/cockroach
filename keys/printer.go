@@ -29,6 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
+// PrettyPrintTimeseriesKey is a hook for pretty printing a timeseries key. The
+// timeseries key prefix will already have been stripped off.
+var PrettyPrintTimeseriesKey = print
+
 type dictEntry struct {
 	name   string
 	prefix roachpb.Key
@@ -103,6 +107,10 @@ var (
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
 			{name: "/StatusNode", prefix: StatusNodePrefix,
 				ppFunc: decodeKeyPrint,
+				psFunc: parseUnsupported,
+			},
+			{name: "/tsd", prefix: TimeseriesPrefix,
+				ppFunc: decodeTimeseriesKey,
 				psFunc: parseUnsupported,
 			},
 		}},
@@ -408,6 +416,10 @@ func print(key roachpb.Key) string {
 
 func decodeKeyPrint(key roachpb.Key) string {
 	return encoding.PrettyPrintValue(key, "/")
+}
+
+func decodeTimeseriesKey(key roachpb.Key) string {
+	return PrettyPrintTimeseriesKey(key)
 }
 
 // prettyPrintInternal parse key with prefix in keyDict,

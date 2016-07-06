@@ -18,6 +18,8 @@ package ts
 
 import (
 	"bytes"
+	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -81,8 +83,13 @@ func DecodeDataKey(key roachpb.Key) (string, string, Resolution, int64, error) {
 	}
 	remainder = remainder[len(keys.TimeseriesPrefix):]
 
+	return decodeDataKeySuffix(remainder)
+}
+
+// decodeDataKeySuffix decodes a time series key into its components.
+func decodeDataKeySuffix(key roachpb.Key) (string, string, Resolution, int64, error) {
 	// Decode series name.
-	remainder, name, err := encoding.DecodeBytesAscending(remainder, nil)
+	remainder, name, err := encoding.DecodeBytesAscending(key, nil)
 	if err != nil {
 		return "", "", 0, 0, err
 	}
@@ -102,4 +109,17 @@ func DecodeDataKey(key roachpb.Key) (string, string, Resolution, int64, error) {
 	source := remainder
 
 	return string(name), string(source), resolution, timestamp, nil
+}
+
+func prettyPrintKey(key roachpb.Key) string {
+	name, source, resolution, timestamp, err := decodeDataKeySuffix(key)
+	if err != nil {
+		return "/" + err.Error()
+	}
+	return fmt.Sprintf("/%s/%s/%s/%s", name, source, resolution,
+		time.Unix(0, timestamp).UTC().Format(time.RFC3339Nano))
+}
+
+func init() {
+	keys.PrettyPrintTimeseriesKey = prettyPrintKey
 }
