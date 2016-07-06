@@ -512,6 +512,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
+//go:generate stringer -type snapshotType
 type snapshotType int
 
 const (
@@ -542,13 +543,13 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType) (uint64,
 	replicaID := r.mu.replicaID
 	r.mu.Unlock()
 
-	log.Infof("replica %d received snapshot for range %d at index %d. "+
-		"encoded size=%d, %d KV pairs, %d log entries",
-		replicaID, desc.RangeID, snap.Metadata.Index,
+	log.Infof("replica %d applying %s for range %d at index %d "+
+		"(encoded size=%d, %d KV pairs, %d log entries)",
+		replicaID, typ, desc.RangeID, snap.Metadata.Index,
 		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %d applied snapshot for range %d in %s",
-			replicaID, desc.RangeID, timeutil.Since(start))
+		log.Infof("replica %d applied %s for range %d in %s",
+			replicaID, typ, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.
