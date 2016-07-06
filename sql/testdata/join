@@ -137,6 +137,14 @@ NULL
 43
 44
 
+# Check that a limit on the JOIN's result do not cause rows from the
+# JOIN operands to become invisible to the JOIN.
+query I colnames
+SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
+----
+x
+42
+
 statement ok
 CREATE TABLE empty (x INT)
 
@@ -270,7 +278,7 @@ EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON 
 1  join   INNER ON (a.b = c.d) AND (c.d = onecolumn.x)
 2  join   INNER ON a.b = twocolumn.x
 3  join   CROSS
-4  scan   onecolumn@primary (max 1 row)
+4  scan   onecolumn@primary
 4  scan   twocolumn@primary
 3  scan   onecolumn@primary
 2  scan   twocolumn@primary
