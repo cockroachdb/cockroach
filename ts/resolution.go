@@ -25,6 +25,16 @@ import (
 // Cockroach.
 type Resolution int64
 
+func (r Resolution) String() string {
+	switch r {
+	case Resolution10s:
+		return "10s"
+	case resolution1ns:
+		return "1ns"
+	}
+	return fmt.Sprintf("%d", r)
+}
+
 // Resolution enumeration values are directly serialized and persisted into
 // system keys; these values must never be altered or reordered.
 const (
