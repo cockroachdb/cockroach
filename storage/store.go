@@ -1326,20 +1326,37 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 }
 
 // GossipStore broadcasts the store on the gossip network.
-func (s *Store) GossipStore() {
-	ctx := s.context(context.TODO())
-
+func (s *Store) GossipStore(ctx context.Context) error {
 	storeDesc, err := s.Descriptor()
 	if err != nil {
-		log.Warningc(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
-		return
+		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
+func (s *Store) GossipDeadReplicas(ctx context.Context) error {
+	deadReplicas, err := s.deadReplicas()
+	if err != nil {
+		return errors.Wrapf(err, "problem getting dead replicas for store %+v", s.Ident)
+	}
+	// Don't gossip if there's nothing to gossip.
+	if len(deadReplicas.Replicas) == 0 {
+		return nil
+	}
+	// Unique gossip key per store.
+	key := gossip.MakeDeadReplicasKey(s.StoreID())
+	// Gossip dead replicas.
+	if err := s.ctx.Gossip.AddInfoProto(key, &deadReplicas, ttlStoreGossip); err != nil {
 		log.Warningc(ctx, "%s", err)
 	}
+	return nil
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -1913,6 +1930,33 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		Attrs:    s.Attrs(),
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
+	}, nil
+}
+
+func (s *Store) deadReplicas() (roachpb.StoreDeadReplicas, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deadReplicas []roachpb.ReplicaIdent
+	for rangeID, repl := range s.mu.replicas {
+		repl.mu.Lock()
+		destroyed := repl.mu.destroyed
+		desc, err := repl.getReplicaDescriptorLocked()
+		repl.mu.Unlock()
+		if err != nil {
+			return roachpb.StoreDeadReplicas{}, err
+		}
+		if destroyed != nil {
+			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
+				RangeID: rangeID,
+				Replica: desc,
+			})
+		}
+	}
+
+	return roachpb.StoreDeadReplicas{
+		StoreID:  s.StoreID(),
+		Replicas: deadReplicas,
 	}, nil
 }
 
