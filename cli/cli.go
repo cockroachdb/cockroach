@@ -79,6 +79,7 @@ func init() {
 		userCmd,
 		zoneCmd,
 		nodeCmd,
+		dumpCmd,
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats
