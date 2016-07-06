@@ -154,7 +154,7 @@ if is_shard 2; then
     done
 
     cmds=$(grep '^cmd ' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
-    path="${gopath0}/bin/linux_amd64"
+    path="${gopath0}/bin/docker_amd64"
     time ssh node0 mkdir -p "$path"
     time ssh node0 sudo chown "${USER}.${USER}" "$path"
     (time cd "$path" && rsync ${cmds} node0:"${path}")
@@ -165,7 +165,7 @@ if is_shard 1; then
   # We might already be on shard 0 if we're running without
   # parallelism. Avoid deleting our build output in that case.
   if ! is_shard 0; then
-    dir="${gopath0}/pkg/linux_amd64_race"
+    dir="${gopath0}/pkg/docker_amd64_race"
     time ssh node0 sudo chown -R "${USER}.${USER}" "${dir}"
     time rsync -a --delete "${dir}/" node0:"${dir}"
   fi
@@ -191,7 +191,7 @@ if is_shard 0; then
   # building an overlapping set of packages.
   if ! is_shard 2; then
     node=$((2 % $CIRCLE_NODE_TOTAL))
-    dir="${gopath0}/pkg/linux_amd64"
+    dir="${gopath0}/pkg/docker_amd64"
     time sudo chown -R "${USER}.${USER}" "${dir}"
     time rsync -au node${node}:"${dir}/" "${dir}"
   fi
