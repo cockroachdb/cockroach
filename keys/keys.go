@@ -253,6 +253,12 @@ func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeLastVerificationTimestampSuffix, nil)
 }
 
+// RangeReplicaDestroyedErrorKey returns a range-local key for
+// the range's replica destroyed error.
+func RangeReplicaDestroyedErrorKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeReplicaDestroyedErrorSuffix, nil)
+}
+
 // MakeRangeKey creates a range-local key based on the range
 // start key, metadata key suffix, and optional detail (e.g. the
 // transaction ID for a txn record, etc.).
