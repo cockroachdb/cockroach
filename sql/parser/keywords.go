@@ -104,6 +104,7 @@ var keywords = map[string]int{
 	"HOUR":              HOUR,
 	"IF":                IF,
 	"IFNULL":            IFNULL,
+	"ILIKE":             ILIKE,
 	"IN":                IN,
 	"INDEX":             INDEX,
 	"INDEXES":           INDEXES,

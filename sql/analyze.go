@@ -182,6 +182,10 @@ func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
 			op = parser.NotLike
 		case parser.NotLike:
 			op = parser.Like
+		case parser.ILike:
+			op = parser.NotILike
+		case parser.NotILike:
+			op = parser.ILike
 		case parser.SimilarTo:
 			op = parser.NotSimilarTo
 		case parser.NotSimilarTo:

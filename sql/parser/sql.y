@@ -562,7 +562,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %token <str>   HAVING HIGH HOUR
 
-%token <str>   IF IFNULL IN
+%token <str>   IF IFNULL IN ILIKE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -632,8 +632,8 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%nonassoc  BETWEEN IN LIKE SIMILAR NOT_LA
-%nonassoc  ESCAPE              // ESCAPE must be just above LIKE/SIMILAR
+%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_LA
+%nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
 // To support target_elem without AS, we must give IDENT an explicit priority
@@ -3238,6 +3238,14 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: NotLike, Left: $1.expr(), Right: $4.expr()}
   }
+| a_expr ILIKE a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: ILike, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr NOT_LA ILIKE a_expr %prec NOT_LA
+  {
+    $$.val = &ComparisonExpr{Operator: NotILike, Left: $1.expr(), Right: $4.expr()}
+  }
 | a_expr SIMILAR TO a_expr %prec SIMILAR
   {
     $$.val = &ComparisonExpr{Operator: SimilarTo, Left: $1.expr(), Right: $4.expr()}
@@ -3769,6 +3777,8 @@ implicit_row:
 //   math_op { unimplemented() }
 // | LIKE { unimplemented() }
 // | NOT_LA LIKE { unimplemented() }
+// | ILIKE { unimplemented() }
+// | NOT_LA ILIKE { unimplemented() }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.
@@ -4507,6 +4517,7 @@ type_func_name_keyword:
 | CROSS
 | FULL
 | INNER
+| ILIKE
 | IS
 | JOIN
 | LEFT
