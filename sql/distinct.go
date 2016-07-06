@@ -103,7 +103,7 @@ func (n *distinctNode) setTop(top *selectTopNode) {
 	}
 }
 
-func (n *distinctNode) Columns() []ResultColumn {
+func (n *distinctNode) Columns() ResultColumns {
 	if n.plan != nil {
 		return n.plan.Columns()
 	}
@@ -222,4 +222,10 @@ func (n *distinctNode) ExplainTypes(_ func(string, string)) {}
 func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 	// Any limit becomes a "soft" limit underneath.
 	n.plan.SetLimitHint(numRows, true)
+}
+
+func (n *distinctNode) Close() {
+	n.plan.Close()
+	n.prefixSeen = nil
+	n.suffixSeen = nil
 }

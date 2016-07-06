@@ -249,6 +249,10 @@ func (n *insertNode) Start() error {
 	return n.run.tw.init(n.p.txn)
 }
 
+func (n *insertNode) Close() {
+	n.run.rows.Close()
+}
+
 func (n *insertNode) Next() (bool, error) {
 	if next, err := n.run.rows.Next(); !next {
 		if err == nil {
@@ -442,7 +446,7 @@ func makeDefaultExprs(
 	return defaultExprs, nil
 }
 
-func (n *insertNode) Columns() []ResultColumn {
+func (n *insertNode) Columns() ResultColumns {
 	return n.rh.columns
 }
 

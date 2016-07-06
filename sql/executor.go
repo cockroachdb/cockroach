@@ -93,7 +93,7 @@ type Result struct {
 	// the names and types of the columns returned in the result set in the order
 	// specified in the SQL statement. The number of columns will equal the number
 	// of values in each Row.
-	Columns []ResultColumn
+	Columns ResultColumns
 	// Rows will be populated if the statement type is "Rows". It will contain
 	// the result set of the result.
 	// TODO(nvanbenschoten): Can this be streamed from the planNode?
@@ -107,6 +107,20 @@ type ResultColumn struct {
 
 	// If set, this is an implicit column; used internally.
 	hidden bool
+}
+
+// ResultColumns is the type used throughout the sql module to
+// describe the column types of a table.
+type ResultColumns []ResultColumn
+
+// NumColumns implements the parser.ColumnHeader interface.
+func (cols ResultColumns) NumColumns() int {
+	return len(cols)
+}
+
+// ColumnType implements the parser.ColumnHeader interface.
+func (cols ResultColumns) ColumnType(i int) parser.Datum {
+	return cols[i].Typ
 }
 
 // ResultRow is a collection of values representing a row in a result.
@@ -298,7 +312,7 @@ func (e *Executor) Prepare(
 	query string,
 	session *Session,
 	pinfo parser.PlaceholderTypes,
-) ([]ResultColumn, error) {
+) (ResultColumns, error) {
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
@@ -338,6 +352,7 @@ func (e *Executor) Prepare(
 	if plan == nil {
 		return nil, nil
 	}
+	defer plan.Close()
 	cols := plan.Columns()
 	for _, c := range cols {
 		if err := checkResultDatum(c.Typ); err != nil {
@@ -1012,6 +1027,8 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 
+	defer plan.Close()
+
 	if testDistSQL != 0 {
 		if err := hackPlanToUseDistSQL(plan, testDistSQL == 1); err != nil {
 			return result, err
@@ -1199,8 +1216,8 @@ func checkResultDatum(datum parser.Datum) error {
 }
 
 // makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
-	cols := make([]ResultColumn, 0, len(colDescs))
+func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) ResultColumns {
+	cols := make(ResultColumns, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
 		typ := colDesc.Type.ToDatumType()

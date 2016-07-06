@@ -68,8 +68,8 @@ Level  Type                  Description    Columns                             
 0      select                               ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition) +9,+"Span Pos"
 1      sort                  +9,+"Span Pos" ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition) +9,+"Span Pos"
 2      explain               trace          ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)
-3      select                               (RowIdx, Key, Value, Disposition)
-4      render/filter(debug)  from ()        (RowIdx, Key, Value, Disposition)
+3      select                               ("1")
+4      render/filter(debug)  from ()        ("1")
 5      empty                 -              ()
 
 # Ensure that all relevant statement types can be explained
