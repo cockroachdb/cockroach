@@ -13,8 +13,6 @@
 		RaftMessageRequest
 		RaftMessageResponse
 		ConfChangeContext
-		RangeTree
-		RangeTreeNode
 */
 package storage
 
