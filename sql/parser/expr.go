@@ -257,6 +257,8 @@ const (
 	NotIn
 	Like
 	NotLike
+	ILike
+	NotILike
 	SimilarTo
 	NotSimilarTo
 	IsDistinctFrom
@@ -276,6 +278,8 @@ var comparisonOpName = [...]string{
 	NotIn:             "NOT IN",
 	Like:              "LIKE",
 	NotLike:           "NOT LIKE",
+	ILike:             "ILIKE",
+	NotILike:          "NOT ILIKE",
 	SimilarTo:         "SIMILAR TO",
 	NotSimilarTo:      "NOT SIMILAR TO",
 	IsDistinctFrom:    "IS DISTINCT FROM",

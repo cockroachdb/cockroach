@@ -1114,17 +1114,17 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				pattern := string(*right.(*DString))
-				like := optimizedLikeFunc(pattern)
-				if like == nil {
-					key := likeKey(pattern)
-					re, err := ctx.ReCache.GetRegexp(key)
-					if err != nil {
-						return DBool(false), fmt.Errorf("LIKE regexp compilation failed: %v", err)
-					}
-					like = re.MatchString
-				}
-				return DBool(like(string(*left.(*DString)))), nil
+				return matchLike(ctx, left, right, false)
+			},
+		},
+	},
+
+	ILike: {
+		CmpOp{
+			LeftType:  TypeString,
+			RightType: TypeString,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				return matchLike(ctx, left, right, true)
 			},
 		},
 	},
@@ -1178,6 +1178,20 @@ func makeEvalTupleIn(d Datum) CmpOp {
 			return DBool(found), nil
 		},
 	}
+}
+
+func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (DBool, error) {
+	pattern := string(*right.(*DString))
+	like := optimizedLikeFunc(pattern, caseInsensitive)
+	if like == nil {
+		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
+		re, err := ctx.ReCache.GetRegexp(key)
+		if err != nil {
+			return DBool(false), fmt.Errorf("LIKE regexp compilation failed: %v", err)
+		}
+		like = re.MatchString
+	}
+	return DBool(like(string(*left.(*DString)))), nil
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -1975,6 +1989,9 @@ func foldComparisonExpr(
 	case NotLike:
 		// NotLike(left, right) is implemented as !Like(left, right)
 		return Like, left, right, false, true
+	case NotILike:
+		// NotILike(left, right) is implemented as !ILike(left, right)
+		return ILike, left, right, false, true
 	case NotSimilarTo:
 		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
 		return SimilarTo, left, right, false, true
@@ -2006,10 +2023,10 @@ func foldComparisonExpr(
 	return op, left, right, false, false
 }
 
-// Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
-// For example, when the expression is just checking to see if a string starts with a given
-// pattern.
-func optimizedLikeFunc(pattern string) func(string) bool {
+// Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
+// evaluate the condition. For example, when the expression is just checking to see
+// if a string starts with a given pattern.
+func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 	switch len(pattern) {
 	case 0:
 		return func(s string) bool {
@@ -2034,15 +2051,27 @@ func optimizedLikeFunc(pattern string) func(string) bool {
 			switch {
 			case anyEnd && anyStart:
 				return func(s string) bool {
-					return strings.Contains(s, pattern[1:len(pattern)-1])
+					substr := pattern[1 : len(pattern)-1]
+					if caseInsensitive {
+						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
+					}
+					return strings.Contains(s, substr)
 				}
 			case anyEnd:
 				return func(s string) bool {
-					return strings.HasPrefix(s, pattern[:len(pattern)-1])
+					prefix := pattern[:len(pattern)-1]
+					if caseInsensitive {
+						s, prefix = strings.ToUpper(s), strings.ToUpper(prefix)
+					}
+					return strings.HasPrefix(s, prefix)
 				}
 			case anyStart:
 				return func(s string) bool {
-					return strings.HasSuffix(s, pattern[1:])
+					suffix := pattern[1:]
+					if caseInsensitive {
+						s, suffix = strings.ToUpper(s), strings.ToUpper(suffix)
+					}
+					return strings.HasSuffix(s, suffix)
 				}
 			}
 		}
@@ -2050,14 +2079,17 @@ func optimizedLikeFunc(pattern string) func(string) bool {
 	return nil
 }
 
-type likeKey string
+type likeKey struct {
+	s               string
+	caseInsensitive bool
+}
 
 func (k likeKey) pattern() (string, error) {
-	pattern := regexp.QuoteMeta(string(k))
-	// Replace LIKE specific wildcards with standard wildcards
+	pattern := regexp.QuoteMeta(k.s)
+	// Replace LIKE/ILIKE specific wildcards with standard wildcards
 	pattern = strings.Replace(pattern, "%", ".*", -1)
 	pattern = strings.Replace(pattern, "_", ".", -1)
-	return anchorPattern(pattern, false), nil
+	return anchorPattern(pattern, k.caseInsensitive), nil
 }
 
 type similarToKey string

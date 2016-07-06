@@ -330,6 +330,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a NOT IN (b, c)`},
 		{`SELECT a FROM t WHERE a LIKE b`},
 		{`SELECT a FROM t WHERE a NOT LIKE b`},
+		{`SELECT a FROM t WHERE a ILIKE b`},
+		{`SELECT a FROM t WHERE a NOT ILIKE b`},
 		{`SELECT a FROM t WHERE a SIMILAR TO b`},
 		{`SELECT a FROM t WHERE a NOT SIMILAR TO b`},
 		{`SELECT a FROM t WHERE a BETWEEN b AND c`},
