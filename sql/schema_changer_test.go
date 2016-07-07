@@ -510,6 +510,7 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#7628")
 
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
