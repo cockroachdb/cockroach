@@ -136,7 +136,7 @@ func (n *scanNode) initScan() error {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix. This isn't needed for the fetcher, but it is for
 		// other external users of n.spans.
-		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&n.desc, n.index.ID))
 		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
 	}
 

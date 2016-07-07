@@ -59,11 +59,11 @@ func (rh *rowHelper) encodeIndexes(
 	err error,
 ) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.tableDesc.ID,
+		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.tableDesc,
 			rh.tableDesc.PrimaryIndex.ID)
 	}
 	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		&rh.tableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.tableDesc, &rh.tableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,7 +87,7 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.indexes))
 	}
 	err = sqlbase.EncodeSecondaryIndexes(
-		rh.tableDesc.ID, rh.indexes, colIDtoRowIndex, values, rh.indexEntries)
+		rh.tableDesc, rh.indexes, colIDtoRowIndex, values, rh.indexEntries)
 	if err != nil {
 		return nil, err
 	}
