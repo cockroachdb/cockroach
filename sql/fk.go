@@ -227,7 +227,7 @@ func makeBaseFKHelper(
 	txn *client.Txn,
 	otherTables TablesByID,
 	writeIdx sqlbase.IndexDescriptor,
-	ref *sqlbase.TableAndIndexID,
+	ref *sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchPrefix: ref.IndexKeyPrefix()}
