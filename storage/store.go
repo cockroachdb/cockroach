@@ -19,7 +19,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -86,7 +85,9 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
-var storeReplicaRaftReadyConcurrency = 2 * runtime.NumCPU()
+// TODO(tschottdorf): It's currently unsafe to set this to any other value due
+// to concurrency issues. See #7672 and the discussion within.
+const storeReplicaRaftReadyConcurrency = 1
 
 // TestStoreContext has some fields initialized with values relevant
 // in tests.
