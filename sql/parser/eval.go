@@ -1135,11 +1135,29 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			RightType: TypeString,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				key := similarToKey(*right.(*DString))
-				re, err := ctx.ReCache.GetRegexp(key)
-				if err != nil {
-					return DBool(false), err
-				}
-				return DBool(re.MatchString(string(*left.(*DString)))), nil
+				return matchRegexpWithKey(ctx, left, key)
+			},
+		},
+	},
+
+	RegMatch: {
+		CmpOp{
+			LeftType:  TypeString,
+			RightType: TypeString,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				key := regexpKey{s: string(*right.(*DString)), caseInsensitive: false}
+				return matchRegexpWithKey(ctx, left, key)
+			},
+		},
+	},
+
+	RegIMatch: {
+		CmpOp{
+			LeftType:  TypeString,
+			RightType: TypeString,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				key := regexpKey{s: string(*right.(*DString)), caseInsensitive: true}
+				return matchRegexpWithKey(ctx, left, key)
 			},
 		},
 	},
@@ -1192,6 +1210,14 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (DBool
 		like = re.MatchString
 	}
 	return DBool(like(string(*left.(*DString)))), nil
+}
+
+func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (DBool, error) {
+	re, err := ctx.ReCache.GetRegexp(key)
+	if err != nil {
+		return DBool(false), err
+	}
+	return DBool(re.MatchString(string(*str.(*DString)))), nil
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -1995,6 +2021,12 @@ func foldComparisonExpr(
 	case NotSimilarTo:
 		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
 		return SimilarTo, left, right, false, true
+	case NotRegMatch:
+		// NotRegMatch(left, right) is implemented as !RegMatch(left, right)
+		return RegMatch, left, right, false, true
+	case NotRegIMatch:
+		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
+		return RegIMatch, left, right, false, true
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
 		//
@@ -2099,6 +2131,18 @@ func (k similarToKey) pattern() (string, error) {
 	return anchorPattern(pattern, false), nil
 }
 
+type regexpKey struct {
+	s               string
+	caseInsensitive bool
+}
+
+func (k regexpKey) pattern() (string, error) {
+	if k.caseInsensitive {
+		return caseInsensitive(k.s), nil
+	}
+	return k.s, nil
+}
+
 // SimilarEscape converts a SQL:2008 regexp pattern to POSIX style, so it can
 // be used by our regexp engine.
 func SimilarEscape(pattern string) string {
@@ -2160,6 +2204,15 @@ func similarEscapeCustomChar(pattern string, escapeChar rune) string {
 	}
 
 	return string(patternBuilder)
+}
+
+// caseInsensitive surrounds the transformed input string with
+//   (?i: ... )
+// which uses a non-capturing set of parens to turn a case sensitive
+// regular expression pattern into a case insensitive regular
+// expression pattern.
+func caseInsensitive(pattern string) string {
+	return fmt.Sprintf("(?i:%s)", pattern)
 }
 
 // anchorPattern surrounds the transformed input string with
