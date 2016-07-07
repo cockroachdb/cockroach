@@ -338,6 +338,50 @@ type Store struct {
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 
+		// The replica descriptor cache maps <rangeID, replicaID> to
+		// ReplicaDescriptor. Normally, a replica knows about the other replica
+		// descriptors for a range via the RangeDescriptor stored in
+		// Replica.mu.state.Desc. But that descriptor is only updated during a
+		// Split or ChangeReplicas operation. There are periods during a Replica's
+		// lifetime when that information is out of date:
+		//
+		// 1. When a replica is being newly created as the result of an incoming
+		// Raft message for it. This is the common case for ChangeReplicas and an
+		// uncommon case for Splits. The leader will be sending the replica
+		// messages and the replica needs to be able to respond before it can
+		// receive an updated range descriptor (via a snapshot,
+		// changeReplicasTrigger, or splitTrigger).
+		//
+		// 2. If the node containing a replica is partitioned or down while the
+		// replicas for the range are updated. When the node comes back up, other
+		// replicas may begin communicating with it and it needs to be able to
+		// respond. Unlike 1 where there is no range descriptor, in this situation
+		// the replica has a range descriptor but it is out of date. Note that a
+		// replica being removed from a node and then quickly re-added before the
+		// replica has been GC'd will also utilize the replica descriptor cache. In
+		// effect, this is another path for which the replica's local range
+		// descriptor is out of date.
+		//
+		// The replica descriptor cache is updated on receipt of every raft message
+		// (see Store.handleRaftMessage). Cached descriptors are retrieved when
+		// sending raft messages in order to have the most up to date descriptor
+		// for a replica (see Replica.sendRaftMessage).
+		//
+		// TODO(peter): The replica descriptor cache is a historical artifact from
+		// the multiraft era. It might be preferrable to move this cache to Replica
+		// and change it to a map keyed by replicaID. The question then becomes
+		// how/when to expire old entries from the cache. Presumably we could hook
+		// into Replica.setDesc to notice when a replicaID has been removed. It is
+		// possible we could get away with a single entry cache as we only need to
+		// be able to respond to the last replica that talked to us.
+		//
+		// There is a potential downside to this move: removing a replica from
+		// Store.mu.replicas will remove cached replica descriptor
+		// information. @bdarnell Thinks this won't be a problem: When a replica is
+		// completely removed, it won't be recreated until there is another event
+		// that will repopulate the cache. When it is temporarily dropped and
+		// recreated, the newly recreated replica will have a complete range
+		// descriptor so it won't need to rely on this cache.
 		replicaDescCache *cache.UnorderedCache
 	}
 
