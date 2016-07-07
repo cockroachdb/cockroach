@@ -338,6 +338,33 @@ type Store struct {
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 
+		// The replica descriptor cache maps <rangeID, replicaID> to
+		// ReplicaDescriptor. Normally, a replica knows about the other replica
+		// descriptors for a range via the RangeDescriptor stored in
+		// Replica.mu.state.desc. But that descriptor is only updated during a
+		// split or change-replicas operation. There are periods during a Replica's
+		// lifetime when that information is out of date:
+		//
+		// 1. When a replica is being newly created. The leader will be sending the
+		// replica messages and the replica needs to be able to respond before it
+		// has received the change-replicas command.
+		//
+		// 2. If the node containing a replica is partitioned or down while the
+		// replicas for the range are updated. When the node comes back up, other
+		// replicas may begin communicating with it and it needs to be able to
+		// respond.
+		//
+		// The replica descriptor cache is updated on receipt of every raft message
+		// (see Store.handleRaftMessage). Cached descriptors are retrieved when
+		// sending raft messages in order to have the most up to date descriptor
+		// for a replica (see Replica.sendRaftMessage).
+		//
+		// TODO(peter): It might be preferrable to move this cache to Replica and
+		// change it to a map keyed by replicaID. The question then becomes
+		// how/when to expire old entries from the cache. Presumably we could hook
+		// into Replica.setDesc to notice when a replicaID has been removed. There
+		// is a potential downside to this move: removing a replica from
+		// Store.mu.replicas will remove cached replica descriptor information.
 		replicaDescCache *cache.UnorderedCache
 	}
 
