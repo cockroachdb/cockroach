@@ -836,6 +836,7 @@ Available Commands:
   user           get, set, list and remove users
   zone           get, set, list and remove zones
   node           list nodes and show their status
+  dump           dump sql tables
 
   gen            generate manpages and bash completion file
   version        output version information
@@ -843,6 +844,7 @@ Available Commands:
 
 Flags:
       --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default NONE)
+      --duration-random value          duration for randomized dump test to run (default 1s)
       --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
       --log-dir value                  if non-empty, write log files in this directory
       --logtostderr                    log to standard error instead of files
