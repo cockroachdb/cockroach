@@ -600,7 +600,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, errors.Errorf("unsupported bytea format code: %s", code)
 		}
-	case oid.T_timestamp, oid.T_timestamptz:
+	case oid.T_timestamp:
 		switch code {
 		case formatText:
 			ts, err := parseTs(string(b))
@@ -610,6 +610,17 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			d = parser.MakeDTimestamp(ts, time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamp format code: %s", code)
+		}
+	case oid.T_timestamptz:
+		switch code {
+		case formatText:
+			ts, err := parseTs(string(b))
+			if err != nil {
+				return d, errors.Errorf("could not parse string %q as timestamp", b)
+			}
+			d = parser.MakeDTimestampTZ(ts, time.Microsecond)
+		default:
+			return d, errors.Errorf("unsupported timestamptz format code: %s", code)
 		}
 	case oid.T_date:
 		switch code {

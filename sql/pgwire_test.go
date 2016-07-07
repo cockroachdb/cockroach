@@ -771,8 +771,7 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
-			// TODO(dt, nvanbenschoten): can we avoid this cast? #7647
-			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $9, $10)",
+			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
 			[]preparedExecTest{
 				base.RowsAffected(1).SetArgs(
 					int64(0),
