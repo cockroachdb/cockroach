@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -2656,7 +2655,11 @@ func (r *Replica) ChangeReplicas(
 		// negate the benefits of pre-emptive snapshots, but that is a recoverable
 		// degradation, not a catastrophic failure.
 
-		snap, err := r.GetSnapshot()
+		// TODO(bdarnell): Preemptive snapshots are disabled pending resolution of
+		// #7600 and #7619.
+		// We generate a snapshot and discard it for throttling purposes.
+		_, _ = r.GetSnapshot()
+		/*snap, err := r.GetSnapshot()
 		if err != nil {
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
@@ -2676,7 +2679,7 @@ func (r *Replica) ChangeReplicas(
 				From:     uint64(fromRepDesc.ReplicaID),
 				Snapshot: snap,
 			},
-		})
+		})*/
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
