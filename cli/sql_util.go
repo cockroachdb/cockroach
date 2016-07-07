@@ -92,6 +92,17 @@ func (c *sqlConn) Next() (*sqlRows, error) {
 	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
+func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
+	rows, err := makeQuery(query, args...)(c)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	vals := make([]driver.Value, len(rows.Columns()))
+	err = rows.Next(vals)
+	return vals, err
+}
+
 func (c *sqlConn) Close() {
 	if c.conn != nil {
 		err := c.conn.Close()
@@ -133,10 +144,19 @@ func (r *sqlRows) Close() error {
 	return err
 }
 
+// Next populates values with the next row of results. []byte values are copied
+// so that subsequent calls to Next and Close do not mutate values. This
+// makes it slower than theoretically possible but the safety concerns
+// (since this is unobvious and unexpected behavior) outweigh.
 func (r *sqlRows) Next(values []driver.Value) error {
 	err := r.rows.Next(values)
 	if err == driver.ErrBadConn {
 		r.conn.Close()
+	}
+	for i, v := range values {
+		if b, ok := v.([]byte); ok {
+			values[i] = append([]byte{}, b...)
+		}
 	}
 	return err
 }

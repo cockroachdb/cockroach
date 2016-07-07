@@ -192,7 +192,7 @@ var nodeCmds = []*cobra.Command{
 
 var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
-	Short: "list nodes and show their status\n",
+	Short: "list nodes and show their status",
 	Long:  "List nodes and show their status.",
 	Run: func(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)

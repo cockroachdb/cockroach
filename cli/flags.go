@@ -429,7 +429,7 @@ func init() {
 	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, envutil.EnvOrDefaultString(cliflags.PasswordName, ""), usageEnv(cliflags.PasswordName))
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, quitCmd, freezeClusterCmd, /* startCmd is covered above */
+		sqlShellCmd, quitCmd, freezeClusterCmd, dumpCmd, /* startCmd is covered above */
 	}
 	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
@@ -474,7 +474,7 @@ func init() {
 	}
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd}
+	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd}
 	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
