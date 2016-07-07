@@ -280,7 +280,9 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 // not have side effects.
 // Returns the updated version of the descriptor.
 func (s LeaseStore) Publish(
-	tableID sqlbase.ID, update func(*sqlbase.TableDescriptor) error,
+	tableID sqlbase.ID,
+	update func(*sqlbase.TableDescriptor) error,
+	logEvent func(*client.Txn) error,
 ) (*sqlbase.Descriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
@@ -334,9 +336,25 @@ func (s LeaseStore) Publish(
 			}
 
 			// Write the updated descriptor.
+			txn.SetSystemConfigTrigger()
 			b := txn.NewBatch()
 			b.Put(descKey, desc)
-			txn.SetSystemConfigTrigger()
+			if logEvent != nil {
+				// If an event log is required for this update, ensure that the
+				// descriptor change occurs first in the transaction. This is
+				// necessary to ensure that the System configuration change is
+				// gossiped. See the documentation for
+				// transaction.SetSystemConfigTrigger() for more information.
+				if err := txn.Run(b); err != nil {
+					return err
+				}
+				if err := logEvent(txn); err != nil {
+					return err
+				}
+				return txn.Commit()
+			}
+			// More efficient batching can be used if no event log message
+			// is required.
 			return txn.CommitInBatch(b)
 		})
 
