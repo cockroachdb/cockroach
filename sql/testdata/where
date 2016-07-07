@@ -58,6 +58,12 @@ SELECT 'hello' SIMILAR TO v FROM kvString WHERE k SIMILAR TO 'like[1-2]'
 true
 false
 
+query B
+SELECT 'hello' ~ replace(v, '%', '.*') FROM kvString WHERE k ~ 'like[1-2]'
+----
+true
+false
+
 # Test mixed type tuple comparison.
 
 query II
