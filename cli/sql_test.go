@@ -95,6 +95,9 @@ SET
 		FuncOnWidthChanged:     func(func()) {},
 	}
 
+	// Some other tests (TestDumpRow) mess with this, so make sure it's set.
+	cliCtx.prettyFmt = true
+
 	for _, test := range tests {
 		conf.Stdin = strings.NewReader(test.in)
 		out, err := captureOutput(func() {
