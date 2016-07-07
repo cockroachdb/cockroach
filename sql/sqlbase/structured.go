@@ -1056,6 +1056,16 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
+// FindInterleaveByIndexID finds an interleave with the specified IndexID.
+func (desc *TableDescriptor) FindInterleaveByIndexID(indexID IndexID) (*InterleaveDescriptor, bool) {
+	for i := range desc.Interleaves {
+		if desc.Interleaves[i].IndexID == indexID {
+			return &desc.Interleaves[i], true
+		}
+	}
+	return nil, false
+}
+
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
 func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 	switch m.Direction {
@@ -1276,9 +1286,4 @@ func (desc *Descriptor) GetName() string {
 	default:
 		return ""
 	}
-}
-
-// IndexKeyPrefix returns the prefix for the table-index reference.
-func (t ForeignKeyReference) IndexKeyPrefix() []byte {
-	return MakeIndexKeyPrefix(t.Table, t.Index)
 }

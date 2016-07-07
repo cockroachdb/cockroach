@@ -198,6 +198,39 @@ message DescriptorMutation {
       (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
 }
 
+// InterleaveDescriptor represents an index (either primary or secondary) that
+// is interleaved into another table's data.
+message InterleaveDescriptor {
+  message Component {
+    // ParentID the ID of the table being interleaved into.
+    optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+    // IndexID is the ID of the parent index being interleaved into.
+    optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+    // SharedPrefixLen is how many fields are shared between a parent and child
+    // being interleaved, excluding the fields shared between parent and
+    // grandparent. Thus, the sum of SharedPrefixLens in the components of an
+    // InterleaveDescriptor is always strictly less than the number of fields
+    // in the index being interleaved. Example:
+    // Table 1 -> /a/b
+    // Table 2 -> /a/b/c
+    // Table 3 -> /a/b/c/d
+    // There are two components (table 2 is the parent and table 1 is the
+    // grandparent) with shared lengths 2 and 1.
+    optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "SharedPrefixLen"];
+  }
+
+  // IndexID is the index being interleaved.
+  optional uint32 index_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+  // Components contains the nesting of interleaves in the order they appear in
+  // an encoded key. The last element is interleaved into the second to last,
+  // and so on.
+  repeated Component components = 2 [(gogoproto.nullable) = false];
+}
+
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
@@ -213,6 +246,8 @@ message TableDescriptor {
   // ID of the parent database.
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  repeated InterleaveDescriptor interleaves = 24 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "Interleaves"];
   // Monotonically increasing version of the table descriptor.
   //
   // Invariants:
