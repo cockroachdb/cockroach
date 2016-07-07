@@ -41,7 +41,7 @@ const (
 var explainStrings = []string{"", "debug", "plan", "trace", "types"}
 
 // Explain executes the explain statement, providing debugging and analysis
-// info about a DELETE, INSERT, SELECT or UPDATE statement.
+// info about an ALTER TABLE, CREATE, DELETE, DROP, INSERT, SELECT, or UPDATE statement.
 //
 // Privileges: the same privileges as the statement being explained.
 func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) {
