@@ -2256,8 +2256,37 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
+	{
+		// TODO(tschottdorf): This is subtle. We are about to commit our batch
+		// and communicate the split to the Store, but we are in fact already
+		// writing to the "other" Range's key space (and in particular to the
+		// Raft state) in this batch. Between committing and telling the Store,
+		// we could race with an uninitialized version of our new Replica which
+		// might have been created by an incoming message from another node
+		// which already processed the split.
+		// This other version might be queued up (or currently in the process
+		// of) updating its state due to a vote cast or heartbeat responded
+		// to, and we can not have it do anything after this point (we are
+		// about to absorb its HardState).
+		//
+		// This is a stop-gap to achieve this: If there is an uninitialized
+		// Replica, disable it now (but leave it in the map). The split will
+		// then delete it after we committed.
+		// See #7600.
+		r.store.mu.Lock()
+		if uninitRHS := r.store.mu.uninitReplicas[split.NewDesc.RangeID]; uninitRHS != nil {
+			uninitRHS.mu.Lock()
+			uninitRHS.mu.internalRaftGroup = nil
+			uninitRHS.mu.destroyed = errors.Errorf(
+				"replica %d (range %d) disabled by split trigger",
+				uninitRHS.mu.replicaID, uninitRHS.RangeID,
+			)
+			uninitRHS.mu.Unlock()
+		}
+		r.store.mu.Unlock()
+	}
 	// Write the initial state for the new Raft group of the right-hand side.
-	// Node that this needs to go into deltaMS (which is the total difference
+	// Note that this needs to go into deltaMS (which is the total difference
 	// in bytes reported to the store in the end). We compute the RHS' stats
 	// from it below.
 	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
