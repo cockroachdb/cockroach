@@ -1961,7 +1961,6 @@ func (r *Replica) applyRaftCommand(
 	})
 	if err := batch.Commit(); err != nil {
 		rErr = roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
-	} else {
 	}
 
 	// On successful write commands handle write-related triggers including
