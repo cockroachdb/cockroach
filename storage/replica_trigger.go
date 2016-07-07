@@ -339,7 +339,7 @@ func (r *Replica) leasePostCommitTrigger(
 				//
 				// TODO(tschottdorf): this error is not handled any more
 				// at this level.
-				log.Fatal(context.Background(), newReplicaCorruptionError(err))
+				log.Fatal(context.Background(), NewReplicaCorruptionError(err))
 			}
 		}
 	}
