@@ -94,6 +94,39 @@ message ColumnFamilyDescriptor {
       (gogoproto.customname) = "DefaultColumnID", (gogoproto.casttype) = "ColumnID"];
 }
 
+// InterleaveDescriptor represents an index (either primary or secondary) that
+// is interleaved into another table's data.
+//
+// Example:
+// Table 1 -> /a/b
+// Table 2 -> /a/b/c
+// Table 3 -> /a/b/c/d
+//
+// There are two components (table 2 is the parent and table 1 is the
+// grandparent) with shared lengths 2 and 1.
+message InterleaveDescriptor {
+  message Ancestor {
+    // TableID the ID of the table being interleaved into.
+    optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
+    // IndexID is the ID of the parent index being interleaved into.
+    optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+    // SharedPrefixLen is how many fields are shared between a parent and child
+    // being interleaved, excluding any fields shared between parent and
+    // grandparent. Thus, the sum of SharedPrefixLens in the components of an
+    // InterleaveDescriptor is always strictly less than the number of fields
+    // in the index being interleaved.
+    optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "SharedPrefixLen"];
+  }
+
+  // Ancestors contains the nesting of interleaves in the order they appear in
+  // an encoded key. This means they are always in the far-to-near ancestor
+  // order (e.g. grand-grand-parent, grand-parent, parent).
+  repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
+}
+
 message IndexDescriptor {
   // The direction of a column in the index.
   enum Direction {
@@ -133,6 +166,10 @@ message IndexDescriptor {
 
   optional ForeignKeyReference foreign_key = 9;
   repeated ForeignKeyReference referenced_by = 10;
+
+  // Interleave, if it's not the zero value, describes how this index's data is
+  // interleaved into another index's data.
+  optional InterleaveDescriptor interleave = 11 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that
