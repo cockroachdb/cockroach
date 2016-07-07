@@ -524,6 +524,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   PLACEHOLDER
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+%token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
 %token <str>   ERROR
 
 // If you want to make any keyword changes, update the keyword table in
@@ -632,7 +633,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_LA
+%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH, NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
@@ -3253,6 +3254,22 @@ a_expr:
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
   {
     $$.val = &ComparisonExpr{Operator: NotSimilarTo, Left: $1.expr(), Right: $5.expr()}
+  }
+| a_expr '~' a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: RegMatch, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr NOT_REGMATCH a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: NotRegMatch, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr REGIMATCH a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: RegIMatch, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr NOT_REGIMATCH a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: NotRegIMatch, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr IS NULL %prec IS
   {
