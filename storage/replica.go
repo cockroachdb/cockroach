@@ -2114,7 +2114,10 @@ func (r *Replica) applyRaftCommand(
 	// TODO(tschottdorf): with proposer-eval'ed KV, the batch would not be
 	// committed at this point. Instead, it would be added to propResult.
 	if err := batch.Commit(); err != nil {
-		rErr = roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
+		if rErr != nil {
+			err = errors.Wrap(rErr.GoError(), err.Error())
+		}
+		rErr = roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not commit batch")))
 	} else {
 		r.mu.Lock()
 		// Update cached appliedIndex if we were able to set the applied index
@@ -2207,7 +2210,7 @@ func (r *Replica) checkIfTxnAborted(
 	var entry roachpb.AbortCacheEntry
 	aborted, err := r.abortCache.Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("could not read from abort cache"), err))
+		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from abort cache")))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
@@ -2689,20 +2692,8 @@ func (r *Replica) maybeGossipSystemConfig() {
 
 // NewReplicaCorruptionError creates a new error indicating a corrupt replica,
 // with the supplied list of errors given as history.
-func NewReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
-	var errMsg string
-	for i := range errs {
-		err := errs[len(errs)-i-1]
-		if err == nil {
-			continue
-		}
-		if len(errMsg) == 0 {
-			errMsg = err.Error()
-		} else {
-			errMsg = fmt.Sprintf("%s (caused by %s)", err, errMsg)
-		}
-	}
-	return &roachpb.ReplicaCorruptionError{ErrorMsg: errMsg}
+func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
+	return &roachpb.ReplicaCorruptionError{ErrorMsg: err.Error()}
 }
 
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
