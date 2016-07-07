@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -90,6 +91,12 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 // InsertEventRecord inserts a single event into the event log as part of the
 // provided transaction.
 func (ev EventLogger) InsertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) error {
+	// Record event record insertion in local log output.
+	log.Infoc(txn.Context, "Event: %q, target: %d, info: %+v",
+		eventType,
+		targetID,
+		info)
+
 	const insertEventTableStmt = `
 INSERT INTO system.eventlog (
   timestamp, eventType, targetID, reportingID, info
