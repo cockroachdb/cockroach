@@ -1738,7 +1738,7 @@ func (r *Replica) applyNewLeaseLocked(
 				// while lacking the necessary synchronization (or even worse, it
 				// fails spuriously - could be a storage error), and so we avoid
 				// sweeping that under the rug.
-				return roachpb.RequestLeaseResponse{}, newReplicaCorruptionError(err)
+				return roachpb.RequestLeaseResponse{}, NewReplicaCorruptionError(err)
 			}
 		}
 	}

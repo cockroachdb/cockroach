@@ -4414,7 +4414,7 @@ func TestReplicaCorruption(t *testing.T) {
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return roachpb.NewError(NewReplicaCorruptionError())
+				return roachpb.NewError(NewReplicaCorruptionError(errors.New("boom")))
 			}
 			return nil
 		}
@@ -5569,8 +5569,9 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 		errStruct *roachpb.ReplicaCorruptionError
 		expErr    string
 	}{
-		{NewReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil), "replica corruption (processed=false): foo (caused by bar)"},
-		{NewReplicaCorruptionError(nil, nil, nil), "replica corruption (processed=false)"},
+		{NewReplicaCorruptionError(errors.New("")), "replica corruption (processed=false)"},
+		{NewReplicaCorruptionError(errors.New("foo")), "replica corruption (processed=false): foo"},
+		{NewReplicaCorruptionError(errors.Wrap(errors.New("bar"), "foo")), "replica corruption (processed=false): foo: bar"},
 	} {
 		// This uses fmt.Sprint because that ends up calling Error() and is the
 		// intended use. A previous version of this test called String() directly
