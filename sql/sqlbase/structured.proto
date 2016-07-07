@@ -46,9 +46,10 @@ message ColumnType {
   optional int32 precision = 3 [(gogoproto.nullable) = false];
 }
 
-message TableAndIndexID {
-  optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"] ;
+message ForeignKeyReference {
+  optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -130,8 +131,8 @@ message IndexDescriptor {
   repeated uint32 implicit_column_ids = 7 [(gogoproto.customname) = "ImplicitColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 
-  optional TableAndIndexID foreign_key = 9;
-  repeated TableAndIndexID referenced_by = 10;
+  optional ForeignKeyReference foreign_key = 9;
+  repeated ForeignKeyReference referenced_by = 10;
 }
 
 // A DescriptorMutation represents a column or an index that

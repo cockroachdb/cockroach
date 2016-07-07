@@ -14,7 +14,7 @@ It has these top-level messages:
 	UserPrivileges
 	PrivilegeDescriptor
 	ColumnType
-	TableAndIndexID
+	ForeignKeyReference
 	ColumnDescriptor
 	ColumnFamilyDescriptor
 	IndexDescriptor
