@@ -179,7 +179,7 @@ func (sc *SchemaChanger) getTableSpan() (sqlbase.Span, error) {
 	}); err != nil {
 		return sqlbase.Span{}, err
 	}
-	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
+	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID))
 	return sqlbase.Span{
 		Start: prefix,
 		End:   prefix.PrefixEnd(),
@@ -314,7 +314,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 
-		indexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID)
+		indexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 		oldValues := make(parser.DTuple, len(ru.fetchCols))
 		updateValues := make(parser.DTuple, len(updateCols))
 
@@ -330,7 +330,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			}
 
 			curIndexKey, _, err = sqlbase.EncodeIndexKey(
-				&tableDesc.PrimaryIndex, colIDtoRowIndex, row, indexKeyPrefix)
+				tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, row, indexKeyPrefix)
 
 			for j, col := range added {
 				if defaultExprs == nil || defaultExprs[j] == nil {
@@ -390,7 +390,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				return nil
 			}
 
-			indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, desc.ID)
+			indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, desc.ID)
 
 			// Delete the index.
 			indexStartKey := roachpb.Key(indexPrefix)
@@ -513,7 +513,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			for _, desc := range added {
 				secondaryIndexEntries := make([]sqlbase.IndexEntry, 1)
 				err := sqlbase.EncodeSecondaryIndexes(
-					tableDesc.ID, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex,
+					tableDesc, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex,
 					rowVals, secondaryIndexEntries)
 				if err != nil {
 					return err

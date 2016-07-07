@@ -93,7 +93,7 @@ func (jr *joinReader) generateKey(
 // mainLoop runs the mainLoop and returns any error.
 // It does not close the output.
 func (jr *joinReader) mainLoop() error {
-	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(jr.desc.ID, jr.index.ID)
+	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	var alloc sqlbase.DatumAlloc
 	spans := make(sqlbase.Spans, 0, joinReaderBatchSize)

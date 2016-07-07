@@ -311,22 +311,65 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	return col, idx, nil
 }
 
+// MakeIndexKeyPrefix returns the key prefix used for the index's data.
+func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
+	var key []byte
+	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
+		key = encoding.EncodeUvarintAscending(key, uint64(i.Interleave.Ancestors[0].TableID))
+		key = encoding.EncodeUvarintAscending(key, uint64(i.Interleave.Ancestors[0].IndexID))
+		return key
+	}
+	key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
+	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
+	return key
+}
+
 // EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
-// the columns in the index (into a new buffer - does not directly append to
-// keyPrefix).
+// the columns in the index.
 //
 // Returns the key and whether any of the encoded values were NULLs.
 //
 // Note that ImplicitColumnIDs are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
+	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	return EncodeColumns(index.ColumnIDs, directions(index.ColumnDirections),
-		colMap, values, keyPrefix)
+	key = keyPrefix
+
+	var offset int
+	dirs := directions(index.ColumnDirections)
+	if len(index.Interleave.Ancestors) > 0 {
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is assumed to already be encoded in keyPrefix.
+			if i != 0 {
+				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.TableID))
+				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.IndexID))
+			}
+
+			l := int(ancestor.SharedPrefixLen)
+			var n bool
+			key, n, err = EncodeColumns(index.ColumnIDs[offset:offset+l], dirs[offset:offset+l], colMap, values, key)
+			if err != nil {
+				return key, containsNull, err
+			}
+			offset += l
+			containsNull = containsNull || n
+
+			key = encoding.EncodeNullDescending(key)
+		}
+
+		key = encoding.EncodeVarintAscending(key, int64(tableDesc.ID))
+		key = encoding.EncodeVarintAscending(key, int64(index.ID))
+	}
+
+	var n bool
+	key, n, err = EncodeColumns(index.ColumnIDs[offset:], dirs[offset:], colMap, values, key)
+	containsNull = containsNull || n
+	return key, containsNull, err
 }
 
 type directions []IndexDescriptor_Direction
@@ -563,28 +606,67 @@ func MakeKeyVals(
 
 // DecodeIndexKeyPrefix decodes the prefix of an index key and returns the
 // index id and a slice for the rest of the key.
-func DecodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (
-	IndexID, []byte, error,
+func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
+	indexID IndexID, remaining []byte, err error,
 ) {
-	if encoding.PeekType(key) != encoding.Int {
-		return 0, nil, errors.Errorf("%s: invalid key prefix: %q", desc.Name, key)
+	// TODO(dan): This whole operation is n^2 because of the interleaves
+	// bookkeeping. We could improve it to n with a prefix tree of components.
+
+	interleaves := append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...)
+
+	for component := 0; ; component++ {
+		var tableID uint64
+		key, tableID, err = encoding.DecodeUvarintAscending(key)
+		if err != nil {
+			return 0, nil, err
+		}
+		var indexIDRaw uint64
+		key, indexIDRaw, err = encoding.DecodeUvarintAscending(key)
+		if err != nil {
+			return 0, nil, err
+		}
+		indexID = IndexID(indexIDRaw)
+		if ID(tableID) == desc.ID {
+			// Once desc's table id has been decoded, there can be no more
+			// interleaves.
+			remaining = key
+			break
+		}
+
+		for i := len(interleaves) - 1; i >= 0; i-- {
+			if len(interleaves[i].Interleave.Ancestors) <= component ||
+				interleaves[i].Interleave.Ancestors[component].TableID != ID(tableID) ||
+				interleaves[i].Interleave.Ancestors[component].IndexID != indexID {
+
+				// This component, and thus this interleave, doesn't match what was
+				// decoded, remove it.
+				copy(interleaves[i:], interleaves[i+1:])
+				interleaves = interleaves[:len(interleaves)-1]
+			}
+		}
+		// The decoded key doesn't many any known interleaves
+		if len(interleaves) == 0 {
+			return 0, nil, errors.Errorf("no known interleaves for key")
+		}
+
+		// Anything left has the same SharedPrefixLen at index `component`, so just
+		// use the first one.
+		for i := uint32(0); i < interleaves[0].Interleave.Ancestors[component].SharedPrefixLen; i++ {
+			l, err := encoding.PeekLength(key)
+			if err != nil {
+				return 0, nil, err
+			}
+			key = key[l:]
+		}
+
+		var ok bool
+		key, ok = encoding.DecodeIfNull(key)
+		if !ok {
+			return 0, nil, errors.Errorf("invalid interleave key")
+		}
 	}
 
-	key, tableID, err := encoding.DecodeUvarintAscending(key)
-	if err != nil {
-		return 0, nil, err
-	}
-	key, indexID, err := encoding.DecodeUvarintAscending(key)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	if ID(tableID) != desc.ID {
-		return IndexID(indexID), nil,
-			errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
-	}
-
-	return IndexID(indexID), key, nil
+	return indexID, key, err
 }
 
 // DecodeIndexKey decodes the values that are a part of the specified index
@@ -600,15 +682,60 @@ func DecodeIndexKey(
 	colDirs []encoding.Direction,
 	key []byte,
 ) ([]byte, error) {
-	decodedIndexID, remaining, err := DecodeIndexKeyPrefix(desc, key)
+	var err error
+	var offset int
+	if index, err := desc.FindIndexByID(indexID); err == nil && len(index.Interleave.Ancestors) > 0 {
+		for _, ancestor := range index.Interleave.Ancestors {
+			var parentTableID uint64
+			key, parentTableID, err = encoding.DecodeUvarintAscending(key)
+			if err != nil {
+				return nil, err
+			}
+			if ID(parentTableID) != ancestor.TableID {
+				return nil, errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, ancestor.TableID, parentTableID)
+			}
+
+			var parentIndexID uint64
+			key, parentIndexID, err = encoding.DecodeUvarintAscending(key)
+			if err != nil {
+				return nil, err
+			}
+			if IndexID(parentIndexID) != ancestor.IndexID {
+				return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, ancestor.IndexID, parentIndexID)
+			}
+
+			l := int(ancestor.SharedPrefixLen)
+			key, err = DecodeKeyVals(a, valTypes[offset:offset+l], vals[offset:offset+l], colDirs[offset:offset+l], key)
+			offset += l
+
+			var ok bool
+			key, ok = encoding.DecodeIfNull(key)
+			if ok != true {
+				return nil, errors.Errorf("%s: malformed index key, expected NULL: %x", desc.Name, key)
+			}
+		}
+	}
+
+	var tableID int64
+	key, tableID, err = encoding.DecodeVarintAscending(key)
+	if err != nil {
+		return nil, err
+	}
+	if ID(tableID) != desc.ID {
+		return nil, errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+	}
+
+	var decodedIndexID int64
+	key, decodedIndexID, err = encoding.DecodeVarintAscending(key)
 	if err != nil {
 		return nil, err
 	}
 
-	if decodedIndexID != indexID {
+	if IndexID(decodedIndexID) != indexID {
 		return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
 	}
-	return DecodeKeyVals(a, valTypes, vals, colDirs, remaining)
+
+	return DecodeKeyVals(a, valTypes[offset:], vals[offset:], colDirs[offset:], key)
 }
 
 // DecodeKeyVals decodes the values that are part of the key. ValTypes is a
@@ -647,7 +774,7 @@ func ExtractIndexKey(
 	tableDesc *TableDescriptor,
 	entry client.KeyValue,
 ) (roachpb.Key, error) {
-	indexID, key, err := DecodeIndexKeyPrefix(tableDesc, entry.Key)
+	indexID, key, err := DecodeIndexKeyPrefix(a, tableDesc, entry.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -673,9 +800,19 @@ func ExtractIndexKey(
 		}
 	}
 	extractedValues := make([]parser.Datum, len(index.ColumnIDs))
-	key, err = DecodeKeyVals(a, valueTypes, extractedValues, dirs, key)
-	if err != nil {
-		return nil, err
+	if i, err := tableDesc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
+		// TODO(dan): In the interleaved index case, we parse the key twice; once to
+		// find the index id so we can look up the descriptor, and once to extract
+		// the values. Only parse once.
+		_, err = DecodeIndexKey(a, tableDesc, indexID, valueTypes, extractedValues, dirs, entry.Key)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		key, err = DecodeKeyVals(a, valueTypes, extractedValues, dirs, key)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Extract the values for index.ImplicitColumnIDs
@@ -710,8 +847,9 @@ func ExtractIndexKey(
 	for i, columnID := range index.ImplicitColumnIDs {
 		colMap[columnID] = i + len(index.ColumnIDs)
 	}
-	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID)
-	indexKey, _, err := EncodeIndexKey(&tableDesc.PrimaryIndex, colMap, extractedValues, indexKeyPrefix)
+	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	indexKey, _, err := EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colMap, extractedValues, indexKeyPrefix)
 	return indexKey, err
 }
 
@@ -1010,14 +1148,14 @@ type IndexEntry struct {
 // EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
 // ColumnIDs to indices in `values`.
 func EncodeSecondaryIndex(
-	tableID ID,
+	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
 ) (IndexEntry, error) {
-	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
+	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 	secondaryIndexKey, containsNull, err := EncodeIndexKey(
-		secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 	if err != nil {
 		return IndexEntry{}, err
 	}
@@ -1063,7 +1201,7 @@ func EncodeSecondaryIndex(
 // value (passed as a parameter so the caller can reuse between rows) and is
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
-	tableID ID,
+	tableDesc *TableDescriptor,
 	indexes []IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []parser.Datum,
@@ -1071,7 +1209,7 @@ func EncodeSecondaryIndexes(
 ) error {
 	for i := range indexes {
 		var err error
-		secondaryIndexEntries[i], err = EncodeSecondaryIndex(tableID, &indexes[i], colMap, values)
+		secondaryIndexEntries[i], err = EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
 			return err
 		}
