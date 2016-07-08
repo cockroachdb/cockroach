@@ -891,16 +891,39 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 	return nil
 }
 
-// AddColumnToFamily adds the specified column to the specified family.
+// AddColumnToFamilyMaybeCreate adds the specified column to the specified
+// family. If it doesn't exist and create is true, creates it. If it does exist
+// adds it unless "strict" create (`true` for create but `false` for
+// ifNotExists) is specified.
+//
 // AllocateIDs must be called before the TableDesciptor will be valid.
-func (desc *TableDescriptor) AddColumnToFamily(col string, family string) error {
-	for i := range desc.Families {
-		if desc.Families[i].Name == family {
-			desc.Families[i].ColumnNames = append(desc.Families[i].ColumnNames, col)
-			return nil
+func (desc *TableDescriptor) AddColumnToFamilyMaybeCreate(
+	col string, family string, create bool, ifNotExists bool,
+) error {
+	idx := int(-1)
+	if len(family) > 0 {
+		normName := NormalizeName(family)
+		for i := range desc.Families {
+			if NormalizeName(desc.Families[i].Name) == normName {
+				idx = i
+				break
+			}
 		}
 	}
-	return fmt.Errorf("unknown family %q", family)
+
+	if idx == -1 {
+		if create {
+			desc.AddFamily(ColumnFamilyDescriptor{Name: family, ColumnNames: []string{col}})
+			return nil
+		}
+		return fmt.Errorf("unknown family %q", family)
+	}
+
+	if create && !ifNotExists {
+		return fmt.Errorf("family %q already exists", family)
+	}
+	desc.Families[idx].ColumnNames = append(desc.Families[idx].ColumnNames, col)
+	return nil
 }
 
 // RemoveColumnFromFamily removes a colID from the family it's assigned to.
