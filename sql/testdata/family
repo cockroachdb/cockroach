@@ -82,6 +82,9 @@ SELECT * from abcd WHERE a > 1
 statement ok
 ALTER TABLE abcd ADD COLUMN f DECIMAL
 
+statement ok
+ALTER TABLE abcd ADD COLUMN g INT FAMILY CREATE
+
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -92,10 +95,12 @@ abcd  CREATE TABLE abcd (
       d INT NULL,
       e STRING NULL,
       f DECIMAL NULL,
+      g INT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
       FAMILY f1 (a, b, e),
       FAMILY fam_1_c_d (c, d),
-      FAMILY fam_2_f (f)
+      FAMILY fam_2_f (f),
+      FAMILY fam_3_g (g)
       )
 
 statement ok
@@ -108,13 +113,31 @@ abcd  CREATE TABLE abcd (
       a INT NOT NULL,
       b INT NULL,
       f DECIMAL NULL,
+      g INT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
       FAMILY f1 (a, b),
-      FAMILY fam_2_f (f)
+      FAMILY fam_2_f (f),
+      FAMILY fam_3_g (g)
       )
 
 statement error unknown family \"foo\"
 ALTER TABLE abcd ADD COLUMN c INT FAMILY foo
+
+statement ok
+CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT FAMILY CREATE)
+
+query TT
+SHOW CREATE TABLE assign_at_create
+----
+assign_at_create  CREATE TABLE assign_at_create (
+                    a INT NOT NULL,
+                    b INT NULL,
+                    c INT NULL,
+                    CONSTRAINT "primary" PRIMARY KEY (a),
+                    FAMILY pri (a),
+                    FAMILY foo (b),
+                    FAMILY fam_2_c (c)
+                  )
 
 # Check the the diff-column-id storage
 statement ok

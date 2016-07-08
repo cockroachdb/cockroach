@@ -60,6 +60,16 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 					return desc, err
 				}
 			}
+			if d.Family.Name != "" {
+				desc.AddFamily(ColumnFamilyDescriptor{
+					Name:        string(d.Family.Name),
+					ColumnNames: []string{col.Name},
+				})
+			}
+			if d.Family.Create {
+				desc.AddFamily(ColumnFamilyDescriptor{ColumnNames: []string{col.Name}})
+			}
+
 		case *parser.IndexTableDef:
 			idx := IndexDescriptor{
 				Name:             string(d.Name),

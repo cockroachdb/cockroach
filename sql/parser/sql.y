@@ -1549,6 +1549,10 @@ col_qualification:
   {
     $$.val = NamedColumnQualification{Qualification: &ColumnFamilyConstraint{Family: Name($2)}}
   }
+| FAMILY CREATE
+  {
+    $$.val = NamedColumnQualification{Qualification: &ColumnFamilyConstraint{Create: true}}
+  }
 
 // DEFAULT NULL is already the default for Postgres. But define it here and
 // carry it forward into the system to make it explicit.
