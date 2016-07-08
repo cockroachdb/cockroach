@@ -161,7 +161,6 @@ var (
 		atEnd  bool
 	}{
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
-		{name: "RangeTreeNode", suffix: localRangeTreeNodeSuffix, atEnd: true},
 		{name: "Transaction", suffix: localTransactionSuffix, atEnd: false},
 	}
 )
@@ -475,7 +474,6 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 //			/[rangeid]/RangeStats                     "\x01s"+[rangeid]+"stat"
 //		/Range/...                                  "\x01k"+...
 //			/RangeDescriptor/[key]                    "\x01k"+[key]+"rdsc"
-//			/RangeTreeNode/[key]                      "\x01k"+[key]+"rtn-"
 //			/Transaction/addrKey:[key]/id:[id]				"\x01k"+[key]+"txn-"+[id]
 // /Local/Max                                     "\x02"
 //
