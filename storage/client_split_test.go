@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 )
 
@@ -1007,6 +1008,108 @@ func TestStoreSplitReadRace(t *testing.T) {
 		if respH.Timestamp.Less(ts(i)) {
 			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), respH.Timestamp)
 		}
+	}
+}
+
+// TestStoreRangeSplitRaceUninitializedRHS reproduces #7600 (before it was
+// fixed). While splits are happening, we simulate incoming messages for the
+// right-hand side to trigger a race between the creation of the proper replica
+// and the uninitialized replica reacting to messages.
+func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	storeCtx := storage.TestStoreContext()
+	// An aggressive tick interval lets groups communicate more and thus
+	// triggers test failures much more reliably. We can't go too aggressive
+	// or race tests never make any progress.
+	storeCtx.RaftTickInterval = 50 * time.Millisecond
+	storeCtx.RaftElectionTimeoutTicks = 2
+	currentTrigger := make(chan *roachpb.SplitTrigger)
+	seen := make(map[storagebase.CmdIDKey]struct{})
+	storeCtx.TestingKnobs.TestingCommandFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+		et, ok := args.Req.(*roachpb.EndTransactionRequest)
+		if !ok || et.InternalCommitTrigger == nil {
+			return nil
+		}
+		trigger := protoutil.Clone(et.InternalCommitTrigger.GetSplitTrigger()).(*roachpb.SplitTrigger)
+		if trigger != nil && len(trigger.NewDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 && args.Sid == mtc.stores[0].StoreID() {
+			if _, ok := seen[args.CmdID]; ok {
+				return nil
+			}
+			// Without replay protection, a single reproposal locks up the
+			// test.
+			seen[args.CmdID] = struct{}{}
+			currentTrigger <- trigger
+			return roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(args.Hdr.Timestamp, args.Hdr.Timestamp))
+		}
+		return nil
+	}
+
+	mtc.storeContext = &storeCtx
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	leftRange := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+
+	// We'll fake messages from term 1, ..., .magicIters-1. The exact number
+	// doesn't matter for anything but for its likelihood of triggering the
+	// race.
+	const magicIters = 5
+
+	// Replicate the left range onto the second node. We don't wait since we
+	// don't actually care what the second node does. All we want is that the
+	// first node isn't surprised by messages from that node.
+	mtc.replicateRange(leftRange.RangeID, 1)
+
+	for i := 0; i < 10; i++ {
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			// Split the data range. The split keys are chosen so that they move
+			// towards "a" (so that the range being split is always the first
+			// range).
+			splitKey := roachpb.Key(encoding.EncodeVarintDescending([]byte("a"), int64(i)))
+			splitArgs := adminSplitArgs(keys.SystemMax, splitKey)
+			if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &splitArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+
+			trigger := <-currentTrigger // our own copy
+			// Make sure the first node is first for convenience.
+			replicas := trigger.NewDesc.Replicas
+			if replicas[0].NodeID > replicas[1].NodeID {
+				tmp := replicas[1]
+				replicas[1] = replicas[0]
+				replicas[0] = tmp
+			}
+
+			// Send a few vote requests which look like they're from the other
+			// node's right hand side of the split. This triggers a race which
+			// is discussed in #7600 (briefly, the creation of the right hand
+			// side in the split trigger was racing with the uninitialized
+			// version for the same group, resulting in clobbered HardState).
+			for term := uint64(1); term < magicIters; term++ {
+				if err := mtc.stores[0].HandleRaftMessage(&storage.RaftMessageRequest{
+					RangeID:     trigger.NewDesc.RangeID,
+					ToReplica:   replicas[0],
+					FromReplica: replicas[1],
+					Message: raftpb.Message{
+						Type: raftpb.MsgVote,
+						To:   uint64(replicas[0].ReplicaID),
+						From: uint64(replicas[1].ReplicaID),
+						Term: term,
+					},
+				}); err != nil {
+					t.Error(err)
+				}
+			}
+		}()
+		wg.Wait()
 	}
 }
 
