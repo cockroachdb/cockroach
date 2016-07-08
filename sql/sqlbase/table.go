@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -70,6 +71,9 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
 			}
+			if d.Interleave != nil {
+				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
+			}
 		case *parser.UniqueConstraintTableDef:
 			idx := IndexDescriptor{
 				Name:             string(d.Name),
@@ -87,6 +91,9 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				for _, c := range d.Columns {
 					primaryIndexColumnSet[c.Column] = struct{}{}
 				}
+			}
+			if d.Interleave != nil {
+				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
 			}
 		case *parser.CheckConstraintTableDef:
 			// CHECK expressions seem to vary across databases. Wikipedia's entry on
