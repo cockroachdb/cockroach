@@ -73,16 +73,22 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 }
 
 func printKey(kv engine.MVCCKeyValue) (bool, error) {
-	fmt.Printf("%q\n", kv.Key)
-
+	fmt.Printf("%s", kv.Key)
+	if debugCtx.sizes {
+		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
+	}
+	fmt.Printf("\n")
 	return false, nil
 }
 
 func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 	if kv.Key.Timestamp != hlc.ZeroTimestamp {
-		fmt.Printf("%s %q: ", kv.Key.Timestamp, kv.Key.Key)
+		fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	} else {
-		fmt.Printf("%q: ", kv.Key.Key)
+		fmt.Printf("%s: ", kv.Key.Key)
+	}
+	if debugCtx.sizes {
+		fmt.Printf("%d %d: ", len(kv.Key.Key), len(kv.Value))
 	}
 	decoders := []func(kv engine.MVCCKeyValue) (string, error){
 		tryRaftLogEntry,

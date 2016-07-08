@@ -143,4 +143,5 @@ func (k *mvccKey) Type() string {
 type debugContext struct {
 	startKey, endKey engine.MVCCKey
 	values           bool
+	sizes            bool
 }
