@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +32,12 @@ type StreamID int
 // LocalStreamID identifies a stream that is local to a flow. The identifier can
 // only be used in the context of a specific flow.
 type LocalStreamID int
+
+// FlowID identifies a flow. It is most importantly used when setting up streams
+// between nodes.
+type FlowID struct {
+	uuid.UUID
+}
 
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
