@@ -866,22 +866,7 @@ func IterateRangeDescriptors(
 	return err
 }
 
-// MIGRATION(tschottdorf): As of #7310, we make sure that a Replica always has
-// a complete Raft state on disk. Prior versions may not have that, which
-// causes issues due to the fact that we used to synthesize a TruncatedState
-// and do so no more. To make up for that, write a missing TruncatedState here.
-// That key is in the replicated state, but since during a cluster upgrade, all
-// nodes do it, it's fine (and we never CPut on that key, so anything in the
-// Raft pipeline will simply overwrite it).
-//
-// Migration(tschottdorf): See #6991. It's possible that the HardState is
-// missing after a snapshot was applied (so there is a TruncatedState). In this
-// case, synthesize a HardState (simply setting everything that was in the
-// snapshot to committed). Having lost the original HardState can theoretically
-// mean that the replica was further ahead or had voted, and so there's no
-// guarantee that this will be correct. But it will be correct in the majority
-// of cases, and some state *has* to be recovered.
-func (s *Store) migrate7310And6991(desc roachpb.RangeDescriptor) {
+func (s *Store) migrate(desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
 	if err := migrate7310And6991(batch, desc); err != nil {
 		errors.Wrap(err, "during migration")
@@ -914,6 +899,7 @@ func migrate7310And6991(batch engine.ReadWriter, desc roachpb.RangeDescriptor) e
 	if (*state.TruncatedState == roachpb.RaftTruncatedState{}) {
 		state.TruncatedState.Term = raftInitialLogTerm
 		state.TruncatedState.Index = raftInitialLogIndex
+		state.RaftAppliedIndex = raftInitialLogIndex
 		if _, err := saveState(batch, state); err != nil {
 			return errors.Wrapf(err, "could not migrate TruncatedState to %+v", &state.TruncatedState)
 		}
@@ -1021,8 +1007,10 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// (which is necessary to have a non-nil raft group)
 			return false, s.destroyReplicaData(&desc)
 		}
-
-		s.migrate7310And6991(desc)
+		if !desc.IsInitialized() {
+			return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
+		}
+		s.migrate(desc)
 
 		rng, err := NewReplica(&desc, s, 0)
 		if err != nil {
