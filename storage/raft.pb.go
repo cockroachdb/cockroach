@@ -7,14 +7,11 @@
 
 	It is generated from these files:
 		cockroach/storage/raft.proto
-		cockroach/storage/rangetree.proto
 
 	It has these top-level messages:
 		RaftMessageRequest
 		RaftMessageResponse
 		ConfChangeContext
-		RangeTree
-		RangeTreeNode
 */
 package storage
 

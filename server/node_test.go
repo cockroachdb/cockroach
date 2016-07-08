@@ -157,7 +157,6 @@ func TestBootstrapCluster(t *testing.T) {
 		testutils.MakeKey(roachpb.Key("\x02"), roachpb.KeyMax),
 		testutils.MakeKey(roachpb.Key("\x03"), roachpb.KeyMax),
 		roachpb.Key("\x04node-idgen"),
-		roachpb.Key("\x04range-tree-root"),
 		roachpb.Key("\x04store-idgen"),
 	}
 	// Add the initial keys for sql.
