@@ -6,7 +6,8 @@
   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
   work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891. 
   - A Go environment with a 64-bit version of Go 1.6.2.
-  - Git 1.8+.
+  - Git 1.8+
+  - Bash
 
 2.  Get the CockroachDB code:
 
