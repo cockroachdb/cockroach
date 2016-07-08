@@ -109,8 +109,8 @@ message ProcessorSpec {
 // computation consisting of processors and streams.
 message FlowSpec {
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "FlowID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+                              (gogoproto.customname) = "FlowID",
+                              (gogoproto.customtype) = "FlowID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
 }
