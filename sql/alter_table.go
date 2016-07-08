@@ -94,10 +94,13 @@ func (n *alterTableNode) Start() error {
 			if idx != nil {
 				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
 			}
-			if t.ColumnDef.Family != "" {
-				if err := n.tableDesc.AddColumnToFamily(col.Name, string(t.ColumnDef.Family)); err != nil {
+			if t.ColumnDef.Family.Name != "" {
+				if err := n.tableDesc.AddColumnToFamily(col.Name, string(t.ColumnDef.Family.Name)); err != nil {
 					return err
 				}
+			}
+			if t.ColumnDef.Family.Create {
+				n.tableDesc.AddFamily(sqlbase.ColumnFamilyDescriptor{ColumnNames: []string{col.Name}})
 			}
 
 		case *parser.AlterTableAddConstraint:
