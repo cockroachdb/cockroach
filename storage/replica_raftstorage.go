@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -517,16 +518,21 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
-type snapshotType int
-
-const (
-	normalSnapshot snapshotType = iota
-	preemptiveSnapshot
-)
-
-// applySnapshot updates the replica based on the given snapshot.
-// Returns the new last index.
-func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType) (uint64, error) {
+// applySnapshot updates the replica based on the given snapshot and associated
+// HardState. The supplied HardState must be empty if a preemptive snapshot is
+// being applied (which is the case if and only if the ReplicaID is zero), in
+// which case it will be synthesized from any existing on-disk HardState
+// appropriately. For a regular snapshot, a HardState may or may not be
+// supplied, though in the common case it is (since the commit index changes as
+// a result of the snapshot application, so Raft will supply us with one).
+// The HardState, if altered or supplied, is persisted along with the applied
+// snapshot and the new last index is returned.
+//
+// During preemptive snapshots, we (must) run additional safety checks. For
+// example, the HardState, Raft's view of term, vote and committed log entries,
+// and other Raft state (like acknowledged log entries) must not move backwards,
+// so we must be very careful touching it manually and refuse such snapshots.
+func (r *Replica) applySnapshot(snap raftpb.Snapshot, hs raftpb.HardState) (uint64, error) {
 	// We use a separate batch to apply the snapshot since the Replica (and in
 	// particular the last index) is updated after the batch commits. Using a
 	// separate batch also allows for future optimization (such as using a
@@ -542,20 +548,40 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType) (uint64,
 
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
+	// Fill the reservation if there was one for this range, regardless of
+	// whether the application succeeded.
+	defer r.store.bookie.Fill(desc.RangeID)
 
 	r.mu.Lock()
 	replicaID := r.mu.replicaID
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
 
-	log.Infof("replica %d received snapshot for range %d at index %d. "+
-		"encoded size=%d, %d KV pairs, %d log entries",
-		replicaID, desc.RangeID, snap.Metadata.Index,
+	isPreemptive := replicaID == 0
+
+	replicaIDStr := "[?]"
+	snapType := "preemptive"
+	if !isPreemptive {
+		replicaIDStr = strconv.FormatInt(int64(replicaID), 10)
+		snapType = "Raft"
+	}
+
+	log.Infof("replica %s applying %s snapshot for range %d at index %d "+
+		"(encoded size=%d, %d KV pairs, %d log entries)",
+		replicaIDStr, snapType, desc.RangeID, snap.Metadata.Index,
 		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %d applied snapshot for range %d in %s",
-			replicaID, desc.RangeID, timeutil.Since(start))
+		log.Infof("replica %s applied %s snapshot for range %d in %s",
+			replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
+
+	// Remember the old last index to verify that the snapshot doesn't wipe out
+	// log entries which have been acknowledged, which is possible with
+	// preemptive snapshots. We assert on it later in this call.
+	oldLastIndex, err := loadLastIndex(batch, desc.RangeID)
+	if err != nil {
+		return 0, errors.Wrap(err, "error loading last index")
+	}
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
@@ -605,19 +631,39 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType) (uint64,
 	}
 
 	// As outlined above, last and applied index are the same after applying
-	// the snapshot.
+	// the snapshot (i.e. the snapshot has no uncommitted tail).
 	if s.RaftAppliedIndex != snap.Metadata.Index {
 		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
 			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
-	if replicaID == 0 {
-		// The replica is not part of the Raft group so we need to write the Raft
-		// hard state for the replica in order for the Raft state machine to start
-		// correctly.
-		if err := updateHardState(batch, s); err != nil {
-			return 0, err
+	if !raft.IsEmptyHardState(hs) {
+		if isPreemptive {
+			return 0, errors.Errorf("unexpected HardState %+v on preemptive snapshot", &hs)
 		}
+		if err := setHardState(batch, s.Desc.RangeID, hs); err != nil {
+			return 0, errors.Wrapf(err, "unable to persist HardState %+v", &hs)
+		}
+	} else if isPreemptive {
+		// Preemptive snapshots get special verifications (see #7619) of their
+		// last index and (necessarily synthesized) HardState.
+		if snap.Metadata.Index < oldLastIndex {
+			// We are not aware of a specific way in which this could happen
+			// (Raft itself should not emit such snapshots, and no Replica can
+			// ever apply two preemptive snapshots), but it doesn't hurt to
+			// check.
+			return 0, errors.Errorf("preemptive snapshot would erase acknowledged log entries")
+		}
+		if err := synthesizeHardState(batch, s); err != nil {
+			return 0, errors.Wrap(err, "unable to write synthesized HardState")
+		}
+	} else {
+		// Note that we don't require that Raft supply us with a nonempty
+		// HardState on a snapshot. We don't want to make that assumption
+		// because it's not guaranteed by the contract. Raft *must* send us
+		// a HardState when it increases the committed index as a result of the
+		// snapshot, but who is to say it isn't going to accept a snapshot
+		// which is identical to the current state?
 	}
 
 	if err := batch.Commit(); err != nil {
@@ -650,23 +696,16 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot, typ snapshotType) (uint64,
 	if err := r.updateRangeInfo(&desc); err != nil {
 		panic(err)
 	}
-
-	// Fill the reservation if there was any one for this range.
-	r.store.bookie.Fill(desc.RangeID)
-
 	// Update the range descriptor. This is done last as this is the step that
 	// makes the Replica visible in the Store.
 	if err := r.setDesc(&desc); err != nil {
 		panic(err)
 	}
 
-	switch typ {
-	case normalSnapshot:
+	if !isPreemptive {
 		r.store.metrics.rangeSnapshotsNormalApplied.Inc(1)
-	case preemptiveSnapshot:
+	} else {
 		r.store.metrics.rangeSnapshotsPreemptiveApplied.Inc(1)
-	default:
-		panic("not reached")
 	}
 	return lastIndex, nil
 }

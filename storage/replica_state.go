@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/protoutil"
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -321,33 +321,42 @@ func setHardState(
 		hlc.ZeroTimestamp, nil, &st)
 }
 
-func updateHardState(eng engine.ReadWriter, s storagebase.ReplicaState) error {
-	// Load a potentially existing HardState as we may need to preserve
-	// information about cast votes. For example, during a Split for which
-	// another node's new right-hand side has contacted us before our left-hand
-	// side called in here to create the group.
-	rangeID := s.Desc.RangeID
-	oldHS, err := loadHardState(eng, rangeID)
+// synthesizeHardState synthesizes a HardState from the given ReplicaState and
+// any existing on-disk HardState in the context of a snapshot, while verifying
+// that the application of the snapshot does not violate Raft invariants. It
+// must be called after the supplied state and ReadWriter have been updated
+// with the result of the snapshot.
+// If there is an existing HardState, we must respect it and we must not apply
+// a snapshot that would move the state backwards.
+func synthesizeHardState(eng engine.ReadWriter, s storagebase.ReplicaState) error {
+	oldHS, err := loadHardState(eng, s.Desc.RangeID)
 	if err != nil {
 		return err
 	}
 
 	newHS := raftpb.HardState{
-		Term:   s.TruncatedState.Term,
+		Term: s.TruncatedState.Term,
+		// Note that when applying a Raft snapshot, the applied index is
+		// equal to the Commit index represented by the snapshot.
 		Commit: s.RaftAppliedIndex,
 	}
 
-	if !raft.IsEmptyHardState(oldHS) {
-		if oldHS.Commit > newHS.Commit {
-			newHS.Commit = oldHS.Commit
-		}
-		if oldHS.Term > newHS.Term {
-			newHS.Term = oldHS.Term
-		}
+	if oldHS.Commit > newHS.Commit {
+		return errors.Errorf("can't decrease HardState.Commit from %d to %d",
+			oldHS.Commit, newHS.Commit)
+	}
+	if oldHS.Term > newHS.Term {
+		// The existing HardState is allowed to be ahead of us, which is
+		// relevant in practice for the split trigger. We already checked above
+		// that we're not rewinding the acknowledged index, and we haven't
+		// updated votes yet.
+		newHS.Term = oldHS.Term
+	}
+	// If the existing HardState voted in this term, remember that.
+	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
 	}
-
-	return setHardState(eng, rangeID, newHS)
+	return errors.Wrapf(setHardState(eng, s.Desc.RangeID, newHS), "writing HardState %+v", &newHS)
 }
 
 // writeInitialState bootstraps a new Raft group (i.e. it is called when we
@@ -378,7 +387,7 @@ func writeInitialState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	if err := updateHardState(eng, s); err != nil {
+	if err := synthesizeHardState(eng, s); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
