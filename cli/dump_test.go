@@ -96,17 +96,10 @@ CREATE TABLE t (
 	o BOOL NULL,
 	e DECIMAL NULL,
 	tz TIMESTAMP WITH TIME ZONE NULL,
-	FAMILY "primary" (rowid),
-	FAMILY fam_1_i (i),
-	FAMILY fam_2_f (f),
-	FAMILY fam_3_s (s),
-	FAMILY fam_4_b (b),
-	FAMILY fam_5_d (d),
-	FAMILY fam_6_t (t),
-	FAMILY fam_7_n (n),
-	FAMILY fam_8_o (o),
-	FAMILY fam_9_e (e),
-	FAMILY fam_10_tz (tz)
+	FAMILY "primary" (i, f, d, t, n, o, tz, rowid),
+	FAMILY fam_1_s (s),
+	FAMILY fam_2_b (b),
+	FAMILY fam_3_e (e)
 );
 
 INSERT INTO t VALUES
