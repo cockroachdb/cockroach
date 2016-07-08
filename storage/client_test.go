@@ -703,10 +703,11 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 	startKey := m.findStartKeyLocked(rangeID)
 
 	for _, dest := range dests {
-		// Perform a consistent read to get the range descriptor, to make
-		// sure we have the effects of the previous ChangeReplicas call.
-		// By the time ChangeReplicas returns the raft leader is
-		// guaranteed to have the updated version, but followers are not.
+		// Perform a consistent read to get the updated range descriptor (as opposed
+		// to just going to one of the stores), to make sure we have the effects of
+		// the previous ChangeReplicas call. By the time ChangeReplicas returns the
+		// raft leader is guaranteed to have the updated version, but followers are
+		// not.
 		var desc roachpb.RangeDescriptor
 		if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			m.t.Fatal(err)
