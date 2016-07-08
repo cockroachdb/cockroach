@@ -36,7 +36,7 @@ import (
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
-	s := server.StartTestServer(b)
+	s := server.StartTestServerCluster(b, 3)
 	defer s.Stop()
 
 	pgURL, cleanupFn := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
