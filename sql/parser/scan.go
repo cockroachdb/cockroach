@@ -317,6 +317,16 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			s.pos++
 			lval.id = NOT_EQUALS
 			return
+		case '~': // !~
+			s.pos++
+			switch s.peek() {
+			case '*': // !~*
+				s.pos++
+				lval.id = NOT_REGIMATCH
+				return
+			}
+			lval.id = NOT_REGMATCH
+			return
 		}
 		return
 
@@ -373,6 +383,15 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '/': // //
 			s.pos++
 			lval.id = FLOORDIV
+			return
+		}
+		return
+
+	case '~':
+		switch s.peek() {
+		case '*': // ~*
+			s.pos++
+			lval.id = REGIMATCH
 			return
 		}
 		return
