@@ -261,6 +261,10 @@ const (
 	NotILike
 	SimilarTo
 	NotSimilarTo
+	RegMatch
+	NotRegMatch
+	RegIMatch
+	NotRegIMatch
 	IsDistinctFrom
 	IsNotDistinctFrom
 	Is
@@ -282,6 +286,10 @@ var comparisonOpName = [...]string{
 	NotILike:          "NOT ILIKE",
 	SimilarTo:         "SIMILAR TO",
 	NotSimilarTo:      "NOT SIMILAR TO",
+	RegMatch:          "~",
+	NotRegMatch:       "!~",
+	RegIMatch:         "~*",
+	NotRegIMatch:      "!~*",
 	IsDistinctFrom:    "IS DISTINCT FROM",
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
 	Is:                "IS",

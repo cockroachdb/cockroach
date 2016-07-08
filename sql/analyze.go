@@ -190,6 +190,10 @@ func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
 			op = parser.NotSimilarTo
 		case parser.NotSimilarTo:
 			op = parser.SimilarTo
+		case parser.RegMatch:
+			op = parser.NotRegMatch
+		case parser.RegIMatch:
+			op = parser.NotRegIMatch
 		default:
 			return parser.MakeDBool(true), false
 		}
