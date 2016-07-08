@@ -38,10 +38,12 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -329,7 +331,7 @@ type logicQuery struct {
 type logicTest struct {
 	*testing.T
 	// the database server instantiated for this input file.
-	srv *testServer
+	srv serverutils.TestServerInterface
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -371,7 +373,7 @@ func (t *logicTest) close() {
 		t.cleanupRootUser = nil
 	}
 	if t.srv != nil {
-		cleanupTestServer(t.srv)
+		t.srv.Stopper().Stop()
 		t.srv = nil
 	}
 	if t.clients != nil {
@@ -421,7 +423,7 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.TestServer.ServingAddr(), user, "TestLogic")
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.ServingAddr(), user, "TestLogic")
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
@@ -448,13 +450,20 @@ func (t *logicTest) run(path string) {
 func (t *logicTest) setup() {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
-	ctx := server.MakeTestContext()
-	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		WaitForGossipUpdate:   true,
-		CheckStmtStringChange: true,
+	// TODO(andrei): if createTestServerParams() is used here, the command filter
+	// it installs detects a transaction that doesn't have
+	// modifiedSystemConfigSpan set even though it should, for
+	// "testdata/rename_table". Figure out what's up with that.
+	params := base.TestServerArgs{
+		MaxOffset: logicMaxOffset,
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				WaitForGossipUpdate:   true,
+				CheckStmtStringChange: true,
+			},
+		},
 	}
-	t.srv = setupTestServerWithContext(t.T, &ctx)
+	t.srv, _, _ = serverutils.StartServer(t.T, params)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
@@ -495,7 +504,7 @@ func (t *logicTest) processTestFile(path string) error {
 
 	t.lastProgress = timeutil.Now()
 
-	execKnobs := t.srv.Ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	execKnobs := t.srv.(*server.TestServer).Ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 
 	repeat := 1
 	s := newLineScanner(file)

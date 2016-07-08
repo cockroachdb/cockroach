@@ -28,8 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -54,7 +53,7 @@ type kvNative struct {
 
 func newKVNative(b *testing.B) kvInterface {
 	enableTracing := tracing.Disable()
-	s := server.StartTestServer(b)
+	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 
 	// TestServer.DB() returns the TxnCoordSender wrapped client. But that isn't
 	// a fair comparison with SQL as we want these client requests to be sent
@@ -74,7 +73,7 @@ func newKVNative(b *testing.B) kvInterface {
 	return &kvNative{
 		db: client.NewDB(sender),
 		doneFn: func() {
-			s.Stop()
+			s.Stopper().Stop()
 			enableTracing()
 		},
 	}
@@ -172,13 +171,9 @@ type kvSQL struct {
 
 func newKVSQL(b *testing.B) kvInterface {
 	enableTracing := tracing.Disable()
-	s := server.StartTestServer(b)
-	pgURL, cleanupURL := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
-	pgURL.Path = "bench"
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		b.Fatal(err)
-	}
+	s, db, _ := serverutils.StartServer(
+		b, base.TestServerArgs{UseDatabase: "bench"})
+
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
 		b.Fatal(err)
 	}
@@ -186,9 +181,7 @@ func newKVSQL(b *testing.B) kvInterface {
 	kv := &kvSQL{}
 	kv.db = db
 	kv.doneFn = func() {
-		db.Close()
-		cleanupURL()
-		s.Stop()
+		s.Stopper().Stop()
 		enableTracing()
 	}
 	return kv

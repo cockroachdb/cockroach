@@ -17,19 +17,26 @@
 package security_test
 
 import (
+	"os"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
-
-func init() {
-	ResetTest()
-}
 
 // ResetTest sets up the test environment. In particular, it embeds the
 // EmbeddedCertsDir folder and makes the tls package load from there.
 func ResetTest() {
 	security.SetReadFileFn(securitytest.Asset)
+}
+
+func TestMain(m *testing.M) {
+	ResetTest()
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	os.Exit(m.Run())
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go

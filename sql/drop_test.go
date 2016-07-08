@@ -17,25 +17,23 @@
 package sql_test
 
 import (
-	gosql "database/sql"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -158,8 +156,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -211,8 +210,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -299,8 +299,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, _ := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -334,18 +335,10 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := server.StartTestServer(t)
-	defer s.Stop()
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(),
-		security.RootUser, "TestDropAndCreateTable")
-	pgURL.Path = "test"
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	params, _ := createTestServerParams()
+	params.UseDatabase = "test"
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)

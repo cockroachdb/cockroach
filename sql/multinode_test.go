@@ -21,11 +21,16 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
-	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -33,62 +38,55 @@ import (
 // creates database `name and returns open gosql.DB connections to each
 // node (to the named db), as well as a cleanup func that stops and
 // cleans up all nodes and connections.
-func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) (server.MultinodeTestCluster, []*gosql.DB, func()) {
+func SetupMultinodeTestCluster(
+	t testing.TB, nodes int, name string,
+) (MultinodeTestCluster, []*gosql.DB, *stop.Stopper) {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
+	stopper := stop.NewStopper()
 
-	servers := make([]server.TestServer, nodes)
-	servers[0] = server.StartTestServerWithContext(t, nil, server.StartParams{Nodes: nodes})
-	for i := range servers[1:] {
-		servers[i+1] = server.StartTestServerJoining(t, servers[0])
-	}
-	testCluster := server.MultinodeTestCluster{Servers: servers}
+	// Force all ranges to be replicated everywhere. This is needed until #7297 is
+	// fixed, otherwise starting a cluster takes forever.
+	cfg := config.DefaultZoneConfig()
+	cfg.ReplicaAttrs = make([]roachpb.Attributes, nodes)
+	fn := config.TestingSetDefaultZoneConfig(cfg)
+	stopper.AddCloser(stop.CloserFn(fn))
+
+	var servers []serverutils.TestServerInterface
 	var conns []*gosql.DB
-	var closes []func() error
-	var cleanups []func()
-
-	for i, s := range servers {
-		pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
-			fmt.Sprintf("node%d", i))
-		pgURL.Path = name
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		closes = append(closes, db.Close)
-		cleanups = append(cleanups, cleanupFn)
-		conns = append(conns, db)
+	args := base.TestServerArgs{
+		Stopper:       stopper,
+		PartOfCluster: true,
+		UseDatabase:   name,
+	}
+	first, conn, _ := serverutils.StartServer(t, args)
+	servers = append(servers, first)
+	conns = append(conns, conn)
+	args.JoinAddr = first.ServingAddr()
+	for i := 1; i < nodes; i++ {
+		s, conn, _ := serverutils.StartServer(t, args)
+		servers = append(servers, s)
+		conns = append(conns, conn)
 	}
 
 	if _, err := conns[0].Exec(fmt.Sprintf(`CREATE DATABASE %s`, name)); err != nil {
 		t.Fatal(err)
 	}
 
-	f := func() {
-		for _, fn := range closes {
-			_ = fn()
-		}
-		for _, s := range servers {
-			s.Stop()
-		}
-		for _, fn := range cleanups {
-			fn()
-		}
-	}
-
-	return testCluster, conns, f
+	testCluster := MultinodeTestCluster{Servers: servers}
+	return testCluster, conns, first.Stopper()
 }
 
 func TestMultinodeCockroach(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer tracing.Disable()()
 
-	testCluster, conns, cleanup := SetupMultinodeTestCluster(t, 3, "Testing")
+	testCluster, conns, stopper := SetupMultinodeTestCluster(t, 3, "Testing")
 	if err := testCluster.WaitForFullReplication(); err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer stopper.Stop()
 
 	if _, err := conns[0].Exec(`CREATE TABLE testing (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
@@ -111,4 +109,41 @@ func TestMultinodeCockroach(t *testing.T) {
 	} else if expected, actual := int64(3), rows; expected != actual {
 		t.Fatalf("wrong row count deleted: expected %d actual %d", expected, actual)
 	}
+}
+
+// A MultinodeTestCluster is an array of in-memory nodes connected to each other.
+type MultinodeTestCluster struct {
+	Servers []serverutils.TestServerInterface
+}
+
+// WaitForFullReplication waits until all of the nodes in the cluster have the
+// same number of replicas.
+func (tc *MultinodeTestCluster) WaitForFullReplication() error {
+	// TODO (WillHaack): Optimize sleep time.
+	for notReplicated := true; notReplicated; time.Sleep(100 * time.Millisecond) {
+		notReplicated = false
+		var numReplicas int
+		err := tc.Servers[0].(*server.TestServer).Stores().VisitStores(func(s *storage.Store) error {
+			numReplicas = s.ReplicaCount()
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		for _, s := range tc.Servers {
+			err := s.(*server.TestServer).Stores().VisitStores(func(s *storage.Store) error {
+				if numReplicas != s.ReplicaCount() {
+					notReplicated = true
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if notReplicated {
+				break
+			}
+		}
+	}
+	return nil
 }

@@ -32,12 +32,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -53,19 +55,19 @@ import (
 // via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
 
-	if body, err := getText(s.Ctx.AdminURL() + "/_status/stacks/local"); err != nil {
+	if body, err := getText(s.AdminURL() + "/_status/stacks/local"); err != nil {
 		t.Fatal(err)
 	} else if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
 	}
 
-	if body, err := getText(s.Ctx.AdminURL() + "/_status/stacks/1"); err != nil {
+	if body, err := getText(s.AdminURL() + "/_status/stacks/1"); err != nil {
 		t.Fatal(err)
 	} else if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
@@ -76,11 +78,12 @@ func TestStatusLocalStacks(t *testing.T) {
 // The content type of the responses is always util.JSONContentType.
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	ts := s.(*TestServer)
 
-	nodeID := s.Gossip().GetNodeID()
-	addr, err := s.Gossip().GetNodeIDAddress(nodeID)
+	nodeID := ts.Gossip().GetNodeID()
+	addr, err := ts.Gossip().GetNodeIDAddress(nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,8 +125,8 @@ func TestStatusJson(t *testing.T) {
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 
 	var data gossip.InfoStatus
 	if err := getRequestProto(t, s, "/_status/gossip/local", &data); err != nil {
@@ -152,13 +155,13 @@ var retryOptions = retry.Options{
 // getRequestReader returns the io.ReadCloser from a get request to the test
 // server with the given path. The returned closer should be closed by the
 // caller.
-func getRequestReader(t *testing.T, ts TestServer, path string) io.ReadCloser {
-	httpClient, err := ts.Ctx.GetHTTPClient()
+func getRequestReader(t *testing.T, ts serverutils.TestServerInterface, path string) io.ReadCloser {
+	httpClient, err := ts.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	url := ts.Ctx.AdminURL() + path
+	url := ts.AdminURL() + path
 	for r := retry.Start(retryOptions); r.Next(); {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
@@ -193,7 +196,7 @@ func getRequestReader(t *testing.T, ts TestServer, path string) io.ReadCloser {
 
 // getRequest returns the results of a get request to the test server with
 // the given path. It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts TestServer, path string) []byte {
+func getRequest(t *testing.T, ts serverutils.TestServerInterface, path string) []byte {
 	respBody := getRequestReader(t, ts, path)
 	defer respBody.Close()
 	body, err := ioutil.ReadAll(respBody)
@@ -206,7 +209,7 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 
 // getRequestProto unmarshals the result of a get request to the test server
 // with the given path.
-func getRequestProto(t *testing.T, ts TestServer, path string, v proto.Message) error {
+func getRequestProto(t *testing.T, ts serverutils.TestServerInterface, path string, v proto.Message) error {
 	respBody := getRequestReader(t, ts, path)
 	defer respBody.Close()
 	return jsonpb.Unmarshal(respBody, v)
@@ -215,26 +218,19 @@ func getRequestProto(t *testing.T, ts TestServer, path string, v proto.Message) 
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-func startServer(t *testing.T) TestServer {
-	ctx := MakeTestContext()
-	ts := TestServer{
-		Ctx:           &ctx,
-		StoresPerNode: 3,
-	}
-	if err := ts.Start(); err != nil {
-		t.Fatalf("failed to start test server: %s", err)
-	}
+func startServer(t *testing.T) serverutils.TestServerInterface {
+	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 3})
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
-	if _, err := ts.db.Get("a"); err != nil {
+	if _, err := kvDB.Get("a"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.node.computePeriodicMetrics(); err != nil {
+	if err := ts.(*TestServer).node.computePeriodicMetrics(); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
@@ -263,7 +259,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	}()
 
 	ts := startServer(t)
-	defer ts.Stop()
+	defer ts.Stopper().Stop()
 
 	// Log an error which we expect to show up on every log file.
 	timestamp := timeutil.Now().UnixNano()
@@ -416,12 +412,13 @@ func TestStatusLocalLogs(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := startServer(t)
-	defer ts.Stop()
+	s := startServer(t)
+	defer s.Stopper().Stop()
+	ts := s.(*TestServer)
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
-	if err := getRequestProto(t, ts, statusNodesPrefix, &wrapper); err != nil {
+	if err := getRequestProto(t, s, statusNodesPrefix, &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	nodeStatuses := wrapper.Nodes
@@ -437,7 +434,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		if err := getRequestProto(t, ts, PathForNodeStatus(oldNodeStatus.Desc.NodeID.String()), &nodeStatus); err != nil {
+		if err := getRequestProto(t, s, PathForNodeStatus(oldNodeStatus.Desc.NodeID.String()), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
@@ -450,26 +447,20 @@ func TestNodeStatusResponse(t *testing.T) {
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := MakeTestContext()
-	ctx.MetricsSampleInterval = 5 * time.Millisecond
-	tsrv := TestServer{
-		Ctx: &ctx,
-	}
-	if err := tsrv.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer tsrv.Stop()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		MetricsSampleInterval: 5 * time.Millisecond})
+	defer s.Stopper().Stop()
 
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
 		data := roachpb.InternalTimeSeriesData{}
-		return tsrv.db.GetProto(key, &data)
+		return kvDB.GetProto(key, &data)
 	}
 
 	// Verify that metrics for the current timestamp are recorded. This should
 	// be true very quickly.
 	util.SucceedsSoon(t, func() error {
-		now := tsrv.Clock().PhysicalNow()
+		now := s.Clock().PhysicalNow()
 		if err := checkTimeSeriesKey(now, "cr.store.livebytes.1"); err != nil {
 			return err
 		}
@@ -486,9 +477,9 @@ func TestMetricsRecording(t *testing.T) {
 func TestMetricsEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stop()
+	defer s.Stopper().Stop()
 
-	nodeID := s.Gossip().GetNodeID()
+	nodeID := s.(*TestServer).Gossip().GetNodeID()
 	url := fmt.Sprintf("%s/%s", statusMetricsPrefix, nodeID)
 	getRequest(t, s, url)
 }
@@ -496,10 +487,10 @@ func TestMetricsEndpoint(t *testing.T) {
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stop()
+	defer ts.Stopper().Stop()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.(*TestServer).db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -536,7 +527,7 @@ func TestRangesResponse(t *testing.T) {
 func TestRaftDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stop()
+	defer s.Stopper().Stop()
 
 	var resp serverpb.RaftDebugResponse
 	if err := getRequestProto(t, s, statusRaftEndpoint, &resp); err != nil {
