@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -71,7 +72,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	serverCtx := MakeTestContext()
+	serverCtx := makeTestContext()
 	g := gossip.New(nodeRPCContext, serverCtx.GossipBootstrapResolvers, stopper)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
@@ -319,7 +320,7 @@ func TestCorruptedClusterID(t *testing.T) {
 // the bytes and counts for Live, Key and Val are at least the expected value.
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
-func compareNodeStatus(t *testing.T, ts TestServer, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
+func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
 	// ========================================
 	// Read NodeStatus from server and validate top-level fields.
 	// ========================================
@@ -439,15 +440,9 @@ func TestStatusSummaries(t *testing.T) {
 	// ========================================
 	// Start test server and wait for full initialization.
 	// ========================================
-	ctx := MakeTestContext()
-	ts := TestServer{
-		Ctx:           &ctx,
-		StoresPerNode: 3,
-	}
-	if err := ts.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer ts.Stop()
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop()
+	ts := srv.(*TestServer)
 
 	// Retrieve the first store from the Node.
 	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
@@ -461,7 +456,7 @@ func TestStatusSummaries(t *testing.T) {
 	leftKey := "a"
 
 	// Scan over all keys to "wake up" all replicas (force a leader election).
-	if _, err := ts.db.Scan(keys.MetaMax, keys.MaxKey, 0); err != nil {
+	if _, err := kvDB.Scan(keys.MetaMax, keys.MaxKey, 0); err != nil {
 		t.Fatal(err)
 	}
 

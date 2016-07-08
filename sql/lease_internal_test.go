@@ -26,9 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -125,7 +124,7 @@ func TestPurgeOldLeases(t *testing.T) {
 	// We're going to block gossip so it doesn't come randomly and clear up the
 	// leases we're artificially setting up.
 	gossipSem := make(chan struct{}, 1)
-	serverParams := testingshim.TestServerParams{
+	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &LeaseManagerTestingKnobs{
 				GossipUpdateEvent: func(cfg config.SystemConfig) {
@@ -135,8 +134,8 @@ func TestPurgeOldLeases(t *testing.T) {
 			},
 		},
 	}
-	s, db, kvDB, cleanup := sqlutils.SetupServerWithParams(t, serverParams)
-	defer cleanup()
+	s, db, kvDB := serverutils.StartServer(t, serverParams)
+	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 	// Block gossip.
 	gossipSem <- struct{}{}
@@ -195,11 +194,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Test that changing a descriptor's name updates the name cache.
 func TestNameCacheIsUpdated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
-	if _, err := sqlDB.Exec(`
+	if _, err := db.Exec(`
 CREATE DATABASE t;
 CREATE DATABASE t1;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
@@ -208,14 +207,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Populate the name cache.
-	if _, err := sqlDB.Exec("SELECT * FROM t.test;"); err != nil {
+	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
 		t.Fatal(err)
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Rename.
-	if _, err := sqlDB.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
+	if _, err := db.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -236,7 +235,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Rename to a different database.
-	if _, err := sqlDB.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
+	if _, err := db.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -266,11 +265,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Tests that a name cache entry with by an expired lease is not returned.
 func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
-	if _, err := sqlDB.Exec(`
+	if _, err := db.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
@@ -278,7 +277,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Populate the name cache.
-	if _, err := sqlDB.Exec("SELECT * FROM t.test;"); err != nil {
+	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,11 +305,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Test that table names are not treated as case sensitive by the name cache.
 func TestTableNameNotCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, kvDB, cleanup := sqlutils.SetupServer(t)
-	defer cleanup()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
-	if _, err := sqlDB.Exec(`
+	if _, err := db.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
@@ -318,7 +317,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Populate the name cache.
-	if _, err := sqlDB.Exec("SELECT * FROM t.test;"); err != nil {
+	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -349,9 +348,9 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, kvDB, cleanup := sqlutils.SetupServerWithParams(
-		t, testingshim.TestServerParams{Knobs: testingKnobs})
-	defer cleanup()
+	s, sqlDB, kvDB := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := sqlDB.Exec(`

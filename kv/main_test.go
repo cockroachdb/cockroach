@@ -17,11 +17,14 @@
 package kv_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -43,4 +46,9 @@ func TestForbiddenDeps(t *testing.T) {
 			"github.com/cockroachdb/cockroach/storage/engine",
 		},
 		[]string{})
+}
+
+func TestMain(m *testing.M) {
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	os.Exit(m.Run())
 }

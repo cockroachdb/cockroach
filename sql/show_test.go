@@ -20,15 +20,16 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestShowCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, _ := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;

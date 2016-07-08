@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -37,7 +39,7 @@ var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
-func forceNewConfig(t *testing.T, s *testServer) config.SystemConfig {
+func forceNewConfig(t *testing.T, s *server.TestServer) config.SystemConfig {
 	configID++
 	configDesc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Database{
@@ -59,7 +61,7 @@ func forceNewConfig(t *testing.T, s *testServer) config.SystemConfig {
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t *testing.T, s *testServer) config.SystemConfig {
+func waitForConfigChange(t *testing.T, s *server.TestServer) config.SystemConfig {
 	var foundDesc sqlbase.Descriptor
 	var cfg config.SystemConfig
 	util.SucceedsSoon(t, func() error {
@@ -83,8 +85,10 @@ func waitForConfigChange(t *testing.T, s *testServer) config.SystemConfig {
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, _ := setup(t)
-	defer cleanup(s, sqlDB)
+	params, _ := createTestServerParams()
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop()
+	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MaxReservedDescID + 1)
 

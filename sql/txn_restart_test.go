@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -205,11 +206,11 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 func TestTxnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
+	params, cmdFilters := createTestServerParams()
 	// Disable one phase commits because they cannot be restarted.
-	ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	// Make sure all the commands we send in this test are sent over the same connection.
 	// This is a bit of a hack; in Go you're not supposed to have connection state
@@ -440,10 +441,10 @@ func abortTxn(t *testing.T, sqlDB *gosql.DB, key int) {
 func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
-	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, cmdFilters := createTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -484,7 +485,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			// Also inject an error at RELEASE time, besides the error injected by magicVals.
 			injectReleaseError := true
 
-			commitCount := server.TestServer.MustGetSQLCounter("txn.commit.count")
+			commitCount := s.MustGetSQLCounter("txn.commit.count")
 			// This is the magic. Run the txn closure until all the retries are exhausted.
 			exec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
 				return runTestTxn(t, tc.magicVals, tc.expectedErr, &injectReleaseError, sqlDB, tx)
@@ -510,7 +511,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			// Check that the commit counter was incremented. It could have been
 			// incremented by more than 1 because of the transactions we use to force
 			// aborts, plus who knows what else the server is doing in the background.
-			checkCounterGE(t, server, "txn.commit.count", commitCount+1)
+			checkCounterGE(t, s, "txn.commit.count", commitCount+1)
 			// Clean up the table for the next test iteration.
 			_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
 			if err != nil {
@@ -526,8 +527,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	server, sqlDB, _ := setup(t)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
@@ -559,10 +561,11 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestErrorOnCommitResultsInRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := server.MakeTestContext()
-	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
@@ -606,9 +609,10 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestCommitFinalizesTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, cmdFilters := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
@@ -671,8 +675,9 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestRollbackToSavepointStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	server, sqlDB, _ := setup(t)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	// ROLLBACK TO SAVEPOINT without a transaction
 	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
@@ -708,8 +713,9 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 func TestNonRetriableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	server, sqlDB, _ := setup(t)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -749,9 +755,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestRollbackInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, cmdFilters := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -796,9 +802,9 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, cmdFilters := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	testKey := []byte("test_key")
 	hitError := false
@@ -835,9 +841,9 @@ SELECT * from t.test WHERE k = 'test_key';
 func TestNonRetryableErrorFromCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cmdFilters := createTestServerContext()
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, cmdFilters := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	hitError := false
 	cleanupFilter := cmdFilters.AppendFilter(
@@ -895,10 +901,10 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		},
 	}
 
-	ctx := server.MakeTestContext()
-	ctx.TestingKnobs.Store = testingKnobs
-	server, sqlDB, _ := setupWithContext(t, &ctx)
-	defer cleanup(server, sqlDB)
+	params, _ := createTestServerParams()
+	params.Knobs.Store = testingKnobs
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
 
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
@@ -913,8 +919,9 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on retry.
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
-					now := server.Clock().Now()
-					txn.UpdateObservedTimestamp(server.Gossip().GetNodeID(), now)
+					now := s.Clock().Now()
+					txn.UpdateObservedTimestamp(
+						s.(*server.TestServer).Gossip().GetNodeID(), now)
 					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
 				}
 			}
@@ -924,7 +931,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	// Use a large max offset to avoid rejecting a transaction whose timestanp is in
 	// future (as we will advance the transaction timestamp with ReadWithinUncertaintyIntervalError).
-	server.Clock().SetMaxOffset(sql.LeaseDuration * 10)
+	s.Clock().SetMaxOffset(sql.LeaseDuration * 10)
 
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`

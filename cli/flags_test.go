@@ -49,6 +49,7 @@ func TestNoLinkForbidden(t *testing.T) {
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary
 			"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
+			"github.com/cockroachdb/cockroach/server/testutils",      // meant for testing code only
 		},
 		[]string{
 			"github.com/cockroachdb/cockroach/testutils", // meant for testing code only
