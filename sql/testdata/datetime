@@ -4,7 +4,10 @@ CREATE TABLE t (
   b DATE,
   c INTERVAL,
   UNIQUE (b),
-  UNIQUE (c)
+  UNIQUE (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
 )
 
 statement ok

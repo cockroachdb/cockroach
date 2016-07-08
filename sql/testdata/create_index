@@ -1,7 +1,9 @@
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
-  b INT
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
 )
 
 statement ok

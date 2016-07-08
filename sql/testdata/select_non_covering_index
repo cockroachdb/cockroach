@@ -5,7 +5,11 @@ CREATE TABLE t (
   c INT,
   d INT,
   INDEX b (b),
-  UNIQUE INDEX c (c)
+  UNIQUE INDEX c (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
 )
 
 statement ok

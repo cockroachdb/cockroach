@@ -456,19 +456,37 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			return
 		}
 		if _, ok := primaryIndexColIDs[col.ID]; ok {
+			// Primary index columns are required to be assigned to family 0.
 			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
 			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
 			return
 		}
-		// TODO(dan): This assigns families such that the encoding is exactly the
-		// same as before column families. A followup commit will implement the
-		// heuristics described in the families rfc.
-		familyID := FamilyID(col.ID)
-		desc.Families = append(desc.Families, ColumnFamilyDescriptor{
-			ID:          familyID,
-			ColumnNames: []string{col.Name},
-			ColumnIDs:   []ColumnID{col.ID},
-		})
+		var familyID FamilyID
+		if desc.ParentID == keys.SystemDatabaseID {
+			// TODO(dan): This assigns families such that the encoding is exactly the
+			// same as before column families. It's used for all system tables because
+			// reads of them don't go through the normal sql layer, which is where the
+			// knowledge of families lives. Fix that and remove this workaround.
+			familyID = FamilyID(col.ID)
+			desc.Families = append(desc.Families, ColumnFamilyDescriptor{
+				ID:          familyID,
+				ColumnNames: []string{col.Name},
+				ColumnIDs:   []ColumnID{col.ID},
+			})
+		} else {
+			idx, ok := fitColumnToFamily(*desc, *col)
+			if !ok {
+				idx = len(desc.Families)
+				desc.Families = append(desc.Families, ColumnFamilyDescriptor{
+					ID:          desc.NextFamilyID,
+					ColumnNames: []string{},
+					ColumnIDs:   []ColumnID{},
+				})
+			}
+			familyID = desc.Families[idx].ID
+			desc.Families[idx].ColumnNames = append(desc.Families[idx].ColumnNames, col.Name)
+			desc.Families[idx].ColumnIDs = append(desc.Families[idx].ColumnIDs, col.ID)
+		}
 		if familyID >= desc.NextFamilyID {
 			desc.NextFamilyID = familyID + 1
 		}
