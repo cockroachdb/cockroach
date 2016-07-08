@@ -167,25 +167,25 @@ func TestStoresLookupReplica(t *testing.T) {
 		ls.AddStore(s[i])
 	}
 
-	if _, r, err := ls.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); err != nil {
+	if _, r, err := ls.LookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); err != nil {
 		t.Error(err)
 	} else if r.StoreID != s[0].Ident.StoreID {
 		t.Errorf("expected store %d; got %d", s[0].Ident.StoreID, r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), nil); err != nil {
+	if _, r, err := ls.LookupReplica(roachpb.RKey("b"), nil); err != nil {
 		t.Error(err)
 	} else if r.StoreID != s[0].Ident.StoreID {
 		t.Errorf("expected store %d; got %d", s[0].Ident.StoreID, r.StoreID)
 	}
-	if _, _, err := ls.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); !testutils.IsError(err, "outside of bounds of range") {
+	if _, _, err := ls.LookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); !testutils.IsError(err, "outside of bounds of range") {
 		t.Errorf("got unexpected error %v", err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); err != nil {
+	if _, r, err := ls.LookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); err != nil {
 		t.Error(err)
 	} else if r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d", s[1].Ident.StoreID, r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("y"), nil); err != nil {
+	if _, r, err := ls.LookupReplica(roachpb.RKey("y"), nil); err != nil {
 		t.Error(err)
 	} else if r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d", s[1].Ident.StoreID, r.StoreID)
