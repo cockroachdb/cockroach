@@ -44,6 +44,7 @@ const (
 	FromName              = "from"
 	ToName                = "to"
 	ValuesName            = "values"
+	SizesName             = "sizes"
 	RaftTickIntervalName  = "raft-tick-interval"
 	UndoFreezeClusterName = "undo"
 )
