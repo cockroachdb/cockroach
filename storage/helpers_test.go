@@ -29,6 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 )
 
+// HandleRaftMessage delegates to handleRaftMessage.
+func (s *Store) HandleRaftMessage(req *RaftMessageRequest) error {
+	return s.handleRaftMessage(req)
+}
+
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
 // store).

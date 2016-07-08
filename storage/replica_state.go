@@ -364,8 +364,8 @@ func writeInitialState(
 	var s storagebase.ReplicaState
 
 	s.TruncatedState = &roachpb.RaftTruncatedState{
-		Term:  raftInitialLogTerm,
-		Index: raftInitialLogIndex,
+		Term:  RaftInitialLogTerm,
+		Index: RaftInitialLogIndex,
 	}
 	s.RaftAppliedIndex = s.TruncatedState.Index
 	s.Desc = &roachpb.RangeDescriptor{

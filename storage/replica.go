@@ -85,13 +85,13 @@ const (
 // simpler with this being turned off.
 var txnAutoGC = true
 
-// raftInitialLogIndex is the starting point for the raft log. We bootstrap
-// the raft membership by synthesizing a snapshot as if there were some
-// discarded prefix to the log, so we must begin the log at an arbitrary
+// RaftInitialLog{Index,Term} are the starting points for the raft log. We
+// bootstrap the raft membership by synthesizing a snapshot as if there were
+// some discarded prefix to the log, so we must begin the log at an arbitrary
 // index greater than 1.
 const (
-	raftInitialLogIndex = 10
-	raftInitialLogTerm  = 5
+	RaftInitialLogIndex = 10
+	RaftInitialLogTerm  = 5
 )
 
 // consultsTimestampCacheMethods specifies the set of methods which
