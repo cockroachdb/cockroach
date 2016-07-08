@@ -533,7 +533,7 @@ func (b *Batch) Del(keys ...interface{}) {
 // Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
+func (b *Batch) DelRange(s, e interface{}, maxRows int64, returnKeys bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -544,7 +544,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
+	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), maxRows, returnKeys))
 	b.initResult(1, 0, notRaw, nil)
 }
 

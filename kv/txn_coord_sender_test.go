@@ -1045,7 +1045,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	b := txn.NewBatch()
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
-	b.DelRange(roachpb.Key("v"), roachpb.Key("z"), false)
+	b.DelRange(roachpb.Key("v"), roachpb.Key("z"), 0, false)
 
 	// The expected intents are a, b, c, and u-z.
 	expectedIntents = []roachpb.Span{

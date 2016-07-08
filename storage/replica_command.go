@@ -110,7 +110,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		*resp, err = r.Delete(ctx, batch, ms, h, *tArgs)
 	case *roachpb.DeleteRangeRequest:
 		resp := reply.(*roachpb.DeleteRangeResponse)
-		*resp, err = r.DeleteRange(ctx, batch, ms, h, *tArgs)
+		*resp, err = r.DeleteRange(ctx, batch, ms, h, remScanResults, *tArgs)
 	case *roachpb.ScanRequest:
 		resp := reply.(*roachpb.ScanResponse)
 		*resp, intents, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
@@ -282,10 +282,17 @@ func (r *Replica) Delete(
 // start and end keys.
 func (r *Replica) DeleteRange(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
-	h roachpb.Header, args roachpb.DeleteRangeRequest,
+	h roachpb.Header, remScanResults int64, args roachpb.DeleteRangeRequest,
 ) (roachpb.DeleteRangeResponse, error) {
+	if remScanResults == 0 {
+		// We can't delete any more keys; skip.
+		return roachpb.DeleteRangeResponse{}, nil
+	}
+	maxResults := scanMaxResultsValue(remScanResults, args.MaxEntriesToDelete)
+
+	log.Warningf("max set to %d %s %s", maxResults, args.Key, args.EndKey)
 	var reply roachpb.DeleteRangeResponse
-	deleted, err := engine.MVCCDeleteRange(ctx, batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn, args.ReturnKeys)
+	deleted, err := engine.MVCCDeleteRange(ctx, batch, ms, args.Key, args.EndKey, maxResults, h.Timestamp, h.Txn, args.ReturnKeys)
 	if err == nil {
 		reply.Keys = deleted
 		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
@@ -322,7 +329,7 @@ func scanMaxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
 func (r *Replica) Scan(ctx context.Context, batch engine.ReadWriter, h roachpb.Header, remScanResults int64,
 	args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
 	if remScanResults == 0 {
-		// We can't return any more results; skip the scan
+		// We can't return any more results; skip the scan.
 		return roachpb.ScanResponse{}, nil, nil
 	}
 	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
@@ -338,7 +345,7 @@ func (r *Replica) Scan(ctx context.Context, batch engine.ReadWriter, h roachpb.H
 func (r *Replica) ReverseScan(ctx context.Context, batch engine.ReadWriter, h roachpb.Header, remScanResults int64,
 	args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
 	if remScanResults == 0 {
-		// We can't return any more results; skip the scan
+		// We can't return any more results; skip the scan.
 		return roachpb.ReverseScanResponse{}, nil, nil
 	}
 	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)

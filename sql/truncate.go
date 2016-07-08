@@ -41,7 +41,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		if err := truncateTable(&tableDesc, p.txn); err != nil {
+		if err := truncateTableInTxn(&tableDesc, p.txn); err != nil {
 			return nil, err
 		}
 
@@ -60,10 +60,51 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	return &emptyNode{}, nil
 }
 
-// truncateTable truncates the data of a table.
+// TableTruncateChunkSize is the size of each chunk during table truncation.
+const TableTruncateChunkSize = 2000
+
+// truncateTable truncates the data of a table in many chunks.
 // It deletes a range of data for the table, which includes the PK and all
 // indexes.
-func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
+func truncateTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) error {
+	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
+
+	// Delete rows and indexes starting with the table's prefix.
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	if log.V(2) {
+		log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
+	}
+
+	for done := false; !done; {
+		if err := db.Txn(func(txn *client.Txn) error {
+			b := client.Batch{}
+			b.DelRange(tableStartKey, tableEndKey, TableTruncateChunkSize, false)
+			if err := txn.Run(&b); err != nil {
+				return err
+			}
+			// The table has been completed truncated once no keys are
+			// returned.
+			if len(b.Results) != 1 {
+				panic("incorrect number of results returned")
+			}
+			if len(b.Results[0].Keys) == 0 {
+				done = true
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// truncateTableInTxn truncates the data of a table in a single transaction.
+// It deletes a range of data for the table, which includes the PK and all
+// indexes.
+//
+// TODO(vivek): fix #2003
+func truncateTableInTxn(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 	// Delete rows and indexes starting with the table's prefix.
@@ -73,6 +114,6 @@ func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 		log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
 	}
 	b := client.Batch{}
-	b.DelRange(tableStartKey, tableEndKey, false)
+	b.DelRange(tableStartKey, tableEndKey, 0, false)
 	return txn.Run(&b)
 }

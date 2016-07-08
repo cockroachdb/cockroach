@@ -341,7 +341,7 @@ func (db *DB) Del(keys ...interface{}) error {
 // key can be either a byte slice or a string.
 func (db *DB) DelRange(begin, end interface{}) error {
 	b := db.NewBatch()
-	b.DelRange(begin, end, false)
+	b.DelRange(begin, end, 0, false)
 	_, err := runOneResult(db, b)
 	return err
 }

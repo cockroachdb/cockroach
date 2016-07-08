@@ -1337,7 +1337,7 @@ func MVCCDeleteRange(
 		}
 		num++
 		// We check num rather than len(keys) since returnKeys could be false.
-		if max != 0 && max >= num {
+		if max != 0 && max <= num {
 			return true, nil
 		}
 		return false, nil
