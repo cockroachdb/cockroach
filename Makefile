@@ -48,6 +48,9 @@ export PATH := $(GOPATH)/bin:$(PATH)
 # is one way to do this globally.
 # http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
 SHELL := $(shell which bash)
+ifeq ($(SHELL),)
+$(error bash is required)
+endif
 export GIT_PAGER :=
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
