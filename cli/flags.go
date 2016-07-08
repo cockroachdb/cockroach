@@ -236,6 +236,9 @@ Exclusive end key and format as [<format>:]<key>. Supported formats:
 	cliflags.ValuesName: wrapText(`
 Print values along with their associated key.`),
 
+	cliflags.SizesName: wrapText(`
+Print key and value sizes along with their associated key.`),
+
 	cliflags.RaftTickIntervalName: wrapText(`
 The resolution of the Raft timer; other raft timeouts are
 defined in terms of multiples of this value.`),
@@ -498,6 +501,7 @@ func init() {
 		f.Var((*mvccKey)(&debugCtx.startKey), cliflags.FromName, usageNoEnv(cliflags.FromName))
 		f.Var((*mvccKey)(&debugCtx.endKey), cliflags.ToName, usageNoEnv(cliflags.ToName))
 		f.BoolVar(&debugCtx.values, cliflags.ValuesName, false, usageNoEnv(cliflags.ValuesName))
+		f.BoolVar(&debugCtx.sizes, cliflags.SizesName, false, usageNoEnv(cliflags.SizesName))
 	}
 
 	{
