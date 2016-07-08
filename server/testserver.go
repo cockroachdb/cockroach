@@ -190,14 +190,13 @@ func (ts *TestServer) DB() *client.DB {
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.ServingAddr() after Start() for client connections.
-// Use TestServer.Stopper.Stop() to shutdown the server after the test
+// Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(params base.TestServerArgs) error {
 	if ts.Ctx == nil {
 		panic("Ctx not set")
 	}
 
-	// !!! I shouldn't change params.Stopper.
 	if params.Stopper == nil {
 		params.Stopper = stop.NewStopper()
 	}
