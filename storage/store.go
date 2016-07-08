@@ -2157,7 +2157,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// the raft group (i.e. replicas with an ID of 0). This is the only
 			// operation that can be performed on a replica before it is part of the
 			// raft group.
-			_, err := r.applySnapshot(req.Message.Snapshot, preemptiveSnapshot)
+			_, err := r.applySnapshot(req.Message.Snapshot, raftpb.HardState{})
 			return err
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
