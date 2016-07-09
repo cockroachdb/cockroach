@@ -19,6 +19,7 @@ package gossip
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -33,11 +34,14 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
+	createdAt             time.Time
 	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
 	addr                  net.Addr                 // Peer node network address
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
 	closer                chan struct{}            // Client shutdown channel
+	sent                  int                      // Count of infos sent
+	received              int                      // Count of infos received
 }
 
 // extractKeys returns a string representation of a gossip delta's keys.
@@ -52,7 +56,8 @@ func extractKeys(delta map[string]*Info) string {
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
-		addr: addr,
+		createdAt: time.Now(),
+		addr:      addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
 	}
@@ -129,6 +134,7 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 			HighWaterStamps: g.is.getHighWaterStamps(),
 		}
 
+		c.sent += len(delta)
 		g.mu.Unlock()
 		return stream.Send(&args)
 	}
@@ -144,6 +150,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
+		c.received += len(reply.Delta)
 		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
 			log.Warningf("node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
