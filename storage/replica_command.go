@@ -2084,6 +2084,8 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 // Conditional Put on the RangeDescriptor to ensure that no other operation has
 // modified the range in the time the decision was being made.
 // TODO(tschottdorf): should assert that split key is not a local key.
+//
+// See the comment on splitTrigger for details on the complexities.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.AdminSplitResponse, *roachpb.Error) {
@@ -2203,11 +2205,143 @@ func (r *Replica) AdminSplit(
 	return reply, nil
 }
 
-// splitTrigger is called on a successful commit of an AdminSplit transaction.
-// It copies the abort cache for the new range and recomputes stats for both the
-// existing, updated range and the new range. For performance it only computes
-// the stats for the updated range and infers the rest by subtracting from the
-// original stats.
+// splitTrigger is called on a successful commit of a transaction containing an
+// AdminSplit operation. It copies the abort cache for the new range and
+// recomputes stats for both the existing, updated range and the new range. For
+// performance it only computes the stats for the old range (the
+// left-hand-side) and infers the RHS stats by subtracting from the original
+// stats. We compute the LHS stats because the split key computation ensures
+// that we do not create large LHS ranges.
+//
+// Splits are complicated. A split is initiated when a replica receives an
+// AdminSplit request. Note that this request (and other "admin" requests)
+// differs from normal requests in that it doesn't go through Raft but instead
+// allows the lease holder Replica to act as the orchestrator for the
+// distributed transaction that performs the split. As such, this request is
+// only executed on the lease holder replica and the request is redirected to
+// the lease holder if the recipient is a follower.
+//
+// Splits do not require the lease for correctness (which is good, because we
+// only check that the lease is held at the beginning of the operation, and
+// have no way to ensure that it is continually held until the end). Followers
+// could perform splits too, and the only downside would be that if two splits
+// were attempted concurrently (or a split and a ChangeReplicas), one would
+// fail. The leader lease is used to designate one replica for this role and
+// avoid wasting time on splits that may fail.
+//
+// The processing of splits is divided into two phases. The first phase occurs
+// in Replica.AdminSplit. In that phase, the split-point is computed, and a
+// transaction is started which updates both the LHS and RHS range descriptors
+// and the meta range addressing information. (If we're splitting a meta2 range
+// we'll be updating the meta1 addressing, otherwise we'll be updating the
+// meta2 addressing). That transaction includes a special SplitTrigger flag on
+// the EndTransaction request. Like all transactions, the requests within the
+// transaction are replicated via Raft, including the end-transaction request.
+//
+// The second phase of split processing occurs when each replica for the range
+// encounters the SplitTrigger. Processing of the SplitTrigger happens below,
+// in Replica.splitTrigger. The processing of the SplitTrigger occurs in two
+// stages. The first stage operates within the context of an engine.Batch and
+// updates all of the on-disk state for the old and new ranges atomically. The
+// second stage is invoked when the batch commits and updates the in-memory
+// state, creating the new replica in memory and populating its timestamp cache
+// and registering it with the store.
+//
+// There is lots of subtlety here. The easy scenario is that all of the
+// replicas process the SplitTrigger before processing any Raft message for RHS
+// (right hand side) of the newly split range. Something like:
+//
+//         Node A             Node B             Node C
+//     ----------------------------------------------------
+// range 1   |                  |                  |
+//           |                  |                  |
+//      SplitTrigger            |                  |
+//           |             SplitTrigger            |
+//           |                  |             SplitTrigger
+//           |                  |                  |
+//     ----------------------------------------------------
+// split finished on A, B and C |                  |
+//           |                  |                  |
+// range 2   |                  |                  |
+//           | ---- MsgVote --> |                  |
+//           | ---------------------- MsgVote ---> |
+//
+// But that ideal ordering is not guaranteed. The split is "finished" when two
+// of the replicas have appended the end-txn request containing the
+// SplitTrigger to their Raft log. The following scenario is possible:
+//
+//         Node A             Node B             Node C
+//     ----------------------------------------------------
+// range 1   |                  |                  |
+//           |                  |                  |
+//      SplitTrigger            |                  |
+//           |             SplitTrigger            |
+//           |                  |                  |
+//     ----------------------------------------------------
+// split finished on A and B    |                  |
+//           |                  |                  |
+// range 2   |                  |                  |
+//           | ---- MsgVote --> |                  |
+//           | --------------------- MsgVote ---> ???
+//           |                  |                  |
+//           |                  |             SplitTrigger
+//
+// In this scenario, C will create range 2 upon reception of the MsgVote from
+// A, though locally that span of keys is still part of range 1. This is
+// possible because at the Raft level ranges are identified by integer IDs and
+// it isn't until C receives a snapshot of range 2 from the leader that it
+// discovers the span of keys it covers. In order to prevent C from fully
+// initializing range 2 in this instance, we prohibit applying a snapshot to a
+// range if the snapshot overlaps another range. See Store.canApplySnapshot.
+//
+// But while a snapshot may not have been applied at C, an uninitialized
+// Replica was created. An uninitialized Replica is one which belongs to a Raft
+// group but for which the range descriptor has not been received. This Replica
+// will have participated in the Raft elections. When we're creating the new
+// Replica below we take control of this uninitialized Replica and stop it from
+// responding to Raft messages by marking it "destroyed". Note that we use the
+// Replica.mu.destroyed field for this, but we don't do everything that
+// Replica.Destroy does (so we should probably rename that field in light of
+// its new uses). In particular we don't touch any data on disk or leave a
+// tombstone. This is especially important because leaving a tombstone would
+// prevent the legitimate recreation of this replica.
+//
+// There is subtle synchronization here that is currently controlled by the
+// Store.processRaft goroutine. In particular, the serial execution of
+// Replica.handleRaftReady by Store.processRaft ensures that an uninitialized
+// RHS won't be concurrently executing in Replica.handleRaftReady because we're
+// currently running on that goroutine (i.e. Replica.splitTrigger is called on
+// the processRaft goroutine).
+//
+// TODO(peter): The above synchronization needs to be fixed. Using a single
+// goroutine for executing Replica.handleRaftReady is undesirable from a
+// performance perspective. Likely we will have to add a mutex to Replica to
+// protect handleRaftReady and to grab that mutex below when marking the
+// uninitialized Replica as "destroyed". Hopefully we'll also be able to remove
+// Store.processRaftMu.
+//
+// Note that in this more complex scenario, A (which performed the SplitTrigger
+// first) will create the associated Raft group for range 2 and start
+// campaigning immediately. It is possible for B to receive MsgVote requests
+// before it has applied the SplitTrigger as well. Both B and C will vote for A
+// (and preserve the records of that vote in their HardState). It is critically
+// important for Raft correctness that we do not lose the records of these
+// votes. After electing A the Raft leader for range 2, A will then attempt to
+// send a snapshot to B and C and we'll fall into the situation above where a
+// snapshot is received for a range before it has finished splitting from its
+// sibling and is thus rejected. An interesting subtlety here: A will send a
+// snapshot to B and C because when range 2 is initialized we were careful set
+// synthesize its HardState to set its Raft log index to 10. If we had instead
+// used log index 0, Raft would have believed the group to be empty, but the
+// RHS has something. Using a non-zero initial log index causes Raft to believe
+// that there is a discarded prefix to the log and will thus send a snapshot to
+// followers.
+//
+// A final point of clarification: when we split a range we're splitting the
+// data the range contains. But we're not forking or splitting the associated
+// Raft group. Instead, we're creating a new Raft group to control the RHS of
+// the split. That Raft group is starting from an empty Raft log (positioned at
+// log entry 10) and a snapshot of the RHS of the split range.
 func (r *Replica) splitTrigger(
 	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats, split *roachpb.SplitTrigger, ts hlc.Timestamp,
 ) error {
