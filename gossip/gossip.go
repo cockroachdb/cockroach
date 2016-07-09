@@ -53,6 +53,7 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/rand"
@@ -339,6 +340,39 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.getNodeDescriptorLocked(nodeID)
+}
+
+// LogStatus logs the current status of gossip such as the incoming and
+// outgoing connections.
+func (g *Gossip) LogStatus() {
+	g.mu.Lock()
+	n := len(g.nodeDescs)
+	status := "ok"
+	if g.is.getInfo(KeySentinel) == nil {
+		status = "stalled"
+	}
+	g.mu.Unlock()
+
+	log.Infof("gossip status (%s, %d node%s)\n%s%s",
+		status, n, util.Pluralize(int64(n)),
+		g.clientStatus(), g.server.status())
+}
+
+func (g *Gossip) clientStatus() string {
+	g.mu.Lock()
+	maxConns := g.outgoing.maxSize
+	g.mu.Unlock()
+
+	g.clientsMu.Lock()
+	defer g.clientsMu.Unlock()
+	var buf bytes.Buffer
+	n := len(g.clients)
+	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", n, maxConns)
+	for _, c := range g.clients {
+		fmt.Fprintf(&buf, "  %d: %s (%s: %d/%d sent/received)\n",
+			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.sent, c.received)
+	}
+	return buf.String()
 }
 
 // EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a

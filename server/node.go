@@ -57,6 +57,8 @@ import (
 )
 
 const (
+	// gossipStatusInterval is the interval for logging gossip status.
+	gossipStatusInterval = 1 * time.Minute
 	// gossipNodeDescriptorInterval is the interval for gossiping the node descriptor.
 	gossipNodeDescriptorInterval = 1 * time.Hour
 	// publishStatusInterval is the interval for publishing periodic statistics
@@ -562,6 +564,7 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		gossipStoresInterval := envutil.EnvOrDefaultDuration("gossip_stores_interval",
 			gossip.DefaultGossipStoresInterval)
+		statusTicker := time.NewTicker(gossipStatusInterval)
 		storesTicker := time.NewTicker(gossipStoresInterval)
 		nodeTicker := time.NewTicker(gossipNodeDescriptorInterval)
 		defer storesTicker.Stop()
@@ -569,6 +572,8 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 		n.gossipStores() // one-off run before going to sleep
 		for {
 			select {
+			case <-statusTicker.C:
+				n.ctx.Gossip.LogStatus()
 			case <-storesTicker.C:
 				n.gossipStores()
 			case <-nodeTicker.C:
