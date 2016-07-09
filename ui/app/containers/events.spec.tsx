@@ -7,7 +7,7 @@ import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";
 import { EventList, EventRow } from "./events";
-import { refreshEvents } from "../redux/events";
+import { refreshEvents } from "../redux/apiReducers";
 
 type Event = cockroach.server.serverpb.EventsResponse.Event;
 

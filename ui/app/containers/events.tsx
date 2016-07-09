@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as _ from "lodash";
-import { refreshEvents } from "../redux/events";
+import { refreshEvents } from "../redux/apiReducers";
 import { connect } from "react-redux";
 import { TimestampToMoment } from "../util/convert";
 
@@ -89,7 +89,7 @@ export class EventList extends React.Component<EventListProps, {}> {
   }
 }
 
-let events = (state: any): Event[] => state.events && state.events && state.events.data && state.events.data.events;
+let events = (state: any): Event[] => state.cachedData.events.data && state.cachedData.events.data.events;
 
 // Connect the EventsList class with our redux store.
 let eventsConnected = connect(

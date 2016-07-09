@@ -56,7 +56,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
     return <div className="section">
       <div className="header">Usage Reporting</div>
       <div className="form">
-        <div classname="intro">CockroachDB is in beta, and we're working diligently to make it better.
+        <div className="intro">CockroachDB is in beta, and we're working diligently to make it better.
               Opt in to share basic anonymous usage statistics.
         </div>
         <hr />
