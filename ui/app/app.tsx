@@ -49,17 +49,12 @@ import { Router, Route, IndexRoute, IndexRedirect, hashHistory } from "react-rou
 import { syncHistoryWithStore, routerReducer } from "react-router-redux";
 import thunk from "redux-thunk";
 
-import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
 import uiDataReducer from "./redux/uiData";
 import metricsReducer from "./redux/metrics";
 import timeWindowReducer from "./redux/timewindow";
 import databaseInfoReducer from "./redux/databaseInfo";
-import eventsReducer from "./redux/events";
-import raftReducer from "./redux/raft";
-import healthReducer from "./redux/health";
-import versionReducer from "./redux/version";
-import clusterReducer from "./redux/cluster";
+import { apiReducers } from "./redux/apiReducers";
 
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
@@ -88,17 +83,12 @@ import RaftRanges from "./containers/raftRanges";
 const store = createStore(
   combineReducers({
     routing: routerReducer,
-    nodes: nodesReducer,
     ui: uiReducer,
     uiData: uiDataReducer,
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
     databaseInfo: databaseInfoReducer,
-    events: eventsReducer,
-    raft: raftReducer,
-    health: healthReducer,
-    version: versionReducer,
-    cluster: clusterReducer,
+    cachedData: apiReducers,
   }),
   compose(
     applyMiddleware(thunk),
