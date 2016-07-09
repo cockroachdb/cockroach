@@ -122,7 +122,7 @@ CREATE TABLE system.lease (
 ```
 
 Entries in the lease table will be added and removed as leases are
-acquired and released. A background goroutine running on the leader
+acquired and released. A background goroutine running on the lease holder
 for the system range will periodically delete expired leases.
 
 Leases will be granted for a duration measured in minutes (we'll
@@ -132,7 +132,7 @@ operation and may release the lease when the last local operation
 completes that was using the lease and a new version of the descriptor
 exists.
 
-The leader of the range containing a table descriptor will gossip the
+The lease holder of the range containing a table descriptor will gossip the
 most recent version of that table descriptor using the gossip key
 `"table-<descID>"` and the value will be the version number. The
 gossiping of the most recent table versions allows nodes to

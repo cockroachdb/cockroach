@@ -99,7 +99,7 @@ func newGCQueue(gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
 	gcq.baseQueue = makeBaseQueue("gc", gcq, gossip, queueConfig{
 		maxSize:              gcQueueMaxSize,
-		needsLeaderLease:     true,
+		needsLease:           true,
 		acceptsUnsplitRanges: false,
 	})
 	return gcq

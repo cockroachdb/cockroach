@@ -69,7 +69,7 @@ const (
 	HeartbeatTxn
 	// GC garbage collects values based on expired timestamps
 	// for a list of keys in a range. This method is called by the
-	// range leader after a snapshot scan. The call goes through Raft,
+	// range lease holder after a snapshot scan. The call goes through Raft,
 	// so all range replicas GC the exact same values.
 	GC
 	// PushTxn attempts to resolve read or write conflicts between
@@ -101,8 +101,8 @@ const (
 	Merge
 	// TruncateLog discards a prefix of the raft log.
 	TruncateLog
-	// LeaderLease requests a leader lease for a replica.
-	LeaderLease
+	// RequestLease requests a range lease for a replica.
+	RequestLease
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
 	// VerifyChecksum verifies the checksum computed through an earlier

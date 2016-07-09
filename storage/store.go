@@ -71,13 +71,13 @@ const (
 	// cannot be recovered through other means if evicted)?
 	maxReplicaDescCacheSize = 1000
 
-	// leaderLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
+	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
-	leaderLeaseRaftElectionTimeoutMultiplier = 3
+	rangeLeaseRaftElectionTimeoutMultiplier = 3
 
-	// leaderLeaseRenewalDivisor specifies what quotient the leader lease renewal
-	// duration should be of the leader lease active time.
-	leaderLeaseRenewalDivisor = 5
+	// rangeLeaseRenewalDivisor specifies what quotient the range lease renewal
+	// duration should be of the range lease active time.
+	rangeLeaseRenewalDivisor = 5
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -310,16 +310,16 @@ type Store struct {
 	// TODO(marc): This may be better inside of `mu`, but is not currently feasible.
 	hasActiveRaftSnapshot int32
 
-	// drainLeadership holds a bool which indicates whether Replicas should be
-	// allowed to acquire or extend leader leases; see DrainLeadership().
+	// drainLeases holds a bool which indicates whether Replicas should be
+	// allowed to acquire or extend range leases; see DrainLeases().
 	//
 	// TODO(bdarnell,tschottdorf): Would look better inside of `mu`. However,
 	// deadlocks loom: For example, `systemGossipUpdate` holds `s.mu` while
 	// iterating over `s.mu.replicas` and, still under `s.mu`, calls `r.Desc()`
 	// but that needs the replica Mutex which may be held by a Replica while
-	// calling out to r.store.IsDrainingLeadership` (so it would deadlock if
+	// calling out to r.store.IsDrainingLeases` (so it would deadlock if
 	// that required `s.mu` as well).
-	drainLeadership atomic.Value
+	drainLeases atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order
 	// must be obeyed: processRaftMu < Store.mu.Mutex <
@@ -469,15 +469,15 @@ type StoreContext struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// leaderLeaseActiveDuration is the duration of the active period of leader
+	// rangeLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
-	leaderLeaseActiveDuration time.Duration
+	rangeLeaseActiveDuration time.Duration
 
-	// leaderLeaseRenewalDuration specifies a time interval at the end of the
+	// rangeLeaseRenewalDuration specifies a time interval at the end of the
 	// active lease interval (i.e. bounded to the right by the start of the stasis
 	// period) during which operations will trigger an asynchronous renewal of the
 	// lease.
-	leaderLeaseRenewalDuration time.Duration
+	rangeLeaseRenewalDuration time.Duration
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -726,8 +726,8 @@ func (sc *StoreContext) setDefaults() {
 	}
 
 	raftElectionTimeout := time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval
-	sc.leaderLeaseActiveDuration = leaderLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
-	sc.leaderLeaseRenewalDuration = sc.leaderLeaseActiveDuration / leaderLeaseRenewalDivisor
+	sc.rangeLeaseActiveDuration = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
+	sc.rangeLeaseRenewalDuration = sc.rangeLeaseActiveDuration / rangeLeaseRenewalDivisor
 }
 
 // NewStore returns a new instance of a store.
@@ -749,7 +749,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		metrics:      newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
-	s.drainLeadership.Store(false)
+	s.drainLeases.Store(false)
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
@@ -790,22 +790,22 @@ func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
-// DrainLeadership (when called with 'true') prevents all of the Store's
-// Replicas from acquiring or extending leader leases and waits until all of
+// DrainLeases (when called with 'true') prevents all of the Store's
+// Replicas from acquiring or extending range leases and waits until all of
 // them have expired. If an error is returned, the draining state is still
 // active, but there may be active leases held by some of the Store's Replicas.
 // When called with 'false', returns to the normal mode of operation.
-func (s *Store) DrainLeadership(drain bool) error {
-	s.drainLeadership.Store(drain)
+func (s *Store) DrainLeases(drain bool) error {
+	s.drainLeases.Store(drain)
 	if !drain {
 		return nil
 	}
 
-	return util.RetryForDuration(10*s.ctx.leaderLeaseActiveDuration, func() error {
+	return util.RetryForDuration(10*s.ctx.rangeLeaseActiveDuration, func() error {
 		var err error
 		now := s.Clock().Now()
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
-			lease, nextLease := r.getLeaderLease()
+			lease, nextLease := r.getLease()
 			// If we own an active lease or we're trying to obtain a lease
 			// (and that request is fresh enough), wait.
 			if (lease.OwnedBy(s.StoreID()) && lease.Covers(now)) ||
@@ -1191,7 +1191,7 @@ func (s *Store) startGossip() {
 // first range and if so instructs it to gossip the cluster ID,
 // sentinel gossip and first range descriptor. This is done in a retry
 // loop in the event that the returned error indicates that the state
-// of the leader lease is not known. This can happen on lease command
+// of the range lease is not known. This can happen on lease command
 // timeouts. The retry loop makes sure we try hard to keep asking for
 // the lease instead of waiting for the next sentinelGossipInterval
 // to transpire.
@@ -1202,7 +1202,7 @@ func (s *Store) maybeGossipFirstRange() error {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {
 			pErr := rng.maybeGossipFirstRange()
-			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
+			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok || nlErr.Leaseholder != nil {
 				return pErr.GoError()
 			}
 		} else {
@@ -1474,9 +1474,9 @@ func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.ctx.TestingKnobs }
 
-// IsDrainingLeadership accessor.
-func (s *Store) IsDrainingLeadership() bool {
-	return s.drainLeadership.Load().(bool)
+// IsDrainingLeases accessor.
+func (s *Store) IsDrainingLeases() bool {
+	return s.drainLeases.Load().(bool)
 }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
@@ -1957,9 +1957,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// but we can be smarter: the replica that caused our
 			// uninitialized replica to be created is most likely the
 			// leader.
-			return nil, roachpb.NewError(&roachpb.NotLeaderError{
-				RangeID: ba.RangeID,
-				Leader:  rng.creatingReplica,
+			return nil, roachpb.NewError(&roachpb.NotLeaseholderError{
+				RangeID:     ba.RangeID,
+				Leaseholder: rng.creatingReplica,
 			})
 		}
 		rng.assert5725(ba)
@@ -2450,11 +2450,11 @@ func (s *Store) computeReplicationStatus(now int64) (
 				replicatedRangeCount++
 			}
 
-			// If any replica holds the leader lease, the range is available.
-			if lease, _ := rng.getLeaderLease(); lease.Covers(timestamp) {
+			// If any replica holds the range lease, the range is available.
+			if lease, _ := rng.getLease(); lease.Covers(timestamp) {
 				availableRangeCount++
 			} else {
-				// If there is no leader lease, then as long as more than 50%
+				// If there is no range lease, then as long as more than 50%
 				// of the replicas are current then it is available.
 				current := 0
 				for _, progress := range raftStatus.Progress {
