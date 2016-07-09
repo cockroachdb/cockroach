@@ -23,17 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 )
 
-// A leaderCache is a cache of replica descriptors keyed by range ID.
-type leaderCache struct {
+// A leaseholderCache is a cache of replica descriptors keyed by range ID.
+type leaseholderCache struct {
 	mu    sync.Mutex
 	cache *cache.UnorderedCache
 }
 
-// newLeaderCache creates a new leaderCache of the given size.
+// newLeaseholderCache creates a new leaseholderCache of the given size.
 // The underlying cache internally uses a hash map, so lookups
 // are cheap.
-func newLeaderCache(size int) *leaderCache {
-	return &leaderCache{
+func newLeaseholderCache(size int) *leaseholderCache {
+	return &leaseholderCache{
 		cache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(s int, key, value interface{}) bool {
@@ -44,7 +44,7 @@ func newLeaderCache(size int) *leaderCache {
 }
 
 // Lookup returns the cached leader of the given range ID.
-func (lc *leaderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDescriptor, bool) {
+func (lc *leaseholderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDescriptor, bool) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	if v, ok := lc.cache.Get(rangeID); ok {
@@ -56,7 +56,7 @@ func (lc *leaderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDescripto
 // Update invalidates the cached leader for the given range ID. If an empty
 // replica descriptor is passed, the cached leader is evicted. Otherwise, the
 // passed-in replica descriptor is cached.
-func (lc *leaderCache) Update(rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor) {
+func (lc *leaseholderCache) Update(rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	if (repDesc == roachpb.ReplicaDescriptor{}) {

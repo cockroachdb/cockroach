@@ -1,4 +1,4 @@
-- Feature Name: Node-level mechanism for refreshing range range leases
+- Feature Name: Node-level mechanism for refreshing range leases
 - Status: draft
 - Start Date: 2016-02-10
 - Authors: Ben Darnell, Spencer Kimball

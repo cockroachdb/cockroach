@@ -78,15 +78,15 @@ range splits/merges.
 Noteworthy scenarios:
 
 1. The lease holder dies between ComputeChecksum and CollectChecksum: The replicas,
-including the new lease holder, will continue computing the SHA. The new leader will
-not send a CollectChecksum command.
+including the new lease holder, will continue computing the SHA. The new lease
+holder will not send a CollectChecksum command.
 2. The lease holdership change occurs between ComputeChecksum and CollectChecksum:
 Same as 1.
 3. The lease holder dies and returns (still with the lease) between ComputeChecksum
 and CollectChecksum: The restored lease holder doesn’t compute the SHA, and the
 replicas never receive CollectChecksum.
-4. The lease holder dies after sending the CollectChecksum: The new leader might
-replay the CollectChecksum, with each replica reporting its SHA.
+4. The lease holder dies after sending the CollectChecksum: The new lease
+holder might replay the CollectChecksum, with each replica reporting its SHA.
 5. A replica dies after receiving ComputeChecksum and receives the
 CollectChecksum later when it comes back up: Since it died it will not have the
 computed SHA, and will reply with a NOT_COMPUTED status.

@@ -100,7 +100,7 @@ message RaftCmd {
     # * compute stats for new left hand side (LHS)      [move pre-raft]
     # * copy some data to new range (abort cache)       [move pre-raft]
     # * make right-hand side `*Replica`
-    # * copy tsCache (in-mem; only relevant on lease holder)  [leader-only]
+    # * copy tsCache (in-mem)                           [lease holder only]
     # * r.store.SplitRange
     # * maybe trigger Raft election
     optional Split ...;

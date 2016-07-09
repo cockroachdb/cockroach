@@ -99,8 +99,8 @@ type DistSender struct {
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache           *rangeDescriptorCache
 	rangeLookupMaxRanges int32
-	// leaderCache caches range leaders by range ID.
-	leaderCache      *leaderCache
+	// leaseholderCache caches range lease holders by range ID.
+	leaseholderCache *leaseholderCache
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
@@ -168,7 +168,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if lcSize <= 0 {
 		lcSize = defaultLeaderCacheSize
 	}
-	ds.leaderCache = newLeaderCache(int(lcSize))
+	ds.leaseholderCache = newLeaseholderCache(int(lcSize))
 	if ctx.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
@@ -450,7 +450,7 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if leader, ok := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
+		if leader, ok := ds.leaseholderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
 			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 			}
@@ -1045,7 +1045,7 @@ func (ds *DistSender) updateLeaderCache(
 	newLeader roachpb.ReplicaDescriptor,
 ) {
 	if log.V(1) {
-		if oldLeader, ok := ds.leaderCache.Lookup(rangeID); ok {
+		if oldLeader, ok := ds.leaseholderCache.Lookup(rangeID); ok {
 			if (newLeader == roachpb.ReplicaDescriptor{}) {
 				log.Infof("range %d: evicting cached lease holder %+v", rangeID, oldLeader)
 			} else if newLeader != oldLeader {
@@ -1055,5 +1055,5 @@ func (ds *DistSender) updateLeaderCache(
 			log.Infof("range %d: caching new lease holder %+v", rangeID, newLeader)
 		}
 	}
-	ds.leaderCache.Update(rangeID, newLeader)
+	ds.leaseholderCache.Update(rangeID, newLeader)
 }

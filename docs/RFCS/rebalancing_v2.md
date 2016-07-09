@@ -24,9 +24,9 @@
   - [Centralized allocation strategy](#centralized-allocation-strategy)
     - [Leader lease acquisition](#lease holder-lease-acquisition)
     - [Leader lease renewal](#lease holder-lease-renewal)
-    - [Updating the lease holder’s *StoreDescriptors*](#updating-the-leaders-storedescriptors)
+    - [Updating the lease holder’s *StoreDescriptors*](#updating-the-lease-holders-storedescriptors)
     - [Centralized decision-making](#centralized-decision-making)
-    - [Failure modes for allocation lease holders](#failure-modes-for-allocation-leaders)
+    - [Failure modes for allocation lease holders](#failure-modes-for-allocation-lease-holders)
     - [Conclusion](#conclusion)
   - [CopySets](#copysets)
   - [CopySets emulation](#copysets-emulation)
@@ -398,7 +398,7 @@ Every second, each node checks whether there’s an allocation lease holder thro
 
 ### Leader lease renewal
 
-Near the end of the allocation lease holder term, the current leader does the following:
+Near the end of the allocation lease, the current lease holder does the following:
 
 ``` golang
     err := CPut(globalAllocatorKey,
@@ -453,9 +453,10 @@ when looking for a rebalance target.
 
 1. Poor network connectivity.
 1. Leader node goes down.
-1. Overloaded lease holder node. This may be unlikely to cause problems that extend beyond one leader
-   lease term. An overloaded lease holder node probably wouldn’t complete its lease renewal KV transaction
-   before its lease term ends.
+1. Overloaded lease holder node. This may be unlikely to cause problems that
+   extend beyond one lease term. An overloaded lease holder node probably
+   wouldn’t complete its lease renewal KV transaction before its lease term
+   ends.
 
 The likely failure modes can largely be alleviated by using short allocation range lease terms.
 
