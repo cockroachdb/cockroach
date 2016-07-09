@@ -99,18 +99,14 @@ TestReturnCheck() {
 }
 
 TestVet() {
-  ! go tool vet -printfuncs Info:0,Infof:0,Warning:0,Warningf:0,UnimplementedWithIssueErrorf:1 . 2>&1 | \
-    grep -vE '^vet: cannot process directory .git' | \
-    grep -vE '^(server/(serverpb/admin|serverpb/status|admin|status)|(ts|ts/tspb)/(server|timeseries))\..*\go:.+: constant [0-9]+ not a string in call to Errorf'
+  ! go tool vet -all -shadow \
+    -printfuncs Info:0,Infof:0,Warning:0,Warningf:0,UnimplementedWithIssueErrorf:1 . 2>&1 | \
+    grep -vE '^vet: cannot process directory .git' | grep -vE '\.pb\.gw\.go' | \
+    grep -vE '^(server/(serverpb/admin|serverpb/status|admin|status)|(ts|ts/tspb)/(server|timeseries))\..*\go:.+: constant [0-9]+ not a string in call to Errorf' | \
+    grep -vE '(declaration of "?(pE|e)rr"? shadows|^vet: cannot process directory \.git)'
   # To return proper HTTP error codes (e.g. 404 Not Found), we need to use
   # grpc.Errorf, which has an error code as its first parameter. 'go vet'
   # doesn't like that the first parameter isn't a format string.
-}
-
-TestVetShadow() {
-  ! go tool vet --shadow . 2>&1 | \
-    grep -vE '(declaration of "?(pE|e)rr"? shadows|^vet: cannot process directory \.git)' | \
-    grep -vE '\.pb\.gw\.go'
 }
 
 TestGolint() {
