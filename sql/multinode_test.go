@@ -82,6 +82,8 @@ func TestMultinodeCockroach(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer tracing.Disable()()
 
+	t.Skip("#7689")
+
 	testCluster, conns, stopper := SetupMultinodeTestCluster(t, 3, "Testing")
 	if err := testCluster.WaitForFullReplication(); err != nil {
 		t.Fatal(err)
