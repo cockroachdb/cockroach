@@ -889,6 +889,9 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					// is kosher).
 					union := &ba.Requests[i] // avoid working on copy
 					union.MustSetInner(&noopRequest)
+					// This request has been saturated indicating that all
+					// prior requests have also been saturated.
+					needAnother = false
 					continue
 				}
 				// The request isn't saturated yet.
