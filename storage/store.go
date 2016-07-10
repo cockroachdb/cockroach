@@ -321,16 +321,101 @@ type Store struct {
 	// that required `s.mu` as well).
 	drainLeadership atomic.Value
 
-	// Locking notes: To avoid deadlocks, the following lock order
-	// must be obeyed: processRaftMu < Store.mu.Mutex <
-	// Replica.mu.Mutex < Store.pendingRaftGroups.Mutex.
+	// Locking notes: To avoid deadlocks, the following lock order must
+	// be obeyed: Store.processRaftMu < Replica.readOnlyCmdMu <
+	// Store.mu.Mutex < Replica.mu.Mutex <
+	// Store.pendingRaftGroups.Mutex. (It is not required to acquire
+	// every lock in sequence, but when multiple locks are held at the
+	// same time, it is incorrect to acquire a lock with "lesser" value
+	// in this sequence after one with "greater" value)
 	//
 	// Methods of Store with a "Locked" suffix require that
 	// Store.mu.Mutex be held. Other locking requirements are indicated
 	// in comments.
+	//
+	// The locking structure here is complex because A) Store is a
+	// container of Replicas, so it must generally be consulted before
+	// doing anything with any Replica, B) some Replica operations
+	// (including splits) modify the Store. Therefore we generally lock
+	// Store.mu to find a Replica, release it, then call a method on the
+	// Replica. These short-lived locks of Store.mu and Replica.mu are
+	// often surrounded by a long-lived lock of processRaftMu as
+	// described below.
+	//
+	// There are two major entry points to this stack of locks:
+	// Store.Send (which handles incoming RPCs) and raft-related message
+	// processing (including handleRaftReady on the processRaft
+	// goroutine and handleRaftMessage on GRPC goroutines). Reads are
+	// processed solely through Store.Send; writes start out on
+	// Store.Send until they propose their raft command and then they
+	// finish on the raft goroutines.
+	//
+	// TODO(bdarnell): a Replica could be destroyed immediately after
+	// Store.Send finds the Replica and releases the lock. We need
+	// another RWMutex to be held by anything using a Replica to ensure
+	// that everything is finished before releasing it. #7169
+	//
+	// Detailed description of the locks:
+	//
+	// * processRaftMu: Named after the processRaft goroutine; held
+	//   while any raft messages are being processed (including
+	//   handleRaftReady and handleRaftMessage) or while the set of
+	//   Replicas in the Store is being changed (which may happen
+	//   outside of raft via the replica GC queue). While
+	//   storeReplicaRaftReadyConcurrency is 1, this also ensures that
+	//   only one Replica is being processed at a time.
+	//
+	// * Replica.readOnlyCmdMu (RWMutex): Held in read mode while any
+	//   read-only command is in progress on the replica; held in write
+	//   mode while executing a commit trigger. This is necessary
+	//   because read-only commands mutate the Replica's timestamp cache
+	//   (while holding Replica.mu in addition to readOnlyCmdMu). The
+	//   RWMutex ensures that no reads are being executed during a split
+	//   (which copies the timestamp cache) while still allowing
+	//   multiple reads in parallel (#3148). TODO(bdarnell): this lock
+	//   only needs to be held during splitTrigger, not all triggers.
+	//
+	// * Store.mu: Protects the Store's map of its Replicas. Acquired
+	//   and released briefly at the start of each request; metadata
+	//   operations like splits acquire it again to update the map. Even
+	//   though these lock acquisitions do not make up a single critical
+	//   section, it is safe thanks to processRaftMu which prevents any
+	//   concurrent modifications.
+	//
+	// * Replica.mu: Protects the Replica's in-memory state. Acquired
+	//   and released briefly as needed (note that while the lock is
+	//   held "briefly" in that it is not held for an entire request, we
+	//   do sometimes do I/O while holding the lock, as in
+	//   Replica.Entries). This lock should be held when calling any
+	//   methods on the raft group. Raft may call back into the Replica
+	//   via the methods of the raft.Storage interface, which assume the
+	//   lock is held even though they do not follow our convention of
+	//   the "Locked" suffix.
+	//
+	// * Store.pendingRaftGroups.Mutex: Protects the set of Replicas
+	//   that need to be checked for raft changes on the next iteration.
+	//   It has its own lock because it is called from Replica while
+	//   holding Replica.mu.
+	//
+	// Splits (and merges, but they're not finished and so will not be
+	// discussed here) deserve special consideration: they operate on
+	// two ranges. Naively, this is fine because the right-hand range is
+	// brand new, but an uninitialized version may have been created by
+	// a raft message before we process the split (see commentary on
+	// Replica.splitTrigger). We currently make this safe by keeping
+	// storeReplicaRaftReadyConcurrency at 1; to increase this (which
+	// will be a significant performance boost), we need to ensure that
+	// the splitTrigger will not be concurrent with a handleRaftReady on
+	// the uninitialized RHS Replica.
+	//
+	// Note that because we acquire and release Store.mu and Replica.mu
+	// repeatedly rather than holding a lock for an entire request, we
+	// are actually relying on higher-level locks to ensure that things
+	// don't change out from under us. In particular, handleRaftReady
+	// accesses the replicaID more than once, and we rely on
+	// processRaftMu to ensure that this is not modified by a concurrent
+	// handleRaftMessage. (#4476)
 
-	// processRaftMu is held while doing anything raft-related.
-	// TODO(bdarnell): replace processRaftMu with a range-level lock.
 	processRaftMu sync.Mutex
 	mu            struct {
 		sync.Mutex                                  // Protects all variables in the mu struct.
