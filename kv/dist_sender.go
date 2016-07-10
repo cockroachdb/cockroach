@@ -839,11 +839,9 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 		}
 
-		// If this request has a bound (such as MaxResults in
-		// ScanRequest) and we are going to query at least one more range,
-		// check whether enough rows have been retrieved.
-		// TODO(tschottdorf): need tests for executing a multi-range batch
-		// with various bounded requests which saturate at different times.
+		// If this request has a bound (such as MaxResults in ScanRequest) and
+		// we are going to query at least one more range, check whether enough
+		// rows have been retrieved.
 		if needAnother {
 			// Start with the assumption that all requests are saturated.
 			// Below, we look at each and decide whether that's true.
@@ -867,7 +865,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 				boundedArg, ok := args.(roachpb.Bounded)
 				if !ok {
-					// Non-bounded request. We will have to query all ranges.
+					// Non-bounded request. We will have to continue querying
+					// until this request is satisfied. This request might
+					// have already been satisfied at this stage but we have
+					// to be pessimistic here.
 					needAnother = true
 					continue
 				}
@@ -921,6 +922,16 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		if err != nil {
 			return nil, roachpb.NewError(err), false
 		}
+
+		// It's possible that the key update has created an empty interval,
+		// indicating that we're done. For example, a bounded scan could have
+		// been masked out as saturated, while an unbounded request that has
+		// completed could have been the reason for needing the next
+		// descriptor (needAnother=true); we now have rs.Key=KeyMax.
+		if !rs.Key.Less(rs.EndKey) {
+			return br, nil, false
+		}
+
 		log.Trace(ctx, "querying next range")
 	}
 }
