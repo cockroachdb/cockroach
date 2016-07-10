@@ -17,9 +17,12 @@
 package gossip
 
 import (
+	"bytes"
+	"fmt"
 	"math/rand"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -29,21 +32,27 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
+
+type serverInfo struct {
+	createdAt time.Time
+	peerID    roachpb.NodeID
+}
 
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
 	stopper *stop.Stopper
 
-	mu       sync.Mutex                             // Protects the fields below
-	is       *infoStore                             // The backing infostore
-	incoming nodeSet                                // Incoming client node IDs
-	nodeMap  map[util.UnresolvedAddr]roachpb.NodeID // Incoming client's local address -> node ID
-	tighten  chan roachpb.NodeID                    // Channel of too-distant node IDs
-	sent     int                                    // Count of infos sent from this server to clients
-	received int                                    // Count of infos received from clients
-	ready    chan struct{}                          // Broadcasts wakeup to waiting gossip requests
+	mu       sync.Mutex                         // Protects the fields below
+	is       *infoStore                         // The backing infostore
+	incoming nodeSet                            // Incoming client node IDs
+	nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
+	tighten  chan roachpb.NodeID                // Channel of too-distant node IDs
+	sent     int                                // Count of infos sent from this server to clients
+	received int                                // Count of infos received from clients
+	ready    chan struct{}                      // Broadcasts wakeup to waiting gossip requests
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
@@ -54,7 +63,7 @@ func newServer(stopper *stop.Stopper) *server {
 		stopper:  stopper,
 		is:       newInfoStore(0, util.UnresolvedAddr{}, stopper),
 		incoming: makeNodeSet(minPeers),
-		nodeMap:  make(map[util.UnresolvedAddr]roachpb.NodeID),
+		nodeMap:  make(map[util.UnresolvedAddr]serverInfo),
 		tighten:  make(chan roachpb.NodeID, 1),
 		ready:    make(chan struct{}),
 	}
@@ -164,7 +173,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				// Do nothing.
 			} else if s.incoming.hasSpace() {
 				s.incoming.addNode(args.NodeID)
-				s.nodeMap[args.Addr] = args.NodeID
+				s.nodeMap[args.Addr] = serverInfo{
+					peerID:    args.NodeID,
+					createdAt: timeutil.Now(),
+				}
 
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
 					s.incoming.removeNode(nodeID)
@@ -175,10 +187,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				var alternateNodeID roachpb.NodeID
 				// Choose a random peer for forwarding.
 				altIdx := rand.Intn(len(s.nodeMap))
-				for addr, id := range s.nodeMap {
+				for addr, info := range s.nodeMap {
 					if altIdx == 0 {
 						alternateAddr = addr
-						alternateNodeID = id
+						alternateNodeID = info.peerID
 						break
 					}
 					altIdx--
@@ -306,4 +318,25 @@ func (s *server) start(grpcServer *grpc.Server, addr net.Addr) {
 
 		broadcast()
 	})
+}
+
+func (s *server) status() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var buf bytes.Buffer
+	n := len(s.nodeMap)
+	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %d/%d sent/received)\n",
+		n, s.incoming.maxSize, s.sent, s.received)
+	for addr, info := range s.nodeMap {
+		// TODO(peter): Report per connection sent/received statistics. The
+		// structure of server.Gossip and server.gossipReceiver makes this
+		// irritating to track.
+		fmt.Fprintf(&buf, "  %d: %s (%s)\n",
+			info.peerID, addr.AddressField, roundSecs(timeutil.Since(info.createdAt)))
+	}
+	return buf.String()
+}
+
+func roundSecs(d time.Duration) time.Duration {
+	return time.Duration(d.Seconds()+0.5) * time.Second
 }
