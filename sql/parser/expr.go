@@ -468,6 +468,21 @@ type IfExpr struct {
 	typeAnnotation
 }
 
+// TypedTrueExpr returns the IfExpr's True expression as a TypedExpr.
+func (node *IfExpr) TypedTrueExpr() TypedExpr {
+	return node.True.(TypedExpr)
+}
+
+// TypedCondExpr returns the IfExpr's Cond expression as a TypedExpr.
+func (node *IfExpr) TypedCondExpr() TypedExpr {
+	return node.Cond.(TypedExpr)
+}
+
+// TypedElseExpr returns the IfExpr's Else expression as a TypedExpr.
+func (node *IfExpr) TypedElseExpr() TypedExpr {
+	return node.Else.(TypedExpr)
+}
+
 // Format implements the NodeFormatter interface.
 func (node *IfExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("IF(")
@@ -502,6 +517,11 @@ type CoalesceExpr struct {
 	Exprs Exprs
 
 	typeAnnotation
+}
+
+// TypedExprAt returns the expression at the specified index as a TypedExpr.
+func (node *CoalesceExpr) TypedExprAt(idx int) TypedExpr {
+	return node.Exprs[idx].(TypedExpr)
 }
 
 // Format implements the NodeFormatter interface.
@@ -979,6 +999,25 @@ func (node *BinaryExpr) memoizeFn() {
 	node.fn = fn
 }
 
+// newBinExprIfValidOverload constructs a new BinaryExpr if and only
+// if the pair of arguments have a valid implementation for the given
+// BinaryOperator.
+func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExpr) *BinaryExpr {
+	leftRet, rightRet := left.ReturnType(), right.ReturnType()
+	fn, ok := BinOps[op].lookupImpl(leftRet, rightRet)
+	if ok {
+		expr := &BinaryExpr{
+			Operator: op,
+			Left:     left,
+			Right:    right,
+			fn:       fn,
+		}
+		expr.typ = fn.returnType()
+		return expr
+	}
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	binExprFmtWithParen(buf, f, node.Left, node.Operator.String(), node.Right)
@@ -1023,6 +1062,11 @@ func (node *UnaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Operator.String())
 	buf.WriteByte(' ')
 	exprFmtWithParen(buf, f, node.Expr)
+}
+
+// TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.
+func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
 }
 
 // FuncExpr represents a function call.
