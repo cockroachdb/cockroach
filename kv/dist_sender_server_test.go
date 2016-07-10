@@ -194,6 +194,44 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 	}
 }
 
+func TestMultiRangeBoundedBatchSaturated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for bound := 1; bound <= 20; bound++ {
+		b := db.NewBatch()
+		b.Header.MaxScanResults = int64(bound)
+
+		b.Scan("a", "c", 0)
+		b.Scan("c", "g", 3)
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+
+		// These are the expected results if there is no bound; we trim them below.
+		expResults := [][]string{
+			{"a1", "a2", "a3", "b1", "b2"},
+			{"c1", "c2", "d1"},
+		}
+		rem := bound
+		for i := range expResults {
+			if rem < len(expResults[i]) {
+				expResults[i] = expResults[i][:rem]
+			}
+			rem -= len(expResults[i])
+		}
+		checkScanResults(t, b.Results, expResults)
+	}
+}
+
 // TestMultiRangeEmptyAfterTruncate exercises a code path in which a
 // multi-range request deals with a range without any active requests after
 // truncation. In that case, the request is skipped.
