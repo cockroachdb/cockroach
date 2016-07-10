@@ -368,14 +368,14 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 		// On certain errors, we must advance our manual clock to ensure
 		// that the next attempt has a chance of succeeding.
 		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.NotLeaseholderError:
-			if tErr.Leaseholder == nil {
+		case *roachpb.NotLeaseHolderError:
+			if tErr.LeaseHolder == nil {
 				// stores has the range, is *not* the lease holder, but the
 				// lease holder is not known; this can happen if the lease
 				// holder is removed from the group. Move the manual clock
 				// forward in an attempt to expire the lease.
 				t.mtc.expireLeases()
-			} else if t.mtc.stores[tErr.Leaseholder.NodeID-1] == nil {
+			} else if t.mtc.stores[tErr.LeaseHolder.NodeID-1] == nil {
 				// The lease holder is known but down, so expire its lease.
 				t.mtc.expireLeases()
 			}

@@ -70,7 +70,7 @@ var (
 
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
-	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEADERSHIP}
+	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
 )
 
 // Server is the cockroach server node.
@@ -514,7 +514,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 		switch {
 		case mode == serverpb.DrainMode_CLIENT:
 			err = s.pgServer.SetDraining(setTo)
-		case mode == serverpb.DrainMode_LEADERSHIP:
+		case mode == serverpb.DrainMode_LEASES:
 			err = s.node.SetDraining(setTo)
 		default:
 			err = errors.Errorf("unknown drain mode: %v (%d)", mode, mode)
@@ -528,7 +528,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 		nowOn = append(nowOn, serverpb.DrainMode_CLIENT)
 	}
 	if s.node.IsDraining() {
-		nowOn = append(nowOn, serverpb.DrainMode_LEADERSHIP)
+		nowOn = append(nowOn, serverpb.DrainMode_LEASES)
 	}
 	return nowOn, nil
 }

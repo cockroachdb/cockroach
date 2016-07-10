@@ -2395,7 +2395,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 0
                                 },
                                 {
-                                    "name": "LEADERSHIP",
+                                    "name": "LEASES",
                                     "id": 1
                                 }
                             ]

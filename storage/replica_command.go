@@ -1887,7 +1887,7 @@ func (r *Replica) VerifyChecksum(
 			if diff != nil {
 				for _, d := range diff {
 					l := "leader"
-					if d.Leader {
+					if d.LeaseHolder {
 						l = "replica"
 					}
 					log.Errorf("consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
@@ -1990,11 +1990,12 @@ func (r *Replica) ChangeFrozen(
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
 // two replica snapshots. For now it's only a diff between their KV pairs.
 type ReplicaSnapshotDiff struct {
-	// Leader is set to true of this k:v pair is only present on the lease holder.
-	Leader    bool
-	Key       roachpb.Key
-	Timestamp hlc.Timestamp
-	Value     []byte
+	// LeaseHolder is set to true of this k:v pair is only present on the lease
+	// holder.
+	LeaseHolder bool
+	Key         roachpb.Key
+	Timestamp   hlc.Timestamp
+	Value       []byte
 }
 
 // diffs the two k:v dumps between the lease holder and the replica.
@@ -2014,11 +2015,11 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 		}
 
 		addLeader := func() {
-			diff = append(diff, ReplicaSnapshotDiff{Leader: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
+			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
 			i++
 		}
 		addReplica := func() {
-			diff = append(diff, ReplicaSnapshotDiff{Leader: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
+			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
 			j++
 		}
 

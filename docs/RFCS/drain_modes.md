@@ -13,7 +13,7 @@ Propose two reduced modes of operation of a running CockroachDB node.
 * `drain-clients` mode: the server lets on-going SQL clients finish (up to some
   deadline) and then politely refuses new work at the gateway in the manner
   which popular load-balancing SQL clients can handle best.
-* `drain-leadership` mode: roughly speaking, all range leases expire and new
+* `drain-leases` mode: roughly speaking, all range leases expire and new
   ones are not granted (in turn disabling most queues and active gossipping).
 
 These modes are not related to the existing `Stopper`-based functionality and
@@ -104,7 +104,7 @@ from the unified port).
 
 This is considered outside of the scope of the RFC, but issue #6295 was filed.
 
-## Node/drain-leadership mode:
+## Node/drain-leases mode:
 
 `(*server.Node).DrainLeases(bool)` iterates over its store list and delegates
 to all contained stores. `(*Replica).redirectOnOrAcquireLease` checks
