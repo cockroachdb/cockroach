@@ -332,13 +332,10 @@ func (txn *Txn) Del(keys ...interface{}) error {
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
 //
-// The returned Result will contain 0 rows and Result.Err will indicate success
-// or failure.
-//
 // key can be either a byte slice or a string.
 func (txn *Txn) DelRange(begin, end interface{}) error {
 	b := txn.NewBatch()
-	b.DelRange(begin, end, false)
+	b.DelRange(begin, end, 0, false)
 	_, err := runOneResult(txn, b)
 	return err
 }

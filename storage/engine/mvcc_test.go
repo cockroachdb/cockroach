@@ -58,6 +58,8 @@ var (
 	testKey2     = roachpb.Key("/db2")
 	testKey3     = roachpb.Key("/db3")
 	testKey4     = roachpb.Key("/db4")
+	testKey5     = roachpb.Key("/db5")
+	testKey6     = roachpb.Key("/db6")
 	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: makeTS(0, 1)}}
 	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: makeTS(0, 1)}, Status: roachpb.COMMITTED}
 	txn1Abort    = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1}, Status: roachpb.ABORTED}
@@ -70,6 +72,7 @@ var (
 	value3       = roachpb.MakeValueFromString("testValue3")
 	value4       = roachpb.MakeValueFromString("testValue4")
 	value5       = roachpb.MakeValueFromString("testValue5")
+	value6       = roachpb.MakeValueFromString("testValue6")
 	tsvalue1     = timeSeriesAsValue(testtime, 1000, []tsSample{
 		{1, 1, 5, 5, 5},
 	}...)
@@ -1374,8 +1377,13 @@ func TestMVCCDeleteRange(t *testing.T) {
 	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
 	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil)
 	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
+	err = MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil)
+	err = MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil)
 
-	deleted, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(2, 0), nil, true)
+	// Attempt to delete two keys.
+	deleted, lastDeleted, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(2, 0), nil, true,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1388,23 +1396,41 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if expected, actual := testKey3, deleted[1]; !expected.Equal(actual) {
 		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
 	}
+	if expected, actual := testKey3, lastDeleted; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
 	kvs, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
-	if len(kvs) != 2 ||
+	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
+		!bytes.Equal(kvs[2].Key, testKey5) ||
+		!bytes.Equal(kvs[3].Key, testKey6) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) ||
-		!bytes.Equal(kvs[1].Value.RawBytes, value4.RawBytes) {
+		!bytes.Equal(kvs[1].Value.RawBytes, value4.RawBytes) ||
+		!bytes.Equal(kvs[2].Value.RawBytes, value5.RawBytes) ||
+		!bytes.Equal(kvs[3].Value.RawBytes, value6.RawBytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	deleted, err = MVCCDeleteRange(context.Background(), engine, nil, testKey4, keyMax, 0, makeTS(2, 0), nil, true)
+	deleted, lastDeleted, err = MVCCDeleteRange(
+		context.Background(), engine, nil, testKey4, keyMax, 0, makeTS(2, 0), nil, true,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(deleted) != 1 {
+	if len(deleted) != 3 {
 		t.Fatal("the value should not be empty")
 	}
 	if expected, actual := testKey4, deleted[0]; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
+	if expected, actual := testKey5, deleted[1]; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
+	if expected, actual := testKey6, deleted[2]; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
+	if expected, actual := testKey6, lastDeleted; !expected.Equal(actual) {
 		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
 	}
 	kvs, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
@@ -1414,7 +1440,9 @@ func TestMVCCDeleteRange(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	deleted, err = MVCCDeleteRange(context.Background(), engine, nil, keyMin, testKey2, 0, makeTS(2, 0), nil, true)
+	deleted, lastDeleted, err = MVCCDeleteRange(
+		context.Background(), engine, nil, keyMin, testKey2, 0, makeTS(2, 0), nil, true,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1422,6 +1450,9 @@ func TestMVCCDeleteRange(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 	if expected, actual := testKey1, deleted[0]; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
+	if expected, actual := testKey1, lastDeleted; !expected.Equal(actual) {
 		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
 	}
 	kvs, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, 0, makeTS(2, 0), true, nil)
@@ -1444,13 +1475,13 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, &txn)
 	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
 
-	_, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(1, 0), nil, false)
+	_, _, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(1, 0), nil, false)
 	if err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 
 	txn.Sequence++
-	_, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(1, 0), &txn, false)
+	_, _, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(1, 0), &txn, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1467,7 +1498,7 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(2, 0), value3, txn2)
 	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
 
-	_, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(1, 0), txn1, false)
+	_, _, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, 0, makeTS(1, 0), txn1, false)
 	if err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
@@ -1504,7 +1535,7 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 	}
 
 	txn := txn1.Clone()
-	if _, err := MVCCDeleteRange(
+	if _, _, err := MVCCDeleteRange(
 		context.Background(), engine, nil, testKey1, testKey4, 0, makeTS(2, 0), &txn, false,
 	); err != nil {
 		t.Fatal(err)

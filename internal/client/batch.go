@@ -232,6 +232,7 @@ func (b *Batch) fillResults() error {
 
 			case *roachpb.DeleteRangeRequest:
 				if result.Err == nil {
+					result.Key = reply.(*roachpb.DeleteRangeResponse).Key
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
@@ -532,8 +533,9 @@ func (b *Batch) Del(keys ...interface{}) {
 // A new result will be appended to the batch which will contain 0 rows and
 // Result.Err will indicate success or failure.
 //
-// key can be either a byte slice or a string.
-func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
+// key can be either a byte slice or a string. maxRows bounds the keys
+// deleted. returnKeys enables returning all the keys deleted in the response.
+func (b *Batch) DelRange(s, e interface{}, maxRows int64, returnKeys bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -544,7 +546,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
+	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), maxRows, returnKeys))
 	b.initResult(1, 0, notRaw, nil)
 }
 

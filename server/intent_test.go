@@ -142,7 +142,7 @@ func TestIntentResolution(t *testing.T) {
 					local := rnd.Intn(2) == 0
 					log.Infof("%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
 					if local {
-						b.DelRange(kr[0], kr[1], false)
+						b.DelRange(kr[0], kr[1], 0, false)
 					} else if err := txn.DelRange(kr[0], kr[1]); err != nil {
 						return err
 					}

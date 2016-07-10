@@ -825,7 +825,7 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 	if log.V(2) {
 		log.Infof("DelRange %s - %s", rd.startKey, rd.endKey)
 	}
-	b.DelRange(&rd.startKey, &rd.endKey, false)
+	b.DelRange(&rd.startKey, &rd.endKey, 0, false)
 	rd.startKey, rd.endKey = nil, nil
 
 	return nil

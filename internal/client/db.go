@@ -132,6 +132,10 @@ type Result struct {
 
 	// Keys is set by some operations instead of returning the rows themselves.
 	Keys []roachpb.Key
+
+	// Key is the last key touched by some operation. It is returned so that
+	// it can be used in the next iteration of the operation.
+	Key roachpb.Key
 }
 
 func (r Result) String() string {
@@ -341,7 +345,7 @@ func (db *DB) Del(keys ...interface{}) error {
 // key can be either a byte slice or a string.
 func (db *DB) DelRange(begin, end interface{}) error {
 	b := db.NewBatch()
-	b.DelRange(begin, end, false)
+	b.DelRange(begin, end, 0, false)
 	_, err := runOneResult(db, b)
 	return err
 }

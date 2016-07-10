@@ -535,16 +535,21 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	}
 
 	if ba.MaxScanResults != 0 {
-		// Verify that the batch contains only Scan or ReverseScan requests.
+		// Verify that the batch contains only Scan, ReverseScan,
+		// DeleteRangeRequest, and Begin/EndTransactionRequest requests.
 		fwd, rev := false, false
 		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
+			switch t := req.GetInner().(type) {
 			case *roachpb.ScanRequest:
 				fwd = true
 			case *roachpb.ReverseScanRequest:
 				rev = true
+			case *roachpb.DeleteRangeRequest:
+				fwd = true
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+				return nil, roachpb.NewErrorf("batch with limit contains %T requests", t)
 			}
 		}
 		if fwd && rev {
@@ -826,12 +831,20 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 					union := roachpb.ResponseUnion{}
 					var reply roachpb.Response
-					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
+					switch t := req.GetInner().(type) {
+					case *roachpb.ScanRequest:
 						reply = &roachpb.ScanResponse{}
-					} else {
-						_ = req.GetInner().(*roachpb.ReverseScanRequest)
+
+					case *roachpb.ReverseScanRequest:
 						reply = &roachpb.ReverseScanResponse{}
+
+					case *roachpb.DeleteRangeRequest:
+						reply = &roachpb.DeleteRangeResponse{}
+
+					default:
+						panic(fmt.Sprintf("bad type %T", t))
 					}
+
 					union.MustSetInner(reply)
 					br.Responses[i] = union
 				}
@@ -859,10 +872,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 			for i, union := range ba.Requests {
 				args := union.GetInner()
-				if _, ok := args.(*roachpb.NoopRequest); ok {
-					// NoopRequests are skipped.
+				// Skip some request types. BeginTransactionRequest is added
+				// before a scan request that writes like DeleteRangeRequest().
+				switch args.(type) {
+				case *roachpb.NoopRequest, *roachpb.BeginTransactionRequest:
 					continue
 				}
+
 				boundedArg, ok := args.(roachpb.Bounded)
 				if !ok {
 					// Non-bounded request. We will have to continue querying

@@ -1323,8 +1323,9 @@ func MVCCDeleteRange(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
-) ([]roachpb.Key, error) {
+) ([]roachpb.Key, roachpb.Key, error) {
 	var keys []roachpb.Key
+	var lastKey roachpb.Key
 	num := int64(0)
 	buf := newPutBuffer()
 	iter := engine.NewIterator(true)
@@ -1332,12 +1333,14 @@ func MVCCDeleteRange(
 		if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
 			return true, err
 		}
+		lastKey = kv.Key
 		if returnKeys {
 			keys = append(keys, kv.Key)
 		}
+
 		num++
 		// We check num rather than len(keys) since returnKeys could be false.
-		if max != 0 && max >= num {
+		if max != 0 && max <= num {
 			return true, nil
 		}
 		return false, nil
@@ -1350,7 +1353,7 @@ func MVCCDeleteRange(
 
 	iter.Close()
 	buf.release()
-	return keys, err
+	return keys, lastKey, err
 }
 
 // getScanMeta returns the MVCCMetadata the iterator is currently pointed at

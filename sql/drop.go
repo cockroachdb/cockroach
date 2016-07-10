@@ -506,10 +506,10 @@ func (p *planner) removeFKBackReference(
 // table descriptor.
 // It is called from a mutation, async wrt the DROP statement.
 func truncateAndDropTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) error {
+	if err := truncateTable(tableDesc, db); err != nil {
+		return err
+	}
 	return db.Txn(func(txn *client.Txn) error {
-		if err := truncateTable(tableDesc, txn); err != nil {
-			return err
-		}
 		zoneKey, nameKey, descKey := getKeysForTableDescriptor(tableDesc)
 		// Delete table descriptor
 		b := client.Batch{}

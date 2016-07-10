@@ -185,6 +185,9 @@ var _ combinable = &ReverseScanResponse{}
 func (dr *DeleteRangeResponse) combine(c combinable) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
+		if otherDR.Key != nil {
+			dr.Key = otherDR.Key
+		}
 		dr.Keys = append(dr.Keys, otherDR.Keys...)
 		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
 			return err
@@ -371,6 +374,16 @@ func (rsr *ReverseScanRequest) SetBound(bound int64) {
 	rsr.MaxResults = bound
 }
 
+// GetBound returns the MaxEntriesToDelete field in DeleteRangeRequest.
+func (drr *DeleteRangeRequest) GetBound() int64 {
+	return drr.MaxEntriesToDelete
+}
+
+// SetBound sets the MaxEntriesToDelete field in DeleteRangeRequest.
+func (drr *DeleteRangeRequest) SetBound(bound int64) {
+	drr.MaxEntriesToDelete = bound
+}
+
 // Countable is implemented by response types which have a number of
 // result rows, such as Scan.
 type Countable interface {
@@ -385,6 +398,11 @@ func (sr *ScanResponse) Count() int64 {
 // Count returns the number of rows in ReverseScanResponse.
 func (sr *ReverseScanResponse) Count() int64 {
 	return int64(len(sr.Rows))
+}
+
+// Count returns the number of rows in DeleteRangeResponse.
+func (dr *DeleteRangeResponse) Count() int64 {
+	return int64(len(dr.Keys))
 }
 
 // Method implements the Request interface.
@@ -756,13 +774,14 @@ func NewDelete(key Key) Request {
 
 // NewDeleteRange returns a Request initialized to delete the values in
 // the given key range (excluding the endpoint).
-func NewDeleteRange(startKey, endKey Key, returnKeys bool) Request {
+func NewDeleteRange(startKey, endKey Key, maxRows int64, returnKeys bool) Request {
 	return &DeleteRangeRequest{
 		Span: Span{
 			Key:    startKey,
 			EndKey: endKey,
 		},
-		ReturnKeys: returnKeys,
+		ReturnKeys:         returnKeys,
+		MaxEntriesToDelete: maxRows,
 	}
 }
 

@@ -111,7 +111,7 @@ func checkKeysInKVs(t *testing.T, kvs []client.KeyValue, keys ...string) {
 	}
 	for i, kv := range kvs {
 		expKey := keys[i]
-		if key := string(kv.Key); key != keys[i] {
+		if key := string(kv.Key); key != expKey {
 			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
 		}
 	}
@@ -123,6 +123,25 @@ func checkScanResults(t *testing.T, results []client.Result, expResults [][]stri
 	}
 	for i, res := range results {
 		checkKeysInKVs(t, res.Rows, expResults[i]...)
+	}
+}
+
+func checkDelRangeResults(t *testing.T, results []client.Result, expResults [][]string) {
+	if len(expResults) != len(results) {
+		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
+	}
+	for i, res := range results {
+		keys := expResults[i]
+		if len(keys) != len(res.Keys) {
+			t.Errorf("%s: expected %d results, got %d", errInfo(), len(keys), len(res.Keys))
+			return
+		}
+		for j, k := range res.Keys {
+			expKey := keys[j]
+			if key := string(k); key != expKey {
+				t.Errorf("%s: expected key %d, %d to be %q; got %q", errInfo(), i, j, expKey, key)
+			}
+		}
 	}
 }
 
@@ -191,6 +210,32 @@ func TestMultiRangeBoundedWithCompletedUnboundedScan(t *testing.T) {
 	checkScanResults(t, b.Results, expResults)
 }
 
+func TestMultiRangeBatchBoundedDelRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	for _, key := range []string{"a", "aa", "aaa", "b", "bb", "cc", "d", "dd", "ff"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	b := db.NewBatch()
+	b.DelRange("aaa", "dd", 3, true)
+	b.DelRange("a", "z", 2, true)
+	b.DelRange("cc", "ff", 3, true)
+	if err := db.Run(b); err != nil {
+		t.Fatal(err)
+	}
+
+	checkDelRangeResults(t, b.Results, [][]string{
+		{"aaa", "b", "bb"},
+		{"a", "aa"},
+		{"cc", "d", "dd"},
+	})
+}
+
 func TestMultiRangeBoundedBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -233,6 +278,46 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 	}
 }
 
+func TestMultiRangeBoundedBatchWithDelRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+
+	for bound := 1; bound <= 20; bound++ {
+		// Initialize all keys.
+		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
+			if err := db.Put(key, "value"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		b := db.NewBatch()
+		b.Header.MaxScanResults = int64(bound)
+
+		b.DelRange("a", "c", 0, true)
+		b.DelRange("c", "g", 3, true)
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+
+		// These are the expected results if there is no bound; we trim them below.
+		expResults := [][]string{
+			{"a1", "a2", "a3", "b1", "b2"},
+			{"c1", "c2", "d1"},
+		}
+		rem := bound
+		for i := range expResults {
+			if rem < len(expResults[i]) {
+				expResults[i] = expResults[i][:rem]
+			}
+			rem -= len(expResults[i])
+		}
+		checkDelRangeResults(t, b.Results, expResults)
+	}
+}
+
 // TestMultiRangeEmptyAfterTruncate exercises a code path in which a
 // multi-range request deals with a range without any active requests after
 // truncation. In that case, the request is skipped.
@@ -246,8 +331,8 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// any active requests.
 	if err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "b", false)
-		b.DelRange("e", "f", false)
+		b.DelRange("a", "b", 0, false)
+		b.DelRange("e", "f", 0, false)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -286,7 +371,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "d", false)
+		b.DelRange("a", "d", 0, false)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
