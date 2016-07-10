@@ -29,11 +29,11 @@ import weak "gogoproto/gogo.proto";
 // `String() string`.
 // option (gogoproto.goproto_stringer_all) = false;
 
-// A NotLeaseholderError indicates that the current range is not the lease
+// A NotLeaseHolderError indicates that the current range is not the lease
 // holder. If the lease holder is known, its Replica is set in the error.
-message NotLeaseholderError {
+message NotLeaseHolderError {
   optional ReplicaDescriptor replica = 1;
-  optional ReplicaDescriptor leaseholder = 2;
+  optional ReplicaDescriptor lease_holder = 2;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
@@ -196,7 +196,7 @@ message ReplicaCorruptionError {
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
 
-  optional NotLeaseholderError not_leaseholder = 1;
+  optional NotLeaseHolderError not_lease_holder = 1;
   optional RangeNotFoundError range_not_found = 2;
   optional RangeKeyMismatchError range_key_mismatch = 3;
   optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;

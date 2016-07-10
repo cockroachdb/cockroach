@@ -476,12 +476,12 @@ func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 	return r.mu.state.Lease, r.mu.pendingLeaseRequest.RequestPending()
 }
 
-// newNotLeaseholderError returns a NotLeaseholderError initialized with the
+// newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
 // replica for the holder (if any) of the given lease.
-func (r *Replica) newNotLeaseholderError(
+func (r *Replica) newNotLeaseHolderError(
 	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
 ) error {
-	err := &roachpb.NotLeaseholderError{
+	err := &roachpb.NotLeaseHolderError{
 		RangeID: r.RangeID,
 	}
 	if repDesc, ok := rangeDesc.GetReplicaDescriptor(originStoreID); ok {
@@ -491,7 +491,7 @@ func (r *Replica) newNotLeaseholderError(
 		// TODO(tamird): why is this not the same as `err.Leader = &l.Replica`?
 		// Making that change causes tests to fail. See #3670.
 		if repDesc, ok := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID); ok {
-			err.Leaseholder = &repDesc
+			err.LeaseHolder = &repDesc
 		}
 	}
 	return err
@@ -499,7 +499,7 @@ func (r *Replica) newNotLeaseholderError(
 
 // redirectOnOrAcquireLease checks whether this replica has the lease at the
 // current timestamp. If it does, returns success. If another replica currently
-// holds the lease, redirects by returning NotLeaseholderError. If the lease is
+// holds the lease, redirects by returning NotLeaseHolderError. If the lease is
 // expired, a renewal is synchronously requested. This method uses the
 // pendingLeaseRequest structure to guarantee only one request to grant the
 // lease is pending. Leases are eagerly renewed when a request with a timestamp
@@ -523,7 +523,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				if !lease.OwnedBy(r.store.StoreID()) {
 					// If lease is currently held by another, redirect to holder.
 					return nil, roachpb.NewError(
-						r.newNotLeaseholderError(lease, r.store.StoreID(), r.mu.state.Desc))
+						r.newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc))
 				}
 				// Should we extend the lease?
 				if (r.mu.pendingLeaseRequest.RequestPending() == nil) &&
@@ -559,13 +559,13 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			if pErr != nil {
 				// Getting a LeaseRejectedError back means someone else got there
 				// first, or the lease request was somehow invalid due to a
-				// concurrent change. Convert the error to a NotLeaseholderError.
+				// concurrent change. Convert the error to a NotLeaseHolderError.
 				if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
 					lease, _ := r.getLease()
 					if !lease.Covers(r.store.Clock().Now()) {
 						lease = nil
 					}
-					return roachpb.NewError(r.newNotLeaseholderError(lease, r.store.StoreID(), r.Desc()))
+					return roachpb.NewError(r.newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc()))
 				}
 				return pErr
 			}
@@ -573,7 +573,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 		case <-ctx.Done():
 		case <-r.store.Stopper().ShouldStop():
 		}
-		return roachpb.NewError(r.newNotLeaseholderError(nil, r.store.StoreID(), r.Desc()))
+		return roachpb.NewError(r.newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 	}
 }
 
@@ -1774,7 +1774,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 			log.Warningf("command proposed from replica %+v (lease at %v): %s",
 				raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd)
 		}
-		forcedErr = roachpb.NewError(r.newNotLeaseholderError(
+		forcedErr = roachpb.NewError(r.newNotLeaseHolderError(
 			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
 	} else if raftCmd.Cmd.IsLease() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
@@ -2370,10 +2370,10 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 		hasLease = pErr == nil
 		if pErr != nil {
 			switch e := pErr.GetDetail().(type) {
-			case *roachpb.NotLeaseholderError:
-				// NotLeaseholderError means there is an active lease, but only if
+			case *roachpb.NotLeaseHolderError:
+				// NotLeaseHolderError means there is an active lease, but only if
 				// the lease holder is set; otherwise, it's likely a timeout.
-				if e.Leaseholder != nil {
+				if e.LeaseHolder != nil {
 					pErr = nil
 				}
 			case *roachpb.LeaseRejectedError:

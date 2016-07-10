@@ -438,13 +438,13 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	log.Trace(ctx, fmt.Sprintf("queue start for range %d", repl.RangeID))
 	defer sp.Finish()
 
-	// If the queue requires a replica to have the range range lease in
+	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease
 	// and renew or acquire if necessary.
 	if bq.needsLease {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
-			if _, harmless := err.GetDetail().(*roachpb.NotLeaseholderError); harmless {
+			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
 				bq.eventLog.VInfof(log.V(3), "%s: not holding lease; skipping", repl)
 				return nil
 			}
