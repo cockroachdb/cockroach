@@ -1,4 +1,4 @@
-- Feature Name: Node-level mechanism for refreshing range leader leases
+- Feature Name: Node-level mechanism for refreshing range range leases
 - Status: draft
 - Start Date: 2016-02-10
 - Authors: Ben Darnell, Spencer Kimball
@@ -8,9 +8,9 @@
 
 # Summary
 
-This is a proposal to replace the current per-range leader lease
+This is a proposal to replace the current per-range range lease
 mechanism with a coarser-grained per-node lease in order to minimize
-leader lease renewal traffic. In the new system, a leader lease will
+range lease renewal traffic. In the new system, a range lease will
 have two components: a short-lived node lease (managed by the node)
 and a range lease of indefinite duration (managed by the range – as it
 is currently). Only the node-level lease will need to be automatically
@@ -19,7 +19,7 @@ refreshed.
 
 # Motivation
 
-All active ranges require a leader lease, which is currently stored in
+All active ranges require a range lease, which is currently stored in
 the raft log. These leases have a short duration (currently 1 second)
 in order to be responsive to failures. Since they are stored in the
 raft log, they must be managed independently for each range and cannot
@@ -29,17 +29,17 @@ large amount of traffic to renew leases on ranges.
 A motivating example is a table with 1,000 ranges experience heavy
 read traffic. If the primary key for the table is chosen such that
 load is evenly distributed, then read traffic will likely keep each
-range active. The leader lease must be renewed constantly in order to
+range active. The range lease must be renewed constantly in order to
 serve consistent reads. For 1,000 ranges, that would require 1,000
 Raft commits per second. This seems untenable even for this simple
 example, especially in light of a read-only workload.
 
 An insight which suggests possible alternatives is that renewing 1,000
-leader leases is duplicating a lot of work in a system which has only
+range leases is duplicating a lot of work in a system which has only
 a small number of nodes. In particular, we mostly care about node
-liveness. Currently, each replica holding leader leases must
+liveness. Currently, each replica holding range leases must
 individually renew. What if we could have the node renew for all of
-its replicas holding leader leases at once?
+its replicas holding range leases at once?
 
 
 # Detailed design
@@ -48,14 +48,14 @@ We introduce a new node lease table at the beginning of the keyspace
 (not an actual SQL table; it will need to be accessed with lower-level
 APIs). This table is special in several respects: it is gossipped, and
 leases within its keyspace (and all ranges that precede it, including
-meta1 and meta2) use the current, per-range leader lease mechanism to
+meta1 and meta2) use the current, per-range range lease mechanism to
 avoid circular dependencies. This table maps node IDs to an epoch
 counter and a lease expiration timestamp.
 
-The range leader lease is moved from a special raft command (which
-writes to a range-local, non-transactional leader lease key) to a
+The range range lease is moved from a special raft command (which
+writes to a range-local, non-transactional range lease key) to a
 transactional range-local key (similar to the range descriptor). The
-range leader lease identifies the node that holds the lease and its
+range range lease identifies the node that holds the lease and its
 epoch counter. It has a start timestamp but does not include an
 expiration time. The lease record is always updated in a distributed
 transaction with the node lease record to ensure that the epoch
@@ -81,10 +81,10 @@ holds the lease is being removed. Leases can be transferred using a
 similar mechanism, for example to respond to changing geographic
 traffic patterns.
 
-A replica claims the leader lease by executing a transaction which
+A replica claims the range lease by executing a transaction which
 reads the replica’s node lease epoch and then does a conditional put
-on the range-local leader lease. The transaction record will be local
-to the leader lease record, so intents will always be cleaned on
+on the range-local range lease. The transaction record will be local
+to the range lease record, so intents will always be cleaned on
 commit or abort. There are never intents on the node lease because
 they’re only updated via a conditional put. Nodes either renew based
 on their last read value, or revoke another node’s lease based on the
@@ -126,7 +126,7 @@ lease durations), although the gains would be much less than what is
 being proposed here and read-heavy workloads would still spend much of
 their time on lease updates.
 
-If we used copysets, there may be an opportunity to maintain leader
+If we used copysets, there may be an opportunity to maintain lease holder
 leases at the granularity of copysets.
 
 

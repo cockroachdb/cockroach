@@ -51,7 +51,7 @@ const (
 	// KeySentinel is a key for gossip which must not expire or
 	// else the node considers itself partitioned and will retry with
 	// bootstrap hosts.  The sentinel is gossiped by the node that holds
-	// the leader lease for the first range.
+	// the range lease for the first range.
 	KeySentinel = "sentinel"
 
 	// KeyFirstRangeDescriptor is the descriptor for the "first"

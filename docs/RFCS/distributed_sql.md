@@ -85,7 +85,7 @@ The desired improvements are listed below.
   When querying for a set of rows that match a filtering expression, we
   currently query all the keys in certain ranges and process the filters after
   receiving the data on the gateway node over the network. Instead, we want the
-  filtering expression to be processed by the leader or remote node, saving on
+  filtering expression to be processed by the lease holder or remote node, saving on
   network traffic and related processing.
 
   The remote-side filtering does not need to support full SQL expressions - it
@@ -633,10 +633,10 @@ Processors are generally made up of three components:
    * hashing: each row goes to a single output stream, chosen according
      to a hash function applied on certain elements of the data tuples.
    * by range: the router is configured with range information (relating to a
-     certain table) and is able to send rows to the nodes that are leaders for
+     certain table) and is able to send rows to the nodes that are lease holders for
      the respective ranges (useful for `JoinReader` nodes (taking index values
      to the node responsible for the PK) and `INSERT` (taking new rows to their
-     leader-to-be)).
+     lease holder-to-be)).
 
 ## Joins
 
@@ -711,7 +711,7 @@ In terms of the physical implementation of `JOIN-READER`, there are two possibil
     physical input stream from; the output stream continues on the same node.
 
     This is simple but involves round-trips between the node and the range
-    leaders. We will probably use this strategy for the first implementation.
+    lease holders. We will probably use this strategy for the first implementation.
 
  2. it can use routers-by-range to route each input to an instance of
     `JOIN-READER` on the node for the respective range of `t2`; the flow of data
@@ -896,7 +896,7 @@ plan nodes in it, the connections between them (input synchronizers, output
 routers) plus identifiers for the input streams of the top node in the plan and
 the output streams of the (possibly multiple) bottom nodes. A node might be
 responsible for multiple heterogeneous flows. More commonly, when a node is the
-leader for multiple ranges from the same table involved in the query, it will
+lease holder for multiple ranges from the same table involved in the query, it will
 be responsible for a set of homogeneous flows, one per range, all starting with
 a `TableReader` processor. In the beginning, we'll coalesce all these
 `TableReader`s into one, configured with all the spans to be read across all
@@ -1191,7 +1191,7 @@ We won't need anything fancier in this area to reach M1 and M2.
 ### KV integration
 
 We do not propose introducing any new KV Get/Put APIs. The current APIs are to
-be used; we simply rely on the fact that when run from the leader node they will
+be used; we simply rely on the fact that when run from the lease holder node they will
 be faster as the work they do is local.
 
 However, we still require some integration with the KV layer:
@@ -1199,7 +1199,7 @@ However, we still require some integration with the KV layer:
 1. Range information lookup
 
    At the physical planning stage we need to break up key spans into ranges and
-   determine who is the leader for each range. We may also use range info at the
+   determine who is the lease holder for each range. We may also use range info at the
    logical planning phase to help estimate table sizes (for index selection,
    join order, etc).  The KV layer already has a range cache that maintains this
    information, but we will need to make changes to be more aggressive in terms
@@ -1289,10 +1289,10 @@ should focus on initial steps towards a more encompassing solution.
 In this approach we would build a distributed SQL layer, where the SQL layer of
 a node can make requests to the SQL layer of any other node. The SQL layer
 would "peek" into the range information in the KV layer to decide how to split
-the workload so that data is processed by the respective raft range leaders.
-Achieving a correct distribution to range leaders would not be necessary for
+the workload so that data is processed by the respective raft range lease holders.
+Achieving a correct distribution to range lease holders would not be necessary for
 correctness; thus we wouldn't need to build extra coordination with the KV
-layer to synchronize with range splits/merges or leadership changes during an
+layer to synchronize with range splits/merges or lease holdership changes during an
 SQL operation.
 
 
@@ -1331,7 +1331,7 @@ would need to support SQL expressions, either as SQL strings (which requires
 each node to re-parse expressions) or a more efficient serialization of ASTs.
 
 The APIs also need to include information about what key ranges the request
-should be restricted to (so that a node processes the keys that it is leader
+should be restricted to (so that a node processes the keys that it is lease holder
 for - or at least was, at the time when we started the operation). Since tables
 can span many raft ranges, this information can include a large number of
 disjoint key ranges.
