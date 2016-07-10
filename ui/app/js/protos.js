@@ -1131,6 +1131,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "fields": [
                                         {
                                             "rule": "optional",
+                                            "type": "bool",
+                                            "name": "contains_estimates",
+                                            "id": 14,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
                                             "type": "sfixed64",
                                             "name": "last_update_nanos",
                                             "id": 1,

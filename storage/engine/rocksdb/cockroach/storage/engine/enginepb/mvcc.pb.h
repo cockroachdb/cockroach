@@ -491,6 +491,13 @@ class MVCCStats : public ::google::protobuf::MessageLite {
 
   // accessors -------------------------------------------------------
 
+  // optional bool contains_estimates = 14;
+  bool has_contains_estimates() const;
+  void clear_contains_estimates();
+  static const int kContainsEstimatesFieldNumber = 14;
+  bool contains_estimates() const;
+  void set_contains_estimates(bool value);
+
   // optional sfixed64 last_update_nanos = 1;
   bool has_last_update_nanos() const;
   void clear_last_update_nanos();
@@ -584,6 +591,8 @@ class MVCCStats : public ::google::protobuf::MessageLite {
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCStats)
  private:
+  inline void set_has_contains_estimates();
+  inline void clear_has_contains_estimates();
   inline void set_has_last_update_nanos();
   inline void clear_has_last_update_nanos();
   inline void set_has_intent_age();
@@ -629,6 +638,7 @@ class MVCCStats : public ::google::protobuf::MessageLite {
   ::google::protobuf::int64 intent_count_;
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
+  bool contains_estimates_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_impl();
   #else
@@ -1203,15 +1213,39 @@ inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::
 
 // MVCCStats
 
-// optional sfixed64 last_update_nanos = 1;
-inline bool MVCCStats::has_last_update_nanos() const {
+// optional bool contains_estimates = 14;
+inline bool MVCCStats::has_contains_estimates() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void MVCCStats::set_has_last_update_nanos() {
+inline void MVCCStats::set_has_contains_estimates() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void MVCCStats::clear_has_last_update_nanos() {
+inline void MVCCStats::clear_has_contains_estimates() {
   _has_bits_[0] &= ~0x00000001u;
+}
+inline void MVCCStats::clear_contains_estimates() {
+  contains_estimates_ = false;
+  clear_has_contains_estimates();
+}
+inline bool MVCCStats::contains_estimates() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.contains_estimates)
+  return contains_estimates_;
+}
+inline void MVCCStats::set_contains_estimates(bool value) {
+  set_has_contains_estimates();
+  contains_estimates_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.contains_estimates)
+}
+
+// optional sfixed64 last_update_nanos = 1;
+inline bool MVCCStats::has_last_update_nanos() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void MVCCStats::set_has_last_update_nanos() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void MVCCStats::clear_has_last_update_nanos() {
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void MVCCStats::clear_last_update_nanos() {
   last_update_nanos_ = GOOGLE_LONGLONG(0);
@@ -1229,13 +1263,13 @@ inline void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
 
 // optional sfixed64 intent_age = 2;
 inline bool MVCCStats::has_intent_age() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void MVCCStats::set_has_intent_age() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void MVCCStats::clear_has_intent_age() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void MVCCStats::clear_intent_age() {
   intent_age_ = GOOGLE_LONGLONG(0);
@@ -1253,13 +1287,13 @@ inline void MVCCStats::set_intent_age(::google::protobuf::int64 value) {
 
 // optional sfixed64 gc_bytes_age = 3;
 inline bool MVCCStats::has_gc_bytes_age() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void MVCCStats::set_has_gc_bytes_age() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void MVCCStats::clear_has_gc_bytes_age() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void MVCCStats::clear_gc_bytes_age() {
   gc_bytes_age_ = GOOGLE_LONGLONG(0);
@@ -1277,13 +1311,13 @@ inline void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
 
 // optional sfixed64 live_bytes = 4;
 inline bool MVCCStats::has_live_bytes() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void MVCCStats::set_has_live_bytes() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void MVCCStats::clear_has_live_bytes() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void MVCCStats::clear_live_bytes() {
   live_bytes_ = GOOGLE_LONGLONG(0);
@@ -1301,13 +1335,13 @@ inline void MVCCStats::set_live_bytes(::google::protobuf::int64 value) {
 
 // optional sfixed64 live_count = 5;
 inline bool MVCCStats::has_live_count() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void MVCCStats::set_has_live_count() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void MVCCStats::clear_has_live_count() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void MVCCStats::clear_live_count() {
   live_count_ = GOOGLE_LONGLONG(0);
@@ -1325,13 +1359,13 @@ inline void MVCCStats::set_live_count(::google::protobuf::int64 value) {
 
 // optional sfixed64 key_bytes = 6;
 inline bool MVCCStats::has_key_bytes() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void MVCCStats::set_has_key_bytes() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void MVCCStats::clear_has_key_bytes() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void MVCCStats::clear_key_bytes() {
   key_bytes_ = GOOGLE_LONGLONG(0);
@@ -1349,13 +1383,13 @@ inline void MVCCStats::set_key_bytes(::google::protobuf::int64 value) {
 
 // optional sfixed64 key_count = 7;
 inline bool MVCCStats::has_key_count() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void MVCCStats::set_has_key_count() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void MVCCStats::clear_has_key_count() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void MVCCStats::clear_key_count() {
   key_count_ = GOOGLE_LONGLONG(0);
@@ -1373,13 +1407,13 @@ inline void MVCCStats::set_key_count(::google::protobuf::int64 value) {
 
 // optional sfixed64 val_bytes = 8;
 inline bool MVCCStats::has_val_bytes() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void MVCCStats::set_has_val_bytes() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void MVCCStats::clear_has_val_bytes() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void MVCCStats::clear_val_bytes() {
   val_bytes_ = GOOGLE_LONGLONG(0);
@@ -1397,13 +1431,13 @@ inline void MVCCStats::set_val_bytes(::google::protobuf::int64 value) {
 
 // optional sfixed64 val_count = 9;
 inline bool MVCCStats::has_val_count() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void MVCCStats::set_has_val_count() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void MVCCStats::clear_has_val_count() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void MVCCStats::clear_val_count() {
   val_count_ = GOOGLE_LONGLONG(0);
@@ -1421,13 +1455,13 @@ inline void MVCCStats::set_val_count(::google::protobuf::int64 value) {
 
 // optional sfixed64 intent_bytes = 10;
 inline bool MVCCStats::has_intent_bytes() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void MVCCStats::set_has_intent_bytes() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void MVCCStats::clear_has_intent_bytes() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void MVCCStats::clear_intent_bytes() {
   intent_bytes_ = GOOGLE_LONGLONG(0);
@@ -1445,13 +1479,13 @@ inline void MVCCStats::set_intent_bytes(::google::protobuf::int64 value) {
 
 // optional sfixed64 intent_count = 11;
 inline bool MVCCStats::has_intent_count() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 inline void MVCCStats::set_has_intent_count() {
-  _has_bits_[0] |= 0x00000400u;
+  _has_bits_[0] |= 0x00000800u;
 }
 inline void MVCCStats::clear_has_intent_count() {
-  _has_bits_[0] &= ~0x00000400u;
+  _has_bits_[0] &= ~0x00000800u;
 }
 inline void MVCCStats::clear_intent_count() {
   intent_count_ = GOOGLE_LONGLONG(0);
@@ -1469,13 +1503,13 @@ inline void MVCCStats::set_intent_count(::google::protobuf::int64 value) {
 
 // optional sfixed64 sys_bytes = 12;
 inline bool MVCCStats::has_sys_bytes() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 inline void MVCCStats::set_has_sys_bytes() {
-  _has_bits_[0] |= 0x00000800u;
+  _has_bits_[0] |= 0x00001000u;
 }
 inline void MVCCStats::clear_has_sys_bytes() {
-  _has_bits_[0] &= ~0x00000800u;
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void MVCCStats::clear_sys_bytes() {
   sys_bytes_ = GOOGLE_LONGLONG(0);
@@ -1493,13 +1527,13 @@ inline void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
 
 // optional sfixed64 sys_count = 13;
 inline bool MVCCStats::has_sys_count() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
+  return (_has_bits_[0] & 0x00002000u) != 0;
 }
 inline void MVCCStats::set_has_sys_count() {
-  _has_bits_[0] |= 0x00001000u;
+  _has_bits_[0] |= 0x00002000u;
 }
 inline void MVCCStats::clear_has_sys_count() {
-  _has_bits_[0] &= ~0x00001000u;
+  _has_bits_[0] &= ~0x00002000u;
 }
 inline void MVCCStats::clear_sys_count() {
   sys_count_ = GOOGLE_LONGLONG(0);

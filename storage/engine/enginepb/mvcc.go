@@ -73,10 +73,11 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	// pre-addition state.
 	ms.AgeTo(oms.LastUpdateNanos)
 	oms.AgeTo(ms.LastUpdateNanos)
+	// If either stats object contains estimates, their sum does too.
+	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
 	// Now that we've done that, we may just add them.
 	ms.IntentAge += oms.IntentAge
 	ms.GCBytesAge += oms.GCBytesAge
-
 	ms.LiveBytes += oms.LiveBytes
 	ms.KeyBytes += oms.KeyBytes
 	ms.ValBytes += oms.ValBytes
@@ -96,6 +97,8 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	// pre-subtraction state.
 	ms.AgeTo(oms.LastUpdateNanos)
 	oms.AgeTo(ms.LastUpdateNanos)
+	// If either stats object contains estimates, their difference does too.
+	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
 	// Now that we've done that, we may subtract.
 	ms.IntentAge -= oms.IntentAge
 	ms.GCBytesAge -= oms.GCBytesAge
