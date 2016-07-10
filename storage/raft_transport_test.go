@@ -152,6 +152,7 @@ func TestSendAndReceive(t *testing.T) {
 
 		for fromStoreID, fromNodeID := range storeNodes {
 			baseReq := storage.RaftMessageRequest{
+				RangeID: 1,
 				Message: raftpb.Message{
 					From: uint64(fromStoreID),
 					To:   uint64(toStoreID),

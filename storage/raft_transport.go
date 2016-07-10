@@ -252,6 +252,11 @@ func (t *RaftTransport) MakeSender(onError errHandler) RaftSender {
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
 func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
+	isHeartbeat := (req.Message.Type == raftpb.MsgHeartbeat ||
+		req.Message.Type == raftpb.MsgHeartbeatResp)
+	if req.RangeID == 0 && !isHeartbeat {
+		panic("only heartbeat messages may be sent to range ID 0")
+	}
 	isSnap := req.Message.Type == raftpb.MsgSnap
 	toReplica := req.ToReplica
 	s.transport.mu.Lock()
