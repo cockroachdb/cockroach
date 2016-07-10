@@ -121,7 +121,7 @@ the other table's rows. Or, when a key from the other table is enountered, a
 `Scan` can be constructed to skip past it. The former may overfetch many keys
 and the latter may involve many round-trips, but the two approaches can be
 combined to minimize the worst case behaviors. Additionally, with distributed
-SQL, this logic would normally run on the range leader so it would be a local
+SQL, this logic would normally run on the range lease holder so it would be a local
 operation. Finally, if performance issues do surface in practice, a new kv
 operation, similar to the one mentioned for deletes, can be created which scans
 a range of data while skipping interleaved rows.

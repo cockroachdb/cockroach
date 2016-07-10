@@ -54,12 +54,12 @@ func (ba *BatchRequest) IsFreeze() bool {
 	return ok
 }
 
-// IsLease returns whether the batch consists of a single LeaderLease request.
+// IsLease returns whether the batch consists of a single RequestLease request.
 func (ba *BatchRequest) IsLease() bool {
 	if len(ba.Requests) != 1 {
 		return false
 	}
-	_, ok := ba.GetArg(LeaderLease)
+	_, ok := ba.GetArg(RequestLease)
 	return ok
 }
 
@@ -233,7 +233,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		resolveIntentRange int
 		merge              int
 		truncateLog        int
-		leaderLease        int
+		lease              int
 		reverseScan        int
 		computeChecksum    int
 		verifyChecksum     int
@@ -283,8 +283,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.merge++
 		case *TruncateLogRequest:
 			counts.truncateLog++
-		case *LeaderLeaseRequest:
-			counts.leaderLease++
+		case *RequestLeaseRequest:
+			counts.lease++
 		case *ReverseScanRequest:
 			counts.reverseScan++
 		case *ComputeChecksumRequest:
@@ -323,7 +323,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		resolveIntentRange []ResolveIntentRangeResponse
 		merge              []MergeResponse
 		truncateLog        []TruncateLogResponse
-		leaderLease        []LeaderLeaseResponse
+		lease              []RequestLeaseResponse
 		reverseScan        []ReverseScanResponse
 		computeChecksum    []ComputeChecksumResponse
 		verifyChecksum     []VerifyChecksumResponse
@@ -434,11 +434,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.truncateLog = make([]TruncateLogResponse, counts.truncateLog)
 			}
 			reply, bufs.truncateLog = &bufs.truncateLog[0], bufs.truncateLog[1:]
-		case *LeaderLeaseRequest:
-			if bufs.leaderLease == nil {
-				bufs.leaderLease = make([]LeaderLeaseResponse, counts.leaderLease)
+		case *RequestLeaseRequest:
+			if bufs.lease == nil {
+				bufs.lease = make([]RequestLeaseResponse, counts.lease)
 			}
-			reply, bufs.leaderLease = &bufs.leaderLease[0], bufs.leaderLease[1:]
+			reply, bufs.lease = &bufs.lease[0], bufs.lease[1:]
 		case *ReverseScanRequest:
 			if bufs.reverseScan == nil {
 				bufs.reverseScan = make([]ReverseScanResponse, counts.reverseScan)

@@ -355,11 +355,11 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 }
 
 // IsDraining returns true if at least one Store housed on this Node is not
-// currently allowing leader leases to be procured or extended.
+// currently allowing range leases to be procured or extended.
 func (n *Node) IsDraining() bool {
 	var isDraining bool
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
-		isDraining = isDraining || s.IsDrainingLeadership()
+		isDraining = isDraining || s.IsDrainingLeases()
 		return nil
 	}); err != nil {
 		panic(err)
@@ -367,14 +367,14 @@ func (n *Node) IsDraining() bool {
 	return isDraining
 }
 
-// SetDraining called with 'true' waits until all Replicas' leader leases
+// SetDraining called with 'true' waits until all Replicas' range leases
 // have expired or a reasonable amount of time has passed (in which case an
 // error is returned but draining mode is still active).
-// When called with 'false', returns to the normal mode of allowing leader
+// When called with 'false', returns to the normal mode of allowing lease holder
 // lease acquisition and extensions.
 func (n *Node) SetDraining(drain bool) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		return s.DrainLeadership(drain)
+		return s.DrainLeases(drain)
 	})
 }
 
