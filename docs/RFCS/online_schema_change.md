@@ -130,11 +130,11 @@ primary index for the table and deletes the column keys.
 Since schema change operations are potentially long running they need
 to be restartable or abortable if the node performing them dies. We
 accomplish this by performing the schema change operation for a table
-on a well known node: the replica holding the leader lease for the
+on a well known node: the replica holding the range lease for the
 first range of the table (i.e. containing the key `/<tableID>`). When
 a node receives a schema change operation such as `CREATE INDEX` it
-will forward the operation to this "table leader". When the table
-leader restarts it will load the associated table descriptor and
+will forward the operation to this "table lease holder". When the table
+lease holder restarts it will load the associated table descriptor and
 restart or abort the schema change operation. Note that aborting a
 schema change operation needs to maintain the invariant that the
 descriptor version only increase.

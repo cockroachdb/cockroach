@@ -149,7 +149,7 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
-	// acquire the leader lease. Once the range is replicated, however,
+	// acquire the range lease. Once the range is replicated, however,
 	// nodes must be able to discover each other over gossip before the
 	// lease can be acquired.
 	num := c.NumNodes()

@@ -123,7 +123,7 @@ const (
 	// TODO(tschottdorf): also terminate existing clients in a graceful manner.
 	DrainMode_CLIENT DrainMode = 0
 	// LEADERSHIP instructs the server to gracefully let all its Replicas'
-	// leader leases expire.
+	// range leases expire.
 	DrainMode_LEADERSHIP DrainMode = 1
 )
 

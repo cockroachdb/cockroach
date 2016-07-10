@@ -52,7 +52,7 @@ const (
 	// The default maximum number of ranges to return from a range
 	// lookup.
 	defaultRangeLookupMaxRanges = 8
-	// The default size of the leader cache.
+	// The default size of the lease holder cache.
 	defaultLeaderCacheSize = 1 << 16
 	// The default size of the range descriptor cache.
 	defaultRangeDescriptorCacheSize = 1 << 20
@@ -255,7 +255,7 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 
 // optimizeReplicaOrder sorts the replicas in the order in which they are to be
 // used for sending RPCs (meaning in the order in which they'll be probed for
-// leadership). "Closer" replicas (matching in more attributes) are ordered
+// the lease). "Closer" replicas (matching in more attributes) are ordered
 // first. Replicas matching in the same number of attributes are shuffled
 // randomly.
 // If the current node is a replica, then it'll be the first one.
@@ -447,7 +447,7 @@ func (ds *DistSender) sendSingleRange(
 	// no-op.
 	ds.optimizeReplicaOrder(replicas)
 
-	// If this request needs to go to a leader and we know who that is, move
+	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
 		if leader, ok := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
@@ -993,7 +993,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 				//
 				// TODO(bdarnell): The last error is not necessarily the best
 				// one to return; we may want to remember the "best" error
-				// we've seen (for example, a NotLeaderError conveys more
+				// we've seen (for example, a NotLeaseholderError conveys more
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
@@ -1026,12 +1026,12 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 		return true
 	case *roachpb.NodeUnavailableError:
 		return true
-	case *roachpb.NotLeaderError:
-		if tErr.Leader != nil {
-			// If the replica we contacted knows the new leader, update the cache.
-			ds.updateLeaderCache(rangeID, *tErr.Leader)
+	case *roachpb.NotLeaseholderError:
+		if tErr.Leaseholder != nil {
+			// If the replica we contacted knows the new lease holder, update the cache.
+			ds.updateLeaderCache(rangeID, *tErr.Leaseholder)
 
-			// TODO(bdarnell): Move the new leader to the head of the queue
+			// TODO(bdarnell): Move the new lease holder to the head of the queue
 			// for the next retry.
 		}
 		return true
@@ -1039,7 +1039,7 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 	return false
 }
 
-// updateLeaderCache updates the cached leader for the given range.
+// updateLeaderCache updates the cached lease holder for the given range.
 func (ds *DistSender) updateLeaderCache(
 	rangeID roachpb.RangeID,
 	newLeader roachpb.ReplicaDescriptor,
@@ -1047,12 +1047,12 @@ func (ds *DistSender) updateLeaderCache(
 	if log.V(1) {
 		if oldLeader, ok := ds.leaderCache.Lookup(rangeID); ok {
 			if (newLeader == roachpb.ReplicaDescriptor{}) {
-				log.Infof("range %d: evicting cached leader %+v", rangeID, oldLeader)
+				log.Infof("range %d: evicting cached lease holder %+v", rangeID, oldLeader)
 			} else if newLeader != oldLeader {
-				log.Infof("range %d: replacing cached leader %+v with %+v", rangeID, oldLeader, newLeader)
+				log.Infof("range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeader, newLeader)
 			}
 		} else {
-			log.Infof("range %d: caching new leader %+v", rangeID, newLeader)
+			log.Infof("range %d: caching new lease holder %+v", rangeID, newLeader)
 		}
 	}
 	ds.leaderCache.Update(rangeID, newLeader)
