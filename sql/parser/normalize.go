@@ -156,41 +156,13 @@ func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 			final, v.err = ReType(right, expectedType)
 			break
 		}
-		if IsNumericZero(left) || IsNumericZero(right) {
-			final, v.err = SameTypeZero(expectedType)
-			break
-		}
+		// We can't simplify multiplication by zero to zero,
+		// because if the other operand is NULL during evaluation
+		// the result must be NULL.
 	case Div, FloorDiv:
 		if IsNumericOne(right) {
 			final, v.err = ReType(left, expectedType)
 			break
-		}
-		if IsNumericZero(left) {
-			cbz, err := CanBeZeroDivider(right)
-			if err != nil {
-				v.err = err
-				break
-			}
-			if !cbz {
-				final, v.err = ReType(left, expectedType)
-				break
-			}
-		}
-	case Mod:
-		if IsNumericOne(right) {
-			final, v.err = SameTypeZero(expectedType)
-			break
-		}
-		if IsNumericZero(left) {
-			cbz, err := CanBeZeroDivider(right)
-			if err != nil {
-				v.err = err
-				break
-			}
-			if !cbz {
-				final, v.err = ReType(left, expectedType)
-				break
-			}
 		}
 	}
 
