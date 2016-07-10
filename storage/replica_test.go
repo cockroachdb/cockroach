@@ -444,7 +444,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
-	// Lose the lease and verify CONSISTENT reads receive NotLeaseholderError
+	// Lose the lease and verify CONSISTENT reads receive NotLeaseHolderError
 	// and INCONSISTENT reads work as expected.
 	start := hlc.ZeroTimestamp.Add(leaseExpiry(tc.rng), 0)
 	tc.manualClock.Set(start.WallTime)
@@ -465,7 +465,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, &gArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 		t.Errorf("expected not lease holder error; got %s", pErr)
 	}
 
@@ -518,7 +518,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: tc.clock.Now().Add(-100, 0),
 	}, &pArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 		t.Fatalf("expected not lease holder error in return, got %v", pErr)
 	}
 }
@@ -610,8 +610,8 @@ func TestReplicaLease(t *testing.T) {
 
 	{
 		pErr := tc.rng.redirectOnOrAcquireLease(tc.rng.context(context.Background()))
-		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok || lErr == nil {
-			t.Fatalf("wanted NotLeaseholderError, got %s", pErr)
+		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || lErr == nil {
+			t.Fatalf("wanted NotLeaseHolderError, got %s", pErr)
 		}
 	}
 	// Advance clock past expiration and verify that another has
@@ -621,7 +621,7 @@ func TestReplicaLease(t *testing.T) {
 		t.Errorf("expected another replica to have expired lease")
 	}
 
-	// Verify that command returns NotLeaseholderError when lease is rejected.
+	// Verify that command returns NotLeaseHolderError when lease is rejected.
 	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -636,14 +636,14 @@ func TestReplicaLease(t *testing.T) {
 	rng.mu.Unlock()
 
 	{
-		if _, ok := rng.redirectOnOrAcquireLease(tc.rng.context(context.Background())).GetDetail().(*roachpb.NotLeaseholderError); !ok {
-			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseholderError{}, err)
+		if _, ok := rng.redirectOnOrAcquireLease(tc.rng.context(context.Background())).GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, err)
 		}
 	}
 }
 
-// TestReplicaNotLeaseholderError verifies NotLeaderError when lease is rejected.
-func TestReplicaNotLeaseholderError(t *testing.T) {
+// TestReplicaNotLeaseHolderError verifies NotLeaderError when lease is rejected.
+func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -699,7 +699,7 @@ func TestReplicaNotLeaseholderError(t *testing.T) {
 	for i, test := range testCases {
 		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: now}, test)
 
-		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Errorf("%d: expected not lease holder error: %s", i, pErr)
 		}
 	}
@@ -1028,9 +1028,9 @@ func TestReplicaDrainLease(t *testing.T) {
 	tc.rng.mu.Lock()
 	pErr := <-tc.rng.requestLeaseLocked(tc.clock.Now())
 	tc.rng.mu.Unlock()
-	_, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError)
+	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
-		t.Fatalf("expected NotLeaseholderError, not %v", pErr)
+		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
 	}
 	if err := tc.store.DrainLeases(false); err != nil {
 		t.Fatal(err)
@@ -5515,16 +5515,16 @@ func TestDiffRange(t *testing.T) {
 
 	// The expected diff.
 	eDiff := []ReplicaSnapshotDiff{
-		{Leader: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
-		{Leader: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
-		{Leader: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
-		{Leader: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
-		{Leader: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
+		{LeaseHolder: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
+		{LeaseHolder: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
+		{LeaseHolder: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
 	}
 
 	diff := diffRange(leaderSnapshot, replicaSnapshot)
@@ -5537,7 +5537,7 @@ func TestDiffRange(t *testing.T) {
 
 	for i, e := range eDiff {
 		v := diff[i]
-		if e.Leader != v.Leader || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
+		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
 			t.Fatalf("diff varies at row %d, %v vs %v", i, e, v)
 		}
 	}

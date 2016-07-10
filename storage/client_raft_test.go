@@ -338,7 +338,7 @@ func TestRestoreReplicas(t *testing.T) {
 	incArgs = incrementArgs([]byte("a"), 11)
 	{
 		_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &incArgs)
-		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Fatalf("expected not lease holder error; got %s", pErr)
 		}
 	}
@@ -1749,7 +1749,7 @@ func TestCheckInconsistent(t *testing.T) {
 			t.Errorf("diff length = %d, diff = %v", len(diff), diff)
 		}
 		d := diff[0]
-		if d.Leader != false || !bytes.Equal([]byte("e"), d.Key) || !timestamp.Equal(d.Timestamp) {
+		if d.LeaseHolder != false || !bytes.Equal([]byte("e"), d.Key) || !timestamp.Equal(d.Timestamp) {
 			t.Errorf("diff = %v", d)
 		}
 		notify <- struct{}{}

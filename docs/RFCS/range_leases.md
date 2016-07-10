@@ -1,4 +1,4 @@
-- Feature Name: Node-level mechanism for refreshing range range leases
+- Feature Name: Node-level mechanism for refreshing range leases
 - Status: draft
 - Start Date: 2016-02-10
 - Authors: Ben Darnell, Spencer Kimball
@@ -8,13 +8,12 @@
 
 # Summary
 
-This is a proposal to replace the current per-range range lease
-mechanism with a coarser-grained per-node lease in order to minimize
-range lease renewal traffic. In the new system, a range lease will
-have two components: a short-lived node lease (managed by the node)
-and a range lease of indefinite duration (managed by the range – as it
-is currently). Only the node-level lease will need to be automatically
-refreshed.
+This is a proposal to replace the current per-range lease mechanism with
+a coarser-grained per-node lease in order to minimize range lease renewal
+traffic. In the new system, a range lease will have two components:
+a short-lived node lease (managed by the node) and a range lease of indefinite
+duration (managed by the range – as it is currently). Only the node-level lease
+will need to be automatically refreshed.
 
 
 # Motivation
@@ -48,14 +47,14 @@ We introduce a new node lease table at the beginning of the keyspace
 (not an actual SQL table; it will need to be accessed with lower-level
 APIs). This table is special in several respects: it is gossipped, and
 leases within its keyspace (and all ranges that precede it, including
-meta1 and meta2) use the current, per-range range lease mechanism to
+meta1 and meta2) use the current, per-range lease mechanism to
 avoid circular dependencies. This table maps node IDs to an epoch
 counter and a lease expiration timestamp.
 
-The range range lease is moved from a special raft command (which
+The range lease is moved from a special raft command (which
 writes to a range-local, non-transactional range lease key) to a
 transactional range-local key (similar to the range descriptor). The
-range range lease identifies the node that holds the lease and its
+range lease identifies the node that holds the lease and its
 epoch counter. It has a start timestamp but does not include an
 expiration time. The lease record is always updated in a distributed
 transaction with the node lease record to ensure that the epoch

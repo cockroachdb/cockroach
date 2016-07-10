@@ -22,11 +22,11 @@
 - [Alternate Allocation Strategies](#alternate-allocation-strategies)
   - [Other enhancements to distributed allocation](#other-enhancements-to-distributed-allocation)
   - [Centralized allocation strategy](#centralized-allocation-strategy)
-    - [Leader lease acquisition](#lease holder-lease-acquisition)
-    - [Leader lease renewal](#lease holder-lease-renewal)
-    - [Updating the lease holder’s *StoreDescriptors*](#updating-the-leaders-storedescriptors)
+    - [Allocator lease acquisition](#allocator-lease-acquisition)
+    - [Allocator lease renewal](#allocator-lease-renewal)
+    - [Updating the allocator’s *StoreDescriptors*](#updating-the-allocators-storedescriptors)
     - [Centralized decision-making](#centralized-decision-making)
-    - [Failure modes for allocation lease holders](#failure-modes-for-allocation-leaders)
+    - [Failure modes for allocation lease holders](#failure-modes-for-allocation-lease-holders)
     - [Conclusion](#conclusion)
   - [CopySets](#copysets)
   - [CopySets emulation](#copysets-emulation)
@@ -375,11 +375,12 @@ One way to avoid the thrashing caused by multiple independently acting allocator
 all replica allocation. In this section, a possible centralized allocation strategy is described in
 detail.
 
-### Leader lease acquisition
+### Allocator lease acquisition
 
-Every second, each node checks whether there’s an allocation lease holder through a
-`Get(globalAllocatorKey)`. If that returns no data, the node tries to become the lease holder using a
-`CPut` for that key. In pseudo-code:
+Every second, each node checks whether there’s an allocation lease holder
+("allocator") through a `Get(globalAllocatorKey)`. If that returns no data, the
+node tries to become the allocator lease holder using a `CPut` for that key. In
+pseudo-code:
 
 ``` pseudocode
     every 60 seconds:
@@ -390,34 +391,34 @@ Every second, each node checks whether there’s an allocation lease holder thro
       }
       err := CPut(globalAllocatorKey, nodeID+"-”+expireTime, nil)
       if err != nil {
-        // Some other node became the lease holder.
+        // Some other node became the allocator.
         return
       }
-      // This node is now the lease holder.
+      // This node is now the allocator.
 ```
 
-### Leader lease renewal
+### Allocator lease renewal
 
-Near the end of the allocation lease holder term, the current leader does the following:
+Near the end of the allocation lease, the current allocator does the following:
 
 ``` golang
     err := CPut(globalAllocatorKey,
       nodeID+"-”+newExpireTime,
       nodeID+"-”+oldExpireTime)
     if err != nil {
-      // Re-election failed. Step down as lease holder.
+      // Re-election failed. Step down as allocator lease holder.
       return err
     }
     // **Re-election succeeded**. We’re still the allocation lease holder.
 ```
 
-For example, if the allocation range lease term is 60 seconds, the current allocation lease holder could
- try to renew its lease 55 seconds into its lease term.
+For example, if the allocation lease term is 60 seconds, the current allocation lease holder could
+ try to renew its lease 55 seconds into its term.
 
-We may want to enforce artificial range lease term limits to more regularly exercise the lease
-acquisition code.
+We may want to enforce artificial allocator lease term limits to more regularly
+exercise the lease acquisition code.
 
-### Updating the lease holder’s *StoreDescriptors*
+### Updating the allocator’s *StoreDescriptors*
 
 An allocation lease holder needs recent store information to make effective allocation decisions.
 
@@ -453,11 +454,12 @@ when looking for a rebalance target.
 
 1. Poor network connectivity.
 1. Leader node goes down.
-1. Overloaded lease holder node. This may be unlikely to cause problems that extend beyond one leader
-   lease term. An overloaded lease holder node probably wouldn’t complete its lease renewal KV transaction
-   before its lease term ends.
+1. Overloaded allocator node. This may be unlikely to cause problems that
+   extend beyond one term. An overloaded allocator node probably
+   wouldn’t complete its allocator lease renewal KV transaction before its term
+   ends.
 
-The likely failure modes can largely be alleviated by using short allocation range lease terms.
+The likely failure modes can largely be alleviated by using short allocation lease terms.
 
 ### Conclusion
 
@@ -482,9 +484,9 @@ The likely failure modes can largely be alleviated by using short allocation ran
 - As the cluster grows, there may be performance issues that arise on the central allocator. Some
   ways to alleviate this would be to ensure that the centralized allocator itself is located on the
   same node in which all required data exists (be it tables and indexes which might be required).
-- If we use `CPuts` for lease holder election, the range that contains the leader key becomes a single
+- If we use `CPuts` for allocator election, the range that contains the leader key becomes a single
   point of failure for the cluster. This could be alleviated by making the allocation lease holder the
-  same as the lease holder of the range holding the `StoreStatus` protos.
+  same as the range lease holder of the range holding the `StoreStatus` protos.
 - More internal work needs to be done to support a centralized system. Be it via an election or
   using the range lease holder of a specific key.
 

@@ -182,7 +182,7 @@ func RangeFrozenStatusKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRangeFrozenStatusSuffix, nil)
 }
 
-// RangeLeaseKey returns a system-local key for a range range lease.
+// RangeLeaseKey returns a system-local key for a range lease.
 func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLeaseSuffix, nil)
 }

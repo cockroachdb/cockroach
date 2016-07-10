@@ -93,7 +93,7 @@
 		Intent
 		Lease
 		AbortCacheEntry
-		NotLeaseholderError
+		NotLeaseHolderError
 		NodeUnavailableError
 		RangeNotFoundError
 		RangeKeyMismatchError
@@ -1299,7 +1299,7 @@ type RaftCommand struct {
 	// This mechanism was introduced as a simpler alternative to using the Raft
 	// applied index, which is fraught with complexity due to the need to predict
 	// exactly the log position at which a command will apply, even when the Raft
-	// lease holder is not colocated with the lease holder (which usually proposes all
+	// leader is not colocated with the lease holder (which usually proposes all
 	// commands).
 	//
 	// Pinning the lease-index to the assigned slot (as opposed to allowing gaps
