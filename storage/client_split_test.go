@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -420,12 +422,13 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	rng := store.LookupReplica(keyPrefix, nil)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
-	if err := verifyRangeStats(store.Engine(), rng.RangeID, enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}); err != nil {
+	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
+	if err := verifyRangeStats(store.Engine(), rng.RangeID, empty); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write random data.
-	writeRandomDataToRange(t, store, rng.RangeID, keyPrefix)
+	midKey := writeRandomDataToRange(t, store, rng.RangeID, keyPrefix)
 
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
@@ -443,10 +446,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	manual.Increment(100)
 
-	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	midKey := append([]byte(nil), keyPrefix...)
-	midKey = append(midKey, []byte("Z")...)
-	midKey = keys.MakeRowSentinelKey(midKey)
+	// Split the range at approximate halfway point.
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rng.RangeID,
@@ -480,6 +480,80 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	ms.LastUpdateNanos = 0
 	if expMS != ms {
 		t.Errorf("expected left plus right ranges to equal original, but\n %+v\n+\n %+v\n!=\n %+v", msLeft, msRight, ms)
+	}
+
+	// Stats should both have the new timestamp.
+	now := manual.UnixNano()
+	if lTs := msLeft.LastUpdateNanos; lTs != now {
+		t.Errorf("expected left range stats to have new timestamp, want %d, got %d", now, lTs)
+	}
+	if rTs := msRight.LastUpdateNanos; rTs != now {
+		t.Errorf("expected right range stats to have new timestamp, want %d, got %d", now, rTs)
+	}
+
+	// Stats should agree with recomputation.
+	if err := verifyRecomputedStats(snap, rng.Desc(), msLeft, now); err != nil {
+		t.Fatalf("failed to verify left range's stats after split: %v", err)
+	}
+	if err := verifyRecomputedStats(snap, rngRight.Desc(), msRight, now); err != nil {
+		t.Fatalf("failed to verify right range's stats after split: %v", err)
+	}
+}
+
+// TestStoreRangeSplitStatsWithMerges starts by splitting the system keys from
+// user-space keys and verifying that the user space side of the split (which is empty),
+// has all zeros for stats. It then issues a number of Merge requests to the user
+// space side, simulating TimeSeries data. Finally, the test splits the user space
+// side halfway and verifies the stats on either side of the split are equal to a
+// recomputation.
+//
+// Note that unlike TestStoreRangeSplitStats, we do not check if the two halves of the
+// split's stats are equal to the pre-split stats when added, because this will not be
+// true of ranges populated with Merge requests. The reason for this is that Merge
+// requests' impact on MVCCStats are only estimated. See updateStatsOnMerge.
+func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer config.TestingDisableTableSplits()()
+	store, stopper, manual := createTestStore(t)
+	defer stopper.Stop()
+
+	// Split the range after the last table data key.
+	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	keyPrefix = keys.MakeRowSentinelKey(keyPrefix)
+	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Verify empty range has empty stats.
+	rng := store.LookupReplica(keyPrefix, nil)
+	// NOTE that this value is expected to change over time, depending on what
+	// we store in the sys-local keyspace. Update it accordingly for this test.
+	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
+	if err := verifyRangeStats(store.Engine(), rng.RangeID, empty); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write random TimeSeries data.
+	midKey := writeRandomTimeSeriesDataToRange(t, store, rng.RangeID, keyPrefix)
+	manual.Increment(100)
+
+	// Split the range at approximate halfway point.
+	args = adminSplitArgs(keyPrefix, midKey)
+	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		RangeID: rng.RangeID,
+	}, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	snap := store.Engine().NewSnapshot()
+	defer snap.Close()
+	var msLeft, msRight enginepb.MVCCStats
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &msLeft); err != nil {
+		t.Fatal(err)
+	}
+	rngRight := store.LookupReplica(midKey, nil)
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID, &msRight); err != nil {
+		t.Fatal(err)
 	}
 
 	// Stats should both have the new timestamp.
@@ -1187,7 +1261,12 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 	}
 }
 
-func writeRandomDataToRange(t testing.TB, store *storage.Store, rangeID roachpb.RangeID, keyPrefix []byte) {
+func writeRandomDataToRange(
+	t testing.TB,
+	store *storage.Store,
+	rangeID roachpb.RangeID,
+	keyPrefix []byte,
+) (midpoint []byte) {
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
 		key := append([]byte(nil), keyPrefix...)
@@ -1201,4 +1280,61 @@ func writeRandomDataToRange(t testing.TB, store *storage.Store, rangeID roachpb.
 			t.Fatal(pErr)
 		}
 	}
+	// Return approximate midway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
+	midKey := append([]byte(nil), keyPrefix...)
+	midKey = append(midKey, []byte("Z")...)
+	return keys.MakeRowSentinelKey(midKey)
+}
+
+func writeRandomTimeSeriesDataToRange(
+	t testing.TB,
+	store *storage.Store,
+	rangeID roachpb.RangeID,
+	keyPrefix []byte,
+) (midpoint []byte) {
+	src := rand.New(rand.NewSource(0))
+	r := ts.Resolution10s
+	for i := 0; i < 20; i++ {
+		var data []tspb.TimeSeriesData
+		for j := int64(0); j <= src.Int63n(5); j++ {
+			d := tspb.TimeSeriesData{
+				Name:   "test.random.metric",
+				Source: "cpu01",
+			}
+			for k := int64(0); k <= src.Int63n(10); k++ {
+				d.Datapoints = append(d.Datapoints, tspb.TimeSeriesDatapoint{
+					TimestampNanos: src.Int63n(200) * r.KeyDuration(),
+					Value:          src.Float64(),
+				})
+			}
+			data = append(data, d)
+		}
+		for _, d := range data {
+			idatas, err := d.ToInternal(r.KeyDuration(), r.SampleDuration())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, idata := range idatas {
+				var value roachpb.Value
+				if err := value.SetProto(&idata); err != nil {
+					t.Fatal(err)
+				}
+				mArgs := roachpb.MergeRequest{
+					Span: roachpb.Span{
+						Key: encoding.EncodeVarintAscending(keyPrefix, idata.StartTimestampNanos),
+					},
+					Value: value,
+				}
+				if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+					RangeID: rangeID,
+				}, &mArgs); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
+		}
+	}
+	// Return approximate midway point (100 is midway between random timestamps in range [0,200)).
+	midKey := append([]byte(nil), keyPrefix...)
+	midKey = encoding.EncodeVarintAscending(midKey, 100*r.KeyDuration())
+	return keys.MakeRowSentinelKey(midKey)
 }

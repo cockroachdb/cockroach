@@ -110,19 +110,20 @@ func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	goldMS := enginepb.MVCCStats{
-		KeyBytes:        1,
-		KeyCount:        1,
-		ValBytes:        1,
-		ValCount:        1,
-		IntentBytes:     1,
-		IntentCount:     1,
-		IntentAge:       1,
-		GCBytesAge:      1,
-		LiveBytes:       1,
-		LiveCount:       1,
-		SysBytes:        1,
-		SysCount:        1,
-		LastUpdateNanos: 1,
+		ContainsEstimates: true,
+		KeyBytes:          1,
+		KeyCount:          1,
+		ValBytes:          1,
+		ValCount:          1,
+		IntentBytes:       1,
+		IntentCount:       1,
+		IntentAge:         1,
+		GCBytesAge:        1,
+		LiveBytes:         1,
+		LiveCount:         1,
+		SysBytes:          1,
+		SysCount:          1,
+		LastUpdateNanos:   1,
 	}
 	if err := util.NoZeroField(&goldMS); err != nil {
 		t.Fatal(err) // prevent rot as fields are added
@@ -136,7 +137,10 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	}
 
 	ms := goldMS
-	zeroWithLU := enginepb.MVCCStats{LastUpdateNanos: ms.LastUpdateNanos}
+	zeroWithLU := enginepb.MVCCStats{
+		ContainsEstimates: true,
+		LastUpdateNanos:   ms.LastUpdateNanos,
+	}
 
 	ms.Subtract(goldMS)
 	cmp(ms, zeroWithLU)
@@ -2820,6 +2824,9 @@ func encodedSize(msg proto.Message, t *testing.T) int64 {
 }
 
 func verifyStats(debug string, ms, expMS *enginepb.MVCCStats, t *testing.T) {
+	if ms.ContainsEstimates != expMS.ContainsEstimates {
+		t.Errorf("%s: mvcc contains estimates %t; expected %t", debug, ms.ContainsEstimates, expMS.ContainsEstimates)
+	}
 	if ms.LiveBytes != expMS.LiveBytes {
 		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
 	}
