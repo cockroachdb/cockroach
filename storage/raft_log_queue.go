@@ -59,7 +59,7 @@ func newRaftLogQueue(db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
 	}
 	rlq.baseQueue = makeBaseQueue("raftlog", rlq, gossip, queueConfig{
 		maxSize:              raftLogQueueMaxSize,
-		needsLeaderLease:     false,
+		needsLease:           false,
 		acceptsUnsplitRanges: true,
 	})
 	return rlq

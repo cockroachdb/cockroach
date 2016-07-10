@@ -262,12 +262,12 @@ message Intent {
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
 }
 
-// Lease contains information about leader leases including the
+// Lease contains information about range leases including the
 // expiration and lease holder. It defines the two intervals
 // [start, start_stasis) and [start_stasis, expiration). The
 // former encompasses those timestamps for which the lease is
 // active, while the latter is a cooldown period which avoids
-// inconsistencies during leadership changes as explained below.
+// inconsistencies during lease holder changes as explained below.
 message Lease {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
@@ -282,16 +282,16 @@ message Lease {
   // by the owner instead). This prevents a failure of linearizability on a
   // single register during lease changes. Without that stasis period, the
   // following could occur:
-  // * a leader lease gets committed on the new leader (but not the old).
-  // * client proposes and commits a write on new leader (with a timestamp
+  // * a range lease gets committed on the new lease holder (but not the old).
+  // * client proposes and commits a write on new lease holder (with a timestamp
   //   just greater than the expiration of the old lease).
   // * client tries to read what it wrote, but hits a slow coordinator
   //   (which assigns a timestamp covered by the old lease).
-  // * the read is served by the old leader (which has not processed the
-  //   change in leadership).
+  // * the read is served by the old lease holder (which has not processed the
+  //   change in lease holdership).
   // * the client fails to read their own write.
   //
-  // Instead, the old leader must refuse to serve the client's command on the
+  // Instead, the old lease holder must refuse to serve the client's command on the
   // basis that its timestamp falls within the stasis period.
   optional util.hlc.Timestamp start_stasis = 4 [(gogoproto.nullable) = false];
 

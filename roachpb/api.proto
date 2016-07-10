@@ -215,7 +215,7 @@ message CheckConsistencyRequest {
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
-// If a replica finds itself to be inconsistent with its leader it will panic.
+// If a replica finds itself to be inconsistent with its lease holder it will panic.
 message CheckConsistencyResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
@@ -401,7 +401,7 @@ message HeartbeatTxnResponse {
 }
 
 // A GCRequest is arguments to the GC() method. It's sent by range
-// leaders after scanning range data to find expired MVCC values.
+// lease holders after scanning range data to find expired MVCC values.
 message GCRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
@@ -576,17 +576,17 @@ message TruncateLogResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A LeaderLeaseRequest is arguments to the LeaderLease()
+// A RequestLeaseRequest is arguments to the RequestLease()
 // method. It is sent by the store on behalf of one of its ranges upon receipt
-// of a leader election event for that range.
-message LeaderLeaseRequest {
+// of a command requiring a lease when none is found.
+message RequestLeaseRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Lease lease = 2[(gogoproto.nullable) = false];
 }
 
-// A LeaderLeaseResponse is the response to a LeaderLease()
+// A RequestLeaseResponse is the response to a RequestLease()
 // operation.
-message LeaderLeaseResponse{
+message RequestLeaseResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -615,7 +615,7 @@ message ComputeChecksumResponse {
 }
 
 // A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
-// verify the checksum computed on the leader against the one requested
+// verify the checksum computed on the lease holder against the one requested
 // earlier through a ComputeChecksumRequest with the same checksum_id.
 message VerifyChecksumRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -659,7 +659,7 @@ message RequestUnion {
   optional ResolveIntentRangeRequest resolve_intent_range = 17;
   optional MergeRequest merge = 18;
   optional TruncateLogRequest truncate_log = 19;
-  optional LeaderLeaseRequest leader_lease = 20;
+  optional RequestLeaseRequest request_lease = 20;
   optional ReverseScanRequest reverse_scan = 21;
   optional ComputeChecksumRequest compute_checksum = 22;
   optional VerifyChecksumRequest verify_checksum = 23;
@@ -693,7 +693,7 @@ message ResponseUnion {
   optional ResolveIntentRangeResponse resolve_intent_range = 17;
   optional MergeResponse merge = 18;
   optional TruncateLogResponse truncate_log = 19;
-  optional LeaderLeaseResponse leader_lease = 20;
+  optional RequestLeaseResponse request_lease = 20;
   optional ReverseScanResponse reverse_scan = 21;
   optional ComputeChecksumResponse compute_checksum = 22;
   optional VerifyChecksumResponse verify_checksum = 23;
@@ -817,7 +817,7 @@ message RaftCommand {
   // This mechanism was introduced as a simpler alternative to using the Raft
   // applied index, which is fraught with complexity due to the need to predict
   // exactly the log position at which a command will apply, even when the Raft
-  // leader is not colocated with the lease holder (which usually proposes all
+  // lease holder is not colocated with the lease holder (which usually proposes all
   // commands).
   //
   // Pinning the lease-index to the assigned slot (as opposed to allowing gaps

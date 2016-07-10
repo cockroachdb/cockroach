@@ -429,12 +429,12 @@ func (m *Intent) String() string            { return proto.CompactTextString(m) 
 func (*Intent) ProtoMessage()               {}
 func (*Intent) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{10} }
 
-// Lease contains information about leader leases including the
+// Lease contains information about range leases including the
 // expiration and lease holder. It defines the two intervals
 // [start, start_stasis) and [start_stasis, expiration). The
 // former encompasses those timestamps for which the lease is
 // active, while the latter is a cooldown period which avoids
-// inconsistencies during leadership changes as explained below.
+// inconsistencies during lease holder changes as explained below.
 type Lease struct {
 	// The start is a timestamp at which the lease begins. This value
 	// must be greater than the last lease expiration or the lease request
@@ -446,16 +446,16 @@ type Lease struct {
 	// by the owner instead). This prevents a failure of linearizability on a
 	// single register during lease changes. Without that stasis period, the
 	// following could occur:
-	// * a leader lease gets committed on the new leader (but not the old).
-	// * client proposes and commits a write on new leader (with a timestamp
+	// * a range lease gets committed on the new lease holder (but not the old).
+	// * client proposes and commits a write on new lease holder (with a timestamp
 	//   just greater than the expiration of the old lease).
 	// * client tries to read what it wrote, but hits a slow coordinator
 	//   (which assigns a timestamp covered by the old lease).
-	// * the read is served by the old leader (which has not processed the
-	//   change in leadership).
+	// * the read is served by the old lease holder (which has not processed the
+	//   change in lease holdership).
 	// * the client fails to read their own write.
 	//
-	// Instead, the old leader must refuse to serve the client's command on the
+	// Instead, the old lease holder must refuse to serve the client's command on the
 	// basis that its timestamp falls within the stasis period.
 	StartStasis cockroach_util_hlc.Timestamp `protobuf:"bytes,4,opt,name=start_stasis,json=startStasis" json:"start_stasis"`
 	// The expiration is a timestamp at which the lease expires. This means that

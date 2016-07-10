@@ -18,7 +18,7 @@ The primary motivation is to minimize the impact that raft snapshots
 have on other RPCs (#3013). Our RPC codec transmits each request as a
 single chunk on the network, which can block other requests for a
 significant period of time (leading to more severe consequences if
-raft heartbeats or leader lease operations are blocked for too long).
+raft heartbeats or range lease operations are blocked for too long).
 Since GRPC is based on HTTP/2, it has built-in support for
 multiplexing large messages.
 

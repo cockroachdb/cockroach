@@ -40,7 +40,7 @@ func loadState(
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
-	// Read the leader lease.
+	// Read the range lease.
 	var err error
 	if s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
@@ -115,7 +115,7 @@ func saveState(
 func loadLease(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
 	_, err := engine.MVCCGetProto(context.Background(), reader,
-		keys.RangeLeaderLeaseKey(rangeID), hlc.ZeroTimestamp,
+		keys.RangeLeaseKey(rangeID), hlc.ZeroTimestamp,
 		true, nil, lease)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func setLease(
 	}
 	return engine.MVCCPutProto(
 		context.Background(), eng, ms,
-		keys.RangeLeaderLeaseKey(rangeID),
+		keys.RangeLeaseKey(rangeID),
 		hlc.ZeroTimestamp, nil, lease)
 }
 

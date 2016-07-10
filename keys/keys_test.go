@@ -103,7 +103,7 @@ func TestKeyAddressError(t *testing.T) {
 			RaftTombstoneKey(0),
 			RaftAppliedIndexKey(0),
 			RaftTruncatedStateKey(0),
-			RangeLeaderLeaseKey(0),
+			RangeLeaseKey(0),
 			RangeStatsKey(0),
 			RaftHardStateKey(0),
 			RaftLastIndexKey(0),

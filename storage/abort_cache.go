@@ -46,7 +46,7 @@ type AbortCache struct {
 }
 
 // NewAbortCache returns a new abort cache. Every range replica
-// maintains an abort cache, not just the leader.
+// maintains an abort cache, not just the lease holder.
 func NewAbortCache(rangeID roachpb.RangeID) *AbortCache {
 	return &AbortCache{
 		rangeID: rangeID,

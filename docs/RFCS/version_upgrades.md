@@ -8,7 +8,7 @@
 # Rejection notes
 
 This RFC lead us to reconsider Raft proposals and lead us to consider (and
-decide for) leader-evaluated Raft (#6166) instead, which makes Raft migrations
+decide for) leaseholder-evaluated Raft (#6166) instead, which makes Raft migrations
 much rarer. We will likely eventually need some of the ideas brought forth
 in this RFC, but in a less all-encompassing setting best considered then.
 
@@ -151,9 +151,9 @@ need to be able to test migrations. For this, we
   from `(*Replica)`.
 * when changing the semantics of a command, copy the "old" code to its
   designated new location keyed by the (now old) version ID (for example,
-  `./storage/replica_command.125.LeaderLease.go`):
+  `./storage/replica_command.125.RequestLease.go`):
   ```go
-  versionedCommands[125][LeaderLease] = func(...) (...) { ... }
+  versionedCommands[125][RequestLease] = func(...) (...) { ... }
   ```
 
 Let's look at some model cases for this naive approach.
@@ -196,11 +196,11 @@ Proto changes are quite horrible. See this next example (#5845)
 Same as the nullability change. All old versions of the code must not use the
 new marshalling code. The old version of the struct and its generated code
 must be kept in a separate location. For example, when adding a field `MaxOffset`
-to `LeaderLease`, the previous version of `LeaderLease` and its code are kept
+to `RequestLease`, the previous version of `RequestLease` and its code are kept
 at `./storage/replica_command.<vers>.go` and the old version converts
-`roachpb.LeaderLease` to `OldLeaderLease` (dropping the new field) and then
+`roachpb.RequestLease` to `OldRequestLease` (dropping the new field) and then
 marshals that to disk.
-Of course the lease is also accessed from other locations (loading the leader
+Of course the lease is also accessed from other locations (loading the
 lease), so that requires versioning as well, leading to, essentially, a mess.
 
 See #5817 for a more involved change which requires additions to a proto and
@@ -274,10 +274,10 @@ replica, but that could be remedied with tooling (to manually drive the process
 forward). In effect, this would version everything by binary version.
 
 For example,
-* when adding a (non-nullable) proto field to `LeaderLease`, the
-forward and background migrations would simply delete all `LeaderLease` entries
+* when adding a (non-nullable) proto field to `Lease`, the
+forward and background migrations would simply delete all `Lease` entries
 (since that is the simplest option and works fine: the only enemy is setting
-leader leases with a zero value where there shouldn't be one)
+range leases with a zero value where there shouldn't be one)
 * the `LastHeartbeat` nullability change would not have to migrate anything.
 * more complicated proto changes could still require taking some of the actual
   old marshalling code to transcode parts of the keyspace in preparation for

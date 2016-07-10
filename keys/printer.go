@@ -149,7 +149,7 @@ var (
 		{name: "RaftLastIndex", suffix: LocalRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffix},
-		{name: "RangeLeaderLease", suffix: LocalRangeLeaderLeaseSuffix},
+		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
 		{name: "RangeFrozenStatus", suffix: LocalRangeFrozenStatusSuffix},
 		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
@@ -463,7 +463,7 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 // 		/Store/...                                  "\x01s"+...
 //		/RangeID/...                                "\x01s"+[rangeid]
 //			/[rangeid]/AbortCache/[id]                "\x01s"+[rangeid]+"abc-"+[id]
-//			/[rangeid]/RaftLeaderLease                "\x01s"+[rangeid]+"rfll"
+//			/[rangeid]/Lease						  "\x01s"+[rangeid]+"rfll"
 //			/[rangeid]/RaftTombstone                  "\x01s"+[rangeid]+"rftb"
 //			/[rangeid]/RaftHardState						      "\x01s"+[rangeid]+"rfth"
 //			/[rangeid]/RaftAppliedIndex						    "\x01s"+[rangeid]+"rfta"

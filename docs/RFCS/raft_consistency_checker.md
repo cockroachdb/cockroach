@@ -19,13 +19,13 @@ Consistency! Correctness at scale.
 
 # Detailed design
 
-The proposal is for each range replica leader to periodically collect a SHA of
+The proposal is for each range replica lease holder to periodically collect a SHA of
 each replica to keep track of consistency problems and report them. The
 consistency checker runs in three phases:
 
 1. All replicas agree on the snapshot at which a SHA is to be computed.
 2. A SHA is computed on all replicas.
-3. The leader collects the SHA from all replicas and reports an error if all
+3. The lease holder collects the SHA from all replicas and reports an error if all
 SHAs do not match.
 
 The above is implemented by introducing two raft commands in
@@ -39,10 +39,10 @@ made available for subsequent querying via CollectChecksum below. A version
 number is also supplied to identify the method used in computing the SHA, and
 the version number is checked against the receivers  version and an error
 returned on mismatch. The computed SHA is stored in a map by UUID, and reported
-back to the leader through the next command.
-2. CollectChecksum: The leader collects the SHA via this command from all
+back to the lease holder through the next command.
+2. CollectChecksum: The lease holder collects the SHA via this command from all
 replicas, citing the UUID identifing the ComputeChecksum command snapshot. The
-leader waits for a short delay (minutes after sending ComputeChecksum) before
+lease holder waits for a short delay (minutes after sending ComputeChecksum) before
 sending a CollectChecksum to all replicas, to give the replicas plenty
 of time to compute the SHA. If a replica has not computed the SHA it returns
 a NOT_COMPUTED status. In tests this command will block until the checksum is
@@ -50,7 +50,7 @@ computed. If this command never arrives the computed SHA is deleted via a 30
 minute timeout.
 
 The periodic consistency checker is run within a scanner that scans through all
-the local replicas and runs the consistency checker for all leader replicas.
+the local replicas and runs the consistency checker for all lease holder replicas.
 The scanner runs in a continuous loop with equal time spacing between
 replicas such that a single iteration spans the entire periodicity interval. It
 will log an error for all consistency problems seen.
@@ -64,7 +64,7 @@ RANGE_CHANGED error.
 Exposing consistency checker through an API for direct invocation:
 
 A cockroach node will support a command through which an admin or a test can
-check the consistency of all ranges for which it is a leader using the same
+check the consistency of all ranges for which it is a lease holder using the same
 mechanism provided for the periodic consistency checker. This will be used
 in all acceptance tests.
 
@@ -77,15 +77,15 @@ range splits/merges.
 
 Noteworthy scenarios:
 
-1. The leader dies between ComputeChecksum and CollectChecksum: The replicas,
-including the new leader, will continue computing the SHA. The new leader will
+1. The lease holder dies between ComputeChecksum and CollectChecksum: The replicas,
+including the new lease holder, will continue computing the SHA. The new leader will
 not send a CollectChecksum command.
-2. The leadership change occurs between ComputeChecksum and CollectChecksum:
+2. The lease holdership change occurs between ComputeChecksum and CollectChecksum:
 Same as 1.
-3. The leader dies and is restored (still as leader) between ComputeChecksum
-and CollectChecksum: The restored leader doesn’t compute the SHA, and the
+3. The lease holder dies and returns (still with the lease) between ComputeChecksum
+and CollectChecksum: The restored lease holder doesn’t compute the SHA, and the
 replicas never receive CollectChecksum.
-4. The leader dies after sending the CollectChecksum: The new leader might
+4. The lease holder dies after sending the CollectChecksum: The new leader might
 replay the CollectChecksum, with each replica reporting its SHA.
 5. A replica dies after receiving ComputeChecksum and receives the
 CollectChecksum later when it comes back up: Since it died it will not have the
@@ -111,8 +111,8 @@ A bug in the consistency checker can spring false alerts.
 2. An online consistency checker that collects checksums from all the replicas,
 computes the majority agreed upon checksum, and supplies it down to the
 replicas. While this could be a better solution, we feel that we cannot depend
-on a majority vote because new replicas brought up with a bad leader supplying
-them with a snapshot would agree with the bad leader, resulting in a bad
+on a majority vote because new replicas brought up with a bad lease holder supplying
+them with a snapshot would agree with the bad lease holder, resulting in a bad
 majority vote. This method is slightly more complex and does not necessarily
 improve upon the current design.
 
