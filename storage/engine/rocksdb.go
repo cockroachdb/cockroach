@@ -1095,6 +1095,7 @@ func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (engi
 	if err := statusToError(result.status); err != nil {
 		return ms, err
 	}
+	ms.ContainsEstimates = false
 	ms.LiveBytes = int64(result.live_bytes)
 	ms.KeyBytes = int64(result.key_bytes)
 	ms.ValBytes = int64(result.val_bytes)

@@ -2211,7 +2211,9 @@ func (r *Replica) AdminSplit(
 // performance it only computes the stats for the old range (the
 // left-hand-side) and infers the RHS stats by subtracting from the original
 // stats. We compute the LHS stats because the split key computation ensures
-// that we do not create large LHS ranges.
+// that we do not create large LHS ranges. However, this optimization is
+// only possible if the stats are fully accurate. If they contain estimates,
+// stats for both the LHS and RHS are computed.
 //
 // Splits are complicated. A split is initiated when a replica receives an
 // AdminSplit request. Note that this request (and other "admin" requests)
@@ -2448,12 +2450,33 @@ func (r *Replica) splitTrigger(
 		return errors.Errorf("unable to write initial state: %s", err)
 	}
 
-	rightMS := deltaMS
-	// Add in the original range's stats.
-	rightMS.Add(origStats)
-	// Remove stats from the left side of the split.
-	rightMS.Subtract(leftMS)
-
+	// Compute stats for new range.
+	var rightMS enginepb.MVCCStats
+	if origStats.ContainsEstimates || deltaMS.ContainsEstimates {
+		// Because either the original stats or the delta stats contain
+		// estimate values, we cannot perform aritmetic to determine the
+		// new range's stats. Instead, we must recompute by iterating
+		// over the keys and counting.
+		rightMS, err = ComputeStatsForRange(&split.NewDesc, batch, ts.WallTime)
+		if err != nil {
+			return errors.Errorf("unable to compute stats for new range after split: %s", err)
+		}
+	} else {
+		// Because neither the original stats or the delta stats contain
+		// estimate values, we can safely perform aritmetic to determine the
+		// new range's stats. The calculation looks like:
+		//   new_ms = old_ms + delta_ms - left_ms
+		// where
+		// - old_ms   contains statistics for the pre-split range
+		// - delta_ms contains statistics for modifications made in the current batch
+		// - left_ms  contains statistics computed for the updated (left) half of the split
+		rightMS = deltaMS
+		rightMS.AgeTo(ts.WallTime)
+		// Add in the original range's stats.
+		rightMS.Add(origStats)
+		// Remove stats from the left side of the split.
+		rightMS.Subtract(leftMS)
+	}
 	if err := setMVCCStats(batch, split.NewDesc.RangeID, rightMS); err != nil {
 		return errors.Errorf("unable to write MVCC stats: %s", err)
 	}
