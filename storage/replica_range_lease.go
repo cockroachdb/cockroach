@@ -130,7 +130,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 				}
 			case <-replica.store.Stopper().ShouldDrain():
 				execPErr = roachpb.NewError(
-					replica.newNotLeaseholderError(nil, replica.store.StoreID(), replica.Desc()))
+					replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.Desc()))
 			}
 		}
 
@@ -151,11 +151,11 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		p.llChans = p.llChans[:0]
 		p.nextLease = roachpb.Lease{}
 	}) != nil {
-		// We failed to start the asynchronous task. Send a blank NotLeaseholderError
+		// We failed to start the asynchronous task. Send a blank NotLeaseHolderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
 		llChan <- roachpb.NewError(
-			replica.newNotLeaseholderError(nil, replica.store.StoreID(), replica.mu.state.Desc))
+			replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.mu.state.Desc))
 		return llChan
 	}
 	p.llChans = append(p.llChans, llChan)
@@ -180,7 +180,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 	if r.store.IsDrainingLeases() {
 		// We've retired from active duty.
 		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(r.newNotLeaseholderError(nil, r.store.StoreID(), r.mu.state.Desc))
+		llChan <- roachpb.NewError(r.newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(

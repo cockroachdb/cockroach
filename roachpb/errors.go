@@ -241,15 +241,15 @@ func (*NodeUnavailableError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &NodeUnavailableError{}
 
-func (e *NotLeaseholderError) Error() string {
+func (e *NotLeaseHolderError) Error() string {
 	return e.message(nil)
 }
 
-func (e *NotLeaseholderError) message(_ *Error) string {
-	return fmt.Sprintf("range %d: replica %s not lease holder; %s is", e.RangeID, e.Replica, e.Leaseholder)
+func (e *NotLeaseHolderError) message(_ *Error) string {
+	return fmt.Sprintf("range %d: replica %s not lease holder; %s is", e.RangeID, e.Replica, e.LeaseHolder)
 }
 
-var _ ErrorDetailInterface = &NotLeaseholderError{}
+var _ ErrorDetailInterface = &NotLeaseHolderError{}
 
 func (e *LeaseRejectedError) Error() string {
 	return e.message(nil)

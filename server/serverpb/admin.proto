@@ -263,7 +263,7 @@ enum DrainMode {
     CLIENT = 0;
     // LEADERSHIP instructs the server to gracefully let all its Replicas'
     // range leases expire.
-    LEADERSHIP = 1;
+    LEASES = 1;
 }
 
 // DrainRequest requests the server to enter the specified draining mode. The

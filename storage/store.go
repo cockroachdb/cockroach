@@ -1202,7 +1202,7 @@ func (s *Store) maybeGossipFirstRange() error {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {
 			pErr := rng.maybeGossipFirstRange()
-			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseholderError); !ok || nlErr.Leaseholder != nil {
+			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || nlErr.LeaseHolder != nil {
 				return pErr.GoError()
 			}
 		} else {
@@ -1957,9 +1957,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// but we can be smarter: the replica that caused our
 			// uninitialized replica to be created is most likely the
 			// leader.
-			return nil, roachpb.NewError(&roachpb.NotLeaseholderError{
+			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
 				RangeID:     ba.RangeID,
-				Leaseholder: rng.creatingReplica,
+				LeaseHolder: rng.creatingReplica,
 			})
 		}
 		rng.assert5725(ba)
