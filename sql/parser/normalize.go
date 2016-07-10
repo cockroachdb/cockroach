@@ -156,41 +156,13 @@ func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 			final, v.err = ReType(right, expectedType)
 			break
 		}
-		if IsNumericZero(left) || IsNumericZero(right) {
-			final, v.err = SameTypeZero(expectedType)
-			break
-		}
+		// We can't simplify multiplication by zero to zero,
+		// because if the other operand is NULL during evaluation
+		// the result must be NULL.
 	case Div, FloorDiv:
 		if IsNumericOne(right) {
 			final, v.err = ReType(left, expectedType)
 			break
-		}
-		if IsNumericZero(left) {
-			cbz, err := CanBeZeroDivider(right)
-			if err != nil {
-				v.err = err
-				break
-			}
-			if !cbz {
-				final, v.err = ReType(left, expectedType)
-				break
-			}
-		}
-	case Mod:
-		if IsNumericOne(right) {
-			final, v.err = SameTypeZero(expectedType)
-			break
-		}
-		if IsNumericZero(left) {
-			cbz, err := CanBeZeroDivider(right)
-			if err != nil {
-				v.err = err
-				break
-			}
-			if !cbz {
-				final, v.err = ReType(left, expectedType)
-				break
-			}
 		}
 	}
 
@@ -727,31 +699,6 @@ func IsNumericZero(expr TypedExpr) bool {
 	return false
 }
 
-// CanBeZeroDivider returns true if the expr may be a number and equal
-// to zero. It also returns true if it is not known yet whether the
-// expr is a number (e.g. it is a more complex sub-expression that has
-// resisted normalization).
-func CanBeZeroDivider(expr TypedExpr) (bool, error) {
-	if d, ok := expr.(Datum); ok {
-		if _, ok := d.(dividerDatum); ok {
-			switch t := d.(type) {
-			case *DDecimal:
-				return t.Dec.Cmp(&DecimalZero.Dec) == 0, nil
-			case *DFloat:
-				return *t == 0, nil
-			case *DInt:
-				return *t == 0, nil
-			default:
-				return true, errors.Errorf("internal error: unknown dividerDatum in CanBeZeroDivider(): %T", d)
-			}
-		}
-		// All other Datums are non-numeric and thus cannot be zero.
-		return false, nil
-	}
-	// Other type of expression; may evaluate to zero.
-	return true, nil
-}
-
 // IsNumericOne returns true if the datum is a number and equal to
 // one.
 func IsNumericOne(expr TypedExpr) bool {
@@ -766,20 +713,6 @@ func IsNumericOne(expr TypedExpr) bool {
 		}
 	}
 	return false
-}
-
-// SameTypeZero returns a datum of equivalent type with value zero.
-// The argument must be a datum of a numeric type.
-func SameTypeZero(d Datum) (TypedExpr, error) {
-	switch d.(type) {
-	case *DDecimal:
-		return &DecimalZero, nil
-	case *DFloat:
-		return NewDFloat(0.0), nil
-	case *DInt:
-		return NewDInt(0), nil
-	}
-	return nil, errors.Errorf("internal error: zero not defined for Datum type %T", d)
 }
 
 // ReType ensures that the given numeric expression evaluates

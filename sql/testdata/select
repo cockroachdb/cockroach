@@ -267,6 +267,16 @@ SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 ----
 2
 
+statement ok
+INSERT INTO abc VALUES (42, NULL, NULL)
+
+query III
+SELECT 0 * b, b % 1, 0 % b from abc
+----
+0 0 0
+0 0 0
+NULL NULL NULL
+
 # Doing an index lookup by MaxInt used to not work.
 # https://github.com/cockroachdb/cockroach/issues/3587
 statement ok
