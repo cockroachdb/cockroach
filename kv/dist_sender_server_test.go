@@ -126,6 +126,8 @@ func checkScanResults(t *testing.T, results []client.Result, expResults [][]stri
 	}
 }
 
+// TestMultiRangeBatchBoundedScans runs a batch request with scans that are
+// all bounded.
 func TestMultiRangeBatchBoundedScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -141,6 +143,7 @@ func TestMultiRangeBatchBoundedScans(t *testing.T) {
 	b.Scan("aaa", "dd", 3)
 	b.Scan("a", "z", 2)
 	b.Scan("cc", "ff", 3)
+
 	if err := db.Run(b); err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +153,42 @@ func TestMultiRangeBatchBoundedScans(t *testing.T) {
 		{"a", "aa"},
 		{"cc", "d", "dd"},
 	})
+}
+
+// TestMultiRangeBoundedWithSaturatedUnboundedScan runs a batch request with a
+// bounded and unbounded scan, such that the bounded scan gets saturated when
+// the unbounded scan has already been saturated. Additionally, the bound for
+// the bounded scan is picked to end at the boundary of a range. It exercises
+// an edge case in DistSender in which a saturated scan being masked out means
+// that a multi-range request ends before the originally assumed key range is
+// exhausted.
+func TestMultiRangeBoundedWithSaturatedUnboundedScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	b := db.NewBatch()
+	// An unbounded scan that is saturated before the bounded scan below.
+	b.Scan("a", "d", 0)
+	// A bounded scan that ends at the boundary of range "d".
+	b.Scan("c", "g", 3)
+	if err := db.Run(b); err != nil {
+		t.Fatal(err)
+	}
+
+	// These are the expected results.
+	expResults := [][]string{
+		{"a1", "a2", "a3", "b1", "b2", "c1", "c2"},
+		{"c1", "c2", "d1"},
+	}
+	checkScanResults(t, b.Results, expResults)
 }
 
 func TestMultiRangeBoundedBatch(t *testing.T) {
