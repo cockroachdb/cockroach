@@ -19,6 +19,7 @@ package sql_test
 import (
 	"bufio"
 	"bytes"
+	"container/heap"
 	"crypto/md5"
 	gosql "database/sql"
 	"errors"
@@ -192,7 +193,7 @@ var (
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
 		"print the individual SQL statement/queries before processing")
-	errorSummary = flag.Bool("error-summary", false,
+	printErrorSummary = flag.Bool("error-summary", false,
 		"print a per-error summary of failing queries at the end of testing, when -allow-prepare-fail is set")
 	fullMessages = flag.Bool("full-messages", false,
 		"do not shorten the error or SQL strings when printing the summary for -allow-prepare-fail or -flex-types.")
@@ -497,9 +498,6 @@ func (t *logicTest) processTestFile(path string) error {
 	if t.verbose {
 		fmt.Println("--- queries start here")
 		defer t.printCompletion(path)
-		if *errorSummary {
-			defer t.printErrorSummary()
-		}
 	}
 
 	t.lastProgress = timeutil.Now()
@@ -1116,6 +1114,9 @@ func TestLogic(t *testing.T) {
 		verbose:         verbose,
 		perErrorSummary: make(map[string][]string),
 	}
+	if *printErrorSummary {
+		defer l.printErrorSummary()
+	}
 	for _, p := range paths {
 		if verbose {
 			fmt.Printf("--- input: %s\n", p)
@@ -1140,14 +1141,48 @@ func TestLogic(t *testing.T) {
 	fmt.Printf("--- total: %d tests, %d failures%s\n", total, totalFail, unsupportedMsg)
 }
 
+type errorSummaryEntry struct {
+	errmsg string
+	sql    []string
+}
+type errorSummary []errorSummaryEntry
+
+func (e errorSummary) Len() int { return len(e) }
+func (e errorSummary) Less(i, j int) bool {
+	if len(e[i].sql) == len(e[j].sql) {
+		return e[i].errmsg < e[j].errmsg
+	}
+	return len(e[i].sql) < len(e[j].sql)
+}
+func (e errorSummary) Swap(i, j int) {
+	t := e[i]
+	e[i] = e[j]
+	e[j] = t
+}
+func (e *errorSummary) Push(x interface{}) {
+	*e = append(*e, x.(errorSummaryEntry))
+}
+func (e *errorSummary) Pop() interface{} {
+	x := (*e)[len(*e)-1]
+	*e = (*e)[:len(*e)-1]
+	return x
+}
+
 // printErrorSummary shows the final per-error list of failing queries when
 // -allow-prepare-fail or -flex-types are specified.
 func (t *logicTest) printErrorSummary() {
 	if t.unsupported > 0 {
 		fmt.Println("--- summary of ignored errors:")
+		summary := &errorSummary{}
+		heap.Init(summary)
 		for errmsg, sql := range t.perErrorSummary {
-			fmt.Println(errmsg)
-			for _, q := range sql {
+			t := errorSummaryEntry{errmsg: errmsg, sql: sql}
+			heap.Push(summary, t)
+		}
+		for summary.Len() > 0 {
+			t := heap.Pop(summary).(errorSummaryEntry)
+			fmt.Printf("%s (%d entries)\n", t.errmsg, len(t.sql))
+			for _, q := range t.sql {
 				fmt.Println("\t", strings.Replace(q, "\n", "\n\t", -1))
 			}
 			fmt.Println()
@@ -1194,10 +1229,37 @@ func shortenString(msg string) string {
 	return msg
 }
 
+// simplifyError condenses long error strings to the shortest form
+// that still explains the origin of the error.
+func simplifyError(msg string) (string, string) {
+	prefix := strings.Split(msg, ": ")
+
+	// Split:  "a: b: c"-> "a: b", "c"
+	expected := ""
+	if len(prefix) > 1 {
+		expected = prefix[len(prefix)-1]
+		prefix = prefix[:len(prefix)-1]
+	}
+
+	// Simplify: "a: b: c: d" -> "a: d"
+	if !*fullMessages && len(prefix) > 2 {
+		prefix[1] = prefix[len(prefix)-1]
+		prefix = prefix[:2]
+	}
+
+	// Mark the error message as shortened if necessary.
+	if expected != "" {
+		prefix = append(prefix, "...")
+	}
+
+	return strings.Join(prefix, ": "), expected
+}
+
 // signalIgnoredError registers a failing but ignored query.
 func (t *logicTest) signalIgnoredError(err error, pos string, sql string) {
-	if *errorSummary {
-		errmsg, expected := splitLastMessagePart(fmt.Sprintf("%s", err))
+	if *printErrorSummary {
+		errmsg, expected := simplifyError(fmt.Sprintf("%s", err))
+
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "-- %s (%s)\n%s", pos, shortenString(expected), shortenString(sql+";"))
 		errmsg = shortenString(errmsg)
