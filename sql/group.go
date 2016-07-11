@@ -458,7 +458,7 @@ func desiredAggregateOrdering(funcs []*aggregateFuncHolder) sqlbase.ColumnOrderi
 	if limit == -1 {
 		return nil
 	}
-	return sqlbase.ColumnOrdering{{limit, direction}}
+	return sqlbase.ColumnOrdering{{ColIdx: limit, Direction: direction}}
 }
 
 type extractAggregatesVisitor struct {

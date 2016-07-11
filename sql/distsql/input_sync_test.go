@@ -54,7 +54,10 @@ func TestOrderedSync(t *testing.T) {
 					{v[4], v[4], v[4]},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{{0, asc}, {1, asc}},
+			ordering: sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: asc},
+				{ColIdx: 1, Direction: asc},
+			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], v[0]},
 				{v[0], v[1], v[4]},
@@ -82,7 +85,11 @@ func TestOrderedSync(t *testing.T) {
 					{v[0], v[0], v[0]},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{{1, desc}, {0, asc}, {2, asc}},
+			ordering: sqlbase.ColumnOrdering{
+				{ColIdx: 1, Direction: desc},
+				{ColIdx: 0, Direction: asc},
+				{ColIdx: 2, Direction: asc},
+			},
 			expected: sqlbase.EncDatumRows{
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[4]},
