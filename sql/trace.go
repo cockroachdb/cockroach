@@ -50,8 +50,8 @@ var traceColumns = append([]ResultColumn{
 }, debugColumns...)
 
 var traceOrdering = sqlbase.ColumnOrdering{
-	{len(traceColumns), encoding.Ascending}, /* Start time */
-	{2, encoding.Ascending},                 /* Span pos */
+	{ColIdx: len(traceColumns), Direction: encoding.Ascending}, /* Start time */
+	{ColIdx: 2, Direction: encoding.Ascending},                 /* Span pos */
 }
 
 func makeTraceNode(plan planNode, txn *client.Txn) planNode {

@@ -33,8 +33,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		ordering sqlbase.ColumnOrdering
 	}{
 		{`a`, nil},
-		{`MIN(a)`, sqlbase.ColumnOrdering{{0, encoding.Ascending}}},
-		{`MAX(a)`, sqlbase.ColumnOrdering{{0, encoding.Descending}}},
+		{`MIN(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`MAX(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Descending}}},
 		{`(MIN(a), MAX(a))`, nil},
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},

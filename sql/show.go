@@ -398,8 +398,11 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 
 	// Sort the results by constraint name.
 	sort := &sortNode{
-		ordering: sqlbase.ColumnOrdering{{0, encoding.Ascending}, {1, encoding.Ascending}},
-		columns:  v.columns,
+		ordering: sqlbase.ColumnOrdering{
+			{ColIdx: 0, Direction: encoding.Ascending},
+			{ColIdx: 1, Direction: encoding.Ascending},
+		},
+		columns: v.columns,
 	}
 	return &selectTopNode{source: v, sort: sort}, nil
 }
