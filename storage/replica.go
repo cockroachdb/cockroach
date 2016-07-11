@@ -25,6 +25,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -332,7 +333,10 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 	r.raftSender = store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
 		log.Warningf("range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
 
-		r.markDeadReplica(toReplica)
+		if IsReplicaCorruptionError(err) {
+			log.Warningf("range %d: replica corruption error received from %s: %v", desc.RangeID, toReplica, err)
+			r.markDeadReplica(toReplica)
+		}
 	})
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
@@ -2522,6 +2526,20 @@ func (r *Replica) maybeGossipSystemConfig() {
 // with the supplied list of errors given as history.
 func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
 	return &roachpb.ReplicaCorruptionError{ErrorMsg: err.Error()}
+}
+
+var replicaCorruptionErrorRegex = regexp.MustCompile(`replica corruption \(processed=(true|false)\)`)
+
+// IsReplicaCorruptionError returns whether the provided error is a
+// roachpb.ReplicaCorruptionError or the error text contains it.
+func IsReplicaCorruptionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if _, ok := err.(*roachpb.ReplicaCorruptionError); ok {
+		return true
+	}
+	return replicaCorruptionErrorRegex.MatchString(err.Error())
 }
 
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
