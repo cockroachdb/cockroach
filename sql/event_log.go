@@ -41,8 +41,13 @@ const (
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
+
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
+	// EventLogCreateIndex is recorded when an index is created.
+	EventLogCreateIndex EventLogType = "create_index"
+	// EventLogDropIndex is recorded when an index is created.
+	EventLogDropIndex EventLogType = "drop_index"
 	// EventLogReverseSchemaChange is recorded when an in-progress schema change
 	// encounters a problem and is reversed.
 	EventLogReverseSchemaChange EventLogType = "reverse_schema_change"
