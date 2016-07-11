@@ -2799,6 +2799,39 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			}
 		})
 	}
+
+	// For the first range, if we're adding a replica or removing a replica and
+	// this is not the replica being removed, then gossip that information
+	// immediately so that DistSender doesn't spin until the next
+	// `sentinelGossipInterval` tick while trying to hit the meta range.
+	//
+	// NB: It's possible that some node is coming up with stale first range
+	// information and this would cause it to gossip. This is thought to be
+	// sufficiently rare that we're not worrying about it for now.
+	//
+	// TODO(dan): Write a test for this (#7644).
+	// It should be possible to set up a three-node cluster, wait for initial
+	// replication of the first range, and then to disable the replication queue
+	// and downreplicate so that the first range leader disappears. Subsequently
+	// we should be able to verify that the first range gossip updates accordingly
+	// in a short amount of time (and once we have lease transfers, we can check
+	// more).
+	if r.RangeID == 1 && (change.ChangeType == roachpb.ADD_REPLICA ||
+		r.store.StoreID() != change.Replica.StoreID) {
+		batch.Defer(func() {
+			// We need to run the gossip in an async task because gossiping requires
+			// the range lease and we'll deadlock if we try to acquire it will
+			// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
+			// blocks waiting for the lease acquisition to finish but it can't finish
+			// because we're not processing raft messages due to holding
+			// processRaftMu (and running on the processRaft goroutine).
+			r.store.Stopper().RunAsyncTask(func() {
+				if err := r.maybeGossipFirstRange(); err != nil {
+					log.Infof("unable to gossip first range: %s", err)
+				}
+			})
+		})
+	}
 	return nil
 }
 
