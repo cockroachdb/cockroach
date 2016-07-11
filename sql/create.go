@@ -76,7 +76,8 @@ func (n *createDatabaseNode) Start() error {
 		return err
 	}
 	if created {
-		// Log Create Database event.
+		// Log Create Database event. This is an auditable log event and is
+		// recorded in the same transaction as the table descriptor update.
 		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
@@ -177,6 +178,24 @@ func (n *createIndexNode) Start() error {
 	if err := n.p.txn.Put(
 		sqlbase.MakeDescMetadataKey(n.tableDesc.GetID()),
 		sqlbase.WrapDescriptor(n.tableDesc)); err != nil {
+		return err
+	}
+
+	// Record index creation in the event log. This is an auditable log
+	// event and is recorded in the same transaction as the table descriptor
+	// update.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateIndex,
+		int32(n.tableDesc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			TableName  string
+			IndexName  string
+			Statement  string
+			User       string
+			MutationID uint32
+		}{n.tableDesc.Name, n.n.Name.String(), n.n.String(), n.p.session.User, uint32(mutationID)},
+	); err != nil {
 		return err
 	}
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
@@ -321,7 +340,8 @@ func (n *createTableNode) Start() error {
 	}
 
 	if created {
-		// Log Create Table event.
+		// Log Create Table event. This is an auditable log event and is
+		// recorded in the same transaction as the table descriptor update.
 		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogCreateTable,
 			int32(desc.ID),

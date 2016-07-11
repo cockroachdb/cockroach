@@ -125,6 +125,48 @@ WHERE eventType = 'reverse_schema_change'
 ----
 51 0
 
+# Create an Index on the table
+#################
+
+statement ok
+CREATE INDEX a_foo ON test.a (val)
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'create_index'
+  AND info LIKE '%a_foo%'
+----
+51 1
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'finish_schema_change'
+----
+51 0
+51 0
+51 0
+
+# Drop the index
+#################
+
+statement ok
+DROP INDEX test.a@a_foo
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'drop_index'
+  AND info LIKE '%a_foo%'
+----
+51 1
+
+query II
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'finish_schema_change'
+----
+51 0
+51 0
+51 0
+51 0
 
 # Drop both tables + superfluous "IF EXISTS"
 ##################

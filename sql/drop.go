@@ -127,7 +127,8 @@ func (n *dropDatabaseNode) Start() error {
 		return err
 	}
 
-	// Log Drop Database event.
+	// Log Drop Database event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
 	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
@@ -259,6 +260,23 @@ func (n *dropIndexNode) Start() error {
 		if err := n.p.writeTableDesc(tableDesc); err != nil {
 			return err
 		}
+		// Record index drop in the event log. This is an auditable log event
+		// and is recorded in the same transaction as the table descriptor
+		// update.
+		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+			EventLogDropIndex,
+			int32(tableDesc.ID),
+			int32(n.p.evalCtx.NodeID),
+			struct {
+				TableName  string
+				IndexName  string
+				Statement  string
+				User       string
+				MutationID uint32
+			}{tableDesc.Name, idxName, n.n.String(), n.p.session.User, uint32(mutationID)},
+		); err != nil {
+			return err
+		}
 		n.p.notifySchemaChange(tableDesc.ID, mutationID)
 	}
 	return nil
@@ -361,7 +379,9 @@ func (n *dropTableNode) Start() error {
 		if err := n.p.dropTableImpl(droppedDesc); err != nil {
 			return err
 		}
-		// Log a Drop Table event for this table.
+		// Log a Drop Table event for this table. This is an auditable log event
+		// and is recorded in the same transaction as the table descriptor
+		// update.
 		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogDropTable,
 			int32(droppedDesc.ID),
