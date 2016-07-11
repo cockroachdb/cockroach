@@ -56,6 +56,10 @@ import "C"
 const (
 	minMemtableBudget = 1 << 20  // 1 MB
 	defaultBlockSize  = 32 << 10 // 32KB (rocksdb default is 4KB)
+	// DefaultMaxOpenFiles is the default value for rocksDB's max_open_files
+	// option.
+	// TODO(bram): Once we upgrade to rocksdb 4.8, maybe change this to -1
+	DefaultMaxOpenFiles = 5000
 )
 
 func init() {
@@ -204,6 +208,7 @@ type RocksDB struct {
 	cache          RocksDBCache       // Shared cache.
 	memtableBudget int64              // Memory to use for the memory table.
 	maxSize        int64              // Used for calculating rebalancing and free space.
+	maxOpenFiles   int                // The maximum number of open files this instance will use.
 	stopper        *stop.Stopper
 	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
 }
@@ -216,6 +221,7 @@ func NewRocksDB(
 	dir string,
 	cache RocksDBCache,
 	memtableBudget, maxSize int64,
+	maxOpenFiles int,
 	stopper *stop.Stopper,
 ) *RocksDB {
 	if dir == "" {
@@ -227,6 +233,7 @@ func NewRocksDB(
 		cache:          cache.ref(),
 		memtableBudget: memtableBudget,
 		maxSize:        maxSize,
+		maxOpenFiles:   maxOpenFiles,
 		stopper:        stopper,
 		deallocated:    make(chan struct{}),
 	}
@@ -301,6 +308,7 @@ func (r *RocksDB) Open() error {
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 			num_cpu:         C.int(runtime.NumCPU()),
+			max_open_files:  C.int(r.maxOpenFiles),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Errorf("could not open rocksdb instance: %s", err)
