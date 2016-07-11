@@ -298,12 +298,6 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 	return
 }
 
-// RangeTreeNodeKey returns a range-local key for the range's
-// node in the range tree.
-func RangeTreeNodeKey(key roachpb.RKey) roachpb.Key {
-	return MakeRangeKey(key, localRangeTreeNodeSuffix, nil)
-}
-
 // RangeDescriptorKey returns a range-local key for the descriptor
 // for the range with specified key.
 func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {

@@ -140,9 +140,6 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
-	// localRangeTreeNodeSuffix is the suffix for keys storing
-	// range tree nodes.  The value is a struct of type RangeTreeNode.
-	localRangeTreeNodeSuffix = roachpb.RKey("rtn-")
 	// localTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
@@ -182,8 +179,6 @@ var (
 	RangeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("store-idgen")))
-	// RangeTreeRoot specifies the root range in the range tree.
-	RangeTreeRoot = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
 
 	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("status-")))
