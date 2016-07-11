@@ -180,7 +180,7 @@ func (d Duration) normalize() Duration {
 }
 
 func (d Duration) shiftPosDaysToMonths() Duration {
-	var maxMonths int64 = math.MaxInt64
+	var maxMonths = int64(math.MaxInt64)
 	if d.Months > 0 {
 		// If d.Months < 0, then this would overflow, but because of the exchange
 		// rate, we can never transfer more than math.MaxInt64 anyway.
@@ -193,7 +193,7 @@ func (d Duration) shiftPosDaysToMonths() Duration {
 }
 
 func (d Duration) shiftPosNanosToDays() Duration {
-	var maxDays int64 = math.MaxInt64
+	var maxDays = int64(math.MaxInt64)
 	if d.Days > 0 {
 		// If d.Days < 0, then this would overflow, but because of the exchange
 		// rate, we can never transfer more than math.MaxInt64 anyway.
@@ -206,7 +206,7 @@ func (d Duration) shiftPosNanosToDays() Duration {
 }
 
 func (d Duration) shiftNegDaysToMonths() Duration {
-	var minMonths int64 = math.MinInt64
+	var minMonths = int64(math.MinInt64)
 	if d.Months < 0 {
 		// If d.Months > 0, then this would overflow, but because of the exchange
 		// rate, we can never transfer more than math.MaxInt64 anyway.
@@ -219,7 +219,7 @@ func (d Duration) shiftNegDaysToMonths() Duration {
 }
 
 func (d Duration) shiftNegNanosToDays() Duration {
-	var minDays int64 = math.MinInt64
+	var minDays = int64(math.MinInt64)
 	if d.Days < 0 {
 		// If d.Days > 0, then this would overflow, but because of the exchange
 		// rate, we can never transfer more than math.MaxInt64 anyway.

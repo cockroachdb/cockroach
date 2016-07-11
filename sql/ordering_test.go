@@ -37,7 +37,7 @@ type computeOrderCase struct {
 	cases    []desiredCase
 }
 
-func defTestCase(expected, expectedReverse int, desired sqlbase.ColumnOrdering) desiredCase {
+func defTestCase(expected, expectedReverse int, desired ...sqlbase.ColumnOrderInfo) desiredCase {
 	// The line number is used to identify testcases in error messages.
 	_, _, line, _ := runtime.Caller(1)
 	return desiredCase{
@@ -51,6 +51,13 @@ func defTestCase(expected, expectedReverse int, desired sqlbase.ColumnOrdering) 
 func TestComputeOrderingMatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Helper function to create a ColumnOrderInfo. The "simple" composite
+	// literal syntax causes vet to warn about unkeyed literals and the explicit
+	// syntax is too verbose.
+	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
+		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
+	}
+
 	e := struct{}{}
 	asc := encoding.Ascending
 	desc := encoding.Descending
@@ -63,35 +70,35 @@ func TestComputeOrderingMatch(t *testing.T) {
 				unique:         false,
 			},
 			cases: []desiredCase{
-				defTestCase(0, 0, sqlbase.ColumnOrdering{{1, desc}, {5, asc}}),
+				defTestCase(0, 0, o(1, desc), o(5, asc)),
 			},
 		},
 		{
 			// Ordering with no exact-match columns.
 			existing: orderingInfo{
 				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{{1, desc}, {2, asc}},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
 				unique:         false,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 0, sqlbase.ColumnOrdering{{1, desc}, {5, asc}}),
-				defTestCase(0, 1, sqlbase.ColumnOrdering{{1, asc}, {5, asc}, {2, asc}}),
+				defTestCase(1, 0, o(1, desc), o(5, asc)),
+				defTestCase(0, 1, o(1, asc), o(5, asc), o(2, asc)),
 			},
 		},
 		{
 			// Ordering with no exact-match columns but with distinct.
 			existing: orderingInfo{
 				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{{1, desc}, {2, asc}},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
 				unique:         true,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 0, sqlbase.ColumnOrdering{{1, desc}, {5, asc}}),
-				defTestCase(3, 0, sqlbase.ColumnOrdering{{1, desc}, {2, asc}, {5, asc}}),
-				defTestCase(4, 0, sqlbase.ColumnOrdering{{1, desc}, {2, asc}, {5, asc}, {6, desc}}),
-				defTestCase(0, 1, sqlbase.ColumnOrdering{{1, asc}, {5, asc}, {2, asc}}),
-				defTestCase(0, 3, sqlbase.ColumnOrdering{{1, asc}, {2, desc}, {5, asc}}),
-				defTestCase(0, 4, sqlbase.ColumnOrdering{{1, asc}, {2, desc}, {5, asc}, {6, asc}}),
+				defTestCase(1, 0, o(1, desc), o(5, asc)),
+				defTestCase(3, 0, o(1, desc), o(2, asc), o(5, asc)),
+				defTestCase(4, 0, o(1, desc), o(2, asc), o(5, asc), o(6, desc)),
+				defTestCase(0, 1, o(1, asc), o(5, asc), o(2, asc)),
+				defTestCase(0, 3, o(1, asc), o(2, desc), o(5, asc)),
+				defTestCase(0, 4, o(1, asc), o(2, desc), o(5, asc), o(6, asc)),
 			},
 		},
 		{
@@ -102,43 +109,43 @@ func TestComputeOrderingMatch(t *testing.T) {
 				unique:         false,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 1, sqlbase.ColumnOrdering{{2, desc}, {5, asc}, {1, asc}}),
-				defTestCase(0, 0, sqlbase.ColumnOrdering{{5, asc}, {2, asc}}),
+				defTestCase(1, 1, o(2, desc), o(5, asc), o(1, asc)),
+				defTestCase(0, 0, o(5, asc), o(2, asc)),
 			},
 		},
 		{
 			// Ordering with exact-match columns.
 			existing: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
-				ordering:       sqlbase.ColumnOrdering{{1, desc}, {2, asc}},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
 				unique:         false,
 			},
 			cases: []desiredCase{
-				defTestCase(2, 0, sqlbase.ColumnOrdering{{1, desc}, {5, asc}}),
-				defTestCase(2, 1, sqlbase.ColumnOrdering{{5, asc}, {1, desc}}),
-				defTestCase(2, 2, sqlbase.ColumnOrdering{{0, desc}, {5, asc}}),
-				defTestCase(1, 0, sqlbase.ColumnOrdering{{1, desc}, {2, desc}}),
-				defTestCase(5, 2, sqlbase.ColumnOrdering{{0, asc}, {6, desc}, {1, desc}, {5, desc}, {2, asc}}),
-				defTestCase(2, 2, sqlbase.ColumnOrdering{{0, asc}, {6, desc}, {2, asc}, {5, desc}, {1, desc}}),
+				defTestCase(2, 0, o(1, desc), o(5, asc)),
+				defTestCase(2, 1, o(5, asc), o(1, desc)),
+				defTestCase(2, 2, o(0, desc), o(5, asc)),
+				defTestCase(1, 0, o(1, desc), o(2, desc)),
+				defTestCase(5, 2, o(0, asc), o(6, desc), o(1, desc), o(5, desc), o(2, asc)),
+				defTestCase(2, 2, o(0, asc), o(6, desc), o(2, asc), o(5, desc), o(1, desc)),
 			},
 		},
 		{
 			// Ordering with exact-match columns and distinct.
 			existing: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
-				ordering:       sqlbase.ColumnOrdering{{1, desc}, {2, asc}},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
 				unique:         true,
 			},
 			cases: []desiredCase{
-				defTestCase(2, 0, sqlbase.ColumnOrdering{{1, desc}, {5, asc}}),
-				defTestCase(2, 1, sqlbase.ColumnOrdering{{5, asc}, {1, desc}}),
-				defTestCase(4, 0, sqlbase.ColumnOrdering{{1, desc}, {5, asc}, {2, asc}, {7, desc}}),
-				defTestCase(4, 1, sqlbase.ColumnOrdering{{5, asc}, {1, desc}, {2, asc}, {7, desc}}),
-				defTestCase(2, 2, sqlbase.ColumnOrdering{{0, desc}, {5, asc}}),
-				defTestCase(2, 1, sqlbase.ColumnOrdering{{5, asc}, {1, desc}, {2, desc}}),
-				defTestCase(1, 0, sqlbase.ColumnOrdering{{1, desc}, {2, desc}}),
-				defTestCase(6, 2, sqlbase.ColumnOrdering{{0, asc}, {6, desc}, {1, desc}, {5, desc}, {2, asc}, {9, asc}}),
-				defTestCase(2, 2, sqlbase.ColumnOrdering{{0, asc}, {6, desc}, {2, asc}, {5, desc}, {1, desc}}),
+				defTestCase(2, 0, o(1, desc), o(5, asc)),
+				defTestCase(2, 1, o(5, asc), o(1, desc)),
+				defTestCase(4, 0, o(1, desc), o(5, asc), o(2, asc), o(7, desc)),
+				defTestCase(4, 1, o(5, asc), o(1, desc), o(2, asc), o(7, desc)),
+				defTestCase(2, 2, o(0, desc), o(5, asc)),
+				defTestCase(2, 1, o(5, asc), o(1, desc), o(2, desc)),
+				defTestCase(1, 0, o(1, desc), o(2, desc)),
+				defTestCase(6, 2, o(0, asc), o(6, desc), o(1, desc), o(5, desc), o(2, asc), o(9, asc)),
+				defTestCase(2, 2, o(0, asc), o(6, desc), o(2, asc), o(5, desc), o(1, desc)),
 			},
 		},
 	}
