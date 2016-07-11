@@ -122,10 +122,21 @@ table
     text-decoration none
 
 .sql-table
-  thead
-    border-left $stats-table-cell--border
-  tr
-    border-left $stats-table-cell--border
+  table
+    thead
+      border-left $stats-table-cell--border
+    tr
+      border-left $stats-table-cell--border
+    td
+      padding 0
+      /* expand cell children */
+      *
+        padding 10px 15px
+        display block
+        width 100%
+        height 100%
+      &:first-child *
+        padding-left 3em
 
 .stat
   .title

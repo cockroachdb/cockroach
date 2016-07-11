@@ -1,5 +1,7 @@
 import * as React from "react";
+import { Link } from "react-router";
 import _ = require("lodash");
+import { isReactElement } from "../util/find";
 
 /**
  * SortableColumn describes the contents a single column of a
@@ -119,7 +121,13 @@ export class SortableTable extends React.Component<TableProps, {}> {
       <tbody>
         {_.times(this.props.count, (rowIndex) => {
           return <tr key={rowIndex}>
-            {_.map(columns, (c: SortableColumn, colIndex: number) => <td key={colIndex}>{c.cell(rowIndex)}</td>)}
+            {_.map(columns, (c: SortableColumn, colIndex: number) => {
+              let content = c.cell(rowIndex);
+              if (isReactElement(content) && content.type === Link) {
+                return <td key={colIndex}>{content}</td>;
+              }
+              return <td key={colIndex}><div>{content}</div></td>;
+            })}
             </tr>;
         })}
       </tbody>
