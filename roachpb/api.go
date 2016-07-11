@@ -463,6 +463,9 @@ func (*TruncateLogRequest) Method() Method { return TruncateLog }
 func (*RequestLeaseRequest) Method() Method { return RequestLease }
 
 // Method implements the Request interface.
+func (*LeaseTransferRequest) Method() Method { return LeaseTransfer }
+
+// Method implements the Request interface.
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
@@ -619,6 +622,12 @@ func (llr *RequestLeaseRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
+func (lt *LeaseTransferRequest) ShallowCopy() Request {
+	shallowCopy := *lt
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
 func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
 	return &shallowCopy
@@ -655,6 +664,7 @@ func (*NoopRequest) createReply() Response               { return &NoopResponse{
 func (*MergeRequest) createReply() Response              { return &MergeResponse{} }
 func (*TruncateLogRequest) createReply() Response        { return &TruncateLogResponse{} }
 func (*RequestLeaseRequest) createReply() Response       { return &RequestLeaseResponse{} }
+func (*LeaseTransferRequest) createReply() Response      { return &RequestLeaseResponse{} }
 func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
 func (*VerifyChecksumRequest) createReply() Response     { return &VerifyChecksumResponse{} }
 
@@ -825,8 +835,12 @@ func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*NoopRequest) flags() int               { return isRead } // slightly special
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
-func (*RequestLeaseRequest) flags() int       { return isWrite }
-func (*ComputeChecksumRequest) flags() int    { return isWrite }
-func (*VerifyChecksumRequest) flags() int     { return isWrite }
-func (*CheckConsistencyRequest) flags() int   { return isAdmin | isRange }
-func (*ChangeFrozenRequest) flags() int       { return isWrite | isRange }
+
+// TODO(tschottdorf): consider setting isAlone on RequestLeaseRequest and
+// LeaseTransferRequest.
+func (*RequestLeaseRequest) flags() int     { return isWrite }
+func (*LeaseTransferRequest) flags() int    { return isWrite }
+func (*ComputeChecksumRequest) flags() int  { return isWrite }
+func (*VerifyChecksumRequest) flags() int   { return isWrite }
+func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
+func (*ChangeFrozenRequest) flags() int     { return isWrite | isRange }

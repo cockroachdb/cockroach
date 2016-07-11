@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"math"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -456,4 +457,168 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRangeLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := storage.TestStoreContext()
+	var filterMu sync.Mutex
+	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
+	ctx.TestingKnobs.TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			filterMu.Lock()
+			filterCopy := filter
+			filterMu.Unlock()
+			if filterCopy != nil {
+				return filterCopy(filterArgs)
+			}
+			return nil
+		}
+	var waitForTransferBlocked atomic.Value
+	waitForTransferBlocked.Store(false)
+	transferBlocked := make(chan struct{})
+	ctx.TestingKnobs.LeaseTransferBlockedOnExtensionEvent = func(
+		_ roachpb.ReplicaDescriptor) {
+		if waitForTransferBlocked.Load().(bool) {
+			transferBlocked <- struct{}{}
+			waitForTransferBlocked.Store(false)
+		}
+	}
+	mtc := &multiTestContext{}
+	mtc.storeContext = &ctx
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	// First, do a write; we'll use it to determine when the dust has settled.
+	leftKey := roachpb.Key("a")
+	incArgs := incrementArgs(leftKey, 1)
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Get the left range's ID.
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
+
+	// Replicate the left range onto node 1.
+	mtc.replicateRange(rangeID, 1)
+
+	replica0 := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+	replica1 := mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+	gArgs := getArgs(leftKey)
+	replicaDesc, err := replica0.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Check that replica0 can serve reads OK.
+	if _, pErr := client.SendWrappedWith(
+		mtc.senders[0], nil, roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Move the lease to store 1.
+	var newHolderDesc roachpb.ReplicaDescriptor
+	util.SucceedsSoon(t, func() error {
+		var err error
+		newHolderDesc, err = replica1.GetReplicaDescriptor()
+		return err
+	})
+
+	if pErr := replica0.TransferLease(newHolderDesc); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Check that replica0 doesn't serve reads any more.
+	replicaDesc, err = replica0.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, pErr := client.SendWrappedWith(
+		mtc.senders[0], nil, roachpb.Header{Replica: replicaDesc}, &gArgs)
+	nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
+	if !ok {
+		t.Fatalf("Expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
+	}
+	if *(nlhe.LeaseHolder) != newHolderDesc {
+		t.Fatalf("Expected lease holder %+v, got %+v",
+			newHolderDesc, nlhe.LeaseHolder)
+	}
+
+	// Check that replica1 now has the lease (or gets it soon).
+	util.SucceedsSoon(t, func() error {
+		if _, pErr := client.SendWrappedWith(
+			mtc.senders[1], nil, roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	})
+
+	replica1Lease, _ := replica1.GetLease()
+
+	// Make replica1 extend its lease and transfer the lease immediately after
+	// that. Test that the transfer still happens (it'll wait until the extension
+	// is done).
+	extensionSem := make(chan struct{})
+	filterMu.Lock()
+	filter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		if filterArgs.Sid != mtc.stores[1].Ident.StoreID {
+			return nil
+		}
+		llReq, ok := filterArgs.Req.(*roachpb.RequestLeaseRequest)
+		if !ok {
+			return nil
+		}
+		if llReq.Lease.Replica == newHolderDesc {
+			// Notify the main thread that the extension is in progress and wait for
+			// the signal to proceed.
+			filterMu.Lock()
+			filter = nil
+			filterMu.Unlock()
+			extensionSem <- struct{}{}
+			<-extensionSem
+		}
+		return nil
+	}
+	filterMu.Unlock()
+	// Initiate an extension.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		shouldRenewTS := replica1Lease.StartStasis.Add(-1, 0)
+		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
+		if _, pErr := client.SendWrappedWith(
+			mtc.senders[1], nil,
+			roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+			panic(pErr)
+		}
+	}()
+
+	<-extensionSem
+	waitForTransferBlocked.Store(true)
+	// Initiate a transfer.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Transfer back from replica1 to replica0.
+		if pErr := replica1.TransferLease(replicaDesc); pErr != nil {
+			panic(pErr)
+		}
+	}()
+	// Wait for the transfer to be blocked by the extension.
+	<-transferBlocked
+	// Now unblock the extension.
+	extensionSem <- struct{}{}
+	// Check that the transfer to replica1 eventually happens.
+	util.SucceedsSoon(t, func() error {
+		if _, pErr := client.SendWrappedWith(
+			mtc.senders[0], nil,
+			roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	})
+	filterMu.Lock()
+	filter = nil
+	filterMu.Unlock()
+	wg.Wait()
 }
