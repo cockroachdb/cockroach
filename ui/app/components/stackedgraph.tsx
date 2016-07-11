@@ -76,11 +76,7 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
       .xScale(d3.time.scale())
       .margin(CHART_MARGINS);
 
-    /**
-     * TODO: This method is missing from the nvd3 typescript typings.
-     * https://github.com/jgoz/typed-nvd3/issues/1
-     */
-    (this.chart as any).showControls(false);
+    this.chart.showControls(false);
 
     this.chart.xAxis
       .tickFormat((t) => typeof t === "string" ? t : d3.time.format("%H:%M:%S")(t))
