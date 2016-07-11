@@ -1618,6 +1618,17 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 	r.mu.state.Lease = &lease
 
+	if r.IsFirstRange() {
+		// Gossip the first range whenever its lease is acquired.
+		//
+		// TODO(peter): This might be excessive. We could avoid gossiping if the
+		// range descriptor hasn't changed recently though we'd have to figure out
+		// what reliable signal to use to determine that.
+		batch.(engine.Batch).Defer(func() {
+			r.gossipFirstRange(r.context(context.TODO()))
+		})
+	}
+
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
 			// The lease is changing hands. Is this replica the new lease holder?
