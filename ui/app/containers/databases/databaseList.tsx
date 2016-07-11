@@ -39,6 +39,8 @@ interface DatabasesColumnDescriptor {
   // databases. This will be used to sort the table according to the data in
   // this column.
   sort?: (s: string) => any;
+  // className to be applied to the td elements
+  className?: string;
 }
 
 /**
@@ -51,8 +53,9 @@ let columnDescriptors: DatabasesColumnDescriptor[] = [
   {
     key: DatabasesTableColumn.Name,
     title: "Database Name",
-    cell: (s) => <Link to={`databases/${s}`}>{s}</Link>,
+    cell: (s) => <Link className="fill-cell" to={`databases/${s}`}>{s}</Link>,
     sort: _.identity,
+    className: "no-padding", // don't pad the td element to allow the link to expand
   },
 ];
 
@@ -108,6 +111,7 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
           title: cd.title,
           cell: (index) => cd.cell(databases[index]),
           sortKey: cd.sort ? cd.key : undefined,
+          className: cd.className,
         };
       });
     });

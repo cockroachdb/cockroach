@@ -55,6 +55,8 @@ interface NodeColumnDescriptor {
   // in a collection. This is used to display an appropriate "total" value for
   // each column.
   rollup?: (ns: NodeStatus[]) => React.ReactNode;
+  // className to be applied to the td elements
+  className?: string;
 }
 
 /**
@@ -78,7 +80,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.NodeID,
     title: "Node",
-    cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>,
+    cell: (ns) => <Link className="fill-cell" to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>,
     sort: (ns) => ns.desc.node_id,
     rollup: (rows) => {
       interface StatusTotals {
@@ -96,6 +98,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
         <span className="missing">{statuses.missing || 0}</span>
       </div>;
     },
+    className: "no-padding",
   },
   // Started at - displays the time that the node started.
   {
@@ -150,7 +153,8 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.Logs,
     title: "Logs",
-    cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
+    cell: (ns) => <Link className="fill-cell" to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
+    className: "no-padding",
   },
 ];
 
