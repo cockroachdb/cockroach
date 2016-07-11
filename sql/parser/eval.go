@@ -247,6 +247,32 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeInt,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Dec
+				r := *right.(*DInt)
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(r))
+				dd.Add(l, &dd.Dec)
+				return dd, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DInt)
+				r := &right.(*DDecimal).Dec
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(l))
+				dd.Add(&dd.Dec, r)
+				return dd, nil
+			},
+		},
+		BinOp{
 			LeftType:   TypeDate,
 			RightType:  TypeInt,
 			ReturnType: TypeDate,
@@ -336,6 +362,32 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeInt,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Dec
+				r := *right.(*DInt)
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(r))
+				dd.Sub(l, &dd.Dec)
+				return dd, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DInt)
+				r := &right.(*DDecimal).Dec
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(l))
+				dd.Sub(&dd.Dec, r)
+				return dd, nil
+			},
+		},
+		BinOp{
 			LeftType:   TypeDate,
 			RightType:  TypeInt,
 			ReturnType: TypeDate,
@@ -413,6 +465,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
 		},
+		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Dec
+				r := &right.(*DDecimal).Dec
+				dd := &DDecimal{}
+				dd.Mul(l, r)
+				return dd, nil
+			},
+		},
 		// The following two overloads are needed becauase DInt/DInt = DDecimal. Due to this
 		// operation, normalization may sometimes create a DInt * DDecimal operation.
 		BinOp{
@@ -424,7 +488,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				r := *right.(*DInt)
 				dd := &DDecimal{}
 				dd.SetUnscaled(int64(r))
-				dd.Mul(&dd.Dec, l)
+				dd.Mul(l, &dd.Dec)
 				return dd, nil
 			},
 		},
@@ -438,18 +502,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				dd := &DDecimal{}
 				dd.SetUnscaled(int64(l))
 				dd.Mul(&dd.Dec, r)
-				return dd, nil
-			},
-		},
-		BinOp{
-			LeftType:   TypeDecimal,
-			RightType:  TypeDecimal,
-			ReturnType: TypeDecimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				l := &left.(*DDecimal).Dec
-				r := &right.(*DDecimal).Dec
-				dd := &DDecimal{}
-				dd.Mul(l, r)
 				return dd, nil
 			},
 		},
@@ -512,6 +564,38 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeInt,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Dec
+				r := *right.(*DInt)
+				if r == 0 {
+					return nil, errDivByZero
+				}
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(r))
+				dd.QuoRound(l, &dd.Dec, decimal.Precision, inf.RoundHalfUp)
+				return dd, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DInt)
+				r := &right.(*DDecimal).Dec
+				if r.Sign() == 0 {
+					return nil, errDivByZero
+				}
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(l))
+				dd.QuoRound(&dd.Dec, r, decimal.Precision, inf.RoundHalfUp)
+				return dd, nil
+			},
+		},
+		BinOp{
 			LeftType:   TypeInterval,
 			RightType:  TypeInt,
 			ReturnType: TypeInterval,
@@ -563,6 +647,38 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return dd, nil
 			},
 		},
+		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeInt,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Dec
+				r := *right.(*DInt)
+				if r == 0 {
+					return nil, errDivByZero
+				}
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(r))
+				dd.QuoRound(l, &dd.Dec, 0, inf.RoundDown)
+				return dd, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DInt)
+				r := &right.(*DDecimal).Dec
+				if r.Sign() == 0 {
+					return nil, errDivByZero
+				}
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(l))
+				dd.QuoRound(&dd.Dec, r, 0, inf.RoundDown)
+				return dd, nil
+			},
+		},
 	},
 
 	Mod: {
@@ -598,6 +714,38 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				dd := &DDecimal{}
 				decimal.Mod(&dd.Dec, l, r)
+				return dd, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeInt,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Dec
+				r := *right.(*DInt)
+				if r == 0 {
+					return nil, errZeroModulus
+				}
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(r))
+				decimal.Mod(&dd.Dec, l, &dd.Dec)
+				return dd, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DInt)
+				r := &right.(*DDecimal).Dec
+				if r.Sign() == 0 {
+					return nil, errZeroModulus
+				}
+				dd := &DDecimal{}
+				dd.SetUnscaled(int64(l))
+				decimal.Mod(&dd.Dec, &dd.Dec, r)
 				return dd, nil
 			},
 		},
