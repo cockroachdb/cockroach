@@ -596,7 +596,9 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 	}
 
 	// Commit the transaction. Note that we cancel the transaction when the
-	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code path.
+	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code
+	// path. We don't check the error of CommitOrCleanup because neither success
+	// or failure are guaranteed due to the async nature of the cancellation.
 	_ = txn.CommitOrCleanup()
 }
 
