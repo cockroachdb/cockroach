@@ -2175,11 +2175,8 @@ func (r *Replica) AdminSplit(
 		if err := r.store.logSplit(txn, updatedDesc, *newDesc); err != nil {
 			return err
 		}
-		// Update the RangeTree.
+
 		b = &client.Batch{}
-		if err := InsertRange(txn, b, newDesc.StartKey); err != nil {
-			return err
-		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
@@ -2645,12 +2642,6 @@ func (r *Replica) AdminMerge(
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
 			return err
 		}
-
-		// Update the RangeTree.
-		if err := DeleteRange(txn, b, rightDesc.StartKey); err != nil {
-			return err
-		}
-
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
 		b.AddRawRequest(&roachpb.EndTransactionRequest{

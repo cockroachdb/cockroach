@@ -1794,11 +1794,6 @@ func TestStoreBadRequests(t *testing.T) {
 	args4 := scanArgs(roachpb.Key("b"), roachpb.Key("a"))
 
 	args5 := scanArgs(roachpb.RKeyMin, roachpb.Key("a"))
-	rangeTreeRootAddr, err := keys.Addr(keys.RangeTreeRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args6 := scanArgs(keys.RangeTreeNodeKey(rangeTreeRootAddr), roachpb.Key("a"))
 
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)
 	tArgs1, _ := heartbeatArgs(txn)
@@ -1826,7 +1821,6 @@ func TestStoreBadRequests(t *testing.T) {
 		{&args4, nil, "must be greater than"},
 		// Can't range from local to global.
 		{&args5, nil, "must be greater than LocalMax"},
-		{&args6, nil, "is range-local, but"},
 		// Txn must be specified in Header.
 		{&tArgs0, nil, "no transaction specified"},
 		{&tArgs1, nil, "no transaction specified"},
