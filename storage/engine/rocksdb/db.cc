@@ -1412,6 +1412,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+  options.max_open_files = db_opts.max_open_files;
 
   // Merge two memtables when flushing to L0.
   options.min_write_buffer_number_to_merge = 2;
