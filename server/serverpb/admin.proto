@@ -262,8 +262,8 @@ enum DrainMode {
     // TODO(tschottdorf): also terminate existing clients in a graceful manner.
     CLIENT = 0;
     // LEADERSHIP instructs the server to gracefully let all its Replicas'
-    // leader leases expire.
-    LEADERSHIP = 1;
+    // range leases expire.
+    LEASES = 1;
 }
 
 // DrainRequest requests the server to enter the specified draining mode. The

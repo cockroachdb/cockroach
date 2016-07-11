@@ -41,7 +41,7 @@ func newReplicaConsistencyQueue(gossip *gossip.Gossip) *replicaConsistencyQueue 
 	rcq := &replicaConsistencyQueue{}
 	rcq.baseQueue = makeBaseQueue("replica consistency checker", rcq, gossip, queueConfig{
 		maxSize:              replicaConsistencyQueueSize,
-		needsLeaderLease:     true,
+		needsLease:           true,
 		acceptsUnsplitRanges: true,
 	})
 	return rcq
@@ -52,7 +52,7 @@ func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	return true, 1.0
 }
 
-// process() is called on every range for which this node is a leader.
+// process() is called on every range for which this node is a lease holder.
 func (q *replicaConsistencyQueue) process(
 	_ context.Context,
 	_ hlc.Timestamp,

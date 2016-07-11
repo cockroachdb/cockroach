@@ -20,7 +20,7 @@ been removed but have not yet been garbage-collected. These nodes may
 try to send raft messages that could disrupt the legitimate members of
 the group. Even worse, if there has been enough turnover in the
 membership of a group, a quorum of removed replicas may manage to
-elect a leader among themselves.
+elect a lease holder among themselves.
 
 We have an additional complication compared to vanilla raft because we
 allow node IDs to be reused (this is necessary for coalesced
@@ -35,11 +35,11 @@ Here is a scenario that can lead to split-brain in the current system:
    node C. Several more `ChangeReplicas` transactions follow, adding
    nodes D, E, and F and removing A and B.
 3. Nodes A and B garbage-collect their copies of the range.
-4. Node C comes back up. When it doesn't hear from the leader of
+4. Node C comes back up. When it doesn't hear from the lease holder of
    range R, it starts an election.
 5. Nodes A and B see that node C has a more advanced log position for
    range R than they do (since they have nothing), so they vote for it.
-   C becomes leader and sends snapshots to A and B.
+   C becomes lease holder and sends snapshots to A and B.
 6. There are now two "live" versions of the range. Clients
    (`DistSenders`) whose range descriptor cache is out of date may
    talk to the ABC group instead of the correct DEF group.

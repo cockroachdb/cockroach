@@ -100,8 +100,8 @@ var (
 	LocalRaftTombstoneSuffix = []byte("rftb")
 	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
-	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
-	LocalRangeLeaderLeaseSuffix = []byte("rll-")
+	// localRangeLeaseSuffix is the suffix for a range lease.
+	LocalRangeLeaseSuffix = []byte("rll-")
 	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
 	LocalLeaseAppliedIndexSuffix = []byte("rlla")
 	// localRangeStatsSuffix is the suffix for range statistics.

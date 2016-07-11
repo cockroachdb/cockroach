@@ -1,4 +1,4 @@
-- Feature Name: leader_evaluated_raft
+- Feature Name: proposer_evaluated_kv
 - Status: in-progress
 - Start Date: 2016-04-19
 - Authors: Tobias Schottdorf
@@ -59,31 +59,31 @@ type pendingCmd struct {
 
 and within which the main change is changing the type of `Cmd` from
 `BatchRequest` to a new type which carries the effects of the application of
-the batch, as computed (by the leader) earlier in `proposeRaftCommand`.
+the batch, as computed (by the lease holder) earlier in `proposeRaftCommand`.
 
 For simplicity, in this draft we will assume that the `raftCmd` struct will
 be modified according to these requirements.
 
 The "effects" contain
 
-* any key-value writes: For example the outcome of a `Put`, `DeleteRange`, `CPut`, `BeginTransaction`, or `LeaderLease`.
+* any key-value writes: For example the outcome of a `Put`, `DeleteRange`, `CPut`, `BeginTransaction`, or `RequestLease`.
   Some alternatives exist: writes could be encoded as `[]MVCCKeyValue`, or even
   as post-MVCC raw (i.e. opaque) key-value pairs. We'll assume the former for
   now.
 * parameters for any "triggers" which must run with the *application* of the
   command. In particular, this is necessary on `EndTransaction` with a commit
-  trigger, or when leadership changes (to apply the new lease).
+  trigger, or when the lease holder changes (to apply the new lease).
   There are more of them, but this already shows that these triggers (which are
   downstream of Raft) will require various pieces of data to be passed around
   with them.
 
 Note that for the "triggers" above, a lot of the work they currently do can
-move pre-Raft as well. For example, for `LeaderLease` below we must change some
+move pre-Raft as well. For example, for `RequestLease` below we must change some
 in-memory state on `*Replica` (lease proto and timestamp cache) plus call out
-to Gossip. Still, the bulk of the code in `(*Replica).LeaderLease` (i.e. the
+to Gossip. Still, the bulk of the code in `(*Replica).RequestLease` (i.e. the
 actual logic) will move pre-Raft, and the remaining trigger is conditional on
-being on the leader (so that one could even remove it completely from the
-"effects" and hack their execution into the leader role itself).
+being on the lease holder (so that one could even remove it completely from the
+"effects" and hack their execution into the lease holder role itself).
 
 Thus, we arrive at the following (proto-backed) candidate struct:
 
@@ -100,7 +100,7 @@ message RaftCmd {
     # * compute stats for new left hand side (LHS)      [move pre-raft]
     # * copy some data to new range (abort cache)       [move pre-raft]
     # * make right-hand side `*Replica`
-    # * copy tsCache (in-mem; only relevant on leader)  [leader-only]
+    # * copy tsCache (in-mem)                           [lease holder only]
     # * r.store.SplitRange
     # * maybe trigger Raft election
     optional Split ...;
@@ -115,19 +115,19 @@ message RaftCmd {
     optional Merge ...:
     # Carries out the following:
     # * `(*Replica).setDesc`
-    # * maybe add to GC queue                           [leader only]
+    # * maybe add to GC queue                           [lease holder only]
     optional ChangeReplicas ...;
     # Carries out the following:
-    # * maybe gossips system config                     [leader only]
+    # * maybe gossips system config                     [lease holder only]
     optional ModifiedSpan ...;
     # Carries out the following:
     # * sanity checks (in particular FindReplica)
     # * update in-memory lease
-    # * on Raft(!) leader: maybe try to elect new lease holder
+    # * on Raft(!) leader: maybe try to elect new leader
     # * on (new) lease holder: update tsCache low water mark
     #   (might be easier to do this unconditionally on all nodes)
     # * on (new) lease holder: maybe gossip system configs
-    optional LeaderLease ...;
+    optional Lease ...;
     # Those below may not be required, but something to think about
     optional GCRange ...;    # allow optimized GC (some logic below of Raft?)
     optional ClearRange ...; # allow erasing key range without huge proposal
@@ -142,7 +142,7 @@ between them in some cases)
 
 ### Computing the (ordered) write set
 
-Before a leader proposes a command, it has the job of translating a
+Before a lease holder proposes a command, it has the job of translating a
 `BatchRequest` into a `RaftCmd`. Note that we assume that writes wait for
 both reads and writes in the command queue (so that at the point at which
 the `RaftCmd` is constructed, all prior mutations have been carried out and
@@ -159,7 +159,7 @@ This is hopefully largely mechanical, with the bulk of work in the MVCC layer,
 outlined in the next section.
 
 The work to be carried out in `ReplicaCommands` is mostly isolating the various
-side effects (most prominently the commit and leader lease triggers). In the
+side effects (most prominently the commit and range lease triggers). In the
 process, it should be possible to remove these methods from `(*Replica)`
 (though that is not a stated goal of this RFC).
 
@@ -275,14 +275,14 @@ Replay protection is naively an issue because applying a logicless batch of
 writes is at odds with our current method, which largely relies on
 write/timestamp conflicts.
 However, as @bdarnell pointed out, as of recently (#5973) we (mostly) colocate
-the Raft leader and the leader lease holder on the same node and have more
+the Raft lease holder and the range lease holder on the same node and have more
 options for dealing with this (i.e. making the application of a command
 conditional on the Raft log position it was originally proposed at).
 
 More concretely (via @bdarnell):
 
 > The RaftCmd would also include a term and log index, to be populated with the
-> leader's latest log information when it is proposed. The writes would only be
+> lease holder's latest log information when it is proposed. The writes would only be
 > applied if it committed at that index; they would be dropped (and reproposed)
 > if they committed at any other index. This would only be a possibility when
 > the lease holder is not the raft leader (and even then it's unlikely in
@@ -353,17 +353,17 @@ Tackle the following in parallel (and roughly in that order):
   required for the post-proposal part. This informs the actual design of the
   Raft "effects" in this proposal.
   Most of these should come up naturally when trying to remove the `(*Replica)`
-  receiver on most of the `ReplicaCommands` (`LeaderLease`, `Put`, ...) and
+  receiver on most of the `ReplicaCommands` (`RequestLease`, `Put`, ...) and
   manually going through the rest of the call stack up to `processRaftCommand`.
 * implement protection against Raft replays/reordering, ideally such that
-  the leader knows at proposal time the log index at which commands commit
+  the lease holder knows at proposal time the log index at which commands commit
   (unless they have to be reproposed).
 * flesh out the WriteBatch encoding. Ideally, this includes a parser in Go (to
   avoid an obstruction to switching storage engines), but the critical part
   here for the purpose of this RFC is hooking up the `RocksDB`-specific
   implementation and guarding against upstream changes.
   We can trust RocksDB to be backwards-compatible in any changes they make, but
-  we require bidirectional compatibility. We create a batch on the leader and
+  we require bidirectional compatibility. We create a batch on the lease holder and
   ship it off to the follower to be applied, and the follower might be running
   either an older or a newer version of the code. If they add a new record
   type, we either need to be able to guarantee that the new record types won't

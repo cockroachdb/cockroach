@@ -52,7 +52,7 @@ func newVerifyQueue(gossip *gossip.Gossip, countFn rangeCountFn) *verifyQueue {
 	vq := &verifyQueue{countFn: countFn}
 	vq.baseQueue = makeBaseQueue("verify", vq, gossip, queueConfig{
 		maxSize:              verifyQueueMaxSize,
-		needsLeaderLease:     false,
+		needsLease:           false,
 		acceptsUnsplitRanges: true,
 	})
 	return vq

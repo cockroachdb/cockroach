@@ -40,7 +40,7 @@ message ReplicaState {
   // Changes of the descriptor should normally go through one of the
   // (*Replica).setDesc* methods.
   roachpb.RangeDescriptor desc = 3;
-  // The latest lease holder, if any.
+  // The latest lease, if any.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
   roachpb.RaftTruncatedState truncated_state = 5;

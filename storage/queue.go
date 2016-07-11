@@ -150,9 +150,9 @@ func (l queueLog) Finish() {
 type queueConfig struct {
 	// maxSize is the maximum number of replicas to queue.
 	maxSize int
-	// needsLeaderLease controls whether this queue requires the leader lease to
+	// needsLease controls whether this queue requires the range lease to
 	// operate on a replica.
-	needsLeaderLease bool
+	needsLease bool
 	// acceptsUnsplitRanges controls whether this queue can process ranges that
 	// need to be split due to zone config settings. Ranges are checked before
 	// calling queueImpl.shouldQueue and queueImpl.process.
@@ -438,13 +438,13 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	log.Trace(ctx, fmt.Sprintf("queue start for range %d", repl.RangeID))
 	defer sp.Finish()
 
-	// If the queue requires a replica to have the range leader lease in
-	// order to be processed, check whether this replica has leader lease
+	// If the queue requires a replica to have the range lease in
+	// order to be processed, check whether this replica has range lease
 	// and renew or acquire if necessary.
-	if bq.needsLeaderLease {
+	if bq.needsLease {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {
-			if _, harmless := err.GetDetail().(*roachpb.NotLeaderError); harmless {
+		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
+			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
 				bq.eventLog.VInfof(log.V(3), "%s: not holding lease; skipping", repl)
 				return nil
 			}

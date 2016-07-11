@@ -41,7 +41,7 @@ import (
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
-// clocks when executing a command, even if the leader's clock is far
+// clocks when executing a command, even if the lease holder's clock is far
 // in the future.
 func TestRangeCommandClockUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -61,8 +61,8 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	defer mtc.Stop()
 	mtc.replicateRange(1, 1, 2)
 
-	// Advance the leader's clock ahead of the followers (by more than
-	// MaxOffset but less than the leader lease) and execute a command.
+	// Advance the lease holder's clock ahead of the followers (by more than
+	// MaxOffset but less than the range lease) and execute a command.
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
@@ -97,7 +97,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	}
 }
 
-// TestRejectFutureCommand verifies that leaders reject commands that
+// TestRejectFutureCommand verifies that lease holders reject commands that
 // would cause a large time jump.
 func TestRejectFutureCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -96,20 +96,20 @@ const (
 	bootstrapRangeOnly
 )
 
-// LeaderLeaseExpiration returns an int64 to increment a manual clock with to
-// make sure that all active leader leases expire.
-func LeaderLeaseExpiration(s *Store, clock *hlc.Clock) int64 {
+// LeaseExpiration returns an int64 to increment a manual clock with to
+// make sure that all active range leases expire.
+func LeaseExpiration(s *Store, clock *hlc.Clock) int64 {
 	// Due to lease extensions, the remaining interval can be longer than just
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
-	return 2 * int64(s.ctx.leaderLeaseActiveDuration+clock.MaxOffset())
+	return 2 * int64(s.ctx.rangeLeaseActiveDuration+clock.MaxOffset())
 }
 
-// leaseExpiry returns a duration in nanos after which any leader lease the
-// Replica may hold is expired. It is more precise than LeaderLeaseExpiration
+// leaseExpiry returns a duration in nanos after which any range lease the
+// Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
 func leaseExpiry(rng *Replica) int64 {
-	if l, _ := rng.getLeaderLease(); l != nil {
+	if l, _ := rng.getLease(); l != nil {
 		return l.Expiration.WallTime + 1
 	}
 	return 0
@@ -384,10 +384,10 @@ func TestReplicaContains(t *testing.T) {
 	}
 }
 
-func setLeaderLease(r *Replica, l *roachpb.Lease) error {
+func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
+	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	ch, _, err := r.proposeRaftCommand(r.context(context.Background()), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
@@ -399,14 +399,14 @@ func setLeaderLease(r *Replica, l *roachpb.Lease) error {
 
 // TestReplicaReadConsistency verifies behavior of the range under
 // different read consistencies. Note that this unittest plays
-// fast and loose with granting leader leases.
+// fast and loose with granting range leases.
 func TestReplicaReadConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Modify range descriptor to include a second replica; leader lease can
+	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
 	secondReplica := roachpb.ReplicaDescriptor{
@@ -444,11 +444,11 @@ func TestReplicaReadConsistency(t *testing.T) {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
-	// Lose the lease and verify CONSISTENT reads receive NotLeaderError
+	// Lose the lease and verify CONSISTENT reads receive NotLeaseHolderError
 	// and INCONSISTENT reads work as expected.
 	start := hlc.ZeroTimestamp.Add(leaseExpiry(tc.rng), 0)
 	tc.manualClock.Set(start.WallTime)
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       start,
 		StartStasis: start.Add(10, 0),
 		Expiration:  start.Add(10, 0),
@@ -465,8 +465,8 @@ func TestReplicaReadConsistency(t *testing.T) {
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, &gArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
-		t.Errorf("expected not leader error; got %s", pErr)
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+		t.Errorf("expected not lease holder error; got %s", pErr)
 	}
 
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{
@@ -477,7 +477,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 }
 
 // TestApplyCmdLeaseError verifies that when during application of a Raft
-// command the proposing node no longer holds the leader lease, an error is
+// command the proposing node no longer holds the range lease, an error is
 // returned. This prevents regression of #1483.
 func TestApplyCmdLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -485,7 +485,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Modify range descriptor to include a second replica; leader lease can
+	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
 	secondReplica := roachpb.ReplicaDescriptor{
@@ -502,7 +502,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	// Lose the lease.
 	start := hlc.ZeroTimestamp.Add(leaseExpiry(tc.rng), 0)
 	tc.manualClock.Set(start.WallTime)
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       start,
 		StartStasis: start.Add(10, 0),
 		Expiration:  start.Add(10, 0),
@@ -518,8 +518,8 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: tc.clock.Now().Add(-100, 0),
 	}, &pArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
-		t.Fatalf("expected not leader error in return, got %v", pErr)
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+		t.Fatalf("expected not lease holder error in return, got %v", pErr)
 	}
 }
 
@@ -532,7 +532,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	key := roachpb.RKey("a")
 	firstRng := tc.store.LookupReplica(key, nil)
 	newRng := splitTestRange(tc.store, key, key, t)
-	if pErr := newRng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+	if pErr := newRng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -551,14 +551,14 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 }
 
-// hasLease returns whether the most recent leader lease was held by the given
+// hasLease returns whether the most recent range lease was held by the given
 // range replica and whether it's expired for the given timestamp.
 func hasLease(rng *Replica, timestamp hlc.Timestamp) (owned bool, expired bool) {
-	l, _ := rng.getLeaderLease()
+	l, _ := rng.getLease()
 	return l.OwnedBy(rng.store.StoreID()), !l.Covers(timestamp)
 }
 
-func TestReplicaLeaderLease(t *testing.T) {
+func TestReplicaLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -571,15 +571,15 @@ func TestReplicaLeaderLease(t *testing.T) {
 		{Start: one, StartStasis: one},
 		{Expiration: one, StartStasis: one.Next()},
 	} {
-		if _, err := tc.rng.LeaderLease(context.Background(), tc.store.Engine(), nil,
-			roachpb.Header{}, roachpb.LeaderLeaseRequest{
+		if _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
+			roachpb.Header{}, roachpb.RequestLeaseRequest{
 				Lease: lease,
 			}); !testutils.IsError(err, "illegal lease interval") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
 
-	// Modify range descriptor to include a second replica; leader lease can
+	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
 	secondReplica := roachpb.ReplicaDescriptor{
@@ -596,7 +596,7 @@ func TestReplicaLeaderLease(t *testing.T) {
 	}
 	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now.Add(10, 0),
 		StartStasis: now.Add(20, 0),
 		Expiration:  now.Add(20, 0),
@@ -605,23 +605,23 @@ func TestReplicaLeaderLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	if held, expired := hasLease(tc.rng, tc.clock.Now().Add(15, 0)); held || expired {
-		t.Errorf("expected second replica to have leader lease")
+		t.Errorf("expected second replica to have range lease")
 	}
 
 	{
-		pErr := tc.rng.redirectOnOrAcquireLeaderLease(tc.rng.context(context.Background()))
-		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
-			t.Fatalf("wanted NotLeaderError, got %s", pErr)
+		pErr := tc.rng.redirectOnOrAcquireLease(tc.rng.context(context.Background()))
+		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || lErr == nil {
+			t.Fatalf("wanted NotLeaseHolderError, got %s", pErr)
 		}
 	}
 	// Advance clock past expiration and verify that another has
-	// leader lease will not be true.
+	// range lease will not be true.
 	tc.manualClock.Increment(21) // 21ns have passed
 	if held, expired := hasLease(tc.rng, tc.clock.Now()); held || !expired {
 		t.Errorf("expected another replica to have expired lease")
 	}
 
-	// Verify that command returns NotLeaderError when lease is rejected.
+	// Verify that command returns NotLeaseHolderError when lease is rejected.
 	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -636,20 +636,20 @@ func TestReplicaLeaderLease(t *testing.T) {
 	rng.mu.Unlock()
 
 	{
-		if _, ok := rng.redirectOnOrAcquireLeaderLease(tc.rng.context(context.Background())).GetDetail().(*roachpb.NotLeaderError); !ok {
-			t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
+		if _, ok := rng.redirectOnOrAcquireLease(tc.rng.context(context.Background())).GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, err)
 		}
 	}
 }
 
-// TestReplicaNotLeaderError verifies NotLeaderError when lease is rejected.
-func TestReplicaNotLeaderError(t *testing.T) {
+// TestReplicaNotLeaseHolderError verifies NotLeaderError when lease is rejected.
+func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Modify range descriptor to include a second replica; leader lease can
+	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
 	secondReplica := roachpb.ReplicaDescriptor{
@@ -663,7 +663,7 @@ func TestReplicaNotLeaderError(t *testing.T) {
 
 	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now,
 		StartStasis: now.Add(10, 0),
 		Expiration:  now.Add(10, 0),
@@ -699,8 +699,8 @@ func TestReplicaNotLeaderError(t *testing.T) {
 	for i, test := range testCases {
 		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: now}, test)
 
-		if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
-			t.Errorf("%d: expected not leader error: %s", i, pErr)
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+			t.Errorf("%d: expected not lease holder error: %s", i, pErr)
 		}
 	}
 }
@@ -724,7 +724,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
 
 	now := tc.clock.Now()
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now,
 		StartStasis: now.Add(10, 0),
 		Expiration:  now.Add(10, 0),
@@ -739,8 +739,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
 	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
 
-	// Make setLeaderLease fail by providing an invalid ReplicaDescriptor.
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	// Make lease request fail by providing an invalid ReplicaDescriptor.
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now,
 		StartStasis: now.Add(10, 0),
 		Expiration:  now.Add(10, 0),
@@ -750,7 +750,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 			StoreID:   99,
 		},
 	}); err == nil {
-		t.Fatal("setLeaderLease did not fail on invalid ReplicaDescriptor")
+		t.Fatal("lease request did not fail on invalid ReplicaDescriptor")
 	}
 
 	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
@@ -758,14 +758,14 @@ func TestReplicaLeaseCounters(t *testing.T) {
 }
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
-// upon acquisition of the leader lease.
+// upon acquisition of the range lease.
 func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Modify range descriptor to include a second replica; leader lease can
+	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
 	secondReplica := roachpb.ReplicaDescriptor{
@@ -799,7 +799,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	now := tc.clock.Now()
 
 	// Give lease to someone else.
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now,
 		StartStasis: now.Add(10, 0),
 		Expiration:  now.Add(10, 0),
@@ -817,7 +817,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	now = tc.clock.Now()
 
 	// Give lease to this range.
-	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now.Add(11, 0),
 		StartStasis: now.Add(20, 0),
 		Expiration:  now.Add(20, 0),
@@ -847,9 +847,9 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 }
 
 // TestReplicaTSCacheLowWaterOnLease verifies that the low water mark
-// is set on the timestamp cache when the node is granted the leader
+// is set on the timestamp cache when the node is granted the lease holder
 // lease after not holding it and it is not set when the node is
-// granted the leader lease when it was the last holder.
+// granted the range lease when it was the last holder.
 func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -859,7 +859,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	// Disable raft log truncation which confuses this test.
 	tc.store.DisableRaftLogQueue(true)
 
-	// Modify range descriptor to include a second replica; leader lease can
+	// Modify range descriptor to include a second replica; range lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
 	// workaround is sufficient for the purpose of this test.
 	secondReplica := roachpb.ReplicaDescriptor{
@@ -924,7 +924,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 			Start:       test.start,
 			StartStasis: test.expiration.Add(-1, 0), // smaller than durations used
 			Expiration:  test.expiration,
@@ -949,11 +949,11 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	}
 }
 
-// TestReplicaLeaderLeaseRejectUnknownRaftNodeID ensures that a replica cannot
-// obtain the leader lease if it is not part of the current range descriptor.
+// TestReplicaLeaseRejectUnknownRaftNodeID ensures that a replica cannot
+// obtain the range lease if it is not part of the current range descriptor.
 // TODO(mrtracy): This should probably be tested in client_raft_test package,
 // using a real second store.
-func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
+func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -973,7 +973,7 @@ func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	}
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.rng.store.Clock().Now()
-	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
+	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
 	ch, _, err := tc.rng.proposeRaftCommand(tc.rng.context(context.Background()), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
@@ -986,23 +986,23 @@ func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	}
 }
 
-// TestReplicaDrainLeaderLease makes sure that no new leases are granted when
-// the Store is in DrainLeadership mode.
-func TestReplicaDrainLeaderLease(t *testing.T) {
+// TestReplicaDrainLease makes sure that no new leases are granted when
+// the Store is in DrainLeases mode.
+func TestReplicaDrainLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
 	// Acquire initial lease.
-	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 	var slept atomic.Value
 	slept.Store(false)
 	if err := tc.stopper.RunAsyncTask(func() {
 		// Wait just a bit so that the main thread can check that
-		// DrainLeadership blocks (false negatives are possible, but 10ms is
+		// DrainLeases blocks (false negatives are possible, but 10ms is
 		// plenty to make this fail 99.999% of the time in practice).
 		time.Sleep(10 * time.Millisecond)
 		slept.Store(true)
@@ -1019,24 +1019,24 @@ func TestReplicaDrainLeaderLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.store.DrainLeadership(true); err != nil {
+	if err := tc.store.DrainLeases(true); err != nil {
 		t.Fatal(err)
 	}
 	if !slept.Load().(bool) {
-		t.Fatal("DrainLeadership returned with active lease")
+		t.Fatal("DrainLeases returned with active lease")
 	}
 	tc.rng.mu.Lock()
 	pErr := <-tc.rng.requestLeaseLocked(tc.clock.Now())
 	tc.rng.mu.Unlock()
-	_, ok := pErr.GetDetail().(*roachpb.NotLeaderError)
+	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
-		t.Fatalf("expected NotLeaderError, not %v", pErr)
+		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
 	}
-	if err := tc.store.DrainLeadership(false); err != nil {
+	if err := tc.store.DrainLeases(false); err != nil {
 		t.Fatal(err)
 	}
 	// Newly unfrozen, leases work again.
-	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -1148,7 +1148,7 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 	}
 }
 
-// TestReplicaNoGossipFromNonLeader verifies that a non-leader replica
+// TestReplicaNoGossipFromNonLeader verifies that a non-lease holder replica
 // does not gossip configurations.
 func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1181,10 +1181,10 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Increment the clock's timestamp to expire the leader lease.
+	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.rng))
-	if lease, _ := tc.rng.getLeaderLease(); lease.Covers(tc.clock.Now()) {
-		t.Fatal("leader lease should have been expired")
+	if lease, _ := tc.rng.getLease(); lease.Covers(tc.clock.Now()) {
+		t.Fatal("range lease should have been expired")
 	}
 
 	// Make sure the information for db1 is not gossiped.
@@ -1523,9 +1523,9 @@ func TestOptimizePuts(t *testing.T) {
 	}
 }
 
-// TestAcquireLeaderLease verifies that the leader lease is acquired
+// TestAcquireLease verifies that the range lease is acquired
 // for read and write methods, and eagerly renewed.
-func TestAcquireLeaderLease(t *testing.T) {
+func TestAcquireLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	gArgs := getArgs([]byte("a"))
@@ -1540,7 +1540,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// the start of a lease as far as possible, and since there is an auto-
 		// matic lease for us at the beginning, we'll basically create a lease from
 		// then on.
-		lease, _ := tc.rng.getLeaderLease()
+		lease, _ := tc.rng.getLease()
 		expStart := lease.Start
 		tc.manualClock.Set(leaseExpiry(tc.rng))
 
@@ -1551,7 +1551,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		if held, expired := hasLease(tc.rng, ts); !held || expired {
 			t.Errorf("%d: expected lease acquisition", i)
 		}
-		lease, _ = tc.rng.getLeaderLease()
+		lease, _ = tc.rng.getLease()
 		if !lease.Start.Equal(expStart) {
 			t.Errorf("%d: unexpected lease start: %s; expected %s", i, lease.Start, expStart)
 		}
@@ -1568,7 +1568,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// Since the command we sent above does not get blocked on the lease
 		// extension, we need to wait for it to go through.
 		util.SucceedsSoon(t, func() error {
-			newLease, _ := tc.rng.getLeaderLease()
+			newLease, _ := tc.rng.getLease()
 			if !lease.StartStasis.Less(newLease.StartStasis) {
 				return errors.Errorf("%d: lease did not get extended: %+v to %+v", i, lease, newLease)
 			}
@@ -1581,7 +1581,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 	}
 }
 
-func TestLeaderLeaseConcurrent(t *testing.T) {
+func TestLeaseConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const num = 5
 
@@ -1594,7 +1594,7 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 		}
 	}
 
-	// Testing concurrent leader lease requests is still a good idea. We check
+	// Testing concurrent range lease requests is still a good idea. We check
 	// that they work and clone *Error, which prevents regression of #6111.
 	const origMsg = "boom"
 	for _, withError := range []bool{false, true} {
@@ -1612,7 +1612,7 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 			tc.rng.mu.Lock()
 			tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
 				ll, ok := cmd.raftCmd.Cmd.Requests[0].
-					GetInner().(*roachpb.LeaderLeaseRequest)
+					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
 					return defaultProposeRaftCommandLocked(tc.rng, cmd)
 				}
@@ -4038,7 +4038,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	defer tc.Stop()
 
 	baseStats := initialStats()
-	// Add in the contribution for the leader lease request.
+	// Add in the contribution for the range lease request.
 	baseStats.Add(enginepb.MVCCStats{
 		SysCount: 1,
 		SysBytes: 62,
@@ -4750,7 +4750,7 @@ func TestReplicaLookup(t *testing.T) {
 	}
 }
 
-// TestRequestLeaderEncounterGroupDeleteError verifies that a request leader proposal which fails with
+// TestRequestLeaderEncounterGroupDeleteError verifies that a lease request which fails with
 // RaftGroupDeletedError is converted to a RangeNotFoundError in the Store.
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -5515,16 +5515,16 @@ func TestDiffRange(t *testing.T) {
 
 	// The expected diff.
 	eDiff := []ReplicaSnapshotDiff{
-		{Leader: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
-		{Leader: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
-		{Leader: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
-		{Leader: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
-		{Leader: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
-		{Leader: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
+		{LeaseHolder: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
+		{LeaseHolder: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
+		{LeaseHolder: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
 	}
 
 	diff := diffRange(leaderSnapshot, replicaSnapshot)
@@ -5537,7 +5537,7 @@ func TestDiffRange(t *testing.T) {
 
 	for i, e := range eDiff {
 		v := diff[i]
-		if e.Leader != v.Leader || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
+		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
 			t.Fatalf("diff varies at row %d, %v vs %v", i, e, v)
 		}
 	}
@@ -5717,7 +5717,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 	}
 	tc.rng.mu.Unlock()
 
-	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		fatalf("%s", pErr)
 	}
 
@@ -5910,7 +5910,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 	tc.rng.mu.Unlock()
 
-	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 

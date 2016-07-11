@@ -4655,7 +4655,7 @@ declare module cockroach.server.serverpb {
 declare module cockroach.server.serverpb {
 	export const enum DrainMode {
 		CLIENT = 0,
-		LEADERSHIP = 1,
+		LEASES = 1,
 		
 }
 }

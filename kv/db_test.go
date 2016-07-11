@@ -173,7 +173,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		&roachpb.ResolveIntentRangeRequest{},
 		&roachpb.MergeRequest{},
 		&roachpb.TruncateLogRequest{},
-		&roachpb.LeaderLeaseRequest{},
+		&roachpb.RequestLeaseRequest{},
 
 		&roachpb.EndTransactionRequest{
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{},

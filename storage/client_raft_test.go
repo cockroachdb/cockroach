@@ -327,19 +327,19 @@ func TestRestoreReplicas(t *testing.T) {
 
 	mtc.restart()
 
-	// Send a command on each store. The original store (the leader still)
+	// Send a command on each store. The original store (the lease holder still)
 	// will succeed.
 	incArgs = incrementArgs([]byte("a"), 5)
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
-	// The follower will return a not leader error, indicating the command
-	// should be forwarded to the leader.
+	// The follower will return a not lease holder error, indicating the command
+	// should be forwarded to the lease holder.
 	incArgs = incrementArgs([]byte("a"), 11)
 	{
 		_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &incArgs)
-		if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
-			t.Fatalf("expected not leader error; got %s", pErr)
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+			t.Fatalf("expected not lease holder error; got %s", pErr)
 		}
 	}
 	// Send again, this time to first store.
@@ -604,7 +604,7 @@ func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roa
 // TestUnreplicateFirstRange verifies that multiTestContext still functions in
 // the case where the first range (which contains range metadata) is
 // unreplicated from the first store. This situation can arise occasionally in
-// tests, as can a similar situation where the first store is no longer the leader of
+// tests, as can a similar situation where the first store is no longer the lease holder of
 // the first range; this verifies that those tests will not be affected.
 func TestUnreplicateFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -674,7 +674,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		case <-maxTimeout:
 			t.Fatalf("Failed to achieve proper replication within 10 seconds")
 		case <-time.After(10 * time.Millisecond):
-			mtc.expireLeaderLeases()
+			mtc.expireLeases()
 			rangeDesc := getRangeMetadata(rightKeyAddr, mtc, t)
 			if count := len(rangeDesc.Replicas); count < 3 {
 				t.Fatalf("Removed too many replicas; expected at least 3 replicas, found %d", count)
@@ -684,19 +684,19 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 			}
 
 			// Run replication scans on every store; only the store with the
-			// leader lease will actually do anything. If we did not wait
+			// range lease will actually do anything. If we did not wait
 			// for the scan to complete here it could be interrupted by the
-			// next call to expireLeaderLeases.
+			// next call to expireLeases.
 			for _, store := range mtc.stores {
 				store.ForceReplicationScanAndProcess()
 			}
 		}
 	}
 
-	// Expire leader leases one more time, so that any remaining resolutions can
-	// get a leader lease.
+	// Expire range leases one more time, so that any remaining resolutions can
+	// get a range lease.
 	// TODO(bdarnell): understand why some tests need this.
-	mtc.expireLeaderLeases()
+	mtc.expireLeases()
 }
 
 // TestChangeReplicasDuplicateError tests that a replica change aborts if
@@ -878,8 +878,8 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		}
 		verify([]int64{39, 5, 39, 39})
 
-		// Wait out the leader lease and the unleased duration to make the replica GC'able.
-		mtc.expireLeaderLeases()
+		// Wait out the range lease and the unleased duration to make the replica GC'able.
+		mtc.expireLeases()
 		mtc.manualClock.Increment(int64(
 			storage.ReplicaGCQueueInactivityThreshold + 1))
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -968,7 +968,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	// Once it catches up, the effects of increment commands can be seen.
 	util.SucceedsSoon(t, func() error {
 		getArgs := getArgs(key)
-		// Reading on non-leader replica should use inconsistent read
+		// Reading on non-lease holder replica should use inconsistent read
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			RangeID:         rangeID2,
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -1180,7 +1180,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Expire leases to ensure any remaining intent resolutions can complete.
 	// TODO(bdarnell): understand why some tests need this.
-	mtc.expireLeaderLeases()
+	mtc.expireLeases()
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an
@@ -1319,7 +1319,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 				break
 			}
 
-			mtc.expireLeaderLeases()
+			mtc.expireLeases()
 			mtc.stores[1].ForceReplicationScanAndProcess()
 		}
 	}
@@ -1389,7 +1389,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// TODO(bdarnell): if the call to RemoveReplica in replicaGCQueue.process can be
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	util.SucceedsSoon(t, func() error {
-		mtc.expireLeaderLeases()
+		mtc.expireLeases()
 		mtc.manualClock.Increment(int64(
 			storage.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -1452,11 +1452,11 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		return nil
 	})
 
-	// Run garbage collection on node 2. The lack of an active leader
+	// Run garbage collection on node 2. The lack of an active lease holder
 	// lease will cause GC to do a consistent range lookup, where it
 	// will see that the range has been moved and delete the old
 	// replica.
-	mtc.expireLeaderLeases()
+	mtc.expireLeases()
 	mtc.manualClock.Increment(int64(
 		storage.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].ForceReplicaGCScanAndProcess()
@@ -1477,10 +1477,10 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2, 3)
 	mtc.unreplicateRange(rangeID, 0)
-	mtc.expireLeaderLeases()
+	mtc.expireLeases()
 
 	// Write on the second node, to ensure that the other nodes have
-	// established leadership after the first node's removal.
+	// established a lease after the first node's removal.
 	incArgs := incrementArgs([]byte("a"), 5)
 	if _, err := client.SendWrapped(mtc.distSenders[1], nil, &incArgs); err != nil {
 		t.Fatal(err)
@@ -1585,7 +1585,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 16})
 }
 
-// TestLeaderRemoveSelf verifies that a leader can remove itself
+// TestLeaderRemoveSelf verifies that a lease holder can remove itself
 // without panicking and future access to the range returns a
 // RangeNotFoundError (not RaftGroupDeletedError, and even before
 // the ReplicaGCQueue has run).
@@ -1608,7 +1608,7 @@ func TestLeaderRemoveSelf(t *testing.T) {
 	clock := mtc.clocks[0]
 	header := roachpb.Header{}
 	header.Timestamp = clock.Update(clock.Now().Add(
-		storage.LeaderLeaseExpiration(mtc.stores[0], clock), 0))
+		storage.LeaseExpiration(mtc.stores[0], clock), 0))
 
 	// Expect get a RangeNotFoundError.
 	_, pErr := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
@@ -1749,7 +1749,7 @@ func TestCheckInconsistent(t *testing.T) {
 			t.Errorf("diff length = %d, diff = %v", len(diff), diff)
 		}
 		d := diff[0]
-		if d.Leader != false || !bytes.Equal([]byte("e"), d.Key) || !timestamp.Equal(d.Timestamp) {
+		if d.LeaseHolder != false || !bytes.Equal([]byte("e"), d.Key) || !timestamp.Equal(d.Timestamp) {
 			t.Errorf("diff = %v", d)
 		}
 		notify <- struct{}{}
@@ -1790,7 +1790,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 		t.Fatalf("raft leader should be 1, but got %v", status.Lead)
 	}
 
-	mtc.expireLeaderLeases()
+	mtc.expireLeases()
 	// Force the read command request a new lease.
 	getArgs := getArgs([]byte("a"))
 	_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs)

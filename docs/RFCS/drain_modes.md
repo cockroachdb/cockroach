@@ -13,7 +13,7 @@ Propose two reduced modes of operation of a running CockroachDB node.
 * `drain-clients` mode: the server lets on-going SQL clients finish (up to some
   deadline) and then politely refuses new work at the gateway in the manner
   which popular load-balancing SQL clients can handle best.
-* `drain-leadership` mode: roughly speaking, all leader leases expire and new
+* `drain-leases` mode: roughly speaking, all range leases expire and new
   ones are not granted (in turn disabling most queues and active gossipping).
 
 These modes are not related to the existing `Stopper`-based functionality and
@@ -60,9 +60,9 @@ Implement the following:
 // prior drain operation.
 (*pgwire.Server).DrainClients(deadline time.Time) error
 
-// Put the Node into drain-leadership mode if requested, or undo any previous
+// Put the Node into drain-lease mode if requested, or undo any previous
 // mode change.
-(*server.Node).DrainLeadership(bool) error
+(*server.Node).DrainLeases(bool) error
 ```
 
 The implementations should be straightforward and are kept brief.
@@ -104,10 +104,10 @@ from the unified port).
 
 This is considered outside of the scope of the RFC, but issue #6295 was filed.
 
-## Node/drain-leadership mode:
+## Node/drain-leases mode:
 
-`(*server.Node).DrainLeadership(bool)` iterates over its store list and delegates
-to all contained stores. `(*Replica).redirectOnOrAcquireLeaderLease` checks
+`(*server.Node).DrainLeases(bool)` iterates over its store list and delegates
+to all contained stores. `(*Replica).redirectOnOrAcquireLease` checks
 with its store before requesting a new or extending an existing lease.
 
 ## Server/adminServer:
@@ -117,10 +117,10 @@ with its store before requesting a new or extending an existing lease.
 type DrainMode int
 const (
   DrainClient DrainMode = 1 << iota
-  DrainLeadership
+  DrainLeases
 )
 
-// For example, `s.Drain(DrainClient | DrainLeadership)`
+// For example, `s.Drain(DrainClient | DrainLeases)`
 (*server.Server).Drain(mode DrainMode) error
 ```
 

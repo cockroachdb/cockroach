@@ -52,7 +52,7 @@ func newSplitQueue(db *client.DB, gossip *gossip.Gossip) *splitQueue {
 	}
 	sq.baseQueue = makeBaseQueue("split", sq, gossip, queueConfig{
 		maxSize:              splitQueueMaxSize,
-		needsLeaderLease:     true,
+		needsLease:           true,
 		acceptsUnsplitRanges: true,
 	})
 	return sq

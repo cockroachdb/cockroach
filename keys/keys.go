@@ -182,9 +182,9 @@ func RangeFrozenStatusKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRangeFrozenStatusSuffix, nil)
 }
 
-// RangeLeaderLeaseKey returns a system-local key for a range leader lease.
-func RangeLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLeaderLeaseSuffix, nil)
+// RangeLeaseKey returns a system-local key for a range lease.
+func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLeaseSuffix, nil)
 }
 
 // RangeStatsKey returns the key for accessing the MVCCStats struct

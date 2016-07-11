@@ -147,9 +147,9 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	case *roachpb.TruncateLogRequest:
 		resp := reply.(*roachpb.TruncateLogResponse)
 		*resp, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
-	case *roachpb.LeaderLeaseRequest:
-		resp := reply.(*roachpb.LeaderLeaseResponse)
-		*resp, err = r.LeaderLease(ctx, batch, ms, h, *tArgs)
+	case *roachpb.RequestLeaseRequest:
+		resp := reply.(*roachpb.RequestLeaseResponse)
+		*resp, err = r.RequestLease(ctx, batch, ms, h, *tArgs)
 		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
@@ -1486,23 +1486,23 @@ func (r *Replica) TruncateLog(
 	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
 }
 
-// LeaderLease sets the leader lease for this range. The command fails
+// RequestLease sets the range lease for this range. The command fails
 // only if the desired start timestamp collides with a previous lease.
 // Otherwise, the start timestamp is wound back to right after the expiration
 // of the previous lease (or zero). If this range replica is already the lease
 // holder, the expiration will be extended or shortened as indicated. For a new
-// lease, all duties required of the range leader are commenced, including
+// lease, all duties required of the range lease holder are commenced, including
 // clearing the command queue and timestamp cache.
-func (r *Replica) LeaderLease(
+func (r *Replica) RequestLease(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
-	h roachpb.Header, args roachpb.LeaderLeaseRequest,
-) (roachpb.LeaderLeaseResponse, error) {
+	h roachpb.Header, args roachpb.RequestLeaseRequest,
+) (roachpb.RequestLeaseResponse, error) {
 	// maybeGossipSystemConfig cannot be called while the replica is locked,
 	// so we defer it here so it is called once the replica lock is released.
 	defer r.maybeGossipSystemConfig()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var reply roachpb.LeaderLeaseResponse
+	var reply roachpb.RequestLeaseResponse
 
 	prevLease := r.mu.state.Lease
 	// We return this error in "normal" lease-overlap related failures.
@@ -1562,7 +1562,7 @@ func (r *Replica) LeaderLease(
 		}
 		// TODO(tschottdorf): We could allow shortening existing leases, which
 		// could be used to effect a faster lease handoff. This needs to be
-		// properly implemented though (the leader must not shorten the lease
+		// properly implemented though (the lease holder must not shorten the lease
 		// when it has already served commands at higher timestamps), so this
 		// is forbidden now but can be re-enabled when we properly implement
 		// it.
@@ -1592,7 +1592,7 @@ func (r *Replica) LeaderLease(
 				// mark of the timestamp cache. Note that clock offset scenarios are
 				// handled via a stasis period inherent in the lease which is documented
 				// in on the Lease struct.
-				log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
+				log.Infof("range %d: new range lease %s following %s [physicalTime=%s]",
 					r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
 				r.mu.tsCache.SetLowWater(prevLease.Expiration)
 			} else if raftGroup.Status().RaftState == raft.StateLeader {
@@ -1887,7 +1887,7 @@ func (r *Replica) VerifyChecksum(
 			if diff != nil {
 				for _, d := range diff {
 					l := "leader"
-					if d.Leader {
+					if d.LeaseHolder {
 						l = "replica"
 					}
 					log.Errorf("consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
@@ -1990,14 +1990,15 @@ func (r *Replica) ChangeFrozen(
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
 // two replica snapshots. For now it's only a diff between their KV pairs.
 type ReplicaSnapshotDiff struct {
-	// Leader is set to true of this k:v pair is only present on the leader.
-	Leader    bool
-	Key       roachpb.Key
-	Timestamp hlc.Timestamp
-	Value     []byte
+	// LeaseHolder is set to true of this k:v pair is only present on the lease
+	// holder.
+	LeaseHolder bool
+	Key         roachpb.Key
+	Timestamp   hlc.Timestamp
+	Value       []byte
 }
 
-// diffs the two k:v dumps between the leader and the replica.
+// diffs the two k:v dumps between the lease holder and the replica.
 func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 	if l == nil || r == nil {
 		return nil
@@ -2014,17 +2015,17 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 		}
 
 		addLeader := func() {
-			diff = append(diff, ReplicaSnapshotDiff{Leader: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
+			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
 			i++
 		}
 		addReplica := func() {
-			diff = append(diff, ReplicaSnapshotDiff{Leader: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
+			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
 			j++
 		}
 
 		// Compare keys.
 		var comp int
-		// Check if it has finished traversing over all the leader keys.
+		// Check if it has finished traversing over all the lease holder keys.
 		if e.Key == nil {
 			if v.Key == nil {
 				// Done traversing over all the replica keys. Done!
@@ -2037,7 +2038,7 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 			if v.Key == nil {
 				comp = -1
 			} else {
-				// Both leader and replica keys exist. Compare them.
+				// Both lease holder and replica keys exist. Compare them.
 				comp = bytes.Compare(e.Key, v.Key)
 			}
 		}
@@ -2188,7 +2189,7 @@ func (r *Replica) AdminSplit(
 				SplitTrigger: &roachpb.SplitTrigger{
 					UpdatedDesc: updatedDesc,
 					NewDesc:     *newDesc,
-					// Designate this store as the preferred leader for the new
+					// Designate this store as the preferred lease holder for the new
 					// range. The choice of store here doesn't matter for
 					// correctness, but for best performance it should be one
 					// that we believe is currently up.
@@ -2736,7 +2737,7 @@ func (r *Replica) mergeTrigger(
 	}
 
 	// Clear the timestamp cache. In the case that this replica and the
-	// subsumed replica each held their respective leader leases, we
+	// subsumed replica each held their respective range leases, we
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
 	r.mu.Lock()
@@ -2765,7 +2766,7 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 		// Defer this to make it run as late as possible, maximizing the chances
 		// that the other nodes have finished this command as well (since
 		// processing the removal from the queue looks up the Range at the
-		// leader, being too early here turns this into a no-op).
+		// lease holder, being too early here turns this into a no-op).
 		batch.Defer(func() {
 			if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
 				// Log the error; this shouldn't prevent the commit; the range

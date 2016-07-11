@@ -29,11 +29,11 @@ import weak "gogoproto/gogo.proto";
 // `String() string`.
 // option (gogoproto.goproto_stringer_all) = false;
 
-// A NotLeaderError indicates that the current range is not the
-// leader. If the leader is known, its Replica is set in the error.
-message NotLeaderError {
+// A NotLeaseHolderError indicates that the current range is not the lease
+// holder. If the lease holder is known, its Replica is set in the error.
+message NotLeaseHolderError {
   optional ReplicaDescriptor replica = 1;
-  optional ReplicaDescriptor leader = 2;
+  optional ReplicaDescriptor lease_holder = 2;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
@@ -164,7 +164,7 @@ message ConditionFailedError {
 }
 
 // A LeaseRejectedError indicates that the requested replica could
-// not acquire the desired lease because of an existing leader lease.
+// not acquire the desired lease because of an existing range lease.
 message LeaseRejectedError {
   optional string message = 1 [(gogoproto.nullable) = false];
   optional Lease requested = 2 [(gogoproto.nullable) = false];
@@ -196,7 +196,7 @@ message ReplicaCorruptionError {
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
 
-  optional NotLeaderError not_leader = 1;
+  optional NotLeaseHolderError not_lease_holder = 1;
   optional RangeNotFoundError range_not_found = 2;
   optional RangeKeyMismatchError range_key_mismatch = 3;
   optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;

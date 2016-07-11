@@ -186,7 +186,7 @@ func TestMoveLocalReplicaToFront(t *testing.T) {
 }
 
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
-// leader, attributes and required consistency to determine where to send
+// lease holder, attributes and required consistency to determine where to send
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -224,12 +224,12 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	testCases := []struct {
-		args       roachpb.Request
-		attrs      []string
-		expReplica []roachpb.NodeID
-		leader     int32 // 0 for not caching a leader.
+		args        roachpb.Request
+		attrs       []string
+		expReplica  []roachpb.NodeID
+		leaseHolder int32 // 0 for not caching a lease holder.
 		// Naming is somewhat off, as eventually consistent reads usually
-		// do not have to go to the leader when a node has a read lease.
+		// do not have to go to the lease holder when a node has a read lease.
 		// Would really want CONSENSUS here, but that is not implemented.
 		// Likely a test setup here will never have a read lease, but good
 		// to keep in mind.
@@ -252,21 +252,21 @@ func TestSendRPCOrder(t *testing.T) {
 		},
 
 		// Scan without matching attributes that requires but does not find
-		// a leader.
+		// a lease holder.
 		{
 			args:       &roachpb.ScanRequest{},
 			attrs:      []string{},
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 			consistent: true,
 		},
-		// Put without matching attributes that requires but does not find leader.
+		// Put without matching attributes that requires but does not find lease holder.
 		// Should go random and not change anything.
 		{
 			args:       &roachpb.PutRequest{},
 			attrs:      []string{"nomatch"},
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
-		// Put with matching attributes but no leader.
+		// Put with matching attributes but no lease holder.
 		// Should move the two nodes matching the attributes to the front.
 		{
 			args:  &roachpb.PutRequest{},
@@ -274,24 +274,24 @@ func TestSendRPCOrder(t *testing.T) {
 			// Compare only the first two resulting addresses.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
-		// Put with matching attributes that finds the leader (node 3).
-		// Should address the leader and the two nodes matching the attributes
+		// Put with matching attributes that finds the lease holder (node 3).
+		// Should address the lease holder and the two nodes matching the attributes
 		// (the last and second to last) in that order.
 		{
 			args:  &roachpb.PutRequest{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
-			// Compare only the first resulting addresses as we have a leader
+			// Compare only the first resulting addresses as we have a lease holder
 			// and that means we're only trying to send there.
-			expReplica: []roachpb.NodeID{2, 5, 4, 0, 0},
-			leader:     2,
+			expReplica:  []roachpb.NodeID{2, 5, 4, 0, 0},
+			leaseHolder: 2,
 		},
-		// Inconsistent Get without matching attributes but leader (node 3). Should just
-		// go random as the leader does not matter.
+		// Inconsistent Get without matching attributes but lease holder (node 3). Should just
+		// go random as the lease holder does not matter.
 		{
-			args:       &roachpb.GetRequest{},
-			attrs:      []string{},
-			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
-			leader:     2,
+			args:        &roachpb.GetRequest{},
+			attrs:       []string{},
+			expReplica:  []roachpb.NodeID{1, 2, 3, 4, 5},
+			leaseHolder: 2,
 		},
 	}
 
@@ -357,9 +357,9 @@ func TestSendRPCOrder(t *testing.T) {
 			}
 		}
 
-		ds.leaderCache.Update(roachpb.RangeID(rangeID), roachpb.ReplicaDescriptor{})
-		if tc.leader > 0 {
-			ds.leaderCache.Update(roachpb.RangeID(rangeID), descriptor.Replicas[tc.leader-1])
+		ds.leaseHolderCache.Update(roachpb.RangeID(rangeID), roachpb.ReplicaDescriptor{})
+		if tc.leaseHolder > 0 {
+			ds.leaseHolderCache.Update(roachpb.RangeID(rangeID), descriptor.Replicas[tc.leaseHolder-1])
 		}
 
 		args := tc.args
@@ -497,13 +497,13 @@ func TestImmutableBatchArgs(t *testing.T) {
 	}
 }
 
-// TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
-// leader cache and retries when receiving a NotLeaderError.
-func TestRetryOnNotLeaderError(t *testing.T) {
+// TestRetryOnNotLeaseHolderError verifies that the DistSender correctly updates the
+// lease holder cache and retries when receiving a NotLeaseHolderError.
+func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
-	leader := roachpb.ReplicaDescriptor{
+	leaseHolder := roachpb.ReplicaDescriptor{
 		NodeID:  99,
 		StoreID: 999,
 	}
@@ -514,7 +514,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		if first {
 			reply := &roachpb.BatchResponse{}
 			reply.Error = roachpb.NewError(
-				&roachpb.NotLeaderError{Leader: &leader, Replica: &roachpb.ReplicaDescriptor{}})
+				&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder, Replica: &roachpb.ReplicaDescriptor{}})
 			first = false
 			return reply, nil
 		}
@@ -535,10 +535,10 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		t.Errorf("The command did not retry")
 	}
 	rangeID := roachpb.RangeID(2)
-	if cur, ok := ds.leaderCache.Lookup(rangeID); !ok {
-		t.Errorf("leader cache was not updated: expected %+v", leader)
-	} else if cur.StoreID != leader.StoreID {
-		t.Errorf("leader cache was not updated: expected %+v, got %+v", leader, cur)
+	if cur, ok := ds.leaseHolderCache.Lookup(rangeID); !ok {
+		t.Errorf("lease holder cache was not updated: expected %+v", leaseHolder)
+	} else if cur.StoreID != leaseHolder.StoreID {
+		t.Errorf("lease holder cache was not updated: expected %+v, got %+v", leaseHolder, cur)
 	}
 }
 
@@ -590,7 +590,7 @@ func TestEvictCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// if rpcError is true, the first attempt gets an RPC error, otherwise
 	// the RPC call succeeds but there is an error in the RequestHeader.
-	// Currently leader and cached range descriptor are treated equally.
+	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
 	testCases := []struct{ rpcError, retryable, shouldClearLeader, shouldClearReplica bool }{
 		{false, false, false, false}, // non-retryable replica error
@@ -641,7 +641,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, errString) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
-		if _, ok := ds.leaderCache.Lookup(1); ok != !tc.shouldClearLeader {
+		if _, ok := ds.leaseHolderCache.Lookup(1); ok != !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %t", i, tc.shouldClearLeader, ok)
 		}
 		if _, cachedDesc, err := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */); err != nil {
@@ -1705,9 +1705,9 @@ func (t *slowLeaderTransport) SendNext(done chan BatchCall) {
 		// Save the first request to finish later.
 		t.slowReqChan = done
 	} else {
-		// Other requests fail immediately with NotLeaderError.
+		// Other requests fail immediately with NotLeaseHolderError.
 		var br roachpb.BatchResponse
-		br.Error = roachpb.NewError(&roachpb.NotLeaderError{})
+		br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{})
 		done <- BatchCall{Reply: &br}
 	}
 	t.count++
@@ -1716,9 +1716,9 @@ func (t *slowLeaderTransport) SendNext(done chan BatchCall) {
 func (t *slowLeaderTransport) Close() {
 }
 
-// TestSlowLeaderRetry verifies that when the leader is slow, we wait
+// TestSlowLeaderRetry verifies that when the lease holder is slow, we wait
 // for it to finish, instead of restarting the process because of
-// NotLeaderErrors returned by faster followers.
+// NotLeaseHolderErrors returned by faster followers.
 func TestSlowLeaderRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)

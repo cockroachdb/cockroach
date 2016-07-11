@@ -255,7 +255,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.ResolveIntentRangeRequest:
 			case *roachpb.MergeRequest:
 			case *roachpb.TruncateLogRequest:
-			case *roachpb.LeaderLeaseRequest:
+			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
 			case *roachpb.ChangeFrozenRequest:
 			}

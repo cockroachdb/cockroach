@@ -25,7 +25,7 @@ import (
 
 func TestLeaderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	lc := newLeaderCache(3)
+	lc := newLeaseHolderCache(3)
 	if repDesc, ok := lc.Lookup(12); ok {
 		t.Errorf("lookup of missing key returned: %+v", repDesc)
 	}
