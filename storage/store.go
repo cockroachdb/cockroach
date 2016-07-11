@@ -1825,9 +1825,13 @@ func (s *Store) ReplicaCount() int {
 // specified through the incoming BatchRequest, and it is not guaranteed that
 // all operations are written at the same timestamp. If it is transactional, a
 // timestamp must not be set - it is deduced automatically from the
-// transaction. Should a transactional operation be forced to a higher
-// timestamp (for instance due to the timestamp cache), the response will have
-// a transaction set which should be used to update the client transaction.
+// transaction. In particular, the read (original) timestamp will be used for
+// all reads _and writes_ (see the TxnMeta.OrigTimestamp for details).
+//
+// Should a transactional operation be forced to a higher timestamp (for
+// instance due to the timestamp cache or finding a committed value in the path
+// of one of its writes), the response will have a transaction set which should
+// be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	ctx = s.context(ctx)
 

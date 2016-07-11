@@ -1768,7 +1768,7 @@ func mvccResolveWriteIntent(
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
 	pushed := intent.Status == roachpb.PENDING &&
-		meta.Txn.Timestamp.Less(intent.Txn.Timestamp) &&
+		meta.Timestamp.Less(intent.Txn.Timestamp) &&
 		meta.Txn.Epoch >= intent.Txn.Epoch
 
 	// If we're committing, or if the commit timestamp of the intent has
