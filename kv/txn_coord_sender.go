@@ -626,7 +626,8 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
-	// Grab the intents and clone the txn to avoid data races.
+	// Clone the intents and the txn to avoid data races.
+	txnMeta.keys = append([]roachpb.Span(nil), txnMeta.keys...)
 	roachpb.MergeSpans(&txnMeta.keys)
 	intentSpans := txnMeta.keys
 	txnMeta.keys = nil
