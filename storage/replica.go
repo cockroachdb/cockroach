@@ -939,7 +939,6 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 	//   directly into the local range they're servicing.
 	if ba.Timestamp.Equal(hlc.ZeroTimestamp) {
 		if ba.Txn != nil {
-			// TODO(tschottdorf): see if this is already done somewhere else.
 			ba.Timestamp = ba.Txn.OrigTimestamp
 		} else {
 			ba.Timestamp = r.store.Clock().Now()
@@ -1009,6 +1008,14 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 //
 // TODO(tschottdorf): find a way not to update the batch txn
 //   which should be immutable.
+// TODO(tschottdorf): Things look fishy here. We're updating txn.Timestamp in
+// multiple places, but there's apparently nothing that forces the remainder of
+// request processing to return that updated transaction with a response. In
+// effect, we're running in danger of writing at higher timestamps than the
+// client (and thus the commit!) are aware of. If there's coverage of these
+// code paths, I wonder how it works if not for data races or some brittle
+// code path a stack frame higher up. Should really address that previous
+// TODO.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -2227,6 +2234,7 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 	}
 }
 
+// TODO(tschottdorf): Reliance on mutating `ba.Txn` should be dealt with.
 func (r *Replica) executeBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey,
 	batch engine.ReadWriter, ms *enginepb.MVCCStats, ba roachpb.BatchRequest) (
