@@ -55,6 +55,8 @@ interface NodeColumnDescriptor {
   // in a collection. This is used to display an appropriate "total" value for
   // each column.
   rollup?: (ns: NodeStatus[]) => React.ReactNode;
+  // className to be applied to the td elements
+  className?: string;
 }
 
 /**
@@ -96,6 +98,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
         <span className="missing">{statuses.missing || 0}</span>
       </div>;
     },
+    className: "expand-link",
   },
   // Started at - displays the time that the node started.
   {
@@ -151,6 +154,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
     key: NodesTableColumn.Logs,
     title: "Logs",
     cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
+    className: "expand-link",
   },
 ];
 
@@ -220,6 +224,7 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
           cell: (index) => cd.cell(statuses[index]),
           sortKey: cd.sort ? cd.key : undefined,
           rollup: rollups[cd.key],
+          className: cd.className,
         };
       });
     });

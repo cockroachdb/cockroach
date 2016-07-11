@@ -17,6 +17,8 @@ export interface SortableColumn {
   // indicating sort order. If not provided, the column is not considered
   // sortable.
   sortKey?: any;
+  // className is a classname to apply to the td elements
+  className?: string;
 }
 
 /**
@@ -119,7 +121,7 @@ export class SortableTable extends React.Component<TableProps, {}> {
       <tbody>
         {_.times(this.props.count, (rowIndex) => {
           return <tr key={rowIndex}>
-            {_.map(columns, (c: SortableColumn, colIndex: number) => <td key={colIndex}>{c.cell(rowIndex)}</td>)}
+            {_.map(columns, (c: SortableColumn, colIndex: number) => <td className={c.className} key={colIndex}>{c.cell(rowIndex)}</td>)}
             </tr>;
         })}
       </tbody>
