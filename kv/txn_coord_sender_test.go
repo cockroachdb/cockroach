@@ -566,6 +566,40 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	verifyCleanup(key, sender, s.Eng, t)
 }
 
+func TestTxnCoordSenderCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sender := createTestDB(t)
+	defer s.Stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	origSender := sender.wrapped
+	sender.wrapped = client.SenderFunc(
+		func(ctx context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if _, hasET := args.GetArg(roachpb.EndTransaction); hasET {
+				// Cancel the transaction while also sending it along. This tickled a
+				// data race in TxnCoordSender.tryAsyncAbort. See #7726.
+				cancel()
+			}
+			return origSender.Send(ctx, args)
+		})
+
+	// Create a transaction with bunch of intents.
+	txn := client.NewTxn(ctx, *s.DB)
+	batch := txn.NewBatch()
+	for i := 0; i < 100; i++ {
+		key := roachpb.Key(fmt.Sprintf("%d", i))
+		batch.Put(key, []byte("value"))
+	}
+	if err := txn.Run(batch); err != nil {
+		t.Fatal(err)
+	}
+
+	// Commit the transaction. Note that we cancel the transaction when the
+	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code path.
+	_ = txn.CommitOrCleanup()
+}
+
 // TestTxnCoordSenderGCTimeout verifies that the coordinator cleans up extant
 // transactions and intents after the lastUpdateNanos exceeds the timeout.
 func TestTxnCoordSenderGCTimeout(t *testing.T) {
