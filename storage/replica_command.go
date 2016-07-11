@@ -1588,10 +1588,11 @@ func (r *Replica) TransferLease(
 //
 // r.mu needs to be locked.
 func (r *Replica) applyNewLeaseLocked(
-	ctx context.Context, batch engine.ReadWriter,
-	ms *enginepb.MVCCStats, lease roachpb.Lease) (
-	roachpb.RequestLeaseResponse, error,
-) {
+	ctx context.Context,
+	batch engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	lease roachpb.Lease,
+) (roachpb.RequestLeaseResponse, error) {
 	prevLease := r.mu.state.Lease
 	// Ensure Start < StartStasis <= Expiration.
 	if !lease.Start.Less(lease.StartStasis) ||
@@ -1620,6 +1621,19 @@ func (r *Replica) applyNewLeaseLocked(
 		return reply, err
 	}
 	r.mu.state.Lease = &lease
+
+	if r.IsFirstRange() && lease.Covers(r.store.Clock().Now()) {
+		// Gossip the first range whenever its lease is acquired. We check to make
+		// sure the lease is active so that a trailing replica won't process an old
+		// lease request and attempt to gossip the first range.
+		//
+		// TODO(peter): This might be excessive. We could avoid gossiping if the
+		// range descriptor hasn't changed recently though we'd have to figure out
+		// what reliable signal to use to determine that.
+		batch.(engine.Batch).Defer(func() {
+			r.gossipFirstRange(ctx)
+		})
+	}
 
 	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
