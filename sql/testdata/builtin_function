@@ -1064,3 +1064,7 @@ query I
 SELECT strpos(version(), 'CockroachDB')
 ----
 1
+
+# Don't panic during incorrect use of * (#7727)
+query error pq: unexpected star: COS\(\*\)
+SELECT COS(*) FROM system.namespace

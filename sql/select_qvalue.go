@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/pkg/errors"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
@@ -153,31 +154,26 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 	case *parser.FuncExpr:
 		// Special case handling for COUNT(*). This is a special construct to
 		// count the number of rows; in this case * does NOT refer to a set of
-		// columns.
-		if len(t.Name.Indirect) > 0 || !strings.EqualFold(string(t.Name.Base), "count") {
-			break
+		// columns. A * is invalid elsewhere.
+		isCount := len(t.Name.Indirect) == 0 && strings.EqualFold(string(t.Name.Base), "count")
+		for i, e := range t.Exprs {
+			qname, ok := e.(*parser.QualifiedName)
+			if !ok {
+				continue
+			}
+			v.err = qname.NormalizeColumnName()
+			if v.err != nil {
+				return false, expr
+			}
+			if qname.IsStar() {
+				if isCount && i == 0 {
+					t = t.CopyNode()
+					t.Exprs[i] = starDatumInstance
+					return true, t
+				}
+				v.err = errors.Errorf("unexpected star: %v", t)
+			}
 		}
-		// The COUNT function takes a single argument. Exit out if this isn't true
-		// as this will be detected during expression evaluation.
-		if len(t.Exprs) != 1 {
-			break
-		}
-		qname, ok := t.Exprs[0].(*parser.QualifiedName)
-		if !ok {
-			break
-		}
-		v.err = qname.NormalizeColumnName()
-		if v.err != nil {
-			return false, expr
-		}
-		if !qname.IsStar() {
-			// This will cause us to recurse into the arguments of the function which
-			// will perform normal qualified name resolution.
-			break
-		}
-		// Replace the function argument with a special non-NULL VariableExpr.
-		t = t.CopyNode()
-		t.Exprs[0] = starDatumInstance
 		return true, t
 
 	case *parser.Subquery:
