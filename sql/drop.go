@@ -259,6 +259,21 @@ func (n *dropIndexNode) Start() error {
 		if err := n.p.writeTableDesc(tableDesc); err != nil {
 			return err
 		}
+		// Record index drop in the event log.
+		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+			EventLogDropIndex,
+			int32(tableDesc.ID),
+			int32(n.p.evalCtx.NodeID),
+			struct {
+				TableName  string
+				IndexName  string
+				Statement  string
+				User       string
+				MutationID uint32
+			}{tableDesc.Name, idxName, n.n.String(), n.p.session.User, uint32(mutationID)},
+		); err != nil {
+			return err
+		}
 		n.p.notifySchemaChange(tableDesc.ID, mutationID)
 	}
 	return nil

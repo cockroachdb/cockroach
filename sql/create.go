@@ -179,6 +179,22 @@ func (n *createIndexNode) Start() error {
 		sqlbase.WrapDescriptor(n.tableDesc)); err != nil {
 		return err
 	}
+
+	// Record index creation in the event log.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateIndex,
+		int32(n.tableDesc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			TableName  string
+			IndexName  string
+			Statement  string
+			User       string
+			MutationID uint32
+		}{n.tableDesc.Name, n.n.Name.String(), n.n.String(), n.p.session.User, uint32(mutationID)},
+	); err != nil {
+		return err
+	}
 	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
 
 	return nil
