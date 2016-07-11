@@ -171,7 +171,7 @@ in-place. This is the case in which the system actually works.
 
 Assume someone decides that our heartbeat interval needs to be smaller
 (motivated by something in the coordinator) and changes
-`storage.DefaultHeartbeatInterval` without thinking it through. That variable
+`base.DefaultHeartbeatInterval` without thinking it through. That variable
 is used in `PushTxn` to decide whether the transaction record is abandoned, so
 during an update we might have transactions which are both aborted and not
 aborted. Many such examples exist and I'm afraid even Sysiphus could get tired
