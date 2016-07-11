@@ -1946,6 +1946,60 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 	}
 }
 
+func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	txn := txn1.Clone()
+	tsEarly := txn.Timestamp
+	txn.TxnMeta.Timestamp.Forward(tsEarly.Add(10, 0))
+
+	// Write an intent which has txn.Timestamp > meta.timestamp.
+	if err := MVCCPut(
+		context.Background(), engine, nil, testKey1, tsEarly, value1, &txn,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	intent := roachpb.Intent{
+		Span:   roachpb.Span{Key: testKey1},
+		Status: roachpb.PENDING,
+		// The Timestamp within is equal to that of txn.Meta even though
+		// the intent sits at tsEarly. The bug was looking at the former
+		// instead of the latter (and so we could also tickle it with
+		// smaller timestamps in Txn).
+		Txn: txn.TxnMeta,
+	}
+
+	// A bug (see #7654) caused intents to just stay where they were instead
+	// of being moved forward in the situation set up above.
+	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, intent); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, test := range []struct {
+		hlc.Timestamp
+		found bool
+	}{
+		// Check that the intent has indeed moved to where we pushed it.
+		{tsEarly, false},
+		{intent.Txn.Timestamp.Prev(), false},
+		{intent.Txn.Timestamp, true},
+		{hlc.MaxTimestamp, true},
+	} {
+		_, _, err := MVCCGet(
+			context.Background(), engine, testKey1, test.Timestamp, true, nil,
+		)
+
+		if _, ok := err.(*roachpb.WriteIntentError); ok != test.found {
+			t.Fatalf("%d: expected write intent error: %t, got %v", i, test.found, err)
+		}
+	}
+
+}
+
 // TestMVCCConditionalPutOldTimestamp tests a case where a conditional
 // put with an older timestamp happens after a put with a newer timestamp.
 //
