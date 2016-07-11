@@ -87,6 +87,10 @@ func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
 
 // Finish releases resources held by the Session.
 func (s *Session) Finish() {
+	// Cleanup leases. We might have unreleased leases if we're finishing the
+	// session abruptly in the middle of a transaction, or, until #7648 is
+	// addressed, there might be leases accumulated by preparing statements.
+	s.planner.releaseLeases()
 	if s.Trace != nil {
 		s.Trace.Finish()
 		s.Trace = nil
