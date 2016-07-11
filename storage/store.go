@@ -298,12 +298,15 @@ type Store struct {
 	metrics                 *storeMetrics
 	intentResolver          *intentResolver
 	wakeRaftLoop            chan struct{}
-	started                 int32
-	stopper                 *stop.Stopper
-	startedAt               int64
-	nodeDesc                *roachpb.NodeDescriptor
-	initComplete            sync.WaitGroup // Signaled by async init tasks
-	bookie                  *bookie
+	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
+	// ops.
+	started int32
+	stopper *stop.Stopper
+	// The time when the store was Start()ed, in nanos.
+	startedAt    int64
+	nodeDesc     *roachpb.NodeDescriptor
+	initComplete sync.WaitGroup // Signaled by async init tasks
+	bookie       *bookie
 
 	// This is 1 if there is an active raft snapshot. This field must be checked
 	// and set atomically.
@@ -495,6 +498,10 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// LeaseTransferBlockedOnExtensionEvent, if set, is called when
+	// replica.TransferLease() encounters an in-progress lease extension.
+	// nextLeader is the replica that we're trying to transfer the lease to.
+	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -2522,7 +2529,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 		}
 		repDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
-			if _, ok := err.(*errReplicaNotInRange); ok {
+			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
 				return true
 			}
 			log.Fatalf("unexpected error: %s", err)

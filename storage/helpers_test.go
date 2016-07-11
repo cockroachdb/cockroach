@@ -149,3 +149,8 @@ func (rs *replicaScanner) SetDisabled(disabled bool) {
 		atomic.StoreInt32(&rs.disabled, 0)
 	}
 }
+
+// GetLease exposes replica.getLease for tests.
+func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
+	return r.getLease()
+}
