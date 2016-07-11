@@ -123,10 +123,12 @@
 		RaftSnapshotData
 		Attributes
 		ReplicaDescriptor
+		ReplicaIdentifier
 		RangeDescriptor
 		StoreCapacity
 		NodeDescriptor
 		StoreDescriptor
+		StoreDeadReplicas
 */
 package roachpb
 

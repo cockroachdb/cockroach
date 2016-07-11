@@ -201,10 +201,12 @@ export interface roachpbBuilder {
 	decode64(buffer: string) : roachpbMessage;
 	Attributes: roachpb.AttributesBuilder;
 	ReplicaDescriptor: roachpb.ReplicaDescriptorBuilder;
+	ReplicaIdentifier: roachpb.ReplicaIdentifierBuilder;
 	RangeDescriptor: roachpb.RangeDescriptorBuilder;
 	StoreCapacity: roachpb.StoreCapacityBuilder;
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
 	StoreDescriptor: roachpb.StoreDescriptorBuilder;
+	StoreDeadReplicas: roachpb.StoreDeadReplicasBuilder;
 	Span: roachpb.SpanBuilder;
 	Value: roachpb.ValueBuilder;
 	KeyValue: roachpb.KeyValueBuilder;
@@ -313,6 +315,51 @@ export interface ReplicaDescriptorBuilder {
 	decode(buffer: ArrayBuffer) : ReplicaDescriptorMessage;
 	decode(buffer: ByteBuffer) : ReplicaDescriptorMessage;
 	decode64(buffer: string) : ReplicaDescriptorMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.roachpb {
+	
+	export interface ReplicaIdentifier {
+	
+		
+
+range_id?: Long;
+		
+
+getRangeId?() : Long;
+		setRangeId?(rangeId : Long): void;
+		
+
+
+
+replica?: ReplicaDescriptor;
+		
+
+getReplica?() : ReplicaDescriptor;
+		setReplica?(replica : ReplicaDescriptor): void;
+		
+
+
+
+}
+	
+	export interface ReplicaIdentifierMessage extends ReplicaIdentifier {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ReplicaIdentifierBuilder {
+	new(data?: ReplicaIdentifier): ReplicaIdentifierMessage;
+	decode(buffer: ArrayBuffer) : ReplicaIdentifierMessage;
+	decode(buffer: ByteBuffer) : ReplicaIdentifierMessage;
+	decode64(buffer: string) : ReplicaIdentifierMessage;
 	
 }
 	
@@ -556,6 +603,51 @@ export interface StoreDescriptorBuilder {
 	decode(buffer: ArrayBuffer) : StoreDescriptorMessage;
 	decode(buffer: ByteBuffer) : StoreDescriptorMessage;
 	decode64(buffer: string) : StoreDescriptorMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.roachpb {
+	
+	export interface StoreDeadReplicas {
+	
+		
+
+store_id?: number;
+		
+
+getStoreId?() : number;
+		setStoreId?(storeId : number): void;
+		
+
+
+
+replicas?: ReplicaIdentifier[];
+		
+
+getReplicas?() : ReplicaIdentifier[];
+		setReplicas?(replicas : ReplicaIdentifier[]): void;
+		
+
+
+
+}
+	
+	export interface StoreDeadReplicasMessage extends StoreDeadReplicas {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface StoreDeadReplicasBuilder {
+	new(data?: StoreDeadReplicas): StoreDeadReplicasMessage;
+	decode(buffer: ArrayBuffer) : StoreDeadReplicasMessage;
+	decode(buffer: ByteBuffer) : StoreDeadReplicasMessage;
+	decode64(buffer: string) : StoreDeadReplicasMessage;
 	
 }
 	

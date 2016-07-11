@@ -415,12 +415,12 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	err = rng1.withRaftGroup(func(r *raft.RawNode) error {
 		return errors.Errorf("unexpectedly created a raft group")
 	})
-	expected := "replica .* was garbage collected"
-	if !testutils.IsError(err, expected) {
-		t.Fatalf("expected error %s, but got %v", expected, err)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	_, _, err = rng1.proposeRaftCommand(context.TODO(), roachpb.BatchRequest{})
+	expected := "replica .* was garbage collected"
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected error %s, but got %v", expected, err)
 	}

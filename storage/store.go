@@ -62,6 +62,9 @@ const (
 	defaultAsyncSnapshotMaxAge      = time.Minute
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
+	// deadReplicasGossipInterval is the interval at which stores gossip
+	// information about their dead replicas.
+	deadReplicasGossipInterval = 5 * time.Second
 
 	// TODO(bdarnell): Determine the right size for this cache. Should
 	// the cache be partitioned so that replica descriptors from the
@@ -1192,6 +1195,19 @@ func (s *Store) startGossip() {
 			}
 		}
 	})
+
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(deadReplicasGossipInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.GossipDeadReplicas()
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // maybeGossipFirstRange checks whether the store has a replica of the
@@ -1262,6 +1278,27 @@ func (s *Store) GossipStore() {
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
+		log.Warningc(ctx, "%s", err)
+	}
+}
+
+// GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
+func (s *Store) GossipDeadReplicas() {
+	ctx := s.context(context.TODO())
+
+	deadReplicas, err := s.deadReplicas()
+	if err != nil {
+		log.Warningc(ctx, "problem getting dead replicas for store %+v: %v", s.Ident, err)
+		return
+	}
+	// Don't gossip if there's nothing to gossip.
+	if len(deadReplicas.Replicas) == 0 {
+		return
+	}
+	// Unique gossip key per store.
+	key := gossip.MakeDeadReplicasKey(s.StoreID())
+	// Gossip dead replicas.
+	if err := s.ctx.Gossip.AddInfoProto(key, deadReplicas, deadReplicasGossipInterval); err != nil {
 		log.Warningc(ctx, "%s", err)
 	}
 }
@@ -1810,6 +1847,34 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}, nil
 }
 
+func (s *Store) deadReplicas() (*roachpb.StoreDeadReplicas, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deadReplicas []roachpb.ReplicaIdentifier
+	for rangeID, repl := range s.mu.replicas {
+		repl.mu.Lock()
+		destroyed := repl.mu.destroyed
+		repl.mu.Unlock()
+
+		desc, err := repl.GetReplicaDescriptor()
+		if err != nil {
+			return nil, err
+		}
+		if destroyed != nil {
+			deadReplicas = append(deadReplicas, roachpb.ReplicaIdentifier{
+				RangeID: rangeID,
+				Replica: desc,
+			})
+		}
+	}
+
+	return &roachpb.StoreDeadReplicas{
+		StoreID:  s.StoreID(),
+		Replicas: deadReplicas,
+	}, nil
+}
+
 // ReplicaCount returns the number of replicas contained by this store.
 func (s *Store) ReplicaCount() int {
 	s.mu.Lock()
@@ -2226,12 +2291,7 @@ func (s *Store) processRaft() {
 				sem.acquire()
 				go func(r *Replica) {
 					if err := r.handleRaftReady(); err != nil {
-						// Silently ignore corruption errors that have been processed. If
-						// they haven't been processed that means there was an error
-						// persisting it to disk, and we can't recover.
-						if cErr, ok := err.(*roachpb.ReplicaCorruptionError); !ok || !cErr.Processed {
-							panic(err) // TODO(bdarnell)
-						}
+						panic(err) // TODO(bdarnell)
 					}
 					wg.Done()
 					sem.release()

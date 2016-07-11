@@ -96,7 +96,7 @@ func (rq *replicateQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(*zone, desc, repl.deadReplicas())
+	action, priority := rq.allocator.ComputeAction(*zone, desc)
 	if action != AllocatorNoop {
 		return true, priority
 	}
@@ -117,12 +117,11 @@ func (rq *replicateQueue) process(
 	if err != nil {
 		return err
 	}
-	deadReplicas := repl.deadReplicas()
-	action, _ := rq.allocator.ComputeAction(*zone, desc, deadReplicas)
+	action, _ := rq.allocator.ComputeAction(*zone, desc)
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas = append(deadReplicas, rq.allocator.storePool.deadReplicas(desc.Replicas)...)
+	deadReplicas := rq.allocator.storePool.deadReplicas(desc.Replicas)
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {

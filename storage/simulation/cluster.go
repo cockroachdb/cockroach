@@ -285,7 +285,7 @@ func (c *Cluster) gossipStores() {
 func (c *Cluster) prepareActions() {
 	for _, r := range c.ranges {
 		for storeID, rep := range r.replicas {
-			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc, nil)
+			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if rep.action == storage.AllocatorNoop {
 				rep.rebalance = r.allocator.ShouldRebalance(storeID)
 				// Set the priority to 1 so that rebalances will occur in

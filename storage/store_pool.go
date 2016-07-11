@@ -67,6 +67,7 @@ type storeDetail struct {
 	throttledUntil  time.Time
 	lastUpdatedTime hlc.Timestamp // This is also the priority for the queue.
 	index           int           // index of the item in the heap, required for heap.Interface
+	deadReplicas    []roachpb.ReplicaIdentifier
 }
 
 // markDead sets the storeDetail to dead(inactive).
@@ -230,6 +231,8 @@ func NewStorePool(
 	heap.Init(&sp.mu.queue)
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
+	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
+	g.RegisterCallback(deadReplicasRegex, sp.deadReplicasGossipUpdate)
 	sp.start(stopper)
 
 	return sp
@@ -254,6 +257,24 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	}
 	detail.markAlive(sp.clock.Now(), &storeDesc)
 	sp.mu.queue.enqueue(detail)
+}
+
+// deadReplicasGossipUpdate is the gossip callback used to keep the StorePool up to date.
+func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
+	var replicas roachpb.StoreDeadReplicas
+	if err := content.GetProto(&replicas); err != nil {
+		log.Error(err)
+		return
+	}
+
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	// Does this storeDetail exist yet?
+	detail, ok := sp.mu.stores[replicas.StoreID]
+	if !ok {
+		return
+	}
+	detail.deadReplicas = replicas.Replicas
 }
 
 // start will run continuously and mark stores as offline if they haven't been
@@ -339,8 +360,22 @@ func (sp *StorePool) deadReplicas(repls []roachpb.ReplicaDescriptor) []roachpb.R
 
 	var deadReplicas []roachpb.ReplicaDescriptor
 	for _, repl := range repls {
-		if sp.getStoreDetailLocked(repl.StoreID).dead {
+		detail := sp.getStoreDetailLocked(repl.StoreID)
+		// Mark replica as dead if store is dead.
+		if detail.dead {
 			deadReplicas = append(deadReplicas, repl)
+			continue
+		}
+
+		// Mark replica as dead if store descriptor has it as dead.
+		if detail.desc == nil {
+			continue
+		}
+		for _, replIdent := range detail.deadReplicas {
+			if replIdent.Replica.ReplicaID == repl.ReplicaID {
+				deadReplicas = append(deadReplicas, repl)
+				break
+			}
 		}
 	}
 	return deadReplicas
