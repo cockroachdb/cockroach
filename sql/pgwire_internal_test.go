@@ -73,11 +73,16 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	if ts == nil {
 		t.Fatal("table state not found")
 	}
+	ts.mu.Lock()
 	if len(ts.active.data) != 1 {
+		ts.mu.Unlock()
 		t.Fatalf("expected one lease, found: %d", len(ts.active.data))
 	}
+	ts.mu.Unlock()
 	// Wait for the lease to be released.
 	util.SucceedsSoon(t, func() error {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
 		if ts.active.data[0].refcount != 0 {
 			return errors.Errorf(
 				"expected lease to be unused, found refcount: %d", ts.active.data[0].refcount)
