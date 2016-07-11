@@ -58,7 +58,7 @@ func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 	}
 	rq.baseQueue = makeBaseQueue("replicate", rq, g, queueConfig{
 		maxSize:              replicateQueueMaxSize,
-		needsLeaderLease:     true,
+		needsLease:           true,
 		acceptsUnsplitRanges: false,
 	})
 

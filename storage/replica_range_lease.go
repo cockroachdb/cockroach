@@ -15,7 +15,7 @@
 // Author: Andrei Matei (andreimatei1@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-// This file contains replica methods related to LeaderLeases.
+// This file contains replica methods related to range leases.
 
 package storage
 
@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
-// pendingLeaseRequest coalesces LeaderLease requests and lets callers
+// pendingLeaseRequest coalesces RequestLease requests and lets callers
 // join an in-progress one and wait for the result.
-// The actual execution of the LeaderLease Raft request is delegated to a
+// The actual execution of the RequestLease Raft request is delegated to a
 // replica.
 // Methods are not thread-safe; a pendingLeaseRequest is logically part of
 // a replica, so replica.mu should be used to synchronize all calls.
@@ -38,7 +38,7 @@ type pendingLeaseRequest struct {
 	// Slice of channels to send on after lease acquisition.
 	// If empty, then no request is in progress.
 	llChans []chan *roachpb.Error
-	// nextLease is the pending LeaderLease request, if any. It can be used to
+	// nextLease is the pending RequestLease request, if any. It can be used to
 	// figure out if we're in the process of extending our own lease.
 	nextLease roachpb.Lease
 }
@@ -53,13 +53,13 @@ func (p *pendingLeaseRequest) RequestPending() *roachpb.Lease {
 	return nil
 }
 
-// InitOrJoinRequest executes a LeaderLease command asynchronously and returns a
+// InitOrJoinRequest executes a RequestLease command asynchronously and returns a
 // promise for the result. If there's already a request in progress, we check
 // that the request is asking for a lease for the same replica as the one this
 // call wants to crown lease holder. If so, we join in waiting the results of
 // that request. If not, an error is immediately returned.
 //
-// replica is used to schedule and execute async work (proposing a LeaderLease
+// replica is used to schedule and execute async work (proposing a RequestLease
 // command). replica.mu is locked when delivering results, so calls from the
 // replica happen either before or after a result for a pending request has
 // happened.
@@ -87,12 +87,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID)
 		return llChan
 	}
-	// No request in progress. Let's propose a LeaderLease command asynchronously.
+	// No request in progress. Let's propose a Lease command asynchronously.
 	// TODO(tschottdorf): get duration from configuration, either as a
 	// config flag or, later, dynamically adjusted.
-	startStasis := timestamp.Add(int64(replica.store.ctx.leaderLeaseActiveDuration), 0)
+	startStasis := timestamp.Add(int64(replica.store.ctx.rangeLeaseActiveDuration), 0)
 	expiration := startStasis.Add(int64(replica.store.Clock().MaxOffset()), 0)
-	leaseReq := roachpb.LeaderLeaseRequest{
+	leaseReq := roachpb.RequestLeaseRequest{
 		Span: roachpb.Span{
 			Key: startKey,
 		},
@@ -104,7 +104,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		},
 	}
 	if replica.store.Stopper().RunAsyncTask(func() {
-		// Propose a LeaderLease command and wait for it to apply.
+		// Propose a RequestLease command and wait for it to apply.
 		var execPErr *roachpb.Error
 		ba := roachpb.BatchRequest{}
 		ba.Timestamp = replica.store.Clock().Now()
@@ -130,7 +130,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 				}
 			case <-replica.store.Stopper().ShouldDrain():
 				execPErr = roachpb.NewError(
-					replica.newNotLeaderError(nil, replica.store.StoreID(), replica.Desc()))
+					replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.Desc()))
 			}
 		}
 
@@ -151,11 +151,11 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		p.llChans = p.llChans[:0]
 		p.nextLease = roachpb.Lease{}
 	}) != nil {
-		// We failed to start the asynchronous task. Send a blank NotLeaderError
+		// We failed to start the asynchronous task. Send a blank NotLeaseHolderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
 		llChan <- roachpb.NewError(
-			replica.newNotLeaderError(nil, replica.store.StoreID(), replica.mu.state.Desc))
+			replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.mu.state.Desc))
 		return llChan
 	}
 	p.llChans = append(p.llChans, llChan)
@@ -177,10 +177,10 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		llChan <- roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 		return llChan
 	}
-	if r.store.IsDrainingLeadership() {
+	if r.store.IsDrainingLeases() {
 		// We've retired from active duty.
 		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID(), r.mu.state.Desc))
+		llChan <- roachpb.NewError(r.newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(

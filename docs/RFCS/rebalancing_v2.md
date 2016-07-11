@@ -22,11 +22,11 @@
 - [Alternate Allocation Strategies](#alternate-allocation-strategies)
   - [Other enhancements to distributed allocation](#other-enhancements-to-distributed-allocation)
   - [Centralized allocation strategy](#centralized-allocation-strategy)
-    - [Leader lease acquisition](#leader-lease-acquisition)
-    - [Leader lease renewal](#leader-lease-renewal)
-    - [Updating the leader’s *StoreDescriptors*](#updating-the-leaders-storedescriptors)
+    - [Allocator lease acquisition](#allocator-lease-acquisition)
+    - [Allocator lease renewal](#allocator-lease-renewal)
+    - [Updating the allocator’s *StoreDescriptors*](#updating-the-allocators-storedescriptors)
     - [Centralized decision-making](#centralized-decision-making)
-    - [Failure modes for allocation leaders](#failure-modes-for-allocation-leaders)
+    - [Failure modes for allocation lease holders](#failure-modes-for-allocation-lease-holders)
     - [Conclusion](#conclusion)
   - [CopySets](#copysets)
   - [CopySets emulation](#copysets-emulation)
@@ -39,7 +39,7 @@
 # Summary
 
 Rebalancing is the redistribution of replicas to optimize for a chosen set of heuristics. Currently,
-each range leader runs a distributed algorithm that spreads replicas as evenly as possible across
+each range lease holder runs a distributed algorithm that spreads replicas as evenly as possible across
 the stores in a cluster. We artificially limit the rate at which each node may move replicas to
 avoid the excessive thrashing of replicas that results from making independent rebalancing decisions
 based on outdated information (gossiped `StoreDescriptor`s that are up to a minute old).
@@ -61,9 +61,9 @@ offline. These are important problems that will be addressed in V3 or later.
 To allocate replicas for ranges, we currently rely on distributed
 [stateless replica relocation](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/stateless_replica_relocation.md).
 
-Each range leader is responsible for replica allocation decisions (adding and removing replicas)
+Each range lease holder is responsible for replica allocation decisions (adding and removing replicas)
 for its respective range. This is a good, simple start. However, it is particularly susceptible to
-thrashing. Because different range leaders distribute replicas independently, they don't necessarily
+thrashing. Because different range lease holders distribute replicas independently, they don't necessarily
 converge on a desirable distribution of replicas within a reasonable number of replica allocations.
 
 A number of factors contribute to this thrashing. First, there is a lack of updated information on
@@ -71,7 +71,7 @@ the current state of all stores so replication decisions typically rely on outda
 current state of the cluster is retrieved from gossiped store descriptors. However, store
 descriptors are only gossiped at an interval of once every minute. So if a store is suddenly
 overloaded with replicas, it may take up to one minute (plus gossip network propagation time) for
-its updated descriptor to reach various range leaders.
+its updated descriptor to reach various range lease holders.
 
 Secondly, until recently, our replica allocator had no limits for how fast rebalancing could occur.
 Combined with lack of data and since there is no coordination between replica allocators, an
@@ -375,11 +375,12 @@ One way to avoid the thrashing caused by multiple independently acting allocator
 all replica allocation. In this section, a possible centralized allocation strategy is described in
 detail.
 
-### Leader lease acquisition
+### Allocator lease acquisition
 
-Every second, each node checks whether there’s an allocation leader through a
-`Get(globalAllocatorKey)`. If that returns no data, the node tries to become the leader using a
-`CPut` for that key. In pseudo-code:
+Every second, each node checks whether there’s an allocation lease holder
+("allocator") through a `Get(globalAllocatorKey)`. If that returns no data, the
+node tries to become the allocator lease holder using a `CPut` for that key. In
+pseudo-code:
 
 ``` pseudocode
     every 60 seconds:
@@ -390,43 +391,43 @@ Every second, each node checks whether there’s an allocation leader through a
       }
       err := CPut(globalAllocatorKey, nodeID+"-”+expireTime, nil)
       if err != nil {
-        // Some other node became the leader.
+        // Some other node became the allocator.
         return
       }
-      // This node is now the leader.
+      // This node is now the allocator.
 ```
 
-### Leader lease renewal
+### Allocator lease renewal
 
-Near the end of the allocation leader term, the current leader does the following:
+Near the end of the allocation lease, the current allocator does the following:
 
 ``` golang
     err := CPut(globalAllocatorKey,
       nodeID+"-”+newExpireTime,
       nodeID+"-”+oldExpireTime)
     if err != nil {
-      // Re-election failed. Step down as leader.
+      // Re-election failed. Step down as allocator lease holder.
       return err
     }
-    // **Re-election succeeded**. We’re still the allocation leader.
+    // **Re-election succeeded**. We’re still the allocation lease holder.
 ```
 
-For example, if the allocation leader lease term is 60 seconds, the current allocation leader could
- try to renew its lease 55 seconds into its lease term.
+For example, if the allocation lease term is 60 seconds, the current allocation lease holder could
+ try to renew its lease 55 seconds into its term.
 
-We may want to enforce artificial leader lease term limits to more regularly exercise the lease
-acquisition code.
+We may want to enforce artificial allocator lease term limits to more regularly
+exercise the lease acquisition code.
 
-### Updating the leader’s *StoreDescriptors*
+### Updating the allocator’s *StoreDescriptors*
 
-An allocation leader needs recent store information to make effective allocation decisions.
+An allocation lease holder needs recent store information to make effective allocation decisions.
 
 This could be achieved using either of two different mechanisms: decreasing the
 interval for gossiping `StoreDescriptor`s from 60 seconds to a lower value, (perhaps 10 seconds) or
 by writing the descriptors to a system keyspace and retrieving them, possibly using inconsistent
 reads, (also every 10 seconds or so). Also, using `StoreStatus`es instead of descriptors is also an
-option. Recall that `StoreDescriptor` updates are frequent and the allocation leader is the only
-node making rebalancing decisions. So, the allocation leader could use the latest gossiped
+option. Recall that `StoreDescriptor` updates are frequent and the allocation lease holder is the only
+node making rebalancing decisions. So, the allocation lease holder could use the latest gossiped
 `StoreDescriptor`s and its knowledge of the replica allocation decisions made since the last
 `StoreDescriptor` gossip to derive the current state of replica allocation in the cluster.
 
@@ -449,15 +450,16 @@ clearly methods which may solve some of these bottlenecking problems. Ideas incl
 move ranges from high to low loads or using a "power of two" technique to randomly pick two stores
 when looking for a rebalance target.
 
-### Failure modes for allocation leaders
+### Failure modes for allocation lease holders
 
 1. Poor network connectivity.
 1. Leader node goes down.
-1. Overloaded leader node. This may be unlikely to cause problems that extend beyond one leader
-   lease term. An overloaded leader node probably wouldn’t complete its lease renewal KV transaction
-   before its lease term ends.
+1. Overloaded allocator node. This may be unlikely to cause problems that
+   extend beyond one term. An overloaded allocator node probably
+   wouldn’t complete its allocator lease renewal KV transaction before its term
+   ends.
 
-The likely failure modes can largely be alleviated by using short allocation leader lease terms.
+The likely failure modes can largely be alleviated by using short allocation lease terms.
 
 ### Conclusion
 
@@ -482,11 +484,11 @@ The likely failure modes can largely be alleviated by using short allocation lea
 - As the cluster grows, there may be performance issues that arise on the central allocator. Some
   ways to alleviate this would be to ensure that the centralized allocator itself is located on the
   same node in which all required data exists (be it tables and indexes which might be required).
-- If we use `CPuts` for leader election, the range that contains the leader key becomes a single
-  point of failure for the cluster. This could be alleviated by making the allocation leader the
-  same as the leader of the range holding the `StoreStatus` protos.
+- If we use `CPuts` for allocator election, the range that contains the leader key becomes a single
+  point of failure for the cluster. This could be alleviated by making the allocation lease holder the
+  same as the range lease holder of the range holding the `StoreStatus` protos.
 - More internal work needs to be done to support a centralized system. Be it via an election or
-  using the range leader of a specific key.
+  using the range lease holder of a specific key.
 
 ***Verdict***
 
@@ -510,7 +512,7 @@ can adapt appropriately.
 ***Advantages***
 
 - Greatly reduces the chance of data availability when >1 nodes die.
-- No central controller/leader
+- No central controller/lease holder
 - No fighting with all ranges when a new node joins or one is lost.
 - It will take a bit of time for all nodes to receive the updated gossiped network topology, so this
   might be a good way to gate the changes.

@@ -368,22 +368,22 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 		// On certain errors, we must advance our manual clock to ensure
 		// that the next attempt has a chance of succeeding.
 		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.NotLeaderError:
-			if tErr.Leader == nil {
-				// stores has the range, is *not* the Leader, but the
-				// Leader is not known; this can happen if the leader is removed
-				// from the group. Move the manual clock forward in an attempt to
-				// expire the lease.
-				t.mtc.expireLeaderLeases()
-			} else if t.mtc.stores[tErr.Leader.NodeID-1] == nil {
-				// The leader is known but down, so expire its lease.
-				t.mtc.expireLeaderLeases()
+		case *roachpb.NotLeaseHolderError:
+			if tErr.LeaseHolder == nil {
+				// stores has the range, is *not* the lease holder, but the
+				// lease holder is not known; this can happen if the lease
+				// holder is removed from the group. Move the manual clock
+				// forward in an attempt to expire the lease.
+				t.mtc.expireLeases()
+			} else if t.mtc.stores[tErr.LeaseHolder.NodeID-1] == nil {
+				// The lease holder is known but down, so expire its lease.
+				t.mtc.expireLeases()
 			}
 		}
 		done <- kv.BatchCall{Reply: br, Err: nil}
 	}) != nil {
 		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
-		t.mtc.expireLeaderLeases()
+		t.mtc.expireLeases()
 	}
 }
 
@@ -797,11 +797,11 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 	})
 }
 
-// expireLeaderLeases increments the context's manual clock far enough into the
-// future that current leader leases are expired. Useful for tests which modify
+// expireLeases increments the context's manual clock far enough into the
+// future that current range leases are expired. Useful for tests which modify
 // replica sets.
-func (m *multiTestContext) expireLeaderLeases() {
-	m.manualClock.Increment(storage.LeaderLeaseExpiration(m.stores[0], m.clock))
+func (m *multiTestContext) expireLeases() {
+	m.manualClock.Increment(storage.LeaseExpiration(m.stores[0], m.clock))
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the

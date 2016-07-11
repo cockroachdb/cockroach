@@ -133,7 +133,7 @@ Each range maintains a small (i.e. latest 10s of read timestamps),
 *in-memory* cache from key to the latest timestamp at which the
 key was read. This *read timestamp cache* is updated every time a key
 is read. The cache’s entries are evicted oldest timestamp first, updating
-the low water mark of the cache appropriately. If a new range replica leader
+the low water mark of the cache appropriately. If a new range lease holder
 is elected, it sets the low water mark for the cache to the current
 wall time + ε (ε = 99th percentile clock skew).
 
@@ -404,7 +404,7 @@ Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/ma
 
 **Cons**
 
-- Reads from non-leader replicas still require a ping to the leader to
+- Reads from non-lease holder replicas still require a ping to the lease holder
   update *read timestamp cache*.
 - Abandoned transactions may block contending writers for up to the
   heartbeat interval, though average wait is likely to be
@@ -803,23 +803,23 @@ batch processing of requests.
 Future optimizations may include two-phase elections and quiescent ranges
 (i.e. stopping traffic completely for inactive ranges).
 
-# Range Leadership (Leader Leases)
+# Range Leases
 
 As outlined in the Raft section, the replicas of a Range are organized as a
 Raft group and execute commands from their shared commit log. Going through
 Raft is an expensive operation though, and there are tasks which should only be
 carried out by a single replica at a time (as opposed to all of them).
 
-For these reasons, Cockroach introduces the concept of **Range Leadership**:
+For these reasons, Cockroach introduces the concept of **Range Leases**:
 This is a lease held for a slice of (database, i.e. hybrid logical) time and is
 established by committing a special log entry through Raft containing the
-interval the leadership is going to be active on, along with the Node:RaftID
+interval the lease is going to be active on, along with the Node:RaftID
 combination that uniquely describes the requesting replica. Reads and writes
 must generally be addressed to the replica holding the lease; if none does, any
 replica may be addressed, causing it to try to obtain the lease synchronously.
-Requests received by a non-leader (for the HLC timestamp specified in the
+Requests received by a non-lease holder (for the HLC timestamp specified in the
 request's header) fail with an error pointing at the replica's last known
-leader. These requests are retried transparently with the updated leader by the
+lease holder. These requests are retried transparently with the updated lease by the
 gateway node and never reach the client.
 
 The replica holding the lease is in charge or involved in handling
@@ -834,32 +834,32 @@ overhead of going through Raft.
 Since reads bypass Raft, a new lease holder will, among other things, ascertain
 that its timestamp cache does not report timestamps smaller than the previous
 lease holder's (so that it's compatible with reads which may have occurred on
-the former leader). This is accomplished by setting the low water mark of the
+the former lease holder). This is accomplished by setting the low water mark of the
 timestamp cache to the expiration of the previous lease plus the maximum clock
 offset.
 
 ## Relationship to Raft leadership
 
-Range leadership is completely separate from Raft leadership, and so without
-further efforts, Raft and Range leadership may not be represented by the same
+The range lease is completely separate from Raft leadership, and so without
+further efforts, Raft leadership and the Range lease may not be represented by the same
 replica most of the time. This is convenient semantically since it decouples
 these two types of leadership and allows the use of Raft as a "black box", but
 for reasons of performance, it is desirable to have both on the same replica.
 Otherwise, sending a command through Raft always incurs the overhead of being
-proposed to the Range leader's Raft instance first, which must relay it to the
+proposed to the Range lease holder's Raft instance first, which must relay it to the
 Raft leader, which finally commits it into the log and updates its followers,
-including the Range leader. This yields correct results but wastes several
+including the Range lease holder. This yields correct results but wastes several
 round-trip delays, and so we will make sure that in the vast majority of cases
-Range and Raft leadership coincide. A fairly easy method for achieving this is
+Range lease and Raft leadership coincide. A fairly easy method for achieving this is
 to have each new lease period (extension or new) be accompanied by a
 stipulation to the lease holder's replica to start Raft elections (unless it's
-already leading), though some care should be taken that Range leadership is
+already leading), though some care should be taken that Range lease holdership is
 relatively stable and long-lived to avoid a large number of Raft leadership
 transitions.
 
 ## Command Execution Flow
 
-This subsection describes how a leader replica processes a read/write
+This subsection describes how a lease holder replica processes a read/write
 command in more details. Each command specifies (1) a key (or a range
 of keys) that the command accesses and (2) the ID of a range which the
 key(s) belongs to. When receiving a command, a RoachNode looks up a
@@ -874,28 +874,28 @@ command, it is processed immediately. If the command is a consistent
 read or a write, the command is executed when both of the following
 conditions hold:
 
-- The range replica has a leader lease.
+- The range replica has a range lease.
 - There are no other running commands whose keys overlap with
 the submitted command and cause read/write conflict.
 
 When the first condition is not met, the replica attempts to acquire
 a lease or returns an error so that the client will redirect the
-command to the current leader. The second condition guarantees that
+command to the current lease holder. The second condition guarantees that
 consistent read/write commands for a given key are sequentially
 executed.
 
-When the above two conditions are met, the leader replica processes the
-command. Consistent reads are processed on the leader immediately.
+When the above two conditions are met, the lease holder replica processes the
+command. Consistent reads are processed on the lease holder immediately.
 Write commands are committed into the Raft log so that every replica
 will execute the same commands. All commands produce deterministic
 results so that the range replicas keep consistent states among them.
 
 When a write command completes, all the replica updates their response
-cache to ensure idempotency. When a read command completes, the leader
+cache to ensure idempotency. When a read command completes, the lease holder
 replica updates its timestamp cache to keep track of the latest read
 for a given key.
 
-There is a chance that a leader lease gets expired while a command is
+There is a chance that a range lease gets expired while a command is
 executed. Before executing a command, each replica checks if a replica
 proposing the command has a still lease. When the lease has been
 expired, the command will be rejected by the replica.
@@ -920,7 +920,7 @@ passing along relevant metrics if they’re in the bottom or top of the
 range it’s aware of.
 
 A range finding itself exceeding either capacity or load threshold
-splits. To this end, the range leader computes an appropriate split key
+splits. To this end, the range lease holder computes an appropriate split key
 candidate and issues the split through Raft. In contrast to splitting,
 merging requires a range to be below the minimum threshold for both
 capacity *and* load. A range being merged chooses the smaller of the
@@ -935,7 +935,7 @@ from the timestamp of the snapshot to catch up fully. Once the new
 replicas are fully up to date, the range metadata is updated and old,
 source replica(s) deleted if applicable.
 
-**Coordinator** (leader replica)
+**Coordinator** (lease holder replica)
 
 ```
 if splitting

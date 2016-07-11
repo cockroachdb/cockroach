@@ -63,7 +63,7 @@ func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
 	}
 	q.baseQueue = makeBaseQueue("replicaGC", q, gossip, queueConfig{
 		maxSize:              replicaGCQueueMaxSize,
-		needsLeaderLease:     false,
+		needsLease:           false,
 		acceptsUnsplitRanges: true,
 	})
 	return q
@@ -71,7 +71,7 @@ func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
 
 // shouldQueue determines whether a replica should be queued for GC,
 // and if so at what priority. To be considered for possible GC, a
-// replica's leader lease must not have been active for longer than
+// replica's range lease must not have been active for longer than
 // ReplicaGCQueueInactivityThreshold. Further, the last replica GC
 // check must have occurred more than ReplicaGCQueueInactivityThreshold
 // in the past.
@@ -84,7 +84,7 @@ func (*replicaGCQueue) shouldQueue(now hlc.Timestamp, rng *Replica, _ config.Sys
 
 	lastActivity := hlc.ZeroTimestamp.Add(rng.store.startedAt, 0)
 
-	lease, nextLease := rng.getLeaderLease()
+	lease, nextLease := rng.getLease()
 	if lease != nil {
 		lastActivity.Forward(lease.Expiration)
 	}
