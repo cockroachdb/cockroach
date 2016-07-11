@@ -105,6 +105,16 @@ $stats-table-tr--bg-alt = $secondary-gray-7
     .units
       font-size 12px
 
+    &.expand-link
+      padding 0
+      a
+        display block
+        width 100%
+        height 100%
+        padding 10px 15px
+    &:first-child a
+        padding-left 3em
+
   td
   th
     padding 10px 15px
@@ -122,10 +132,11 @@ table
     text-decoration none
 
 .sql-table
-  thead
-    border-left $stats-table-cell--border
-  tr
-    border-left $stats-table-cell--border
+  table
+    thead
+      border-left $stats-table-cell--border
+    tr
+      border-left $stats-table-cell--border
 
 .stat
   .title
