@@ -22,7 +22,7 @@
     "enzyme": "registry:npm/enzyme#2.2.0+20160322031343",
     "fetch-mock": "github:asvetliakov/typings-fetch-mock#308703edebf10abbde727d2d46933b26002da0bb",
     "lodash": "registry:npm/lodash#4.0.0+20160701205107",
-    "nvd3": "registry:npm/nvd3#1.8.3+20160501004949",
+    "nvd3": "github:jgoz/typed-nvd3#bbab90891c32bb78ba873d122809964adde28c38",
     "object-assign": "registry:npm/object-assign#4.0.1+20160301180549",
     "protos-builders": "file:app/js/protos.d.ts",
     "react-paginate": "file:local_typings/react-paginate.d.ts",
