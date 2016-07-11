@@ -587,10 +587,11 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 	})
 }
 
-// gossipStores broadcasts each store to the gossip network.
+// gossipStores broadcasts each store and dead replica to the gossip network.
 func (n *Node) gossipStores() {
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
 		s.GossipStore()
+		s.GossipDeadReplicas()
 		return nil
 	}); err != nil {
 		panic(err)

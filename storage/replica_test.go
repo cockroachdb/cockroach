@@ -4457,28 +4457,6 @@ func TestReplicaCorruption(t *testing.T) {
 	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
 }
 
-func TestIsReplicaCorruptionError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		err      error
-		expected bool
-	}{
-		{NewReplicaCorruptionError(errors.New("test")), true},
-		{errors.New(NewReplicaCorruptionError(errors.New("test")).Error()), true},
-		{errors.New("test"), false},
-		{nil, false},
-		// Processed error
-		{&roachpb.ReplicaCorruptionError{Processed: true}, true},
-	}
-
-	for i, tc := range testCases {
-		if out := IsReplicaCorruptionError(tc.err); out != tc.expected {
-			t.Errorf("%d. expected IsReplicaCorruptionError(%+v) = %+v; not %+v", i, tc.err, tc.expected, out)
-		}
-	}
-}
-
 // TestChangeReplicasDuplicateError tests that a replica change that would
 // use a NodeID twice in the replica configuration fails.
 func TestChangeReplicasDuplicateError(t *testing.T) {

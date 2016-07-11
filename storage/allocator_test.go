@@ -184,22 +184,30 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the
-// store pool for testing purposes.
-func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID) {
+// store pool for testing purposes. It also adds dead replicas to the stores and
+// ranges in deadReplicas.
+func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID, deadReplicas []roachpb.ReplicaIdent) {
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
 	storePool.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
-		storePool.mu.stores[storeID] = &storeDetail{
-			dead: false,
-			desc: &roachpb.StoreDescriptor{StoreID: storeID},
-		}
+		detail := newStoreDetail()
+		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		storePool.mu.stores[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
-		storePool.mu.stores[storeID] = &storeDetail{
-			dead: true,
-			desc: &roachpb.StoreDescriptor{StoreID: storeID},
+		detail := newStoreDetail()
+		detail.dead = true
+		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		storePool.mu.stores[storeID] = detail
+	}
+	for storeID, detail := range storePool.mu.stores {
+		for _, replica := range deadReplicas {
+			if storeID != replica.Replica.StoreID {
+				continue
+			}
+			detail.deadReplicas[replica.RangeID] = append(detail.deadReplicas[replica.RangeID], replica.Replica)
 		}
 	}
 }
@@ -558,18 +566,28 @@ func TestAllocatorComputeAction(t *testing.T) {
 	stopper, _, sp, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
-	// Set up seven stores. Stores six and seven are marked as dead.
-	mockStorePool(sp, []roachpb.StoreID{1, 2, 3, 4, 5}, []roachpb.StoreID{6, 7})
+	// Set up eight stores. Stores six and seven are marked as dead. Replica eight
+	// is dead.
+	mockStorePool(sp,
+		[]roachpb.StoreID{1, 2, 3, 4, 5, 8},
+		[]roachpb.StoreID{6, 7},
+		[]roachpb.ReplicaIdent{{
+			RangeID: 0,
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    8,
+				StoreID:   8,
+				ReplicaID: 8,
+			},
+		}})
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
 	testCases := []struct {
 		zone           config.ZoneConfig
 		desc           roachpb.RangeDescriptor
-		deadReplicas   []roachpb.ReplicaDescriptor
 		expectedAction AllocatorAction
 	}{
-		// Needs Three replicas, two are on dead stores.
+		// Needs three replicas, two are on dead stores.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -607,7 +625,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorRemoveDead,
 		},
-		// Needs Three replicas, one is on a dead store.
+		// Needs three replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -645,7 +663,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorRemoveDead,
 		},
-		// Needs Three replicas, one is dead.
+		// Needs three replicas, one is dead.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -675,17 +693,10 @@ func TestAllocatorComputeAction(t *testing.T) {
 						ReplicaID: 2,
 					},
 					{
-						StoreID:   3,
-						NodeID:    3,
-						ReplicaID: 3,
+						StoreID:   8,
+						NodeID:    8,
+						ReplicaID: 8,
 					},
-				},
-			},
-			deadReplicas: []roachpb.ReplicaDescriptor{
-				{
-					StoreID:   3,
-					NodeID:    3,
-					ReplicaID: 3,
 				},
 			},
 			expectedAction: AllocatorRemoveDead,
@@ -991,7 +1002,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 
 	lastPriority := float64(999999999)
 	for i, tcase := range testCases {
-		action, priority := a.ComputeAction(tcase.zone, &tcase.desc, tcase.deadReplicas)
+		action, priority := a.ComputeAction(tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
@@ -1008,7 +1019,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	a := MakeAllocator(nil /* storePool */, AllocatorOptions{})
-	action, priority := a.ComputeAction(config.ZoneConfig{}, nil, nil)
+	action, priority := a.ComputeAction(config.ZoneConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
 	}

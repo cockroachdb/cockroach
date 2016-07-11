@@ -635,7 +635,9 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	// maybeSetCorrupt should have been called.
 
 	util.SucceedsSoon(t, func() error {
+		store2.GossipDeadReplicas()
 		store0.ForceReplicationScanAndProcess()
+
 		reps := store0.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).Desc().Replicas
 		for _, rep := range reps {
 			if rep == corruptRep {

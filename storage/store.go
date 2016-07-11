@@ -1329,6 +1329,27 @@ func (s *Store) GossipStore() {
 	}
 }
 
+// GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
+func (s *Store) GossipDeadReplicas() {
+	ctx := s.context(context.TODO())
+
+	deadReplicas, err := s.deadReplicas()
+	if err != nil {
+		log.Warningc(ctx, "problem getting dead replicas for store %+v: %v", s.Ident, err)
+		return
+	}
+	// Don't gossip if there's nothing to gossip.
+	if len(deadReplicas.Replicas) == 0 {
+		return
+	}
+	// Unique gossip key per store.
+	key := gossip.MakeDeadReplicasKey(s.StoreID())
+	// Gossip dead replicas.
+	if err := s.ctx.Gossip.AddInfoProto(key, deadReplicas, ttlStoreGossip); err != nil {
+		log.Warningc(ctx, "%s", err)
+	}
+}
+
 // Bootstrap writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
@@ -1873,6 +1894,33 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}, nil
 }
 
+func (s *Store) deadReplicas() (*roachpb.StoreDeadReplicas, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deadReplicas []roachpb.ReplicaIdent
+	for rangeID, repl := range s.mu.replicas {
+		repl.mu.Lock()
+		destroyed := repl.mu.destroyed
+		desc, err := repl.getReplicaDescriptorLocked()
+		repl.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		if destroyed != nil {
+			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
+				RangeID: rangeID,
+				Replica: desc,
+			})
+		}
+	}
+
+	return &roachpb.StoreDeadReplicas{
+		StoreID:  s.StoreID(),
+		Replicas: deadReplicas,
+	}, nil
+}
+
 // ReplicaCount returns the number of replicas contained by this store.
 func (s *Store) ReplicaCount() int {
 	s.mu.Lock()
@@ -2289,12 +2337,7 @@ func (s *Store) processRaft() {
 				sem.acquire()
 				go func(r *Replica) {
 					if err := r.handleRaftReady(); err != nil {
-						// Silently ignore corruption errors that have been processed. If
-						// they haven't been processed that means there was an error
-						// persisting it to disk, and we can't recover.
-						if cErr, ok := err.(*roachpb.ReplicaCorruptionError); !ok || !cErr.Processed {
-							panic(err) // TODO(bdarnell)
-						}
+						panic(err) // TODO(bdarnell)
 					}
 					wg.Done()
 					sem.release()
