@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -72,6 +73,16 @@ type rangeLogEvent struct {
 }
 
 func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) error {
+	// Record range log event to console log.
+	var info string
+	if event.info != nil {
+		info = *event.info
+	}
+	log.Infoc(txn.Context, "Range Event: %q, range: %d, info: %s",
+		event.eventType,
+		event.rangeID,
+		info)
+
 	const insertEventTableStmt = `
 INSERT INTO system.rangelog (
   timestamp, rangeID, storeID, eventType, otherRangeID, info
