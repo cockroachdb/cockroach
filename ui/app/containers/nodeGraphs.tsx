@@ -24,7 +24,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
           <GraphGroup groupId="node.activity">
 
             <LineGraph title="SQL Connections" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.conns" title="Client Connections" />
               </Axis>
             </LineGraph>
@@ -37,7 +37,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </LineGraph>
 
             <LineGraph title="Queries Per Second" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
               </Axis>
             </LineGraph>
@@ -71,13 +71,13 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
           <GraphGroup groupId="node.queries">
 
             <LineGraph title="Reads" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
               </Axis>
             </LineGraph>
 
             <LineGraph title="Writes" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
                 <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
                 <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
@@ -85,7 +85,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </LineGraph>
 
             <LineGraph title="Transactions" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.txn.commit.count" title="Commits" nonNegativeRate />
                 <Metric name="cr.node.sql.txn.rollback.count" title="Rollbacks" nonNegativeRate />
                 <Metric name="cr.node.sql.txn.abort.count" title="Aborts" nonNegativeRate />
@@ -93,7 +93,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </LineGraph>
 
             <LineGraph title="Schema Changes" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
               </Axis>
             </LineGraph>
@@ -120,13 +120,13 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </LineGraph>
 
             <LineGraph title="Goroutine Count" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
               </Axis>
             </LineGraph>
 
             <LineGraph title="CGo Calls" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sys.cgocalls" title="CGo Calls" nonNegativeRate />
               </Axis>
             </LineGraph>
@@ -154,7 +154,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </LineGraph>
 
             <StackedAreaGraph title="Block Cache Hits/Misses" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.block.cache.hits"
                         title="Cache Hits"
                         nonNegativeRate />
@@ -173,14 +173,14 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </StackedAreaGraph>
 
             <LineGraph title="Flushes and Compactions" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.flushes" title="Flushes" nonNegativeRate />
                 <Metric name="cr.store.rocksdb.compactions" title="Compactions" nonNegativeRate />
               </Axis>
             </LineGraph>
 
             <LineGraph title="Bloom Filter Prefix" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.bloom.filter.prefix.checked"
                         title="Checked"
                         nonNegativeRate />
@@ -204,7 +204,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
             </LineGraph>
 
             <LineGraph title="Read Amplification" sources={sources}>
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" />
               </Axis>
             </LineGraph>
