@@ -54,6 +54,12 @@ func TestSchemaChangeLease(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	// Set MinLeaseDuration to always expire the lease.
+	minLeaseDuration := csql.MinLeaseDuration
+	csql.MinLeaseDuration = 2 * csql.LeaseDuration
+	defer func() {
+		csql.MinLeaseDuration = minLeaseDuration
+	}()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -92,6 +98,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("invalid expiration time: %s", time.Unix(0, newLease.ExpirationTime))
 	}
 
+	// The new lease is a brand new lease.
+	if newLease == lease {
+		t.Fatalf("leases are equal: %v", lease)
+	}
+
 	// Extending an old lease fails.
 	_, err = changer.ExtendLease(lease)
 	if err == nil {
@@ -120,6 +131,17 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	lease, err = changer.AcquireLease()
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Set MinLeaseDuration to not expire the lease.
+	csql.MinLeaseDuration = minLeaseDuration
+	newLease, err = changer.ExtendLease(lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The old lease is renewed.
+	if newLease != lease {
+		t.Fatalf("acquired new lease: %v, old lease: %v", newLease, lease)
 	}
 }
 

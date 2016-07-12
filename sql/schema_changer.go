@@ -146,7 +146,7 @@ func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChange
 	return err
 }
 
-// ExtendLease for the current leaser.
+// ExtendLease for the current leaser if necessary.
 func (sc *SchemaChanger) ExtendLease(
 	existingLease sqlbase.TableDescriptor_SchemaChangeLease,
 ) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
@@ -156,6 +156,14 @@ func (sc *SchemaChanger) ExtendLease(
 		if err != nil {
 			return err
 		}
+
+		// Check if there is still time on this lease.
+		minDesiredExpiration := timeutil.Now().Add(MinLeaseDuration)
+		if time.Unix(0, tableDesc.Lease.ExpirationTime).After(minDesiredExpiration) {
+			lease = existingLease
+			return nil
+		}
+
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
 		txn.SetSystemConfigTrigger()
