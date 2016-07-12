@@ -106,8 +106,7 @@ func (n *explainTraceNode) Next() (bool, error) {
 		if len(n.txn.CollectedSpans) == 0 {
 			if !n.exhausted {
 				n.txn.CollectedSpans = append(n.txn.CollectedSpans, basictracer.RawSpan{
-					Context: basictracer.Context{},
-					Logs:    []opentracing.LogData{{Timestamp: n.lastTS}},
+					Logs: []opentracing.LogData{{Timestamp: n.lastTS}},
 				})
 			}
 			basePos = n.lastPos + 1

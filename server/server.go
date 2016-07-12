@@ -343,7 +343,7 @@ func (s *Server) Start() error {
 
 	if tlsConfig != nil {
 		httpMux := cmux.New(httpLn)
-		clearL := httpMux.Match(cmux.HTTP1Fast())
+		clearL := httpMux.Match(cmux.HTTP1())
 		tlsL := httpMux.Match(cmux.Any())
 
 		s.stopper.RunWorker(func() {
