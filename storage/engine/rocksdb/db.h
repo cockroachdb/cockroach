@@ -67,6 +67,7 @@ typedef struct {
   bool allow_os_buffer;
   bool logging_enabled;
   int num_cpu;
+  int max_open_files;
 } DBOptions;
 
 // Create a new cache with the specified size.
