@@ -523,7 +523,7 @@ func TestRangeLeaseTransfer(t *testing.T) {
 		return err
 	})
 
-	if pErr := replica0.TransferLease(newHolderDesc); pErr != nil {
+	if pErr := replica0.AdminTransferLease(newHolderDesc); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -600,7 +600,7 @@ func TestRangeLeaseTransfer(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if pErr := replica1.TransferLease(replicaDesc); pErr != nil {
+		if pErr := replica1.AdminTransferLease(replicaDesc); pErr != nil {
 			panic(pErr)
 		}
 	}()

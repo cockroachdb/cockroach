@@ -245,26 +245,25 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		r, repDesc, timestamp, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
-// TransferLease transfers the LeaderLease to another replica. Only the current
-// holder of the LeaderLease can do a transfer, because it needs to stop serving
-// reads and proposing Raft commands (CPut is a read) after sending the transfer
-// command. If it did not stop serving reads immediately, it would potentially
-// serve reads with timestamps greater than the start timestamp of the new
-// (transferred) lease. More subtly, the replica can't even serve reads or
-// propose commands with timestamps lower than the start of the new lease
-// because it could lead to read your own write violations (see comments on the
-// stasis period in the Lease proto). We could, in principle, serve reads more
-// than the maximum clock offset in the past.
+// AdminTransferLease transfers the LeaderLease to another replica. Only the
+// current holder of the LeaderLease can do a transfer, because it needs to
+// stop serving reads and proposing Raft commands (CPut is a read) after
+// sending the transfer command. If it did not stop serving reads immediately,
+// it would potentially serve reads with timestamps greater than the start
+// timestamp of the new (transferred) lease. More subtly, the replica can't
+// even serve reads or propose commands with timestamps lower than the start of
+// the new lease because it could lead to read your own write violations (see
+// comments on the stasis period in the Lease proto). We could, in principle,
+// serve reads more than the maximum clock offset in the past.
 //
 // The method waits for any in-progress lease extension to be done, and it also
-// blocks until the transfer is done.
-// If a transfer is already in progress, this method joins in waiting for it to
-// complete if it's transferring to the same replica. Otherwise, a
-// NotLeaderError is returned.
+// blocks until the transfer is done. If a transfer is already in progress,
+// this method joins in waiting for it to complete if it's transferring to the
+// same replica. Otherwise, a NotLeaderError is returned.
 //
 // TODO(andrei): figure out how to persist the "not serving" state across node
 // restarts.
-func (r *Replica) TransferLease(nextLeader roachpb.ReplicaDescriptor) error {
+func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
