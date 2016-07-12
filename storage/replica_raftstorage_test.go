@@ -12,56 +12,72 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Tamir Duberstein (tamird@gmail.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage_test
+package storage
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
-func BenchmarkReplicaSnapshot(b *testing.B) {
-	defer tracing.Disable()()
-	defer config.TestingDisableTableSplits()()
-	store, stopper, _ := createTestStore(b)
-	// We want to manually control the size of the raft log.
-	store.DisableRaftLogQueue(true)
-	defer stopper.Stop()
+func TestApplySnapshotDenyPreemptive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
-	const rangeID = 1
-	const keySize = 1 << 7   // 128 B
-	const valSize = 1 << 10  // 1 KiB
-	const snapSize = 1 << 25 // 32 MiB
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
 
-	rep, err := store.GetReplica(rangeID)
+	key := roachpb.RKey("a")
+	realRng := tc.store.LookupReplica(key, nil)
+
+	// Use Raft to get a nontrivial term for our snapshot.
+	if pErr := realRng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	snap, err := realRng.GetSnapshot()
 	if err != nil {
-		b.Fatal(err)
+		t.Fatal(err)
 	}
 
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < snapSize/(keySize+valSize); i++ {
-		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
-		val := randutil.RandBytes(src, valSize)
-		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(rep, nil, roachpb.Header{
-			RangeID: rangeID,
-		}, &pArgs); pErr != nil {
-			b.Fatal(pErr)
-		}
+	// Make sure that the Term is behind our first range term (raftInitialLogTerm)
+	snap.Metadata.Term--
+
+	// Create an uninitialized version of the first range. This is only ok
+	// because in the case we test, there's an error (and so we don't clobber
+	// our actual first range in the Store). If we want snapshots to apply
+	// successfully during tests, we need to adapt the snapshots to a new
+	// RangeID first and generally do a lot more work.
+	rng, err := NewReplica(&roachpb.RangeDescriptor{RangeID: 1}, tc.store, 0)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := rep.GetSnapshot(); err != nil {
-			b.Fatal(err)
-		}
+	if _, err := rng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(
+		err, "cannot apply preemptive snapshot from past term",
+	) {
+		t.Fatal(err)
 	}
+
+	// Do something that extends the Raft log past what we have in the
+	// snapshot.
+	put := putArgs(roachpb.Key("a"), []byte("foo"))
+	if _, pErr := tc.SendWrapped(&put); pErr != nil {
+		t.Fatal(pErr)
+	}
+	snap.Metadata.Term++ // restore the "real" term of the snapshot
+
+	if _, err := rng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(
+		err, "would erase acknowledged log entries",
+	) {
+		t.Fatal(err)
+	}
+
 }
