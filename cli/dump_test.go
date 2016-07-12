@@ -235,7 +235,18 @@ func TestDumpRandom(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			vals := []driver.Value{_i, i, f, d, m, n, o, e, s, b}
+			vals := []driver.Value{
+				_i,
+				i,
+				f,
+				d,
+				m,
+				[]byte(n), // intervals come out as `[]byte`s
+				o,
+				[]byte(e), // decimals come out as `[]byte`s
+				string(s),
+				b,
+			}
 			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)", vals); err != nil {
 				t.Fatal(err)
 			}
@@ -261,17 +272,17 @@ func TestDumpRandom(t *testing.T) {
 
 				for i, fetchedVal := range fetched {
 					generatedVal := generatedRow[i]
-					switch t := fetchedVal.(type) {
-					case time.Time:
+					if t, ok := fetchedVal.(time.Time); ok {
+						// dates and timestamps come out with offset zero (but
+						// not UTC specifically).
 						fetchedVal = t.UTC()
-					case []uint8:
-						if _, ok := generatedVal.(string); ok {
-							fetchedVal = string(t)
-						}
 					}
 					if !reflect.DeepEqual(fetchedVal, generatedVal) {
-						t.Fatalf("NOT EQUAL: table %s, row %d, col %d\ngenerated: %#v (%T): %v\nselected: %#v (%T): %v\n", table, gi, i, generatedVal, generatedVal, generatedVal, fetchedVal, fetchedVal, fetchedVal)
+						t.Errorf("NOT EQUAL: table %s, row %d, col %d\ngenerated (%T): %v\nselected (%T): %v\n", table, gi, i, generatedVal, generatedVal, fetchedVal, fetchedVal)
 					}
+				}
+				if t.Failed() {
+					t.FailNow()
 				}
 			}
 		}

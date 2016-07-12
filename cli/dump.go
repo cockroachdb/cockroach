@@ -137,8 +137,8 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 	if err != nil {
 		return err
 	}
-	create := vals[1].([]byte)
-	if _, err := w.Write(create); err != nil {
+	create := vals[1].(string)
+	if _, err := w.Write([]byte(create)); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte(";\n")); err != nil {
@@ -186,6 +186,8 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					ivals[si] = parser.NewDInt(parser.DInt(t)).String()
 				case float64:
 					ivals[si] = parser.NewDFloat(parser.DFloat(t)).String()
+				case string:
+					ivals[si] = parser.NewDString(t).String()
 				case []byte:
 					switch ct := coltypes[cols[si]]; ct {
 					case "INTERVAL":
@@ -193,8 +195,8 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					case "DECIMAL":
 						ivals[si] = fmt.Sprintf("%s", t)
 					default:
-						// STRING and BYTES types can have optional length suffixes, so only examine
-						// the prefix of the type.
+						// STRING and BYTES types can have optional length
+						// suffixes, so only examine the prefix of the type.
 						if strings.HasPrefix(coltypes[cols[si]], "STRING") {
 							ivals[si] = parser.NewDString(string(t)).String()
 						} else if strings.HasPrefix(coltypes[cols[si]], "BYTES") {
