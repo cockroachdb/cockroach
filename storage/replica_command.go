@@ -2257,8 +2257,8 @@ func (r *Replica) AdminSplit(
 // have no way to ensure that it is continually held until the end). Followers
 // could perform splits too, and the only downside would be that if two splits
 // were attempted concurrently (or a split and a ChangeReplicas), one would
-// fail. The leader lease is used to designate one replica for this role and
-// avoid wasting time on splits that may fail.
+// fail. The lease is used to designate one replica for this role and avoid
+// wasting time on splits that may fail.
 //
 // The processing of splits is divided into two phases. The first phase occurs
 // in Replica.AdminSplit. In that phase, the split-point is computed, and a

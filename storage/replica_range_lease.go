@@ -66,7 +66,7 @@ func (p *pendingLeaseRequest) RequestPending() *roachpb.Lease {
 // happened.
 //
 // transfer needs to be set if the request represents a lease transfer (as
-// opposed to an extension, or acquiring the lease when there's no leader).
+// opposed to an extension, or acquiring the lease when none is held).
 //
 // Note: Once this function gets a context to be used for cancellation, instead
 // of replica.store.Stopper().ShouldDrain(), care will be needed for cancelling
