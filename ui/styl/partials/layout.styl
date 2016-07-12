@@ -585,11 +585,11 @@ table
   right auto
   white-space normal
 
-  .content
+  .content, .warning
     font-size 11px
     color $secondary-gray-16
     font-family Lato-Regular
-  .title
+  .title, .warning-title
     font-size 13px
     color $main-navy
     font-family Lato-Heavy
@@ -597,10 +597,18 @@ table
     width 100%
     padding-bottom 5px
 
+  .warning .icon-warning
+    color $secondary-gold
+    font-size 50px
+    width 50px
+    line-height 50px
+    margin auto
+    margin-top 5px
+
 &.viz-tooltip
     width 250px
 
-.viz-info-icon:hover + .tooltip
+.viz-info-icon:hover + .tooltip, .tooltip:hover
   display block
 
 // The last visualization tooltip should be above and to the left to avoid running off the page.
