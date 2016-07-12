@@ -14,50 +14,29 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package storage_test
+package storage
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer tracing.Disable()()
-	sCtx := storage.TestStoreContext()
+	sCtx := TestStoreContext()
 	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(b, sCtx)
+	store, _, stopper := createTestStoreWithContext(b, &sCtx)
 	defer stopper.Stop()
 	// We want to manually control the size of the raft log.
 	store.SetRaftLogQueueActive(false)
-
-	const rangeID = 1
-	const keySize = 1 << 7   // 128 B
-	const valSize = 1 << 10  // 1 KiB
-	const snapSize = 1 << 25 // 32 MiB
 
 	rep, err := store.GetReplica(rangeID)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < snapSize/(keySize+valSize); i++ {
-		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
-		val := randutil.RandBytes(src, valSize)
-		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(rep, nil, roachpb.Header{
-			RangeID: rangeID,
-		}, &pArgs); pErr != nil {
-			b.Fatal(pErr)
-		}
-	}
+	fillTestRange(b, rep, snapSize)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
