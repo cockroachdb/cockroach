@@ -596,8 +596,13 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 	}
 
 	// Commit the transaction. Note that we cancel the transaction when the
-	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code path.
-	_ = txn.CommitOrCleanup()
+	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code
+	// path. We'll either succeed or get a "does not exist" error. Anything else
+	// is unexpected.
+	err := txn.CommitOrCleanup()
+	if err != nil && !testutils.IsError(err, "does not exist") {
+		t.Fatal(err)
+	}
 }
 
 // TestTxnCoordSenderGCTimeout verifies that the coordinator cleans up extant
