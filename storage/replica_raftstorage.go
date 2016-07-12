@@ -299,6 +299,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
+			case <-r.store.Stopper().ShouldDrain():
 			}
 		}
 	}) == nil {
