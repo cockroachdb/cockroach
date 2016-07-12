@@ -54,6 +54,12 @@ func TestSchemaChangeLease(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	// Set MinSchemaChangeLeaseDuration to always expire the lease.
+	minLeaseDuration := csql.MinSchemaChangeLeaseDuration
+	csql.MinSchemaChangeLeaseDuration = 2 * csql.SchemaChangeLeaseDuration
+	defer func() {
+		csql.MinSchemaChangeLeaseDuration = minLeaseDuration
+	}()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -78,8 +84,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	if newLease, err := changer.AcquireLease(); err == nil {
-		t.Fatalf("acquired new lease: %v, while unexpired lease exists: %v", newLease, lease)
+	if _, err := changer.AcquireLease(); !testutils.IsError(
+		err, "an outstanding schema change lease exists",
+	) {
+		t.Fatal(err)
 	}
 
 	// Extend the lease.
@@ -92,10 +100,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("invalid expiration time: %s", time.Unix(0, newLease.ExpirationTime))
 	}
 
+	// The new lease is a brand new lease.
+	if newLease == lease {
+		t.Fatalf("lease was not extended: %v", lease)
+	}
+
 	// Extending an old lease fails.
-	_, err = changer.ExtendLease(lease)
-	if err == nil {
-		t.Fatal("extending an old lease succeeded")
+	if _, err := changer.ExtendLease(lease); !testutils.IsError(err, "table: .* has lease") {
+		t.Fatal(err)
 	}
 
 	// Releasing an old lease fails.
@@ -120,6 +132,17 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	lease, err = changer.AcquireLease()
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Set MinSchemaChangeLeaseDuration to not expire the lease.
+	csql.MinSchemaChangeLeaseDuration = minLeaseDuration
+	newLease, err = changer.ExtendLease(lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The old lease is renewed.
+	if newLease != lease {
+		t.Fatalf("acquired new lease: %v, old lease: %v", newLease, lease)
 	}
 }
 

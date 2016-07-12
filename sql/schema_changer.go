@@ -35,6 +35,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	// SchemaChangeLeaseDuration is the duration a lease will be acquired for.
+	// Exported for testing purposes only.
+	SchemaChangeLeaseDuration = 5 * time.Minute
+	// MinSchemaChangeLeaseDuration is the minimum duration a lease will have
+	// remaining upon acquisition. Exported for testing purposes only.
+	MinSchemaChangeLeaseDuration = time.Minute
+)
+
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
 	tableID    sqlbase.ID
@@ -78,7 +87,7 @@ func NewSchemaChangerForTesting(
 
 func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_SchemaChangeLease {
 	return sqlbase.TableDescriptor_SchemaChangeLease{
-		NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(jitteredLeaseDuration()).UnixNano()}
+		NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(SchemaChangeLeaseDuration).UnixNano()}
 }
 
 var errExistingSchemaChangeLease = errors.New(
@@ -146,16 +155,25 @@ func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChange
 	return err
 }
 
-// ExtendLease for the current leaser.
+// ExtendLease for the current leaser. This needs to be called often while
+// doing a schema change to prevent more than one node attempting to apply a
+// schema change (which is still safe, but unwise).
 func (sc *SchemaChanger) ExtendLease(
 	existingLease sqlbase.TableDescriptor_SchemaChangeLease,
 ) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
+	// Check if there is still time on this lease.
+	minDesiredExpiration := timeutil.Now().Add(MinSchemaChangeLeaseDuration)
+	if time.Unix(0, existingLease.ExpirationTime).After(minDesiredExpiration) {
+		return existingLease, nil
+	}
+	// Update lease.
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(txn, existingLease)
 		if err != nil {
 			return err
 		}
+
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
 		txn.SetSystemConfigTrigger()
