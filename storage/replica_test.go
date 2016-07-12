@@ -4442,13 +4442,16 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	if err := tc.rng.ChangeReplicas(roachpb.ADD_REPLICA, roachpb.ReplicaDescriptor{
-		NodeID:  tc.store.Ident.NodeID,
-		StoreID: 9999,
-	}, tc.rng.Desc()); err == nil || !strings.Contains(err.Error(),
-		"already present") {
-		t.Fatalf("must not be able to add second replica to same node (err=%s)",
-			err)
+	if err := tc.rng.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  tc.store.Ident.NodeID,
+			StoreID: 9999,
+		},
+		tc.rng.Desc(),
+	); err == nil || !strings.Contains(err.Error(), "already present") {
+		t.Fatalf("must not be able to add second replica to same node (err=%s)", err)
 	}
 }
 

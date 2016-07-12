@@ -723,11 +723,14 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 			m.t.Fatalf("store index %d out of range; there's only %d of them", dest, len(m.stores))
 		}
 
-		if err := rep.ChangeReplicas(roachpb.ADD_REPLICA,
+		if err := rep.ChangeReplicas(
+			context.Background(),
+			roachpb.ADD_REPLICA,
 			roachpb.ReplicaDescriptor{
 				NodeID:  m.stores[dest].Ident.NodeID,
 				StoreID: m.stores[dest].Ident.StoreID,
-			}, &desc,
+			},
+			&desc,
 		); err != nil {
 			m.t.Fatal(err)
 		}
@@ -763,11 +766,14 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 		m.t.Fatal(err)
 	}
 
-	if err := rep.ChangeReplicas(roachpb.REMOVE_REPLICA,
+	if err := rep.ChangeReplicas(
+		context.Background(),
+		roachpb.REMOVE_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  m.idents[dest].NodeID,
 			StoreID: m.idents[dest].StoreID,
-		}, &desc,
+		},
+		&desc,
 	); err != nil {
 		m.t.Fatal(err)
 	}

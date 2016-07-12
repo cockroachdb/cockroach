@@ -144,7 +144,7 @@ func (rq *replicateQueue) process(
 			log.Infof("range %d: adding replica to %+v due to under-replication", repl.RangeID, newReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("adding replica to %+v due to under-replication", newReplica))
-		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, newReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorRemove:
@@ -157,7 +157,7 @@ func (rq *replicateQueue) process(
 			log.Infof("range %d: removing replica %+v due to over-replication", repl.RangeID, removeReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("removing replica %+v due to over-replication", removeReplica))
-		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
 		// Do not requeue if we removed ourselves.
@@ -177,7 +177,7 @@ func (rq *replicateQueue) process(
 			log.Infof("range %d: removing replica %+v from dead store", repl.RangeID, deadReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
-		if err = repl.ChangeReplicas(roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorNoop:
@@ -202,7 +202,7 @@ func (rq *replicateQueue) process(
 			log.Infof("range %d: rebalancing to %+v", repl.RangeID, rebalanceReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("rebalancing to %+v", rebalanceReplica))
-		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
+		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
 	}
