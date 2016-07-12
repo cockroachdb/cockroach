@@ -156,6 +156,8 @@ type queueConfig struct {
 	// acceptsUnsplitRanges controls whether this queue can process ranges that
 	// need to be split due to zone config settings. Ranges are checked before
 	// calling queueImpl.shouldQueue and queueImpl.process.
+	// This is so that we don't generate huge snapshots for ranges that will be
+	// split soon.
 	acceptsUnsplitRanges bool
 }
 
@@ -248,6 +250,11 @@ func (bq *baseQueue) SetDisabled(disabled bool) {
 	}
 }
 
+// GetDisabled returns true is the queue is currently disabled.
+func (bq *baseQueue) GetDisabled() bool {
+	return atomic.LoadInt32(&bq.disabled) == 1
+}
+
 func (bq *baseQueue) Close() {
 	bq.eventLog.Finish()
 }
@@ -283,11 +290,14 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	}
 
 	desc := repl.Desc()
-	if !bq.acceptsUnsplitRanges && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
-		// Range needs to be split due to zone configs, but queue does
-		// not accept unsplit ranges.
-		bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
-		return
+	if !bq.acceptsUnsplitRanges {
+		// If the split queue is disabled (i.e. in some tests), ignore this condition.
+		if !splittingDisabledForTest(repl.store) && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
+			// Range needs to be split due to zone configs, but queue does
+			// not accept unsplit ranges.
+			bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
+			return
+		}
 	}
 
 	bq.mu.Lock()
@@ -296,6 +306,16 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	if err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
 		bq.eventLog.Error(errors.Wrapf(err, "unable to add %s", repl))
 	}
+}
+
+// splittingDisabledForTest returns true if a store's split queue has been
+// disabled. This only happens in tests.
+func splittingDisabledForTest(store *Store) bool {
+	if store == nil {
+		// Some tests hack half-initialized replicas.
+		return true
+	}
+	return store.splitQueue.GetDisabled()
 }
 
 // addInternal adds the replica the queue with specified priority. If the
@@ -426,11 +446,13 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	}
 
 	desc := repl.Desc()
-	if !bq.acceptsUnsplitRanges && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
-		// Range needs to be split due to zone configs, but queue does
-		// not accept unsplit ranges.
-		bq.eventLog.VInfof(log.V(3), "%s: split needed; skipping", repl)
-		return nil
+	if !bq.acceptsUnsplitRanges {
+		if !splittingDisabledForTest(repl.store) && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
+			// Range needs to be split due to zone configs, but queue does
+			// not accept unsplit ranges.
+			bq.eventLog.VInfof(log.V(3), "%s: split needed; skipping", repl)
+			return nil
+		}
 	}
 
 	sp := repl.store.Tracer().StartSpan(bq.name)

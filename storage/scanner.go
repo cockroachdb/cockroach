@@ -101,6 +101,7 @@ func (rs *replicaScanner) AddQueues(queues ...replicaQueue) {
 
 // Start spins up the scanning loop.
 func (rs *replicaScanner) Start(clock *hlc.Clock, stopper *stop.Stopper) {
+	log.Infof("!!! starting scanner")
 	for _, queue := range rs.queues {
 		queue.Start(clock, stopper)
 	}
