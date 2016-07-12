@@ -17,13 +17,18 @@
 package storage
 
 import (
+	"math/rand"
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -80,4 +85,48 @@ func TestApplySnapshotDenyPreemptive(t *testing.T) {
 		t.Fatal(err)
 	}
 
+}
+
+const rangeID = 1
+const keySize = 1 << 7   // 128 B
+const valSize = 1 << 10  // 1 KiB
+const snapSize = 1 << 25 // 32 MiB
+
+func fillTestRange(t testing.TB, rep *Replica, size int) {
+	src := rand.New(rand.NewSource(0))
+	for i := 0; i < snapSize/(keySize+valSize); i++ {
+		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
+		val := randutil.RandBytes(src, valSize)
+		pArgs := putArgs(key, val)
+		if _, pErr := client.SendWrappedWith(rep, nil, roachpb.Header{
+			RangeID: rangeID,
+		}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+}
+
+func TestSkipLargeReplicaSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+
+	// We want to manually control the size of the raft log.
+	defer stopper.Stop()
+
+	rep, err := store.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fillTestRange(t, rep, snapSize)
+
+	if _, err := rep.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+
+	fillTestRange(t, rep, snapSize*2)
+
+	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
+		t.Fatal("snapshot of a very large range should fail but got %v", err)
+	}
 }

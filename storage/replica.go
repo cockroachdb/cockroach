@@ -2612,6 +2612,12 @@ func (r *Replica) needsSplitBySize() bool {
 	return maxBytes > 0 && size > maxBytes
 }
 
+func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
+	maxBytes := r.mu.maxBytes
+	size := r.mu.state.Stats.Total()
+	return maxBytes > 0 && size > maxBytes*2
+}
+
 // maybeAddToSplitQueue checks whether the current size of the range
 // exceeds the max size specified in the zone config. If yes, the
 // range is added to the split queue.
