@@ -433,9 +433,8 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		return nil
 	}
 
-	sp := repl.store.Tracer().StartSpan(bq.name)
+	sp := repl.store.Tracer().StartSpan(fmt.Sprintf("%s:%d", bq.name, repl.RangeID))
 	ctx := opentracing.ContextWithSpan(repl.context(context.Background()), sp)
-	log.Trace(ctx, fmt.Sprintf("queue start for range %d", repl.RangeID))
 	defer sp.Finish()
 
 	// If the queue requires a replica to have the range lease in
