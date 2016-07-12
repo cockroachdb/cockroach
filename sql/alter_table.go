@@ -94,8 +94,11 @@ func (n *alterTableNode) Start() error {
 			if idx != nil {
 				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
 			}
-			if t.ColumnDef.Family != "" {
-				if err := n.tableDesc.AddColumnToFamily(col.Name, string(t.ColumnDef.Family)); err != nil {
+			if t.ColumnDef.Family.Create || len(t.ColumnDef.Family.Name) > 0 {
+				err := n.tableDesc.AddColumnToFamilyMaybeCreate(
+					col.Name, string(t.ColumnDef.Family.Name), t.ColumnDef.Family.Create,
+					t.ColumnDef.Family.IfNotExists)
+				if err != nil {
 					return err
 				}
 			}
