@@ -108,29 +108,64 @@ func (k taskKey) String() string {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
-	drainer  chan struct{}  // Closed when draining
-	stopper  chan struct{}  // Closed when stopping
-	stopped  chan struct{}  // Closed when stopped completely
-	stop     sync.WaitGroup // Incremented for outstanding workers
-	mu       sync.Mutex     // Protects the fields below
-	drain    *sync.Cond     // Conditional variable to wait for outstanding tasks
-	draining bool           // true when Stop() has been called
-	numTasks int            // number of outstanding tasks
+	drainer  chan struct{}     // Closed when draining
+	stopper  chan struct{}     // Closed when stopping
+	stopped  chan struct{}     // Closed when stopped completely
+	onPanic  func(interface{}) // called with recover() on panic on any goroutine
+	stop     sync.WaitGroup    // Incremented for outstanding workers
+	mu       sync.Mutex        // Protects the fields below
+	drain    *sync.Cond        // Conditional variable to wait for outstanding tasks
+	draining bool              // true when Stop() has been called
+	numTasks int               // number of outstanding tasks
 	tasks    map[taskKey]int
 	closers  []Closer
 }
 
+// An Option can be passed to NewStopper.
+type Option interface {
+	apply(*Stopper)
+}
+
+type optionPanicHandler func(interface{})
+
+func (oph optionPanicHandler) apply(stopper *Stopper) {
+	stopper.onPanic = oph
+}
+
+// OnPanic is an option which lets the Stopper recover from all panics using
+// the provided panic handler.
+// When Stop() is invoked during stack unwinding, OnPanic is also invoked, but
+// Stop() may not have carried out its duties.
+func OnPanic(handler func(interface{})) Option {
+	return optionPanicHandler(handler)
+}
+
 // NewStopper returns an instance of Stopper.
-func NewStopper() *Stopper {
+func NewStopper(options ...Option) *Stopper {
 	s := &Stopper{
 		drainer: make(chan struct{}),
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
 		tasks:   map[taskKey]int{},
 	}
+
+	for _, opt := range options {
+		opt.apply(s)
+	}
+
 	s.drain = sync.NewCond(&s.mu)
 	register(s)
 	return s
+}
+
+func (s *Stopper) maybeHandlePanic() {
+	if r := recover(); r != nil {
+		if s.onPanic != nil {
+			s.onPanic(r)
+			return
+		}
+		panic(r)
+	}
 }
 
 // RunWorker runs the supplied function as a "worker" to be stopped
@@ -138,6 +173,7 @@ func NewStopper() *Stopper {
 func (s *Stopper) RunWorker(f func()) {
 	s.stop.Add(1)
 	go func() {
+		defer s.maybeHandlePanic()
 		defer s.stop.Done()
 		f()
 	}()
@@ -165,6 +201,7 @@ func (s *Stopper) RunTask(f func()) error {
 		return errUnavailable
 	}
 	// Call f.
+	defer s.maybeHandlePanic()
 	defer s.runPostlude(key)
 	f()
 	return nil
@@ -180,6 +217,7 @@ func (s *Stopper) RunAsyncTask(f func()) error {
 	}
 	// Call f.
 	go func() {
+		defer s.maybeHandlePanic()
 		defer s.runPostlude(key)
 		f()
 	}()
@@ -216,6 +254,7 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 		return errUnavailable
 	}
 	go func() {
+		defer s.maybeHandlePanic()
 		defer s.runPostlude(key)
 		defer func() { <-sem }()
 		f()
@@ -285,6 +324,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped.
 func (s *Stopper) Stop() {
+	defer s.maybeHandlePanic()
 	defer unregister(s)
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
@@ -344,6 +384,7 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 // Quiesce moves the stopper to state draining and waits until all
 // tasks complete. This is used from Stop() and unittests.
 func (s *Stopper) Quiesce() {
+	defer s.maybeHandlePanic()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.draining {
