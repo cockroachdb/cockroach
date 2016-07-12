@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package storage_test
+package storage
 
 import (
 	"math/rand"
@@ -24,39 +24,70 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/coreos/etcd/raft"
 )
 
-func BenchmarkReplicaSnapshot(b *testing.B) {
-	defer tracing.Disable()()
-	defer config.TestingDisableTableSplits()()
-	store, stopper, _ := createTestStore(b)
-	// We want to manually control the size of the raft log.
-	store.DisableRaftLogQueue(true)
-	defer stopper.Stop()
+const rangeID = 1
+const keySize = 1 << 7   // 128 B
+const valSize = 1 << 10  // 1 KiB
+const snapSize = 1 << 25 // 32 MiB
 
-	const rangeID = 1
-	const keySize = 1 << 7   // 128 B
-	const valSize = 1 << 10  // 1 KiB
-	const snapSize = 1 << 25 // 32 MiB
-
-	rep, err := store.GetReplica(rangeID)
-	if err != nil {
-		b.Fatal(err)
-	}
-
+func fillTestRange(t testing.TB, rep *Replica, size int) {
 	src := rand.New(rand.NewSource(0))
-	for i := 0; i < snapSize/(keySize+valSize); i++ {
+	for i := 0; i < size/(keySize+valSize); i++ {
 		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
 		val := randutil.RandBytes(src, valSize)
 		pArgs := putArgs(key, val)
 		if _, pErr := client.SendWrappedWith(rep, nil, roachpb.Header{
 			RangeID: rangeID,
 		}, &pArgs); pErr != nil {
-			b.Fatal(pErr)
+			t.Fatal(pErr)
 		}
 	}
+}
+
+func TestSkipLargeReplicaSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	store.DisableSplitQueue(true)
+	// We want to manually control the size of the raft log.
+	defer stopper.Stop()
+
+	rep, err := store.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fillTestRange(t, rep, snapSize)
+
+	if _, err := rep.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+
+	fillTestRange(t, rep, snapSize*2)
+
+	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
+		t.Fatal("snapshot of a very large range should fail but got %v", err)
+	}
+}
+
+func BenchmarkReplicaSnapshot(b *testing.B) {
+	defer tracing.Disable()()
+	defer config.TestingDisableTableSplits()()
+	store, _, stopper := createTestStore(b)
+	// We want to manually control the size of the raft log.
+	store.DisableRaftLogQueue(true)
+	defer stopper.Stop()
+
+	rep, err := store.GetReplica(rangeID)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	fillTestRange(b, rep, snapSize)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
