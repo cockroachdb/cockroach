@@ -583,6 +583,11 @@ func (r *Replica) applySnapshot(
 	if err != nil {
 		return 0, errors.Wrap(err, "error loading last index")
 	}
+	// Similar strategy for the HardState.
+	oldHardState, err := loadHardState(batch, desc.RangeID)
+	if err != nil {
+		return 0, errors.Wrap(err, "unable to load HardState")
+	}
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
@@ -655,15 +660,11 @@ func (r *Replica) applySnapshot(
 			// check.
 			return 0, errors.Errorf("preemptive snapshot would erase acknowledged log entries")
 		}
-		oldHS, err := loadHardState(batch, s.Desc.RangeID)
-		if err != nil {
-			return 0, errors.Wrap(err, "unable to load HardState")
-		}
-		if snap.Metadata.Term < oldHS.Term {
+		if snap.Metadata.Term < oldHardState.Term {
 			return 0, errors.Errorf("cannot apply preemptive snapshot from past term %d at term %d",
-				snap.Metadata.Term, oldHS.Term)
+				snap.Metadata.Term, oldHardState.Term)
 		}
-		if err := synthesizeHardState(batch, s, oldHS); err != nil {
+		if err := synthesizeHardState(batch, s, oldHardState); err != nil {
 			return 0, errors.Wrap(err, "unable to write synthesized HardState")
 		}
 	} else {
