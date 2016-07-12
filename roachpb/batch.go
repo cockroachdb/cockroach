@@ -286,7 +286,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.truncateLog++
 		case *RequestLeaseRequest:
 			counts.lease++
-		case *LeaseTransferRequest:
+		case *TransferLeaseRequest:
 			counts.leaseTransfer++
 		case *ReverseScanRequest:
 			counts.reverseScan++
@@ -443,7 +443,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.lease = make([]RequestLeaseResponse, counts.lease)
 			}
 			reply, bufs.lease = &bufs.lease[0], bufs.lease[1:]
-		case *LeaseTransferRequest:
+		case *TransferLeaseRequest:
 			if bufs.leaseTransfer == nil {
 				bufs.leaseTransfer = make([]RequestLeaseResponse, counts.leaseTransfer)
 			}

@@ -459,7 +459,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 }
 
-func TestRangeLeaseTransfer(t *testing.T) {
+func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := storage.TestStoreContext()
 	var filterMu sync.Mutex

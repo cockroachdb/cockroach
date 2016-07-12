@@ -463,7 +463,7 @@ func (*TruncateLogRequest) Method() Method { return TruncateLog }
 func (*RequestLeaseRequest) Method() Method { return RequestLease }
 
 // Method implements the Request interface.
-func (*LeaseTransferRequest) Method() Method { return LeaseTransfer }
+func (*TransferLeaseRequest) Method() Method { return TransferLease }
 
 // Method implements the Request interface.
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
@@ -622,7 +622,7 @@ func (llr *RequestLeaseRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (lt *LeaseTransferRequest) ShallowCopy() Request {
+func (lt *TransferLeaseRequest) ShallowCopy() Request {
 	shallowCopy := *lt
 	return &shallowCopy
 }
@@ -664,7 +664,7 @@ func (*NoopRequest) createReply() Response               { return &NoopResponse{
 func (*MergeRequest) createReply() Response              { return &MergeResponse{} }
 func (*TruncateLogRequest) createReply() Response        { return &TruncateLogResponse{} }
 func (*RequestLeaseRequest) createReply() Response       { return &RequestLeaseResponse{} }
-func (*LeaseTransferRequest) createReply() Response      { return &RequestLeaseResponse{} }
+func (*TransferLeaseRequest) createReply() Response      { return &RequestLeaseResponse{} }
 func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
 func (*VerifyChecksumRequest) createReply() Response     { return &VerifyChecksumResponse{} }
 
@@ -839,7 +839,7 @@ func (*TruncateLogRequest) flags() int        { return isWrite }
 // TODO(tschottdorf): consider setting isAlone on RequestLeaseRequest and
 // LeaseTransferRequest.
 func (*RequestLeaseRequest) flags() int     { return isWrite }
-func (*LeaseTransferRequest) flags() int    { return isWrite }
+func (*TransferLeaseRequest) flags() int    { return isWrite }
 func (*ComputeChecksumRequest) flags() int  { return isWrite }
 func (*VerifyChecksumRequest) flags() int   { return isWrite }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
