@@ -46,12 +46,13 @@ func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
 // creates Span from the given tracer.
 func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing.Span, error) {
 	if carrier != nil {
-		sp, err := tr.Join(opName, basictracer.Delegator, carrier)
+		wireContext, err := tr.Extract(basictracer.Delegator, carrier)
 		switch err {
 		case nil:
+			sp := tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
 			sp.LogEvent(opName)
 			return sp, nil
-		case opentracing.ErrTraceNotFound:
+		case opentracing.ErrSpanContextNotFound:
 		default:
 			return nil, err
 		}
@@ -69,7 +70,7 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 		// We definitely want to sample a Snowball trace.
 		// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
 		ext.SamplingPriority.Set(sp, 1)
-		sp.SetBaggageItem(Snowball, "1")
+		sp.Context().SetBaggageItem(Snowball, "1")
 	}
 	return sp, err
 }

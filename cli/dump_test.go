@@ -264,7 +264,11 @@ func TestDumpRandom(t *testing.T) {
 					switch t := fetchedVal.(type) {
 					case time.Time:
 						fetchedVal = t.UTC()
-					case []uint8:
+					case string:
+						if _, ok := generatedVal.([]byte); ok {
+							fetchedVal = []byte(t)
+						}
+					case []byte:
 						if _, ok := generatedVal.(string); ok {
 							fetchedVal = string(t)
 						}
