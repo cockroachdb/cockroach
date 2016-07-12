@@ -34,7 +34,7 @@ package acceptance
 //	 TESTTIMEOUT=48h \
 //	 PKG=./acceptance \
 //	 TESTS=Rebalance_3To5Small \
-//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster-fail' \
+//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster-fail'
 //
 // Things to note:
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
@@ -189,7 +189,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 	at.f.Assert(t)
 
 	log.Info("waiting for rebalance to finish")
-	if err := at.WaitForRebalance(); err != nil {
+	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,7 +300,7 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
-func (at *allocatorTest) WaitForRebalance() error {
+func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(1))
 	if err != nil {
 		return err
@@ -309,13 +309,16 @@ func (at *allocatorTest) WaitForRebalance() error {
 		_ = db.Close()
 	}()
 
-	var timer timeutil.Timer
-	defer timer.Stop()
-	timer.Reset(0)
+	var statsTimer timeutil.Timer
+	var assertTimer timeutil.Timer
+	defer statsTimer.Stop()
+	defer assertTimer.Stop()
+	statsTimer.Reset(0)
+	assertTimer.Reset(0)
 	for {
 		select {
-		case <-timer.C:
-			timer.Read = true
+		case <-statsTimer.C:
+			statsTimer.Read = true
 			stable, err := at.checkAllocatorStable(db)
 			if err != nil {
 				return err
@@ -327,11 +330,15 @@ func (at *allocatorTest) WaitForRebalance() error {
 				}
 				return nil
 			}
+			statsTimer.Reset(10 * time.Second)
+		case <-assertTimer.C:
+			assertTimer.Read = true
+			at.f.Assert(t)
+			assertTimer.Reset(time.Minute)
 		case <-stopper:
 			return errors.New("interrupted")
 		}
 
-		timer.Reset(10 * time.Second)
 	}
 }
 
