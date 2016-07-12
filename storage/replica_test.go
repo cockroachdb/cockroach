@@ -5359,33 +5359,69 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		}
 	}
 
-	initialChecksum := verifyChecksum(t, rng)
+	// We use this helper below to gauge whether another Raft command possibly
+	// snuck in (in which case we recompute). We can't use the in-memory state
+	// because it's not updated atomically with the batch and because this
+	// test doesn't respect Raft ordering.
+	getAppliedIndex := func() uint64 {
+		rng.mu.Lock()
+		defer rng.mu.Unlock()
 
-	// Getting a value will not affect the snapshot checksum
-	{
-		gArgs := getArgs(key)
+		appliedIndex, _, err := loadAppliedIndex(rng.store.Engine(), rng.RangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return appliedIndex
+	}
+
+	// The following part of the test is inherently racy if other Raft commands
+	// get processed (which could happen due to reproposals). The loop makes
+	// sure that we catch this.
+	util.SucceedsSoon(t, func() error {
+		oldAppliedIndex := getAppliedIndex()
+		initialChecksum := verifyChecksum(t, rng)
+
+		// Getting a value will not affect the snapshot checksum.
+		gArgs := getArgs(roachpb.Key("a"))
 		if _, err := tc.SendWrapped(&gArgs); err != nil {
 			t.Fatal(err)
 		}
-
 		checksum := verifyChecksum(t, rng)
+
+		appliedIndex := getAppliedIndex()
+		if appliedIndex != oldAppliedIndex {
+			return errors.Errorf("applied index changed from %d to %d",
+				oldAppliedIndex, appliedIndex)
+		}
+
 		if !bytes.Equal(initialChecksum, checksum) {
 			t.Fatalf("changed checksum: e = %v, c = %v", initialChecksum, checksum)
 		}
-	}
+		return nil
+	})
 
-	// Modifying the range will change the checksum.
-	{
+	util.SucceedsSoon(t, func() error {
+		oldAppliedIndex := getAppliedIndex()
+		initialChecksum := verifyChecksum(t, rng)
+
+		// Modifying the range will change the checksum.
 		incArgs := incrementArgs(key, 5)
 		if _, err := tc.SendWrapped(&incArgs); err != nil {
 			t.Fatal(err)
 		}
-
 		checksum := verifyChecksum(t, rng)
+
+		appliedIndex := getAppliedIndex()
+		if diff := appliedIndex - oldAppliedIndex; diff != 1 {
+			return errors.Errorf("applied index changed by %d, from %d to %d",
+				diff, oldAppliedIndex, appliedIndex)
+		}
+
 		if bytes.Equal(initialChecksum, checksum) {
 			t.Fatalf("same checksum: e = %v, c = %v", initialChecksum, checksum)
 		}
-	}
+		return nil
+	})
 
 	// Verify that a bad version/checksum sent will result in an error.
 	id1 := uuid.MakeV4()
