@@ -958,38 +958,14 @@ func IterateRangeDescriptors(
 	return err
 }
 
-// MIGRATION(tschottdorf): As of #7310, we make sure that a Replica
-// always has a complete Raft state on disk. Prior versions may not
-// have that, which causes issues due to the fact that we used to
-// synthesize a TruncatedState and do so no more. To make up for
-// that, write a missing TruncatedState here. That key is in the
-// replicated state, but since during a cluster upgrade, all nodes
-// do it, it's fine (and we never CPut on that key, so anything in
-// the Raft pipeline will simply overwrite it).
-//
-// TODO(tschottdorf): test this method.
-func (s *Store) migrate7310(desc roachpb.RangeDescriptor) {
-	if !desc.IsInitialized() {
-		log.Fatalf("found uninitialized descriptor on range: %+v", desc)
-	}
+func (s *Store) migrate(desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
-	state, err := loadState(batch, &desc)
-	if err != nil {
-		log.Fatalf("could not migrate truncated state: %s", err)
-	}
-	if (*state.TruncatedState != roachpb.RaftTruncatedState{}) {
-		return
-	}
-
-	state.TruncatedState.Term = raftInitialLogTerm
-	state.TruncatedState.Index = raftInitialLogIndex
-	if _, err := saveState(batch, state); err != nil {
-		log.Fatalf("could not migrate truncated state: %s", err)
+	if err := migrate7310And6991(batch, desc); err != nil {
+		log.Fatal(errors.Wrap(err, "during migration"))
 	}
 	if err := batch.Commit(); err != nil {
-		log.Fatalf("could not migrate truncated state: %s", err)
+		log.Fatal(errors.Wrap(err, "could not migrate Raft state"))
 	}
-	log.Warningf("migration: synthesized truncated state for %+v", desc)
 }
 
 // Start the engine, set the GC and read the StoreIdent.
@@ -1078,8 +1054,10 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// (which is necessary to have a non-nil raft group)
 			return false, s.destroyReplicaData(&desc)
 		}
-
-		s.migrate7310(desc)
+		if !desc.IsInitialized() {
+			return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
+		}
+		s.migrate(desc)
 
 		rng, err := NewReplica(&desc, s, 0)
 		if err != nil {
@@ -2242,7 +2220,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// the raft group (i.e. replicas with an ID of 0). This is the only
 			// operation that can be performed on a replica before it is part of the
 			// raft group.
-			_, err := r.applySnapshot(req.Message.Snapshot, preemptiveSnapshot)
+			_, err := r.applySnapshot(req.Message.Snapshot, raftpb.HardState{})
 			return err
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that

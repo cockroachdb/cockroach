@@ -556,7 +556,7 @@ func (r *Replica) EndTransaction(
 		if err := r.runCommitTrigger(ctx, batch.(engine.Batch), ms, args, reply.Txn); err != nil {
 			// TODO(tschottdorf): should an error here always amount to a
 			// ReplicaCorruptionError?
-			log.Errorf("Range %d transaction commit trigger fail: %s", r.RangeID, err)
+			log.Error(errors.Wrapf(err, "range %d commit trigger", r.RangeID))
 			return reply, nil, err
 		}
 	}
