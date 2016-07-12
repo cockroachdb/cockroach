@@ -108,7 +108,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Replica:     nextLeaseHolder,
 	}
 	if transfer {
-		leaseReq = &roachpb.LeaseTransferRequest{
+		leaseReq = &roachpb.TransferLeaseRequest{
 			Span:  reqSpan,
 			Lease: reqLease,
 		}
