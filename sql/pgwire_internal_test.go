@@ -82,11 +82,11 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	// Wait for the lease to be released.
 	util.SucceedsSoon(t, func() error {
 		ts.mu.Lock()
-		lease := *(ts.active.data[0])
+		refcount := ts.active.data[0].refcount
 		ts.mu.Unlock()
-		if lease.refcount != 0 {
+		if refcount != 0 {
 			return errors.Errorf(
-				"expected lease to be unused, found refcount: %d", lease.refcount)
+				"expected lease to be unused, found refcount: %d", refcount)
 		}
 		return nil
 	})
