@@ -60,6 +60,16 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 					return desc, err
 				}
 			}
+			if d.Family.Create || len(d.Family.Name) > 0 {
+				// Pass true for `create` and `ifNotExists` because when we're creating
+				// a table, we always want to create the specified family if it doesn't
+				// exist.
+				err := desc.AddColumnToFamilyMaybeCreate(col.Name, string(d.Family.Name), true, true)
+				if err != nil {
+					return desc, err
+				}
+			}
+
 		case *parser.IndexTableDef:
 			idx := IndexDescriptor{
 				Name:             string(d.Name),

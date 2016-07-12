@@ -176,7 +176,11 @@ type ColumnTableDef struct {
 		Col            Name
 		ConstraintName Name
 	}
-	Family Name
+	Family struct {
+		Name        Name
+		Create      bool
+		IfNotExists bool
+	}
 }
 
 func newColumnTableDef(
@@ -226,7 +230,9 @@ func newColumnTableDef(
 				d.References.ConstraintName = c.Name
 			}
 		case *ColumnFamilyConstraint:
-			d.Family = t.Family
+			d.Family.Name = t.Family
+			d.Family.Create = t.Create
+			d.Family.IfNotExists = t.IfNotExists
 		default:
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
@@ -283,9 +289,18 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 			buf.WriteByte(')')
 		}
 	}
-	if node.Family != "" {
-		buf.WriteString(" FAMILY ")
-		FormatNode(buf, f, node.Family)
+	if node.Family.Name != "" || node.Family.Create {
+		if node.Family.Create {
+			buf.WriteString(" CREATE")
+		}
+		if node.Family.IfNotExists {
+			buf.WriteString(" IF NOT EXISTS")
+		}
+		buf.WriteString(" FAMILY")
+		if len(node.Family.Name) > 0 {
+			buf.WriteByte(' ')
+			FormatNode(buf, f, node.Family.Name)
+		}
 	}
 }
 
@@ -339,7 +354,9 @@ type ColumnFKConstraint struct {
 
 // ColumnFamilyConstraint represents FAMILY on a column.
 type ColumnFamilyConstraint struct {
-	Family Name
+	Family      Name
+	Create      bool
+	IfNotExists bool
 }
 
 // NameListToIndexElems converts a NameList to an IndexElemList with all
