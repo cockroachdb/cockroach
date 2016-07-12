@@ -257,6 +257,10 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	rangeID := r.RangeID
 
+	if r.needsSplitBySizeLocked() {
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	}
+
 	// If a snapshot is in progress, see if it's ready.
 	if r.mu.snapshotChan != nil {
 		select {

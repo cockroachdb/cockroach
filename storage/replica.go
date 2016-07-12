@@ -2568,9 +2568,14 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 // to be split.
 func (r *Replica) needsSplitBySize() bool {
 	r.mu.Lock()
+	res := r.needsSplitBySizeLocked()
+	r.mu.Unlock()
+	return res
+}
+
+func (r *Replica) needsSplitBySizeLocked() bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
-	r.mu.Unlock()
 	return maxBytes > 0 && size > maxBytes
 }
 
