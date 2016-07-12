@@ -51,8 +51,15 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
       <div className="charts half">
 
         <div style={{float:"left"}} className="small half">
-          <Visualization title={ (totalNodes === 1) ? "Node" : "Nodes" }
-                         tooltip="The total number of nodes in the cluster.">
+          <Visualization
+            title={ (totalNodes === 1) ? "Node" : "Nodes" }
+            tooltip="The total number of nodes in the cluster."
+            warning={ totalNodes < 3 ? <div>This cluster has fewer than 3 nodes, which is not sufficient to tolerate node failure.
+              <br />See <a href="https://www.cockroachlabs.com/docs/configure-replication-zones.html" target="_blank">
+                Replica Recommendations
+              </a> in the docs for more details.</div> : ""
+            }
+            warningTitle = { totalNodes < 3 ? "Low Replication" : "" }>
             <div className="visualization">
               <div style={{zoom:"100%"}} className="number">{ d3.format("s")(totalNodes) }</div>
             </div>
