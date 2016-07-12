@@ -280,7 +280,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		if ba.Header.Trace == nil {
 			ba.Header.Trace = &tracing.Span{}
 		}
-		if err := tc.tracer.Inject(sp, basictracer.Delegator, ba.Trace); err != nil {
+		if err := tc.tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
