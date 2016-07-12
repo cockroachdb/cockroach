@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -57,6 +58,11 @@ const (
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
 	defaultReservationsEnabled      = true
+
+	minimumNetworkFileDescriptors     = 256
+	recommendedNetworkFileDescriptors = 5000
+
+	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/recommended-production-settings.html for more details"
 )
 
 // Context holds parameters needed to setup a server.
@@ -204,6 +210,87 @@ func GetTotalMemory() (int64, error) {
 	return totalMem, nil
 }
 
+// setOpenFileLimit sets the current limit for open file descriptors to the max
+// limit if needed. Returns an error if the hard limit is too low. Returns the
+// value to set maxOpenFiles to for each store.
+func setOpenFileLimit(physicalStoreCount int) (int, error) {
+	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
+	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.DefaultMaxOpenFiles + recommendedNetworkFileDescriptors)
+	// TODO(bram): Test this out on windows.
+	var rLimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+		if log.V(1) {
+			log.Infof("could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
+		}
+		return engine.DefaultMaxOpenFiles, nil
+	}
+
+	// The max open file descriptor limit is too low.
+	if rLimit.Max < minimumOpenFileLimit {
+		return 0, fmt.Errorf("max open file descriptor limit of %d is under the minimum required %d\n%s",
+			rLimit.Max,
+			minimumOpenFileLimit,
+			productionSettingsWebpage)
+	}
+
+	// If current open file descriptor limit is higher than the recommended
+	// value, we can just use the default value.
+	if rLimit.Cur > recommendedOpenFileLimit {
+		return engine.DefaultMaxOpenFiles, nil
+	}
+
+	// If the current limit is less than the recommended limit, set the current
+	// limit to the minimum of the max limit or the recommendedOpenFileLimit.
+	var newCurrent uint64
+	if rLimit.Max > recommendedOpenFileLimit {
+		newCurrent = recommendedOpenFileLimit
+	} else {
+		newCurrent = rLimit.Max
+	}
+	if rLimit.Cur < newCurrent {
+		if log.V(1) {
+			log.Infof("setting the current limit for open file descriptors %d to %d",
+				rLimit.Cur, newCurrent)
+		}
+		rLimit.Cur = newCurrent
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+			return 0, err
+		}
+		// Sadly, the current limit is not always set as expected, (e.g. OSX)
+		// so fetch the limit again to see the new current limit.
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+			return 0, err
+		}
+		if log.V(1) {
+			log.Infof("current open file descriptor limit is now %d", rLimit.Cur)
+		}
+	}
+
+	// The current open file descriptor limit is still too low.
+	if rLimit.Cur < minimumOpenFileLimit {
+		return 0, fmt.Errorf("current open file descriptor limit of %d is under the minimum required %d and cannot be increased\n%s",
+			rLimit.Cur,
+			minimumOpenFileLimit,
+			productionSettingsWebpage)
+	}
+
+	// If we have the desired number, just use the default values.
+	if rLimit.Cur >= recommendedOpenFileLimit {
+		return engine.DefaultMaxOpenFiles, nil
+	}
+
+	// We're still below the recommended amount, we should always show a
+	// warning.
+	log.Warningf("current open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
+		rLimit.Cur,
+		recommendedOpenFileLimit,
+		productionSettingsWebpage)
+
+	// Always sacrifice all but the minimum needed network descriptors to be
+	// used by the stores.
+	return int(rLimit.Cur-minimumNetworkFileDescriptors) / physicalStoreCount, nil
+}
+
 // MakeContext returns a Context with default values.
 func MakeContext() Context {
 	ctx := Context{
@@ -229,6 +316,17 @@ func MakeContext() Context {
 func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	cache := engine.NewRocksDBCache(ctx.CacheSize)
 	defer cache.Release()
+
+	var physicalStores int
+	for _, spec := range ctx.Stores.Specs {
+		if !spec.InMemory {
+			physicalStores++
+		}
+	}
+	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
+	if err != nil {
+		return err
+	}
 
 	for _, spec := range ctx.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
@@ -257,10 +355,21 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path,
-				cache, ctx.MemtableBudget, sizeInBytes, stopper))
+			ctx.Engines = append(
+				ctx.Engines,
+				engine.NewRocksDB(
+					spec.Attributes,
+					spec.Path,
+					cache,
+					ctx.MemtableBudget,
+					sizeInBytes,
+					openFileLimitPerStore,
+					stopper,
+				),
+			)
 		}
 	}
+
 	if len(ctx.Engines) == 1 {
 		log.Infof("1 storage engine initialized")
 	} else {
