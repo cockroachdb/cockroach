@@ -67,7 +67,7 @@ LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 endif
 
 .PHONY: all
-all: build test check
+all: build test
 
 .PHONY: release
 release: build
