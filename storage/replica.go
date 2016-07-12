@@ -622,8 +622,8 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
-// processRangeDescriptorUpdate() to make the range manager handle the
-// descriptor update.
+// processRangeDescriptorUpdate() to make the Store handle the descriptor
+// update.
 func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 	r.setDescWithoutProcessUpdate(desc)
 	if r.store == nil {
