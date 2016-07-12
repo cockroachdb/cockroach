@@ -240,9 +240,6 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// If enabled, wait for initial splits to complete before returning control.
 	// If initial splits do not complete, the server is stopped before
 	// returning.
-	if config.TestingTableSplitsDisabled() {
-		return nil
-	}
 	if stk, ok := ts.ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
 		stk.DisableSplitQueue {
 		return nil

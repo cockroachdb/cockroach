@@ -78,8 +78,7 @@ func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 
 func (rq *replicateQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
-
-	if repl.needsSplitBySize() {
+	if !splittingDisabledForTest(repl.store) && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish
 		// first. Ranges must fit in memory on both sender and receiver
 		// nodes while being replicated. This supplements the check

@@ -351,10 +351,8 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc := TestStoreContext()
-	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
-	defer tc.Stop()
+	s, _, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	dataMaxAddr, err := keys.Addr(keys.SystemConfigTableDataMax)
 	if err != nil {
@@ -362,7 +360,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := &Replica{RangeID: 1, store: tc.store}
+	neverSplits := &Replica{RangeID: 1, store: s}
 	neverSplits.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
@@ -370,7 +368,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	})
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := &Replica{RangeID: 2, store: tc.store}
+	willSplit := &Replica{RangeID: 2, store: s}
 	willSplit.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{
 		RangeID:  2,
 		StartKey: dataMaxAddr,
@@ -386,11 +384,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: 2})
-	bq.Start(tc.clock, tc.stopper)
+	bq := makeBaseQueue("test", testQueue, s.ctx.Gossip, queueConfig{maxSize: 2})
+	bq.Start(s.ctx.Clock, stopper)
 
 	// Check our config.
-	sysCfg, ok := tc.gossip.GetSystemConfig()
+	sysCfg, ok := s.ctx.Gossip.GetSystemConfig()
 	if !ok {
 		t.Fatal("config not set")
 	}

@@ -41,7 +41,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -82,11 +81,10 @@ func rg1(s *storage.Store) client.Sender {
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
-	sCtx := storage.TestStoreContext()
-	return createTestStoreWithContext(t, &sCtx)
+	return createTestStoreWithContext(t, storage.TestStoreContext())
 }
 
-func createTestStoreWithContext(t testing.TB, sCtx *storage.StoreContext) (
+func createTestStoreWithContext(t testing.TB, sCtx storage.StoreContext) (
 	*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 
 	stopper := stop.NewStopper()
@@ -99,14 +97,11 @@ func createTestStoreWithContext(t testing.TB, sCtx *storage.StoreContext) (
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
+// TestStoreContext() can be used for creating a context suitable for most
+// tests.
 func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool, sCtx *storage.StoreContext, stopper *stop.Stopper) *storage.Store {
+	bootstrap bool, sCtx storage.StoreContext, stopper *stop.Stopper) *storage.Store {
 	rpcContext := rpc.NewContext(nil, clock, stopper)
-	if sCtx == nil {
-		// make a copy
-		ctx := storage.TestStoreContext()
-		sCtx = &ctx
-	}
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, nil, stopper)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
@@ -141,7 +136,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	)
 	sCtx.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(*sCtx, eng, nodeDesc)
+	store := storage.NewStore(sCtx, eng, nodeDesc)
 	if bootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
@@ -189,8 +184,6 @@ type multiTestContext struct {
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
 
-	reenableTableSplits func()
-
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
 	mu       sync.RWMutex
@@ -233,16 +226,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 	}
 	m.t = t
-	m.reenableTableSplits = config.TestingDisableTableSplits()
-
-	var ranSuccessfully bool
-	defer func() {
-		// t.Fatal calls runtime.Goexit(), so recover() is nil, but we
-		// still need to know whether we ran to completion.
-		if !ranSuccessfully {
-			m.reenableTableSplits()
-		}
-	}()
 
 	m.stores = make([]*storage.Store, numStores)
 	m.storePools = make([]*storage.StorePool, numStores)
@@ -281,7 +264,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 		return nil
 	})
-	ranSuccessfully = true
 }
 
 func (m *multiTestContext) Stop() {
@@ -319,7 +301,6 @@ func (m *multiTestContext) Stop() {
 		for _, s := range m.engineStoppers {
 			s.Stop()
 		}
-		m.reenableTableSplits()
 		close(done)
 	}()
 
@@ -503,6 +484,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.DB = m.dbs[i]
 	ctx.Gossip = m.gossips[i]
 	ctx.StorePool = m.storePools[i]
+	ctx.TestingKnobs.DisableSplitQueue = true
 	return ctx
 }
 
