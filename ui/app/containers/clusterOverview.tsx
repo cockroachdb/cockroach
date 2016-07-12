@@ -52,7 +52,9 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
         <div style={{float:"left"}} className="small half">
           <Visualization title={ (totalNodes === 1) ? "Node" : "Nodes" }
-                         tooltip="The total number of nodes in the cluster.">
+                         tooltip="The total number of nodes in the cluster."
+                         warning={ totalNodes < 3 ? `A ${totalNodes} node cluster cannot tolerate node failure.` : "" }
+                         warningTitle = { totalNodes < 3 ? "Low Replication" : "" }>
             <div className="visualization">
               <div style={{zoom:"100%"}} className="number">{ d3.format("s")(totalNodes) }</div>
             </div>
