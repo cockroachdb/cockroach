@@ -34,10 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// TODO(tschottdorf): name and location of this test. Should also test an actual
-// migration, cf. the reference test.
-func TestRaftUpdate(t *testing.T) {
-	runTestOnConfigs(t, testRaftUpdateInner)
+func TestFreezeCluster(t *testing.T) {
+	runTestOnConfigs(t, testFreezeClusterInner)
 }
 
 func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb.ClusterFreezeResponse, error) {
@@ -66,7 +64,7 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb
 	return resp, err
 }
 
-func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	minAffected := int64(server.ExpectedInitialRangeCount())
 
 	const long = time.Minute
