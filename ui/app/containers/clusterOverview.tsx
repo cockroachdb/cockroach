@@ -117,7 +117,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
           <LineGraph title="SQL Connections"
                      tooltip="The total number of active SQL connections to the cluster.">
-            <Axis format={ d3.format(".1") }>
+            <Axis format={ d3.format(".1f") }>
               <Metric name="cr.node.sql.conns" title="Connections" />
             </Axis>
           </LineGraph>
@@ -132,14 +132,14 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
           <LineGraph title="Reads Per Second"
                      tooltip="The number of SELECT statements, averaged over a 10 second period.">
-            <Axis format={ d3.format(".1") }>
+            <Axis format={ d3.format(".1f") }>
               <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
             </Axis>
           </LineGraph>
 
           <LineGraph title="Writes Per Second"
                      tooltip="The number of INSERT, UPDATE, and DELETE statements, averaged over a 10 second period.">
-            <Axis format={ d3.format(".1") }>
+            <Axis format={ d3.format(".1f") }>
               <Metric name="cr.node.sql.insert.count" title="Insert" nonNegativeRate />
               <Metric name="cr.node.sql.update.count" title="Update" nonNegativeRate />
               <Metric name="cr.node.sql.delete.count" title="Delete" nonNegativeRate />
