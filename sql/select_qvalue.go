@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/pkg/errors"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
@@ -151,14 +152,7 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		return true, v.qt.qvals.getQVal(colRef)
 
 	case *parser.FuncExpr:
-		// Special case handling for COUNT(*). This is a special construct to
-		// count the number of rows; in this case * does NOT refer to a set of
-		// columns.
-		if len(t.Name.Indirect) > 0 || !strings.EqualFold(string(t.Name.Base), "count") {
-			break
-		}
-		// The COUNT function takes a single argument. Exit out if this isn't true
-		// as this will be detected during expression evaluation.
+		// Check for invalid use of *, which, if it is an argument, is the only argument.
 		if len(t.Exprs) != 1 {
 			break
 		}
@@ -170,14 +164,18 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		if v.err != nil {
 			return false, expr
 		}
-		if !qname.IsStar() {
-			// This will cause us to recurse into the arguments of the function which
-			// will perform normal qualified name resolution.
-			break
+		if qname.IsStar() {
+			// Special case handling for COUNT(*). This is a special construct to
+			// count the number of rows; in this case * does NOT refer to a set of
+			// columns. A * is invalid elsewhere.
+			if len(t.Name.Indirect) == 0 && strings.EqualFold(string(t.Name.Base), "count") {
+				// Replace the function argument with a special non-NULL VariableExpr.
+				t = t.CopyNode()
+				t.Exprs[0] = starDatumInstance
+			} else {
+				v.err = errors.Errorf("cannot use '*' with %s", t.Name)
+			}
 		}
-		// Replace the function argument with a special non-NULL VariableExpr.
-		t = t.CopyNode()
-		t.Exprs[0] = starDatumInstance
 		return true, t
 
 	case *parser.Subquery:
