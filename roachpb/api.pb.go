@@ -1040,15 +1040,15 @@ func (*RequestLeaseRequest) Descriptor() ([]byte, []int) { return fileDescriptor
 // are not generally allowed to overlap. The LeaseTransferRequest is not special
 // in this respect (for example, the proposer of this command is checked to have
 // been holding the lease when the proposal was made).
-type LeaseTransferRequest struct {
+type TransferLeaseRequest struct {
 	Span  `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Lease Lease `protobuf:"bytes,2,opt,name=lease" json:"lease"`
 }
 
-func (m *LeaseTransferRequest) Reset()                    { *m = LeaseTransferRequest{} }
-func (m *LeaseTransferRequest) String() string            { return proto.CompactTextString(m) }
-func (*LeaseTransferRequest) ProtoMessage()               {}
-func (*LeaseTransferRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{50} }
+func (m *TransferLeaseRequest) Reset()                    { *m = TransferLeaseRequest{} }
+func (m *TransferLeaseRequest) String() string            { return proto.CompactTextString(m) }
+func (*TransferLeaseRequest) ProtoMessage()               {}
+func (*TransferLeaseRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{50} }
 
 // A RequestLeaseResponse is the response to a RequestLease()
 // operation.
@@ -1152,7 +1152,7 @@ type RequestUnion struct {
 	Noop               *NoopRequest               `protobuf:"bytes,25,opt,name=noop" json:"noop,omitempty"`
 	InitPut            *InitPutRequest            `protobuf:"bytes,26,opt,name=init_put,json=initPut" json:"init_put,omitempty"`
 	ChangeFrozen       *ChangeFrozenRequest       `protobuf:"bytes,27,opt,name=change_frozen,json=changeFrozen" json:"change_frozen,omitempty"`
-	LeaseTransfer      *LeaseTransferRequest      `protobuf:"bytes,28,opt,name=lease_transfer,json=leaseTransfer" json:"lease_transfer,omitempty"`
+	LeaseTransfer      *TransferLeaseRequest      `protobuf:"bytes,28,opt,name=lease_transfer,json=leaseTransfer" json:"lease_transfer,omitempty"`
 }
 
 func (m *RequestUnion) Reset()                    { *m = RequestUnion{} }
@@ -1455,7 +1455,7 @@ func init() {
 	proto.RegisterType((*TruncateLogRequest)(nil), "cockroach.roachpb.TruncateLogRequest")
 	proto.RegisterType((*TruncateLogResponse)(nil), "cockroach.roachpb.TruncateLogResponse")
 	proto.RegisterType((*RequestLeaseRequest)(nil), "cockroach.roachpb.RequestLeaseRequest")
-	proto.RegisterType((*LeaseTransferRequest)(nil), "cockroach.roachpb.LeaseTransferRequest")
+	proto.RegisterType((*TransferLeaseRequest)(nil), "cockroach.roachpb.LeaseTransferRequest")
 	proto.RegisterType((*RequestLeaseResponse)(nil), "cockroach.roachpb.RequestLeaseResponse")
 	proto.RegisterType((*ComputeChecksumRequest)(nil), "cockroach.roachpb.ComputeChecksumRequest")
 	proto.RegisterType((*ComputeChecksumResponse)(nil), "cockroach.roachpb.ComputeChecksumResponse")
@@ -3406,7 +3406,7 @@ func (m *RequestLeaseRequest) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *LeaseTransferRequest) Marshal() (data []byte, err error) {
+func (m *TransferLeaseRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -3416,7 +3416,7 @@ func (m *LeaseTransferRequest) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *LeaseTransferRequest) MarshalTo(data []byte) (int, error) {
+func (m *TransferLeaseRequest) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -5228,7 +5228,7 @@ func (m *RequestLeaseRequest) Size() (n int) {
 	return n
 }
 
-func (m *LeaseTransferRequest) Size() (n int) {
+func (m *TransferLeaseRequest) Size() (n int) {
 	var l int
 	_ = l
 	l = m.Span.Size()
@@ -5817,7 +5817,7 @@ func (this *RequestUnion) SetValue(value interface{}) bool {
 		this.InitPut = vt
 	case *ChangeFrozenRequest:
 		this.ChangeFrozen = vt
-	case *LeaseTransferRequest:
+	case *TransferLeaseRequest:
 		this.LeaseTransfer = vt
 	default:
 		return false
@@ -11489,7 +11489,7 @@ func (m *RequestLeaseRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *LeaseTransferRequest) Unmarshal(data []byte) error {
+func (m *TransferLeaseRequest) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -13128,7 +13128,7 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.LeaseTransfer == nil {
-				m.LeaseTransfer = &LeaseTransferRequest{}
+				m.LeaseTransfer = &TransferLeaseRequest{}
 			}
 			if err := m.LeaseTransfer.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
