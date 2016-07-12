@@ -92,6 +92,21 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	}
 }
 
+// TestGossipNoForwardSelf verifies that when a Gossip instance is full, it
+// redirects clients elsewhere (in particular not to itself).
+//
+// NB: Stress testing this test really stresses the OS networking stack
+// more than anything else. For example, on Linux it may quickly deplete
+// the ephemeral port range (due to the TIME_WAIT state).
+// On a box which only runs tests, this can be circumvented by running
+//
+//	sudo bash -c "echo 1 > /proc/sys/net/ipv4/tcp_tw_recycle"
+//
+// See https://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html
+// for details.
+//
+// On OSX, things similarly fall apart. See #7524 and #5218 for some discussion
+// of this.
 func TestGossipNoForwardSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
