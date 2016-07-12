@@ -78,8 +78,8 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	},
 	reflect.TypeOf(&enginepb.MVCCStats{}): {
 		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCStats(r, false) },
-		emptySum:             12760152523270066584,
-		populatedSum:         17551055561102061772,
+		emptySum:             18064891702890239528,
+		populatedSum:         4287370248246326846,
 	},
 	reflect.TypeOf(&roachpb.AbortCacheEntry{}): {
 		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedAbortCacheEntry(r, false) },

@@ -113,6 +113,12 @@ message MVCCMetadata {
 message MVCCStats {
   option (gogoproto.populate) = true;
 
+  // contains_estimates indicates that the MVCCStats object contains values
+  // which have been estimated. This means that the stats should not be used
+  // where complete accuracy is required, and instead should be recomputed 
+  // when necessary.
+  optional bool contains_estimates = 14 [(gogoproto.nullable) = false];
+
   // last_update_nanos is a timestamp at which the ages were last
   // updated. See the comment on MVCCStats.
   optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false];

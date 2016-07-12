@@ -1815,6 +1815,15 @@ declare module cockroach.storage.engine.enginepb {
 	
 		
 
+contains_estimates?: boolean;
+		
+
+getContainsEstimates?() : boolean;
+		setContainsEstimates?(containsEstimates : boolean): void;
+		
+
+
+
 last_update_nanos?: Long;
 		
 
