@@ -45,11 +45,15 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb
 	httpClient.Timeout = timeout
 
 	var resp serverpb.ClusterFreezeResponse
+	log.Infof("requesting: freeze=%t, timeout=%s", freeze, timeout)
 	cb := func(v proto.Message) {
 		oldNum := resp.RangesAffected
 		resp = *v.(*serverpb.ClusterFreezeResponse)
 		if oldNum > resp.RangesAffected {
 			resp.RangesAffected = oldNum
+		}
+		if (resp != serverpb.ClusterFreezeResponse{}) {
+			log.Infof("%+v", &resp)
 		}
 	}
 	err := util.StreamJSON(
@@ -135,13 +139,13 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 	// The cluster should now be fully operational (at least after waiting
 	// a little bit) since each node tries to unfreeze everything when it
 	// starts.
-	//
-	// TODO(tschottdorf): we unfreeze again in the loop since Raft reproposals
-	// can re-freeze Ranges unexpectedly. This should be re-evaluated after
-	// #6287 removes that problem.
 	if err := util.RetryForDuration(time.Minute, func() error {
 		if _, err := postFreeze(c, false, short); err != nil {
-			return err
+			if testutils.IsError(err, "404 Not Found") {
+				// It can take a bit until the endpoint is available.
+				return err
+			}
+			t.Fatal(err)
 		}
 
 		// TODO(tschottdorf): moving the client creation outside of the retry
@@ -155,11 +159,10 @@ func testRaftUpdateInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig
 		db, dbStopper := c.NewClient(t, 0)
 		defer dbStopper.Stop()
 
-		_, err := db.Scan(keys.LocalMax, roachpb.KeyMax, 0)
-		if err != nil {
-			log.Info(err)
+		if _, err := db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+			t.Fatal(err)
 		}
-		return err
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
