@@ -2397,7 +2397,7 @@ func (r *Replica) splitTrigger(
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
 	if err := engine.AccountForSelf(&deltaMS, split.NewDesc.RangeID); err != nil {
-		return errors.Errorf("unable to account for enginepb.MVCCStats's own stats impact: %s", err)
+		return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 	}
 
 	// TODO(d4l3k): we should check which half is smaller and compute stats for it
@@ -2406,12 +2406,12 @@ func (r *Replica) splitTrigger(
 	// Compute stats for updated range.
 	leftMS, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
 	if err != nil {
-		return errors.Errorf("unable to compute stats for updated range after split: %s", err)
+		return errors.Wrap(err, "unable to compute stats for updated range after split")
 	}
 	log.Trace(ctx, "computed stats for old range")
 
 	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
-		return errors.Errorf("unable to write MVCC stats: %s", err)
+		return errors.Wrap(err, "unable to write MVCC stats")
 	}
 	r.mu.Lock()
 	r.mu.state.Stats = leftMS
@@ -2422,24 +2422,24 @@ func (r *Replica) splitTrigger(
 	// nil on calls to MVCCPutProto.
 	replicaGCTS, err := r.getLastReplicaGCTimestamp()
 	if err != nil {
-		return errors.Errorf("unable to fetch last replica GC timestamp: %s", err)
+		return errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
-		return errors.Errorf("unable to copy last replica GC timestamp: %s", err)
+		return errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 	verifyTS, err := r.getLastVerificationTimestamp()
 	if err != nil {
-		return errors.Errorf("unable to fetch last verification timestamp: %s", err)
+		return errors.Wrap(err, "unable to fetch last verification timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
-		return errors.Errorf("unable to copy last verification timestamp: %s", err)
+		return errors.Wrap(err, "unable to copy last verification timestamp")
 	}
 
 	// Initialize the new range's abort cache by copying the original's.
 	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return errors.Errorf("unable to copy abort cache to new split range: %s", err)
+		return errors.Wrap(err, "unable to copy abort cache to new split range")
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
@@ -2478,7 +2478,7 @@ func (r *Replica) splitTrigger(
 	// from it below.
 	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
 	if err != nil {
-		return errors.Errorf("unable to write initial state: %s", err)
+		return errors.Wrap(err, "unable to write initial state")
 	}
 
 	// Compute stats for new range.
@@ -2490,7 +2490,7 @@ func (r *Replica) splitTrigger(
 		// over the keys and counting.
 		rightMS, err = ComputeStatsForRange(&split.NewDesc, batch, ts.WallTime)
 		if err != nil {
-			return errors.Errorf("unable to compute stats for new range after split: %s", err)
+			return errors.Wrap(err, "unable to compute stats for new range after split")
 		}
 	} else {
 		// Because neither the original stats or the delta stats contain
@@ -2509,7 +2509,7 @@ func (r *Replica) splitTrigger(
 		rightMS.Subtract(leftMS)
 	}
 	if err := setMVCCStats(batch, split.NewDesc.RangeID, rightMS); err != nil {
-		return errors.Errorf("unable to write MVCC stats: %s", err)
+		return errors.Wrap(err, "unable to write MVCC stats")
 	}
 	log.Trace(ctx, "computed stats for new range")
 
