@@ -39,6 +39,9 @@ func interestingGoroutines() (gs []string) {
 			// timeout properly. See also
 			// https://github.com/cockroachdb/cockroach/issues/7524.
 			strings.Contains(stack, "google.golang.org/grpc.NewConn") ||
+			// Go1.7 added a goroutine to network dialing that doesn't shut down
+			// quickly.
+			strings.Contains(stack, "created by net.(*netFD).connect") ||
 			// Below are the stacks ignored by the upstream leaktest code.
 			strings.Contains(stack, "testing.Main(") ||
 			strings.Contains(stack, "testing.tRunner(") ||
