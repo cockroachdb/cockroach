@@ -1558,7 +1558,10 @@ func (r *Replica) RequestLease(
 }
 
 // LeaseTransfer sets the lease holder for the range.
-// Unlike LeaderLease(), the new lease is allowed to overlap the old one.
+// Unlike with RequestLease(), the new lease is allowed to overlap the old one,
+// the contract being that the transfer must have been initiated by the (soon
+// ex-) lease holder which must have dropped all of its lease holder powers
+// before proposing.
 func (r *Replica) LeaseTransfer(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
 	h roachpb.Header, args roachpb.LeaseTransferRequest,
