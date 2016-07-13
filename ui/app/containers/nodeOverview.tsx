@@ -1,14 +1,16 @@
 import * as React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import { RouteComponentProps } from "react-router";
+import { IInjectedProps } from "react-router";
 import _ = require("lodash");
 
+import { nodeID } from "./../util/constants";
+import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import { NodeStatus, MetricConstants } from  "../util/proto";
 import { Bytes, Percentage } from "../util/format";
 
-interface NodeOverviewProps extends RouteComponentProps<any, any> {
+interface NodeOverviewProps extends IInjectedProps {
   node: NodeStatus;
   refreshNodes: typeof refreshNodes;
 }
@@ -117,8 +119,8 @@ function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: cockroa
 }
 
 let currentNode = createSelector(
-  (state: any, props: RouteComponentProps<any, any>): NodeStatus[] => state.cachedData.nodes.data,
-  (state: any, props: RouteComponentProps<any, any>): number => parseInt(props.params.node_id, 10),
+  (state: AdminUIState, props: IInjectedProps): NodeStatus[] => state.cachedData.nodes.data,
+  (state: AdminUIState, props: IInjectedProps): number => parseInt(props.params[nodeID], 10),
   (nodes, id) => {
     if (!nodes || !id) {
       return undefined;
@@ -127,7 +129,7 @@ let currentNode = createSelector(
   });
 
 export default connect(
-  (state: any, ownProps: RouteComponentProps<any, any>) => {
+  (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
       node: currentNode(state, ownProps),
     };

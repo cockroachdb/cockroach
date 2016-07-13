@@ -3,7 +3,9 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import moment = require("moment");
 import _ = require("lodash");
+
 import Banner from "./banner";
+import { AdminUIState } from "../../redux/state";
 import { refreshNodes, refreshCluster, refreshVersion } from "../../redux/apiReducers";
 import { VERSION_DISMISSED_KEY, loadUIData, saveUIData } from "../../redux/uiData";
 import { VersionList } from "../../interfaces/cockroachlabs";
@@ -93,14 +95,14 @@ class OutdatedBanner extends React.Component<OutdatedBannerProps, OutdatedBanner
   }
 }
 
-let nodeStatuses = (state: any): NodeStatus[] => state.cachedData.nodes.data;
-let newerVersions = (state: any): VersionList => state.cachedData.version.valid ? state.cachedData.version.data : null;
-let clusterID = (state: any): string => state.cachedData.cluster.data && state.cachedData.cluster.data.cluster_id;
+let nodeStatuses = (state: AdminUIState): NodeStatus[] => state.cachedData.nodes.data;
+let newerVersions = (state: AdminUIState): VersionList => state.cachedData.version.valid ? state.cachedData.version.data : null;
+let clusterID = (state: AdminUIState): string => state.cachedData.cluster.data && state.cachedData.cluster.data.cluster_id;
 
 // TODO(maxlang): change the way uiData stores data so we don't need an added check to see if the value was fetched
 // TODO(maxlang): determine whether they dismissed a node version mismatch or an upstream version check
-let versionCheckDismissedFetched = (state: any): boolean => state.uiData.data && _.has(state.uiData.data, VERSION_DISMISSED_KEY);
-let versionCheckDismissed = (state: any): number => versionCheckDismissedFetched(state) ? state.uiData.data[VERSION_DISMISSED_KEY] : undefined;
+let versionCheckDismissedFetched = (state: AdminUIState): boolean => state.uiData.data && _.has(state.uiData.data, VERSION_DISMISSED_KEY);
+let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismissedFetched(state) ? state.uiData.data[VERSION_DISMISSED_KEY] : undefined;
 
 let versions = createSelector(
   nodeStatuses,

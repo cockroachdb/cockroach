@@ -26,10 +26,7 @@ export type HealthState = CachedDataReducerState<HealthResponseMessage>;
 export let healthReducerObj = new CachedDataReducer<void, HealthResponseMessage>(api.getHealth, "health", TWO_SECONDS);
 export let refreshHealth = healthReducerObj.refresh;
 
-export let raftReducerObj = new CachedDataReducer<void, RaftDebugResponseMessage>(api.raftDebug, "raft");
-export let refreshRaft = raftReducerObj.refresh;
-
-function rollupStoreMetrics(res: NodesResponseMessage) {
+function rollupStoreMetrics(res: NodesResponseMessage): NodeStatus[] {
   return _.map(res.nodes, (node) => {
     RollupStoreMetrics(node);
     return node;
@@ -39,14 +36,26 @@ function rollupStoreMetrics(res: NodesResponseMessage) {
 export let nodesReducerObj = new CachedDataReducer<void, NodeStatus[]>(() => api.getNodes().then(rollupStoreMetrics), "nodes", TEN_SECONDS);
 export let refreshNodes = nodesReducerObj.refresh;
 
+export let raftReducerObj = new CachedDataReducer<void, RaftDebugResponseMessage>(api.raftDebug, "raft");
+export let refreshRaft = raftReducerObj.refresh;
+
 export let versionReducerObj = new CachedDataReducer<VersionCheckRequest, VersionList>(versionCheck, "version");
 export let refreshVersion = versionReducerObj.refresh;
 
-export let apiReducers = combineReducers({
-  [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
-  [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
-  [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
-  [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
-  [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
+export interface APIReducersState {
+  cluster: CachedDataReducerState<ClusterResponseMessage>;
+  events: CachedDataReducerState<EventsResponseMessage>;
+  health: HealthState;
+  nodes: CachedDataReducerState<NodeStatus[]>;
+  raft: CachedDataReducerState<RaftDebugResponseMessage>;
+  version: CachedDataReducerState<VersionList>;
+}
+
+export default combineReducers<APIReducersState>({
   [clusterReducerObj.actionNamespace]: clusterReducerObj.reducer,
+  [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
+  [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
+  [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
+  [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
+  [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
 });

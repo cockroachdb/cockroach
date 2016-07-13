@@ -253,8 +253,8 @@ let queuePromise: Promise<void> = null;
  * specifically, queries which have the same time span can be handled by the
  * server in a single call.
  */
-export function queryMetrics(id: string, query: TSRequestMessage) {
-  return (dispatch: Dispatch): Promise<void> => {
+export function queryMetrics<S>(id: string, query: TSRequestMessage) {
+  return (dispatch: Dispatch<S>): Promise<void> => {
     // Indicate that this request has been received and queued.
     dispatch(requestMetrics(id, query));
     queuedRequests.push({

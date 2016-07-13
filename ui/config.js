@@ -59,6 +59,9 @@ System.config({
     "moment": {
       "typings": "moment.d.ts"
     },
+    "redux": {
+      "typings": "index.d.ts"
+    },
     "reselect": {
       "typings": "src/reselect.d.ts"
     }

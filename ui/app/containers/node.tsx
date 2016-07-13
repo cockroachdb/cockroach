@@ -1,5 +1,7 @@
 import * as React from "react";
-import { Link, RouteComponentProps } from "react-router";
+import { Link, IInjectedProps } from "react-router";
+
+import { nodeID } from "./../util/constants";
 
 import { IndexListLink, ListLink } from "../components/listLink";
 import TimeScaleSelector from "./timescale";
@@ -7,10 +9,10 @@ import TimeScaleSelector from "./timescale";
 /**
  * Renders teh main content of the single node page.
  */
-export default class extends React.Component<RouteComponentProps<any, any>, {}> {
-  static title(routes: RouteComponentProps<any, any>) {
+export default class extends React.Component<IInjectedProps, {}> {
+  static title(routes: IInjectedProps) {
     return <h2>
-      <Link to="/nodes">Nodes</Link>: Node { routes.params.node_id }
+      <Link to="/nodes">Nodes</Link>: Node { routes.params[nodeID] }
     </h2>;
   }
 
@@ -19,7 +21,7 @@ export default class extends React.Component<RouteComponentProps<any, any>, {}> 
     let child = React.Children.only(this.props.children);
     let displayTimescale = (child as any).type.displayTimeScale === true;
 
-    let baseRoute = `/nodes/${this.props.params.node_id}`;
+    let baseRoute = `/nodes/${this.props.params[nodeID]}`;
 
     // TODO(mrtracy): this outer div is used to spare the children
     // `nav-container's styling. Should those styles apply only to `nav`?

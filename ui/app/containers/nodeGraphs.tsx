@@ -1,6 +1,8 @@
 import * as React from "react";
 import * as d3 from "d3";
-import { RouteComponentProps } from "react-router";
+import { IInjectedProps } from "react-router";
+
+import { nodeID } from "./../util/constants";
 
 import GraphGroup from "../components/graphGroup";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
@@ -11,12 +13,11 @@ import { NanoToMilli } from "../util/convert";
 /**
  * Renders the main content of the help us page.
  */
-export default class extends React.Component<RouteComponentProps<any, any>, {}> {
+export default class extends React.Component<IInjectedProps, {}> {
   static displayTimeScale = true;
 
   render() {
-    let { node_id : nodeId } = this.props.params;
-    let sources = [nodeId];
+    let sources = [this.props.params[nodeID]];
 
     return <div className="section node">
       <div className="charts">
