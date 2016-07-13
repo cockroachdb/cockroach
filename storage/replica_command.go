@@ -2286,7 +2286,7 @@ func (r *Replica) AdminSplit(
 // we'll be updating the meta1 addressing, otherwise we'll be updating the
 // meta2 addressing). That transaction includes a special SplitTrigger flag on
 // the EndTransaction request. Like all transactions, the requests within the
-// transaction are replicated via Raft, including the end-transaction request.
+// transaction are replicated via Raft, including the EndTransaction request.
 //
 // The second phase of split processing occurs when each replica for the range
 // encounters the SplitTrigger. Processing of the SplitTrigger happens below,
@@ -2848,6 +2848,65 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
+//
+// Changing the replicas for a range is complicated. A change is initiated by
+// the "replicate" queue when it encounters a range which has too many
+// replicas, too few replicas or requires rebalancing. Addition and removal of
+// a replica is divided into three phases. The first phase, which occurs in
+// Replica.ChangeReplicas, is performed via a distributed transaction which
+// updates the range descriptor and the meta range addressing information. This
+// transaction includes a special ChangeReplicasTrigger on the EndTransaction
+// request. A ConditionalPut of the RangeDescriptor implements the optimistic
+// lock on the RangeDescriptor mentioned previously. Like all transactions, the
+// requests within the transaction are replicated via Raft, including the
+// EndTransaction request.
+//
+// The second phase of processing occurs when the batch containing the
+// EndTransaction is proposed to raft. This proposing occurs on whatever
+// replica received the batch, usually, but not always the range lease
+// holder. defaultProposeRaftCommandLocked notices that the EndTransaction
+// contains a ChangeReplicasTrigger and proposes a ConfChange to Raft (via
+// raft.RawNode.ProposeConfChange). When this phase completes, the replica
+// change has been enacted on the Raft group. If a new replica was added the
+// raft leader will start sending it heartbeat messages and attempting to bring
+// it up to date.
+//
+// The third phase of change replicas occurs when each replica for the range
+// encounters the ChangeReplicasTrigger when applying the EndTransaction
+// request. The replica will update its local range descriptor so as to contain
+// the new set of replicas. If the replica is the one that is being removed, it
+// will queue itself for removal with replicaGCQueue.
+//
+// TODO(peter): Why does a removed replica receive the EndTransaction
+// containing the ChangeReplicasTrigger? Is this accidental or guaranteed by
+// Raft?
+//
+// When a new replica is added, it will have to catch up to the state of the
+// other replicas. The Raft leader automatically handles this by either sending
+// the new replica Raft log entries to apply, or by generating and sending a
+// snapshot. See Replica.Snapshot and Replica.Entries.
+//
+// Note that Replica.ChangeReplicas returns when the distributed transaction
+// has been committed to a quorum of replicas in the range. The actual
+// replication of data occurs asynchronously via a snapshot or application of
+// Raft log entries. This is important for the replicate queue to be aware
+// of. A node can process hundreds or thousands of ChangeReplicas operations
+// per second even though the actual replication of data proceeds at a much
+// slower base. In order to avoid having this background replication overwhelm
+// the system, replication is throttled via a reservation system. When
+// allocating a new replica for a range, the replicate queue reserves space for
+// that replica on the target store via a ReservationRequest. (See
+// StorePool.reserve). The reservation is fulfilled when the snapshot is
+// applied.
+//
+// TODO(peter): What happens if the replica is brought up to date via Raft log
+// entries?
+//
+// TODO(peter): Describe preemptive snapshots. Preemptive snapshots are needed
+// for the replicate queue to function properly. Currently the replicate queue
+// will fire off as many replica additions as possible until it starts getting
+// reservations denied at which point it will ignore the replica until the next
+// scanner cycle.
 func (r *Replica) ChangeReplicas(
 	changeType roachpb.ReplicaChangeType, repDesc roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor,
 ) error {
