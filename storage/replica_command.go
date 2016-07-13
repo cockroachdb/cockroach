@@ -802,8 +802,8 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 				// in the transaction.
 				if !r.ContainsKey(keys.SystemConfigSpan.Key) {
 					log.Errorc(ctx, "System configuration span was modified, but the "+
-						"modification trigger is executing on a non-system range. Configuration "+
-						"changes will not be gossiped.")
+						"modification trigger is executing on a non-system range. "+
+						"Configuration changes will not be gossiped.")
 				} else {
 					batch.Defer(r.maybeGossipSystemConfig)
 				}
