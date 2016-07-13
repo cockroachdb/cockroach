@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -109,6 +110,16 @@ const (
 	// DefaultGossipStoresInterval is the default interval for gossiping storage-
 	// related info.
 	DefaultGossipStoresInterval = 1 * time.Minute
+)
+
+// Gossip metrics counter names.
+const (
+	ConnectionsIncomingCounterName = "connections.incoming"
+	ConnectionsOutgoingCounterName = "connections.outgoing"
+	InfosSentRatesName             = "infos.sent"
+	InfosReceivedRatesName         = "infos.received"
+	BytesSentRatesName             = "bytes.sent"
+	BytesReceivedRatesName         = "bytes.received"
 )
 
 // Storage is an interface which allows the gossip instance
@@ -168,7 +179,7 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
+func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
@@ -191,6 +202,15 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
+
+	if registry != nil {
+		registry.MustAdd(ConnectionsIncomingCounterName, g.incoming.counter)
+		registry.MustAdd(ConnectionsOutgoingCounterName, g.outgoing.counter)
+		registry.MustAddRates(InfosSentRatesName, g.aggregateMetrics.infosSent)
+		registry.MustAddRates(InfosReceivedRatesName, g.aggregateMetrics.infosReceived)
+		registry.MustAddRates(BytesSentRatesName, g.aggregateMetrics.bytesSent)
+		registry.MustAddRates(BytesReceivedRatesName, g.aggregateMetrics.bytesReceived)
+	}
 
 	return g
 }
@@ -369,8 +389,8 @@ func (g *Gossip) clientStatus() string {
 	n := len(g.clients)
 	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", n, maxConns)
 	for _, c := range g.clients {
-		fmt.Fprintf(&buf, "  %d: %s (%s: %d/%d sent/received)\n",
-			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.sent, c.received)
+		fmt.Fprintf(&buf, "  %d: %s (%s: %s)\n",
+			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.metrics)
 	}
 	return buf.String()
 }
@@ -954,7 +974,7 @@ func (g *Gossip) checkHasConnected() {
 // The client is added to the outgoing address set and launched in
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr) {
-	c := newClient(addr)
+	c := newClient(addr, g.aggregateMetrics)
 	g.clientsMu.Lock()
 	g.clients = append(g.clients, c)
 	g.clientsMu.Unlock()
@@ -993,4 +1013,25 @@ var _ security.RequestWithUser = &Request{}
 // Gossip messages are always sent by the node user.
 func (*Request) GetUser() string {
 	return security.NodeUser
+}
+
+type metrics struct {
+	infosSent     metric.Rates // Count of infos sent
+	infosReceived metric.Rates // Count of infos received
+	bytesSent     metric.Rates // Number of bytes sent
+	bytesReceived metric.Rates // Number of bytes received
+}
+
+func (m metrics) String() string {
+	return fmt.Sprintf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
+		m.infosSent.Count(), m.infosReceived.Count(), m.bytesSent.Count(), m.bytesReceived.Count())
+}
+
+func makeMetrics() metrics {
+	return metrics{
+		infosSent:     metric.NewRates(),
+		infosReceived: metric.NewRates(),
+		bytesSent:     metric.NewRates(),
+		bytesReceived: metric.NewRates(),
+	}
 }

@@ -311,6 +311,18 @@ type Rates struct {
 	Rates map[TimeScale]*Rate
 }
 
+// NewRates returns a new Rates instance, which contains a set of EWMA-based
+// rates with generally useful timescales and a cumulative counter.
+func NewRates() Rates {
+	scales := DefaultTimeScales
+	es := make(map[TimeScale]*Rate)
+	for _, scale := range scales {
+		es[scale] = NewRate(scale.d)
+	}
+	c := NewCounter()
+	return Rates{Counter: c, Rates: es}
+}
+
 // Add adds the given value to all contained objects.
 func (es Rates) Add(v int64) {
 	es.Counter.Inc(v)

@@ -204,11 +204,15 @@ func (r *Registry) GetRate(name string) *Rate {
 // Rates registers and returns a new Rates instance, which contains a set of EWMA-based rates
 // with generally useful time scales and a cumulative counter.
 func (r *Registry) Rates(prefix string) Rates {
-	scales := DefaultTimeScales
-	es := make(map[TimeScale]*Rate)
-	for _, scale := range scales {
-		es[scale] = r.Rate(prefix+sep+scale.name, scale.d)
+	rates := NewRates()
+	r.MustAddRates(prefix, rates)
+	return rates
+}
+
+// MustAddRates registers a new Rates instance and panics if it is unsuccessful.
+func (r *Registry) MustAddRates(prefix string, rates Rates) {
+	for scale, rate := range rates.Rates {
+		r.MustAdd(prefix+sep+scale.name, rate)
 	}
-	c := r.Counter(prefix + sep + "count")
-	return Rates{Counter: c, Rates: es}
+	r.MustAdd(prefix+sep+"count", rates.Counter)
 }
