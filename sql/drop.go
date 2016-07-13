@@ -172,12 +172,9 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		tableDesc, err := p.getTableDesc(index.Table)
+		tableDesc, err := p.mustGetTableDesc(index.Table)
 		if err != nil {
 			return nil, err
-		}
-		if tableDesc == nil {
-			return nil, sqlbase.NewUndefinedTableError(index.Table.String())
 		}
 
 		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {

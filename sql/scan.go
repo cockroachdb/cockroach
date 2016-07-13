@@ -248,27 +248,19 @@ func (n *scanNode) initTable(
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (string, error) {
-	var err error
-
-	// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
-	// specified time, and never lease anything. The proto transaction already
-	// has its timestamps set correctly so getTableDesc will fetch with the
-	// correct timestamp.
+	descFunc := p.getTableLease
 	if p.asOf {
-		desc, err := p.getTableDesc(tableName)
-		if err != nil {
-			return "", err
-		}
-		if desc == nil {
-			return "", sqlbase.NewUndefinedTableError(tableName.String())
-		}
-		n.desc = *desc
-	} else {
-		n.desc, err = p.getTableLease(tableName)
+		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
+		// specified time, and never lease anything. The proto transaction already
+		// has its timestamps set correctly so mustGetTableDesc will fetch with the
+		// correct timestamp.
+		descFunc = p.mustGetTableDesc
 	}
+	desc, err := descFunc(tableName)
 	if err != nil {
 		return "", err
 	}
+	n.desc = *desc
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
 		return "", err

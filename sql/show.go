@@ -60,13 +60,11 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
-	desc, err := p.getTableDesc(n.Table)
+	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
 	}
-	if desc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
-	}
+
 	v := &valuesNode{
 		columns: []ResultColumn{
 			{Name: "Field", Typ: parser.TypeString},
@@ -75,6 +73,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 			{Name: "Default", Typ: parser.TypeString},
 		},
 	}
+
 	for i, col := range desc.Columns {
 		defaultExpr := parser.Datum(parser.DNull)
 		if e := desc.Columns[i].DefaultExpr; e != nil {
@@ -94,13 +93,11 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 // Traditional syntax.
 // Privileges: None.
 func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
-	desc, err := p.getTableDesc(n.Table)
+	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
 	}
-	if desc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
-	}
+
 	v := &valuesNode{
 		columns: []ResultColumn{
 			{Name: "Table", Typ: parser.TypeString},
@@ -271,12 +268,9 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
-	desc, err := p.getTableDesc(n.Table)
+	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
-	}
-	if desc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 
 	v := &valuesNode{
@@ -303,6 +297,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			parser.MakeDBool(parser.DBool(isStored)),
 		})
 	}
+
 	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		sequence := 1
 		for i, col := range index.ColumnNames {
@@ -322,12 +317,9 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
-	desc, err := p.getTableDesc(n.Table)
+	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
-	}
-	if desc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 
 	v := &valuesNode{
