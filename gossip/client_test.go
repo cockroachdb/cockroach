@@ -223,7 +223,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	// startClient requires locks are held, so acquire here.
 	local.mu.Lock()
 	lAddr := local.is.NodeAddr
-	local.startClient(&lAddr, stopper)
+	local.startClient(&lAddr)
 	local.mu.Unlock()
 	local.manage()
 	util.SucceedsSoon(t, func() error {
@@ -250,8 +250,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
-	local.startClient(&rAddr, stopper)
-	remote.startClient(&lAddr, stopper)
+	local.startClient(&rAddr)
+	remote.startClient(&lAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
@@ -289,8 +289,8 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
-	local.startClient(&rAddr, stopper)
-	local.startClient(&rAddr, stopper)
+	local.startClient(&rAddr)
+	local.startClient(&rAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
