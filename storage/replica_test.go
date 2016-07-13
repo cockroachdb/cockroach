@@ -5147,7 +5147,7 @@ func TestTerm(t *testing.T) {
 		t.Fatal(err)
 	}
 	if firstIndex != indexes[5] {
-		t.Fatalf("expected fristIndex %d to be %d", firstIndex, indexes[4])
+		t.Fatalf("expected firstIndex %d to be %d", firstIndex, indexes[4])
 	}
 
 	// Truncated logs should return an ErrCompacted error.
@@ -5250,7 +5250,7 @@ func TestGCIncorrectRange(t *testing.T) {
 }
 
 // TestReplicaCancelRaft checks that it is possible to safely abandon Raft
-// commands via a canceable context.Context.
+// commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, cancelEarly := range []bool{true, false} {
