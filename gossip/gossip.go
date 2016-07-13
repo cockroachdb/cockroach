@@ -834,7 +834,31 @@ func (g *Gossip) manage() {
 			case nodeID := <-g.tighten:
 				g.tightenNetwork(nodeID)
 			case <-cullTicker.C:
-				g.cullNetwork()
+				func() {
+					g.mu.Lock()
+					if !g.outgoing.hasSpace() {
+						leastUsefulID := g.is.leastUseful(g.outgoing)
+
+						if c := g.findClient(func(c *client) bool {
+							return c.peerID == leastUsefulID
+						}); c != nil {
+							if log.V(1) {
+								log.Infof("closing least useful client %+v to tighten network graph", c)
+							}
+							c.close()
+
+							// After releasing the lock, block until the client disconnects.
+							defer func() {
+								g.doDisconnected(<-g.disconnected)
+							}()
+						} else {
+							if log.V(1) {
+								log.Infof("couldn't find least useful client among %+v", g.clients)
+							}
+						}
+					}
+					g.mu.Unlock()
+				}()
 			case <-stallTicker.C:
 				g.mu.Lock()
 				g.maybeSignalStalledLocked()
@@ -863,31 +887,6 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 			log.Infof("starting client to distant node %d to tighten network graph", distantNodeID)
 			g.startClient(nodeAddr)
 		}
-	}
-}
-
-// cullNetwork is called periodically to remove the least "useful"
-// outgoing node to free up an outgoing spot for a more targeted
-// tightening (via tightenNetwork).
-func (g *Gossip) cullNetwork() {
-	leastUsefulID := func() roachpb.NodeID {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		// If there's no space, find and remove least useful peer, if possible.
-		if g.outgoing.hasSpace() {
-			return 0
-		}
-		return g.is.leastUseful(g.outgoing)
-	}()
-	if leastUsefulID == 0 {
-		if log.V(1) {
-			log.Infof("couldn't find least useful client to close")
-		}
-	} else {
-		if log.V(1) {
-			log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
-		}
-		g.closeClient(leastUsefulID)
 	}
 }
 
@@ -960,14 +959,6 @@ func (g *Gossip) startClient(addr net.Addr) {
 	g.clients = append(g.clients, c)
 	g.clientsMu.Unlock()
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper)
-}
-
-// closeClient finds and closes a client.
-func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	if c := g.findClient(func(c *client) bool { return c.peerID == nodeID }); c != nil {
-		c.close()
-		g.doDisconnected(<-g.disconnected) // block until the client has disconnected
-	}
 }
 
 // removeClient removes the specified client. Called when a client
