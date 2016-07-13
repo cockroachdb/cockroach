@@ -2551,12 +2551,8 @@ func (r *Replica) splitTrigger(
 		// queue may not have picked it up (due to the need for a split). Enqueue
 		// both new halves to speed up a potentially necessary replication. See
 		// #7022.
-		if len(split.UpdatedDesc.Replicas) == 1 {
-			r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
-		}
-		if len(split.NewDesc.Replicas) == 1 {
-			r.store.replicateQueue.MaybeAdd(newRng, r.store.Clock().Now())
-		}
+		r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.replicateQueue.MaybeAdd(newRng, r.store.Clock().Now())
 
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
@@ -2823,6 +2819,16 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 				// will be GC'd eventually.
 				log.Errorf("unable to add range %s to GC queue: %s", r, err)
 			}
+		})
+	} else {
+		// After a successful replica addition or removal check to see if the range
+		// needs to be split. Splitting usually takes precedence over replication
+		// via configuration of the split and replicate queues, but if the split
+		// occurs concurrently with the replicas change the split can fail and
+		// won't retry until the next scanner cycle. Re-queuing the replica here
+		// removes that latency.
+		batch.Defer(func() {
+			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 		})
 	}
 	return nil
