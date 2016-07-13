@@ -2502,7 +2502,7 @@ func (r *Replica) splitTrigger(
 	var rightMS enginepb.MVCCStats
 	if origStats.ContainsEstimates || deltaMS.ContainsEstimates {
 		// Because either the original stats or the delta stats contain
-		// estimate values, we cannot perform aritmetic to determine the
+		// estimate values, we cannot perform arithmetic to determine the
 		// new range's stats. Instead, we must recompute by iterating
 		// over the keys and counting.
 		rightMS, err = ComputeStatsForRange(&split.NewDesc, batch, ts.WallTime)
@@ -2511,7 +2511,7 @@ func (r *Replica) splitTrigger(
 		}
 	} else {
 		// Because neither the original stats or the delta stats contain
-		// estimate values, we can safely perform aritmetic to determine the
+		// estimate values, we can safely perform arithmetic to determine the
 		// new range's stats. The calculation looks like:
 		//   new_ms = old_ms + delta_ms - left_ms
 		// where
