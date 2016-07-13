@@ -196,9 +196,29 @@ func (at *allocatorTest) Run(t *testing.T) {
 	at.f.Assert(t)
 }
 
-// printStats prints the time it took for rebalancing to finish and the final
-// standard deviation of replica counts across stores.
-func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPort int) error {
+// getStdDev returns the standard deviation of the replica counts for all
+// stores.
+func getStdDev(host string, adminPort int) (float64, error) {
+	var client http.Client
+	var nodesResp serverpb.NodesResponse
+	url := fmt.Sprintf("http://%s:%d/_status/nodes", host, adminPort)
+	if err := util.GetJSON(client, url, &nodesResp); err != nil {
+		return 0, err
+	}
+	var replicaCounts stats.Float64Data
+	for _, node := range nodesResp.Nodes {
+		for _, ss := range node.StoreStatuses {
+			replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
+		}
+	}
+	return stats.StdDevP(replicaCounts)
+}
+
+// printRebalanceStats prints the time it took for rebalancing to finish and
+// the final standard deviation of replica counts across stores. The
+// rebalancedAt parameter represents how long it took for the cluster to be
+// rebalanced but not necessarily settle into an equilibrium.
+func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPort int, rebalancedAt time.Duration) error {
 	// TODO(cuongdo): Output these in a machine-friendly way and graph.
 
 	// Output time it took to rebalance.
@@ -218,7 +238,10 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 			// This can happen with single-node clusters.
 			rebalanceInterval = time.Duration(0)
 		}
-		log.Infof("cluster took %s to rebalance", rebalanceInterval)
+
+		log.Infof("cluster took %s to rebalance", rebalancedAt)
+		log.Infof("cluster took %s to reach equilibrium", rebalanceInterval-rebalancedAt)
+		log.Infof("for a total of %s", rebalanceInterval)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -234,19 +257,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 
 	// Output standard deviation of the replica counts for all stores.
 	{
-		var client http.Client
-		var nodesResp serverpb.NodesResponse
-		url := fmt.Sprintf("http://%s:%d/_status/nodes", host, adminPort)
-		if err := util.GetJSON(client, url, &nodesResp); err != nil {
-			return err
-		}
-		var replicaCounts stats.Float64Data
-		for _, node := range nodesResp.Nodes {
-			for _, ss := range node.StoreStatuses {
-				replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
-			}
-		}
-		stddev, err := stats.StdDevP(replicaCounts)
+		stddev, err := getStdDev(host, adminPort)
 		if err != nil {
 			return err
 		}
@@ -309,6 +320,12 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 		_ = db.Close()
 	}()
 
+	startTime := timeutil.Now()
+	// rebalancedAt is the time in which the nodes can be considered
+	// rebalanced, having a stddev of replicas counts at less than 1.
+	var rebalancedAt time.Duration
+	host := at.f.Nodes()[0]
+
 	var statsTimer timeutil.Timer
 	var assertTimer timeutil.Timer
 	defer statsTimer.Stop()
@@ -323,9 +340,17 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 			if err != nil {
 				return err
 			}
+			if rebalancedAt == 0 {
+				stddev, err := getStdDev(host, 8080)
+				if err != nil {
+					return err
+				}
+				if stddev < 1 {
+					rebalancedAt = timeutil.Now().Sub(startTime)
+				}
+			}
 			if stable {
-				host := at.f.Nodes()[0]
-				if err := at.printRebalanceStats(db, host, 8080); err != nil {
+				if err := at.printRebalanceStats(db, host, 8080, rebalancedAt); err != nil {
 					return err
 				}
 				return nil
