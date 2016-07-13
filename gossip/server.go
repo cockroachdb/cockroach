@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -50,22 +51,25 @@ type server struct {
 	incoming nodeSet                            // Incoming client node IDs
 	nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
 	tighten  chan roachpb.NodeID                // Channel of too-distant node IDs
-	sent     int                                // Count of infos sent from this server to clients
-	received int                                // Count of infos received from clients
 	ready    chan struct{}                      // Broadcasts wakeup to waiting gossip requests
+
+	nodeMetrics   metrics
+	serverMetrics metrics
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
-func newServer(stopper *stop.Stopper) *server {
+func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	return &server{
-		stopper:  stopper,
-		is:       newInfoStore(0, util.UnresolvedAddr{}, stopper),
-		incoming: makeNodeSet(minPeers),
-		nodeMap:  make(map[util.UnresolvedAddr]serverInfo),
-		tighten:  make(chan roachpb.NodeID, 1),
-		ready:    make(chan struct{}),
+		stopper:       stopper,
+		is:            newInfoStore(0, util.UnresolvedAddr{}, stopper),
+		incoming:      makeNodeSet(minPeers, registry.Gauge(ConnectionsIncomingGaugeName)),
+		nodeMap:       make(map[util.UnresolvedAddr]serverInfo),
+		tighten:       make(chan roachpb.NodeID, 1),
+		ready:         make(chan struct{}),
+		nodeMetrics:   makeMetrics(registry),
+		serverMetrics: makeMetrics(metric.NewRegistry()),
 	}
 }
 
@@ -87,6 +91,14 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			return ctx.Err()
 		case syncChan <- struct{}{}:
 			defer func() { <-syncChan }()
+
+			bytesSent := int64(reply.Size())
+			infoCount := int64(len(reply.Delta))
+			s.nodeMetrics.bytesSent.Add(bytesSent)
+			s.nodeMetrics.infosSent.Add(infoCount)
+			s.serverMetrics.bytesSent.Add(bytesSent)
+			s.serverMetrics.infosSent.Add(infoCount)
+
 			return stream.Send(reply)
 		}
 	}
@@ -137,7 +149,6 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 				return err
 			}
 			s.mu.Lock()
-			s.sent += infoCount
 		}
 
 		ready := s.ready
@@ -212,7 +223,13 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 			}
 		}
 
-		s.received += len(args.Delta)
+		bytesReceived := int64(args.Size())
+		infosReceived := int64(len(args.Delta))
+		s.nodeMetrics.bytesReceived.Add(bytesReceived)
+		s.nodeMetrics.infosReceived.Add(infosReceived)
+		s.serverMetrics.bytesReceived.Add(bytesReceived)
+		s.serverMetrics.infosReceived.Add(infosReceived)
+
 		freshCount, err := s.is.combine(args.Delta, args.NodeID)
 		if err != nil {
 			log.Warningf("node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
@@ -251,20 +268,6 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 		// *argsPtr were set to nil.
 		*argsPtr = recvArgs
 	}
-}
-
-// InfosSent returns the total count of infos sent to clients.
-func (s *server) InfosSent() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.sent
-}
-
-// InfosReceived returns the total count of infos received from clients.
-func (s *server) InfosReceived() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.received
 }
 
 // maybeTighten examines the infostore for the most distant node and
@@ -324,9 +327,8 @@ func (s *server) status() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var buf bytes.Buffer
-	n := len(s.nodeMap)
-	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %d/%d sent/received)\n",
-		n, s.incoming.maxSize, s.sent, s.received)
+	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
+		s.incoming.gauge.Value(), s.incoming.maxSize, s.serverMetrics)
 	for addr, info := range s.nodeMap {
 		// TODO(peter): Report per connection sent/received statistics. The
 		// structure of server.Gossip and server.gossipReceiver makes this
