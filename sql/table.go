@@ -119,10 +119,8 @@ type SchemaAccessor interface {
 	notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationID)
 
 	// getTableLease acquires a lease for the specified table. The lease will be
-	// released when the planner closes. Note that a shallow copy of the table
-	// descriptor is returned. It is safe to mutate fields of the returned
-	// descriptor, but the values those fields point to should not be modified.
-	getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error)
+	// released when the planner closes.
+	getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
 	// getAliasedTableLease looks up the table descriptor for an alias table
 	// expression.
@@ -175,12 +173,12 @@ func (p *planner) mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableD
 }
 
 // getTableLease implements the SchemaAccessor interface.
-func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error) {
+func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof("planner acquiring lease on table %q", qname)
 	}
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return nil, err
 	}
 
 	if qname.Database() == sqlbase.SystemDB.Name || testDisableTableLeases {
@@ -188,16 +186,12 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
 		// chicken&egg problem.
-		desc, err := p.mustGetTableDesc(qname)
-		if err != nil {
-			return sqlbase.TableDescriptor{}, err
-		}
-		return *desc, nil
+		return p.mustGetTableDesc(qname)
 	}
 
 	dbID, err := p.getDatabaseID(qname.Database())
 	if err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return nil, err
 	}
 
 	// First, look to see if we already have a lease for this table.
@@ -224,16 +218,16 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 			if err == errDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
 				// table's name.
-				return sqlbase.TableDescriptor{}, sqlbase.NewUndefinedTableError(qname.String())
+				return nil, sqlbase.NewUndefinedTableError(qname.String())
 			}
-			return sqlbase.TableDescriptor{}, err
+			return nil, err
 		}
 		p.leases = append(p.leases, lease)
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
 		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
-	return lease.TableDescriptor, nil
+	return &lease.TableDescriptor, nil
 }
 
 // getTableLeaseByID is a by-ID variant of getTableLease (i.e. uses same cache).
@@ -351,7 +345,7 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*sqlbase.TableDescri
 	if err != nil {
 		return nil, err
 	}
-	return &desc, nil
+	return desc, nil
 }
 
 // notifySchemaChange implements the SchemaAccessor interface.

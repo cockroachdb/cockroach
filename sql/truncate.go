@@ -37,20 +37,20 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
+		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
 
-		if err := truncateTable(&tableDesc, p.txn); err != nil {
+		if err := truncateTable(tableDesc, p.txn); err != nil {
 			return nil, err
 		}
 
-		fkTables := TablesNeededForFKs(tableDesc, CheckDeletes)
+		fkTables := TablesNeededForFKs(*tableDesc, CheckDeletes)
 		if err := p.fillFKTableMap(fkTables); err != nil {
 			return nil, err
 		}
 		colMap := colIDtoRowIndexFromCols(tableDesc.Columns)
-		if helper, err := makeFKDeleteHelper(p.txn, tableDesc, fkTables, colMap); err != nil {
+		if helper, err := makeFKDeleteHelper(p.txn, *tableDesc, fkTables, colMap); err != nil {
 			return nil, err
 		} else if err = helper.checkAll(nil); err != nil {
 			return nil, err

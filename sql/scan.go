@@ -248,8 +248,6 @@ func (n *scanNode) initTable(
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (string, error) {
-	var err error
-
 	// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 	// specified time, and never lease anything. The proto transaction already
 	// has its timestamps set correctly so getTableDesc will fetch with the
@@ -261,10 +259,11 @@ func (n *scanNode) initTable(
 		}
 		n.desc = *desc
 	} else {
-		n.desc, err = p.getTableLease(tableName)
-	}
-	if err != nil {
-		return "", err
+		desc, err := p.getTableLease(tableName)
+		if err != nil {
+			return "", err
+		}
+		n.desc = *desc
 	}
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
