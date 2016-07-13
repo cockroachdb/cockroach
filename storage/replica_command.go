@@ -151,9 +151,9 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		resp := reply.(*roachpb.RequestLeaseResponse)
 		*resp, err = r.RequestLease(ctx, batch, ms, h, *tArgs)
 		r.store.metrics.leaseRequestComplete(err)
-	case *roachpb.LeaseTransferRequest:
+	case *roachpb.TransferLeaseRequest:
 		resp := reply.(*roachpb.RequestLeaseResponse)
-		*resp, err = r.LeaseTransfer(ctx, batch, ms, h, *tArgs)
+		*resp, err = r.TransferLease(ctx, batch, ms, h, *tArgs)
 		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
@@ -1557,11 +1557,14 @@ func (r *Replica) RequestLease(
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
 }
 
-// LeaseTransfer sets the lease holder for the range.
-// Unlike LeaderLease(), the new lease is allowed to overlap the old one.
-func (r *Replica) LeaseTransfer(
+// TransferLease sets the lease holder for the range.
+// Unlike with RequestLease(), the new lease is allowed to overlap the old one,
+// the contract being that the transfer must have been initiated by the (soon
+// ex-) lease holder which must have dropped all of its lease holder powers
+// before proposing.
+func (r *Replica) TransferLease(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
-	h roachpb.Header, args roachpb.LeaseTransferRequest,
+	h roachpb.Header, args roachpb.TransferLeaseRequest,
 ) (roachpb.RequestLeaseResponse, error) {
 	// maybeGossipSystemConfig cannot be called while the replica is locked,
 	// so we defer it here so it is called once the replica lock is released.

@@ -584,7 +584,7 @@ message RequestLeaseRequest {
   optional Lease lease = 2[(gogoproto.nullable) = false];
 }
 
-// A LeaseTransferRequest represents the arguments to the LeaseTransfer()
+// A TransferLeaseRequest represents the arguments to the TransferLease()
 // method. It is sent by a replica that currently holds the range lease and
 // wants to transfer it away.
 // Like a LeaderLeaseRequest, this request has the effect of instituting a new
@@ -592,15 +592,15 @@ message RequestLeaseRequest {
 // existing one. It is a separate request because the LeaderLeaseRequest is
 // special - it's not subject to the same replay protection restrictions as
 // other requests, instead being protected from replays by the fact that leases
-// are not generally allowed to overlap. The LeaseTransferRequest is not special
+// are not generally allowed to overlap. The TransferLeaseRequest is not special
 // in this respect (for example, the proposer of this command is checked to have
 // been holding the lease when the proposal was made).
-message LeaseTransferRequest {
+message TransferLeaseRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
-// A RequestLeaseResponse is the response to a RequestLease()
+// A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
 // operation.
 message RequestLeaseResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -683,7 +683,7 @@ message RequestUnion {
   optional NoopRequest noop = 25;
   optional InitPutRequest init_put = 26;
   optional ChangeFrozenRequest change_frozen = 27;
-  optional LeaseTransferRequest lease_transfer = 28;
+  optional TransferLeaseRequest transfer_lease = 28;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
