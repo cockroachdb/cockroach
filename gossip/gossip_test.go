@@ -18,7 +18,6 @@ package gossip
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 	"time"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -202,11 +202,14 @@ func TestGossipCullNetwork(t *testing.T) {
 
 	local.manage()
 
+	expectedNum := minPeers - 1
 	util.SucceedsSoon(t, func() error {
 		// Verify that a client is closed within the cull interval.
-		if len(local.Outgoing()) == minPeers-1 {
+		actualNum := len(local.Outgoing())
+		if actualNum <= expectedNum {
 			return nil
 		}
-		return errors.New("no network culling occurred")
+		return errors.Errorf("no network culling occurred (have %d, want %d)",
+			actualNum, expectedNum)
 	})
 }
