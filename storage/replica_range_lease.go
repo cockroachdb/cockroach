@@ -143,7 +143,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 					}
 					execPErr = c.Err
 				}
-			case <-replica.store.Stopper().ShouldDrain():
+			case <-replica.store.Stopper().ShouldQuiesce():
 				execPErr = roachpb.NewError(
 					replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.Desc()))
 			}

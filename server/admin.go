@@ -710,7 +710,7 @@ func (s *adminServer) waitForStoreFrozen(
 	}
 
 	opts := base.DefaultRetryOptions()
-	opts.Closer = s.server.stopper.ShouldDrain()
+	opts.Closer = s.server.stopper.ShouldQuiesce()
 	opts.MaxRetries = 20
 	sem := make(chan struct{}, 256)
 	errChan := make(chan error, 1)

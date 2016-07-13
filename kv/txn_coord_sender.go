@@ -614,7 +614,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 			// responsible for client timeouts.
 			tc.tryAsyncAbort(txnID)
 			return
-		case <-tc.stopper.ShouldDrain():
+		case <-tc.stopper.ShouldQuiesce():
 			return
 		}
 	}

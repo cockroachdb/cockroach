@@ -58,7 +58,7 @@ func InitSenderForLocalTestCluster(
 	gossip *gossip.Gossip,
 ) client.Sender {
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = stopper.ShouldDrain()
+	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	distSender := NewDistSender(&DistSenderContext{
 		Clock: clock,
