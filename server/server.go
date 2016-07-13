@@ -144,7 +144,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 	)
 
-	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
+	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
 	//

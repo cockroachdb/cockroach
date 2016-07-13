@@ -69,7 +69,7 @@ func (p *pendingLeaseRequest) RequestPending() *roachpb.Lease {
 // opposed to an extension, or acquiring the lease when none is held).
 //
 // Note: Once this function gets a context to be used for cancellation, instead
-// of replica.store.Stopper().ShouldDrain(), care will be needed for cancelling
+// of replica.store.Stopper().ShouldQuiesce(), care will be needed for cancelling
 // the Raft command, similar to replica.addWriteCmd.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
 	replica *Replica,
