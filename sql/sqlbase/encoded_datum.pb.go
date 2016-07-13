@@ -17,6 +17,7 @@ It has these top-level messages:
 	ForeignKeyReference
 	ColumnDescriptor
 	ColumnFamilyDescriptor
+	InterleaveDescriptor
 	IndexDescriptor
 	DescriptorMutation
 	TableDescriptor

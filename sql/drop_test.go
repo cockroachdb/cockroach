@@ -178,7 +178,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if status != sqlbase.DescriptorActive {
 		t.Fatal("Index 'foo' is not active.")
 	}
-	indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.Indexes[i].ID)
+	indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.Indexes[i].ID)
 
 	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()

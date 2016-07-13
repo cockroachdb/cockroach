@@ -108,10 +108,3 @@ func MakeZoneKey(id ID) roachpb.Key {
 	k = encoding.EncodeUvarintAscending(k, uint64(id))
 	return keys.MakeFamilyKey(k, uint32(zonesTable.Columns[1].ID))
 }
-
-// MakeIndexKeyPrefix returns the key prefix used for the index's data.
-func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
-	key := keys.MakeTablePrefix(uint32(tableID))
-	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
-	return key
-}

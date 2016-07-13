@@ -153,7 +153,7 @@ func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) e
 	if len(spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
-		start := roachpb.Key(MakeIndexKeyPrefix(rf.desc.ID, rf.index.ID))
+		start := roachpb.Key(MakeIndexKeyPrefix(rf.desc, rf.index.ID))
 		spans = []Span{{Start: start, End: start.PrefixEnd()}}
 	}
 

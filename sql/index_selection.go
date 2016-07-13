@@ -198,7 +198,7 @@ func selectIndex(
 	c := candidates[0]
 	s.index = c.index
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	s.spans = makeSpans(c.constraints, c.desc.ID, c.index)
+	s.spans = makeSpans(c.constraints, c.desc, c.index)
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
 		return &emptyNode{}, nil
@@ -1085,14 +1085,14 @@ func (a spanEvents) Less(i, j int) bool {
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
 func makeSpans(
-	constraints orIndexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
+	constraints orIndexConstraints, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) sqlbase.Spans {
 	if len(constraints) == 0 {
-		return makeSpansForIndexConstraints(nil, tableID, index)
+		return makeSpansForIndexConstraints(nil, tableDesc, index)
 	}
 	var allSpans sqlbase.Spans
 	for _, c := range constraints {
-		s := makeSpansForIndexConstraints(c, tableID, index)
+		s := makeSpansForIndexConstraints(c, tableDesc, index)
 		allSpans = append(allSpans, s...)
 	}
 	return mergeAndSortSpans(allSpans)
@@ -1145,9 +1145,9 @@ func mergeAndSortSpans(s sqlbase.Spans) sqlbase.Spans {
 // instance of indexConstraints. The resulting spans are non-overlapping (by
 // virtue of the input constraints being disjunct).
 func makeSpansForIndexConstraints(
-	constraints indexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
+	constraints indexConstraints, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) sqlbase.Spans {
-	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableID, index.ID))
+	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.
 	// But we also have (...) IN <tuple> constraints that span multiple columns.

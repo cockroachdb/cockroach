@@ -243,7 +243,7 @@ func (tu *tableUpserter) start() error {
 func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
 	tu.tableDesc = tu.ri.helper.tableDesc
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc, tu.tableDesc.PrimaryIndex.ID)
 
 	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
 		tu.evaler != nil && tu.evaler.isIdentityEvaler()
@@ -294,7 +294,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
 	if tu.fastPathBatch != nil {
 		primaryKey, _, err := sqlbase.EncodeIndexKey(
-			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +364,7 @@ func (tu *tableUpserter) upsertRowPKs() ([]roachpb.Key, error) {
 		// conflicts.
 		for i, insertRow := range tu.insertRows {
 			upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-				&tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
+				tu.tableDesc, &tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -380,7 +380,7 @@ func (tu *tableUpserter) upsertRowPKs() ([]roachpb.Key, error) {
 	b := tu.txn.NewBatch()
 	for _, insertRow := range tu.insertRows {
 		entry, err := sqlbase.EncodeSecondaryIndex(
-			tu.tableDesc.ID, &tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow)
+			tu.tableDesc, &tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow)
 		if err != nil {
 			return nil, err
 		}
@@ -455,7 +455,7 @@ func (tu *tableUpserter) fetchExisting() ([]parser.DTuple, error) {
 		}
 
 		rowPrimaryKey, _, err := sqlbase.EncodeIndexKey(
-			&tu.tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}

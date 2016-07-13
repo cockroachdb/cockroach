@@ -230,12 +230,13 @@ func makeBaseFKHelper(
 	ref *sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
 ) (baseFKHelper, error) {
-	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchPrefix: ref.IndexKeyPrefix()}
+	b := baseFKHelper{txn: txn, writeIdx: writeIdx}
 	searchTable, ok := otherTables[ref.Table]
 	if !ok {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchTable = searchTable
+	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable, ref.Index)
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
 	if err != nil {
 		return b, err
@@ -270,7 +271,8 @@ func makeBaseFKHelper(
 func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
 	var key roachpb.Key
 	if values != nil {
-		keyBytes, _, err := sqlbase.EncodeIndexKey(f.searchIdx, f.ids, values, f.searchPrefix)
+		keyBytes, _, err := sqlbase.EncodeIndexKey(
+			f.searchTable, f.searchIdx, f.ids, values, f.searchPrefix)
 		if err != nil {
 			return nil, err
 		}
