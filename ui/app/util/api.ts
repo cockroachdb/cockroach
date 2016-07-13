@@ -10,7 +10,6 @@ import * as protos from "../js/protos";
 let serverpb = protos.cockroach.server.serverpb;
 let ts = protos.cockroach.ts.tspb;
 
-type DatabasesRequest = cockroach.server.serverpb.DatabasesRequest;
 type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
 
 type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;

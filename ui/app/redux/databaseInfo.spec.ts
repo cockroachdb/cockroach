@@ -6,13 +6,9 @@ import * as databases from "./databaseInfo";
 import * as protos from "../js/protos";
 import { Action } from "../interfaces/action";
 
-type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
-type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
-
 type DatabaseDetailsResponse = cockroach.server.serverpb.DatabaseDetailsResponse;
 type TableDetailsResponse = cockroach.server.serverpb.TableDetailsResponse;
 
-type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
 type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 

@@ -80,6 +80,7 @@ System.config({
     "long": "npm:long@3.2.0",
     "moment": "npm:moment@2.14.1",
     "nvd3": "npm:nvd3@1.8.4",
+    "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
     "react": "npm:react@15.2.1",
     "react-addons-test-utils": "npm:react-addons-test-utils@15.2.1",
@@ -92,15 +93,15 @@ System.config({
     "redux-thunk": "npm:redux-thunk@2.1.0",
     "reselect": "npm:reselect@2.5.3",
     "sinon": "npm:sinon@1.17.4",
-    "ts": "github:frankwallis/plugin-typescript@4.0.16",
+    "ts": "github:frankwallis/plugin-typescript@5.0.8",
     "ts-runtime": "npm:babel-runtime@6.9.2",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
-    "github:frankwallis/plugin-typescript@4.0.16": {
-      "typescript": "npm:typescript@1.8.10"
+    "github:frankwallis/plugin-typescript@5.0.8": {
+      "typescript": "npm:typescript@2.0.0"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
       "assert": "npm:assert@1.4.1"
@@ -1189,6 +1190,10 @@ System.config({
       "prelude-ls": "npm:prelude-ls@1.1.2"
     },
     "npm:typescript@1.8.10": {
+      "os": "github:jspm/nodelibs-os@0.1.0"
+    },
+    "npm:typescript@2.0.0": {
+      "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "os": "github:jspm/nodelibs-os@0.1.0"
     },
     "npm:ua-parser-js@0.7.10": {
