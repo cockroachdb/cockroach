@@ -74,14 +74,16 @@ http://www.cockroachlabs.com/docs/
 
 // addHistory persists a line of input to the readline history
 // file.
-func addHistory(line string) {
-	// readline.AddHistory will push command into memory and try to
-	// persist to disk (if readline.SetHistoryPath was called).  err can
+func addHistory(ins *readline.Instance, line string) {
+	// ins.SaveHistory will push command into memory and try to
+	// persist to disk (if ins's config.HistoryFile is set).  err can
 	// be not nil only if it got a IO error while trying to persist.
-	if err := readline.AddHistory(line); err != nil {
+	if err := ins.SaveHistory(line); err != nil {
 		log.Warningf("cannot save command-line history: %s", err)
 		log.Info("command-line history will not be saved in this session")
-		readline.SetHistoryPath("")
+		cfg := ins.Config.Clone()
+		cfg.HistoryFile = ""
+		ins.SetConfig(cfg)
 	}
 }
 
@@ -89,7 +91,7 @@ func addHistory(line string) {
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
 // a regular query.
-func handleInputLine(stmt *[]string, line string, syntax parser.Syntax) (status int, hasSet bool) {
+func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax) (status int, hasSet bool) {
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.
@@ -104,7 +106,7 @@ func handleInputLine(stmt *[]string, line string, syntax parser.Syntax) (status 
 		if len(line) > 0 && line[0] == '\\' {
 			// Client-side commands: process locally.
 
-			addHistory(line)
+			addHistory(ins, line)
 
 			cmd := strings.Fields(line)
 			switch cmd[0] {
@@ -237,6 +239,11 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 	fullPrompt, continuePrompt := preparePrompts(conn.url)
 
+	ins, err := readline.NewEx(config)
+	if err != nil {
+		return err
+	}
+
 	if isInteractive {
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
@@ -249,7 +256,9 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			}
 		} else {
 			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
-			readline.SetHistoryPath(histFile)
+			cfg := ins.Config.Clone()
+			cfg.HistoryFile = histFile
+			ins.SetConfig(cfg)
 		}
 	}
 
@@ -259,11 +268,6 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 	var stmt []string
 	syntax := parser.Traditional
-
-	ins, err := readline.NewEx(config)
-	if err != nil {
-		return err
-	}
 
 	for isFinished := false; !isFinished; {
 		thisPrompt := fullPrompt
@@ -289,7 +293,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 		// Check if this is a request for help or a client-side command.
 		// If so, process it directly and skip query processing below.
-		status, hasSet := handleInputLine(&stmt, l, syntax)
+		status, hasSet := handleInputLine(ins, &stmt, l, syntax)
 		if status == cliExit {
 			break
 		} else if status == cliNextLine && !isFinished {
@@ -319,7 +323,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			// We save the history between each statement, This enables
 			// reusing history in another SQL shell without closing the
 			// current shell.
-			addHistory(fullStmt)
+			addHistory(ins, fullStmt)
 		}
 
 		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), cliCtx.prettyFmt); exitErr != nil {
