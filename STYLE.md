@@ -9,9 +9,9 @@ in non-Go code (in Go, we follow `gofmt` which indents with
 tabs).
 
 ### Line Length
-Format your code assuming it will be read in a window 100 columns wide.
-Wrap code at 100 characters and comments at 80 unless doing so makes the
-code less legible.
+Format your code assuming it will be read in a window 100 columns wide.  Wrap
+code at 100 characters and comments at 80 unless doing so makes the code less
+legible.
 
 ### Wrapping Function Signatures
 When wrapping function signatures that do not fit on one line,
