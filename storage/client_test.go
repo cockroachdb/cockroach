@@ -537,9 +537,57 @@ func (m *multiTestContext) addStore() {
 			),
 		)
 	}
+
+	stopper := stop.NewStopper()
 	if len(m.dbs) <= idx {
 		retryOpts := base.DefaultRetryOptions()
-		retryOpts.Closer = m.clientStopper.ShouldQuiesce()
+		retryOpts.Closer = func() chan struct{} {
+			ch := make(chan struct{})
+			// Feed the channel periodically as long as our "real" stopper
+			// is quiescing. Close it when clientStopper closes (which means
+			// we're done). This is awkward, but necessary. We allow stopping
+			// and restarting stores, but their DistSender needs to respect
+			// that as well (since they may be involved in Store tasks).
+			if m.clientStopper.RunAsyncTask(func() {
+				feed := func() bool { // true when closed (and we're done)
+					select {
+					case ch <- struct{}{}:
+					case <-m.clientStopper.ShouldQuiesce():
+						if ch != nil {
+							close(ch)
+							ch = nil
+						}
+						return true
+					}
+					return false
+				}
+
+				for {
+					var grabbedStopper *stop.Stopper
+					// While the stopper is nil, this store is down.
+					for grabbedStopper != nil {
+						m.mu.RLock()
+						if len(m.stoppers) <= idx {
+							grabbedStopper = m.stoppers[idx]
+						}
+						m.mu.RUnlock()
+						if feed() {
+							return
+						}
+					}
+					select {
+					case <-m.clientStopper.ShouldQuiesce():
+						feed() // to make sure chan is closed
+						return
+					case <-grabbedStopper.ShouldQuiesce():
+						feed()
+					}
+				}
+			}) != nil {
+				close(ch)
+			}
+			return ch
+		}()
 		m.distSenders = append(m.distSenders,
 			kv.NewDistSender(&kv.DistSenderContext{
 				Clock:             m.clock,
@@ -552,7 +600,6 @@ func (m *multiTestContext) addStore() {
 		m.dbs = append(m.dbs, client.NewDB(sender))
 	}
 
-	stopper := stop.NewStopper()
 	ctx := m.makeContext(idx)
 	nodeID := roachpb.NodeID(idx + 1)
 	store := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
@@ -632,10 +679,25 @@ func (m *multiTestContext) gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeI
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
 	m.mu.Lock()
+	// Stopping when multiple stoppers (which are not aware of each other) is
+	// messy.
+	// multiTestContextKVTransport needs a read lock to access its stopper and
+	// it's already in a task, so if we simply grabbed a write lock here while
+	// stopping we could deadlock (see #7678).
+	// So we initiate stopping under a write lock, and then release the lock
+	// until that has finished.
+	stopper := m.stoppers[i]
+	m.stoppers[i] = nil
+	go func() {
+		stopper.Quiesce()
+	}()
+	<-stopper.ShouldQuiesce()
+	m.mu.Unlock()
+	stopper.Stop()
+
+	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.senders[i].RemoveStore(m.stores[i])
-	m.stoppers[i].Stop()
-	m.stoppers[i] = nil
 	m.stores[i] = nil
 }
 
