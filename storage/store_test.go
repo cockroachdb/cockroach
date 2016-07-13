@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -130,7 +131,7 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(nil, nil, stopper)
-	ctx.Gossip = gossip.New(rpcContext, nil, stopper)
+	ctx.Gossip = gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)

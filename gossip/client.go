@@ -41,8 +41,8 @@ type client struct {
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
 	closer                chan struct{}            // Client shutdown channel
-	sent                  int                      // Count of infos sent
-	received              int                      // Count of infos received
+	metrics               metrics
+	aggregateMetrics      metrics
 }
 
 // extractKeys returns a string representation of a gossip delta's keys.
@@ -55,12 +55,14 @@ func extractKeys(delta map[string]*Info) string {
 }
 
 // newClient creates and returns a client struct.
-func newClient(addr net.Addr) *client {
+func newClient(addr net.Addr, aggregateMetrics metrics) *client {
 	return &client{
 		createdAt: timeutil.Now(),
 		addr:      addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
+		metrics:               makeMetrics(nil),
+		aggregateMetrics:      aggregateMetrics,
 	}
 }
 
@@ -122,6 +124,10 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 	}
 	g.mu.Unlock()
 
+	bytesSent := int64(args.Size())
+	c.metrics.bytesSent.Add(bytesSent)
+	c.aggregateMetrics.bytesSent.Add(bytesSent)
+
 	return stream.Send(args)
 }
 
@@ -137,7 +143,13 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 			HighWaterStamps: g.is.getHighWaterStamps(),
 		}
 
-		c.sent += len(delta)
+		bytesSent := int64(args.Size())
+		infosSent := int64(len(delta))
+		c.metrics.bytesSent.Add(bytesSent)
+		c.metrics.infosSent.Add(infosSent)
+		c.aggregateMetrics.bytesSent.Add(bytesSent)
+		c.aggregateMetrics.infosSent.Add(infosSent)
+
 		g.mu.Unlock()
 		return stream.Send(&args)
 	}
@@ -151,9 +163,15 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	bytesReceived := int64(reply.Size())
+	infosReceived := int64(len(reply.Delta))
+	c.metrics.bytesReceived.Add(bytesReceived)
+	c.aggregateMetrics.bytesReceived.Add(bytesReceived)
+	c.metrics.infosReceived.Add(infosReceived)
+	c.aggregateMetrics.infosReceived.Add(infosReceived)
+
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
-		c.received += len(reply.Delta)
 		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
 			log.Warningf("node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
