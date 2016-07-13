@@ -543,7 +543,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		return nil, errors.Errorf("%s: not a valid table key", key)
 	}
 
-	// Strip off the family ID / column ID suffix from the buf. The last byte of the buf
+	// Strip off the family ID suffix from the buf. The last byte of the buf
 	// contains the length of the column ID suffix (which might be 0 if the buf
 	// does not contain a column ID suffix).
 	_, colIDLen, err := encoding.DecodeUvarintAscending(buf)
