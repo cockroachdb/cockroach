@@ -1,10 +1,18 @@
 {
   "compilerOptions": {
-    "target": "ES5",
-    "module": "commonjs",
+    "allowJs": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
     "jsx": "react",
+    "module": "commonjs",
+    "noEmit": true,
+    "noErrorTruncation": true,
+    "noFallthroughCasesInSwitch": true,
     "noImplicitAny": true,
-    "noEmit": true
+    "noUnusedLocals": true,
+    "target": "ES5"
   },
   "files": [
     "typings/index.d.ts",
