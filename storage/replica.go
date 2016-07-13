@@ -373,7 +373,11 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		}
 		replicaID = repDesc.ReplicaID
 	}
-	return r.setReplicaIDLocked(replicaID)
+	if err := r.setReplicaIDLocked(replicaID); err != nil {
+		return err
+	}
+	r.assertStateLocked(r.store.Engine())
+	return nil
 }
 
 // String returns a string representation of the range. It acquires mu.Lock in the call to Desc().
