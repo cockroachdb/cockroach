@@ -133,7 +133,9 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 					t.mu.Unlock()
 
 					if !ok {
-						return errors.Errorf("Unable to proxy message to node: %d", req.Message.To)
+						return errors.Errorf(
+							"unable to proxy message to node %d: store %d not registered",
+							req.Message.To, req.ToReplica.StoreID)
 					}
 
 					if err := handler(req); err != nil {
