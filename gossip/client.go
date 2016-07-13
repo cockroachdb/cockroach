@@ -68,6 +68,8 @@ func newClient(addr net.Addr) *client {
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
 func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, stopper *stop.Stopper) {
+	log.Infof("starting client to %s", c.addr)
+
 	stopper.RunWorker(func() {
 		defer func() {
 			disconnected <- c

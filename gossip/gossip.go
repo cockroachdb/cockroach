@@ -957,7 +957,6 @@ func (g *Gossip) checkHasConnected() {
 // The client is added to the outgoing address set and launched in
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
-	log.Infof("starting client to %s", addr)
 	c := newClient(addr)
 	g.clientsMu.Lock()
 	g.clients = append(g.clients, c)
