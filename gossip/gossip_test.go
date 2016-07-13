@@ -193,20 +193,26 @@ func TestGossipCullNetwork(t *testing.T) {
 	}
 	local.mu.Unlock()
 
-	util.SucceedsSoon(t, func() error {
+	const slowGossipDuration = time.Minute
+
+	if err := util.RetryForDuration(slowGossipDuration, func() error {
 		if peers := len(local.Outgoing()); peers != minPeers {
 			return errors.Errorf("%d of %d peers connected", peers, minPeers)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s", slowGossipDuration, err)
+	}
 
 	local.manage()
 
-	util.SucceedsSoon(t, func() error {
+	if err := util.RetryForDuration(slowGossipDuration, func() error {
 		// Verify that a client is closed within the cull interval.
 		if peers := len(local.Outgoing()); peers != minPeers-1 {
 			return errors.Errorf("%d of %d peers connected", peers, minPeers-1)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s", slowGossipDuration, err)
+	}
 }
