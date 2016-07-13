@@ -103,7 +103,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	bootstrap bool, sCtx storage.StoreContext, stopper *stop.Stopper) *storage.Store {
 	rpcContext := rpc.NewContext(nil, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
-	sCtx.Gossip = gossip.New(rpcContext, nil, stopper)
+	sCtx.Gossip = gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = 1 * time.Second
 	sCtx.Tracer = tracing.NewTracer()
@@ -553,7 +553,7 @@ func (m *multiTestContext) addStore(idx int) {
 			resolvers = append(resolvers, r)
 		}
 	}()
-	m.gossips[idx] = gossip.New(m.rpcContext, resolvers, m.transportStopper)
+	m.gossips[idx] = gossip.New(m.rpcContext, resolvers, m.transportStopper, metric.NewRegistry())
 	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
 	if m.timeUntilStoreDead == 0 {
 		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
