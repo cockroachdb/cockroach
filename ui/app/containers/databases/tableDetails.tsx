@@ -1,9 +1,12 @@
-import * as React from "react";
 import * as _ from "lodash";
+import * as React from "react";
+import { Link, IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import { Link } from "react-router";
 
+import { databaseName, tableName } from "../../util/constants";
+
+import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshTableDetails, generateTableID } from "../../redux/databaseInfo";
 
@@ -255,19 +258,11 @@ interface TableMainActions {
   refreshTableDetails: typeof refreshTableDetails;
 }
 
-// params from the route for the table name and database name
-interface TableSpecified {
-  params: {
-    database_name: string;
-    table_name: string;
-  };
-}
-
 /**
  * TableMainProps is the type of the props object that must be passed to
  * TableMain component.
  */
-type TableMainProps = TableMainData & TableMainActions & TableSpecified;
+type TableMainProps = TableMainData & TableMainActions & IInjectedProps;
 
 /**
  * TableMain renders the main content of the databases page, which is primarily a
@@ -323,8 +318,8 @@ class TableMain extends React.Component<TableMainProps, {}> {
     });
 
   // TODO(maxlang): truncate long db names
-  static title(props: any) {
-    return <h2><Link to="/databases" >Databases </Link>: <Link to={`/databases/${props.params.database_name}`}> {props.params.database_name}</Link>: {props.params.table_name}</h2>;
+  static title(props: IInjectedProps) {
+    return <h2><Link to="/databases" >Databases </Link>: <Link to={`/databases/${props.params[databaseName]}`}> {props.params[databaseName]}</Link>: {props.params[tableName]}</h2>;
   }
 
   // Callbacks when the user elects to change the sort settings.
@@ -340,7 +335,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
 
   componentWillMount() {
     // Refresh databases when mounting.
-    this.props.refreshTableDetails(this.props.params.database_name, this.props.params.table_name);
+    this.props.refreshTableDetails(this.props.params[databaseName], this.props.params[tableName]);
   }
 
   render() {
@@ -377,21 +372,20 @@ class TableMain extends React.Component<TableMainProps, {}> {
  */
 
 // Helper function that gets a TableDetailsResponseMessage given a state and props
-function getTableDetails(state: any, props: TableMainProps): TableDetailsResponseMessage {
-  let db = props && props.params && props.params.database_name;
-  let table = props && props.params && props.params.table_name;
-  let details = state.databaseInfo.tableDetails &&
-    state.databaseInfo.tableDetails[generateTableID(db, table)];
+function getTableDetails(state: AdminUIState, props: IInjectedProps): TableDetailsResponseMessage {
+  let db = props.params[databaseName];
+  let table = props.params[tableName];
+  let details = state.databaseInfo.tableDetails[generateTableID(db, table)];
   return details && details.data;
 }
 
 // Base selectors to extract data from redux state.
-let columns = (state: any, props: any): Column[] => getTableDetails(state, props) ? getTableDetails(state, props).getColumns() : [];
-let indexes = (state: any, props: any): Index[] => getTableDetails(state, props) ? getTableDetails(state, props).getIndexes() : [];
-let grants = (state: any, props: any): Grant[] => getTableDetails(state, props) ? getTableDetails(state, props).getGrants() : [];
-let columnsSortSetting = (state: any): SortSetting => state.ui[UI_TABLE_COLUMNS_SORT_SETTING_KEY] || {};
-let indexesSortSetting = (state: any): SortSetting => state.ui[UI_TABLE_INDEXES_SORT_SETTING_KEY] || {};
-let grantsSortSetting = (state: any): SortSetting => state.ui[UI_TABLE_GRANTS_SORT_SETTING_KEY] || {};
+let columns = (state: AdminUIState, props: IInjectedProps): Column[] => getTableDetails(state, props) ? getTableDetails(state, props).getColumns() : [];
+let indexes = (state: AdminUIState, props: IInjectedProps): Index[] => getTableDetails(state, props) ? getTableDetails(state, props).getIndexes() : [];
+let grants = (state: AdminUIState, props: IInjectedProps): Grant[] => getTableDetails(state, props) ? getTableDetails(state, props).getGrants() : [];
+let columnsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_TABLE_COLUMNS_SORT_SETTING_KEY] || {};
+let indexesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_TABLE_INDEXES_SORT_SETTING_KEY] || {};
+let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_TABLE_GRANTS_SORT_SETTING_KEY] || {};
 
 // Selector which sorts statuses according to current sort setting.
 let columnsSortFunctionLookup = _(columnsColumnDescriptors).keyBy("key").mapValues<(s: Column) => any>("sort").value();

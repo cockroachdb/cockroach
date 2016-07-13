@@ -5,6 +5,7 @@ import { createSelector } from "reselect";
 import _ = require("lodash");
 
 import Banner from "./banner";
+import { AdminUIState } from "../../redux/state";
 import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData } from "../../redux/uiData";
 import { setUISetting } from "../../redux/ui";
 
@@ -60,7 +61,7 @@ interface UIDataState {
   data: { [key: string]: any; };
 }
 
-let uiDataState = (state: any): UIDataState => state && state.uiData;
+let uiDataState = (state: AdminUIState): UIDataState => state && state.uiData;
 
 // optinAttributes are the saved attributes that indicate whether the user has
 // opted in to usage reporting
@@ -75,11 +76,11 @@ let attributesLoaded = createSelector(
   (state: UIDataState) => state && _.has(state.data, KEY_HELPUS)
 );
 
-let helpusBannerDismissed = (state: any): boolean => state.ui[HELPUS_BANNER_DISMISSED_KEY] || false;
+let helpusBannerDismissed = (state: AdminUIState): boolean => state.ui[HELPUS_BANNER_DISMISSED_KEY] || false;
 
 // Connect the HelpUsBanner class with our redux store.
 let helpusBannerConnected = connect(
-  (state: any, ownProps: any) => {
+  (state: AdminUIState, ownProps: any) => {
     return {
       attributes: optinAttributes(state),
       attributesLoaded: attributesLoaded(state),
