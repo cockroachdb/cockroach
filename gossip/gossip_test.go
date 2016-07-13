@@ -189,7 +189,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Lock()
 	for i := 0; i < minPeers; i++ {
 		peer := startGossip(roachpb.NodeID(i+2), stopper, t)
-		local.startClient(&peer.is.NodeAddr, stopper)
+		local.startClient(&peer.is.NodeAddr)
 	}
 	local.mu.Unlock()
 
