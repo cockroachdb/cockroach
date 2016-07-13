@@ -1818,7 +1818,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		// unfortunate and hopefully rare; we will refurbish on the proposer.
 		// Note that in this situation, the leaseIndex does not advance.
 		forcedErr = roachpb.NewErrorf("command observed at lease index %d, "+
-			"but required <= %d", raftCmd.MaxLeaseIndex, leaseIndex)
+			"but required < %d", leaseIndex, raftCmd.MaxLeaseIndex)
 
 		if cmd != nil {
 			// Only refurbish when no earlier incarnation of this command has
