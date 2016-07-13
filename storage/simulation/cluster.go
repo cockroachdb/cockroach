@@ -290,7 +290,7 @@ func (c *Cluster) prepareActions() {
 				rep.rebalance = r.allocator.ShouldRebalance(storeID)
 				// Set the priority to 1 so that rebalances will occur in
 				// performActions.
-				rep.priority = 1
+				rep.priority = 1 + c.rand.Float64()
 			} else {
 				rep.rebalance = false
 			}
