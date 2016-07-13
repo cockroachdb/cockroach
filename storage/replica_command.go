@@ -1622,7 +1622,7 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 	r.mu.state.Lease = &lease
 
-	if r.IsFirstRange() && lease.Covers(r.store.Clock().Now()) {
+	if r.IsFirstRange() && lease.OwnedBy(r.store.StoreID()) && lease.Covers(r.store.Clock().Now()) {
 		// Gossip the first range whenever its lease is acquired. We check to make
 		// sure the lease is active so that a trailing replica won't process an old
 		// lease request and attempt to gossip the first range.
