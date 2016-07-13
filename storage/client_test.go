@@ -507,15 +507,17 @@ func (m *multiTestContext) addStore() {
 	if len(m.gossips) <= idx {
 		// Give this store all previous stores as gossip bootstraps.
 		var resolvers []resolver.Resolver
-		m.mu.Lock()
-		for _, addr := range m.nodeIDtoAddr {
-			r, err := resolver.NewResolverFromAddress(addr)
-			if err != nil {
-				m.t.Fatal(err)
+		func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			for _, addr := range m.nodeIDtoAddr {
+				r, err := resolver.NewResolverFromAddress(addr)
+				if err != nil {
+					m.t.Fatal(err)
+				}
+				resolvers = append(resolvers, r)
 			}
-			resolvers = append(resolvers, r)
-		}
-		m.mu.Unlock()
+		}()
 		m.gossips = append(m.gossips, gossip.New(m.rpcContext, resolvers, m.transportStopper))
 		m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
 	}
