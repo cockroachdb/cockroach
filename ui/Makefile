@@ -60,7 +60,7 @@ lint: npm.installed typings.installed
 test: protobuf npm.installed typings.installed jspm.installed
 	karma start
 
-GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png index.html
+GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png release.html
 
 $(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_SOURCES)
