@@ -467,7 +467,7 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
-	return bytes.Equal(r.Desc().StartKey, roachpb.RKeyMin)
+	return r.RangeID == 1
 }
 
 // getLease returns the current lease, and the tentative next one, if a lease
@@ -2461,6 +2461,16 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if ok, pErr := r.getLeaseForGossip(ctx); !ok || pErr != nil {
 		return pErr
 	}
+	r.gossipFirstRange(ctx)
+	return nil
+}
+
+func (r *Replica) gossipFirstRange(ctx context.Context) {
+	// Gossip is not provided for the bootstrap store and for some tests.
+	if r.store.Gossip() == nil {
+		return
+	}
+	log.Trace(ctx, "gossiping sentinel and first range")
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
@@ -2473,7 +2483,6 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if err := r.store.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, r.Desc(), configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
-	return nil
 }
 
 // maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
