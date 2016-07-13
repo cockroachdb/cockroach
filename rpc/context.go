@@ -106,7 +106,7 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 
 	stopper.RunWorker(func() {
-		<-stopper.ShouldDrain()
+		<-stopper.ShouldQuiesce()
 
 		ctx.conns.Lock()
 		for key, meta := range ctx.conns.cache {
