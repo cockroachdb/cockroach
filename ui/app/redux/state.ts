@@ -1,6 +1,6 @@
 import _ = require("lodash");
 import { createStore, combineReducers, applyMiddleware, compose, StoreEnhancer } from "redux";
-import { hashHistory } from "react-router";
+import { browserHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, IRouterState } from "react-router-redux";
 import thunk from "redux-thunk";
 
@@ -40,4 +40,4 @@ export const store = createStore<AdminUIState>(
 );
 
 // Connect react-router history with redux.
-export const history = syncHistoryWithStore(hashHistory, store);
+export const history = syncHistoryWithStore(browserHistory, store);
