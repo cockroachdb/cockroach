@@ -200,12 +200,9 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 			return nil, err
 		}
 		for _, table := range tables {
-			descriptor, err := p.getTableDesc(table)
+			descriptor, err := p.mustGetTableDesc(table)
 			if err != nil {
 				return nil, err
-			}
-			if descriptor == nil {
-				return nil, sqlbase.NewUndefinedTableError(table.String())
 			}
 			descs = append(descs, descriptor)
 		}

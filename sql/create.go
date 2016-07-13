@@ -117,12 +117,9 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
-	tableDesc, err := p.getTableDesc(n.Table)
+	tableDesc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
-	}
-	if tableDesc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
