@@ -5307,7 +5307,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 	}
 }
 
-// verify the checksum for the range and returrn it.
+// verify the checksum for the range and return it.
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	id := uuid.MakeV4()
 	args := roachpb.ComputeChecksumRequest{
@@ -5348,25 +5348,54 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	if _, err := tc.SendWrapped(&incArgs); err != nil {
 		t.Fatal(err)
 	}
-	initialChecksum := verifyChecksum(t, rng)
 
-	// Getting a value will not affect the snapshot checksum
-	gArgs := getArgs(roachpb.Key("a"))
-	if _, err := tc.SendWrapped(&gArgs); err != nil {
-		t.Fatal(err)
-	}
-	checksum := verifyChecksum(t, rng)
+	// We use this helper below to gauge whether another Raft command possibly
+	// snuck in (in which case we recompute). We can't use the in-memory state
+	// because it's not updated atomically with the batch and because this
+	// test doesn't respect Raft ordering.
+	getAppliedIndex := func() uint64 {
+		rng.mu.Lock()
+		defer rng.mu.Unlock()
 
-	if !bytes.Equal(initialChecksum, checksum) {
-		t.Fatalf("changed checksum: e = %v, c = %v", initialChecksum, checksum)
+		appliedIndex, _, err := loadAppliedIndex(rng.store.Engine(), rng.RangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return appliedIndex
 	}
+
+	var initialChecksum []byte
+	// The following part of the test is inherently racy if other Raft commands
+	// get processed (which could happen due to reproposals). The loop makes
+	// sure that we catch this.
+	util.SucceedsSoon(t, func() error {
+		oldAppliedIndex := getAppliedIndex()
+		initialChecksum = verifyChecksum(t, rng)
+
+		// Getting a value will not affect the snapshot checksum.
+		gArgs := getArgs(roachpb.Key("a"))
+		if _, err := tc.SendWrapped(&gArgs); err != nil {
+			t.Fatal(err)
+		}
+		checksum := verifyChecksum(t, rng)
+
+		if !bytes.Equal(initialChecksum, checksum) {
+			appliedIndex := getAppliedIndex()
+			if appliedIndex != oldAppliedIndex {
+				return errors.Errorf("applied index changed from %d to %d",
+					oldAppliedIndex, appliedIndex)
+			}
+			t.Fatalf("changed checksum: e = %v, c = %v", initialChecksum, checksum)
+		}
+		return nil
+	})
 
 	// Modifying the range will change the checksum.
 	incArgs = incrementArgs([]byte("a"), 5)
 	if _, err := tc.SendWrapped(&incArgs); err != nil {
 		t.Fatal(err)
 	}
-	checksum = verifyChecksum(t, rng)
+	checksum := verifyChecksum(t, rng)
 	if bytes.Equal(initialChecksum, checksum) {
 		t.Fatalf("same checksum: e = %v, c = %v", initialChecksum, checksum)
 	}
