@@ -178,9 +178,12 @@ type replicaChecksum struct {
 // as appropriate.
 type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
-	RangeID      roachpb.RangeID // Should only be set by the constructor.
-	store        *Store
-	systemDBHash []byte      // sha1 hash of the system config @ last gossip
+	RangeID roachpb.RangeID // Should only be set by the constructor.
+	store   *Store
+	// sha1 hash of the system config @ last gossip. No synchronized access;
+	// must only be accessed from maybeGossipSystemConfig (which in turn is
+	// only called from the Raft-processing goroutine).
+	systemDBHash []byte
 	abortCache   *AbortCache // Avoids anomalous reads after abort
 	raftSender   RaftSender
 
