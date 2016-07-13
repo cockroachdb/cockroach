@@ -1503,7 +1503,6 @@ func (r *Replica) RequestLease(
 ) (roachpb.RequestLeaseResponse, error) {
 	// maybeGossipSystemConfig cannot be called while the replica is locked,
 	// so we defer it here so it is called once the replica lock is released.
-	defer r.maybeGossipSystemConfig()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1568,7 +1567,6 @@ func (r *Replica) TransferLease(
 ) (roachpb.RequestLeaseResponse, error) {
 	// maybeGossipSystemConfig cannot be called while the replica is locked,
 	// so we defer it here so it is called once the replica lock is released.
-	defer r.maybeGossipSystemConfig()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if log.V(2) {
@@ -1621,18 +1619,22 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 	r.mu.state.Lease = &lease
 
-	return reply, r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-		if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
-			// The lease is changing hands. Is this replica the new lease holder?
-			if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {
-				// If this replica is a new holder of the lease, update the low water
-				// mark of the timestamp cache. Note that clock offset scenarios are
-				// handled via a stasis period inherent in the lease which is documented
-				// in on the Lease struct.
-				log.Infof("range %d: new range lease %s following %s [physicalTime=%s]",
-					r.RangeID, lease, prevLease, r.store.Clock().PhysicalTime())
-				r.mu.tsCache.SetLowWater(prevLease.Expiration)
-			} else if raftGroup.Status().RaftState == raft.StateLeader {
+	// TODO(tschottdorf): this upcast is unidiomatic, but with #6286 (isolate
+	// Raft side effects) this will go away, and this is a good place to move
+	// it away from.
+	batch.(engine.Batch).Defer(r.maybeGossipSystemConfig)
+	if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
+		// The lease is changing hands. Is this replica the new lease holder?
+		if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {
+			// If this replica is a new holder of the lease, update the low water
+			// mark of the timestamp cache. Note that clock offset scenarios are
+			// handled via a stasis period inherent in the lease which is documented
+			// in on the Lease struct.
+			log.Infof("range %d: new range lease %s following %s [physicalTime=%s]",
+				r.RangeID, lease, prevLease, r.store.Clock().PhysicalTime())
+			r.mu.tsCache.SetLowWater(prevLease.Expiration)
+		} else if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+			if raftGroup.Status().RaftState == raft.StateLeader {
 				// If this replica is the raft leader but it is not the new lease
 				// holder, then try to transfer the raft leadership to match the
 				// lease.
@@ -1640,9 +1642,14 @@ func (r *Replica) applyNewLeaseLocked(
 					r.RangeID, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
 				raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
 			}
+			return nil
+		}); err != nil {
+			// Failing to transfer the leader away is not a reason for letting
+			// a Replica diverge.
+			log.Warning(err)
 		}
-		return nil
-	})
+	}
+	return reply, nil
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies
