@@ -16,19 +16,24 @@
 
 package gossip
 
-import "github.com/cockroachdb/cockroach/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/metric"
+)
 
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
 type nodeSet struct {
 	nodes   map[roachpb.NodeID]struct{} // Set of roachpb.NodeID
 	maxSize int                         // Maximum size of set
+	counter *metric.Counter             // Counter for the number of nodes in the set.
 }
 
 func makeNodeSet(maxSize int) nodeSet {
 	return nodeSet{
 		nodes:   make(map[roachpb.NodeID]struct{}),
 		maxSize: maxSize,
+		counter: metric.NewCounter(),
 	}
 }
 
@@ -82,9 +87,11 @@ func (as *nodeSet) setMaxSize(maxSize int) {
 // addNode adds the node to the nodes set.
 func (as *nodeSet) addNode(node roachpb.NodeID) {
 	as.nodes[node] = struct{}{}
+	as.counter.Inc(1)
 }
 
 // removeNode removes the node from the nodes set.
 func (as *nodeSet) removeNode(node roachpb.NodeID) {
 	delete(as.nodes, node)
+	as.counter.Dec(1)
 }
