@@ -138,6 +138,7 @@ func setLease(
 		hlc.ZeroTimestamp, nil, lease)
 }
 
+// loadAppliedIndex returns the Raft applied index and the lease applied index.
 func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, uint64, error) {
 	var appliedIndex uint64
 	v, _, err := engine.MVCCGet(context.Background(), reader, keys.RaftAppliedIndexKey(rangeID),
