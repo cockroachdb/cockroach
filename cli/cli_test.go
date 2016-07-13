@@ -1133,11 +1133,11 @@ func TestGenAutocomplete(t *testing.T) {
 	if err := Run([]string{"gen", "autocomplete", "--out=" + acpath}); err != nil {
 		t.Fatal(err)
 	}
-	s, err := os.Stat(acpath)
+	info, err := os.Stat(acpath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Size() < minsize {
-		t.Fatalf("autocomplete file size (%d) < minimum (%d)", s.Size(), minsize)
+	if size := info.Size(); size < minsize {
+		t.Fatalf("autocomplete file size (%d) < minimum (%d)", size, minsize)
 	}
 }

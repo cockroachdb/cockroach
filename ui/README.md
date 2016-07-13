@@ -24,25 +24,18 @@ navigating to the web console.
 
 As mentioned above, be sure to run the CockroachDB server in UI debug mode
 while developing the web console. This causes the CockroachDB server to serve
-assets directly from the disk, rather than use the compiled-in assets.
-
-In order to regenerate the on-disk assets, be sure to run `make` in this
-directory. This will regenerate `build/app.{css,js}` as well as embedded.go.
-
-For faster iteration still, you may want to point your browser at debug.html
-rather than index.html at the web console's top level; this doesn't require
-running `make` at all - instead, all raw assets will be loaded from disk and
-compiled in the browser.
+assets directly from the disk, rather than use the compiled-in assets. These
+assets will be compiled in the browser each time the page is reloaded.
 
 NOTE: styles are not yet compiled in the browser. As a workaround, `make
 watch` is available; it automatically watches for style changes and recompiles
 them, though a browser reload is still required. Note that if you add a new
 file, you'll need to restart `make watch`.
 
-Regardless of the workflow you choose, always be sure to run `make` in this
-directory before committing, so that your commit includes the updated
-`embedded.go`. This is enforced by our build system, but forgetting to do this
-will result in wasted time waiting for the build.
+When you're ready to submit your changes, be sure to run `make` in this
+directory to regenerate the on-disk assets so that your commit includes the
+updated `embedded.go`. This is enforced by our build system, but forgetting to
+do this will result in wasted time waiting for the build.
 
 We commit the generated file so that CockroachDB can be compiled with minimal
 [non-go dependencies](#dependencies).

@@ -481,7 +481,8 @@ func (s *Server) Start() error {
 	}
 
 	var uiFileSystem http.FileSystem
-	if envutil.EnvOrDefaultBool("debug_ui", false) {
+	uiDebug := envutil.EnvOrDefaultBool("debug_ui", false)
+	if uiDebug {
 		uiFileSystem = http.Dir("ui")
 	} else {
 		uiFileSystem = &assetfs.AssetFS{
@@ -490,8 +491,18 @@ func (s *Server) Start() error {
 			AssetInfo: ui.AssetInfo,
 		}
 	}
+	uiFileServer := http.FileServer(uiFileSystem)
 
-	s.mux.Handle("/", http.FileServer(uiFileSystem))
+	s.mux.HandleFunc("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			if uiDebug {
+				r.URL.Path = "debug.html"
+			} else {
+				r.URL.Path = "release.html"
+			}
+		}
+		uiFileServer.ServeHTTP(w, r)
+	}))
 
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
