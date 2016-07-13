@@ -2586,7 +2586,7 @@ func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 }
 
 // FrozenStatus returns all of the Store's Replicas which are frozen (if the
-// parameter is false) or unfrozen (otherwise). It makes no attempt to prevent
+// parameter is true) or unfrozen (otherwise). It makes no attempt to prevent
 // new data being rebalanced to the Store, and thus does not guarantee that the
 // Store remains in the reported state.
 func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDescriptor) {
