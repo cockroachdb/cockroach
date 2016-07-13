@@ -182,7 +182,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if ctx.RPCContext != nil {
 		ds.rpcContext = ctx.RPCContext
 		if ds.rpcRetryOptions.Closer == nil {
-			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldDrain()
+			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
 	}
 	if ctx.Tracer != nil {

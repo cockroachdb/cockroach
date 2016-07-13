@@ -156,7 +156,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	// succeed because the only server has been shut down; thus, thus the
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = s.stopper.ShouldDrain()
+	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	s.distSender = kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
@@ -314,7 +314,7 @@ func (s *Server) Start() error {
 	s.rpcContext.SetLocalInternalServer(s.node)
 
 	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldDrain()
+		<-s.stopper.ShouldQuiesce()
 		if err := ln.Close(); err != nil {
 			log.Fatal(err)
 		}
@@ -335,7 +335,7 @@ func (s *Server) Start() error {
 	s.ctx.HTTPAddr = unresolvedHTTPAddr.String()
 
 	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldDrain()
+		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
 			log.Fatal(err)
 		}
@@ -381,7 +381,7 @@ func (s *Server) Start() error {
 		}
 
 		s.stopper.RunWorker(func() {
-			<-s.stopper.ShouldDrain()
+			<-s.stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
 				log.Fatal(err)
 			}

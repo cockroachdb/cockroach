@@ -44,7 +44,7 @@ func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server,
 	}
 
 	stopper.RunWorker(func() {
-		<-stopper.ShouldDrain()
+		<-stopper.ShouldQuiesce()
 		server.Stop()
 	})
 
