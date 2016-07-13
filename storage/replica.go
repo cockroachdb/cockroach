@@ -2493,7 +2493,9 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // lease is actually held. The method does not request a range lease
 // here since RequestLease and applyRaftCommand call the method and we
 // need to avoid deadlocking in redirectOnOrAcquireLease.
-// TODO(tschottdorf): Can possibly simplify.
+//
+// maybeGossipSystemConfig must only be called from Raft commands
+// (which provide the necessary serialization to avoid data races).
 func (r *Replica) maybeGossipSystemConfig() {
 	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return
