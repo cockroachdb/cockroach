@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -109,6 +110,16 @@ const (
 	// DefaultGossipStoresInterval is the default interval for gossiping storage-
 	// related info.
 	DefaultGossipStoresInterval = 1 * time.Minute
+)
+
+// Gossip metrics counter names.
+const (
+	ConnectionsIncomingGaugeName = "connections.incoming"
+	ConnectionsOutgoingGaugeName = "connections.outgoing"
+	InfosSentRatesName           = "infos.sent"
+	InfosReceivedRatesName       = "infos.received"
+	BytesSentRatesName           = "bytes.sent"
+	BytesReceivedRatesName       = "bytes.received"
 )
 
 // Storage is an interface which allows the gossip instance
@@ -174,12 +185,12 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
+func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
-		server:            newServer(stopper),
-		outgoing:          makeNodeSet(minPeers),
+		server:            newServer(stopper, registry),
+		outgoing:          makeNodeSet(minPeers, registry.Gauge(ConnectionsOutgoingGaugeName)),
 		bootstrapping:     map[string]struct{}{},
 		disconnected:      make(chan *client, 10),
 		stalled:           make(chan struct{}, 1),
@@ -373,8 +384,8 @@ func (g *Gossip) clientStatus() string {
 
 	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", len(g.clientsMu.clients), g.outgoing.maxSize)
 	for _, c := range g.clientsMu.clients {
-		fmt.Fprintf(&buf, "  %d: %s (%s: %d/%d sent/received)\n",
-			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.sent, c.received)
+		fmt.Fprintf(&buf, "  %d: %s (%s: %s)\n",
+			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.metrics)
 	}
 	return buf.String()
 }
@@ -960,7 +971,7 @@ func (g *Gossip) checkHasConnected() {
 // The client is added to the outgoing address set and launched in
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr) {
-	c := newClient(addr)
+	c := newClient(addr, g.aggregateMetrics)
 	g.clientsMu.Lock()
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	g.clientsMu.Unlock()
@@ -999,4 +1010,30 @@ var _ security.RequestWithUser = &Request{}
 // Gossip messages are always sent by the node user.
 func (*Request) GetUser() string {
 	return security.NodeUser
+}
+
+type metrics struct {
+	bytesReceived metric.Rates // Number of bytes received
+	bytesSent     metric.Rates // Number of bytes sent
+	infosReceived metric.Rates // Count of infos received
+	infosSent     metric.Rates // Count of infos sent
+}
+
+func (m metrics) String() string {
+	return fmt.Sprintf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
+		m.infosSent.Count(), m.infosReceived.Count(), m.bytesSent.Count(), m.bytesReceived.Count())
+}
+
+// makeMetrics makes a new metrics object with rates set on the provided
+// registry. If registry is nil, the rates are created on a new registry.
+func makeMetrics(registry *metric.Registry) metrics {
+	if registry == nil {
+		registry = metric.NewRegistry()
+	}
+	return metrics{
+		bytesReceived: registry.Rates(BytesReceivedRatesName),
+		bytesSent:     registry.Rates(BytesSentRatesName),
+		infosReceived: registry.Rates(InfosReceivedRatesName),
+		infosSent:     registry.Rates(InfosSentRatesName),
+	}
 }

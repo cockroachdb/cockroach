@@ -16,19 +16,24 @@
 
 package gossip
 
-import "github.com/cockroachdb/cockroach/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/metric"
+)
 
 // A nodeSet keeps a set of nodes and provides simple node-matched
 // management functions. nodeSet is not thread safe.
 type nodeSet struct {
 	nodes   map[roachpb.NodeID]struct{} // Set of roachpb.NodeID
 	maxSize int                         // Maximum size of set
+	gauge   *metric.Gauge               // Gauge for the number of nodes in the set.
 }
 
-func makeNodeSet(maxSize int) nodeSet {
+func makeNodeSet(maxSize int, gauge *metric.Gauge) nodeSet {
 	return nodeSet{
 		nodes:   make(map[roachpb.NodeID]struct{}),
 		maxSize: maxSize,
+		gauge:   gauge,
 	}
 }
 
@@ -52,11 +57,12 @@ func (as nodeSet) asSlice() []roachpb.NodeID {
 	return slice
 }
 
-// filter returns an nodeSet of nodes which return true when
-// passed to the supplied filter function filterFn. filterFn should
-// return true to keep an node and false to remove an node.
+// filter returns an nodeSet of nodes which return true when passed to the
+// supplied filter function filterFn. filterFn should return true to keep an
+// node and false to remove an node. The new nodeSet has a separate gauge object
+// from the parent.
 func (as nodeSet) filter(filterFn func(node roachpb.NodeID) bool) nodeSet {
-	avail := makeNodeSet(as.maxSize)
+	avail := makeNodeSet(as.maxSize, metric.NewGauge())
 	for node := range as.nodes {
 		if filterFn(node) {
 			avail.addNode(node)
@@ -82,9 +88,15 @@ func (as *nodeSet) setMaxSize(maxSize int) {
 // addNode adds the node to the nodes set.
 func (as *nodeSet) addNode(node roachpb.NodeID) {
 	as.nodes[node] = struct{}{}
+	as.updateGauge()
 }
 
 // removeNode removes the node from the nodes set.
 func (as *nodeSet) removeNode(node roachpb.NodeID) {
 	delete(as.nodes, node)
+	as.updateGauge()
+}
+
+func (as *nodeSet) updateGauge() {
+	as.gauge.Update(int64(len(as.nodes)))
 }
