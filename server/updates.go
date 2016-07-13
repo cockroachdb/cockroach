@@ -100,7 +100,7 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 			jitter := rand.Intn(updateCheckJitterSeconds) - updateCheckJitterSeconds/2
 			wait = wait + (time.Duration(jitter) * time.Second)
 			select {
-			case <-s.stopper.ShouldDrain():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			case <-time.After(wait):
 			}

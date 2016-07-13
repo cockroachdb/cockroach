@@ -144,7 +144,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		s.mu.Unlock()
 
 		select {
-		case <-s.stopper.ShouldDrain():
+		case <-s.stopper.ShouldQuiesce():
 			return nil
 		case err := <-errCh:
 			return err
@@ -310,7 +310,7 @@ func (s *server) start(grpcServer *grpc.Server, addr net.Addr) {
 	})
 
 	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldDrain()
+		<-s.stopper.ShouldQuiesce()
 
 		s.mu.Lock()
 		unregister()

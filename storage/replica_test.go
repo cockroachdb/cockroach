@@ -1012,7 +1012,7 @@ func TestReplicaDrainLease(t *testing.T) {
 			tc.manualClock.Increment(leaseExpiry(tc.rng))
 			select {
 			case <-time.After(10 * time.Millisecond): // real code would use Ticker
-			case <-tc.stopper.ShouldDrain():
+			case <-tc.stopper.ShouldQuiesce():
 				return
 			}
 		}

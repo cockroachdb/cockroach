@@ -136,7 +136,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 
 		select {
 		case <-s.ShouldStop():
-			t.Fatal("expected stopper to be draining")
+			t.Fatal("expected stopper to be quiesceing")
 		case <-time.After(1 * time.Millisecond):
 			// Expected.
 		}
@@ -173,7 +173,7 @@ func TestStopperRunWorker(t *testing.T) {
 	}
 }
 
-// TestStopperQuiesce tests coordinate drain with Quiesce.
+// TestStopperQuiesce tests coordinate quiesce with Quiesce.
 func TestStopperQuiesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var stoppers []*stop.Stopper
@@ -339,7 +339,7 @@ func TestStopperRunTaskPanic(t *testing.T) {
 	}
 }
 
-func TestStopperShouldDrain(t *testing.T) {
+func TestStopperShouldQuiesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	running := make(chan struct{})
@@ -363,15 +363,15 @@ func TestStopperShouldDrain(t *testing.T) {
 	}
 
 	go func() {
-		// The ShouldDrain() channel should close as soon as the stopper is
+		// The ShouldQuiesce() channel should close as soon as the stopper is
 		// Stop()ed.
-		<-s.ShouldDrain()
+		<-s.ShouldQuiesce()
 		// However, the ShouldStop() channel should still be blocked because the
-		// async task started above is still running, meaning we haven't drained
+		// async task started above is still running, meaning we haven't quiesceed
 		// yet.
 		select {
 		case <-s.ShouldStop():
-			t.Fatal("expected ShouldStop() to block until draining complete")
+			t.Fatal("expected ShouldStop() to block until quiesceing complete")
 		default:
 			// Expected.
 		}

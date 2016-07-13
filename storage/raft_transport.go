@@ -149,7 +149,7 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 	select {
 	case err := <-errCh:
 		return err
-	case <-t.rpcContext.Stopper.ShouldDrain():
+	case <-t.rpcContext.Stopper.ShouldQuiesce():
 		return stream.SendAndClose(new(RaftMessageResponse))
 	}
 }

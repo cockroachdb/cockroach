@@ -35,7 +35,7 @@ func TestPartitionNemesis(t *testing.T) {
 		s := stop.NewStopper()
 		defer s.Stop()
 		s.RunWorker(func() {
-			BidirectionalPartitionNemesis(t, s.ShouldDrain(), c)
+			BidirectionalPartitionNemesis(t, s.ShouldQuiesce(), c)
 		})
 		select {
 		case <-time.After(*flagDuration):
@@ -172,7 +172,7 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 		b.Init(accounts, 10)
 		for _, nemesis := range nemeses {
 			s.RunWorker(func() {
-				nemesis(t, s.ShouldDrain(), c)
+				nemesis(t, s.ShouldQuiesce(), c)
 			})
 		}
 		for i := 0; i < concurrency; i++ {
@@ -180,7 +180,7 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 			if err := s.RunAsyncTask(func() {
 				for timeutil.Now().Before(deadline) {
 					select {
-					case <-s.ShouldDrain():
+					case <-s.ShouldQuiesce():
 						return
 					default:
 					}
