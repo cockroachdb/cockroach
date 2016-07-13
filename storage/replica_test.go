@@ -1188,8 +1188,11 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 		t.Fatal("range lease should have been expired")
 	}
 
-	// Make sure the information for db1 is not gossiped.
-	tc.rng.maybeGossipSystemConfig()
+	// Make sure the information for db1 is not gossiped. Since obtaining
+	// a lease updates the gossiped information, we do that.
+	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
 	// Fetch the raw gossip info. GetSystemConfig is based on callbacks at
 	// modification time. But we're checking for _not_ gossiped, so there should
 	// be no callbacks. Easier to check the raw info.
