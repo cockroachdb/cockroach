@@ -18,10 +18,10 @@ package gossip
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -194,19 +194,19 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Unlock()
 
 	util.SucceedsSoon(t, func() error {
-		if len(local.Outgoing()) == minPeers {
-			return nil
+		if peers := len(local.Outgoing()); peers != minPeers {
+			return errors.Errorf("%d of %d peers connected", peers, minPeers)
 		}
-		return errors.New("some peers not yet connected")
+		return nil
 	})
 
 	local.manage()
 
 	util.SucceedsSoon(t, func() error {
 		// Verify that a client is closed within the cull interval.
-		if len(local.Outgoing()) == minPeers-1 {
-			return nil
+		if peers := len(local.Outgoing()); peers != minPeers-1 {
+			return errors.Errorf("%d of %d peers connected", peers, minPeers-1)
 		}
-		return errors.New("no network culling occurred")
+		return nil
 	})
 }
