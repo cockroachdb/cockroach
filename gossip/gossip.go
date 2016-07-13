@@ -870,23 +870,25 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 // outgoing node to free up an outgoing spot for a more targeted
 // tightening (via tightenNetwork).
 func (g *Gossip) cullNetwork() {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	// If there's no space, find and remove least useful peer, if possible.
-	if g.outgoing.hasSpace() {
-		return
-	}
-	leastUsefulID := g.is.leastUseful(g.outgoing)
+	leastUsefulID := func() roachpb.NodeID {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		// If there's no space, find and remove least useful peer, if possible.
+		if g.outgoing.hasSpace() {
+			return 0
+		}
+		return g.is.leastUseful(g.outgoing)
+	}()
 	if leastUsefulID == 0 {
 		if log.V(1) {
 			log.Infof("couldn't find least useful client to close")
 		}
-		return
+	} else {
+		if log.V(1) {
+			log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
+		}
+		g.closeClient(leastUsefulID)
 	}
-	if log.V(1) {
-		log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
-	}
-	g.closeClient(leastUsefulID)
 }
 
 func (g *Gossip) doDisconnected(c *client) {
@@ -964,6 +966,7 @@ func (g *Gossip) startClient(addr net.Addr) {
 func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
 	if c := g.findClient(func(c *client) bool { return c.peerID == nodeID }); c != nil {
 		c.close()
+		g.doDisconnected(<-g.disconnected) // block until the client has disconnected
 	}
 }
 
