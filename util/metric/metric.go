@@ -23,10 +23,9 @@ import (
 	"time"
 
 	"github.com/VividCortex/ewma"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/codahale/hdrhistogram"
 	"github.com/rcrowley/go-metrics"
-
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const histWrapNum = 4 // number of histograms to keep in rolling window
@@ -80,7 +79,13 @@ type periodic interface {
 var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
-var now = timeutil.Now
+var phyNow = hlc.NewClock(hlc.UnixNano).PhysicalNow
+
+func physicalTime() time.Time {
+	return time.Time{}.Add(time.Duration(phyNow()))
+}
+
+var now = physicalTime
 
 // TestingSetNow changes the clock used by the metric system. For use by
 // testing to precisely control the clock.
