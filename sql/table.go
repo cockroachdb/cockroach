@@ -102,9 +102,13 @@ type SchemaAccessor interface {
 	expandTableGlob(expr *parser.QualifiedName) (parser.QualifiedNames, error)
 
 	// getTableDesc returns a table descriptor, or nil if the descriptor
-	// is not found. If you want to transform the not found condition
-	// into an error, use newUndefinedTableError().
+	// is not found. If you want the not found condition to return an error,
+	// use mustGetTableDesc() instead.
 	getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
+
+	// mustGetTableDesc returns a table descriptor, or an error if the descriptor
+	// is not found.
+	mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
 	// NB: one can use getTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
@@ -158,6 +162,18 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 	return &desc, nil
 }
 
+// mustGetTableDesc implements the SchemaAccessor interface.
+func (p *planner) mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableDesc(qname)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, sqlbase.NewUndefinedTableError(qname.String())
+	}
+	return desc, nil
+}
+
 // getTableLease implements the SchemaAccessor interface.
 func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error) {
 	if log.V(2) {
@@ -172,12 +188,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescr
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
 		// chicken&egg problem.
-		desc, err := p.getTableDesc(qname)
+		desc, err := p.mustGetTableDesc(qname)
 		if err != nil {
 			return sqlbase.TableDescriptor{}, err
-		}
-		if desc == nil {
-			return sqlbase.TableDescriptor{}, sqlbase.NewUndefinedTableError(qname.String())
 		}
 		return *desc, nil
 	}

@@ -255,12 +255,9 @@ func (n *scanNode) initTable(
 	// has its timestamps set correctly so getTableDesc will fetch with the
 	// correct timestamp.
 	if p.asOf {
-		desc, err := p.getTableDesc(tableName)
+		desc, err := p.mustGetTableDesc(tableName)
 		if err != nil {
 			return "", err
-		}
-		if desc == nil {
-			return "", sqlbase.NewUndefinedTableError(tableName.String())
 		}
 		n.desc = *desc
 	} else {

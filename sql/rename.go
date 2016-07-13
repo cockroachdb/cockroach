@@ -158,11 +158,11 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return &emptyNode{}, nil
 	}
 
-	tableDesc, err := p.getTableDesc(n.Name)
+	tableDesc, err := p.mustGetTableDesc(n.Name)
 	if err != nil {
 		return nil, err
 	}
-	if tableDesc == nil || tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
 		return nil, sqlbase.NewUndefinedTableError(n.Name.String())
 	}
 
@@ -236,12 +236,9 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
-	tableDesc, err := p.getTableDesc(n.Index.Table)
+	tableDesc, err := p.mustGetTableDesc(n.Index.Table)
 	if err != nil {
 		return nil, err
-	}
-	if tableDesc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Index.Table.String())
 	}
 
 	idxName := string(n.Index.Index)
@@ -325,12 +322,9 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, fmt.Errorf("table %q does not exist", n.Table.Table())
 	}
 
-	tableDesc, err := p.getTableDesc(n.Table)
+	tableDesc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
-	}
-	if tableDesc == nil {
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
 	}
 
 	colName := string(n.Name)
