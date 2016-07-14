@@ -364,15 +364,14 @@ func (g *Gossip) LogStatus() {
 }
 
 func (g *Gossip) clientStatus() string {
-	g.mu.Lock()
-	maxConns := g.outgoing.maxSize
-	g.mu.Unlock()
+	var buf bytes.Buffer
 
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
-	var buf bytes.Buffer
-	n := len(g.clientsMu.clients)
-	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", n, maxConns)
+
+	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", len(g.clientsMu.clients), g.outgoing.maxSize)
 	for _, c := range g.clientsMu.clients {
 		fmt.Fprintf(&buf, "  %d: %s (%s: %d/%d sent/received)\n",
 			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.sent, c.received)

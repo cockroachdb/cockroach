@@ -18,6 +18,7 @@ package gossip
 
 import (
 	"bytes"
+	"strconv"
 	"testing"
 	"time"
 
@@ -90,6 +91,37 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addrStr)
 		}
 	}
+}
+
+func TestGossipRaceLogStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	local := startGossip(1, stopper, t)
+
+	local.mu.Lock()
+	peer := startGossip(2, stopper, t)
+	local.startClient(&peer.is.NodeAddr)
+	local.mu.Unlock()
+
+	// Race gossiping against LogStatus.
+	gun := make(chan struct{})
+	for i := uint8(0); i < 10; i++ {
+		go func() {
+			<-gun
+			local.LogStatus()
+		}()
+		gun <- struct{}{}
+		if err := local.AddInfo(
+			strconv.FormatUint(uint64(i), 10),
+			[]byte{i},
+			time.Hour,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(gun)
 }
 
 // TestGossipNoForwardSelf verifies that when a Gossip instance is full, it
