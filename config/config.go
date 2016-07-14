@@ -60,36 +60,7 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
-
-	// testingDisableTableSplits is a testing-only variable that disables
-	// splits of tables into separate ranges.
-	testingDisableTableSplits bool
 )
-
-// TestingDisableTableSplits is a testing-only function that disables
-// splits of tables into separate ranges. It returns a function
-// that re-enables this splitting.
-func TestingDisableTableSplits() func() {
-	testingLock.Lock()
-	if testingDisableTableSplits {
-		log.Fatal("TestingDisableTableSplits called twice without cleaning up")
-	}
-	testingDisableTableSplits = true
-	testingLock.Unlock()
-	return func() {
-		testingLock.Lock()
-		testingDisableTableSplits = false
-		testingLock.Unlock()
-	}
-}
-
-// TestingTableSplitsDisabled is a testing-only function that returns true if table
-// splits are currently disabled.
-func TestingTableSplitsDisabled() bool {
-	testingLock.Lock()
-	defer testingLock.Unlock()
-	return testingDisableTableSplits
-}
 
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
@@ -326,10 +297,6 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
 func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
-	if TestingTableSplitsDisabled() {
-		return nil
-	}
-
 	tableStart := roachpb.RKey(keys.SystemConfigTableDataMax)
 	if !tableStart.Less(endKey) {
 		// This range is before the user tables span: no required splits.
