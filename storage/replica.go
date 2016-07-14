@@ -536,7 +536,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				}
 				// Check that we're not in the process of transferring the lease away.
 				// If we are transferring the lease away, we can't serve reads or
-				// propose Raft commands - see comments on TransferLeaderLease.
+				// propose Raft commands - see comments on TransferLease.
 				// TODO(andrei): If the lease is being transferred, consider returning a
 				// new error type so the client backs off until the transfer is
 				// completed.
