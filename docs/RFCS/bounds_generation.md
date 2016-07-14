@@ -11,7 +11,7 @@ This RFC supplements  #1866, which was rejected.
 # Summary
 
 Add a **bounds generation number** to all range descriptors, and use
-it to maintain consistency of the store's `rangesByKey` map.
+it to maintain consistency of the store's `replicasByKey` map.
 
 # Motivation
 
@@ -19,7 +19,7 @@ One of the issues in
 [#1644](https://github.com/cockroachdb/cockroach/issues/1644) is that
 a replica may be created in response to a raft message before the
 split that created the range has been processed, leading to conflicts
-in the `Store.rangesByKey` map.
+in the `Store.replicasByKey` map.
 
 # Detailed design
 
@@ -30,7 +30,7 @@ incremented whenever the bounds of the range change. On a split, the
 post-merge range is one plus the maximum of the two pre-merge ranges'
 values.
 
-In `Store.addRangeInternal`, when we add the range to `rangesByKey`,
+In `Store.addRangeInternal`, when we add the range to `replicasByKey`,
 we first test for an overlapping range. If we find one, we compare
 bounds generations: the range with the lower bounds generation has its
 effective bounds reduced to eliminate the conflict.

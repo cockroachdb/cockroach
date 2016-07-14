@@ -219,7 +219,7 @@ func (e *NotBootstrappedError) Error() string {
 }
 
 // storeRangeSet is an implementation of rangeSet which
-// cycles through a store's rangesByKey btree.
+// cycles through a store's replicasByKey btree.
 type storeRangeSet struct {
 	store    *Store
 	rangeIDs []roachpb.RangeID // Range IDs of ranges to be visited.
@@ -1567,7 +1567,7 @@ func (s *Store) NewRangeDescriptor(
 }
 
 // SplitRange shortens the original range to accommodate the new
-// range. The new range is added to the ranges map and the rangesByKey
+// range. The new range is added to the ranges map and the replicasByKey
 // btree.
 func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	origDesc := origRng.Desc()
@@ -1594,7 +1594,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
 	if s.mu.replicasByKey.Delete(origRng) == nil {
-		return errors.Errorf("couldn't find range %s in rangesByKey btree", origRng)
+		return errors.Errorf("couldn't find range %s in replicasByKey btree", origRng)
 	}
 
 	copyDesc := *origDesc
@@ -1602,11 +1602,11 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
 	if s.mu.replicasByKey.ReplaceOrInsert(origRng) != nil {
-		return errors.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
+		return errors.Errorf("couldn't insert range %v in replicasByKey btree", origRng)
 	}
 
 	if err := s.addReplicaInternalLocked(newRng); err != nil {
-		return errors.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
+		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", newRng, err)
 	}
 
 	// Update the max bytes and other information of the new range.
@@ -1691,7 +1691,7 @@ func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
-		return errors.Errorf("range for key %v already exists in rangesByKey btree",
+		return errors.Errorf("range for key %v already exists in replicasByKey btree",
 			(exRngItem.(*Replica)).getKey())
 	}
 	return nil
@@ -1809,7 +1809,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
-		return errors.Errorf("range for key %v already exists in rangesByKey btree",
+		return errors.Errorf("range for key %v already exists in replicasByKey btree",
 			(exRngItem.(*Replica)).getKey())
 	}
 	return nil
@@ -2372,9 +2372,9 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 		return nil, err
 	}
 	r.creatingReplica = &creatingReplica
-	// Add the range to range map, but not rangesByKey since
+	// Add the range to range map, but not replicasByKey since
 	// the range's start key is unknown. The range will be
-	// added to rangesByKey later when a snapshot is applied.
+	// added to replicasByKey later when a snapshot is applied.
 	if err = s.addReplicaToRangeMapLocked(r); err != nil {
 		return nil, err
 	}
