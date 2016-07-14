@@ -180,7 +180,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Disable the raft log truncation which confuses this test.
 	for _, s := range mtc.stores {
-		s.DisableRaftLogQueue(true)
+		s.SetRaftLogQueueActive(false)
 	}
 
 	// Perform a split, which has special metrics handling.
