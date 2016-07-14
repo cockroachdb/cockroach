@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
@@ -128,7 +129,7 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 //
 // Example usage of a TestServer:
 //
-//   s, db, kvDB := sqlutils.SetupServer(t, testingshim.TestServerParams{})
+//   s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 //   defer s.Stopper().Stop()
 //   // If really needed, in tests that can depend on server, downcast to
 //   // server.TestServer:
@@ -240,6 +241,10 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// If initial splits do not complete, the server is stopped before
 	// returning.
 	if config.TestingTableSplitsDisabled() {
+		return nil
+	}
+	if stk, ok := ts.ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
+		stk.DisableSplitQueue {
 		return nil
 	}
 	if err := ts.WaitForInitialSplits(); err != nil {
@@ -373,6 +378,32 @@ func (ts *TestServer) KVDB() interface{} { return ts.kvDB }
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {
 	return ts.leaseMgr
+}
+
+// GetNode exposes the Server's Node.
+func (ts *TestServer) GetNode() *Node {
+	return ts.node
+}
+
+// GetDistSender exposes the Server's DistSender.
+func (ts *TestServer) GetDistSender() *kv.DistSender {
+	return ts.distSender
+}
+
+// GetFirstStoreID is a utility function returning the StoreID of the first
+// store on this node.
+func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
+	firstStoreID := roachpb.StoreID(-1)
+	err := ts.Stores().VisitStores(func(s *storage.Store) error {
+		if firstStoreID == -1 {
+			firstStoreID = s.Ident.StoreID
+		}
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return firstStoreID
 }
 
 type testServerFactoryImpl struct{}

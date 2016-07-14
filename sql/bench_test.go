@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	_ "github.com/cockroachdb/pq"
 )
@@ -48,12 +49,22 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 
 func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
-	testCluster, conns, stopper := SetupMultinodeTestCluster(b, 3, "bench")
-	if err := testCluster.WaitForFullReplication(); err != nil {
+	tc := testcluster.StartTestCluster(b, 3,
+		testcluster.ClusterArgs{
+			ReplicationMode: testcluster.ReplicationFull,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "bench",
+			},
+		})
+	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
-	defer stopper.Stop()
-	f(b, conns[0])
+	if err := tc.WaitForFullReplication(); err != nil {
+		b.Fatal(err)
+	}
+	defer tc.Stopper().Stop()
+
+	f(b, tc.Conns[0])
 }
 
 func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {

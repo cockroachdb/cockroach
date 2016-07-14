@@ -33,7 +33,7 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer config.TestingDisableTableSplits()()
 	store, stopper, _ := createTestStore(b)
 	// We want to manually control the size of the raft log.
-	store.DisableRaftLogQueue(true)
+	store.SetRaftLogQueueActive(false)
 	defer stopper.Stop()
 
 	const rangeID = 1
