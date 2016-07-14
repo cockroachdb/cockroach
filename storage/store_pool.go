@@ -18,11 +18,11 @@ package storage
 
 import (
 	"container/heap"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -445,7 +445,7 @@ func (sp *StorePool) reserve(
 	defer sp.mu.Unlock()
 	detail, ok := sp.mu.stores[toStoreID]
 	if !ok {
-		return fmt.Errorf("store does not exist in the store pool")
+		return errors.Errorf("store does not exist in the store pool")
 	}
 	conn, err := sp.rpcContext.GRPCDial(detail.desc.Node.Address.String())
 	if err != nil {
@@ -482,7 +482,7 @@ func (sp *StorePool) reserve(
 			log.Infof("reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
-		return fmt.Errorf("reservation failed:%+v due to error:%s", req, err)
+		return errors.Errorf("reservation failed:%+v due to error:%s", req, err)
 	}
 	if !resp.Reserved {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
@@ -490,7 +490,7 @@ func (sp *StorePool) reserve(
 			log.Infof("reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
-		return fmt.Errorf("reservation declined:%+v", req)
+		return errors.Errorf("reservation declined:%+v", req)
 	}
 
 	if log.V(2) {
