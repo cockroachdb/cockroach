@@ -525,7 +525,7 @@ func TestStorePoolReserve(t *testing.T) {
 		// The reservation is successful.
 		{fakeResp: true, storeID: 2},
 		// The store is not in the StorePool.
-		{storeID: 3, expErr: "store does not exist in the store pool"},
+		{storeID: 3, expErr: "store 3 does not exist in the store pool"},
 		// The reservation is declined.
 		{fakeResp: false, storeID: 2, expErr: "reservation declined"},
 		// The reservation is with an error.
