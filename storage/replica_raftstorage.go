@@ -146,7 +146,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := raftTruncatedState(e, rangeID)
+	ts, err := loadTruncatedState(e, rangeID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 func term(eng engine.Reader, rangeID roachpb.RangeID, i uint64) (uint64, error) {
 	ents, err := entries(eng, rangeID, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := raftTruncatedState(eng, rangeID)
+		ts, err := loadTruncatedState(eng, rangeID)
 		if err != nil {
 			return 0, err
 		}
@@ -216,7 +216,7 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := raftTruncatedState(r.store.Engine(), r.RangeID)
+	ts, err := loadTruncatedState(r.store.Engine(), r.RangeID)
 	if err != nil {
 		return ts, err
 	}
@@ -224,15 +224,6 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 		r.mu.state.TruncatedState = &ts
 	}
 	return ts, nil
-}
-
-func raftTruncatedState(
-	eng engine.Reader, rangeID roachpb.RangeID,
-) (roachpb.RaftTruncatedState, error) {
-	ts := roachpb.RaftTruncatedState{}
-	_, err := engine.MVCCGetProto(context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
-		hlc.ZeroTimestamp, true, nil, &ts)
-	return ts /* zero if not found */, err
 }
 
 // FirstIndex implements the raft.Storage interface.
@@ -364,7 +355,7 @@ func snapshot(
 	start := timeutil.Now()
 	var snapData roachpb.RaftSnapshotData
 
-	truncState, err := raftTruncatedState(snap, rangeID)
+	truncState, err := loadTruncatedState(snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
