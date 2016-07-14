@@ -306,11 +306,13 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
+func (n *Node) start(
+	ctx context.Context, addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes,
+) error {
 	n.initDescriptor(addr, attrs)
 
 	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(engines, n.stopper); err != nil {
+	if err := n.initStores(ctx, engines, n.stopper); err != nil {
 		if err == errNeedsBootstrap {
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
@@ -322,7 +324,7 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 			log.Infof(context.TODO(), "**** cluster %s has been created", clusterID)
 			log.Infof(context.TODO(), "**** add additional nodes by specifying --join=%s", addr)
 			// After bootstrapping, try again to initialize the stores.
-			if err := n.initStores(engines, n.stopper); err != nil {
+			if err := n.initStores(ctx, engines, n.stopper); err != nil {
 				return err
 			}
 		} else {
@@ -336,12 +338,12 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 	n.recorder.NodeStarted(n.Descriptor, n.startedAt)
 
 	n.startComputePeriodicMetrics(n.stopper)
-	n.startGossip(n.stopper)
+	n.startGossip(ctx, n.stopper)
 
 	// Record node started event.
 	n.recordJoinEvent()
 
-	log.Infof(context.TODO(), "%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
+	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
 	return nil
 }
 
@@ -375,7 +377,9 @@ func (n *Node) SetDraining(drain bool) error {
 // the Store doesn't yet have a valid ident, it's added to the
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
-func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error {
+func (n *Node) initStores(
+	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper,
+) error {
 	var bootstraps []*storage.Store
 
 	if len(engines) == 0 {
@@ -445,7 +449,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
 		if err := stopper.RunAsyncTask(func() {
-			n.bootstrapStores(bootstraps, stopper)
+			n.bootstrapStores(ctx, bootstraps, stopper)
 		}); err != nil {
 			return err
 		}
@@ -480,7 +484,7 @@ func (n *Node) validateStores() error {
 // and node IDs have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per
 // node.
-func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stopper) {
+func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper) {
 	if n.ClusterID == *uuid.EmptyUUID {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
@@ -490,7 +494,7 @@ func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stoppe
 	inc := int64(len(bootstraps))
 	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
 	if err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatal(ctx, err)
 	}
 	sIdent := roachpb.StoreIdent{
 		ClusterID: n.ClusterID,
@@ -499,24 +503,24 @@ func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stoppe
 	}
 	for _, s := range bootstraps {
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatal(ctx, err)
 		}
 		if err := s.Start(stopper); err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatal(ctx, err)
 		}
 		n.addStore(s)
 		sIdent.StoreID++
-		log.Infof(context.TODO(), "bootstrapped store %s", s)
+		log.Infof(ctx, "bootstrapped store %s", s)
 		// Done regularly in Node.startGossip, but this cuts down the time
 		// until this store is used for range allocations.
 		if err := s.GossipStore(ctx); err != nil {
-			log.Warningc(ctx, "error doing initial gossiping: %s", err)
+			log.Warningf(ctx, "error doing initial gossiping: %s", err)
 		}
 	}
 	// write a new status summary after all stores have been bootstrapped; this
 	// helps the UI remain responsive when new nodes are added.
 	if err := n.writeSummaries(); err != nil {
-		log.Warningf(context.TODO(), "error writing node summary after store bootstrap: %s", err)
+		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 }
 
@@ -551,7 +555,7 @@ func (n *Node) connectGossip() {
 
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
-func (n *Node) startGossip(stopper *stop.Stopper) {
+func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		gossipStoresInterval := envutil.EnvOrDefaultDuration("gossip_stores_interval",
 			gossip.DefaultGossipStoresInterval)
@@ -560,16 +564,16 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 		nodeTicker := time.NewTicker(gossipNodeDescriptorInterval)
 		defer storesTicker.Stop()
 		defer nodeTicker.Stop()
-		n.gossipStores() // one-off run before going to sleep
+		n.gossipStores(ctx) // one-off run before going to sleep
 		for {
 			select {
 			case <-statusTicker.C:
 				n.ctx.Gossip.LogStatus()
 			case <-storesTicker.C:
-				n.gossipStores()
+				n.gossipStores(ctx)
 			case <-nodeTicker.C:
 				if err := n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-					log.Warningf(context.TODO(), "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+					log.Warningf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 				}
 			case <-stopper.ShouldStop():
 				return
@@ -579,13 +583,17 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 }
 
 // gossipStores broadcasts each store and dead replica to the gossip network.
-func (n *Node) gossipStores() {
+func (n *Node) gossipStores(ctx context.Context) {
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
-		s.GossipStore()
-		s.GossipDeadReplicas()
+		if err := s.GossipStore(ctx); err != nil {
+			return err
+		}
+		if err := s.GossipDeadReplicas(ctx); err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
-		panic(err)
+		log.Warning(ctx, err)
 	}
 }
 

@@ -368,7 +368,7 @@ func (r *Replica) handleTrigger(
 			r.mu.state.Stats.ContainsEstimates = false
 			stats := r.mu.state.Stats
 			r.mu.Unlock()
-			if err := setMVCCStats(r.store.Engine(), r.RangeID, stats); err != nil {
+			if err := setMVCCStats(ctx, r.store.Engine(), r.RangeID, stats); err != nil {
 				log.Fatal(context.Background(), errors.Wrap(err, "unable to write MVCC stats"))
 			}
 		}
