@@ -1,6 +1,6 @@
 import { assert } from "chai";
 import _ = require("lodash");
-import * as fetchMock from "fetch-mock";
+import * as fetchMock from "../util/fetch-mock";
 import Long = require("long");
 
 import * as protos from "../js/protos";
@@ -8,11 +8,11 @@ import * as api from "./api";
 
 describe("rest api", function() {
 
-  afterEach(function () {
+  afterEach(() => {
     api.setFetchTimeout(10000);
   });
 
-  describe("propsToQueryString", function () {
+  describe("propsToQueryString", () => {
     interface PropBag {
       [k: string]: string;
     }
@@ -30,7 +30,7 @@ describe("rest api", function() {
       );
     }
 
-    it("creates an appropriate querystring", function () {
+    it("creates an appropriate querystring", () => {
       let testValues: any = {
         a: "testa",
         b: "testb",
@@ -45,7 +45,7 @@ describe("rest api", function() {
       assert.deepEqual(testValues, decodeQueryString(querystring));
     });
 
-    it("handles falsy values correctly", function () {
+    it("handles falsy values correctly", () => {
       let testValues: any = {
         // null and undefined should be ignored
         undefined: undefined,
@@ -68,7 +68,7 @@ describe("rest api", function() {
       assert.deepEqual({ false: "false", "": "", 0: "0" }, decodeQueryString(querystring));
     });
 
-    it("handles special characters", function () {
+    it("handles special characters", () => {
       let key = "!@#$%^&*()=+-_\\|\"`'?/<>";
       let value = key.split("").reverse().join(""); // key reversed
       let testValues: any = {
@@ -81,7 +81,7 @@ describe("rest api", function() {
       assert.deepEqual(testValues, decodeQueryString(querystring));
     });
 
-    it("handles non-string values", function () {
+    it("handles non-string values", () => {
       let testValues: any = {
         boolean: true,
         number: 1,
@@ -97,18 +97,17 @@ describe("rest api", function() {
     });
   });
 
-  describe("databases request", function () {
+  describe("databases request", () => {
     afterEach(fetchMock.restore);
 
-    it("correctly requests info about all databases", function () {
+    it("correctly requests info about all databases", () => {
       this.timeout(1000);
       // Mock out the fetch query to /databases
-      fetchMock.mock(api.API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/databases", (url: string, requestObj: RequestInit) => {
 
         assert.isUndefined(requestObj.body);
 
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.DatabasesResponse({
             databases: ["system", "test"],
           }).toArrayBuffer(),
@@ -124,7 +123,7 @@ describe("rest api", function() {
     it("correctly handles an error", function (done) {
       this.timeout(1000);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(api.API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/databases", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { throws: new Error() };
       });
@@ -141,7 +140,7 @@ describe("rest api", function() {
       this.timeout(1000);
       api.setFetchTimeout(0);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(api.API_PREFIX + "/databases", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/databases", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
@@ -156,19 +155,18 @@ describe("rest api", function() {
 
   });
 
-  describe("database details request", function () {
+  describe("database details request", () => {
 
     let dbName = "test";
 
     afterEach(fetchMock.restore);
 
-    it("correctly requests info about a specific database", function () {
+    it("correctly requests info about a specific database", () => {
       this.timeout(1000);
       // Mock out the fetch query
-      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.DatabaseDetailsResponse({
             table_names: ["table1", "table2"],
             grants: [
@@ -189,7 +187,7 @@ describe("rest api", function() {
     it("correctly handles an error", function (done) {
       this.timeout(1000);
       // Mock out the fetch query, but return a 500 status code
-      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { throws: new Error() };
       });
@@ -206,7 +204,7 @@ describe("rest api", function() {
       this.timeout(1000);
       api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}`, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
@@ -221,20 +219,19 @@ describe("rest api", function() {
 
   });
 
-  describe("table details request", function () {
+  describe("table details request", () => {
 
     let dbName = "testDB";
     let tableName = "testTable";
 
     afterEach(fetchMock.restore);
 
-    it("correctly requests info about a specific table", function () {
+    it("correctly requests info about a specific table", () => {
       this.timeout(1000);
       // Mock out the fetch query
-      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.TableDetailsResponse().toArrayBuffer(),
         };
       });
@@ -250,7 +247,7 @@ describe("rest api", function() {
     it("correctly handles an error", function (done) {
       this.timeout(1000);
       // Mock out the fetch query, but return a 500 status code
-      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { throws: new Error() };
       });
@@ -267,7 +264,7 @@ describe("rest api", function() {
       this.timeout(1000);
       api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(`${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
@@ -287,13 +284,12 @@ describe("rest api", function() {
 
     afterEach(fetchMock.restore);
 
-    it("correctly requests events", function () {
+    it("correctly requests events", () => {
       this.timeout(1000);
       // Mock out the fetch query
-      fetchMock.mock(api.API_PREFIX + "/events?", "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(api.API_PREFIX + "/events?", (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.EventsResponse({
             events: [
               { event_type: "test" },
@@ -308,7 +304,7 @@ describe("rest api", function() {
       });
     });
 
-    it("correctly requests filtered events", function () {
+    it("correctly requests filtered events", () => {
       this.timeout(1000);
 
       let req = new protos.cockroach.server.serverpb.EventsRequest({
@@ -317,7 +313,7 @@ describe("rest api", function() {
       });
 
       // Mock out the fetch query
-      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(eventsUrl, (url: string, requestObj: RequestInit) => {
         let params = url.split("?")[1].split("&");
         assert.lengthOf(params, 2);
         _.each(params, (param) => {
@@ -326,7 +322,6 @@ describe("rest api", function() {
         });
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.EventsResponse({
             events: [
               { event_type: "test" },
@@ -341,7 +336,7 @@ describe("rest api", function() {
       });
     });
 
-    it("ignores unknown parameters", function () {
+    it("ignores unknown parameters", () => {
       this.timeout(1000);
 
       let req = {
@@ -351,14 +346,13 @@ describe("rest api", function() {
       };
 
       // Mock out the fetch query
-      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(eventsUrl, (url: string, requestObj: RequestInit) => {
         let params = url.split("?")[1].split("&");
         assert.lengthOf(params, 1);
         assert(params[0].split("=")[0] === "type");
         assert(params[0].split("=")[1] === "here");
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.EventsResponse().toArrayBuffer(),
         };
       });
@@ -373,7 +367,7 @@ describe("rest api", function() {
       this.timeout(1000);
 
       // Mock out the fetch query, but return a 500 status code
-      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(eventsUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { throws: new Error() };
       });
@@ -390,7 +384,7 @@ describe("rest api", function() {
       this.timeout(1000);
       api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(eventsUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(eventsUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
@@ -409,13 +403,12 @@ describe("rest api", function() {
 
     afterEach(fetchMock.restore);
 
-    it("correctly requests health", function () {
+    it("correctly requests health", () => {
       this.timeout(1000);
       // Mock out the fetch query
-      fetchMock.mock(healthUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(healthUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.HealthResponse().toArrayBuffer(),
         };
       });
@@ -430,7 +423,7 @@ describe("rest api", function() {
       this.timeout(1000);
 
       // Mock out the fetch query, but return a 500 status code
-      fetchMock.mock(healthUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(healthUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { throws: new Error() };
       });
@@ -447,7 +440,7 @@ describe("rest api", function() {
       this.timeout(1000);
       api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(healthUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(healthUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });
@@ -467,12 +460,11 @@ describe("rest api", function() {
 
     afterEach(fetchMock.restore);
 
-    it("correctly requests cluster info", function () {
+    it("correctly requests cluster info", () => {
       this.timeout(1000);
-      fetchMock.mock(clusterUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(clusterUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return {
-          sendAsJson: false,
           body: new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: clusterID }).toArrayBuffer(),
         };
       });
@@ -487,7 +479,7 @@ describe("rest api", function() {
       this.timeout(1000);
 
       // Mock out the fetch query, but return an error
-      fetchMock.mock(clusterUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(clusterUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return { throws: new Error() };
       });
@@ -504,7 +496,7 @@ describe("rest api", function() {
       this.timeout(1000);
       api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
-      fetchMock.mock(clusterUrl, "get", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock(clusterUrl, (url: string, requestObj: RequestInit) => {
         assert.isUndefined(requestObj.body);
         return new Promise<any>(() => { });
       });

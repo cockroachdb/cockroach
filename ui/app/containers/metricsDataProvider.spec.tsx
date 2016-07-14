@@ -90,18 +90,18 @@ describe("<MetricsDataProvider>", function() {
   });
 
   describe("refresh", function() {
-    it("refreshes query data when mounted.", function () {
+    it("refreshes query data when mounted.", () => {
       makeDataProvider(graphid, null, timespan1, spy);
       assert.isTrue(spy.called);
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
     });
 
-    it("does nothing when mounted if current request fulfilled.", function () {
+    it("does nothing when mounted if current request fulfilled.", () => {
       makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
     });
 
-    it("does nothing when mounted if current request is in flight.", function () {
+    it("does nothing when mounted if current request is in flight.", () => {
       let query = makeMetricsQuery(graphid, timespan1);
       query.request = null;
       query.data = null;
@@ -109,7 +109,7 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.notCalled);
     });
 
-    it("refreshes query data when receiving props.", function () {
+    it("refreshes query data when receiving props.", () => {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       provider.setProps({
@@ -119,7 +119,7 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
     });
 
-    it("refreshes if timespan changes.", function () {
+    it("refreshes if timespan changes.", () => {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       provider.setProps({
@@ -129,7 +129,7 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan2)));
     });
 
-    it("refreshes if query changes.", function () {
+    it("refreshes if query changes.", () => {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       // Modify "sources" parameter.

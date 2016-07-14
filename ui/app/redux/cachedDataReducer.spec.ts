@@ -15,11 +15,11 @@ let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, reject)
 
 let expected: CachedDataReducerState<Response>;
 
-describe("reducerObj", function () {
+describe("reducerObj", () => {
   let actionNamespace = "test";
   let testReducerObj = new CachedDataReducer<Request, Response>(apiEndpointMock, actionNamespace);
 
-  describe("actions", function () {
+  describe("actions", () => {
     it("requestData() creates the correct action type.", function() {
       assert.equal(testReducerObj.requestData().type, testReducerObj.REQUEST);
     });
@@ -50,14 +50,14 @@ describe("reducerObj", function () {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch requestData", function () {
+    it("should correctly dispatch requestData", () => {
       state = reducer(state, testReducerObj.requestData());
       expected = new CachedDataReducerState<Response>();
       expected.inFlight = true;
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch receiveData", function () {
+    it("should correctly dispatch receiveData", () => {
       let expectedResponse = new Response(null);
 
       state = reducer(state, testReducerObj.receiveData(expectedResponse));
@@ -84,7 +84,7 @@ describe("reducerObj", function () {
     });
   });
 
-  describe("refresh", function () {
+  describe("refresh", () => {
     let state: {
       cachedData: {
         test: CachedDataReducerState<Response>;
@@ -95,7 +95,7 @@ describe("reducerObj", function () {
       state.cachedData.test = testReducerObj.reducer(state.cachedData.test, action);
     };
 
-    it("correctly dispatches refresh", function () {
+    it("correctly dispatches refresh", () => {
       state = {
         cachedData: {
           test: new CachedDataReducerState<Response>(),
@@ -115,8 +115,8 @@ describe("reducerObj", function () {
   });
 });
 
-describe("multiple reducer objects", function () {
-  it("should throw an error if the same actionNamespace is used twice", function () {
+describe("multiple reducer objects", () => {
+  it("should throw an error if the same actionNamespace is used twice", () => {
     new CachedDataReducer<Request, Response>(apiEndpointMock, "duplicatenamespace");
     try {
       new CachedDataReducer<Request, Response>(apiEndpointMock, "duplicatenamespace");

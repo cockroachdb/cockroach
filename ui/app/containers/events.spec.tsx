@@ -27,14 +27,14 @@ describe("<EventList>", function() {
   });
 
   describe("refresh", function() {
-    it("refreshes events when mounted.", function () {
+    it("refreshes events when mounted.", () => {
       makeEventList((new protos.cockroach.server.serverpb.EventsResponse()).events, spy);
       assert.isTrue(spy.called);
     });
   });
 
   describe("attach", function() {
-    it("attaches event data to contained component", function () {
+    it("attaches event data to contained component", () => {
       let eventsResponse = new protos.cockroach.server.serverpb.EventsResponse({
       events: [
         {
@@ -61,9 +61,9 @@ describe("<EventList>", function() {
   });
 });
 
-describe("<EventRow>", function () {
-  describe("attach", function () {
-    it("correctly renders a known event", function () {
+describe("<EventRow>", () => {
+  describe("attach", () => {
+    it("correctly renders a known event", () => {
       let e = new protos.cockroach.server.serverpb.EventsResponse.Event({
         target_id: Long.fromString("1"),
         event_type: "create_database",
@@ -75,7 +75,7 @@ describe("<EventRow>", function () {
       assert(_.includes(text, "created database"));
     });
 
-    it("correctly renders an unknown event", function () {
+    it("correctly renders an unknown event", () => {
       let e = new protos.cockroach.server.serverpb.EventsResponse.Event({
         target_id: Long.fromString("1"),
         event_type: "unknown",
