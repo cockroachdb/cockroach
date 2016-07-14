@@ -60,7 +60,6 @@ import TableDetails from "./containers/databases/tableDetails";
 import HelpUs from "./containers/helpus";
 import Nodes from "./containers/nodes";
 import NodesOverview from "./containers/nodesOverview";
-import NodesGraphs from "./containers/nodesGraphs";
 import Node from "./containers/node";
 import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
@@ -80,7 +79,7 @@ ReactDOM.render(
         <Route path="nodes" component={ Nodes }>
           <IndexRedirect to="overview" />
           <Route path="overview" component={ NodesOverview } />
-          <Route path="graphs" component={ NodesGraphs } />
+          <Route path="graphs" component={ NodeGraphs } />
         </Route>
         <Route path="nodes">
           // This path has to match the "nodes" route for the purpose of

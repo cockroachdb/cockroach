@@ -5,7 +5,7 @@ import { ToolTip } from "./toolTip";
 interface VisualizationProps {
   title: string;
   subtitle?: string;
-  tooltip?: string;
+  tooltip?: React.ReactNode;
   // If warning or warningTitle exist, they are appended to the tooltip
   // and the icon is changed to the warning icon.
   warningTitle?: string;
