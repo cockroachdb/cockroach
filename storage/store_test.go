@@ -981,9 +981,9 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	}
 }
 
-// TestStoreRangesByKey verifies we can lookup ranges by key using
-// the sorted rangesByKey slice.
-func TestStoreRangesByKey(t *testing.T) {
+// TestStoreReplicasByKey verifies we can lookup ranges by key using
+// the sorted replicasByKey slice.
+func TestStoreReplicasByKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
