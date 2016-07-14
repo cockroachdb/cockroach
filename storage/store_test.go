@@ -988,7 +988,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	if _, err := writeInitialState(store.engine, enginepb.MVCCStats{}, *desc); err != nil {
+	if _, err := writeInitialState(context.Background(), store.engine, enginepb.MVCCStats{}, *desc); err != nil {
 		t.Fatal(err)
 	}
 	newRng, err := NewReplica(desc, store, 0)
@@ -1979,7 +1979,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		repl.mu.Lock()
 		frozen := repl.mu.state.Frozen
 		repl.mu.Unlock()
-		pFrozen, err := loadFrozenStatus(store.Engine(), 1)
+		pFrozen, err := loadFrozenStatus(context.Background(), store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2118,7 +2118,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
 		repl.mu.Unlock()
-		pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
+		pgcThreshold, err := loadGCThreshold(context.Background(), store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
