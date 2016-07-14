@@ -2874,9 +2874,10 @@ func (r *Replica) ChangeReplicas(
 	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
-		nodeUsed = nodeUsed || existingRep.NodeID == repDesc.NodeID
+		nodeUsedByExistingRep := existingRep.NodeID == repDesc.NodeID
+		nodeUsed = nodeUsed || nodeUsedByExistingRep
 
-		if existingRep.NodeID == repDesc.NodeID && existingRep.StoreID == repDesc.StoreID {
+		if nodeUsedByExistingRep && existingRep.StoreID == repDesc.StoreID {
 			repDescIdx = i
 			repDesc.ReplicaID = existingRep.ReplicaID
 			break
