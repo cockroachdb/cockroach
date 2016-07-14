@@ -282,7 +282,7 @@ func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, error
 	} else {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away.
-		lastEnt, err := raftTruncatedState(reader, rangeID)
+		lastEnt, err := loadTruncatedState(reader, rangeID)
 		if err != nil {
 			return 0, err
 		}
