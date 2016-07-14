@@ -267,6 +267,9 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	}
 
 	if r.mu.internalRaftGroup == nil {
+		if r.mu.replicaID == 0 {
+			panic("creating raft group with replicaID=0")
+		}
 		raftGroup, err := raft.NewRawNode(&raft.Config{
 			ID:            uint64(r.mu.replicaID),
 			Applied:       r.mu.state.RaftAppliedIndex,
