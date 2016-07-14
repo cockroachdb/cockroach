@@ -17,33 +17,35 @@ export default class extends React.Component<IInjectedProps, {}> {
   static displayTimeScale = true;
 
   render() {
-    let sources = [this.props.params[nodeID]];
+    let sources: string[];
+    let node = this.props.params[nodeID];
+    sources = node ? [node] : null;
+    let specifier = node ? `on node ${node}` : "across all nodes";
 
     return <div className="section node">
       <div className="charts">
         <h2>Activity</h2>
           <GraphGroup groupId="node.activity">
-
-            <LineGraph title="SQL Connections" sources={sources}>
+          <LineGraph title="SQL Connections" sources={sources} tooltip={`The total number of active SQL connections ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.conns" title="Client Connections" />
               </Axis>
             </LineGraph>
 
-            <LineGraph title="SQL Traffic" sources={sources}>
+            <LineGraph title="SQL Traffic" sources={sources} tooltip={`The average amount of SQL client network traffic in bytes per second ${specifier}.`}>
               <Axis format={ Bytes }>
                 <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
                 <Metric name="cr.node.sql.bytesout" title="Bytes Out" nonNegativeRate />
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Queries Per Second" sources={sources}>
+            <LineGraph title="Queries Per Second" sources={sources} tooltip={`The average number of SQL queries per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Live Bytes" sources={sources}>
+            <LineGraph title="Live Bytes" sources={sources} tooltip={`The amount of storage space used by live (non-historical) data ${specifier}.`}>
               <Axis format={ Bytes }>
                 <Metric name="cr.store.livebytes" title="Live Bytes" />
               </Axis>
@@ -67,17 +69,22 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
+            <LineGraph title="GC Pause Time" sources={sources} tooltip={`The average amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
+              <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
+                <Metric name="cr.node.sys.gc.pause.ns" title="Time" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
           </GraphGroup>
         <h2>SQL Queries</h2>
           <GraphGroup groupId="node.queries">
-
-            <LineGraph title="Reads" sources={sources}>
+            <LineGraph title="Reads" sources={sources} tooltip={`The average number of SELECT statements per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Writes" sources={sources}>
+            <LineGraph title="Writes" sources={sources} tooltip={`The average number of INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
                 <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
@@ -85,7 +92,7 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Transactions" sources={sources}>
+            <LineGraph title="Transactions" sources={sources} tooltip={`The average number of transactions committed, rolled back, or aborted per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.txn.commit.count" title="Commits" nonNegativeRate />
                 <Metric name="cr.node.sql.txn.rollback.count" title="Rollbacks" nonNegativeRate />
@@ -93,7 +100,7 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Schema Changes" sources={sources}>
+            <LineGraph title="Schema Changes" sources={sources} tooltip={`The average number of DDL statements per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
               </Axis>
@@ -103,37 +110,43 @@ export default class extends React.Component<IInjectedProps, {}> {
         <h2>System Resources</h2>
           <GraphGroup groupId="node.resources">
 
-            <StackedAreaGraph title="CPU Usage" sources={sources}>
+            <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
                 <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %"/>
                 <Metric name="cr.node.sys.cpu.sys.percent" title="CPU Sys %"/>
               </Axis>
             </StackedAreaGraph>
 
-            <LineGraph title="Memory Usage" sources={sources}>
+            <LineGraph title="Memory Usage" sources={sources} tooltip={<div>{`Memory in use ${specifier}:`}<dl>
+            <dt>RSS</dt><dd>Total memory in use by CockroachDB</dd>
+            <dt>Go Allocated</dt><dd>Memory allocated by the Go layer</dd>
+            <dt>Go Total</dt><dd>Total memory managed by the Go layer</dd>
+            <dt>C Allocated</dt><dd>Memory allocated by the C layer</dd>
+            <dt>C Total</dt><dd>Total memory managed by the C layer</dd>
+            </dl></div>}>
               <Axis format={ Bytes }>
+                <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
                 <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
                 <Metric name="cr.node.sys.go.totalbytes" title="Go Total" />
-                <Metric name="cr.node.sys.cgo.allocbytes" title="Cgo Allocated" />
-                <Metric name="cr.node.sys.cgo.totalbytes" title="Cgo Total" />
-                <Metric name="cr.node.sys.rss" title="RSS" />
+                <Metric name="cr.node.sys.cgo.allocbytes" title="C Allocated" />
+                <Metric name="cr.node.sys.cgo.totalbytes" title="C Total" />
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Goroutine Count" sources={sources}>
+            <LineGraph title="Goroutine Count" sources={sources} tooltip={`The number of Goroutines ${specifier}. This count should rise and fall based on load.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
               </Axis>
             </LineGraph>
 
-            <LineGraph title="CGo Calls" sources={sources}>
+            <LineGraph title="Cgo Calls" sources={sources} tooltip={`The average number of calls from Go to C per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
-                <Metric name="cr.node.sys.cgocalls" title="CGo Calls" nonNegativeRate />
+                <Metric name="cr.node.sys.cgocalls" title="Cgo Calls" nonNegativeRate />
               </Axis>
             </LineGraph>
 
           </GraphGroup>
-        <h2>Internals</h2>
+        <h2>Advanced Internals</h2>
           <GraphGroup groupId="node.internals">
 
             <StackedAreaGraph title="Key/Value Transactions" sources={sources}>
@@ -188,19 +201,6 @@ export default class extends React.Component<IInjectedProps, {}> {
                 <Metric name="cr.store.rocksdb.bloom.filter.prefix.useful"
                         title="Useful"
                         nonNegativeRate />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="Clock Offset" sources={sources}>
-              <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
-                <Metric name="cr.node.clock-offset.upper-bound-nanos" title="Upper Bound" />
-                <Metric name="cr.node.clock-offset.lower-bound-nanos" title="Lower Bound" />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="GC Pause Time" sources={sources}>
-              <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
-                <Metric name="cr.node.sys.gc.pause.ns" title="Time" nonNegativeRate />
               </Axis>
             </LineGraph>
 
