@@ -1129,7 +1129,7 @@ func (r *Replica) GC(
 		r.mu.state.GCThreshold = newThreshold
 		r.mu.Unlock()
 	})
-	return reply, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
+	return reply, setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold)
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1611,7 +1611,7 @@ func (r *Replica) applyNewLeaseLocked(
 
 	var reply roachpb.RequestLeaseResponse
 	// Store the lease to disk & in-memory.
-	if err := setLease(batch, ms, r.RangeID, &lease); err != nil {
+	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
 		return reply, err
 	}
 	r.mu.state.Lease = &lease
@@ -1992,7 +1992,7 @@ func (r *Replica) ChangeFrozen(
 
 	desc := r.Desc()
 
-	frozen, err := loadFrozenStatus(batch, desc.RangeID)
+	frozen, err := loadFrozenStatus(ctx, batch, desc.RangeID)
 	if err != nil || frozen == args.Frozen {
 		// Something went wrong or we're already in the right frozen state. In
 		// the latter case, we avoid writing the "same thing" because "we"
@@ -2048,7 +2048,7 @@ func (r *Replica) ChangeFrozen(
 		r.mu.state.Frozen = args.Frozen
 		r.mu.Unlock()
 	})
-	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
+	return resp, setFrozenStatus(ctx, batch, ms, r.Desc().RangeID, args.Frozen)
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
@@ -2444,7 +2444,7 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, "computed stats for old range")
 
-	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
+	if err := setMVCCStats(ctx, batch, r.RangeID, leftMS); err != nil {
 		return errors.Wrap(err, "unable to write MVCC stats")
 	}
 	r.mu.Lock()
@@ -2491,7 +2491,7 @@ func (r *Replica) splitTrigger(
 	// Note that the stats need to go into deltaMS (which is the total
 	// difference in bytes reported to the store in the end). We compute the
 	// RHS' stats from it below.
-	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
+	deltaMS, err = writeInitialState(ctx, batch, deltaMS, split.NewDesc)
 	if err != nil {
 		return errors.Wrap(err, "unable to write initial state")
 	}
@@ -2523,7 +2523,7 @@ func (r *Replica) splitTrigger(
 		// Remove stats from the left side of the split.
 		rightMS.Subtract(leftMS)
 	}
-	if err := setMVCCStats(batch, split.NewDesc.RangeID, rightMS); err != nil {
+	if err := setMVCCStats(ctx, batch, split.NewDesc.RangeID, rightMS); err != nil {
 		return errors.Wrap(err, "unable to write MVCC stats")
 	}
 	log.Trace(ctx, "computed stats for new range")
@@ -2798,7 +2798,7 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range (in-memory updated under lock below).
-	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
+	if err := setMVCCStats(ctx, batch, r.RangeID, mergedMS); err != nil {
 		return errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 

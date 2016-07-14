@@ -964,9 +964,9 @@ func IterateRangeDescriptors(
 	return err
 }
 
-func (s *Store) migrate(desc roachpb.RangeDescriptor) {
+func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
-	if err := migrate7310And6991(batch, desc); err != nil {
+	if err := migrate7310And6991(ctx, batch, desc); err != nil {
 		log.Fatal(errors.Wrap(err, "during migration"))
 	}
 	if err := batch.Commit(); err != nil {
@@ -977,6 +977,7 @@ func (s *Store) migrate(desc roachpb.RangeDescriptor) {
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *stop.Stopper) error {
 	s.stopper = stopper
+	ctx := s.context(context.TODO())
 
 	// Add a closer for the various scanner queues, needed to properly clean up
 	// the event logs.
@@ -1020,7 +1021,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -1063,7 +1064,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if !desc.IsInitialized() {
 			return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 		}
-		s.migrate(desc)
+		s.migrate(ctx, desc)
 
 		rng, err := NewReplica(&desc, s, 0)
 		if err != nil {
@@ -1121,7 +1122,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 					MustVersion: build.GetInfo().Tag,
 				}
 				ba.Add(&fReq)
-				if _, pErr := r.Send(context.TODO(), ba); pErr != nil {
+				if _, pErr := r.Send(ctx, ba); pErr != nil {
 					log.Errorf("could not unfreeze Range %s on startup: %s", r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
@@ -1175,7 +1176,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// sentinel and first range metadata if we have a first range.
 		// This may wake up ranges and requires everything to be set up and
 		// running.
-		s.startGossip()
+		s.startGossip(ctx)
 
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
@@ -1218,8 +1219,7 @@ func (s *Store) WaitForInit() {
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
-func (s *Store) startGossip() {
-	ctx := s.context(context.TODO())
+func (s *Store) startGossip(ctx context.Context) {
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
 	s.initComplete.Add(2)
@@ -1522,7 +1522,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(batch, *ms, *desc)
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc)
 	if err != nil {
 		return err
 	}
@@ -2221,6 +2221,8 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
+	ctx := s.context(context.Background())
+
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
 	s.mu.Lock()
@@ -2274,7 +2276,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// the raft group (i.e. replicas with an ID of 0). This is the only
 			// operation that can be performed on a replica before it is part of the
 			// raft group.
-			_, err := r.applySnapshot(req.Message.Snapshot, raftpb.HardState{})
+			_, err := r.applySnapshot(ctx, req.Message.Snapshot, raftpb.HardState{})
 			return err
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
