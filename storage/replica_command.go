@@ -1168,7 +1168,7 @@ func (r *Replica) GC(
 	trigger := &PostCommitTrigger{
 		gcThreshold: &newThreshold,
 	}
-	return reply, trigger, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
+	return reply, trigger, setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold)
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1687,7 +1687,7 @@ func (r *Replica) applyNewLeaseLocked(
 
 	var reply roachpb.RequestLeaseResponse
 	// Store the lease to disk & in-memory.
-	if err := setLease(batch, ms, r.RangeID, &lease); err != nil {
+	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
 		return reply, newFailedLeaseTrigger(), err
 	}
 
@@ -1948,7 +1948,7 @@ func (r *Replica) ChangeFrozen(
 
 	desc := r.Desc()
 
-	frozen, err := loadFrozenStatus(batch, desc.RangeID)
+	frozen, err := loadFrozenStatus(ctx, batch, desc.RangeID)
 	if err != nil || frozen == args.Frozen {
 		// Something went wrong or we're already in the right frozen state. In
 		// the latter case, we avoid writing the "same thing" because "we"
@@ -1999,7 +1999,7 @@ func (r *Replica) ChangeFrozen(
 
 	resp.MinStartKey = desc.StartKey
 
-	if err := setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen); err != nil {
+	if err := setFrozenStatus(ctx, batch, ms, r.Desc().RangeID, args.Frozen); err != nil {
 		return roachpb.ChangeFrozenResponse{}, nil, err
 	}
 
@@ -2457,7 +2457,7 @@ func (r *Replica) splitTrigger(
 	//   know about the read at 'd' which happened at the beginning.
 	// - node two can illegally propose a write to 'd' at a lower timestamp.
 	{
-		leftLease, err := loadLease(r.store.Engine(), r.RangeID)
+		leftLease, err := loadLease(ctx, r.store.Engine(), r.RangeID)
 		if err != nil {
 			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to load lease")
 		}
@@ -2472,7 +2472,7 @@ func (r *Replica) splitTrigger(
 		rightLease := leftLease
 		rightLease.Replica = replica
 		if err := setLease(
-			batch, &bothDeltaMS, split.RightDesc.RangeID, rightLease,
+			ctx, batch, &bothDeltaMS, split.RightDesc.RangeID, rightLease,
 		); err != nil {
 			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to seed right-hand side lease")
 		}
@@ -2535,7 +2535,7 @@ func (r *Replica) splitTrigger(
 		// and for history #7600. Note also that it is crucial that
 		// writeInitialState *absorbs* an existing HardState (which might
 		// contain a cast vote).
-		rightMS, err = writeInitialState(batch, rightMS, split.RightDesc)
+		rightMS, err = writeInitialState(ctx, batch, rightMS, split.RightDesc)
 		if err != nil {
 			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to write initial state")
 		}
@@ -2746,7 +2746,7 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
-	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
+	if err := setMVCCStats(ctx, batch, r.RangeID, mergedMS); err != nil {
 		return nil, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 

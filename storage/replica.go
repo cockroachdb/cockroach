@@ -426,18 +426,19 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 
 	var err error
+	ctx := context.TODO()
 
-	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = loadState(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeDesc.Store(r.mu.state.Desc)
 
-	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
+	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
 
-	pErr, err := loadReplicaDestroyedError(r.store.Engine(), r.RangeID)
+	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
@@ -887,7 +888,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(reader engine.Reader) {
-	diskState, err := loadState(reader, r.mu.state.Desc)
+	diskState, err := loadState(context.TODO(), reader, r.mu.state.Desc)
 	if err != nil {
 		r.panic(err)
 	}
@@ -1537,6 +1538,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 }
 
 func (r *Replica) handleRaftReady() error {
+	ctx := context.TODO()
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
@@ -1560,11 +1562,11 @@ func (r *Replica) handleRaftReady() error {
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		if err := r.applySnapshot(rd.Snapshot, rd.HardState); err != nil {
+		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
 		var err error
-		if lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID); err != nil {
+		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
@@ -1578,12 +1580,12 @@ func (r *Replica) handleRaftReady() error {
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
 		var err error
-		if lastIndex, raftLogSize, err = r.append(writer, lastIndex, raftLogSize, rd.Entries); err != nil {
+		if lastIndex, raftLogSize, err = r.append(ctx, writer, lastIndex, raftLogSize, rd.Entries); err != nil {
 			return err
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := setHardState(writer, r.RangeID, rd.HardState); err != nil {
+		if err := setHardState(ctx, writer, r.RangeID, rd.HardState); err != nil {
 			return err
 		}
 	}
@@ -1990,7 +1992,7 @@ func (r *Replica) processRaftCommand(
 
 	br, propResult, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
 		raftCmd.OriginReplica, raftCmd.Cmd, forcedErr)
-	pErr = r.maybeSetCorrupt(pErr)
+	pErr = r.maybeSetCorrupt(ctx, pErr)
 
 	// Handle all returned side effects. This must happen after commit but
 	// before returning to the client.
@@ -2091,7 +2093,7 @@ func (r *Replica) applyRaftCommand(
 	writer := batch.Distinct()
 
 	// Advance the last applied index.
-	if err := setAppliedIndex(writer, &propResult.delta, r.RangeID, index, leaseIndex); err != nil {
+	if err := setAppliedIndex(ctx, writer, &propResult.delta, r.RangeID, index, leaseIndex); err != nil {
 		log.Fatalf(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
@@ -2101,7 +2103,7 @@ func (r *Replica) applyRaftCommand(
 	// TODO(tschottdorf): refactor that for clarity.
 	newMS := r.GetMVCCStats()
 	newMS.Add(propResult.delta)
-	if err := setMVCCStats(writer, r.RangeID, newMS); err != nil {
+	if err := setMVCCStats(ctx, writer, r.RangeID, newMS); err != nil {
 		log.Fatalf(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
 
@@ -2709,19 +2711,19 @@ func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
 // best bet is to not have any of those.
 // @bdarnell remarks: Corruption errors should be rare so we may want the store
 // to just recompute its stats in the background when one occurs.
-func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
+func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
-		log.Errorc(context.TODO(), "%s: stalling replica due to: %s", r, cErr.ErrorMsg)
+		log.Errorf(ctx, "%s: stalling replica due to: %s", r, cErr.ErrorMsg)
 		cErr.Processed = true
 		r.mu.destroyed = cErr
 		pErr = roachpb.NewError(cErr)
 
 		// Try to persist the destroyed error message. If the underlying store is
 		// corrupted the error won't be processed and a panic will occur.
-		if err := setReplicaDestroyedError(r.store.Engine(), r.RangeID, pErr); err != nil {
+		if err := setReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID, pErr); err != nil {
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}

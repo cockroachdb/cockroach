@@ -71,7 +71,7 @@ func TestRangeStatsInit(t *testing.T) {
 	if err := engine.MVCCSetRangeStats(context.Background(), tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := loadMVCCStats(tc.engine, tc.rng.RangeID)
+	loadMS, err := loadMVCCStats(context.Background(), tc.engine, tc.rng.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
