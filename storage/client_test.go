@@ -181,12 +181,10 @@ type multiTestContext struct {
 	gossips     []*gossip.Gossip
 	storePools  []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
-	// test individually. clientStopper is for 'db', transportStopper is
-	// for 'transports', and the 'stoppers' slice corresponds to the
-	// 'stores'.
+	// test individually. transportStopper is for 'transports', and the
+	// 'stoppers' slice corresponds to the 'stores'.
 	// TODO(bdarnell): now that there are multiple transports, do we
 	// need transportStopper?
-	clientStopper      *stop.Stopper
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
@@ -245,9 +243,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
 	}
-	if m.clientStopper == nil {
-		m.clientStopper = stop.NewStopper()
-	}
 
 	for i := 0; i < numStores; i++ {
 		m.addStore()
@@ -270,20 +265,33 @@ func (m *multiTestContext) Stop() {
 	go func() {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
-		stoppers := append([]*stop.Stopper{m.clientStopper}, m.stoppers...)
-		stoppers = append(stoppers, m.transportStopper)
-		// Quiesce all the stoppers so that we can stop all stoppers in unison.
-		for _, s := range stoppers {
-			// Stoppers may be nil if stopStore has been called without restartStore.
-			if s != nil {
-				s.Quiesce()
-			}
+
+		// Quiesce everyone in parallel (before the transport stopper) to avoid
+		// deadlocks.
+		var wg sync.WaitGroup
+		wg.Add(len(m.stoppers))
+		for _, s := range m.stoppers {
+			go func(s *stop.Stopper) {
+				defer wg.Done()
+				// Some Stoppers may be nil if stopStore has been called
+				// without restartStore.
+				if s != nil {
+					// TODO(tschottdorf): seems like it *should* be possible to
+					// call .Stop() directly, but then stressing essentially
+					// any test (TestRaftAfterRemove is a good example) results
+					// in deadlocks where a task can't finish because of
+					// getting stuck in addWriteCommand.
+					s.Quiesce()
+				}
+			}(s)
 		}
-		for _, s := range stoppers {
-			if s != nil {
-				s.Stop()
-			}
+		wg.Wait()
+
+		for _, stopper := range m.stoppers {
+			stopper.Stop()
 		}
+		m.transportStopper.Stop()
+
 		for _, s := range m.engineStoppers {
 			s.Stop()
 		}
@@ -474,6 +482,38 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	return ctx
 }
 
+func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
+	if len(m.dbs) <= idx {
+		m.distSenders = append(m.distSenders, nil)
+		m.dbs = append(m.dbs, nil)
+	}
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = stopper.ShouldQuiesce()
+	m.distSenders[idx] = kv.NewDistSender(&kv.DistSenderContext{
+		Clock:             m.clock,
+		RangeDescriptorDB: m,
+		TransportFactory:  m.kvTransportFactory,
+		RPCRetryOptions:   &retryOpts,
+	}, m.gossips[idx])
+	sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),
+		stopper, kv.NewTxnMetrics(metric.NewRegistry()))
+	m.dbs[idx] = client.NewDB(sender)
+}
+
+func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
+	if len(m.storePools) <= idx {
+		m.storePools = append(m.storePools, nil)
+	}
+	m.storePools[idx] = storage.NewStorePool(
+		m.gossips[idx],
+		m.clock,
+		m.rpcContext,
+		/* reservationsEnabled */ false,
+		m.timeUntilStoreDead,
+		stopper,
+	)
+}
+
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
 func (m *multiTestContext) addStore() {
 	m.mu.RLock()
@@ -504,6 +544,9 @@ func (m *multiTestContext) addStore() {
 		m.transports = append(m.transports,
 			storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext))
 	}
+
+	stopper := stop.NewStopper()
+
 	if len(m.gossips) <= idx {
 		// Give this store all previous stores as gossip bootstraps.
 		var resolvers []resolver.Resolver
@@ -525,79 +568,11 @@ func (m *multiTestContext) addStore() {
 		if m.timeUntilStoreDead == 0 {
 			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
 		}
-		m.storePools = append(
-			m.storePools,
-			storage.NewStorePool(
-				m.gossips[idx],
-				m.clock,
-				m.rpcContext,
-				/* reservationsEnabled */ false,
-				m.timeUntilStoreDead,
-				m.clientStopper,
-			),
-		)
+		m.populateStorePool(idx, stopper)
 	}
 
-	stopper := stop.NewStopper()
 	if len(m.dbs) <= idx {
-		retryOpts := base.DefaultRetryOptions()
-		retryOpts.Closer = func() chan struct{} {
-			ch := make(chan struct{})
-			// Feed the channel periodically as long as our "real" stopper
-			// is quiescing. Close it when clientStopper closes (which means
-			// we're done). This is awkward, but necessary. We allow stopping
-			// and restarting stores, but their DistSender needs to respect
-			// that as well (since they may be involved in Store tasks).
-			if m.clientStopper.RunAsyncTask(func() {
-				feed := func() bool { // true when closed (and we're done)
-					select {
-					case ch <- struct{}{}:
-					case <-m.clientStopper.ShouldQuiesce():
-						if ch != nil {
-							close(ch)
-							ch = nil
-						}
-						return true
-					}
-					return false
-				}
-
-				for {
-					var grabbedStopper *stop.Stopper
-					// While the stopper is nil, this store is down.
-					for grabbedStopper != nil {
-						m.mu.RLock()
-						if len(m.stoppers) <= idx {
-							grabbedStopper = m.stoppers[idx]
-						}
-						m.mu.RUnlock()
-						if feed() {
-							return
-						}
-					}
-					select {
-					case <-m.clientStopper.ShouldQuiesce():
-						feed() // to make sure chan is closed
-						return
-					case <-grabbedStopper.ShouldQuiesce():
-						feed()
-					}
-				}
-			}) != nil {
-				close(ch)
-			}
-			return ch
-		}()
-		m.distSenders = append(m.distSenders,
-			kv.NewDistSender(&kv.DistSenderContext{
-				Clock:             m.clock,
-				RangeDescriptorDB: m,
-				TransportFactory:  m.kvTransportFactory,
-				RPCRetryOptions:   &retryOpts,
-			}, m.gossips[idx]))
-		sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),
-			m.clientStopper, kv.NewTxnMetrics(metric.NewRegistry()))
-		m.dbs = append(m.dbs, client.NewDB(sender))
+		m.populateDB(idx, stopper)
 	}
 
 	ctx := m.makeContext(idx)
@@ -704,6 +679,8 @@ func (m *multiTestContext) restartStore(i int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.stoppers[i] = stop.NewStopper()
+	m.populateDB(i, m.stoppers[i])
+	m.populateStorePool(i, m.stoppers[i])
 
 	ctx := m.makeContext(i)
 	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
