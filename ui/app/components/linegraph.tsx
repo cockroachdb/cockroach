@@ -22,7 +22,7 @@ interface LineGraphProps extends MetricsDataComponentProps {
   subtitle?: string;
   legend?: boolean;
   xAxis?: boolean;
-  tooltip?: string;
+  tooltip?: React.ReactNode;
 }
 
 /**
