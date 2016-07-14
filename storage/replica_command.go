@@ -2865,7 +2865,10 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) ChangeReplicas(
-	changeType roachpb.ReplicaChangeType, repDesc roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	changeType roachpb.ReplicaChangeType,
+	repDesc roachpb.ReplicaDescriptor,
+	desc *roachpb.RangeDescriptor,
 ) error {
 
 	repDescIdx := -1  // tracks NodeID && StoreID
@@ -2892,6 +2895,7 @@ func (r *Replica) ChangeReplicas(
 			return errors.Errorf("adding replica %v which is already present in range %d", repDesc, rangeID)
 		}
 
+		log.Trace(ctx, "requesting reservation")
 		// Before we try to add a new replica, we first need to secure a
 		// reservation for the replica on the receiving store.
 		if err := r.store.allocator.storePool.reserve(
@@ -2902,6 +2906,7 @@ func (r *Replica) ChangeReplicas(
 		); err != nil {
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
+		log.Trace(ctx, "reservation granted")
 
 		// Send a pre-emptive snapshot. Note that the replica to which this
 		// snapshot is addressed has not yet had its replica ID initialized; this
@@ -2924,6 +2929,7 @@ func (r *Replica) ChangeReplicas(
 		// #7600 and #7619.
 		// We generate a snapshot and discard it for throttling purposes.
 		_, _ = r.GetSnapshot()
+		log.Trace(ctx, "generated snapshot")
 		/*snap, err := r.GetSnapshot()
 		if err != nil {
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
@@ -2961,6 +2967,7 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
+	log.Trace(ctx, "starting txn")
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
@@ -3025,6 +3032,7 @@ func (r *Replica) ChangeReplicas(
 	}); err != nil {
 		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 	}
+	log.Trace(ctx, "txn complete")
 	return nil
 }
 
