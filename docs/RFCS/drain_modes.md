@@ -25,7 +25,7 @@ running to `drain-clients` to both.
 
 In our Stopper usage, we've taken to fairly ruthlessly shutting down service of
 many components once `(*Stopper).Quiesce()` is called. In code, this manifests
-itself through copious use of the `(*Stopper).ShouldDrain()` channel even when
+itself through copious use of the `(*Stopper).ShouldQuiesce()` channel even when
 not running inside of a task (or running long-running operations inside tasks).
 
 This was motivated mainly by endless amounts of test failures around leaked
