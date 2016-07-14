@@ -19,6 +19,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -2220,7 +2221,32 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// the raft group (i.e. replicas with an ID of 0). This is the only
 			// operation that can be performed on a replica before it is part of the
 			// raft group.
-			_, err := r.applySnapshot(req.Message.Snapshot, raftpb.HardState{})
+			r.mu.Lock()
+			if r.mu.internalRaftGroup != nil {
+				return errors.New("already running")
+			}
+			const preemptiveSnapReplicaID = math.MaxUint64
+			var err error
+			if r.mu.internalRaftGroup, err = raft.NewRawNode(&raft.Config{
+				ID: preemptiveSnapReplicaID,
+				//Applied:       r.mu.state.RaftAppliedIndex,
+				ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
+				HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
+				Storage:       r,
+				// TODO(bdarnell): make these configurable; evaluate defaults.
+				MaxSizePerMsg:   1024 * 1024,
+				MaxInflightMsgs: 256,
+				CheckQuorum:     true,
+				Logger:          &raftLogger{rangeID: r.RangeID},
+			}, nil); err != nil {
+				return err
+			}
+			r.mu.internalRaftGroup.Step(req.Message)
+			r.mu.Unlock()
+			err = r.handleRaftReady()
+			r.mu.Lock()
+			r.mu.internalRaftGroup = nil
+			r.mu.Unlock()
 			return err
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
