@@ -2982,22 +2982,24 @@ func (r *Replica) ChangeReplicas(
 		}
 		log.Infof("change replicas of %d: read existing descriptor %+v", rangeID, oldDesc)
 
-		b := txn.NewBatch()
+		{
+			b := txn.NewBatch()
 
-		// Important: the range descriptor must be the first thing touched in the transaction
-		// so the transaction record is co-located with the range being modified.
-		if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
-			return err
-		}
+			// Important: the range descriptor must be the first thing touched in the transaction
+			// so the transaction record is co-located with the range being modified.
+			if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
+				return err
+			}
 
-		// Update range descriptor addressing record(s).
-		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
-			return err
-		}
+			// Update range descriptor addressing record(s).
+			if err := updateRangeAddressing(b, &updatedDesc); err != nil {
+				return err
+			}
 
-		// Run transaction up to this point.
-		if err := txn.Run(b); err != nil {
-			return err
+			// Run transaction up to this point.
+			if err := txn.Run(b); err != nil {
+				return err
+			}
 		}
 
 		// Log replica change into range event log.
@@ -3007,20 +3009,22 @@ func (r *Replica) ChangeReplicas(
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		b = &client.Batch{}
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
-			Commit: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-					ChangeType:      changeType,
-					Replica:         repDesc,
-					UpdatedReplicas: updatedDesc.Replicas,
-					NextReplicaID:   updatedDesc.NextReplicaID,
+		{
+			b := txn.NewBatch()
+			b.AddRawRequest(&roachpb.EndTransactionRequest{
+				Commit: true,
+				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+					ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
+						ChangeType:      changeType,
+						Replica:         repDesc,
+						UpdatedReplicas: updatedDesc.Replicas,
+						NextReplicaID:   updatedDesc.NextReplicaID,
+					},
 				},
-			},
-		})
-		if err := txn.Run(b); err != nil {
-			return err
+			})
+			if err := txn.Run(b); err != nil {
+				return err
+			}
 		}
 
 		if oldDesc.RangeID != 0 && !reflect.DeepEqual(oldDesc, desc) {
