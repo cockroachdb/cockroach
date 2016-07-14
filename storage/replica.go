@@ -178,9 +178,12 @@ type replicaChecksum struct {
 // as appropriate.
 type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
-	RangeID      roachpb.RangeID // Should only be set by the constructor.
-	store        *Store
-	systemDBHash []byte      // sha1 hash of the system config @ last gossip
+	RangeID roachpb.RangeID // Should only be set by the constructor.
+	store   *Store
+	// sha1 hash of the system config @ last gossip. No synchronized access;
+	// must only be accessed from maybeGossipSystemConfig (which in turn is
+	// only called from the Raft-processing goroutine).
+	systemDBHash []byte
 	abortCache   *AbortCache // Avoids anomalous reads after abort
 	raftSender   RaftSender
 
@@ -373,7 +376,11 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		}
 		replicaID = repDesc.ReplicaID
 	}
-	return r.setReplicaIDLocked(replicaID)
+	if err := r.setReplicaIDLocked(replicaID); err != nil {
+		return err
+	}
+	r.assertStateLocked(r.store.Engine())
+	return nil
 }
 
 // String returns a string representation of the range. It acquires mu.Lock in the call to Desc().
@@ -2493,7 +2500,9 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // lease is actually held. The method does not request a range lease
 // here since RequestLease and applyRaftCommand call the method and we
 // need to avoid deadlocking in redirectOnOrAcquireLease.
-// TODO(tschottdorf): Can possibly simplify.
+//
+// maybeGossipSystemConfig must only be called from Raft commands
+// (which provide the necessary serialization to avoid data races).
 func (r *Replica) maybeGossipSystemConfig() {
 	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return
