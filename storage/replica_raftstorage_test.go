@@ -29,6 +29,7 @@ import (
 
 func TestApplySnapshotDenyPreemptive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(tschottdorf): test doesn't apply in this WIP")
 
 	var tc testContext
 	tc.Start(t)

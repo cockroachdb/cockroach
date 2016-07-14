@@ -260,10 +260,31 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		// error here as all errors returned from this method are considered fatal.
 		return nil
 	}
+
+	// If the replica was created for a preemptive snapshot, then nobody
+	// must use this raft group.
 	if r.mu.replicaID == 0 {
-		// The replica's raft group has not yet been configured (i.e. the replica
-		// was created from a preemptive snapshot).
-		return nil
+		// TODO(tschottdorf): when applying a preemptive snapshot, we manually
+		// create a Raft group to circumvent the error below. Need more hygiene
+		// here to catch anyone who's trying to do anything with this Replica
+		// except the intended preemptive snapshot application. At time of
+		// writing, this is being tickled as we don't hold enough of a lock
+		// during preemptive snapshot application to prevent the store from
+		// scheduling work on that same group while the replicaID is still
+		// zero. Or perhaps the problem is not being able to apply the
+		// preemptive snapshot and leaving the Replica behind (as is the
+		// procedure at time of writing).
+		// This should be a good thread to pull on - making sure this Replica
+		// can't ever be touched by anyone except the applier of the preemptive
+		// snapshot (which sits on the Store).
+		if r.mu.internalRaftGroup == nil {
+			log.Warningf(
+				"illegal usage of Raft group for preemptive snapshot on range %d",
+				r.RangeID,
+			)
+			return nil
+		}
+		// Go ahead and return the already existing raft group.
 	}
 
 	if r.mu.internalRaftGroup == nil {

@@ -550,7 +550,7 @@ func (r *Replica) applySnapshot(
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
 
-	isPreemptive := replicaID == 0
+	isPreemptive := replicaID == 0 // only used for accounting and log format
 
 	replicaIDStr := "[?]"
 	snapType := "preemptive"
@@ -568,17 +568,41 @@ func (r *Replica) applySnapshot(
 			replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
-	// Remember the old last index to verify that the snapshot doesn't wipe out
-	// log entries which have been acknowledged, which is possible with
-	// preemptive snapshots. We assert on it later in this call.
-	oldLastIndex, err := loadLastIndex(batch, desc.RangeID)
-	if err != nil {
-		return 0, errors.Wrap(err, "error loading last index")
+	{
+		// Verify that the snapshot doesn't wipe out log entries which have
+		// been acknowledged. Note that we only apply snapshots Raft tells us
+		// to apply, so that should never happen, but we check anyway.
+		// TODO(tschottdorf): is this correct or did we concluce that Raft's
+		// sanity checks assumed we weren't touching the acked log entries?
+		oldLastIndex, err := loadLastIndex(batch, desc.RangeID)
+		if err != nil {
+			return 0, errors.Wrap(err, "error loading last index")
+		}
+		if snap.Metadata.Index < oldLastIndex {
+			// We are not aware of a specific way in which this could happen
+			// (Raft itself should not emit such snapshots, and no Replica can
+			// ever apply two preemptive snapshots), but it doesn't hurt to
+			// check.
+			return 0, errors.Errorf("snapshot would erase acknowledged log entries")
+		}
+
 	}
-	// Similar strategy for the HardState.
-	oldHardState, err := loadHardState(batch, desc.RangeID)
-	if err != nil {
-		return 0, errors.Wrap(err, "unable to load HardState")
+	// TODO(tschottdorf): interestingly, it looks that Raft will make use of
+	// old snapshots. I'm seeing snap.Metadata.Term = 6 at Term=13, but
+	// supplied along with it is a new HardState which is also at Term=13,
+	// making me think that this assertion is just plain invalid (or, of
+	// course, the locking mayhem is at fault and what I'm seeing is in
+	// fact some weird version of clobbering).
+	if false {
+		// Similar strategy for the HardState.
+		oldHardState, err := loadHardState(batch, desc.RangeID)
+		if err != nil {
+			return 0, errors.Wrap(err, "unable to load HardState")
+		}
+		if snap.Metadata.Term < oldHardState.Term {
+			return 0, errors.Errorf("cannot apply snapshot from past term %d at term %d: %+v",
+				snap.Metadata.Term, oldHardState.Term, hs)
+		}
 	}
 
 	// Delete everything in the range and recreate it from the snapshot.
@@ -636,28 +660,8 @@ func (r *Replica) applySnapshot(
 	}
 
 	if !raft.IsEmptyHardState(hs) {
-		if isPreemptive {
-			return 0, errors.Errorf("unexpected HardState %+v on preemptive snapshot", &hs)
-		}
 		if err := setHardState(batch, s.Desc.RangeID, hs); err != nil {
 			return 0, errors.Wrapf(err, "unable to persist HardState %+v", &hs)
-		}
-	} else if isPreemptive {
-		// Preemptive snapshots get special verifications (see #7619) of their
-		// last index and (necessarily synthesized) HardState.
-		if snap.Metadata.Index < oldLastIndex {
-			// We are not aware of a specific way in which this could happen
-			// (Raft itself should not emit such snapshots, and no Replica can
-			// ever apply two preemptive snapshots), but it doesn't hurt to
-			// check.
-			return 0, errors.Errorf("preemptive snapshot would erase acknowledged log entries")
-		}
-		if snap.Metadata.Term < oldHardState.Term {
-			return 0, errors.Errorf("cannot apply preemptive snapshot from past term %d at term %d",
-				snap.Metadata.Term, oldHardState.Term)
-		}
-		if err := synthesizeHardState(batch, s, oldHardState); err != nil {
-			return 0, errors.Wrap(err, "unable to write synthesized HardState")
 		}
 	} else {
 		// Note that we don't require that Raft supply us with a nonempty

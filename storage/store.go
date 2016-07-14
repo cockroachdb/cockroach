@@ -2217,36 +2217,95 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
-			// Allow snapshots to be applied to replicas before they are members of
-			// the raft group (i.e. replicas with an ID of 0). This is the only
-			// operation that can be performed on a replica before it is part of the
-			// raft group.
-			r.mu.Lock()
-			if r.mu.internalRaftGroup != nil {
-				return errors.New("already running")
+			// Allow snapshots to be applied to replicas before they are
+			// members of the raft group (i.e. replicas with an ID of 0). This
+			// is the only operation that can be performed on a replica before
+			// it is part of the raft group.
+			//
+			// TODO(tschottdorf): This should be synchronized better with the
+			// rest of the game. We're not under any continuous lock here. It's
+			// conceivable that checks become invalidated as we process with
+			// the preemptive snapshot and that we might clash into someone
+			// else's keyspace.
+			if !r.store.canApplySnapshot(req.RangeID, req.Message.Snapshot) {
+				return errors.Errorf("cannot apply this snapshot; dropping")
 			}
-			const preemptiveSnapReplicaID = math.MaxUint64
-			var err error
-			if r.mu.internalRaftGroup, err = raft.NewRawNode(&raft.Config{
-				ID: preemptiveSnapReplicaID,
-				//Applied:       r.mu.state.RaftAppliedIndex,
-				ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
-				HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
-				Storage:       r,
-				// TODO(bdarnell): make these configurable; evaluate defaults.
-				MaxSizePerMsg:   1024 * 1024,
-				MaxInflightMsgs: 256,
-				CheckQuorum:     true,
-				Logger:          &raftLogger{rangeID: r.RangeID},
-			}, nil); err != nil {
+			// TODO(tschottdorf): A lot of locking of the individual Replica
+			// going on below as well. I think that's more easily refactored
+			// away; what really matters is that the Store doesn't do anything
+			// else with that same Replica (or one that might conflict with us
+			// while we still run). In effect, we'd want something like:
+			//
+			// 1. look up our key range from the snapshot
+			// 2. get an exclusive lock for operations on that key range from
+			//    the store (or discard the snapshot)
+			// 3. do everything below (apply the snapshot, etc)
+			// 4. throw away this Replica (or, if we have separate types, the
+			//    preemptive snapshot receiver)
+			// 5. release that exclusive lock for that key range
+			//
+			// so that once "real" Raft traffic comes in after successful
+			// ChangeReplicas, a full-blown Replica gets created automagically.
+			if err := func() (err error) {
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				defer func() {
+					if err != nil {
+						r.mu.internalRaftGroup = nil
+					}
+				}()
+				if r.mu.internalRaftGroup != nil {
+					// This can happen if a previous ChangeReplicas failed.
+					return errors.New("cannot apply preemptive snapshot, Raft group already active")
+				}
+				const preemptiveSnapReplicaID = math.MaxUint64
+				if r.mu.internalRaftGroup, err = raft.NewRawNode(&raft.Config{
+					ID: preemptiveSnapReplicaID,
+					// TODO(tschottdorf): I don't think we have to be truthful
+					// about this, but if we did have on-disk state, this Raft
+					// instance might try to give us a large slab of entries
+					// to apply which is bad, so probably worth loading the
+					// state and using it (though for the most part we expect
+					// everything to be empty).
+					//Applied:       r.mu.state.RaftAppliedIndex,
+
+					// TODO(tschottdorf): copied verbatim from `withRaftGroup`,
+					// should centralize this.
+					ElectionTick:    r.store.ctx.RaftElectionTimeoutTicks,
+					HeartbeatTick:   r.store.ctx.RaftHeartbeatIntervalTicks,
+					Storage:         r,
+					MaxSizePerMsg:   1024 * 1024,
+					MaxInflightMsgs: 256,
+					CheckQuorum:     true,
+					Logger:          &raftLogger{rangeID: r.RangeID},
+				}, nil); err != nil {
+					return err
+				}
+				// We have a Raft group; feed it the message.
+				if err = r.mu.internalRaftGroup.Step(req.Message); err != nil {
+					return errors.Wrap(err, "unable to process preemptive snapshot")
+				}
+				// In the normal case, the group should have something to say.
+				// If it doesn't, our snapshot was probably stale.
+				if !r.mu.internalRaftGroup.HasReady() {
+					return errors.Errorf("preemptive snapshot discarded by Raft")
+				}
+				return nil
+			}(); err != nil {
 				return err
 			}
-			r.mu.internalRaftGroup.Step(req.Message)
-			r.mu.Unlock()
-			err = r.handleRaftReady()
+			// Now handle the reaction of Raft to receiving the snapshot
+			// (usually applying the snapshot, along with a HardState update).
+			if err := r.handleRaftReady(); err != nil {
+				return err
+			}
+
+			// TODO(tschottdorf): at this point, the Replica should simply
+			// disappear. Since this is a WIP, we just nil out the group.
 			r.mu.Lock()
-			r.mu.internalRaftGroup = nil
+			r.mu.internalRaftGroup = nil // force recreation on next op
 			r.mu.Unlock()
+
 			return err
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
