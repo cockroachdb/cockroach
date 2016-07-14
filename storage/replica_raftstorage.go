@@ -56,7 +56,7 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState implements the raft.Storage interface.
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	hs, err := loadHardState(r.store.Engine(), r.RangeID)
+	hs, err := loadHardState(r.context(context.TODO()), r.store.Engine(), r.RangeID)
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -133,7 +133,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := loadLastIndex(e, rangeID)
+		lastIndex, err := loadLastIndex(context.TODO(), e, rangeID)
 		if err != nil {
 			return nil, err
 		}
@@ -370,9 +370,11 @@ func snapshot(
 	}
 	firstIndex := truncState.Index + 1
 
+	ctx := context.TODO()
+
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(snap, rangeID)
+	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -381,7 +383,7 @@ func snapshot(
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(context.Background(), snap, keys.RangeDescriptorKey(startKey),
+	ok, err := engine.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
 		hlc.MaxTimestamp, false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, errors.Errorf("failed to get desc: %s", err)
@@ -463,7 +465,7 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, prevRaft
 		return prevLastIndex, prevRaftLogSize, nil
 	}
 	var diff enginepb.MVCCStats
-	ctx := context.Background()
+	ctx := r.context(context.TODO())
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKey(r.RangeID, ent.Index)
@@ -481,7 +483,7 @@ func (r *Replica) append(batch engine.ReadWriter, prevLastIndex uint64, prevRaft
 		}
 	}
 
-	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
+	if err := setLastIndex(ctx, batch, r.RangeID, lastIndex); err != nil {
 		return 0, 0, err
 	}
 
@@ -577,15 +579,17 @@ func (r *Replica) applySnapshot(
 			replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
+	ctx := r.context(context.TODO())
+
 	// Remember the old last index to verify that the snapshot doesn't wipe out
 	// log entries which have been acknowledged, which is possible with
 	// preemptive snapshots. We assert on it later in this call.
-	oldLastIndex, err := loadLastIndex(batch, desc.RangeID)
+	oldLastIndex, err := loadLastIndex(ctx, batch, desc.RangeID)
 	if err != nil {
 		return 0, errors.Wrap(err, "error loading last index")
 	}
 	// Similar strategy for the HardState.
-	oldHardState, err := loadHardState(batch, desc.RangeID)
+	oldHardState, err := loadHardState(ctx, batch, desc.RangeID)
 	if err != nil {
 		return 0, errors.Wrap(err, "unable to load HardState")
 	}
@@ -632,7 +636,7 @@ func (r *Replica) applySnapshot(
 		return 0, err
 	}
 
-	s, err := loadState(batch, &desc)
+	s, err := loadState(ctx, batch, &desc)
 	if err != nil {
 		return 0, err
 	}
@@ -648,7 +652,7 @@ func (r *Replica) applySnapshot(
 		if isPreemptive {
 			return 0, errors.Errorf("unexpected HardState %+v on preemptive snapshot", &hs)
 		}
-		if err := setHardState(batch, s.Desc.RangeID, hs); err != nil {
+		if err := setHardState(ctx, batch, s.Desc.RangeID, hs); err != nil {
 			return 0, errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	} else if isPreemptive {
@@ -665,7 +669,7 @@ func (r *Replica) applySnapshot(
 			return 0, errors.Errorf("cannot apply preemptive snapshot from past term %d at term %d",
 				snap.Metadata.Term, oldHardState.Term)
 		}
-		if err := synthesizeHardState(batch, s, oldHardState); err != nil {
+		if err := synthesizeHardState(ctx, batch, s, oldHardState); err != nil {
 			return 0, errors.Wrap(err, "unable to write synthesized HardState")
 		}
 	} else {

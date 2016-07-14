@@ -207,6 +207,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
 			if _, err := writeInitialState(
+				context.Background(),
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
@@ -4446,7 +4447,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Verify destroyed error was persisted.
-	pErr, err = loadReplicaDestroyedError(r.store.Engine(), r.RangeID)
+	pErr, err = loadReplicaDestroyedError(context.Background(), r.store.Engine(), r.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5391,7 +5392,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		rng.mu.Lock()
 		defer rng.mu.Unlock()
 
-		appliedIndex, _, err := loadAppliedIndex(rng.store.Engine(), rng.RangeID)
+		appliedIndex, _, err := loadAppliedIndex(context.Background(), rng.store.Engine(), rng.RangeID)
 		if err != nil {
 			t.Fatal(err)
 		}

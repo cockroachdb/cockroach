@@ -55,6 +55,7 @@ func TestRangeStatsInit(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+	ctx := context.Background()
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
@@ -68,10 +69,10 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	if err := engine.MVCCSetRangeStats(context.Background(), tc.engine, 1, &ms); err != nil {
+	if err := engine.MVCCSetRangeStats(ctx, tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := loadMVCCStats(tc.engine, tc.rng.RangeID)
+	loadMS, err := loadMVCCStats(ctx, tc.engine, tc.rng.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}

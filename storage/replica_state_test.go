@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
@@ -34,6 +36,7 @@ func TestSynthesizeHardState(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	ctx := context.Background()
 
 	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4}
 
@@ -64,17 +67,17 @@ func TestSynthesizeHardState(t *testing.T) {
 			}
 
 			if test.OldHS != nil {
-				if err := setHardState(batch, testState.Desc.RangeID, *test.OldHS); err != nil {
+				if err := setHardState(ctx, batch, testState.Desc.RangeID, *test.OldHS); err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			oldHS, err := loadHardState(batch, testState.Desc.RangeID)
+			oldHS, err := loadHardState(ctx, batch, testState.Desc.RangeID)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if err := synthesizeHardState(batch, testState, oldHS); ((err == nil) != (test.Err == "")) ||
+			if err := synthesizeHardState(ctx, batch, testState, oldHS); ((err == nil) != (test.Err == "")) ||
 				(err != nil && !testutils.IsError(err, test.Err)) {
 				t.Fatalf("%d: %v (expected '%s')", i, err, test.Err)
 			} else if err != nil {
@@ -82,7 +85,7 @@ func TestSynthesizeHardState(t *testing.T) {
 				return
 			}
 
-			hs, err := loadHardState(batch, testState.Desc.RangeID)
+			hs, err := loadHardState(ctx, batch, testState.Desc.RangeID)
 			if err != nil {
 				t.Fatal(err)
 			}

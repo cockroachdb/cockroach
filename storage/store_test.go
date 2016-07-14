@@ -921,7 +921,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	if _, err := writeInitialState(store.engine, enginepb.MVCCStats{}, *desc); err != nil {
+	if _, err := writeInitialState(context.Background(), store.engine, enginepb.MVCCStats{}, *desc); err != nil {
 		t.Fatal(err)
 	}
 	newRng, err := NewReplica(desc, store, 0)
@@ -1910,7 +1910,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		repl.mu.Lock()
 		frozen := repl.mu.state.Frozen
 		repl.mu.Unlock()
-		pFrozen, err := loadFrozenStatus(store.Engine(), 1)
+		pFrozen, err := loadFrozenStatus(context.Background(), store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2039,6 +2039,7 @@ func TestStoreGCThreshold(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+	ctx := context.Background()
 	store := tc.store
 
 	assertThreshold := func(ts hlc.Timestamp) {
@@ -2049,7 +2050,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
 		repl.mu.Unlock()
-		pgcThreshold, err := loadGCThreshold(store.Engine(), 1)
+		pgcThreshold, err := loadGCThreshold(ctx, store.Engine(), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2074,7 +2075,7 @@ func TestStoreGCThreshold(t *testing.T) {
 	gcr := roachpb.GCRequest{
 		Threshold: threshold,
 	}
-	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
+	if _, err := tc.rng.GC(ctx, b, nil, h, gcr); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Commit(); err != nil {

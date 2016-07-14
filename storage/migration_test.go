@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -34,22 +36,23 @@ func TestMigrate7310And6991(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<10, stopper)
 
 	desc := *testRangeDescriptor()
+	ctx := context.Background()
 
 	if err := migrate7310And6991(eng, desc); err != nil {
 		t.Fatal(err)
 	}
 
-	ts, err := loadTruncatedState(eng, desc.RangeID)
+	ts, err := loadTruncatedState(ctx, eng, desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	hs, err := loadHardState(eng, desc.RangeID)
+	hs, err := loadHardState(ctx, eng, desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rApplied, lApplied, err := loadAppliedIndex(eng, desc.RangeID)
+	rApplied, lApplied, err := loadAppliedIndex(ctx, eng, desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
