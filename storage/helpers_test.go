@@ -111,6 +111,21 @@ func (s *Store) ReplicateQueuePurgatoryLength() int {
 	return s.replicateQueue.PurgatoryLength()
 }
 
+// SetRaftLogQueueActive enables or disables the raft log queue.
+func (s *Store) SetRaftLogQueueActive(active bool) {
+	s.setRaftLogQueueActive(active)
+}
+
+// SetReplicaGCQueueActive enables or disables the replica GC queue.
+func (s *Store) SetReplicaGCQueueActive(active bool) {
+	s.setReplicaGCQueueActive(active)
+}
+
+// SetSplitQueueActive enables or disables the split queue.
+func (s *Store) SetSplitQueueActive(active bool) {
+	s.setSplitQueueActive(active)
+}
+
 // SetReplicaScannerDisabled turns replica scanning off or on as directed. Note
 // that while disabled, removals are still processed.
 func (s *Store) SetReplicaScannerDisabled(disabled bool) {
