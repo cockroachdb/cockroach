@@ -258,7 +258,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 	var replicas roachpb.StoreDeadReplicas
 	if err := content.GetProto(&replicas); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return
 	}
 

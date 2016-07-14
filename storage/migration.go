@@ -39,8 +39,8 @@ import (
 // mean that the replica was further ahead or had voted, and so there's no
 // guarantee that this will be correct. But it will be correct in the majority
 // of cases, and some state *has* to be recovered.
-func migrate7310And6991(batch engine.ReadWriter, desc roachpb.RangeDescriptor) error {
-	state, err := loadState(batch, &desc)
+func migrate7310And6991(ctx context.Context, batch engine.ReadWriter, desc roachpb.RangeDescriptor) error {
+	state, err := loadState(ctx, batch, &desc)
 	if err != nil {
 		return errors.Wrap(err, "could not migrate TruncatedState: %s")
 	}
@@ -48,13 +48,13 @@ func migrate7310And6991(batch engine.ReadWriter, desc roachpb.RangeDescriptor) e
 		state.TruncatedState.Term = raftInitialLogTerm
 		state.TruncatedState.Index = raftInitialLogIndex
 		state.RaftAppliedIndex = raftInitialLogIndex
-		if _, err := saveState(batch, state); err != nil {
+		if _, err := saveState(ctx, batch, state); err != nil {
 			return errors.Wrapf(err, "could not migrate TruncatedState to %+v", &state.TruncatedState)
 		}
 		log.Warningf(context.TODO(), "migration: synthesized TruncatedState for %+v", desc)
 	}
 
-	hs, err := loadHardState(batch, desc.RangeID)
+	hs, err := loadHardState(ctx, batch, desc.RangeID)
 	if err != nil {
 		return errors.Wrap(err, "unable to load HardState")
 	}
@@ -62,7 +62,7 @@ func migrate7310And6991(batch engine.ReadWriter, desc roachpb.RangeDescriptor) e
 	// don't have a snapshot here, so we could wind up lowering the commit
 	// index (which would error out and fatal us).
 	if hs.Commit == 0 {
-		if err := synthesizeHardState(batch, state, hs); err != nil {
+		if err := synthesizeHardState(ctx, batch, state, hs); err != nil {
 			return errors.Wrap(err, "could not migrate HardState")
 		}
 	}
