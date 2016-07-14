@@ -20,21 +20,22 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer tracing.Disable()()
-	defer config.TestingDisableTableSplits()()
-	store, stopper, _ := createTestStore(b)
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithContext(b, sCtx)
+	defer stopper.Stop()
 	// We want to manually control the size of the raft log.
 	store.SetRaftLogQueueActive(false)
-	defer stopper.Stop()
 
 	const rangeID = 1
 	const keySize = 1 << 7   // 128 B

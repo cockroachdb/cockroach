@@ -31,7 +31,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -65,7 +64,6 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer config.TestingDisableTableSplits()()
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
 	key1 := roachpb.Key("a")
@@ -102,7 +100,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
+		sCtx := storage.TestStoreContext()
+		sCtx.TestingKnobs.DisableSplitQueue = true
+		store := createTestStoreWithEngine(t, eng, clock, true, sCtx, stopper)
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
 			args := incrementArgs(key, value)
@@ -139,7 +139,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store := createTestStoreWithEngine(t, eng, clock, false, nil, engineStopper)
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store := createTestStoreWithEngine(t, eng, clock, false, sCtx, engineStopper)
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
@@ -181,7 +183,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 				}
 				return nil
 			}
-		store := createTestStoreWithEngine(t, eng, clock, true, &sCtx, stopper)
+		store := createTestStoreWithEngine(t, eng, clock, true, sCtx, stopper)
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(roachpb.Key("a"), []byte("asdf"))
@@ -202,7 +204,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	// Recover from the engine.
-	store := createTestStoreWithEngine(t, eng, clock, false, nil, engineStopper)
+	store := createTestStoreWithEngine(
+		t, eng, clock, false, storage.TestStoreContext(), engineStopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs := incrementArgs(roachpb.Key("b"), 0)

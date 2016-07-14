@@ -27,7 +27,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -217,7 +216,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		clock,
 		true,
-		&ctx,
+		ctx,
 		stopper)
 
 	// Put an initial value.
@@ -327,8 +326,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer config.TestingDisableTableSplits()()
-	store, stopper, _ := createTestStore(t)
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
 
 	// Init test ranges:
