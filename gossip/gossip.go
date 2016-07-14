@@ -136,10 +136,16 @@ type Gossip struct {
 	storage       Storage             // Persistent storage interface
 	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
-	clientsMu     sync.Mutex          // Mutex protects the clients slice
-	clients       []*client           // Slice of clients
-	disconnected  chan *client        // Channel of disconnected clients
-	stalled       chan struct{}       // Channel to wakeup stalled bootstrap
+
+	// Note that access to each client's internal state is serialized by the
+	// embedded server's mutex. This is surprising!
+	clientsMu struct {
+		sync.Mutex
+		clients []*client
+	}
+
+	disconnected chan *client  // Channel of disconnected clients
+	stalled      chan struct{} // Channel to wakeup stalled bootstrap
 
 	stallInterval     time.Duration
 	bootstrapInterval time.Duration
@@ -175,7 +181,6 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 		server:            newServer(stopper),
 		outgoing:          makeNodeSet(minPeers),
 		bootstrapping:     map[string]struct{}{},
-		clients:           []*client{},
 		disconnected:      make(chan *client, 10),
 		stalled:           make(chan struct{}, 1),
 		stallInterval:     defaultStallInterval,
@@ -366,9 +371,9 @@ func (g *Gossip) clientStatus() string {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	var buf bytes.Buffer
-	n := len(g.clients)
+	n := len(g.clientsMu.clients)
 	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", n, maxConns)
-	for _, c := range g.clients {
+	for _, c := range g.clientsMu.clients {
 		fmt.Fprintf(&buf, "  %d: %s (%s: %d/%d sent/received)\n",
 			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.sent, c.received)
 	}
@@ -853,7 +858,9 @@ func (g *Gossip) manage() {
 							}()
 						} else {
 							if log.V(1) {
-								log.Infof("couldn't find least useful client among %+v", g.clients)
+								g.clientsMu.Lock()
+								log.Infof("couldn't find least useful client among %+v", g.clientsMu.clients)
+								g.clientsMu.Unlock()
 							}
 						}
 					}
@@ -956,7 +963,7 @@ func (g *Gossip) checkHasConnected() {
 func (g *Gossip) startClient(addr net.Addr) {
 	c := newClient(addr)
 	g.clientsMu.Lock()
-	g.clients = append(g.clients, c)
+	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	g.clientsMu.Unlock()
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper)
 }
@@ -966,9 +973,9 @@ func (g *Gossip) startClient(addr net.Addr) {
 func (g *Gossip) removeClient(target *client) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
-	for i, candidate := range g.clients {
+	for i, candidate := range g.clientsMu.clients {
 		if candidate == target {
-			g.clients = append(g.clients[:i], g.clients[i+1:]...)
+			g.clientsMu.clients = append(g.clientsMu.clients[:i], g.clientsMu.clients[i+1:]...)
 			delete(g.bootstrapping, candidate.addr.String())
 			g.outgoing.removeNode(candidate.peerID)
 			break
@@ -979,7 +986,7 @@ func (g *Gossip) removeClient(target *client) {
 func (g *Gossip) findClient(match func(*client) bool) *client {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
-	for _, c := range g.clients {
+	for _, c := range g.clientsMu.clients {
 		if match(c) {
 			return c
 		}
