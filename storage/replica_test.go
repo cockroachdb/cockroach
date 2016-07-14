@@ -207,6 +207,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
 			if _, err := writeInitialState(
+				context.Background(),
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
@@ -4450,7 +4451,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Verify destroyed error was persisted.
-	pErr, err = loadReplicaDestroyedError(r.store.Engine(), r.RangeID)
+	pErr, err = loadReplicaDestroyedError(context.Background(), r.store.Engine(), r.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5390,7 +5391,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		rng.mu.Lock()
 		defer rng.mu.Unlock()
 
-		appliedIndex, _, err := loadAppliedIndex(rng.store.Engine(), rng.RangeID)
+		appliedIndex, _, err := loadAppliedIndex(context.Background(), rng.store.Engine(), rng.RangeID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -6290,7 +6291,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 
 	// Apply a snapshot and check the reservation was filled. Note that this
 	// out-of-band application could be a root cause if this test ever crashes.
-	if _, err := firstRng.applySnapshot(snap, raftpb.HardState{}); err != nil {
+	if _, err := firstRng.applySnapshot(context.Background(), snap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)

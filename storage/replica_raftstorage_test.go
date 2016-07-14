@@ -65,7 +65,7 @@ func TestApplySnapshotDenyPreemptive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := rng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(
+	if _, err := rng.applySnapshot(context.Background(), snap, raftpb.HardState{}); !testutils.IsError(
 		err, "cannot apply preemptive snapshot from past term",
 	) {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func TestApplySnapshotDenyPreemptive(t *testing.T) {
 	}
 	snap.Metadata.Term++ // restore the "real" term of the snapshot
 
-	if _, err := rng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(
+	if _, err := rng.applySnapshot(context.Background(), snap, raftpb.HardState{}); !testutils.IsError(
 		err, "would erase acknowledged log entries",
 	) {
 		t.Fatal(err)
