@@ -34,6 +34,7 @@ import (
 // RangeDescriptor under the convention that that is the latest committed
 // version.
 func loadState(
+	ctx context.Context,
 	reader engine.Reader, desc *roachpb.RangeDescriptor,
 ) (storagebase.ReplicaState, error) {
 	var s storagebase.ReplicaState
@@ -42,32 +43,31 @@ func loadState(
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the range lease.
 	var err error
-	if s.Lease, err = loadLease(reader, desc.RangeID); err != nil {
+	if s.Lease, err = loadLease(ctx, reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
-	if s.Frozen, err = loadFrozenStatus(reader, desc.RangeID); err != nil {
+	if s.Frozen, err = loadFrozenStatus(ctx, reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
-	if s.GCThreshold, err = loadGCThreshold(reader, desc.RangeID); err != nil {
+	if s.GCThreshold, err = loadGCThreshold(ctx, reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
 	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
-		reader,
-		desc.RangeID,
+		ctx, reader, desc.RangeID,
 	); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
-	if s.Stats, err = loadMVCCStats(reader, desc.RangeID); err != nil {
+	if s.Stats, err = loadMVCCStats(ctx, reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
 
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
-	truncState, err := loadTruncatedState(reader, desc.RangeID)
+	truncState, err := loadTruncatedState(ctx, reader, desc.RangeID)
 	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
@@ -86,35 +86,37 @@ func loadState(
 // TODO(tschottdorf): consolidate direct permutation and persistence of
 // state throughout the Raft path in favor of a more organized approach.
 func saveState(
-	eng engine.ReadWriter, state storagebase.ReplicaState,
+	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
 ) (enginepb.MVCCStats, error) {
 	ms, rangeID := &state.Stats, state.Desc.RangeID
-	if err := setLease(eng, ms, rangeID, state.Lease); err != nil {
+	if err := setLease(ctx, eng, ms, rangeID, state.Lease); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := setAppliedIndex(
-		eng, ms, rangeID, state.RaftAppliedIndex, state.LeaseAppliedIndex,
+		ctx, eng, ms, rangeID, state.RaftAppliedIndex, state.LeaseAppliedIndex,
 	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := setFrozenStatus(eng, ms, rangeID, state.Frozen); err != nil {
+	if err := setFrozenStatus(ctx, eng, ms, rangeID, state.Frozen); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := setGCThreshold(eng, ms, rangeID, &state.GCThreshold); err != nil {
+	if err := setGCThreshold(ctx, eng, ms, rangeID, &state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := setTruncatedState(eng, ms, rangeID, *state.TruncatedState); err != nil {
+	if err := setTruncatedState(ctx, eng, ms, rangeID, *state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := setMVCCStats(eng, rangeID, state.Stats); err != nil {
+	if err := setMVCCStats(ctx, eng, rangeID, state.Stats); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return state.Stats, nil
 }
 
-func loadLease(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+func loadLease(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	_, err := engine.MVCCGetProto(context.Background(), reader,
+	_, err := engine.MVCCGetProto(ctx, reader,
 		keys.RangeLeaseKey(rangeID), hlc.ZeroTimestamp,
 		true, nil, lease)
 	if err != nil {
@@ -124,6 +126,7 @@ func loadLease(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Lease, e
 }
 
 func setLease(
+	ctx context.Context,
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	rangeID roachpb.RangeID,
@@ -133,15 +136,17 @@ func setLease(
 		return nil
 	}
 	return engine.MVCCPutProto(
-		context.Background(), eng, ms,
+		ctx, eng, ms,
 		keys.RangeLeaseKey(rangeID),
 		hlc.ZeroTimestamp, nil, lease)
 }
 
 // loadAppliedIndex returns the Raft applied index and the lease applied index.
-func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, uint64, error) {
+func loadAppliedIndex(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (uint64, uint64, error) {
 	var appliedIndex uint64
-	v, _, err := engine.MVCCGet(context.Background(), reader, keys.RaftAppliedIndexKey(rangeID),
+	v, _, err := engine.MVCCGet(ctx, reader, keys.RaftAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -155,7 +160,7 @@ func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, ui
 	}
 	// TODO(tschottdorf): code duplication.
 	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(context.Background(), reader, keys.LeaseAppliedIndexKey(rangeID),
+	v, _, err = engine.MVCCGet(ctx, reader, keys.LeaseAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -171,11 +176,18 @@ func loadAppliedIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, ui
 	return appliedIndex, leaseAppliedIndex, nil
 }
 
-func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64) error {
+func setAppliedIndex(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	appliedIndex,
+	leaseAppliedIndex uint64,
+) error {
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 
-	if err := engine.MVCCPut(context.Background(), eng, ms,
+	if err := engine.MVCCPut(ctx, eng, ms,
 		keys.RaftAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
@@ -183,7 +195,7 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 		return err
 	}
 	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCPut(context.Background(), eng, ms,
+	return engine.MVCCPut(ctx, eng, ms,
 		keys.LeaseAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
@@ -191,10 +203,10 @@ func setAppliedIndex(eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roac
 }
 
 func loadTruncatedState(
-	reader engine.Reader, rangeID roachpb.RangeID,
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(context.Background(), reader,
+	if _, err := engine.MVCCGetProto(ctx, reader,
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, true,
 		nil, &truncState); err != nil {
 		return roachpb.RaftTruncatedState{}, err
@@ -203,52 +215,69 @@ func loadTruncatedState(
 }
 
 func setTruncatedState(
+	ctx context.Context,
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	rangeID roachpb.RangeID,
 	truncState roachpb.RaftTruncatedState,
 ) error {
-	return engine.MVCCPutProto(context.Background(), eng, ms,
+	return engine.MVCCPutProto(ctx, eng, ms,
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
 }
 
-func loadGCThreshold(reader engine.Reader, rangeID roachpb.RangeID) (hlc.Timestamp, error) {
+func loadGCThreshold(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (hlc.Timestamp, error) {
 	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(context.Background(), reader, keys.RangeLastGCKey(rangeID),
+	_, err := engine.MVCCGetProto(ctx, reader, keys.RangeLastGCKey(rangeID),
 		hlc.ZeroTimestamp, true, nil, &t)
 	return t, err
 }
 
 func setGCThreshold(
-	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, threshold *hlc.Timestamp,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	threshold *hlc.Timestamp,
 ) error {
-	return engine.MVCCPutProto(context.Background(), eng, ms,
+	return engine.MVCCPutProto(ctx, eng, ms,
 		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
 
-func loadMVCCStats(reader engine.Reader, rangeID roachpb.RangeID) (enginepb.MVCCStats, error) {
+func loadMVCCStats(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), reader, rangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(ctx, reader, rangeID, &ms); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return ms, nil
 }
 
-func setMVCCStats(eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb.MVCCStats) error {
-	return engine.MVCCSetRangeStats(context.Background(), eng, rangeID, &newMS)
+func setMVCCStats(
+	ctx context.Context, eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb.MVCCStats,
+) error {
+	return engine.MVCCSetRangeStats(ctx, eng, rangeID, &newMS)
 }
 
 func setFrozenStatus(
-	eng engine.ReadWriter, ms *enginepb.MVCCStats, rangeID roachpb.RangeID, frozen bool,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	frozen bool,
 ) error {
 	var val roachpb.Value
 	val.SetBool(frozen)
-	return engine.MVCCPut(context.Background(), eng, ms,
+	return engine.MVCCPut(ctx, eng, ms,
 		keys.RangeFrozenStatusKey(rangeID), hlc.ZeroTimestamp, val, nil)
 }
 
-func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, error) {
-	val, _, err := engine.MVCCGet(context.Background(), reader, keys.RangeFrozenStatusKey(rangeID),
+func loadFrozenStatus(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (bool, error) {
+	val, _, err := engine.MVCCGet(ctx, reader, keys.RangeFrozenStatusKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
 		return false, err
@@ -265,9 +294,11 @@ func loadFrozenStatus(reader engine.Reader, rangeID roachpb.RangeID) (bool, erro
 // with its TruncatedState) but are different in that they are not consistently
 // updated through Raft.
 
-func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, error) {
+func loadLastIndex(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (uint64, error) {
 	lastIndex := uint64(0)
-	v, _, err := engine.MVCCGet(context.Background(), reader,
+	v, _, err := engine.MVCCGet(ctx, reader,
 		keys.RaftLastIndexKey(rangeID),
 		hlc.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
@@ -282,7 +313,7 @@ func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, error
 	} else {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away.
-		lastEnt, err := loadTruncatedState(reader, rangeID)
+		lastEnt, err := loadTruncatedState(ctx, reader, rangeID)
 		if err != nil {
 			return 0, err
 		}
@@ -291,11 +322,13 @@ func loadLastIndex(reader engine.Reader, rangeID roachpb.RangeID) (uint64, error
 	return lastIndex, nil
 }
 
-func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint64) error {
+func setLastIndex(
+	ctx context.Context, eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint64,
+) error {
 	var value roachpb.Value
 	value.SetInt(int64(lastIndex))
 
-	return engine.MVCCPut(context.Background(), eng, nil, keys.RaftLastIndexKey(rangeID),
+	return engine.MVCCPut(ctx, eng, nil, keys.RaftLastIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */)
@@ -303,9 +336,11 @@ func setLastIndex(eng engine.ReadWriter, rangeID roachpb.RangeID, lastIndex uint
 
 // loadReplicaDestroyedError loads the replica destroyed error for the specified
 // range. If there is no error, nil is returned.
-func loadReplicaDestroyedError(reader engine.Reader, rangeID roachpb.RangeID) (*roachpb.Error, error) {
+func loadReplicaDestroyedError(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (*roachpb.Error, error) {
 	var v roachpb.Error
-	found, err := engine.MVCCGetProto(context.Background(), reader,
+	found, err := engine.MVCCGetProto(ctx, reader,
 		keys.RangeReplicaDestroyedErrorKey(rangeID),
 		hlc.ZeroTimestamp, true /* consistent */, nil, &v)
 	if err != nil {
@@ -319,16 +354,18 @@ func loadReplicaDestroyedError(reader engine.Reader, rangeID roachpb.RangeID) (*
 
 // setReplicaDestroyedError sets an error indicating that the replica has been
 // destroyed.
-func setReplicaDestroyedError(eng engine.ReadWriter, rangeID roachpb.RangeID, err *roachpb.Error) error {
-	return engine.MVCCPutProto(context.Background(), eng, nil,
+func setReplicaDestroyedError(
+	ctx context.Context, eng engine.ReadWriter, rangeID roachpb.RangeID, err *roachpb.Error,
+) error {
+	return engine.MVCCPutProto(ctx, eng, nil,
 		keys.RangeReplicaDestroyedErrorKey(rangeID), hlc.ZeroTimestamp, nil /* txn */, err)
 }
 
 func loadHardState(
-	reader engine.Reader, rangeID roachpb.RangeID,
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(context.Background(), reader,
+	found, err := engine.MVCCGetProto(ctx, reader,
 		keys.RaftHardStateKey(rangeID), hlc.ZeroTimestamp, true, nil, &hs)
 
 	if !found || err != nil {
@@ -338,9 +375,9 @@ func loadHardState(
 }
 
 func setHardState(
-	batch engine.ReadWriter, rangeID roachpb.RangeID, st raftpb.HardState,
+	ctx context.Context, batch engine.ReadWriter, rangeID roachpb.RangeID, st raftpb.HardState,
 ) error {
-	return engine.MVCCPutProto(context.Background(), batch, nil,
+	return engine.MVCCPutProto(ctx, batch, nil,
 		keys.RaftHardStateKey(rangeID),
 		hlc.ZeroTimestamp, nil, &st)
 }
@@ -353,7 +390,7 @@ func setHardState(
 // If there is an existing HardState, we must respect it and we must not apply
 // a snapshot that would move the state backwards.
 func synthesizeHardState(
-	eng engine.ReadWriter, s storagebase.ReplicaState, oldHS raftpb.HardState,
+	ctx context.Context, eng engine.ReadWriter, s storagebase.ReplicaState, oldHS raftpb.HardState,
 ) error {
 	newHS := raftpb.HardState{
 		Term: s.TruncatedState.Term,
@@ -377,7 +414,7 @@ func synthesizeHardState(
 	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
 	}
-	return errors.Wrapf(setHardState(eng, s.Desc.RangeID, newHS), "writing HardState %+v", &newHS)
+	return errors.Wrapf(setHardState(ctx, eng, s.Desc.RangeID, newHS), "writing HardState %+v", &newHS)
 }
 
 // writeInitialState bootstraps a new Raft group (i.e. it is called when we
@@ -388,7 +425,7 @@ func synthesizeHardState(
 // The supplied MVCCStats are used for the Stats field after adjusting for
 // persisting the state itself, and the updated stats are returned.
 func writeInitialState(
-	eng engine.ReadWriter, ms enginepb.MVCCStats, desc roachpb.RangeDescriptor,
+	ctx context.Context, eng engine.ReadWriter, ms enginepb.MVCCStats, desc roachpb.RangeDescriptor,
 ) (enginepb.MVCCStats, error) {
 	var s storagebase.ReplicaState
 
@@ -402,21 +439,21 @@ func writeInitialState(
 	}
 	s.Stats = ms
 
-	newMS, err := saveState(eng, s)
+	newMS, err := saveState(ctx, eng, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
-	oldHS, err := loadHardState(eng, desc.RangeID)
+	oldHS, err := loadHardState(ctx, eng, desc.RangeID)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
-	if err := synthesizeHardState(eng, s, oldHS); err != nil {
+	if err := synthesizeHardState(ctx, eng, s, oldHS); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
-	if err := setLastIndex(eng, desc.RangeID, s.TruncatedState.Index); err != nil {
+	if err := setLastIndex(ctx, eng, desc.RangeID, s.TruncatedState.Index); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 

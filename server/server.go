@@ -401,7 +401,8 @@ func (s *Server) Start() error {
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
-	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	ctx := context.Background()
+	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -448,7 +449,7 @@ func (s *Server) Start() error {
 		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
 	)
-	gwCtx, gwCancel := context.WithCancel(context.Background())
+	gwCtx, gwCancel := context.WithCancel(ctx)
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Setup HTTP<->gRPC handlers.
