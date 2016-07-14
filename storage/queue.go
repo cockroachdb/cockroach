@@ -291,15 +291,11 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 		return
 	}
 
-	desc := repl.Desc()
-	if !bq.acceptsUnsplitRanges {
-		// If the split queue is disabled (i.e. in some tests), ignore this condition.
-		if !splittingDisabledForTest(repl.store) && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
-			// Range needs to be split due to zone configs, but queue does
-			// not accept unsplit ranges.
-			bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
-			return
-		}
+	if bq.requiresSplit(cfg, repl) {
+		// Range needs to be split due to zone configs, but queue does
+		// not accept unsplit ranges.
+		bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
+		return
 	}
 
 	bq.mu.Lock()
@@ -310,14 +306,15 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	}
 }
 
-// splittingDisabledForTest returns true if a store's split queue has been
-// disabled. This only happens in tests.
-func splittingDisabledForTest(store *Store) bool {
-	if store == nil {
-		// Some tests hack half-initialized replicas.
-		return true
+func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool {
+	// If there's no store (as is the case in some narrow unit tests), or if
+	// the store's split queue is disabled, the "required" split will never
+	// come. In that case, pretend we don't require the split.
+	if store := repl.store; store == nil || store.splitQueue.Disabled() {
+		return false
 	}
-	return store.splitQueue.Disabled()
+	desc := repl.Desc()
+	return !bq.acceptsUnsplitRanges && cfg.NeedsSplit(desc.StartKey, desc.EndKey)
 }
 
 // addInternal adds the replica the queue with specified priority. If the
@@ -447,14 +444,11 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		return nil
 	}
 
-	desc := repl.Desc()
-	if !bq.acceptsUnsplitRanges {
-		if !splittingDisabledForTest(repl.store) && cfg.NeedsSplit(desc.StartKey, desc.EndKey) {
-			// Range needs to be split due to zone configs, but queue does
-			// not accept unsplit ranges.
-			bq.eventLog.VInfof(log.V(3), "%s: split needed; skipping", repl)
-			return nil
-		}
+	if bq.requiresSplit(cfg, repl) {
+		// Range needs to be split due to zone configs, but queue does
+		// not accept unsplit ranges.
+		bq.eventLog.VInfof(log.V(3), "%s: split needed; skipping", repl)
+		return nil
 	}
 
 	sp := repl.store.Tracer().StartSpan(fmt.Sprintf("%s:%d", bq.name, repl.RangeID))
