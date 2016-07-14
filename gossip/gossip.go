@@ -766,13 +766,11 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
 func (g *Gossip) bootstrap() {
-	stopper := g.server.stopper
-
-	stopper.RunWorker(func() {
+	g.server.stopper.RunWorker(func() {
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
-			if stopper.RunTask(func() {
+			if g.server.stopper.RunTask(func() {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
@@ -780,7 +778,7 @@ func (g *Gossip) bootstrap() {
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
 					if addr := g.getNextBootstrapAddress(); addr != nil {
-						g.startClient(addr, stopper)
+						g.startClient(addr)
 					} else {
 						// We couldn't start a client, signal that we're stalled so that
 						// we'll retry.
@@ -797,14 +795,14 @@ func (g *Gossip) bootstrap() {
 			case <-bootstrapTimer.C:
 				bootstrapTimer.Read = true
 				// break
-			case <-stopper.ShouldStop():
+			case <-g.server.stopper.ShouldStop():
 				return
 			}
 			// Block until we need bootstrapping again.
 			select {
 			case <-g.stalled:
 				// break
-			case <-stopper.ShouldStop():
+			case <-g.server.stopper.ShouldStop():
 				return
 			}
 		}
@@ -822,23 +820,45 @@ func (g *Gossip) bootstrap() {
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage() {
-	stopper := g.server.stopper
-
-	stopper.RunWorker(func() {
+	g.server.stopper.RunWorker(func() {
 		cullTicker := time.NewTicker(g.jitteredInterval(g.cullInterval))
 		stallTicker := time.NewTicker(g.jitteredInterval(g.stallInterval))
 		defer cullTicker.Stop()
 		defer stallTicker.Stop()
 		for {
 			select {
-			case <-stopper.ShouldStop():
+			case <-g.server.stopper.ShouldStop():
 				return
 			case c := <-g.disconnected:
-				g.doDisconnected(stopper, c)
+				g.doDisconnected(c)
 			case nodeID := <-g.tighten:
-				g.tightenNetwork(stopper, nodeID)
+				g.tightenNetwork(nodeID)
 			case <-cullTicker.C:
-				g.cullNetwork()
+				func() {
+					g.mu.Lock()
+					if !g.outgoing.hasSpace() {
+						leastUsefulID := g.is.leastUseful(g.outgoing)
+
+						if c := g.findClient(func(c *client) bool {
+							return c.peerID == leastUsefulID
+						}); c != nil {
+							if log.V(1) {
+								log.Infof("closing least useful client %+v to tighten network graph", c)
+							}
+							c.close()
+
+							// After releasing the lock, block until the client disconnects.
+							defer func() {
+								g.doDisconnected(<-g.disconnected)
+							}()
+						} else {
+							if log.V(1) {
+								log.Infof("couldn't find least useful client among %+v", g.clients)
+							}
+						}
+					}
+					g.mu.Unlock()
+				}()
 			case <-stallTicker.C:
 				g.mu.Lock()
 				g.maybeSignalStalledLocked()
@@ -857,7 +877,7 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 // tightenNetwork "tightens" the network by starting a new gossip
 // client to the most distant node as measured in required gossip hops
 // to propagate info from the distant node to this node.
-func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.NodeID) {
+func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.outgoing.hasSpace() {
@@ -865,42 +885,19 @@ func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.Nod
 			log.Errorf("node %d: %s", distantNodeID, err)
 		} else {
 			log.Infof("starting client to distant node %d to tighten network graph", distantNodeID)
-			g.startClient(nodeAddr, stopper)
+			g.startClient(nodeAddr)
 		}
 	}
 }
 
-// cullNetwork is called periodically to remove the least "useful"
-// outgoing node to free up an outgoing spot for a more targeted
-// tightening (via tightenNetwork).
-func (g *Gossip) cullNetwork() {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	// If there's no space, find and remove least useful peer, if possible.
-	if g.outgoing.hasSpace() {
-		return
-	}
-	leastUsefulID := g.is.leastUseful(g.outgoing)
-	if leastUsefulID == 0 {
-		if log.V(1) {
-			log.Infof("couldn't find least useful client to close")
-		}
-		return
-	}
-	if log.V(1) {
-		log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
-	}
-	g.closeClient(leastUsefulID)
-}
-
-func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
+func (g *Gossip) doDisconnected(c *client) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.removeClient(c)
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr, stopper)
+		g.startClient(c.forwardAddr)
 	}
 	g.maybeSignalStalledLocked()
 }
@@ -956,20 +953,12 @@ func (g *Gossip) checkHasConnected() {
 // startClient launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
-	log.Infof("starting client to %s", addr)
+func (g *Gossip) startClient(addr net.Addr) {
 	c := newClient(addr)
 	g.clientsMu.Lock()
 	g.clients = append(g.clients, c)
 	g.clientsMu.Unlock()
-	c.start(g, g.disconnected, g.rpcContext, stopper)
-}
-
-// closeClient finds and closes a client.
-func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	if c := g.findClient(func(c *client) bool { return c.peerID == nodeID }); c != nil {
-		c.close()
-	}
+	c.start(g, g.disconnected, g.rpcContext, g.server.stopper)
 }
 
 // removeClient removes the specified client. Called when a client
