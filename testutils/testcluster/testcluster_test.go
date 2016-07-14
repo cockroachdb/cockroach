@@ -108,6 +108,50 @@ func TestTestClusterWithManualReplication(t *testing.T) {
 				tc.Servers[i].GetFirstStoreID(), tableRangeDesc.Replicas)
 		}
 	}
+
+	// Transfer the lease to node 1.
+	leaseHolder, err := tc.FindRangeLeaseHolder(
+		tableRangeDesc,
+		&ReplicationTarget{
+			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
+			StoreID: tc.Servers[0].GetFirstStoreID(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leaseHolder.StoreID != tc.Servers[0].GetFirstStoreID() {
+		t.Fatalf("expected initial lease on server idx 0, but is on node: %+v",
+			leaseHolder)
+	}
+
+	err = tc.TransferRangeLease(tableRangeDesc,
+		ReplicationTarget{
+			NodeID:  tc.Servers[1].GetNode().Descriptor.NodeID,
+			StoreID: tc.Servers[1].GetFirstStoreID(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the lease holder has changed. We'll use a bogus hint, which
+	// shouldn't matter (other than ensuring that it's not this call that moves
+	// the range holder, but that a holder already existed).
+	leaseHolder, err = tc.FindRangeLeaseHolder(
+		tableRangeDesc,
+		&ReplicationTarget{
+			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
+			StoreID: tc.Servers[0].GetFirstStoreID(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leaseHolder.StoreID != tc.Servers[1].GetFirstStoreID() {
+		t.Fatalf("expected lease on server idx 1 (node: %d store: %d), but is on node: %+v",
+			tc.Servers[1].GetNode().Descriptor.NodeID,
+			tc.Servers[1].GetFirstStoreID(),
+			leaseHolder)
+	}
+
 }
 
 func TestWaitForFullReplication(t *testing.T) {
