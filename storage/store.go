@@ -19,6 +19,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,6 +64,10 @@ const (
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
 
+	// preemptiveSnapshotRaftGroupID is a bogus ID for which a Raft group is
+	// temporarily created during the application of a preemptive snapshot.
+	preemptiveSnapshotRaftGroupID = math.MaxUint64
+
 	// TODO(bdarnell): Determine the right size for this cache. Should
 	// the cache be partitioned so that replica descriptors from the
 	// range descriptors (which are the bulk of the data and can be
@@ -101,6 +106,27 @@ func TestStoreContext() StoreContext {
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
 		BlockingSnapshotDuration:       100 * time.Millisecond,
+	}
+}
+
+func newRaftConfig(
+	strg raft.Storage,
+	id uint64,
+	appliedIndex uint64,
+	storeCtx StoreContext,
+	logger raft.Logger,
+) *raft.Config {
+	return &raft.Config{
+		ID:            id,
+		Applied:       appliedIndex,
+		ElectionTick:  storeCtx.RaftElectionTimeoutTicks,
+		HeartbeatTick: storeCtx.RaftHeartbeatIntervalTicks,
+		Storage:       strg,
+		Logger:        logger,
+		CheckQuorum:   true,
+		// TODO(bdarnell): make these configurable; evaluate defaults.
+		MaxSizePerMsg:   1024 * 1024,
+		MaxInflightMsgs: 256,
 	}
 }
 
@@ -2227,12 +2253,86 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
-			// Allow snapshots to be applied to replicas before they are members of
-			// the raft group (i.e. replicas with an ID of 0). This is the only
-			// operation that can be performed on a replica before it is part of the
-			// raft group.
-			_, err := r.applySnapshot(req.Message.Snapshot, raftpb.HardState{})
-			return err
+			// Allow snapshots to be applied to replicas before they are
+			// members of the raft group (i.e. replicas with an ID of 0). This
+			// is the only operation that can be performed before it is part of
+			// the raft group.
+
+			// Requiring that the Term is set in a message makes sure that we
+			// get all of Raft's internal safety checks (it confuses messages
+			// at term zero for internal messages). The sending side uses the
+			// term from the snapshot itself, so we check for equality here.
+			if a, e := req.Message.Term, req.Message.Snapshot.Metadata.Term; a != e {
+				return errors.Errorf(
+					"preemptive snapshot from term %d received with term %d",
+					e, a,
+				)
+			}
+			// TODO(tschottdorf): A lot of locking of the individual Replica
+			// going on below as well. I think that's more easily refactored
+			// away; what really matters is that the Store doesn't do anything
+			// else with that same Replica (or one that might conflict with us
+			// while we still run). In effect, we'd want something like:
+			//
+			// 1. look up the snapshot's key range
+			// 2. get an exclusive lock for operations on that key range from
+			//    the store (or discard the snapshot)
+			//    (at the time of writing, we have checked the key range in
+			//    canApplySnapshot above, but there are concerns about two
+			//    conflicting operations passing that check simultaneously,
+			//    see #7830)
+			// 3. do everything below (apply the snapshot through temp Raft group)
+			// 4. release the exclusive lock on the snapshot's key range
+			//
+			// There are two future outcomes: Either we begin receiving
+			// legitimate Raft traffic for this Range (hence learning the
+			// ReplicaID and becoming a real Replica), or the Replica GC queue
+			// decides that the ChangeReplicas as a part of which the
+			// preemptive snapshot was sent has likely failed and removes both
+			// in-memory and on-disk state.
+			r.mu.Lock()
+			groupExists := r.mu.internalRaftGroup != nil
+			r.mu.Unlock()
+			if groupExists {
+				log.Fatalf(
+					"cannot apply preemptive snapshot, Raft group for %d already active",
+					r.RangeID,
+				)
+			}
+			raftGroup, err := raft.NewRawNode(
+				newRaftConfig(
+					raft.Storage(r),
+					preemptiveSnapshotRaftGroupID,
+					0, // applied index
+					r.store.ctx,
+					&raftLogger{rangeID: r.RangeID},
+				), nil)
+			if err != nil {
+				return err
+			}
+			// We have a Raft group; feed it the message.
+			if err := raftGroup.Step(req.Message); err != nil {
+				return errors.Wrap(err, "unable to process preemptive snapshot")
+			}
+			// In the normal case, the group should ask us to apply a snapshot.
+			// If it doesn't, our snapshot was probably stale.
+			var ready raft.Ready
+			if raftGroup.HasReady() {
+				ready = raftGroup.Ready()
+			}
+			if raft.IsEmptySnap(ready.Snapshot) {
+				return errors.Errorf("preemptive snapshot discarded by Raft")
+			}
+			// Apply the snapshot, as Raft told us to.
+			if err := r.applySnapshot(ready.Snapshot, ready.HardState); err != nil {
+				return err
+			}
+			// TODO(tschottdorf): at this point, the Replica has data but
+			// no ReplicaID. We hope that it turns into a "real" Replica
+			// by means of receiving Raft messages addressed to it with
+			// a ReplicaID, but if that doesn't happen, at some point the
+			// Replica GC queue will have to grab it.
+			return nil
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
