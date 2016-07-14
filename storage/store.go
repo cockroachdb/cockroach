@@ -89,8 +89,7 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 // to concurrency issues. See #7672 and the discussion within.
 const storeReplicaRaftReadyConcurrency = 1
 
-// TestStoreContext has some fields initialized with values relevant
-// in tests.
+// TestStoreContext has some fields initialized with values relevant in tests.
 func TestStoreContext() StoreContext {
 	return StoreContext{
 		Tracer:                         tracing.NewTracer(),
@@ -879,10 +878,10 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 
 	if ctx.TestingKnobs.DisableSplitQueue {
-		s.SetSplitQueueActive(false)
+		s.setSplitQueueActive(false)
 	}
 	if ctx.TestingKnobs.DisableReplicateQueue {
-		s.SetReplicateQueueActive(false)
+		s.setReplicateQueueActive(false)
 	}
 
 	return s
@@ -2639,22 +2638,15 @@ func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationRespo
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 
-// SetReplicaGCQueueActive enables or disables the replica GC queue.
-func (s *Store) SetReplicaGCQueueActive(active bool) {
-	s.replicaGCQueue.SetDisabled(!active)
-}
-
-// SetRaftLogQueueActive enables or disables the raft log queue.
-func (s *Store) SetRaftLogQueueActive(active bool) {
+func (s *Store) setRaftLogQueueActive(active bool) {
 	s.raftLogQueue.SetDisabled(!active)
 }
-
-// SetReplicateQueueActive enables or disabled the replication queue.
-func (s *Store) SetReplicateQueueActive(active bool) {
+func (s *Store) setReplicaGCQueueActive(active bool) {
+	s.replicaGCQueue.SetDisabled(!active)
+}
+func (s *Store) setReplicateQueueActive(active bool) {
 	s.replicateQueue.SetDisabled(!active)
 }
-
-// SetSplitQueueActive enables or disables the split queue.
-func (s *Store) SetSplitQueueActive(active bool) {
+func (s *Store) setSplitQueueActive(active bool) {
 	s.splitQueue.SetDisabled(!active)
 }
