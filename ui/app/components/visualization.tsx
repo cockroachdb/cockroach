@@ -5,7 +5,7 @@ import { ToolTip } from "./toolTip";
 interface VisualizationProps {
   title: string;
   subtitle?: string;
-  tooltip?: string;
+  tooltip?: React.ReactNode;
   stale?: boolean;
 }
 
