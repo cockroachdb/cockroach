@@ -64,6 +64,9 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
 	key1 := roachpb.Key("a")
@@ -100,8 +103,6 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		sCtx := storage.TestStoreContext()
-		sCtx.TestingKnobs.DisableSplitQueue = true
 		store := createTestStoreWithEngine(t, eng, clock, true, sCtx, stopper)
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
@@ -139,8 +140,6 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
 	store := createTestStoreWithEngine(t, eng, clock, false, sCtx, engineStopper)
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
