@@ -231,6 +231,17 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 	}()
 
+	m.stores = make([]*storage.Store, numStores)
+	m.storePools = make([]*storage.StorePool, numStores)
+	m.distSenders = make([]*kv.DistSender, numStores)
+	m.dbs = make([]*client.DB, numStores)
+	m.stoppers = make([]*stop.Stopper, numStores)
+	m.senders = make([]*storage.Stores, numStores)
+	m.idents = make([]roachpb.StoreIdent, numStores)
+	m.grpcServers = make([]*grpc.Server, numStores)
+	m.transports = make([]*storage.RaftTransport, numStores)
+	m.gossips = make([]*gossip.Gossip, numStores)
+
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
 	}
@@ -244,8 +255,8 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
 	}
 
-	for i := 0; i < numStores; i++ {
-		m.addStore()
+	for idx := 0; idx < numStores; idx++ {
+		m.addStore(idx)
 	}
 
 	// Wait for gossip to startup.
@@ -483,10 +494,6 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 }
 
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
-	if len(m.dbs) <= idx {
-		m.distSenders = append(m.distSenders, nil)
-		m.dbs = append(m.dbs, nil)
-	}
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	m.distSenders[idx] = kv.NewDistSender(&kv.DistSenderContext{
@@ -501,9 +508,6 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 }
 
 func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
-	if len(m.storePools) <= idx {
-		m.storePools = append(m.storePools, nil)
-	}
 	m.storePools[idx] = storage.NewStorePool(
 		m.gossips[idx],
 		m.clock,
@@ -515,10 +519,7 @@ func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
 }
 
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
-func (m *multiTestContext) addStore() {
-	m.mu.RLock()
-	idx := len(m.stores)
-	m.mu.RUnlock()
+func (m *multiTestContext) addStore(idx int) {
 	var clock *hlc.Clock
 	if len(m.clocks) > idx {
 		clock = m.clocks[idx]
@@ -537,43 +538,32 @@ func (m *multiTestContext) addStore() {
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
 	}
-	if len(m.grpcServers) <= idx {
-		m.grpcServers = append(m.grpcServers, rpc.NewServer(m.rpcContext))
-	}
-	if len(m.transports) <= idx {
-		m.transports = append(m.transports,
-			storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext))
-	}
+	m.grpcServers[idx] = rpc.NewServer(m.rpcContext)
+	m.transports[idx] = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext)
 
 	stopper := stop.NewStopper()
 
-	if len(m.gossips) <= idx {
-		// Give this store all previous stores as gossip bootstraps.
-		var resolvers []resolver.Resolver
-		func() {
-			m.mu.Lock()
-			defer m.mu.Unlock()
-			for _, addr := range m.nodeIDtoAddr {
-				r, err := resolver.NewResolverFromAddress(addr)
-				if err != nil {
-					m.t.Fatal(err)
-				}
-				resolvers = append(resolvers, r)
+	// Give this store all previous stores as gossip bootstraps.
+	var resolvers []resolver.Resolver
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		for _, addr := range m.nodeIDtoAddr {
+			r, err := resolver.NewResolverFromAddress(addr)
+			if err != nil {
+				m.t.Fatal(err)
 			}
-		}()
-		m.gossips = append(m.gossips, gossip.New(m.rpcContext, resolvers, m.transportStopper))
-		m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
-	}
-	if len(m.storePools) <= idx {
-		if m.timeUntilStoreDead == 0 {
-			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
+			resolvers = append(resolvers, r)
 		}
-		m.populateStorePool(idx, stopper)
+	}()
+	m.gossips[idx] = gossip.New(m.rpcContext, resolvers, m.transportStopper)
+	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
+	if m.timeUntilStoreDead == 0 {
+		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
 	}
 
-	if len(m.dbs) <= idx {
-		m.populateDB(idx, stopper)
-	}
+	m.populateStorePool(idx, stopper)
+	m.populateDB(idx, stopper)
 
 	ctx := m.makeContext(idx)
 	nodeID := roachpb.NodeID(idx + 1)
@@ -618,14 +608,14 @@ func (m *multiTestContext) addStore() {
 	// (these must be populated before the store is started so that
 	// FirstRange() can find the sender)
 	m.mu.Lock()
-	m.stores = append(m.stores, store)
-	m.stoppers = append(m.stoppers, stopper)
+	m.stores[idx] = store
+	m.stoppers[idx] = stopper
 	sender := storage.NewStores(clock)
 	sender.AddStore(store)
-	m.senders = append(m.senders, sender)
+	m.senders[idx] = sender
 	// Save the store identities for later so we can use them in
 	// replication operations even while the store is stopped.
-	m.idents = append(m.idents, store.Ident)
+	m.idents[idx] = store.Ident
 	m.mu.Unlock()
 	if err := store.Start(stopper); err != nil {
 		m.t.Fatal(err)
