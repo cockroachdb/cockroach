@@ -234,11 +234,15 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := rng.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, rng.Desc()); err != nil {
+		},
+		rng.Desc(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
@@ -307,11 +311,15 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := firstRng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := firstRng.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, firstRng.Desc()); err != nil {
+		},
+		firstRng.Desc(),
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -402,11 +410,14 @@ func TestFailedReplicaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := rng.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, rng.Desc(),
+		},
+		rng.Desc(),
 	); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %v", err)
 	}
@@ -425,11 +436,14 @@ func TestFailedReplicaChange(t *testing.T) {
 	// are pushable by making the transaction abandoned.
 	mtc.manualClock.Increment(10 * base.DefaultHeartbeatInterval.Nanoseconds())
 
-	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := rng.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, rng.Desc(),
+		},
+		rng.Desc(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -487,11 +501,15 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	// Now add the second replica.
-	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
+	if err := rng.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-		}, rng.Desc()); err != nil {
+		},
+		rng.Desc(),
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -712,7 +730,9 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	}
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
-		return repl.ChangeReplicas(roachpb.ADD_REPLICA,
+		return repl.ChangeReplicas(
+			context.Background(),
+			roachpb.ADD_REPLICA,
 			roachpb.ReplicaDescriptor{
 				NodeID:  mtc.stores[storeNum].Ident.NodeID,
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
