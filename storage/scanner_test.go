@@ -38,13 +38,13 @@ import (
 // Test implementation of a range set backed by btree.BTree.
 type testRangeSet struct {
 	sync.Mutex
-	rangesByKey *btree.BTree
-	visited     int
+	replicasByKey *btree.BTree
+	visited       int
 }
 
 // newTestRangeSet creates a new range set that has the count number of ranges.
 func newTestRangeSet(count int, t *testing.T) *testRangeSet {
-	rs := &testRangeSet{rangesByKey: btree.New(64 /* degree */)}
+	rs := &testRangeSet{replicasByKey: btree.New(64 /* degree */)}
 	for i := 0; i < count; i++ {
 		desc := &roachpb.RangeDescriptor{
 			RangeID:  roachpb.RangeID(i),
@@ -65,7 +65,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		if err := rng.setDesc(desc); err != nil {
 			t.Fatal(err)
 		}
-		if exRngItem := rs.rangesByKey.ReplaceOrInsert(rng); exRngItem != nil {
+		if exRngItem := rs.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", rng)
 		}
 	}
@@ -76,7 +76,7 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.visited = 0
-	rs.rangesByKey.Ascend(func(i btree.Item) bool {
+	rs.replicasByKey.Ascend(func(i btree.Item) bool {
 		rs.visited++
 		rs.Unlock()
 		defer rs.Lock()
@@ -87,7 +87,7 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 func (rs *testRangeSet) EstimatedCount() int {
 	rs.Lock()
 	defer rs.Unlock()
-	count := rs.rangesByKey.Len() - rs.visited
+	count := rs.replicasByKey.Len() - rs.visited
 	if count < 1 {
 		count = 1
 	}
@@ -99,7 +99,7 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 	endKey := roachpb.Key(fmt.Sprintf("%03d", index+1))
 	rs.Lock()
 	defer rs.Unlock()
-	rng := rs.rangesByKey.Delete((rangeBTreeKey)(endKey))
+	rng := rs.replicasByKey.Delete((rangeBTreeKey)(endKey))
 	if rng == nil {
 		t.Fatalf("failed to delete range of end key %s", endKey)
 	}
