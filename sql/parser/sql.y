@@ -379,7 +379,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <FamilyElemList> family_params
 %type <[]string> name_list opt_name_list
 %type <empty> opt_array_bounds
-%type <TableExprs> from_clause from_list
+%type <TableExprs> from_clause from_list update_from_clause
 %type <QualifiedNames> qualified_name_list
 %type <QualifiedNames> indirect_name_or_glob_list
 %type <*QualifiedName> any_name
@@ -2112,10 +2112,15 @@ returning_clause:
 
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
-    SET set_clause_list from_clause where_clause returning_clause
+    SET set_clause_list update_from_clause where_clause returning_clause
   {
     $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr()), Returning: $8.retExprs()}
   }
+
+// Mark this as unimplemented until the normal from_clause is supported here.
+update_from_clause:
+  FROM from_list { unimplementedWithIssue(7841) }
+| /* EMPTY */ {}
 
 set_clause_list:
   set_clause
