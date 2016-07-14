@@ -219,6 +219,19 @@ func startMultiTestContext(t *testing.T, numStores int) *multiTestContext {
 }
 
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
+	{
+		// Only the fields we nil out below can be injected into m as it
+		// starts up, so fail early if anything else was set (as we'd likely
+		// override it and the test wouldn't get what it wanted).
+		mCopy := *m
+		mCopy.storeContext = nil
+		mCopy.clocks = nil
+		mCopy.clock = nil
+		mCopy.timeUntilStoreDead = 0
+		if !reflect.DeepEqual(mCopy, multiTestContext{}) {
+			t.Fatalf("illegal fields set in multiTestContext: %+v", &mCopy)
+		}
+	}
 	m.t = t
 	m.reenableTableSplits = config.TestingDisableTableSplits()
 
