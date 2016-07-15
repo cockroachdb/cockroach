@@ -1579,7 +1579,10 @@ func (s *Store) NewRangeDescriptor(
 
 // SplitRange shortens the original range to accommodate the new
 // range. The new range is added to the ranges map and the replicasByKey
-// btree.
+// btree. processRaftMu must be held.
+//
+// This is only called from the split trigger in the context of the execution
+// of a Raft command (so processRaftMu *is* held).
 func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	origDesc := origRng.Desc()
 	newDesc := newRng.Desc()
