@@ -1018,6 +1018,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 	getContinues := make(chan struct{})
 	var getStarted sync.WaitGroup
 	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
 	sCtx.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
@@ -1033,7 +1034,6 @@ func TestStoreSplitReadRace(t *testing.T) {
 			}
 			return nil
 		}
-	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
 
