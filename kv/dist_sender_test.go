@@ -592,7 +592,7 @@ func TestEvictCacheOnError(t *testing.T) {
 	// the RPC call succeeds but there is an error in the RequestHeader.
 	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
-	testCases := []struct{ rpcError, retryable, shouldClearLeader, shouldClearReplica bool }{
+	testCases := []struct{ rpcError, retryable, shouldClearLeaseHolder, shouldClearReplica bool }{
 		{false, false, false, false}, // non-retryable replica error
 		{false, true, false, false},  // retryable replica error
 		{true, true, false, false},   // RPC error aka all nodes dead
@@ -603,7 +603,7 @@ func TestEvictCacheOnError(t *testing.T) {
 	for i, tc := range testCases {
 		g, s := makeTestGossip(t)
 		defer s()
-		leader := roachpb.ReplicaDescriptor{
+		leaseHolder := roachpb.ReplicaDescriptor{
 			NodeID:  99,
 			StoreID: 999,
 		}
@@ -634,15 +634,15 @@ func TestEvictCacheOnError(t *testing.T) {
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		}
 		ds := NewDistSender(ctx, g)
-		ds.updateLeaderCache(1, leader)
+		ds.updateLeaseHolderCache(1, leaseHolder)
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
 		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, errString) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
-		if _, ok := ds.leaseHolderCache.Lookup(1); ok != !tc.shouldClearLeader {
-			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %t", i, tc.shouldClearLeader, ok)
+		if _, ok := ds.leaseHolderCache.Lookup(1); ok != !tc.shouldClearLeaseHolder {
+			t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
 		}
 		if _, cachedDesc, err := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */); err != nil {
 			t.Error(err)
@@ -1672,13 +1672,13 @@ func TestCountRanges(t *testing.T) {
 	}
 }
 
-type slowLeaderTransport struct {
+type slowLeaseHolderTransport struct {
 	created     bool
 	count       int
 	slowReqChan chan BatchCall
 }
 
-func (t *slowLeaderTransport) factory(
+func (t *slowLeaseHolderTransport) factory(
 	_ SendOptions,
 	_ *rpc.Context,
 	_ ReplicaSlice,
@@ -1691,7 +1691,7 @@ func (t *slowLeaderTransport) factory(
 	return t, nil
 }
 
-func (t *slowLeaderTransport) IsExhausted() bool {
+func (t *slowLeaseHolderTransport) IsExhausted() bool {
 	if t.count >= 3 {
 		// When we've tried all replicas, let the slow request finish.
 		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
@@ -1700,7 +1700,7 @@ func (t *slowLeaderTransport) IsExhausted() bool {
 	return false
 }
 
-func (t *slowLeaderTransport) SendNext(done chan BatchCall) {
+func (t *slowLeaseHolderTransport) SendNext(done chan BatchCall) {
 	if t.count == 0 {
 		// Save the first request to finish later.
 		t.slowReqChan = done
@@ -1713,18 +1713,18 @@ func (t *slowLeaderTransport) SendNext(done chan BatchCall) {
 	t.count++
 }
 
-func (t *slowLeaderTransport) Close() {
+func (t *slowLeaseHolderTransport) Close() {
 }
 
-// TestSlowLeaderRetry verifies that when the lease holder is slow, we wait
+// TestSlowLeaseHolderRetry verifies that when the lease holder is slow, we wait
 // for it to finish, instead of restarting the process because of
 // NotLeaseHolderErrors returned by faster followers.
-func TestSlowLeaderRetry(t *testing.T) {
+func TestSlowLeaseHolderRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 
-	transport := slowLeaderTransport{}
+	transport := slowLeaseHolderTransport{}
 	ds := NewDistSender(&DistSenderContext{
 		TransportFactory:  transport.factory,
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,

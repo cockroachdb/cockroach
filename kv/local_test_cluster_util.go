@@ -64,7 +64,7 @@ func InitSenderForLocalTestCluster(
 		Clock: clock,
 		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
 		RangeLookupMaxRanges:     defaultRangeLookupMaxRanges,
-		LeaderCacheSize:          defaultLeaseHolderCacheSize,
+		LeaseHolderCacheSize:     defaultLeaseHolderCacheSize,
 		RPCRetryOptions:          &retryOpts,
 		nodeDescriptor:           nodeDesc,
 		TransportFactory: func(

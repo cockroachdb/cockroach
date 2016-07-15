@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestLeaderCache(t *testing.T) {
+func TestLeaseHolderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	lc := newLeaseHolderCache(3)
 	if repDesc, ok := lc.Lookup(12); ok {
