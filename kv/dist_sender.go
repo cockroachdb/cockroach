@@ -121,7 +121,7 @@ type DistSenderContext struct {
 	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
 	// range descriptor cache when dispatching a range lookup request.
 	RangeLookupMaxRanges int32
-	LeaderCacheSize      int32
+	LeaseHolderCacheSize int32
 	RPCRetryOptions      *retry.Options
 	// nodeDescriptor, if provided, is used to describe which node the DistSender
 	// lives on, for instance when deciding where to send RPCs.
@@ -164,7 +164,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		rdb = ds
 	}
 	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
-	lcSize := ctx.LeaderCacheSize
+	lcSize := ctx.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
 	}
@@ -450,8 +450,8 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if leader, ok := ds.leaseHolderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
-			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
+		if leaseHolder, ok := ds.leaseHolderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
+			if i := replicas.FindReplica(leaseHolder.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 			}
 		}
@@ -1040,7 +1040,7 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 	case *roachpb.NotLeaseHolderError:
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
-			ds.updateLeaderCache(rangeID, *tErr.LeaseHolder)
+			ds.updateLeaseHolderCache(rangeID, *tErr.LeaseHolder)
 
 			// TODO(bdarnell): Move the new lease holder to the head of the queue
 			// for the next retry.
@@ -1050,21 +1050,21 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 	return false
 }
 
-// updateLeaderCache updates the cached lease holder for the given range.
-func (ds *DistSender) updateLeaderCache(
+// updateLeaseHolderCache updates the cached lease holder for the given range.
+func (ds *DistSender) updateLeaseHolderCache(
 	rangeID roachpb.RangeID,
-	newLeader roachpb.ReplicaDescriptor,
+	newLeaseHolder roachpb.ReplicaDescriptor,
 ) {
 	if log.V(1) {
-		if oldLeader, ok := ds.leaseHolderCache.Lookup(rangeID); ok {
-			if (newLeader == roachpb.ReplicaDescriptor{}) {
-				log.Infof("range %d: evicting cached lease holder %+v", rangeID, oldLeader)
-			} else if newLeader != oldLeader {
-				log.Infof("range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeader, newLeader)
+		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(rangeID); ok {
+			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
+				log.Infof("range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
+			} else if newLeaseHolder != oldLeaseHolder {
+				log.Infof("range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
 			}
 		} else {
-			log.Infof("range %d: caching new lease holder %+v", rangeID, newLeader)
+			log.Infof("range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
 		}
 	}
-	ds.leaseHolderCache.Update(rangeID, newLeader)
+	ds.leaseHolderCache.Update(rangeID, newLeaseHolder)
 }
