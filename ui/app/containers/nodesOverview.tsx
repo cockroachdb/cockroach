@@ -323,7 +323,7 @@ let rollupStatuses = createSelector(
 
 // Connect the NodesMain class with our redux store.
 let nodesMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       sortedStatuses: sortedStatuses(state),
       statusRollups: rollupStatuses(state),

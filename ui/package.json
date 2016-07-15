@@ -25,7 +25,6 @@
       "long": "npm:long@^3.1.0",
       "moment": "npm:moment@^2.13.0",
       "nvd3": "npm:nvd3@^1.8.3",
-      "object-assign": "npm:object-assign@^4.0.1",
       "protobufjs": "npm:protobufjs@^5.0.1",
       "react": "npm:react@^15.0.1",
       "react-dom": "npm:react-dom@^15.0.1",

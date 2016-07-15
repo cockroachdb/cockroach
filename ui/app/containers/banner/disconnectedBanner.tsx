@@ -41,7 +41,7 @@ let health = (state: AdminUIState): HealthState => state.cachedData.health;
 
 // Connect the DisconnectedBanner class with our redux store.
 let disconnectedBannerConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       health: health(state),
     };
