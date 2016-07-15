@@ -82,8 +82,9 @@ type RowFetcher struct {
 	prettyValueBuf   bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
-	kv    client.KeyValue
-	kvEnd bool
+	kv                client.KeyValue
+	keyRemainingBytes []byte
+	kvEnd             bool
 
 	// Buffered allocation of decoded datums.
 	alloc DatumAlloc
@@ -186,44 +187,45 @@ func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) e
 // TODO(andrei): change to return error
 func (rf *RowFetcher) NextKey() (rowDone bool, err error) {
 	var ok bool
-	ok, rf.kv, err = rf.kvFetcher.nextKV()
-	if err != nil {
-		return false, err
-	}
-	rf.kvEnd = !ok
 
-	// For unique secondary indexes, the index-key does not distinguish one row
-	// from the next if both rows contain identical values along with a
-	// NULL. Consider the keys:
-	//
-	//   /test/unique_idx/NULL/0
-	//   /test/unique_idx/NULL/1
-	//
-	// The index-key extracted from the above keys is /test/unique_idx/NULL. The
-	// trailing /0 and /1 are the primary key used to unique-ify the keys when a
-	// NULL is present. Currently we don't detect NULLs on decoding. If we did we
-	// could detect this case and enlarge the index-key. A simpler fix for this
-	// problem is to simply always output a row for each key scanned from a
-	// secondary index as secondary indexes have only one key per row.
-
-	if rf.indexKey != nil &&
-		(rf.isSecondaryIndex || rf.kvEnd ||
-			!bytes.HasPrefix(rf.kv.Key, rf.indexKey)) {
-		// The current key belongs to a new row. Output the current row.
-		rf.indexKey = nil
-
-		// Fill in any missing values with NULLs
-		for i, col := range rf.cols {
-			if rf.valNeededForCol[i] && rf.row[i] == nil {
-				if !col.Nullable {
-					panic("Non-nullable column with no value!")
-				}
-				rf.row[i] = parser.DNull
-			}
+	for {
+		ok, rf.kv, err = rf.kvFetcher.nextKV()
+		if err != nil {
+			return false, err
 		}
-		return true, nil
+		rf.kvEnd = !ok
+		if rf.kvEnd {
+			return true, nil
+		}
+
+		rf.keyRemainingBytes, err = rf.ReadIndexKey(rf.kv.Key)
+		if err != nil {
+			if _, ok := err.(KeyDescriptorMismatchError); ok {
+				continue
+			}
+			return false, err
+		}
+
+		// For unique secondary indexes, the index-key does not distinguish one row
+		// from the next if both rows contain identical values along with a NULL.
+		// Consider the keys:
+		//
+		//   /test/unique_idx/NULL/0
+		//   /test/unique_idx/NULL/1
+		//
+		// The index-key extracted from the above keys is /test/unique_idx/NULL. The
+		// trailing /0 and /1 are the primary key used to unique-ify the keys when a
+		// NULL is present. Currently we don't detect NULLs on decoding. If we did
+		// we could detect this case and enlarge the index-key. A simpler fix for
+		// this problem is to simply always output a row for each key scanned from a
+		// secondary index as secondary indexes have only one key per row.
+		if rf.indexKey != nil && (rf.isSecondaryIndex || !bytes.HasPrefix(rf.kv.Key, rf.indexKey)) {
+			// The current key belongs to a new row. Output the current row.
+			rf.indexKey = nil
+			return true, nil
+		}
+		return false, nil
 	}
-	return false, nil
 }
 
 func prettyDatums(vals []parser.Datum) string {
@@ -246,18 +248,13 @@ func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, err error) 
 func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 	prettyKey string, prettyValue string, err error,
 ) {
-	remaining, err := rf.ReadIndexKey(kv.Key)
-	if err != nil {
-		return "", "", err
-	}
-
 	if debugStrings {
 		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyDatums(rf.keyVals))
 	}
 
 	if rf.indexKey == nil {
 		// This is the first key for the row.
-		rf.indexKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
+		rf.indexKey = []byte(kv.Key[:len(kv.Key)-len(rf.keyRemainingBytes)])
 
 		// Reset the row to nil; it will get filled in with the column
 		// values as we decode the key-value pairs for the row.
@@ -271,8 +268,8 @@ func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 		}
 	}
 
-	if !rf.isSecondaryIndex && len(remaining) > 0 {
-		_, familyID, err := encoding.DecodeUvarintAscending(remaining)
+	if !rf.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
+		_, familyID, err := encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -475,6 +472,7 @@ func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
 			return nil, err
 		}
 		if rowDone {
+			rf.finalizeRow()
 			return rf.row, nil
 		}
 	}
@@ -498,9 +496,22 @@ func (rf *RowFetcher) NextKeyDebug() (
 		return "", "", nil, err
 	}
 	if rowDone {
+		rf.finalizeRow()
 		row = rf.row
 	}
 	return prettyKey, prettyValue, row, nil
+}
+
+func (rf *RowFetcher) finalizeRow() {
+	// Fill in any missing values with NULLs
+	for i, col := range rf.cols {
+		if rf.valNeededForCol[i] && rf.row[i] == nil {
+			if !col.Nullable {
+				panic("Non-nullable column with no value!")
+			}
+			rf.row[i] = parser.DNull
+		}
+	}
 }
 
 // Key returns the next key (the key that follows the last returned row).

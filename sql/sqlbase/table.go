@@ -364,8 +364,8 @@ func EncodeIndexKey(
 			colIDs, dirs = colIDs[length:], dirs[length:]
 			containsNull = containsNull || n
 
-			// We reuse NullDescending (0xff) as the interleave sentinel.
-			key = encoding.EncodeNullDescending(key)
+			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
+			key = encoding.EncodeNotNullDescending(key)
 		}
 
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
@@ -679,15 +679,24 @@ func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
 			key = key[l:]
 		}
 
-		// We reuse NullDescending as the interleave sentinal, consume it.
+		// We reuse NotNullDescending as the interleave sentinel, consume it.
 		var ok bool
-		key, ok = encoding.DecodeIfNull(key)
+		key, ok = encoding.DecodeIfNotNull(key)
 		if !ok {
 			return 0, nil, errors.Errorf("invalid interleave key")
 		}
 	}
 
 	return indexID, key, err
+}
+
+// KeyDescriptorMismatchError indicates that a key being decoded does not match
+// the specified table and/or index.
+type KeyDescriptorMismatchError struct {
+}
+
+func (e KeyDescriptorMismatchError) Error() string {
+	return "key/descriptor mismatch"
 }
 
 // DecodeIndexKey decodes the values that are a part of the specified index
@@ -713,22 +722,19 @@ func DecodeIndexKey(
 			if err != nil {
 				return nil, err
 			}
-			if decodedTableID != ancestor.TableID {
-				return nil, errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, ancestor.TableID, decodedTableID)
-			}
-			if decodedIndexID != ancestor.IndexID {
-				return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, ancestor.IndexID, decodedIndexID)
+			if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
+				return nil, KeyDescriptorMismatchError{}
 			}
 
 			length := int(ancestor.SharedPrefixLen)
 			key, err = DecodeKeyVals(a, valTypes[:length], vals[:length], colDirs[:length], key)
 			valTypes, vals, colDirs = valTypes[length:], vals[length:], colDirs[length:]
 
-			// We reuse NullDescending as the interleave sentinal, consume it.
+			// We reuse NotNullDescending as the interleave sentinel, consume it.
 			var ok bool
-			key, ok = encoding.DecodeIfNull(key)
+			key, ok = encoding.DecodeIfNotNull(key)
 			if ok != true {
-				return nil, errors.Errorf("%s: malformed index key, expected NULL: %x", desc.Name, key)
+				return nil, KeyDescriptorMismatchError{}
 			}
 		}
 	}
@@ -737,14 +743,22 @@ func DecodeIndexKey(
 	if err != nil {
 		return nil, err
 	}
-	if decodedTableID != desc.ID {
-		return nil, errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, decodedTableID)
-	}
-	if decodedIndexID != indexID {
-		return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
+	if decodedTableID != desc.ID || decodedIndexID != indexID {
+		return nil, KeyDescriptorMismatchError{}
 	}
 
-	return DecodeKeyVals(a, valTypes, vals, colDirs, key)
+	key, err = DecodeKeyVals(a, valTypes, vals, colDirs, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// We're expecting a column family id next (a varint). If descNotNull is
+	// actually next, then this key is for a child table.
+	if _, ok := encoding.DecodeIfNotNull(key); ok {
+		return nil, KeyDescriptorMismatchError{}
+	}
+
+	return key, nil
 }
 
 // DecodeKeyVals decodes the values that are part of the key. ValTypes is a

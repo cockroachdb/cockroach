@@ -88,8 +88,8 @@ A table `orders` interleaved into a table `customers` will be encoded as
     /customers/1/<customerID>/<interleavedTableSentinel>/orders/<indexID>/<orderID>/0
     /customers/1/<customerID>/<interleavedTableSentinel>/orders/<indexID>/<orderID>/<familyID>/suffix
 
-Where `interleavedTableSentinel` is the byte `0xff`, which is the same as
-`EncodeNullDescending` and so is available to use here.
+Where `interleavedTableSentinel` is the byte `0xfe`, which is the same as
+`EncodeNotNullDescending` and so is available to use here.
 
 We currently choose `suffix` such that each row in a table is forced to stay
 entirely in one range. To avoid size limitations on the interleaved table, its

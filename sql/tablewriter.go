@@ -522,6 +522,12 @@ func (td *tableDeleter) fastPathAvailable() bool {
 		}
 		return false
 	}
+	if td.rd.helper.tableDesc.IsInterleaved() {
+		if log.V(2) {
+			log.Info("delete forced to scan: table is interleaved")
+		}
+		return false
+	}
 	return true
 }
 

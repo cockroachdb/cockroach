@@ -93,6 +93,24 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 // Traditional syntax.
 // Privileges: None.
 func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
+	showCreateInterleave := func(idx *sqlbase.IndexDescriptor) (string, error) {
+		if len(idx.Interleave.Ancestors) == 0 {
+			return "", nil
+		}
+		intl := idx.Interleave
+		parentTable, err := getTableDescFromID(p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
+		if err != nil {
+			return "", err
+		}
+		var sharedPrefixLen int
+		for _, ancestor := range intl.Ancestors {
+			sharedPrefixLen += int(ancestor.SharedPrefixLen)
+		}
+		interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
+		s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parentTable.Name, interleavedColumnNames)
+		return s, nil
+	}
+
 	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
 		return nil, err
@@ -142,11 +160,16 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		if len(idx.StoreColumnNames) > 0 {
 			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
 		}
-		fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s",
+		interleave, err := showCreateInterleave(&idx)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
 			isUnique[idx.Unique],
 			quoteNames(idx.Name),
 			quoteNames(idx.ColumnNames...),
 			storing,
+			interleave,
 		)
 	}
 	for _, fam := range desc.Families {
@@ -171,6 +194,12 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	}
 
 	buf.WriteString("\n)")
+	interleave, err := showCreateInterleave(&desc.PrimaryIndex)
+	if err != nil {
+		return nil, err
+	}
+	buf.WriteString(interleave)
+
 	v.rows = append(v.rows, []parser.Datum{
 		parser.NewDString(n.Table.String()),
 		parser.NewDString(buf.String()),
