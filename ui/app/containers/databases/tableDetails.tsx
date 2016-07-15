@@ -433,7 +433,7 @@ let sortedGrants = createSelector(
 
 // Connect the TableMain class with our redux store.
 let tableMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
       sortedColumns: sortedColumns(state, ownProps),
       sortedIndexes: sortedIndexes(state, ownProps),
