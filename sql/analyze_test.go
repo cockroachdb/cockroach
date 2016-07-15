@@ -47,7 +47,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 			ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 		},
 		Privileges:    sqlbase.NewDefaultPrivilegeDescriptor(),
-		FormatVersion: sqlbase.BaseFormatVersion,
+		FormatVersion: sqlbase.FamilyFormatVersion,
 	}
 }
 

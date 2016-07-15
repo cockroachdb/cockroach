@@ -150,10 +150,6 @@ func (n *createIndexNode) Start() error {
 		}
 	}
 
-	if n.n.Interleave != nil {
-		return util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
-	}
-
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:             string(n.n.Name),
 		Unique:           n.n.Unique,
@@ -163,6 +159,7 @@ func (n *createIndexNode) Start() error {
 		return err
 	}
 
+	mutationIdx := len(n.tableDesc.Mutations)
 	n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
 	mutationID, err := n.tableDesc.FinalizeMutation()
 	if err != nil {
@@ -170,6 +167,16 @@ func (n *createIndexNode) Start() error {
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {
 		return err
+	}
+
+	if n.n.Interleave != nil {
+		index := n.tableDesc.Mutations[mutationIdx].GetIndex()
+		if err := n.p.addInterleave(n.tableDesc, index, n.n.Interleave); err != nil {
+			return err
+		}
+		if err := n.p.finalizeInterleave(n.tableDesc, *index); err != nil {
+			return err
+		}
 	}
 
 	if err := n.p.txn.Put(
@@ -296,6 +303,12 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
+	if n.n.Interleave != nil {
+		if err := n.p.addInterleave(&desc, &desc.PrimaryIndex, n.n.Interleave); err != nil {
+			return err
+		}
+	}
+
 	// FKs are resolved after the descriptor is otherwise complete and IDs have
 	// been allocated since the FKs will reference those IDs.
 	var fkTargets []fkTargetUpdate
@@ -323,17 +336,22 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	if n.n.Interleave != nil {
-		return util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
-	}
-
-	created, err := n.p.createDescriptor(tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
+	created, err := n.p.createDescriptor(
+		tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}
 
 	if err := n.finalizeFKs(&desc, fkTargets); err != nil {
 		return err
+	}
+
+	for _, index := range desc.AllNonDropIndexes() {
+		if len(index.Interleave.Ancestors) > 0 {
+			if err := n.p.finalizeInterleave(&desc, index); err != nil {
+				return err
+			}
+		}
 	}
 
 	if created {
@@ -482,6 +500,62 @@ func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
 	return nil
 }
 
+// addInterleave marks an index as one that is interleaved in some parent data
+// according to the given definition.
+func (p *planner) addInterleave(
+	desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, interleave *parser.InterleaveDef,
+) error {
+	if interleave.DropBehavior != parser.DropDefault {
+		return util.UnimplementedWithIssueErrorf(
+			7854, "unsupported shorthand %s", interleave.DropBehavior)
+	}
+
+	parentTable, err := p.mustGetTableDesc(interleave.Parent)
+	if err != nil {
+		return err
+	}
+	parentIndex := parentTable.PrimaryIndex
+
+	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
+		return fmt.Errorf("interleaved columns must match parent")
+	}
+	if len(interleave.Fields) > len(index.ColumnIDs) {
+		return fmt.Errorf("declared columns must match index being interleaved")
+	}
+	for i, targetColID := range parentIndex.ColumnIDs {
+		targetCol, err := parentTable.FindColumnByID(targetColID)
+		if err != nil {
+			return err
+		}
+		col, err := desc.FindColumnByID(index.ColumnIDs[i])
+		if err != nil {
+			return err
+		}
+		if sqlbase.NormalizeName(interleave.Fields[i]) != sqlbase.NormalizeName(string(col.Name)) {
+			return fmt.Errorf("declared columns must match index being interleaved")
+		}
+		if col.Type != targetCol.Type ||
+			index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
+
+			return fmt.Errorf("interleaved columns must match parent")
+		}
+	}
+
+	ancestorPrefix := append(
+		[]sqlbase.InterleaveDescriptor_Ancestor(nil), parentIndex.Interleave.Ancestors...)
+	intl := sqlbase.InterleaveDescriptor_Ancestor{
+		TableID:         parentTable.ID,
+		IndexID:         parentIndex.ID,
+		SharedPrefixLen: uint32(len(parentIndex.ColumnIDs)),
+	}
+	for _, ancestor := range ancestorPrefix {
+		intl.SharedPrefixLen -= uint32(ancestor.SharedPrefixLen)
+	}
+	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
+
+	return nil
+}
+
 func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets []fkTargetUpdate) error {
 	for _, t := range fkTargets {
 		targetIdx, err := t.target.FindIndexByID(t.targetIdx)
@@ -510,6 +584,32 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 		desc.State = sqlbase.TableDescriptor_PUBLIC
 
 		if err := n.p.saveNonmutationAndNotify(desc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// finalizeInterleave creats backreferences from an interleaving parent to the
+// child data being interleaved.
+func (p *planner) finalizeInterleave(
+	desc *sqlbase.TableDescriptor, index sqlbase.IndexDescriptor,
+) error {
+	// TODO(dan): This is similar to finalizeFKs. Consolidate them.
+	for _, ancestor := range index.Interleave.Ancestors {
+		ancestorTable, err := getTableDescFromID(p.txn, ancestor.TableID)
+		if err != nil {
+			return err
+		}
+		ancestorIndex, err := ancestorTable.FindIndexByID(ancestor.IndexID)
+		if err != nil {
+			return err
+		}
+		ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
+			sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
+
+		// TODO(dan): Only save each referenced table once.
+		if err := p.saveNonmutationAndNotify(ancestorTable); err != nil {
 			return err
 		}
 	}

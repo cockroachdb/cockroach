@@ -364,8 +364,8 @@ func EncodeIndexKey(
 			colIDs, dirs = colIDs[length:], dirs[length:]
 			containsNull = containsNull || n
 
-			// We reuse NullDescending (0xff) as the interleave sentinel.
-			key = encoding.EncodeNullDescending(key)
+			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
+			key = encoding.EncodeNotNullDescending(key)
 		}
 
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
@@ -679,9 +679,9 @@ func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
 			key = key[l:]
 		}
 
-		// We reuse NullDescending as the interleave sentinal, consume it.
+		// We reuse NotNullDescending as the interleave sentinel, consume it.
 		var ok bool
-		key, ok = encoding.DecodeIfNull(key)
+		key, ok = encoding.DecodeIfNotNull(key)
 		if !ok {
 			return 0, nil, errors.Errorf("invalid interleave key")
 		}
@@ -694,7 +694,8 @@ func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
 // key. ValTypes is a slice returned from makeKeyVals. The remaining bytes in the
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
-// or unique secondary indexes containing NULL or empty.
+// or unique secondary indexes containing NULL or empty. If the given descriptor
+// does not match the key, false is returned with no error.
 func DecodeIndexKey(
 	a *DatumAlloc,
 	desc *TableDescriptor,
@@ -702,7 +703,7 @@ func DecodeIndexKey(
 	valTypes, vals []parser.Datum,
 	colDirs []encoding.Direction,
 	key []byte,
-) ([]byte, error) {
+) ([]byte, bool, error) {
 	var decodedTableID ID
 	var decodedIndexID IndexID
 	var err error
@@ -711,40 +712,45 @@ func DecodeIndexKey(
 		for _, ancestor := range index.Interleave.Ancestors {
 			key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
-			if decodedTableID != ancestor.TableID {
-				return nil, errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, ancestor.TableID, decodedTableID)
-			}
-			if decodedIndexID != ancestor.IndexID {
-				return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, ancestor.IndexID, decodedIndexID)
+			if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
+				return nil, false, nil
 			}
 
 			length := int(ancestor.SharedPrefixLen)
 			key, err = DecodeKeyVals(a, valTypes[:length], vals[:length], colDirs[:length], key)
 			valTypes, vals, colDirs = valTypes[length:], vals[length:], colDirs[length:]
 
-			// We reuse NullDescending as the interleave sentinal, consume it.
+			// We reuse NotNullDescending as the interleave sentinel, consume it.
 			var ok bool
-			key, ok = encoding.DecodeIfNull(key)
+			key, ok = encoding.DecodeIfNotNull(key)
 			if ok != true {
-				return nil, errors.Errorf("%s: malformed index key, expected NULL: %x", desc.Name, key)
+				return nil, false, nil
 			}
 		}
 	}
 
 	key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if decodedTableID != desc.ID {
-		return nil, errors.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, decodedTableID)
-	}
-	if decodedIndexID != indexID {
-		return nil, errors.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
+	if decodedTableID != desc.ID || decodedIndexID != indexID {
+		return nil, false, nil
 	}
 
-	return DecodeKeyVals(a, valTypes, vals, colDirs, key)
+	key, err = DecodeKeyVals(a, valTypes, vals, colDirs, key)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// We're expecting a column family id next (a varint). If descNotNull is
+	// actually next, then this key is for a child table.
+	if _, ok := encoding.DecodeIfNotNull(key); ok {
+		return nil, false, nil
+	}
+
+	return key, true, nil
 }
 
 // DecodeKeyVals decodes the values that are part of the key. ValTypes is a
@@ -815,9 +821,13 @@ func ExtractIndexKey(
 		// TODO(dan): In the interleaved index case, we parse the key twice; once to
 		// find the index id so we can look up the descriptor, and once to extract
 		// the values. Only parse once.
-		_, err = DecodeIndexKey(a, tableDesc, indexID, valueTypes, extractedValues, dirs, entry.Key)
+		var ok bool
+		_, ok, err = DecodeIndexKey(a, tableDesc, indexID, valueTypes, extractedValues, dirs, entry.Key)
 		if err != nil {
 			return nil, err
+		}
+		if !ok {
+			return nil, errors.Errorf("descriptor did not match key")
 		}
 	} else {
 		key, err = DecodeKeyVals(a, valueTypes, extractedValues, dirs, key)
