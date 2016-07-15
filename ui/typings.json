@@ -18,7 +18,6 @@
     "fetch-mock": "registry:npm/fetch-mock#4.1.1+20160712175252",
     "lodash": "registry:npm/lodash#4.0.0+20160701205107",
     "nvd3": "registry:npm/nvd3#1.8.3+20160711175044",
-    "object-assign": "registry:npm/object-assign#4.0.1+20160301180549",
     "protos-builders": "file:app/js/protos.d.ts",
     "react-paginate": "file:local_typings/react-paginate.d.ts",
     "react-router": "registry:npm/react-router#2.4.0+20160628165748",
