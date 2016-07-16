@@ -113,7 +113,7 @@ func (rl *rangeList) Add(r Range) bool {
 	for e := rl.ll.Front(); e != nil; e = e.Next() {
 		er := e.Value.(Range)
 		switch {
-		case er.OverlapInclusive(r):
+		case InclusiveOverlapper.Overlap(er, r):
 			// If a current range fully contains the new range, no
 			// need to add it.
 			if contains(er, r) {
@@ -124,7 +124,7 @@ func (rl *rangeList) Add(r Range) bool {
 			newR := merge(er, r)
 			for p := e.Next(); p != nil; {
 				pr := p.Value.(Range)
-				if newR.OverlapInclusive(pr) {
+				if InclusiveOverlapper.Overlap(newR, pr) {
 					newR = merge(newR, pr)
 
 					nextP := p.Next()
@@ -161,7 +161,7 @@ func (rl *rangeList) Sub(r Range) bool {
 	for e := rl.ll.Front(); e != nil; {
 		er := e.Value.(Range)
 		switch {
-		case er.OverlapExclusive(r):
+		case ExclusiveOverlapper.Overlap(er, r):
 			sCmp := er.Start.Compare(r.Start)
 			eCmp := er.End.Compare(r.End)
 
@@ -225,7 +225,7 @@ func (rl *rangeList) Overlaps(r Range) bool {
 	for e := rl.ll.Front(); e != nil; e = e.Next() {
 		er := e.Value.(Range)
 		switch {
-		case er.OverlapExclusive(r):
+		case ExclusiveOverlapper.Overlap(er, r):
 			return true
 		case r.End.Compare(er.Start) <= 0:
 			// Past where exclusive overlapping ranges would be.
@@ -310,7 +310,7 @@ type rangeTree struct {
 // NewRangeTree constructs an interval tree backed RangeGroup.
 func NewRangeTree() RangeGroup {
 	return &rangeTree{
-		t: Tree{Overlapper: Range.OverlapInclusive},
+		t: NewTree(InclusiveOverlapper),
 	}
 }
 
@@ -398,7 +398,7 @@ func (rt *rangeTree) Sub(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	overlaps := rt.t.GetWithOverlapper(r, Range.OverlapExclusive)
+	overlaps := rt.t.GetWithOverlapper(r, ExclusiveOverlapper)
 	if len(overlaps) == 0 {
 		return false
 	}
@@ -441,7 +441,7 @@ func (rt *rangeTree) Sub(r Range) bool {
 
 // Clear implements RangeGroup. It clears all rangeKeys from the rangeTree.
 func (rt *rangeTree) Clear() {
-	rt.t = Tree{Overlapper: Range.OverlapInclusive}
+	rt.t = NewTree(InclusiveOverlapper)
 }
 
 // Overlaps implements RangeGroup. It returns whether the provided
@@ -450,7 +450,7 @@ func (rt *rangeTree) Overlaps(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	overlaps := rt.t.GetWithOverlapper(r, Range.OverlapExclusive)
+	overlaps := rt.t.GetWithOverlapper(r, ExclusiveOverlapper)
 	return len(overlaps) > 0
 }
 
@@ -460,7 +460,7 @@ func (rt *rangeTree) Encloses(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	overlaps := rt.t.GetWithOverlapper(r, Range.OverlapExclusive)
+	overlaps := rt.t.GetWithOverlapper(r, ExclusiveOverlapper)
 	if len(overlaps) != 1 {
 		return false
 	}
@@ -561,7 +561,7 @@ func RangeGroupsOverlap(rg1, rg2 RangeGroup) bool {
 	}
 	for {
 		// Check if the current pair of Ranges overlap.
-		if r1.OverlapExclusive(r2) {
+		if ExclusiveOverlapper.Overlap(r1, r2) {
 			return true
 		}
 
