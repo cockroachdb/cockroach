@@ -441,7 +441,7 @@ func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interfac
 // IntervalCache is not safe for concurrent access.
 type IntervalCache struct {
 	baseCache
-	tree interval.Tree
+	tree *interval.Tree
 
 	// The fields below are used to avoid allocations during get, del and
 	// GetOverlaps.
@@ -496,7 +496,7 @@ func (ic *IntervalCache) MakeKey(start, end []byte) IntervalKey {
 
 // Implementation of cacheStore interface.
 func (ic *IntervalCache) init() {
-	ic.tree = interval.Tree{Overlapper: interval.Range.OverlapExclusive}
+	ic.tree = interval.New(&interval.ExclusiveOverlapper)
 }
 
 func (ic *IntervalCache) get(key interface{}) *Entry {

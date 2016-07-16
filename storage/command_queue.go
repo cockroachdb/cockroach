@@ -47,7 +47,7 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	tree      interval.Tree
+	tree      *interval.Tree
 	idAlloc   int64
 	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait
 	oHeap     overlapHeap         // avoids allocating in GetWait
@@ -76,7 +76,7 @@ func (c *cmd) Range() interval.Range {
 // NewCommandQueue returns a new command queue.
 func NewCommandQueue() *CommandQueue {
 	cq := &CommandQueue{
-		tree: interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		tree: interval.New(interval.ExclusiveOverlapper),
 		wRg:  interval.NewRangeTree(),
 		rwRg: interval.NewRangeTree(),
 	}
