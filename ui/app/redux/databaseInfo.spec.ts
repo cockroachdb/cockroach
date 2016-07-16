@@ -1,6 +1,6 @@
 import { assert } from "chai";
 import * as _ from "lodash";
-import * as fetchMock from "fetch-mock";
+import * as fetchMock from "../util/fetch-mock";
 
 import * as databases from "./databaseInfo";
 import * as protos from "../js/protos";
@@ -370,13 +370,16 @@ describe("databases reducers", function () {
       afterEach(fetchMock.restore);
 
       it("refreshes database list", function () {
-        fetchMock.mock("/_admin/v1/databases", "get", (url: string, requestObj: RequestInit) => {
-          assert.deepEqual(state.databaseInfo.databases, { inFlight: true, valid: false });
+        fetchMock.mock({
+          matcher: "/_admin/v1/databases",
+          method: "GET",
+          response: (url: string, requestObj: RequestInit) => {
+            assert.deepEqual(state.databaseInfo.databases, { inFlight: true, valid: false });
 
-          return {
-            sendAsJson: false,
-            body: response.toArrayBuffer(),
-          };
+            return {
+              body: response.toArrayBuffer(),
+            };
+          },
         });
 
         return databases.refreshDatabases()(dispatch, () => state).then(() => {
@@ -392,8 +395,12 @@ describe("databases reducers", function () {
       it("handles database list errors", function () {
         let error = new Error();
 
-        fetchMock.mock("/_admin/v1/databases", "get", (url: string, requestObj: RequestInit) => {
-          return { throws: error };
+        fetchMock.mock({
+          matcher: "/_admin/v1/databases",
+          method: "GET",
+          response: (url: string, requestObj: RequestInit) => {
+            return { throws: error };
+          },
         });
 
         return databases.refreshDatabases()(dispatch, () => state).then(() => {
@@ -436,17 +443,20 @@ describe("databases reducers", function () {
         return Promise.all(_.map([DB1, DB2], (db: string) => {
           let response: DatabaseDetailsResponseMessage;
 
-          fetchMock.reMock(re, "get", (url: string, requestObj: RequestInit) => {
-            let database = url.match(re)[1];
+          fetchMock.restore().mock({
+            matcher: re,
+            method: "GET",
+            response: (url: string, requestObj: RequestInit) => {
+              let database = url.match(re)[1];
 
-            assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
+              assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
 
-            response = new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[database]);
+              response = new protos.cockroach.server.serverpb.DatabaseDetailsResponse(dbs[database]);
 
-            return {
-              sendAsJson: false,
-              body: response.toArrayBuffer(),
-            };
+              return {
+                body: response.toArrayBuffer(),
+              };
+            },
           });
 
           return databases.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
@@ -467,12 +477,16 @@ describe("databases reducers", function () {
         let re = new RegExp("/_admin/v1/databases/(.+)");
 
         return Promise.all(_.map([DB1, DB2], (db: string) => {
-          fetchMock.reMock(re, "get", (url: string, requestObj: RequestInit) => {
-            let database = url.match(re)[1];
+          fetchMock.restore().mock({
+            matcher: re,
+            method: "GET",
+            response: (url: string, requestObj: RequestInit) => {
+              let database = url.match(re)[1];
 
-            assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
+              assert.deepEqual(state.databaseInfo.databaseDetails[database], { inFlight: true, valid: false });
 
-            return { throws: error };
+              return { throws: error };
+            },
           });
 
           return databases.refreshDatabaseDetails(db)(dispatch, () => state).then(() => {
@@ -538,19 +552,22 @@ describe("databases reducers", function () {
         return Promise.all(_.map(tableList, (id: TableID) => {
           let response: TableDetailsResponseMessage;
 
-          fetchMock.reMock(re, "get", (url: string, requestObj: RequestInit) => {
-            let result = url.match(re);
-            let database = result[1];
-            let table = result[2];
+          fetchMock.restore().mock({
+            matcher: re,
+            method: "GET",
+            response: (url: string, requestObj: RequestInit) => {
+              let result = url.match(re);
+              let database = result[1];
+              let table = result[2];
 
-            assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
+              assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
 
-            response = new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[databases.generateTableID(database, table)]);
+              response = new protos.cockroach.server.serverpb.TableDetailsResponse(dbTables[databases.generateTableID(database, table)]);
 
-            return {
-              sendAsJson: false,
-              body: response.toArrayBuffer(),
-            };
+              return {
+                body: response.toArrayBuffer(),
+              };
+            },
           });
 
           return databases.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
@@ -570,10 +587,14 @@ describe("databases reducers", function () {
         let error = new Error();
 
         return Promise.all(_.map(tableList, (id: TableID) => {
-          fetchMock.reMock(new RegExp("/_admin/v1/databases/.+/tables/.+"), "get", (url: string, requestObj: RequestInit) => {
-            assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
+          fetchMock.restore().mock({
+            matcher: new RegExp("/_admin/v1/databases/.+/tables/.+"),
+            method: "GET",
+            response: (url: string, requestObj: RequestInit) => {
+              assert.deepEqual(state.databaseInfo.tableDetails[databases.generateTableID(id.db, id.table)], { inFlight: true, valid: false });
 
-            return { throws: error };
+              return { throws: error };
+            },
           });
 
           return databases.refreshTableDetails(id.db, id.table)(dispatch, () => state).then(() => {
