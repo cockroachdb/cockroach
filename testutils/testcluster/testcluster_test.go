@@ -159,6 +159,18 @@ func TestBasicManualReplication(t *testing.T) {
 	if len(desc.Replicas) != 3 {
 		t.Fatalf("expected 3 replicas, got %+v", desc.Replicas)
 	}
+
+	if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	desc, err = tc.RemoveReplica(desc, tc.Target(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(desc.Replicas) != 2 {
+		t.Fatalf("expected 3 replicas, got %+v", desc.Replicas)
+	}
 }
 
 func TestWaitForFullReplication(t *testing.T) {

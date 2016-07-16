@@ -329,6 +329,47 @@ func (tc *TestCluster) AddReplicas(
 	return rangeDesc, nil
 }
 
+// RemoveReplica removes a replica from a range.
+func (tc *TestCluster) RemoveReplica(
+	rangeDesc *roachpb.RangeDescriptor, target ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	startKey := rangeDesc.StartKey
+
+	// Perform a consistent read to get the updated range descriptor (as opposed
+	// to just going to one of the stores), to make sure we have the effects of
+	// the previous ChangeReplicas call. By the time ChangeReplicas returns the
+	// raft leader is guaranteed to have the updated version, but followers are
+	// not.
+	if err := tc.Servers[0].DB().GetProto(
+		keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
+		return nil, err
+	}
+
+	// Ask a random replica of the range to up-replicate.
+	store, err := tc.findMemberStore(rangeDesc.Replicas[0].StoreID)
+	if err != nil {
+		return nil, err
+	}
+	replica, err := store.GetReplica(rangeDesc.RangeID)
+	if err != nil {
+		return nil, err
+	}
+	if err := replica.ChangeReplicas(context.Background(),
+		roachpb.REMOVE_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  target.NodeID,
+			StoreID: target.StoreID,
+		}, rangeDesc); err != nil {
+		return nil, err
+	}
+
+	if err := tc.Servers[0].DB().GetProto(
+		keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
+		return nil, err
+	}
+	return rangeDesc, nil
+}
+
 // TransferRangeLease transfers the lease for a range from whoever has it to
 // a particular store. That store must already have a replica of the range. If
 // that replica already has the (active) lease, this method is a no-op.
