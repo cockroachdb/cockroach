@@ -86,7 +86,7 @@ func TestManualReplication(t *testing.T) {
 	}
 
 	// Replicate the table's range to all the nodes.
-	tableRangeDesc, err = tc.AddReplicas(tableRangeDesc, tc.Target(1), tc.Target(2))
+	tableRangeDesc, err = tc.AddReplicas(tableRangeDesc.StartKey, tc.Target(1), tc.Target(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,15 +149,33 @@ func TestBasicManualReplication(t *testing.T) {
 	tc := StartTestCluster(t, 3, ClusterArgs{ReplicationMode: ReplicationManual})
 	defer tc.Stopper().Stop()
 
-	desc := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey(keys.MinKey),
-	}
-	desc, err := tc.AddReplicas(desc, tc.Target(1), tc.Target(2))
+	desc, err := tc.AddReplicas(roachpb.RKey(keys.MinKey), tc.Target(1), tc.Target(2))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(desc.Replicas) != 3 {
-		t.Fatalf("expected 3 replicas, got %+v", desc.Replicas)
+	if expected := 3; expected != len(desc.Replicas) {
+		t.Fatalf("expected %d replicas, got %+v", expected, desc.Replicas)
+	}
+
+	// TODO(andrei,tobias): Figure out how to fix the test failure:
+	//
+	// testcluster_test.go:169: change replicas of range 1 failed: storage/store.go:1938:
+	//   rejecting command with timestamp in the future: 1468681160641425412 (3.047592914s ahead)
+	//
+	// This is caused by Replica.applyNewLeaseLocked setting the timestamp cache
+	// low water based on the previous lease expiration.
+	// if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
+	// 	t.Fatal(err)
+	// }
+
+	// TODO(peter): Removing the range leader (tc.Target(0)) causes the test to
+	// take ~13s vs ~1.5s for removing a non-leader. Track down that slowness.
+	desc, err = tc.RemoveReplicas(desc.StartKey, tc.Target(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected := 2; expected != len(desc.Replicas) {
+		t.Fatalf("expected %d replicas, got %+v", expected, desc.Replicas)
 	}
 }
 
