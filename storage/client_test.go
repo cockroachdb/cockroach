@@ -186,7 +186,7 @@ type multiTestContext struct {
 
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
-	mu       sync.RWMutex
+	mu       *sync.RWMutex
 	senders  []*storage.Stores
 	stores   []*storage.Store
 	stoppers []*stop.Stopper
@@ -221,12 +221,14 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		mCopy.clocks = nil
 		mCopy.clock = nil
 		mCopy.timeUntilStoreDead = 0
-		if !reflect.DeepEqual(mCopy, multiTestContext{}) {
-			t.Fatalf("illegal fields set in multiTestContext: %+v", &mCopy)
+		var empty multiTestContext
+		if !reflect.DeepEqual(empty, mCopy) {
+			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
 		}
 	}
 	m.t = t
 
+	m.mu = &sync.RWMutex{}
 	m.stores = make([]*storage.Store, numStores)
 	m.storePools = make([]*storage.StorePool, numStores)
 	m.distSenders = make([]*kv.DistSender, numStores)
