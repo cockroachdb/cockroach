@@ -19,6 +19,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,9 +86,7 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
-// TODO(tschottdorf): It's currently unsafe to set this to any other value due
-// to concurrency issues. See #7672 and the discussion within.
-const storeReplicaRaftReadyConcurrency = 1
+var storeReplicaRaftReadyConcurrency = 2 * runtime.NumCPU()
 
 // TestStoreContext has some fields initialized with values relevant in tests.
 func TestStoreContext() StoreContext {
@@ -363,9 +362,8 @@ type Store struct {
 	//   while any raft messages are being processed (including
 	//   handleRaftReady and handleRaftMessage) or while the set of
 	//   Replicas in the Store is being changed (which may happen
-	//   outside of raft via the replica GC queue). While
-	//   storeReplicaRaftReadyConcurrency is 1, this also ensures that
-	//   only one Replica is being processed at a time.
+	//   outside of raft via the replica GC queue). Multiple Replicas
+	//   may be processed at a time.
 	//
 	// * Replica.readOnlyCmdMu (RWMutex): Held in read mode while any
 	//   read-only command is in progress on the replica; held in write
@@ -404,11 +402,9 @@ type Store struct {
 	// two ranges. Naively, this is fine because the right-hand range is
 	// brand new, but an uninitialized version may have been created by
 	// a raft message before we process the split (see commentary on
-	// Replica.splitTrigger). We currently make this safe by keeping
-	// storeReplicaRaftReadyConcurrency at 1; to increase this (which
-	// will be a significant performance boost), we need to ensure that
-	// the splitTrigger will not be concurrent with a handleRaftReady on
-	// the uninitialized RHS Replica.
+	// Replica.splitTrigger). We currently make this safe by processing
+	// all uninitialized replicas serially before starting any
+	// initialized replicas which can run in parallel.
 	//
 	// Note that because we acquire and release Store.mu and Replica.mu
 	// repeatedly rather than holding a lock for an entire request, we
@@ -2281,13 +2277,21 @@ func (s *Store) processRaft() {
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
 		defer ticker.Stop()
 		for {
-			var replicas []*Replica
 			s.processRaftMu.Lock()
+
+			// Copy the replicas tracked in pendingRaftGroups into local
+			// variables that we can use without the lock. Divide them into
+			// separate lists for initialized and uninitialized replicas
+			// (explained below).
+			var replicas []*Replica
+			var uninitReplicas []*Replica
 			s.mu.Lock()
 			s.pendingRaftGroups.Lock()
 			if len(s.pendingRaftGroups.value) > 0 {
 				for rangeID := range s.pendingRaftGroups.value {
-					if r, ok := s.mu.replicas[rangeID]; ok {
+					if r, ok := s.mu.uninitReplicas[rangeID]; ok {
+						uninitReplicas = append(uninitReplicas, r)
+					} else if r, ok := s.mu.replicas[rangeID]; ok {
 						replicas = append(replicas, r)
 					}
 				}
@@ -2295,6 +2299,21 @@ func (s *Store) processRaft() {
 			}
 			s.pendingRaftGroups.Unlock()
 			s.mu.Unlock()
+
+			// Handle raft updates for all replicas. Concurrency here is
+			// subtle: we can process replicas in parallel if they are
+			// initialized (because we know that they operate on disjoint
+			// regions of the keyspace), but uninitialized replicas might
+			// conflict with either initialized replicas (which can create
+			// new replicas via splits) or other uninitialized replicas (by
+			// applying snapshots). We therefore process all uninitialized
+			// replicas serially, before starting initialized replicas in
+			// parallel.
+			for _, r := range uninitReplicas {
+				if err := r.handleRaftReady(); err != nil {
+					panic(err) // TODO(bdarnell)
+				}
+			}
 
 			var wg sync.WaitGroup
 			wg.Add(len(replicas))
