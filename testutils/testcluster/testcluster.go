@@ -18,6 +18,7 @@ package testcluster
 
 import (
 	gosql "database/sql"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -123,20 +125,52 @@ func StartTestCluster(t testing.TB, nodes int, args ClusterArgs) *TestCluster {
 		t.Fatal("unexpected replication mode")
 	}
 
-	var servers []*server.TestServer
-	var conns []*gosql.DB
+	tc := &TestCluster{}
 	args.ServerArgs.PartOfCluster = true
 	first, conn, _ := serverutils.StartServer(t, args.ServerArgs)
-	servers = append(servers, first.(*server.TestServer))
-	conns = append(conns, conn)
+	tc.Servers = append(tc.Servers, first.(*server.TestServer))
+	tc.Conns = append(tc.Conns, conn)
 	args.ServerArgs.JoinAddr = first.ServingAddr()
 	for i := 1; i < nodes; i++ {
 		s, conn, _ := serverutils.StartServer(t, args.ServerArgs)
-		servers = append(servers, s.(*server.TestServer))
-		conns = append(conns, conn)
+		tc.Servers = append(tc.Servers, s.(*server.TestServer))
+		tc.Conns = append(tc.Conns, conn)
 	}
 
-	return &TestCluster{Servers: servers, Conns: conns}
+	tc.waitForStores(t)
+	return tc
+}
+
+// waitForStores waits for all of the store descriptors to be gossiped. Servers
+// other than the first "bootstrap" their stores asynchronously, but we'd like
+// to wait for all of the stores to be initialized before returning the
+// TestCluster.
+func (tc *TestCluster) waitForStores(t testing.TB) {
+	// Register a gossip callback for the store descriptors.
+	g := tc.Servers[0].Gossip()
+	var storesMu sync.Mutex
+	stores := map[roachpb.StoreID]struct{}{}
+	storesDone := make(chan error)
+	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
+		func(_ string, content roachpb.Value) {
+			var desc roachpb.StoreDescriptor
+			if err := content.GetProto(&desc); err != nil {
+				storesDone <- err
+				return
+			}
+			storesMu.Lock()
+			stores[desc.StoreID] = struct{}{}
+			if len(stores) == len(tc.Servers) {
+				close(storesDone)
+			}
+			storesMu.Unlock()
+		})
+	defer unregister()
+
+	// Wait for the store descriptors to be gossiped.
+	if err := <-storesDone; err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Stopper returns a Stopper to be used to stop the TestCluster.
@@ -216,6 +250,15 @@ func (tc *TestCluster) SplitRange(
 type ReplicationTarget struct {
 	NodeID  roachpb.NodeID
 	StoreID roachpb.StoreID
+}
+
+// Target returns a ReplicationTarget for the specified server.
+func (tc *TestCluster) Target(serverIdx int) ReplicationTarget {
+	s := tc.Servers[serverIdx]
+	return ReplicationTarget{
+		NodeID:  s.GetNode().Descriptor.NodeID,
+		StoreID: s.GetFirstStoreID(),
+	}
 }
 
 // AddReplicas adds replicas for a range on a set of stores.
