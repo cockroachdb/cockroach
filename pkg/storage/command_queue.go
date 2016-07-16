@@ -139,8 +139,8 @@ func (c *cmd) String() string {
 // typically contain many spans, but are spatially disjoint.
 func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 	cq := &CommandQueue{
-		reads:                interval.Tree{Overlapper: interval.Range.OverlapExclusive},
-		writes:               interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		reads:                interval.NewTree(interval.ExclusiveOverlapper),
+		writes:               interval.NewTree(interval.ExclusiveOverlapper),
 		wRg:                  interval.NewRangeTree(),
 		rwRg:                 interval.NewRangeTree(),
 		coveringOptimization: coveringOptimization,

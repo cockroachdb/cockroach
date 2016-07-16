@@ -138,7 +138,7 @@ func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeD
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
-	sstIntervalTree := interval.Tree{Overlapper: interval.Range.OverlapExclusive}
+	sstIntervalTree := interval.Tree{Overlapper: interval.ExclusiveOverlapper}
 	for _, table := range tables {
 		for _, index := range table.AllNonDropIndexes() {
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
