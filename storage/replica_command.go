@@ -1565,8 +1565,6 @@ func (r *Replica) TransferLease(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
 	h roachpb.Header, args roachpb.TransferLeaseRequest,
 ) (roachpb.RequestLeaseResponse, error) {
-	// maybeGossipSystemConfig cannot be called while the replica is locked,
-	// so we defer it here so it is called once the replica lock is released.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if log.V(2) {
@@ -1633,10 +1631,14 @@ func (r *Replica) applyNewLeaseLocked(
 		})
 	}
 
+	// maybeGossipSystemConfig cannot be called while the replica is locked,
+	// so we defer it here so it is called once the replica lock is released.
+	//
 	// TODO(tschottdorf): this upcast is unidiomatic, but with #6286 (isolate
 	// Raft side effects) this will go away, and this is a good place to move
 	// it away from.
 	batch.(engine.Batch).Defer(r.maybeGossipSystemConfig)
+
 	if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
 		// The lease is changing hands. Is this replica the new lease holder?
 		if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {

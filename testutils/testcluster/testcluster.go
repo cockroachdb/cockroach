@@ -267,12 +267,13 @@ func (tc *TestCluster) Target(serverIdx int) ReplicationTarget {
 // The method blocks until a snapshot of the range has been copied to all the
 // new replicas and the new replicas become part of the Raft group.
 func (tc *TestCluster) AddReplicas(
-	rangeDesc *roachpb.RangeDescriptor, dests ...ReplicationTarget,
+	startKey roachpb.RKey, targets ...ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
-	startKey := rangeDesc.StartKey
+	rangeDesc := &roachpb.RangeDescriptor{}
+
 	// TODO(andrei): the following code has been adapted from
 	// multiTestContext.replicateRange(). Find a way to share.
-	for _, dest := range dests {
+	for _, target := range targets {
 		// Perform a consistent read to get the updated range descriptor (as opposed
 		// to just going to one of the stores), to make sure we have the effects of
 		// the previous ChangeReplicas call. By the time ChangeReplicas returns the
@@ -283,7 +284,9 @@ func (tc *TestCluster) AddReplicas(
 			return nil, err
 		}
 
-		// Ask a random replica of the range to up-replicate.
+		// Ask the first replica of the range to up-replicate. Note that the target
+		// for addition is specified, this is about the choice of which replica
+		// receives the ChangeReplicas operation.
 		store, err := tc.findMemberStore(rangeDesc.Replicas[0].StoreID)
 		if err != nil {
 			return nil, err
@@ -295,8 +298,8 @@ func (tc *TestCluster) AddReplicas(
 		err = replica.ChangeReplicas(context.Background(),
 			roachpb.ADD_REPLICA,
 			roachpb.ReplicaDescriptor{
-				NodeID:  dest.NodeID,
-				StoreID: dest.StoreID,
+				NodeID:  target.NodeID,
+				StoreID: target.StoreID,
 			}, rangeDesc)
 		if err != nil {
 			return nil, err
@@ -305,16 +308,16 @@ func (tc *TestCluster) AddReplicas(
 
 	// Wait for the replication to complete on all destination nodes.
 	err := util.RetryForDuration(time.Second*5, func() error {
-		for _, dest := range dests {
+		for _, target := range targets {
 			// Use LookupReplica(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
-			store, err := tc.findMemberStore(dest.StoreID)
+			store, err := tc.findMemberStore(target.StoreID)
 			if err != nil {
 				log.Errorf("unexpected error: %s", err)
 				return err
 			}
 			if store.LookupReplica(startKey, nil) == nil {
-				return errors.Errorf("range not found on store %d", dest)
+				return errors.Errorf("range not found on store %d", target)
 			}
 		}
 		return nil
@@ -322,6 +325,51 @@ func (tc *TestCluster) AddReplicas(
 	if err != nil {
 		return nil, err
 	}
+	if err := tc.Servers[0].DB().GetProto(
+		keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
+		return nil, err
+	}
+	return rangeDesc, nil
+}
+
+// RemoveReplicas removes one or more replicas from a range.
+func (tc *TestCluster) RemoveReplicas(
+	startKey roachpb.RKey, targets ...ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	rangeDesc := &roachpb.RangeDescriptor{}
+
+	for _, target := range targets {
+		// Perform a consistent read to get the updated range descriptor (as opposed
+		// to just going to one of the stores), to make sure we have the effects of
+		// the previous ChangeReplicas call. By the time ChangeReplicas returns the
+		// raft leader is guaranteed to have the updated version, but followers are
+		// not.
+		if err := tc.Servers[0].DB().GetProto(
+			keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
+			return nil, err
+		}
+
+		// Ask the first replica of the range to down-replicate. Note that the
+		// target for removal is specified, this is about the choice of which
+		// replica receives the ChangeReplicas operation.
+		store, err := tc.findMemberStore(rangeDesc.Replicas[0].StoreID)
+		if err != nil {
+			return nil, err
+		}
+		replica, err := store.GetReplica(rangeDesc.RangeID)
+		if err != nil {
+			return nil, err
+		}
+		if err := replica.ChangeReplicas(context.Background(),
+			roachpb.REMOVE_REPLICA,
+			roachpb.ReplicaDescriptor{
+				NodeID:  target.NodeID,
+				StoreID: target.StoreID,
+			}, rangeDesc); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := tc.Servers[0].DB().GetProto(
 		keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
 		return nil, err
