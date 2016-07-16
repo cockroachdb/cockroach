@@ -1132,11 +1132,6 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 
 	leftRange := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
 
-	// We'll fake messages from term 1, ..., .magicIters-1. The exact number
-	// doesn't matter for anything but for its likelihood of triggering the
-	// race.
-	const magicIters = 5
-
 	// Replicate the left range onto the second node. We don't wait since we
 	// don't actually care what the second node does. All we want is that the
 	// first node isn't surprised by messages from that node.
@@ -1146,8 +1141,13 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(2)
 
+		// Closed when the split goroutine is done.
+		splitDone := make(chan struct{})
+
 		go func() {
 			defer wg.Done()
+			defer close(splitDone)
+
 			// Split the data range. The split keys are chosen so that they move
 			// towards "a" (so that the range being split is always the first
 			// range).
@@ -1174,7 +1174,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// is discussed in #7600 (briefly, the creation of the right hand
 			// side in the split trigger was racing with the uninitialized
 			// version for the same group, resulting in clobbered HardState).
-			for term := uint64(1); term < magicIters; term++ {
+			for term := uint64(1); ; term++ {
 				if err := mtc.stores[0].HandleRaftMessage(&storage.RaftMessageRequest{
 					RangeID:     trigger.NewDesc.RangeID,
 					ToReplica:   replicas[0],
@@ -1187,6 +1187,15 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 					},
 				}); err != nil {
 					t.Error(err)
+				}
+				select {
+				case <-splitDone:
+					return
+				case <-time.After(time.Microsecond):
+					// If we busy-loop here, we monopolize processRaftMu and the
+					// split takes a long time to complete. Sleeping reduces the
+					// chance that we hit the race, but it still shows up under
+					// stress.
 				}
 			}
 		}()
