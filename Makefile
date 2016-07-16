@@ -100,8 +100,8 @@ testbuild:
 # tests.
 .PHONY: test
 test:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v

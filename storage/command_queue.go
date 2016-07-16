@@ -76,7 +76,7 @@ func (c *cmd) Range() interval.Range {
 // NewCommandQueue returns a new command queue.
 func NewCommandQueue() *CommandQueue {
 	cq := &CommandQueue{
-		tree: interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		tree: interval.NewTree(interval.ExclusiveOverlapper),
 		wRg:  interval.NewRangeTree(),
 		rwRg: interval.NewRangeTree(),
 	}
