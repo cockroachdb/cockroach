@@ -22,12 +22,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func TestTestClusterWithManualReplication(t *testing.T) {
+func TestManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := StartTestCluster(t, 3,
@@ -85,16 +86,7 @@ func TestTestClusterWithManualReplication(t *testing.T) {
 	}
 
 	// Replicate the table's range to all the nodes.
-	tableRangeDesc, err = tc.AddReplicas(
-		tableRangeDesc,
-		ReplicationTarget{
-			NodeID:  tc.Servers[1].GetNode().Descriptor.NodeID,
-			StoreID: tc.Servers[1].GetFirstStoreID(),
-		},
-		ReplicationTarget{
-			NodeID:  tc.Servers[2].GetNode().Descriptor.NodeID,
-			StoreID: tc.Servers[2].GetFirstStoreID(),
-		})
+	tableRangeDesc, err = tc.AddReplicas(tableRangeDesc, tc.Target(1), tc.Target(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,11 +116,7 @@ func TestTestClusterWithManualReplication(t *testing.T) {
 			leaseHolder)
 	}
 
-	err = tc.TransferRangeLease(tableRangeDesc,
-		ReplicationTarget{
-			NodeID:  tc.Servers[1].GetNode().Descriptor.NodeID,
-			StoreID: tc.Servers[1].GetFirstStoreID(),
-		})
+	err = tc.TransferRangeLease(tableRangeDesc, tc.Target(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +139,26 @@ func TestTestClusterWithManualReplication(t *testing.T) {
 			tc.Servers[1].GetFirstStoreID(),
 			leaseHolder)
 	}
+}
 
+// A basic test of manual replication that used to fail because we weren't
+// waiting for all of the stores to initialize.
+func TestBasicManualReplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := StartTestCluster(t, 3, ClusterArgs{ReplicationMode: ReplicationManual})
+	defer tc.Stopper().Stop()
+
+	desc := &roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey(keys.MinKey),
+	}
+	desc, err := tc.AddReplicas(desc, tc.Target(1), tc.Target(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(desc.Replicas) != 3 {
+		t.Fatalf("expected 3 replicas, got %+v", desc.Replicas)
+	}
 }
 
 func TestWaitForFullReplication(t *testing.T) {

@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
@@ -60,6 +61,9 @@ type TestServerInterface interface {
 
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
+
+	// Gossip returns the gossip used by the TestServer.
+	Gossip() *gossip.Gossip
 
 	// Clock returns the clock used by the TestServer.
 	Clock() *hlc.Clock
