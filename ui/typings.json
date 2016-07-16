@@ -15,7 +15,7 @@
     "chai": "registry:npm/chai#3.5.0+20160415060238",
     "d3": "registry:npm/d3#3.0.0+20160627165201",
     "enzyme": "registry:npm/enzyme#2.2.0+20160322031343",
-    "fetch-mock": "registry:npm/fetch-mock#4.1.1+20160712175252",
+    "fetch-mock": "github:tamird/DefinitelyTyped/fetch-mock/fetch-mock.d.ts#fetch-mock-v5",
     "lodash": "registry:npm/lodash#4.0.0+20160701205107",
     "nvd3": "registry:npm/nvd3#1.8.3+20160711175044",
     "protos-builders": "file:app/js/protos.d.ts",

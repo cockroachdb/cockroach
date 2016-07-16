@@ -75,7 +75,7 @@ System.config({
     "d3": "npm:d3@3.5.17",
     "enzyme": "npm:enzyme@2.4.1",
     "es6-promise": "npm:es6-promise@3.2.1",
-    "fetch-mock": "npm:fetch-mock@4.6.1",
+    "fetch-mock": "npm:fetch-mock@5.0.0",
     "lodash": "npm:lodash@4.13.1",
     "long": "npm:long@3.1.0",
     "moment": "npm:moment@2.14.1",
@@ -593,7 +593,7 @@ System.config({
       "promise": "npm:promise@7.1.1",
       "ua-parser-js": "npm:ua-parser-js@0.7.10"
     },
-    "npm:fetch-mock@4.6.1": {
+    "npm:fetch-mock@5.0.0": {
       "http": "github:jspm/nodelibs-http@1.7.1",
       "node-fetch": "npm:node-fetch@1.5.3",
       "process": "github:jspm/nodelibs-process@0.1.2",

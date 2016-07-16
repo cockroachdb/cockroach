@@ -244,7 +244,6 @@ interface TableMainData {
   sortedColumns: Column[];
   sortedIndexes: Index[];
   sortedGrants: Grant[];
-
 }
 
 /**
