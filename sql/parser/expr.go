@@ -622,6 +622,12 @@ func (node *QualifiedName) NormalizeTableName(database string) error {
 	if len(node.Indirect) > 1 {
 		return fmt.Errorf("invalid table name: %s", node)
 	}
+	switch node.Indirect[0].(type) {
+	case NameIndirection:
+		// Nothing to do.
+	default:
+		return fmt.Errorf("invalid table name: %s", node)
+	}
 	node.normalized = tableName
 	return nil
 }
