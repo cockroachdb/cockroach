@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -203,6 +204,11 @@ type Replica struct {
 		destroyed error
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
+		// rangeDesc is a rangeDescriptor that can be atomically read from. All
+		// updates to state.desc should be duplicated here (as is done in
+		// updateRangeDescriptorLocked()) so that it can be read without acquiring
+		// the lock.
+		rangeDesc atomic.Value
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
@@ -357,6 +363,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
 		return err
 	}
+	r.mu.rangeDesc.Store(r.mu.state.Desc)
 
 	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -623,9 +630,7 @@ func (r *Replica) isInitializedLocked() bool {
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.state.Desc
+	return r.mu.rangeDesc.Load().(*roachpb.RangeDescriptor)
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -657,6 +662,7 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 			desc.RangeID, r.RangeID))
 	}
 	r.mu.state.Desc = desc
+	r.mu.rangeDesc.Store(desc)
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
