@@ -10,6 +10,12 @@ EXPLAIN (DEBUG) SELECT * FROM t
 RowIdx Key          Value Disposition
 0      /t/primary/1 NULL  ROW
 
+statement error invalid table name
+ALTER TABLE t RENAME TO t.*
+
+statement error invalid table name
+ALTER TABLE t RENAME TO t[TRUE]
+
 statement ok
 ALTER TABLE t ADD b INT
 
