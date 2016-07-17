@@ -283,7 +283,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// state of the Replica). Everything must come from the snapshot.
 		snapData, err := snapshot(snap, rangeID, r.mu.state.Desc.StartKey)
 		if err != nil {
-			log.Errorf("range %s: error generating snapshot: %s", rangeID, err)
+			log.Errorf("%s: error generating snapshot: %s", r, err)
 		} else {
 			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
@@ -496,14 +496,14 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	if !ok {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
-		log.Warningf("no system config available, cannot determine range MaxBytes")
+		log.Warningf("%s: no system config available, cannot determine range MaxBytes", r)
 		return nil
 	}
 
 	// Find zone config for this range.
 	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		return errors.Errorf("failed to lookup zone config for Range %s: %s", r, err)
+		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
 	}
 
 	r.SetMaxBytes(zone.RangeMaxBytes)
@@ -559,13 +559,13 @@ func (r *Replica) applySnapshot(
 		snapType = "Raft"
 	}
 
-	log.Infof("replica %s applying %s snapshot for range %d at index %d "+
+	log.Infof("%s: with replicaID %s, applying %s snapshot for range %d at index %d "+
 		"(encoded size=%d, %d KV pairs, %d log entries)",
-		replicaIDStr, snapType, desc.RangeID, snap.Metadata.Index,
+		r, replicaIDStr, snapType, desc.RangeID, snap.Metadata.Index,
 		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("replica %s applied %s snapshot for range %d in %s",
-			replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
+		log.Infof("%s: with replicaID %s, applied %s snapshot for range %d in %s",
+			r, replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	// Remember the old last index to verify that the snapshot doesn't wipe out
@@ -631,8 +631,8 @@ func (r *Replica) applySnapshot(
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
 	if s.RaftAppliedIndex != snap.Metadata.Index {
-		log.Fatalf("%d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
-			s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
+		log.Fatalf("%s with state loaded from %d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+			r, s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
 	if !raft.IsEmptyHardState(hs) {
@@ -650,14 +650,15 @@ func (r *Replica) applySnapshot(
 			// (Raft itself should not emit such snapshots, and no Replica can
 			// ever apply two preemptive snapshots), but it doesn't hurt to
 			// check.
-			return 0, errors.Errorf("preemptive snapshot would erase acknowledged log entries")
+			return 0, errors.Errorf("%s: preemptive snapshot would erase acknowledged log entries",
+				r)
 		}
 		if snap.Metadata.Term < oldHardState.Term {
-			return 0, errors.Errorf("cannot apply preemptive snapshot from past term %d at term %d",
-				snap.Metadata.Term, oldHardState.Term)
+			return 0, errors.Errorf("%s: cannot apply preemptive snapshot from past term %d at term %d",
+				r, snap.Metadata.Term, oldHardState.Term)
 		}
 		if err := synthesizeHardState(batch, s, oldHardState); err != nil {
-			return 0, errors.Wrap(err, "unable to write synthesized HardState")
+			return 0, errors.Wrapf(err, "%s: unable to write synthesized HardState", r)
 		}
 	} else {
 		// Note that we don't require that Raft supply us with a nonempty
