@@ -73,7 +73,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
-			log.Infof("test injecting error: %s", pErr)
+			log.Infof("%s: test injecting error: %s", r, pErr)
 			return nil, pErr
 		}
 	}
@@ -169,7 +169,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	}
 
 	if log.V(2) {
-		log.Infof("executed %s command %+v: %+v, err=%s", args.Method(), args, reply, err)
+		log.Infof("%s: executed %s command %+v: %+v, err=%s", r, args.Method(), args, reply, err)
 	}
 
 	// Create a roachpb.Error by initializing txn from the request/response header.
@@ -556,7 +556,7 @@ func (r *Replica) EndTransaction(
 		if err := r.runCommitTrigger(ctx, batch.(engine.Batch), ms, args, reply.Txn); err != nil {
 			// TODO(tschottdorf): should an error here always amount to a
 			// ReplicaCorruptionError?
-			log.Error(errors.Wrapf(err, "range %d commit trigger", r.RangeID))
+			log.Error(errors.Wrapf(err, "%s: commit trigger", r))
 			return reply, nil, err
 		}
 	}
@@ -1304,13 +1304,13 @@ func (r *Replica) PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof("%s "+s+" %s: %s", args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
+		log.Infof("%s: %s "+s+" %s: %s", r, args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
 	}
 
 	if !pusherWins {
 		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
 		if log.V(1) {
-			log.Info(err)
+			log.Infof("%s: %v", r, err)
 		}
 		return reply, err
 	}
@@ -1437,8 +1437,8 @@ func (r *Replica) TruncateLog(
 	// range based on the start key. This will cancel the request if this is not
 	// the range specified in the request body.
 	if r.RangeID != args.RangeID {
-		log.Infof("range %d: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
-			r.RangeID, args.RangeID)
+		log.Infof("%s: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
+			r, args.RangeID)
 		return reply, nil
 	}
 
@@ -1450,8 +1450,8 @@ func (r *Replica) TruncateLog(
 
 	if firstIndex >= args.Index {
 		if log.V(3) {
-			log.Infof("range %d: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
-				r.RangeID, firstIndex, args.Index)
+			log.Infof("%s: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+				r, firstIndex, args.Index)
 		}
 		return reply, nil
 	}
@@ -1571,9 +1571,9 @@ func (r *Replica) TransferLease(
 	defer r.mu.Unlock()
 	if log.V(2) {
 		prevLease := r.mu.state.Lease
-		log.Infof("[range %s] lease transfer: prev lease: %+v, new lease: %+v "+
+		log.Infof("[%s] lease transfer: prev lease: %+v, new lease: %+v "+
 			"old expiration: %s, new start: %s",
-			r.RangeID, prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
+			r, prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
 	}
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
 }
@@ -1644,16 +1644,16 @@ func (r *Replica) applyNewLeaseLocked(
 			// mark of the timestamp cache. Note that clock offset scenarios are
 			// handled via a stasis period inherent in the lease which is documented
 			// in on the Lease struct.
-			log.Infof("range %d: new range lease %s following %s [physicalTime=%s]",
-				r.RangeID, lease, prevLease, r.store.Clock().PhysicalTime())
+			log.Infof("%s: new range lease %s following %s [physicalTime=%s]",
+				r, lease, prevLease, r.store.Clock().PhysicalTime())
 			r.mu.tsCache.SetLowWater(prevLease.Expiration)
 		} else if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 			if raftGroup.Status().RaftState == raft.StateLeader {
 				// If this replica is the raft leader but it is not the new lease
 				// holder, then try to transfer the raft leadership to match the
 				// lease.
-				log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
-					r.RangeID, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
+				log.Infof("%s: replicaID %v transfer raft leadership to replicaID %v",
+					r, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
 				raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
 			}
 			return nil
@@ -1757,7 +1757,7 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 	now := timeutil.Now()
 	<-c.notify
 	if log.V(1) {
-		log.Infof("waited for compute checksum for %s", timeutil.Since(now))
+		log.Infof("%s: waited for compute checksum for %s", r, timeutil.Since(now))
 	}
 	r.mu.Lock()
 	c, ok = r.mu.checksums[id]
@@ -1781,7 +1781,7 @@ func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte, snapshot *roachp
 		// ComputeChecksum adds an entry into the map, and the entry can
 		// only be GCed once the gcTimestamp is set above. Something
 		// really bad happened.
-		log.Errorf("no checksum for id = %v", id)
+		log.Errorf("%s: no checksum for id = %v", r, id)
 	}
 }
 
@@ -1793,7 +1793,7 @@ func (r *Replica) ComputeChecksum(
 	h roachpb.Header, args roachpb.ComputeChecksumRequest,
 ) (roachpb.ComputeChecksumResponse, error) {
 	if args.Version != replicaChecksumVersion {
-		log.Errorf("Incompatible versions: e=%d, v=%d", replicaChecksumVersion, args.Version)
+		log.Errorf("%s: Incompatible versions: e=%d, v=%d", r, replicaChecksumVersion, args.Version)
 		return roachpb.ComputeChecksumResponse{}, nil
 	}
 	stopper := r.store.Stopper()
@@ -1833,7 +1833,7 @@ func (r *Replica) ComputeChecksum(
 		}
 		sha, err := r.sha512(desc, snap, snapshot)
 		if err != nil {
-			log.Error(err)
+			log.Errorf("%s: %v", r, err)
 			sha = nil
 		}
 		r.computeChecksumDone(id, sha, snapshot)
@@ -1904,7 +1904,8 @@ func (r *Replica) VerifyChecksum(
 	h roachpb.Header, args roachpb.VerifyChecksumRequest,
 ) (roachpb.VerifyChecksumResponse, error) {
 	if args.Version != replicaChecksumVersion {
-		log.Errorf("consistency check skipped: incompatible versions: e=%d, v=%d", replicaChecksumVersion, args.Version)
+		log.Errorf("%s: consistency check skipped: incompatible versions: e=%d, v=%d",
+			r, replicaChecksumVersion, args.Version)
 		// Return success because version incompatibility might only
 		// be seen on this replica.
 		return roachpb.VerifyChecksumResponse{}, nil
@@ -1912,7 +1913,7 @@ func (r *Replica) VerifyChecksum(
 	id := args.ChecksumID
 	c, ok := r.getChecksum(id)
 	if !ok {
-		log.Errorf("consistency check skipped: checksum for id = %v doesn't exist", id)
+		log.Errorf("%s: consistency check skipped: checksum for id = %v doesn't exist", r, id)
 		// Return success because a checksum might be missing only on
 		// this replica. A checksum might be missing because of a
 		// number of reasons: GC-ed, server restart, and ComputeChecksum
@@ -1928,7 +1929,7 @@ func (r *Replica) VerifyChecksum(
 			// No debug information; run another consistency check to deliver
 			// more debug information.
 			if err := r.store.stopper.RunAsyncTask(func() {
-				log.Errorf("consistency check failed on replica %s; fetching details", r)
+				log.Errorf("%s: consistency check failed; fetching details", r)
 				desc := r.Desc()
 				startKey := desc.StartKey.AsRawKey()
 				// Can't use a start key less than LocalMax.
@@ -1950,8 +1951,8 @@ func (r *Replica) VerifyChecksum(
 					if d.LeaseHolder {
 						l = "replica"
 					}
-					log.Errorf("consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
-						d.Key, d.Key, d.Timestamp, d.Value, l)
+					log.Errorf("%s: consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
+						r, d.Key, d.Key, d.Timestamp, d.Value, l)
 				}
 			}
 			if r.store.ctx.ConsistencyCheckPanicOnFailure {
@@ -2010,8 +2011,8 @@ func (r *Replica) ChangeFrozen(
 		// This is a classical candidate for returning replica corruption, but
 		// we don't do it (yet); for now we'll assume that the update steps
 		// are carried out in correct order.
-		log.Warningf("freeze %s issued from %s is applied by %s",
-			desc, args.MustVersion, bi)
+		log.Warningf("%s: freeze %s issued from %s is applied by %s",
+			r, desc, args.MustVersion, bi)
 	}
 
 	// Generally, we want to act only if the request hits the Range's StartKey.
@@ -2208,7 +2209,7 @@ func (r *Replica) AdminSplit(
 	updatedDesc := *desc
 	updatedDesc.EndKey = splitKey
 
-	log.Infof("initiating a split of %s at key %s", r, splitKey)
+	log.Infof("%s: initiating a split of this range at key %s", r, splitKey)
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
@@ -2565,7 +2566,7 @@ func (r *Replica) splitTrigger(
 		// new replica to the store's replica map.
 		if err := r.store.SplitRange(r, newRng); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf("failed to update Store after split: %s", err)
+			log.Fatalf("%s: failed to update Store after split: %s", r, err)
 		}
 
 		// Update store stats with difference in stats before and after split.
@@ -2613,23 +2614,25 @@ func (r *Replica) splitTrigger(
 				replica, err := r.store.GetReplica(newRng.RangeID)
 				if err != nil {
 					if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-						log.Infof("new replica %d removed before campaigning", r.mu.replicaID)
+						log.Infof("%s: new replica %d removed before campaigning",
+							r, r.mu.replicaID)
 					} else {
-						log.Infof("new replica %d unable to campaign: %s", r.mu.replicaID, err)
+						log.Infof("%s: new replica %d unable to campaign: %s",
+							r, r.mu.replicaID, err)
 					}
 					return
 				}
 
 				if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
 					if err := raftGroup.Campaign(); err != nil {
-						log.Warning(err)
+						log.Warningf("%s: error %v", r, err)
 					}
 					return nil
 				}); err != nil {
 					panic(err)
 				}
 			}); err != nil {
-				log.Warning(err)
+				log.Warningf("%s: error %v", r, err)
 				return
 			}
 		}
@@ -2674,7 +2677,7 @@ func (r *Replica) AdminMerge(
 		}
 
 		updatedLeftDesc.EndKey = rightRng.Desc().EndKey
-		log.Infof("initiating a merge of %s into %s", rightRng, r)
+		log.Infof("%s: initiating a merge of %s into this range", r, rightRng)
 	}
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
@@ -2819,7 +2822,7 @@ func (r *Replica) mergeTrigger(
 	batch.Defer(func() {
 		if err := r.store.MergeRange(r, merge.UpdatedDesc.EndKey, subsumedRangeID); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf("failed to update store after merging range: %s", err)
+			log.Fatalf("%s: failed to update store after merging range: %s", r, err)
 		}
 	})
 	return nil
@@ -2842,7 +2845,7 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
 				// Log the error; this shouldn't prevent the commit; the range
 				// will be GC'd eventually.
-				log.Errorf("unable to add range %s to GC queue: %s", r, err)
+				log.Errorf("%s: unable to add to GC queue: %s", r, err)
 			}
 		})
 	} else {
@@ -2981,7 +2984,7 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof("change replicas of %d: read existing descriptor %+v", rangeID, oldDesc)
+		log.Infof("%s: change replicas of %d: read existing descriptor %+v", r, rangeID, oldDesc)
 
 		{
 			b := txn.NewBatch()
