@@ -674,7 +674,7 @@ func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
 	return r.getReplicaDescriptorLocked()
 }
 
-// getReplicaLocked is like getReplica, but assumes that r.mu is held.
+// getReplicaDescriptorLocked is like getReplicaDescriptor, but assumes that r.mu is held.
 func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error) {
 	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 	if ok {
