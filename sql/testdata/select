@@ -31,6 +31,18 @@ SELECT * FROM abc
 a b c
 1 2 3
 
+# synonym for SELECT * FROM abc
+query III
+TABLE abc
+----
+1 2 3
+
+query error invalid table name
+TABLE abc[TRUE]
+
+query error invalid table name
+TABLE abc.*
+
 query III colnames
 SELECT * FROM abc WHERE NULL
 ----
