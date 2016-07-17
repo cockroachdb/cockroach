@@ -139,7 +139,7 @@ func (p *planner) Insert(
 	}
 
 	if expressions := len(rows.Columns()); expressions > numInputColumns {
-		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
+		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
 	}
 
 	fkTables := TablesNeededForFKs(*en.tableDesc, CheckInserts)
@@ -385,7 +385,10 @@ func (p *planner) fillDefaults(defaultExprs []parser.TypedExpr,
 						&parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
 					tupleCopied = true
 				}
-				if defaultExprs == nil {
+				if defaultExprs == nil || eIdx >= len(defaultExprs) {
+					// The case where eIdx is too large for defaultExprs will be
+					// transformed into an error by the check on the number of
+					// columns in Insert().
 					ret.Tuples[tIdx].Exprs[eIdx] = parser.DNull
 				} else {
 					ret.Tuples[tIdx].Exprs[eIdx] = defaultExprs[eIdx]
