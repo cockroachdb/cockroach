@@ -554,6 +554,14 @@ func TestRangeTransferLease(t *testing.T) {
 
 	replica1Lease, _ := replica1.GetLease()
 
+	// Verify the timestamp cache low water. Because we executed a transfer lease
+	// request, the low water should be set to the new lease start time which is
+	// less than the previous lease's expiration time.
+	if lowWater := replica1.GetTimestampCacheLowWater(); lowWater != replica1Lease.Start {
+		t.Fatalf("expected timestamp cache low water %s, but found %s",
+			replica1Lease.Start, lowWater)
+	}
+
 	// Make replica1 extend its lease and transfer the lease immediately after
 	// that. Test that the transfer still happens (it'll wait until the extension
 	// is done).
