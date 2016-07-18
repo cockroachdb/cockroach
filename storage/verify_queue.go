@@ -48,9 +48,9 @@ type verifyQueue struct {
 }
 
 // newVerifyQueue returns a new instance of verifyQueue.
-func newVerifyQueue(gossip *gossip.Gossip, countFn rangeCountFn) *verifyQueue {
+func newVerifyQueue(store *Store, gossip *gossip.Gossip, countFn rangeCountFn) *verifyQueue {
 	vq := &verifyQueue{countFn: countFn}
-	vq.baseQueue = makeBaseQueue("verify", vq, gossip, queueConfig{
+	vq.baseQueue = makeBaseQueue("verify", vq, store, gossip, queueConfig{
 		maxSize:              verifyQueueMaxSize,
 		needsLease:           false,
 		acceptsUnsplitRanges: true,

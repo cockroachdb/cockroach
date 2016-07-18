@@ -57,11 +57,11 @@ type replicaGCQueue struct {
 }
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
-func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
+func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
 	q := &replicaGCQueue{
 		db: db,
 	}
-	q.baseQueue = makeBaseQueue("replicaGC", q, gossip, queueConfig{
+	q.baseQueue = makeBaseQueue("replicaGC", q, store, gossip, queueConfig{
 		maxSize:              replicaGCQueueMaxSize,
 		needsLease:           false,
 		acceptsUnsplitRanges: true,
