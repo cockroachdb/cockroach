@@ -31,6 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 )
 
+// This file implements method receivers for members of server.Context struct
+// -- 'Stores' and 'JoinList', which satisfies pflag's value interface
+
 var minimumStoreSize = 10 * int64(config.DefaultZoneConfig().RangeMaxBytes)
 
 // StoreSpec contains the details that can be specified in the cli pertaining
@@ -248,5 +251,36 @@ func (ssl *StoreSpecList) Set(value string) error {
 	} else {
 		ssl.Specs = append(ssl.Specs, spec)
 	}
+	return nil
+}
+
+// JoinListType is a slice of strings that implements pflag's value
+// interface.
+type JoinListType []string
+
+// String returns a string representation of all the JoinListType. This is part
+// of pflag's value interface.
+func (jls JoinListType) String() string {
+	var buffer bytes.Buffer
+	for _, jl := range jls {
+		fmt.Fprintf(&buffer, "--join=%s ", jl)
+	}
+	// Trim the extra space from the end if it exists.
+	if l := buffer.Len(); l > 0 {
+		buffer.Truncate(l - 1)
+	}
+	return buffer.String()
+}
+
+// Type returns the underlying type in string form. This is part of pflag's
+// value interface.
+func (jls *JoinListType) Type() string {
+	return "string"
+}
+
+// Set adds a new value to the JoinListType. It is the important part of
+// pflag's value interface.
+func (jls *JoinListType) Set(value string) error {
+	*jls = append(*jls, value)
 	return nil
 }
