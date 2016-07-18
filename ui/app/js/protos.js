@@ -2357,6 +2357,55 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "SpanStatsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "node_id",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "bytes",
+                                    "name": "start_key",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RKey"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "bytes",
+                                    "name": "end_key",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RKey"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "SpanStatsResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "range_count",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "storage.engine.enginepb.MVCCStats",
+                                    "name": "total_stats",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
                             "name": "PrettySpan",
                             "fields": [
                                 {
@@ -2542,6 +2591,14 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "response": "gossip.InfoStatus",
                                     "options": {
                                         "(google.api.http).get": "/_status/gossip/{node_id}"
+                                    }
+                                },
+                                "SpanStats": {
+                                    "request": "SpanStatsRequest",
+                                    "response": "SpanStatsResponse",
+                                    "options": {
+                                        "(google.api.http).post": "/_status/span",
+                                        "(google.api.http).body": "*"
                                     }
                                 },
                                 "Stacks": {
