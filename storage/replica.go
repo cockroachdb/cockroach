@@ -661,9 +661,10 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 // setDescWithoutProcessUpdateLocked requires that the replica lock is held.
 func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescriptor) {
 	if desc.RangeID != r.RangeID {
-		panic(fmt.Sprintf("range descriptor ID (%d) does not match replica's range ID (%d)",
-			desc.RangeID, r.RangeID))
+		panic(fmt.Sprintf("%s: range descriptor ID (%d) does not match replica's range ID (%d)",
+			r, desc.RangeID, r.RangeID))
 	}
+
 	r.mu.state.Desc = desc
 	r.mu.rangeDesc.Store(desc)
 }
@@ -808,7 +809,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 func (r *Replica) assertStateLocked(reader engine.Reader) {
 	diskState, err := loadState(reader, r.mu.state.Desc)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("%s: %v", r, err))
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
 		log.Fatalf("%s: on-disk and in-memory state diverged:\n%+v\n%+v", r, diskState, r.mu.state)
@@ -847,9 +848,9 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		panic("empty batch")
+		panic(fmt.Sprintf("%s: empty batch", r))
 	} else {
-		panic(fmt.Sprintf("don't know how to handle command %s", ba))
+		panic(fmt.Sprintf("%s: don't know how to handle command %s", r, ba))
 	}
 	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
@@ -1710,7 +1711,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			raftGroup.ReportUnreachable(msg.To)
 			return nil
 		}); err != nil {
-			panic(err)
+			panic(fmt.Sprintf("%s: %v", r, err))
 		}
 	}
 }
@@ -1725,7 +1726,7 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		raftGroup.ReportSnapshot(to, snapStatus)
 		return nil
 	}); err != nil {
-		panic(err)
+		panic(fmt.Sprintf("%s: %v", r, err))
 	}
 }
 
@@ -2257,7 +2258,7 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 			case *roachpb.ConditionalPutRequest:
 				t.Blind = true
 			default:
-				panic(fmt.Sprintf("unexpected non-put request: %s", t))
+				panic(fmt.Sprintf("%s: unexpected non-put request: %s", r, t))
 			}
 		}
 	}
@@ -2364,7 +2365,8 @@ func (r *Replica) executeBatch(
 			if cReply, ok := reply.(roachpb.Countable); ok {
 				retResults := cReply.Count()
 				if retResults > remScanResults {
-					panic(fmt.Sprintf("received %d results, limit was %d", retResults, remScanResults))
+					panic(fmt.Sprintf("%s: received %d results, limit was %d", r,
+						retResults, remScanResults))
 				}
 				remScanResults -= retResults
 			}
