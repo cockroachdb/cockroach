@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/pkg/errors"
 )
 
 // expressionCarrier handles expanding and starting sub-query plans
@@ -522,6 +523,12 @@ func (td *tableDeleter) fastPathAvailable() bool {
 		}
 		return false
 	}
+	if td.rd.helper.tableDesc.IsInterleaved() {
+		if log.V(2) {
+			log.Info("delete forced to scan: table is interleaved")
+		}
+		return false
+	}
 	return true
 }
 
@@ -551,9 +558,12 @@ func (td *tableDeleter) fastDelete(
 				continue
 			}
 
-			after, err := scan.fetcher.ReadIndexKey(i)
+			after, ok, err := scan.fetcher.ReadIndexKey(i)
 			if err != nil {
 				return 0, err
+			}
+			if !ok {
+				return 0, errors.Errorf("key did not match descriptor")
 			}
 			k := i[:len(i)-len(after)]
 			if !bytes.Equal(k, prev) {

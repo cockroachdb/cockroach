@@ -170,6 +170,9 @@ message IndexDescriptor {
   // Interleave, if it's not the zero value, describes how this index's data is
   // interleaved into another index's data.
   optional InterleaveDescriptor interleave = 11 [(gogoproto.nullable) = false];
+  // InterleavedBy contains a reference to every table/index that is interleaved
+  // into this one.
+  repeated ForeignKeyReference interleaved_by = 12  [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that

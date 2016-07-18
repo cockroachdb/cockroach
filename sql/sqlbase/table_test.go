@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -101,8 +102,14 @@ func decodeIndex(
 			return nil, err
 		}
 	}
-	_, err = DecodeIndexKey(a, tableDesc, index.ID, valTypes, values, colDirs, key)
-	return values, err
+	_, ok, err := DecodeIndexKey(a, tableDesc, index.ID, valTypes, values, colDirs, key)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.Errorf("key did not match descriptor")
+	}
+	return values, nil
 }
 
 func TestIndexKey(t *testing.T) {
