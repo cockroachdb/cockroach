@@ -61,8 +61,8 @@ func GetJSON(httpClient http.Client, path string, response proto.Message) error 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		b, _ := ioutil.ReadAll(resp.Body)
+		return errors.Errorf("status: %s, body: %s", resp.Status, b)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
 }
