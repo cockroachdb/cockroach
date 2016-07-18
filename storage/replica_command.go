@@ -1648,7 +1648,7 @@ func (r *Replica) applyNewLeaseLocked(
 			// in on the Lease struct.
 			log.Infof("range %d: new range lease %s following %s [physicalTime=%s]",
 				r.RangeID, lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.tsCache.SetLowWater(prevLease.Expiration)
+			r.mu.tsCache.SetLowWater(r.mu.state.Lease.Start)
 		} else if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 			if raftGroup.Status().RaftState == raft.StateLeader {
 				// If this replica is the raft leader but it is not the new lease
