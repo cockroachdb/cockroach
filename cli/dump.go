@@ -192,15 +192,15 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					switch ct := coltypes[cols[si]]; ct {
 					case "INTERVAL":
 						ivals[si] = fmt.Sprintf("'%s'", t)
-					case "DECIMAL":
-						ivals[si] = fmt.Sprintf("%s", t)
+					case "BYTES":
+						ivals[si] = parser.NewDBytes(parser.DBytes(t)).String()
 					default:
-						// STRING and BYTES types can have optional length
+						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
 						if strings.HasPrefix(coltypes[cols[si]], "STRING") {
 							ivals[si] = parser.NewDString(string(t)).String()
-						} else if strings.HasPrefix(coltypes[cols[si]], "BYTES") {
-							ivals[si] = parser.NewDBytes(parser.DBytes(t)).String()
+						} else if strings.HasPrefix(coltypes[cols[si]], "DECIMAL") {
+							ivals[si] = string(t)
 						} else {
 							panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], coltypes[cols[si]]))
 						}

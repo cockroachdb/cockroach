@@ -55,7 +55,10 @@ func TestDumpRow(t *testing.T) {
 		n interval,
 		o bool,
 		e decimal,
-		tz timestamptz
+		tz timestamptz,
+		e1 decimal(2),
+		e2 decimal(2, 1),
+		s1 string(1)
 	);
 	INSERT INTO d.t VALUES (
 		1,
@@ -65,7 +68,10 @@ func TestDumpRow(t *testing.T) {
 		'2h30m30s',
 		true,
 		1.2345,
-		'2016-01-25 10:10:10'
+		'2016-01-25 10:10:10',
+		3.4,
+		4.5,
+		's'
 	);
 	INSERT INTO d.t VALUES (DEFAULT);
 	INSERT INTO d.t (f) VALUES (
@@ -96,18 +102,21 @@ CREATE TABLE t (
 	o BOOL NULL,
 	e DECIMAL NULL,
 	tz TIMESTAMP WITH TIME ZONE NULL,
-	FAMILY "primary" (i, f, d, t, n, o, tz, rowid),
+	e1 DECIMAL(2) NULL,
+	e2 DECIMAL(2,1) NULL,
+	s1 STRING(1) NULL,
+	FAMILY "primary" (i, f, d, t, n, o, tz, e1, e2, s1, rowid),
 	FAMILY fam_1_s (s),
 	FAMILY fam_2_b (b),
 	FAMILY fam_3_e (e)
 );
 
 INSERT INTO t VALUES
-	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, -Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, NaN, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3.4, 4.5, 's'),
+	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, -Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, NaN, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 `
 
 	if string(out) != expect {
