@@ -786,9 +786,7 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 			*ms = enginepb.MVCCStats{} // clear stats, as merge recomputed.
 		}
 		if crt := ct.GetChangeReplicasTrigger(); crt != nil {
-			if err := r.changeReplicasTrigger(ctx, batch, crt); err != nil {
-				return err
-			}
+			r.changeReplicasTrigger(ctx, batch, crt);
 		}
 		if ct.GetModifiedSpanTrigger() != nil {
 			if ct.ModifiedSpanTrigger.SystemConfigSpan {
@@ -2827,13 +2825,17 @@ func (r *Replica) mergeTrigger(
 	return nil
 }
 
-func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch, change *roachpb.ChangeReplicasTrigger) error {
-	cpy := *r.Desc()
-	cpy.Replicas = change.UpdatedReplicas
-	cpy.NextReplicaID = change.NextReplicaID
-	if err := r.setDesc(&cpy); err != nil {
-		return err
-	}
+func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch, change *roachpb.ChangeReplicasTrigger) {
+	batch.Defer(func() {
+		cpy := *r.Desc()
+		cpy.Replicas = change.UpdatedReplicas
+		cpy.NextReplicaID = change.NextReplicaID
+		if err := r.setDesc(&cpy); err != nil {
+			// Log the error. There's not much we can do because the commit may have already occurred at this point.
+			log.Fatalf("failed to update Store %s after trying to update replica to %s: %s", r.store.StoreID(), cpy, err)
+		}
+	})
+
 	// If we're removing the current replica, add it to the range GC queue.
 	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
 		// Defer this to make it run as late as possible, maximizing the chances
@@ -2858,7 +2860,6 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 		})
 	}
-	return nil
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
