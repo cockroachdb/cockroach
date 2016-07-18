@@ -89,7 +89,11 @@ func (n *alterTableNode) Start() error {
 					n.tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_DROP {
 					return fmt.Errorf("column %q being dropped, try again later", col.Name)
 				}
+				if status == sqlbase.DescriptorActive && t.IfNotExists {
+					continue
+				}
 			}
+
 			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
 				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
