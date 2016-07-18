@@ -18,6 +18,7 @@ package storage
 
 import (
 	"container/heap"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -111,11 +112,11 @@ func TestQueuePriorityQueue(t *testing.T) {
 	// Create a priority queue, put the items in it, and
 	// establish the priority queue (heap) invariants.
 	const count = 3
-	expRanges := make([]*Replica, count+1)
+	expRanges := make([]roachpb.RangeID, count+1)
 	pq := make(priorityQueue, count)
 	for i := 0; i < count; {
 		pq[i] = &replicaItem{
-			value:    &Replica{},
+			value:    roachpb.RangeID(i),
 			priority: float64(i),
 			index:    i,
 		}
@@ -126,7 +127,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 
 	// Insert a new item and then modify its priority.
 	priorityItem := &replicaItem{
-		value:    &Replica{},
+		value:    -1,
 		priority: 1.0,
 	}
 	heap.Push(&pq, priorityItem)
@@ -147,13 +148,27 @@ func TestQueuePriorityQueue(t *testing.T) {
 // queued, updating an existing range, and removing a range.
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
 
-	r1 := &Replica{RangeID: 1}
-	r1.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
-	r2 := &Replica{RangeID: 2}
-	r2.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 2})
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	rng1, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	r1 := createRange(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	if err := tc.store.AddReplicaTest(r1); err != nil {
+		t.Fatal(err)
+	}
+	r2 := createRange(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	if err := tc.store.AddReplicaTest(r2); err != nil {
+		t.Fatal(err)
+	}
 
 	shouldAddMap := map[*Replica]bool{
 		r1: true,
@@ -168,7 +183,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
+	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 2 {
@@ -233,18 +248,21 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 // ShouldQueue method.
 func TestBaseQueueAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
 
-	r := &Replica{RangeID: 1}
-	r.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return false, 0.0
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 1})
+	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 1})
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
@@ -266,10 +284,23 @@ func TestBaseQueueProcess(t *testing.T) {
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
 
-	r1 := &Replica{RangeID: 1, store: tc.store}
-	r1.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
-	r2 := &Replica{RangeID: 2, store: tc.store}
-	r2.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 2})
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	rng1, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	r1 := createRange(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	if err := tc.store.AddReplicaTest(r1); err != nil {
+		t.Fatal(err)
+	}
+	r2 := createRange(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	if err := tc.store.AddReplicaTest(r2); err != nil {
+		t.Fatal(err)
+	}
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
@@ -279,7 +310,7 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: 2})
+	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 	bq.Start(tc.clock, tc.stopper)
 
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
@@ -313,11 +344,15 @@ func TestBaseQueueProcess(t *testing.T) {
 // not processed.
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	g, stopper := gossipForTest(t)
-	defer stopper.Stop()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
 
-	r := &Replica{RangeID: 1}
-	r.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: 1})
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
@@ -326,10 +361,10 @@ func TestBaseQueueAddRemove(t *testing.T) {
 			return
 		},
 	}
-	bq := makeBaseQueue("test", testQueue, g, queueConfig{maxSize: 2})
+	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	bq.Start(clock, stopper)
+	bq.Start(clock, tc.stopper)
 
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	bq.MaybeRemove(r)
@@ -359,21 +394,26 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	rng1, err := s.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := &Replica{RangeID: 1, store: s}
-	neverSplits.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
-		EndKey:   dataMaxAddr,
-	})
+	neverSplits := createRange(s, 2, roachpb.RKeyMin, dataMaxAddr)
+	if err := s.AddReplicaTest(neverSplits); err != nil {
+		t.Fatal(err)
+	}
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := &Replica{RangeID: 2, store: s}
-	willSplit.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{
-		RangeID:  2,
-		StartKey: dataMaxAddr,
-		EndKey:   roachpb.RKeyMax,
-	})
+	willSplit := createRange(s, 3, dataMaxAddr, roachpb.RKeyMax)
+	if err := s.AddReplicaTest(willSplit); err != nil {
+		t.Fatal(err)
+	}
 
 	var queued int32
 	testQueue := &testQueueImpl{
@@ -384,7 +424,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeBaseQueue("test", testQueue, s.ctx.Gossip, queueConfig{maxSize: 2})
+	bq := makeBaseQueue("test", testQueue, s, s.ctx.Gossip, queueConfig{maxSize: 2})
 	bq.Start(s.ctx.Clock, stopper)
 
 	// Check our config.
@@ -477,13 +517,25 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		err:   &testError{},
 	}
 
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	rng1, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
 	replicaCount := 10
-	bq := makeBaseQueue("test", testQueue, tc.gossip, queueConfig{maxSize: replicaCount})
+	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: replicaCount})
 	bq.Start(tc.clock, tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
-		r := &Replica{RangeID: roachpb.RangeID(i), store: tc.store}
-		r.setDescWithoutProcessUpdate(&roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i)})
+		r := createRange(tc.store, roachpb.RangeID(i+1000),
+			roachpb.RKey(fmt.Sprintf("%d", i)), roachpb.RKey(fmt.Sprintf("%d/end", i)))
+		if err := tc.store.AddReplicaTest(r); err != nil {
+			t.Fatal(err)
+		}
 		bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	}
 

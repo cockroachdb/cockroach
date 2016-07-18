@@ -37,9 +37,9 @@ type replicaConsistencyQueue struct {
 }
 
 // newReplicaConsistencyQueue returns a new instance of replicaConsistencyQueue.
-func newReplicaConsistencyQueue(gossip *gossip.Gossip) *replicaConsistencyQueue {
+func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaConsistencyQueue {
 	rcq := &replicaConsistencyQueue{}
-	rcq.baseQueue = makeBaseQueue("replica consistency checker", rcq, gossip, queueConfig{
+	rcq.baseQueue = makeBaseQueue("replica consistency checker", rcq, store, gossip, queueConfig{
 		maxSize:              replicaConsistencyQueueSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: true,

@@ -55,7 +55,7 @@ func TestVerifyQueueShouldQueue(t *testing.T) {
 		{makeTS(verificationInterval.Nanoseconds()*2, 0), true, 2},
 	}
 
-	verifyQ := newVerifyQueue(tc.gossip, nil)
+	verifyQ := newVerifyQueue(tc.store, tc.gossip, nil)
 	emptyConfig := config.SystemConfig{}
 
 	for i, test := range testCases {
