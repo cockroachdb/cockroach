@@ -247,6 +247,10 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	if r.exceedsDoubleSplitSizeLocked() {
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	}
+
 	rangeID := r.RangeID
 
 	// If a snapshot is in progress, see if it's ready.
