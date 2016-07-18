@@ -81,9 +81,9 @@ type Context struct {
 	// in zone configs.
 	Attrs string
 
-	// JoinUsing is a comma-separated list of node addresses that
-	// act as bootstrap hosts for connecting to the gossip network.
-	JoinUsing string
+	// JoinList is a list of node addresses that act as bootstrap hosts for
+	// connecting to the gossip network.
+	JoinList JoinListType
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
@@ -416,12 +416,10 @@ func (ctx *Context) readEnvironmentVariables() {
 	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("reservations_enabled", ctx.ReservationsEnabled)
 }
 
-// parseGossipBootstrapResolvers parses a comma-separated list of
-// gossip bootstrap resolvers.
+// parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
 func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
-	addresses := strings.Split(ctx.JoinUsing, ",")
-	for _, address := range addresses {
+	for _, address := range ctx.JoinList {
 		if len(address) == 0 {
 			continue
 		}
