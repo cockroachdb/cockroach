@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -38,11 +39,15 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -151,17 +156,35 @@ func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, pr
 // transaction's value to be written after all retries are complete.
 func TestClientRetryNonTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(tschottdorf): disabled since it uses removed SetRangeRetryOptions")
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	// Set up a command filter which tracks which one of our test keys have
+	// been attempted to be pushed.
+	mu := struct {
+		sync.Mutex
+		m map[string]struct{}
+	}{
+		m: make(map[string]struct{}),
+	}
+	filter := func(args storagebase.FilterArgs) *roachpb.Error {
+		mu.Lock()
+		defer mu.Unlock()
+		pushArg, ok := args.Req.(*roachpb.PushTxnRequest)
+		if !ok || !strings.HasPrefix(string(pushArg.PusheeTxn.Key), "key-") {
+			return nil
+		}
+		log.Infof("registered push to %s", pushArg.PusheeTxn.Key)
+		mu.m[string(pushArg.PusheeTxn.Key)] = struct{}{}
+		return nil
+	}
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				TestingCommandFilter: filter,
+			},
+		},
+	}
+	s, _, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop()
-	/*
-		s.(*server.TestServer).SetRangeRetryOptions(retry.Options{
-			InitialBackoff: 1 * time.Millisecond,
-			MaxBackoff:     5 * time.Millisecond,
-			Multiplier:     2,
-			MaxRetries:     1,
-		})
-	*/
 
 	testCases := []struct {
 		args        roachpb.Request
@@ -180,9 +203,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, false, 1},
 		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, false, 1},
 	}
-	// Lay down a write intent using a txn and attempt to write to same
-	// key. Try this twice--once with priorities which will allow the
-	// intent to be pushed and once with priorities which will not.
+	// Lay down a write intent using a txn and attempt to access the same
+	// key from our test client, with priorities set up so that the Push
+	// succeeds iff the test dicates that it do.
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		var txnPri int32 = 1
@@ -196,7 +219,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		db, sender := createTestNotifyClient(t, s.Stopper(), s.ServingAddr(), -clientPri)
 
 		// doneCall signals when the non-txn read or write has completed.
-		doneCall := make(chan struct{})
+		doneCall := make(chan error)
 		count := 0 // keeps track of retries
 		err := db.Txn(func(txn *client.Txn) error {
 			if test.isolation == enginepb.SNAPSHOT {
@@ -225,26 +248,28 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// the event we can push.
 				go func() {
 					var err error
-					for {
-						if _, ok := test.args.(*roachpb.GetRequest); ok {
-							_, err = db.Get(key)
-						} else {
-							err = db.Put(key, "value")
-						}
-						// The above Get/Put() calls Send() which releases
-						// notify below; the txn proceeds to succeed.
-						// The above Get/Put() is repeated until no WriteIntentError
-						// is seen.
-						if _, ok := err.(*roachpb.WriteIntentError); !ok {
-							break
-						}
+					//for {
+					if _, ok := test.args.(*roachpb.GetRequest); ok {
+						_, err = db.Get(key)
+					} else {
+						err = db.Put(key, "value")
 					}
-					close(doneCall)
-					if err != nil {
-						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, test.args.Method(), err)
-					}
+					doneCall <- errors.Wrapf(
+						err,
+						"%d: expected success on non-txn call to %s; got %s",
+						i, test.args.Method(), err,
+					)
 				}()
-				<-notify
+				// Block until the non-transactional client has pushed us at
+				// least once.
+				util.SucceedsSoon(t, func() error {
+					mu.Lock()
+					defer mu.Unlock()
+					if _, ok := mu.m[string(key)]; ok {
+						return nil
+					}
+					return errors.New("non-transactional client has not pushed txn yet")
+				})
 			}
 			return nil
 		})
@@ -253,7 +278,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 		}
 
 		// Make sure non-txn put or get has finished.
-		<-doneCall
+		if err := <-doneCall; err != nil {
+			t.Fatal(err)
+		}
 
 		// Get the current value to verify whether the txn happened first.
 		gr, err := db.Get(key)
