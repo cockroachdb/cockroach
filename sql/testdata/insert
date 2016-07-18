@@ -294,7 +294,7 @@ NULL a
 statement ok
 CREATE TABLE boom (id INT PRIMARY KEY)
 
-statement error INSERT has more expressions than target columns: \d+/\d+
+statement error INSERT error: table boom has \d+ columns but \d+ values were supplied
 INSERT INTO boom VALUES(1,2)
 
 statement ok
@@ -435,3 +435,9 @@ CREATE TABLE blindcput (
 # many in one batch to trigger it.
 statement error duplicate key value \(x\)=\(1\) violates unique constraint "primary"
 INSERT INTO blindcput values (1, 1), (2, 2), (3, 3), (4, 4), (1, 5);
+
+statement ok
+CREATE TABLE nocols()
+
+statement error INSERT error: table nocols has \d+ columns but \d+ values were supplied
+INSERT INTO nocols VALUES (true, default)
