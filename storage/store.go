@@ -2609,16 +2609,6 @@ func (s *Store) ComputeMetrics() error {
 	return nil
 }
 
-// SetRangeRetryOptions sets the retry options used for this store.
-// For unittests only.
-// TODO(bdarnell): have the affected tests pass retry options in through
-// the StoreContext.
-func (s *Store) SetRangeRetryOptions(ro retry.Options) {
-	s.mu.Lock()
-	s.ctx.RangeRetryOptions = ro
-	s.mu.Unlock()
-}
-
 // FrozenStatus returns all of the Store's Replicas which are frozen (if the
 // parameter is true) or unfrozen (otherwise). It makes no attempt to prevent
 // new data being rebalanced to the Store, and thus does not guarantee that the
