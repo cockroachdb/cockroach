@@ -53,11 +53,11 @@ type raftLogQueue struct {
 }
 
 // newRaftLogQueue returns a new instance of raftLogQueue.
-func newRaftLogQueue(db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
+func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
 	rlq := &raftLogQueue{
 		db: db,
 	}
-	rlq.baseQueue = makeBaseQueue("raftlog", rlq, gossip, queueConfig{
+	rlq.baseQueue = makeBaseQueue("raftlog", rlq, store, gossip, queueConfig{
 		maxSize:              raftLogQueueMaxSize,
 		needsLease:           false,
 		acceptsUnsplitRanges: true,
