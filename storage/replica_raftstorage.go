@@ -248,7 +248,7 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	if r.exceedsDoubleSplitSizeLocked() {
-		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		return raftpb.Snapshot{}, errors.Wrap(raft.ErrSnapshotTemporarilyUnavailable, "too big")
 	}
 
 	rangeID := r.RangeID
@@ -264,13 +264,13 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 		default:
 			// If the result is not ready, return immediately.
-			return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+			return raftpb.Snapshot{}, errors.Wrap(raft.ErrSnapshotTemporarilyUnavailable, "the result is not ready")
 		}
 	}
 
 	// See if there is already a snapshot running for this store.
 	if !r.store.AcquireRaftSnapshot() {
-		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		return raftpb.Snapshot{}, errors.Wrap(raft.ErrSnapshotTemporarilyUnavailable, "there is already a snapshot running for this store")
 	}
 
 	// Use an unbuffered channel so the worker stays alive until someone
@@ -313,7 +313,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		case <-time.After(r.store.ctx.BlockingSnapshotDuration):
 		}
 	}
-	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	return raftpb.Snapshot{}, errors.Wrap(raft.ErrSnapshotTemporarilyUnavailable, "no result")
 }
 
 // GetSnapshot wraps Snapshot() but does not require the replica lock
@@ -330,7 +330,7 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 		snap, err := r.Snapshot()
 		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
-		if err == raft.ErrSnapshotTemporarilyUnavailable {
+		if err == raft.ErrSnapshotTemporarilyUnavailable || errors.Cause(err) == raft.ErrSnapshotTemporarilyUnavailable {
 			if snapshotChan == nil {
 				// The call to Snapshot() didn't start an async process due to
 				// rate limiting. Try again later.
@@ -345,6 +345,7 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 			// We could be racing with raft itself, so if we get a closed
 			// channel loop back and try again.
 		} else {
+			log.Infof("unexpected error getting snapshot: %+v", err)
 			return snap, err
 		}
 	}

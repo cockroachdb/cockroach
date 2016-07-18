@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 )
 
 func TestApplySnapshotDenyPreemptive(t *testing.T) {
@@ -125,12 +126,12 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	fillTestRange(t, rep, snapSize)
 
 	if _, err := rep.Snapshot(); err != nil {
-		t.Fatal(err)
+		t.Fatalf("err on snapshot: %+v", err)
 	}
 
 	fillTestRange(t, rep, snapSize*2)
 
-	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("snapshot of a very large range should fail but got %v", err)
+	if _, err := rep.Snapshot(); errors.Cause(err) != raft.ErrSnapshotTemporarilyUnavailable {
+		t.Fatalf("snapshot of a very large range should fail but got %+v", err)
 	}
 }

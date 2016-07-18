@@ -5653,8 +5653,8 @@ func TestAsyncSnapshot(t *testing.T) {
 	tc.rng.mu.Unlock()
 
 	// In async operation, the first call never succeeds.
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
+	if errors.Cause(err) != raft.ErrSnapshotTemporarilyUnavailable {
+		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %+v", err)
 	}
 
 	// It will eventually succeed.
@@ -5689,8 +5689,8 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 	tc.rng.mu.Unlock()
 
 	// In async operation, the first call never succeeds.
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
+	if errors.Cause(err) != raft.ErrSnapshotTemporarilyUnavailable {
+		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %+v", err)
 	}
 
 	// Wait for the snapshot to be generated and abandoned.
