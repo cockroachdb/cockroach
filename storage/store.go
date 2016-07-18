@@ -1812,16 +1812,17 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	// Add the range and its current stats into metrics.
-	s.metrics.replicaCount.Inc(1)
-
-	if s.mu.replicasByKey.Has(rng) {
+	if s.hasOverlappingReplicaLocked(rng.Desc()) {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
 			(exRngItem.(*Replica)).getKey())
 	}
+
+	// Add the range and its current stats into metrics.
+	s.metrics.replicaCount.Inc(1)
+
 	return nil
 }
 
