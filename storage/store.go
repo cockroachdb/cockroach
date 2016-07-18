@@ -801,7 +801,9 @@ func (sc *StoreContext) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
 func (sc *StoreContext) setDefaults() {
-	sc.RangeRetryOptions = base.DefaultRetryOptions()
+	if (sc.RangeRetryOptions == retry.Options{}) {
+		sc.RangeRetryOptions = base.DefaultRetryOptions()
+	}
 
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = base.DefaultRaftTickInterval
