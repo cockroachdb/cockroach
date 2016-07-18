@@ -378,3 +378,14 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 	}
 	at.Run(t)
 }
+
+func TestUpreplicate_1To6Medium(t *testing.T) {
+	at := allocatorTest{
+		StartNodes:          1,
+		EndNodes:            6,
+		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
+		Prefix:              "uprep-1to6m",
+		CockroachDiskSizeGB: 250, // GB
+	}
+	at.Run(t)
+}
