@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // HandleRaftMessage delegates to handleRaftMessage.
@@ -153,4 +154,11 @@ func (rs *replicaScanner) SetDisabled(disabled bool) {
 // GetLease exposes replica.getLease for tests.
 func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
 	return r.getLease()
+}
+
+// GetTimestampCacheLowWater returns the timestamp cache low water mark.
+func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.tsCache.lowWater
 }
