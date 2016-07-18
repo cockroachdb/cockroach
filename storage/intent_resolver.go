@@ -331,8 +331,8 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				txn := item.intents[0].Txn
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{
-						Key:    r.Desc().StartKey.AsRawKey(),
-						EndKey: r.Desc().EndKey.AsRawKey(),
+						Key:    txn.Key,
+						EndKey: roachpb.BytesNext(txn.Key),
 					},
 				}
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{

@@ -1000,7 +1000,7 @@ func (r *Replica) RangeLookup(
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record collocated with a replica
+		// split-related intents or a txn record co-located with a replica
 		// involved in the split. Since we cannot know the correct answer, we
 		// reply with both the pre- and post- transaction values when the
 		// ConsiderIntents flag is set.
@@ -2139,12 +2139,13 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 }
 
 // AdminSplit divides the range into into two ranges, using either
-// args.SplitKey (if provided) or an internally computed key that aims to
-// roughly equipartition the range by size. The split is done inside of
-// a distributed txn which writes updated and new range descriptors, and
-// updates the range addressing metadata. The handover of responsibility for
-// the reassigned key range is carried out seamlessly through a split trigger
-// carried out as part of the commit of that transaction.
+// args.SplitKey (if provided) or an internally computed key that aims
+// to roughly equipartition the range by size. The split is done
+// inside of a distributed txn which writes updated left and and new
+// right hand side range descriptors, and updates the range addressing
+// metadata. The handover of responsibility for the reassigned key
+// range is carried out seamlessly through a split trigger carried out
+// as part of the commit of that transaction.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. An
 // operation which might split a range should obtain a copy of the range's
@@ -2180,7 +2181,7 @@ func (r *Replica) AdminSplit(
 			return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
 		}
 
-		foundSplitKey, err := keys.MakeSplitKey(foundSplitKey)
+		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
 		if err != nil {
 			return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
 				args.SplitKey, err)
@@ -2206,43 +2207,43 @@ func (r *Replica) AdminSplit(
 	}
 	log.Trace(ctx, "found split key")
 
-	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
-	newDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
+	// Create right hand side range descriptor with the newly-allocated Range ID.
+	rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
-		return reply, roachpb.NewErrorf("unable to allocate new range descriptor: %s", err)
+		return reply, roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
 	}
 
 	// Init updated version of existing range descriptor.
-	updatedDesc := *desc
-	updatedDesc.EndKey = splitKey
+	leftDesc := *desc
+	leftDesc.EndKey = splitKey
 
 	log.Infof("%s: initiating a split of this range at key %s", r, splitKey)
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
 		defer log.Trace(ctx, "split closure ends")
-		// Create range descriptor for second half of split.
-		// Note that this put must go first in order to locate the
-		// transaction record on the correct range.
+		// Update existing range descriptor for left hand side of
+		// split. Note that we mutate the descriptor for the left hand
+		// side of the split first to locate the txn record there.
 		b := &client.Batch{}
-		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
-		if err := updateRangeDescriptor(b, desc1Key, nil, newDesc); err != nil {
+		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+		if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
 			return err
 		}
-		// Update existing range descriptor for first half of split.
-		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
-		if err := updateRangeDescriptor(b, desc2Key, desc, &updatedDesc); err != nil {
+		// Create range descriptor for right hand side of the split.
+		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
+		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).
-		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
+		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
 			return err
 		}
 		if err := txn.Run(b); err != nil {
 			return err
 		}
 		// Log the split into the range event log.
-		if err := r.store.logSplit(txn, updatedDesc, *newDesc); err != nil {
+		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
 			return err
 		}
 		b = &client.Batch{}
@@ -2252,8 +2253,9 @@ func (r *Replica) AdminSplit(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
-					UpdatedDesc: updatedDesc,
-					NewDesc:     *newDesc,
+					// TODO(spencer): rename Updated to Left and New to Right.
+					UpdatedDesc: leftDesc,
+					NewDesc:     *rightDesc,
 					// Designate this store as the preferred lease holder for the new
 					// range. The choice of store here doesn't matter for
 					// correctness, but for best performance it should be one
@@ -2435,8 +2437,9 @@ func (r *Replica) splitTrigger(
 		return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 	}
 
-	// TODO(d4l3k): we should check which half is smaller and compute stats for it
-	// instead of having a constraint that the left side is smaller.
+	// TODO(d4l3k): we should check which side of the split is smaller
+	// and compute stats for it instead of having a constraint that the
+	// left side is smaller.
 
 	// Compute stats for updated range.
 	leftMS, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
@@ -2535,7 +2538,7 @@ func (r *Replica) splitTrigger(
 		// where
 		// - old_ms   contains statistics for the pre-split range
 		// - delta_ms contains statistics for modifications made in the current batch
-		// - left_ms  contains statistics computed for the updated (left) half of the split
+		// - left_ms  contains statistics computed for the updated (left) hand side
 		rightMS = deltaMS
 		rightMS.AgeTo(ts.WallTime)
 		// Add in the original range's stats.
@@ -2648,14 +2651,16 @@ func (r *Replica) splitTrigger(
 	return nil
 }
 
-// AdminMerge extends this range to subsume the range that comes next in
-// the key space. The merge is performed inside of a distributed
-// transaction which writes the updated range descriptor for the subsuming range
-// and deletes the range descriptor for the subsumed one. It also updates the
-// range addressing metadata. The handover of responsibility for
-// the reassigned key range is carried out seamlessly through a merge trigger
-// carried out as part of the commit of that transaction.
-// A merge requires that the two ranges are collocated on the same set of replicas.
+// AdminMerge extends this range to subsume the range that comes next
+// in the key space. The merge is performed inside of a distributed
+// transaction which writes the left hand side range descriptor (the
+// subsuming range) and deletes the range descriptor for the right
+// hand side range (the subsumed range). It also updates the range
+// addressing metadata. The handover of responsibility for the
+// reassigned key range is carried out seamlessly through a merge
+// trigger carried out as part of the commit of that transaction.  A
+// merge requires that the two ranges are collocated on the same set
+// of replicas.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
@@ -2671,12 +2676,13 @@ func (r *Replica) AdminMerge(
 
 	updatedLeftDesc := *origLeftDesc
 
-	// Lookup subsumed (right) range. This really belongs inside the
-	// transaction for consistency, but it is important (for transaction
-	// record placement) that the first action inside the transaction is
-	// the conditional put to change the left descriptor's end key. We
-	// look up the descriptor here only to get the new end key and then
-	// repeat the lookup inside the transaction.
+	// Lookup right hand side range (subsumed). This really belongs
+	// inside the transaction for consistency, but it is important (for
+	// transaction record placement) that the first action inside the
+	// transaction is the conditional put to change the left hand side's
+	// descriptor end key. We look up the descriptor here only to get
+	// the new end key and then repeat the lookup inside the
+	// transaction.
 	{
 		rightRng := r.store.LookupReplica(origLeftDesc.EndKey, nil)
 		if rightRng == nil {
@@ -2704,7 +2710,7 @@ func (r *Replica) AdminMerge(
 			}
 		}
 
-		// Do a consistent read of the second range descriptor.
+		// Do a consistent read of the right hand side's range descriptor.
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 		var rightDesc roachpb.RangeDescriptor
 		if err := txn.GetProto(rightDescKey, &rightDesc); err != nil {
@@ -2735,6 +2741,8 @@ func (r *Replica) AdminMerge(
 		}
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
+		// TODO(spencer): rename "UpdatedDesc" to "LeftDesc" and
+		// "SubsumedDesc" to "RightDesc".
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
@@ -2778,8 +2786,8 @@ func (r *Replica) mergeTrigger(
 	var mergedMS = r.GetMVCCStats()
 	mergedMS.Add(*ms)
 
-	// Add in stats for right half of merge, excluding system-local stats, which
-	// will need to be recomputed.
+	// Add in stats for right hand side of merge, excluding system-local
+	// stats, which will need to be recomputed.
 	var rightMS enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMS); err != nil {
 		return err
