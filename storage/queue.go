@@ -307,6 +307,9 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 }
 
 func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool {
+	if bq.acceptsUnsplitRanges {
+		return false
+	}
 	// If there's no store (as is the case in some narrow unit tests), or if
 	// the store's split queue is disabled, the "required" split will never
 	// come. In that case, pretend we don't require the split.
@@ -314,7 +317,7 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 		return false
 	}
 	desc := repl.Desc()
-	return !bq.acceptsUnsplitRanges && cfg.NeedsSplit(desc.StartKey, desc.EndKey)
+	return cfg.NeedsSplit(desc.StartKey, desc.EndKey)
 }
 
 // addInternal adds the replica the queue with specified priority. If the
