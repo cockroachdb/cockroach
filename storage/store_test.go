@@ -587,6 +587,56 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 }
 
+func TestProcessRangeDescriptorUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// ensure Range 1 already exists with start and end keys set to min and max
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	rng := createRange(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
+	if err := store.AddReplicaTest(rng); err != nil {
+		t.Fatal(err)
+	}
+
+	desc := &roachpb.RangeDescriptor{
+		RangeID:  roachpb.RangeID(3),
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("d"),
+		Replicas: []roachpb.ReplicaDescriptor{{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		}},
+		NextReplicaID: 2,
+	}
+
+	r := &Replica{
+		RangeID:    desc.RangeID,
+		store:      store,
+		abortCache: NewAbortCache(desc.RangeID),
+		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
+			log.Warningf("range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
+		}),
+	}
+
+	// pretend the range is initialized
+	r.mu.state.Desc = desc
+	store.mu.uninitReplicas[roachpb.RangeID(3)] = r
+
+	if err := store.processRangeDescriptorUpdate(r); err != (rangeAlreadyExists{r}) {
+		t.Errorf("Expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
+	}
+
+}
+
 // TestStoreSend verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreSend(t *testing.T) {
