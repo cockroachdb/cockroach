@@ -2607,6 +2607,40 @@ func (s *Store) ComputeMetrics() error {
 	return nil
 }
 
+// ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
+// this store which contain any keys in the supplied range.
+func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.MVCCStats, int32) {
+	var output enginepb.MVCCStats
+	var count int32
+	iterator := func(item btree.Item) bool {
+		repl := item.(*Replica)
+		if !repl.Desc().StartKey.Less(endKey) {
+			// This properly checks if this range contains any keys in the supplied span.
+			return false
+		}
+		repl.mu.Lock()
+		output.Add(repl.mu.state.Stats)
+		repl.mu.Unlock()
+		count++
+		return true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Iterate over replicasByKey to find all ranges containing keys in the
+	// specified range. We use `startKey.Next()`` because btree's `Ascend`
+	// methods are inclusive of the start bound and exclusive of the end bound,
+	// but ranges are stored in the BTree by EndKey; in cockroach, end keys have
+	// the opposite behavior (a range's EndKey is contained by the subsequent
+	// range). We want ComputeStatsForKeySpan to match cockroach's behavior;
+	// using `startKey.Next()`,  will ignore a range which has EndKey exactly
+	// equal to the supplied startKey.
+	s.mu.replicasByKey.AscendGreaterOrEqual(
+		rangeBTreeKey(startKey.Next()), iterator)
+
+	return output, count
+}
+
 // FrozenStatus returns all of the Store's Replicas which are frozen (if the
 // parameter is true) or unfrozen (otherwise). It makes no attempt to prevent
 // new data being rebalanced to the Store, and thus does not guarantee that the
