@@ -1430,15 +1430,14 @@ func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bo
 // iterator.
 func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func(r *Replica) bool) {
 	// Iterate over replicasByKey to visit all ranges containing keys in the
-	// specified range. We use `startKey.Next()`` because btree's `Ascend`
-	// methods are inclusive of the start bound and exclusive of the end bound,
-	// but ranges are stored in the BTree by EndKey; in cockroach, end keys have
-	// the opposite behavior (a range's EndKey is contained by the subsequent
-	// range). We want ComputeStatsForKeySpan to match cockroach's behavior;
-	// using `startKey.Next()`, will ignore a range which has EndKey exactly
-	// equal to the supplied startKey.
-	// Iteration ends when all ranges are exhausted, or the next range contains
-	// no keys in the supplied span.
+	// specified range. We use startKey.Next() because btree's Ascend methods
+	// are inclusive of the start bound and exclusive of the end bound, but
+	// ranges are stored in the BTree by EndKey; in cockroach, end keys have the
+	// opposite behavior (a range's EndKey is contained by the subsequent
+	// range). We want visitReplicasLocked to match cockroach's behavior; using
+	// startKey.Next(), will ignore a range which has EndKey exactly equal to
+	// the supplied startKey. Iteration ends when all ranges are exhausted, or
+	// the next range contains no keys in the supplied span.
 	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(startKey.Next()),
 		func(item btree.Item) bool {
 			repl := item.(*Replica)

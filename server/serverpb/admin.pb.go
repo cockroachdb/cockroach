@@ -52,6 +52,8 @@
 		RaftRangeStatus
 		RaftDebugRequest
 		RaftDebugResponse
+		SpanStatsRequest
+		SpanStatsResponse
 		PrettySpan
 */
 package serverpb

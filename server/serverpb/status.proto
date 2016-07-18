@@ -21,8 +21,10 @@ option go_package = "serverpb";
 import "cockroach/build/info.proto";
 import "cockroach/gossip/gossip.proto";
 import "cockroach/server/status/status.proto";
+import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/storage/storagebase/state.proto";
 import "cockroach/util/unresolved_addr.proto";
+import "cockroach/roachpb/data.proto";
 
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
@@ -123,6 +125,17 @@ message RaftDebugResponse {
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
 }
 
+message SpanStatsRequest {
+  string node_id = 1;
+  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RKey"];
+  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RKey"];
+}
+
+message SpanStatsResponse {
+  int32 range_count = 2;
+  cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
+}
+
 service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
@@ -157,13 +170,18 @@ service Status {
       get: "/_status/gossip/{node_id}"
     };
   }
+  rpc SpanStats(SpanStatsRequest) returns (SpanStatsResponse) {
+    option (google.api.http) = {
+      post: "/_status/span"
+      body: "*"
+    };
+  }
   rpc Stacks(StacksRequest) returns (JSONResponse) {}
   rpc Metrics(MetricsRequest) returns (JSONResponse) {}
   rpc Logs(LogsRequest) returns (JSONResponse) {}
   rpc LogFilesList(LogFilesListRequest) returns (JSONResponse) {}
   rpc LogFile(LogFileRequest) returns (JSONResponse) {}
 }
-
 
 // PrettySpan holds a pretty-printed key range.
 message PrettySpan {

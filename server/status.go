@@ -677,6 +677,37 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 	return &output, nil
 }
 
+// SpanStats requests the total statistics stored on a node for a given key
+// span, which may include multiple ranges.
+func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsRequest) (
+	*serverpb.SpanStatsResponse, error,
+) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.SpanStats(ctx, req)
+	}
+
+	output := &serverpb.SpanStatsResponse{}
+	err = s.stores.VisitStores(func(store *storage.Store) error {
+		stats, count := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
+		output.TotalStats.Add(stats)
+		output.RangeCount += int32(count)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
 // jsonWrapper provides a wrapper on any slice data type being
 // marshaled to JSON. This prevents a security vulnerability
 // where a phishing attack can trick a user's browser into
