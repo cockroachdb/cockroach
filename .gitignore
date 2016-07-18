@@ -40,5 +40,7 @@ _testmain.go
 /cockroach-data
 /cockroach-darwin-10.9-amd64
 *.swp
+*.idea
+*.iml
 
 .bootstrap
