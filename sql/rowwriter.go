@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/util/encoding"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -821,7 +823,7 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 
 	// Delete the row.
 	rd.startKey = roachpb.Key(primaryIndexKey)
-	rd.endKey = rd.startKey.PrefixEnd()
+	rd.endKey = roachpb.Key(encoding.EncodeNotNullDescending(primaryIndexKey))
 	if log.V(2) {
 		log.Infof("DelRange %s - %s", rd.startKey, rd.endKey)
 	}

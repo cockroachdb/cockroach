@@ -130,7 +130,7 @@ func TestValidateTableDesc(t *testing.T) {
 			TableDescriptor{ID: 0, Name: "foo"}},
 		{`invalid parent ID 0`,
 			TableDescriptor{ID: 2, Name: "foo"}},
-		{`table "foo" is encoded using using version 0, but this client only supports version 1 and 2`,
+		{`table "foo" is encoded using using version 0, but this client only supports version 2 and 3`,
 			TableDescriptor{ID: 2, ParentID: 1, Name: "foo"}},
 		{`table must contain at least 1 column`,
 			TableDescriptor{

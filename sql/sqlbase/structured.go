@@ -59,7 +59,13 @@ const (
 	// FamilyFormatVersion corresponds to the encoding described in
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_families.md
 	FamilyFormatVersion
+	// InterleavedFormatVersion corresponds to the encoding described in
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_interleaved_tables.md
+	InterleavedFormatVersion
 )
+
+// Work around unused const linter.
+const _ = BaseFormatVersion
 
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
@@ -553,13 +559,20 @@ func (desc *TableDescriptor) Validate() error {
 		return fmt.Errorf("invalid parent ID %d", desc.ParentID)
 	}
 
-	// TODO(dan): Once a beta with this check is released, update the reference
-	// tests with it as the new bidirectional compatibility version. Then remove
-	// support here for BaseFormatVersion.
-	if v := desc.GetFormatVersion(); v != BaseFormatVersion && v != FamilyFormatVersion {
+	// We maintain forward compatibility, so if you see this error message with a
+	// version older that what this client supports, then there's a
+	// MaybeUpgradeFormatVersion missing from some codepath.
+	if v := desc.GetFormatVersion(); v != FamilyFormatVersion && v != InterleavedFormatVersion {
+		// TODO(dan): We're currently switching from FamilyFormatVersion to
+		// InterleavedFormatVersion. After a beta is released with this dual version
+		// support, then:
+		// - Upgrade the bidirectional reference version to that beta
+		// - Start constructing all TableDescriptors with InterleavedFormatVersion
+		// - Change MaybeUpgradeFormatVersion to output InterleavedFormatVersion
+		// - Change this check to only allow InterleavedFormatVersion
 		return fmt.Errorf(
 			"table %q is encoded using using version %d, but this client only supports version %d and %d",
-			desc.Name, desc.GetFormatVersion(), BaseFormatVersion, FamilyFormatVersion)
+			desc.Name, desc.GetFormatVersion(), FamilyFormatVersion, InterleavedFormatVersion)
 	}
 
 	if len(desc.Columns) == 0 {
@@ -1078,6 +1091,20 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 		}
 	}
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
+}
+
+// IsInterleaved returns true if any part of this this table is interleaved with
+// another table's data.
+func (desc *TableDescriptor) IsInterleaved() bool {
+	for _, index := range desc.AllNonDropIndexes() {
+		if len(index.Interleave.Ancestors) > 0 {
+			return true
+		}
+		if len(index.InterleavedBy) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
