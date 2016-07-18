@@ -124,7 +124,7 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 // clock's manual unix nanos time and a stopper. The caller is
 // responsible for stopping the stopper upon completion.
 // Some fields of ctx are populated by this function.
-func createTestStoreWithoutStart(t *testing.T, ctx *StoreContext) (*Store, *hlc.ManualClock, *stop.Stopper) {
+func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
@@ -158,7 +158,7 @@ func createTestStoreWithoutStart(t *testing.T, ctx *StoreContext) (*Store, *hlc.
 	return store, manual, stopper
 }
 
-func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
+func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	ctx := TestStoreContext()
 	return createTestStoreWithContext(t, &ctx)
 }
@@ -167,7 +167,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
 // engine. It returns the store, the store clock's manual unix nanos time
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
-func createTestStoreWithContext(t *testing.T, ctx *StoreContext) (
+func createTestStoreWithContext(t testing.TB, ctx *StoreContext) (
 	*Store, *hlc.ManualClock, *stop.Stopper) {
 
 	store, manual, stopper := createTestStoreWithoutStart(t, ctx)
