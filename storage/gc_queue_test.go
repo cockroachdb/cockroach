@@ -124,7 +124,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		{0, 0, 2, 0, hlc.ZeroTimestamp, true, 1},
 	}
 
-	gcQ := newGCQueue(tc.gossip)
+	gcQ := newGCQueue(tc.store, tc.gossip)
 
 	for i, test := range testCases {
 		// Write gc'able bytes as key bytes; since "live" bytes will be
@@ -272,7 +272,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.gossip)
+	gcQ := newGCQueue(tc.store, tc.gossip)
 	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -488,7 +488,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	// Run GC.
-	gcQ := newGCQueue(tc.gossip)
+	gcQ := newGCQueue(tc.store, tc.gossip)
 	cfg, ok := tc.gossip.GetSystemConfig()
 	if !ok {
 		t.Fatal("config not set")
@@ -591,7 +591,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.gossip)
+	gcQ := newGCQueue(tc.store, tc.gossip)
 	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
