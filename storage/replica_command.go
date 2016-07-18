@@ -1616,19 +1616,6 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 	r.mu.state.Lease = &lease
 
-	if r.IsFirstRange() && lease.OwnedBy(r.store.StoreID()) && lease.Covers(r.store.Clock().Now()) {
-		// Gossip the first range whenever its lease is acquired. We check to make
-		// sure the lease is active so that a trailing replica won't process an old
-		// lease request and attempt to gossip the first range.
-		//
-		// TODO(peter): This might be excessive. We could avoid gossiping if the
-		// range descriptor hasn't changed recently though we'd have to figure out
-		// what reliable signal to use to determine that.
-		batch.(engine.Batch).Defer(func() {
-			r.gossipFirstRange(ctx)
-		})
-	}
-
 	// maybeGossipSystemConfig cannot be called while the replica is locked,
 	// so we defer it here so it is called once the replica lock is released.
 	//
@@ -1654,22 +1641,31 @@ func (r *Replica) applyNewLeaseLocked(
 			log.Infof("%s: new range lease %s following %s [physicalTime=%s]",
 				r, lease, prevLease, r.store.Clock().PhysicalTime())
 			r.mu.tsCache.SetLowWater(lease.Start)
-		} else if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-			if raftGroup.Status().RaftState == raft.StateLeader {
-				// If this replica is the raft leader but it is not the new lease
-				// holder, then try to transfer the raft leadership to match the
-				// lease.
-				log.Infof("%s: replicaID %v transfer raft leadership to replicaID %v",
-					r, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
-				raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
+
+			// Gossip the first range whenever its lease is acquired. We check to
+			// make sure the lease is active so that a trailing replica won't process
+			// an old lease request and attempt to gossip the first range.
+			if r.IsFirstRange() && r.mu.state.Lease.Covers(r.store.Clock().Now()) {
+				r.gossipFirstRangeLocked(ctx)
 			}
-			return nil
-		}); err != nil {
-			// An error here indicates that this Replica has been destroyed
-			// while lacking the necessary synchronization (or even worse, it
-			// fails spuriously - could be a storage error), and so we avoid
-			// sweeping that under the rug.
-			return roachpb.RequestLeaseResponse{}, newReplicaCorruptionError(err)
+		} else if r.mu.state.Lease.Covers(r.store.Clock().Now()) {
+			if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+				if raftGroup.Status().RaftState == raft.StateLeader {
+					// If this replica is the raft leader but it is not the new lease
+					// holder, then try to transfer the raft leadership to match the
+					// lease.
+					log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
+						r.RangeID, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
+					raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
+				}
+				return nil
+			}); err != nil {
+				// An error here indicates that this Replica has been destroyed
+				// while lacking the necessary synchronization (or even worse, it
+				// fails spuriously - could be a storage error), and so we avoid
+				// sweeping that under the rug.
+				return roachpb.RequestLeaseResponse{}, newReplicaCorruptionError(err)
+			}
 		}
 	}
 	return reply, nil
@@ -2860,6 +2856,36 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 		})
 	}
+
+	// Gossip the first range whenever the range descriptor changes. We also
+	// gossip the first range whenever the lease holder changes, but that might
+	// not have occurred if a replica was being added or the non-lease-holder
+	// replica was being removed. Note that we attempt the gossiping even from
+	// the removed replica in case it was the lease-holder and it is still
+	// holding the lease.
+	if r.IsFirstRange() {
+		batch.Defer(func() {
+			// We need to run the gossip in an async task because gossiping requires
+			// the range lease and we'll deadlock if we try to acquire it while
+			// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
+			// blocks waiting for the lease acquisition to finish but it can't finish
+			// because we're not processing raft messages due to holding
+			// processRaftMu (and running on the processRaft goroutine).
+			_ = r.store.Stopper().RunAsyncTask(func() {
+				// Create a new context because this is an asynchronous task and we
+				// don't want to share the trace.
+				ctx := r.context(context.Background())
+				if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					r.gossipFirstRangeLocked(ctx)
+				} else {
+					log.Infof("unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
+				}
+			})
+		})
+	}
+
 	batch.Defer(func() {
 		cpy := *r.Desc()
 		cpy.Replicas = change.UpdatedReplicas
