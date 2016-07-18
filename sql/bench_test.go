@@ -924,7 +924,7 @@ func runBenchmarkInterleavedSelect(b *testing.B, db *gosql.DB, count int) {
 	if _, err := db.Exec(`CREATE TABLE bench.interleaved_select1 (a INT PRIMARY KEY, b INT)`); err != nil {
 		b.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE bench.interleaved_select2 (c INT PRIMARY KEY, d INT)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE bench.interleaved_select2 (c INT PRIMARY KEY, d INT) INTERLEAVE IN PARENT interleaved_select1 (c)`); err != nil {
 		b.Fatal(err)
 	}
 
