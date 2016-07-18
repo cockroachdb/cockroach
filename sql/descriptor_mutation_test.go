@@ -252,7 +252,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			t.Fatal(err)
 		}
 		// Repeating the same without specifying the columns results in a different error.
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('b', 'y', 'i')`); !testutils.IsError(err, "INSERT has more expressions than target columns: 3/2") {
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('b', 'y', 'i')`); !testutils.IsError(err, "INSERT error: table t.test has 2 columns but 3 values were supplied") {
 			t.Fatal(err)
 		}
 		// Make column "i" live so that it is read.
