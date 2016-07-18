@@ -1002,7 +1002,7 @@ func (r *Replica) RangeLookup(
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record collocated with a replica
+		// split-related intents or a txn record co-located with a replica
 		// involved in the split. Since we cannot know the correct answer, we
 		// reply with both the pre- and post- transaction values when the
 		// ConsiderIntents flag is set.
@@ -2174,7 +2174,7 @@ func (r *Replica) AdminSplit(
 			return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
 		}
 
-		foundSplitKey, err := keys.MakeSplitKey(foundSplitKey)
+		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
 		if err != nil {
 			return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
 				args.SplitKey, err)
@@ -2200,7 +2200,7 @@ func (r *Replica) AdminSplit(
 	}
 	log.Trace(ctx, "found split key")
 
-	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
+	// Create new range descriptor with newly-allocated Range ID.
 	newDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		return reply, roachpb.NewErrorf("unable to allocate new range descriptor: %s", err)
@@ -2215,17 +2215,17 @@ func (r *Replica) AdminSplit(
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
 		defer log.Trace(ctx, "split closure ends")
-		// Create range descriptor for second half of split.
-		// Note that this put must go first in order to locate the
-		// transaction record on the correct range.
+		// Update existing range descriptor for first half of split. Note
+		// that we mutate the descriptor for the left hand side of the
+		// split first to locate the txn record there..
 		b := &client.Batch{}
-		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
-		if err := updateRangeDescriptor(b, desc1Key, nil, newDesc); err != nil {
+		desc1Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
+		if err := updateRangeDescriptor(b, desc1Key, desc, &updatedDesc); err != nil {
 			return err
 		}
-		// Update existing range descriptor for first half of split.
-		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
-		if err := updateRangeDescriptor(b, desc2Key, desc, &updatedDesc); err != nil {
+		// Create range descriptor for second half of split.
+		desc2Key := keys.RangeDescriptorKey(newDesc.StartKey)
+		if err := updateRangeDescriptor(b, desc2Key, nil, newDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).
@@ -2487,7 +2487,7 @@ func (r *Replica) splitTrigger(
 		//
 		// This is a stop-gap to achieve this: If there is an uninitialized
 		// Replica, disable it now (but leave it in the map). The split will
-		// then delete it after we committed.
+		// then delete it after we are committed.
 		// See #7600.
 		r.store.mu.Lock()
 		if uninitRHS := r.store.mu.uninitReplicas[split.NewDesc.RangeID]; uninitRHS != nil {
