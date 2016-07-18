@@ -1814,7 +1814,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	// Add the range and its current stats into metrics.
 	s.metrics.replicaCount.Inc(1)
 
-	if s.mu.replicasByKey.Has(rng) {
+	if s.hasOverlappingReplicaLocked(rng.Desc()) {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
