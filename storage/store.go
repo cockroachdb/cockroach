@@ -1550,8 +1550,9 @@ func (s *Store) IsDrainingLeases() bool {
 }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
-// keys and the supplied roachpb.Replicas slice. It allocates new
-// replica IDs to fill out the supplied replicas.
+// keys and the supplied roachpb.Replicas slice. It allocates a new
+// range ID and returns a RangeDescriptor whose Replicas are a copy
+// of the supplied replicas slice, with appropriate ReplicaIDs assigned.
 func (s *Store) NewRangeDescriptor(
 	start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.RangeDescriptor, error) {

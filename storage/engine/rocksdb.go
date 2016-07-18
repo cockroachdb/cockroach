@@ -752,6 +752,11 @@ func (r *rocksDBBatchIterator) PrevKey() {
 	r.rocksDBIterator.PrevKey()
 }
 
+func (r *rocksDBBatchIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+	r.batch.flushMutations()
+	return r.rocksDBIterator.ComputeStats(start, end, nowNanos)
+}
+
 type rocksDBBatch struct {
 	parent             *RocksDB
 	batch              *C.DBEngine
