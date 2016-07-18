@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/pkg/errors"
 )
@@ -305,16 +304,6 @@ func (ts *TestServer) ServingHost() (string, error) {
 func (ts *TestServer) ServingPort() (string, error) {
 	_, p, err := net.SplitHostPort(ts.ServingAddr())
 	return p, err
-}
-
-// SetRangeRetryOptions sets the retry options for stores in TestServer.
-func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
-	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
-		s.SetRangeRetryOptions(ro)
-		return nil
-	}); err != nil {
-		panic(err)
-	}
 }
 
 // WriteSummaries implements TestServerInterface.
