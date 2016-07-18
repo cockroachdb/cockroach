@@ -197,6 +197,11 @@ type Replica struct {
 	// RWMutex.
 	readOnlyCmdMu sync.RWMutex
 
+	// rangeDesc is a *RangeDescriptor that can be atomically read from in
+	// replica.Desc() without needing to acquire the replica.mu lock. All
+	// updates to state.Desc should be duplicated here
+	rangeDesc atomic.Value
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
@@ -204,11 +209,6 @@ type Replica struct {
 		destroyed error
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
-		// rangeDesc is a *RangeDescriptor that can be atomically read from. All
-		// updates to state.Desc should be duplicated here (as is done in
-		// updateRangeDescriptorLocked()) so that it can be read without acquiring
-		// the lock.
-		rangeDesc atomic.Value
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
@@ -363,7 +363,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
 		return err
 	}
-	r.mu.rangeDesc.Store(r.mu.state.Desc)
+	r.rangeDesc.Store(r.mu.state.Desc)
 
 	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -392,7 +392,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	desc := r.mu.rangeDesc.Load().(*roachpb.RangeDescriptor)
+	desc := r.Desc()
 	return fmt.Sprintf("%s range=%d [%s-%s)", r.store,
 		desc.RangeID, desc.StartKey, desc.EndKey)
 }
@@ -631,9 +631,7 @@ func (r *Replica) isInitializedLocked() bool {
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.state.Desc
+	return r.rangeDesc.Load().(*roachpb.RangeDescriptor)
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -666,7 +664,7 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 	}
 
 	r.mu.state.Desc = desc
-	r.mu.rangeDesc.Store(desc)
+	r.rangeDesc.Store(desc)
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
@@ -848,7 +846,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		r.panic("empty batch")
+		r.panicf("empty batch")
 	} else {
 		r.panicf("don't know how to handle command %s", ba)
 	}
@@ -2648,8 +2646,8 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	}
 }
 
-func (r *Replica) panic(s interface{}) {
-	panic(r.String() + ": " + s)
+func (r *Replica) panic(err error) {
+	panic(r.String() + ": " + err.Error())
 }
 
 func (r *Replica) panicf(format string, vals ...interface{}) {
