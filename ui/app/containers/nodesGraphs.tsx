@@ -20,7 +20,7 @@ export default class extends React.Component<{}, {}> {
           <GraphGroup groupId="nodes.activity">
 
             <LineGraph title="SQL Connections">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.conns" title="Client Connections" />
               </Axis>
             </LineGraph>
@@ -33,7 +33,7 @@ export default class extends React.Component<{}, {}> {
             </LineGraph>
 
             <LineGraph title="Queries Per Second">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
               </Axis>
             </LineGraph>
@@ -66,13 +66,13 @@ export default class extends React.Component<{}, {}> {
           <GraphGroup groupId="nodes.queries">
 
             <LineGraph title="Reads">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
               </Axis>
             </LineGraph>
 
             <LineGraph title="Writes">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
                 <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
                 <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
@@ -80,7 +80,7 @@ export default class extends React.Component<{}, {}> {
             </LineGraph>
 
             <LineGraph title="Transactions">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.txn.commit.count" title="Commits" nonNegativeRate />
                 <Metric name="cr.node.sql.txn.rollback.count" title="Rollbacks" nonNegativeRate />
                 <Metric name="cr.node.sql.txn.abort.count" title="Aborts" nonNegativeRate />
@@ -88,7 +88,7 @@ export default class extends React.Component<{}, {}> {
             </LineGraph>
 
             <LineGraph title="Schema Changes">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
               </Axis>
             </LineGraph>
@@ -115,13 +115,13 @@ export default class extends React.Component<{}, {}> {
             </LineGraph>
 
             <LineGraph title="Goroutine Count">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
               </Axis>
             </LineGraph>
 
             <LineGraph title="CGo Calls">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sys.cgocalls" title="CGo Calls" nonNegativeRate />
               </Axis>
             </LineGraph>
@@ -149,7 +149,7 @@ export default class extends React.Component<{}, {}> {
             </LineGraph>
 
             <StackedAreaGraph title="Block Cache Hits/Misses">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.block.cache.hits"
                         title="Cache Hits"
                         nonNegativeRate />
@@ -168,14 +168,14 @@ export default class extends React.Component<{}, {}> {
             </StackedAreaGraph>
 
             <LineGraph title="Flushes and Compactions">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.flushes" title="Flushes" nonNegativeRate />
                 <Metric name="cr.store.rocksdb.compactions" title="Compactions" nonNegativeRate />
               </Axis>
             </LineGraph>
 
             <LineGraph title="Bloom Filter Prefix">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.bloom.filter.prefix.checked"
                         title="Checked"
                         nonNegativeRate />
@@ -199,7 +199,7 @@ export default class extends React.Component<{}, {}> {
             </LineGraph>
 
             <LineGraph title="Read Amplification">
-              <Axis format={ d3.format(".1") }>
+              <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" aggregateMax downsampleMax />
               </Axis>
             </LineGraph>
