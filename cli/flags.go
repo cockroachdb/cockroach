@@ -109,7 +109,7 @@ with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`),
 
 	cliflags.PrettyName: wrapText(`
-Causes table rows to be formatted as tables using ASCII art. 
+Causes table rows to be formatted as tables using ASCII art.
 When not specified, table rows are printed as tab-separated values (TSV).`),
 
 	cliflags.JoinName: wrapText(`
@@ -418,7 +418,7 @@ func init() {
 		f.StringVar(&baseCtx.SSLCertKey, cliflags.KeyName, baseCtx.SSLCertKey, usageNoEnv(cliflags.KeyName))
 
 		// Cluster joining flags.
-		f.StringVar(&serverCtx.JoinUsing, cliflags.JoinName, serverCtx.JoinUsing, usageNoEnv(cliflags.JoinName))
+		f.VarP(&serverCtx.JoinUsing, cliflags.JoinName, "j", usageNoEnv(cliflags.JoinName))
 
 		// Engine flags.
 		setDefaultCacheSize(&serverCtx)

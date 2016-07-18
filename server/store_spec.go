@@ -215,6 +215,14 @@ type StoreSpecList struct {
 	updated bool // updated is used to determine if specs only contain the default value.
 }
 
+// JoinUsingSpecList contains a slice of strings that implements pflag's value
+// interface.
+type JoinUsingSpecList struct {
+	Specs   []string
+	updated bool // updated is used to determine if specs only contain the default value.
+	// TODO(rushiagr): do we really need updated bool?
+}
+
 // String returns a string representation of all the StoreSpecs. This is part
 // of pflag's value interface.
 func (ssl StoreSpecList) String() string {
@@ -229,10 +237,30 @@ func (ssl StoreSpecList) String() string {
 	return buffer.String()
 }
 
+// String returns a string representation of all the JoinUsingSpecList. This is part
+// of pflag's value interface.
+func (jusl JoinUsingSpecList) String() string {
+	var buffer bytes.Buffer
+	for _, ju := range jusl.Specs {
+		fmt.Fprintf(&buffer, "--join=%s ", ju)
+	}
+	// Trim the extra space from the end if it exists.
+	if l := buffer.Len(); l > 0 {
+		buffer.Truncate(l - 1)
+	}
+	return buffer.String()
+}
+
 // Type returns the underlying type in string form. This is part of pflag's
 // value interface.
 func (ssl *StoreSpecList) Type() string {
 	return "StoreSpec"
+}
+
+// Type returns the underlying type in string form. This is part of pflag's
+// value interface.
+func (jusl *JoinUsingSpecList) Type() string {
+	return "string"
 }
 
 // Set adds a new value to the StoreSpecValue. It is the important part of
@@ -247,6 +275,18 @@ func (ssl *StoreSpecList) Set(value string) error {
 		ssl.updated = true
 	} else {
 		ssl.Specs = append(ssl.Specs, spec)
+	}
+	return nil
+}
+
+// Set adds a new value to the JoinUsingSpecList. It is the important part of
+// pflag's value interface.
+func (jusl *JoinUsingSpecList) Set(value string) error {
+	if !jusl.updated {
+		jusl.Specs = []string{value}
+		jusl.updated = true
+	} else {
+		jusl.Specs = append(jusl.Specs, value)
 	}
 	return nil
 }

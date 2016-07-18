@@ -366,6 +366,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	for i, spec := range serverCtx.Stores.Specs {
 		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 	}
+	fmt.Fprintf(tw, "join thingy: %s", serverCtx.JoinUsing)
 	if err := tw.Flush(); err != nil {
 		return err
 	}

@@ -83,7 +83,9 @@ type Context struct {
 
 	// JoinUsing is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
-	JoinUsing string
+	// JoinUsing string
+	// TODO(rushiagr): update comment above
+	JoinUsing JoinUsingSpecList // []string
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
@@ -307,6 +309,9 @@ func MakeContext() Context {
 		Stores: StoreSpecList{
 			Specs: []StoreSpec{{Path: defaultStorePath}},
 		},
+		// JoinUsing: JoinUsingSpecList{
+		// 	Specs: []string{},
+		// },
 	}
 	ctx.Context.InitDefaults()
 	return ctx
@@ -420,16 +425,18 @@ func (ctx *Context) readEnvironmentVariables() {
 // gossip bootstrap resolvers.
 func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
-	addresses := strings.Split(ctx.JoinUsing, ",")
-	for _, address := range addresses {
-		if len(address) == 0 {
-			continue
+	for _, joinusing := range ctx.JoinUsing.Specs {
+		addresses := strings.Split(joinusing, ",")
+		for _, address := range addresses {
+			if len(address) == 0 {
+				continue
+			}
+			resolver, err := resolver.NewResolver(ctx.Context, address)
+			if err != nil {
+				return nil, err
+			}
+			bootstrapResolvers = append(bootstrapResolvers, resolver)
 		}
-		resolver, err := resolver.NewResolver(ctx.Context, address)
-		if err != nil {
-			return nil, err
-		}
-		bootstrapResolvers = append(bootstrapResolvers, resolver)
 	}
 
 	return bootstrapResolvers, nil
