@@ -34,6 +34,7 @@ func (f *Farmer) defaultKeyFile() string {
 
 func (f *Farmer) ssh(host, keyfile, cmd string) (stdout string, stderr string, _ error) {
 	return f.run("ssh",
+		"-o", "ServerAliveInterval=5",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-q", "-i", keyfile, sshUser+"@"+host, cmd)
