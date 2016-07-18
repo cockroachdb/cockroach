@@ -57,16 +57,17 @@ var testIdent = roachpb.StoreIdent{
 	StoreID:   1,
 }
 
-// setTestRetryOptions sets aggressive retries with a limit on number
-// of attempts so we don't get stuck behind indefinite backoff/retry
+// testRetryOptions returns retry options with aggressive retries and a limit
+// on number of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
-func setTestRetryOptions(s *Store) {
-	s.SetRangeRetryOptions(retry.Options{
+// Using this is generally considered bad taste and legacy.
+func testRetryOptions() retry.Options {
+	return retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     2 * time.Millisecond,
 		Multiplier:     2,
 		MaxRetries:     1,
-	})
+	}
 }
 
 // testSender is an implementation of the client.Sender interface
@@ -1073,8 +1074,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 // Verifies no starvation for both serializable and snapshot txns.
 func TestStoreLongTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
-	setTestRetryOptions(store)
+	sCtx := TestStoreContext()
+	sCtx.RangeRetryOptions = testRetryOptions()
+	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
 
 	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
@@ -1237,9 +1239,10 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // push, verify a write intent error is returned with !Resolvable.
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	sCtx := TestStoreContext()
+	sCtx.RangeRetryOptions = testRetryOptions()
+	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
-	setTestRetryOptions(store)
 
 	testCases := []struct {
 		resolvable bool
