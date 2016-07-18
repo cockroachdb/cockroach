@@ -81,9 +81,10 @@ type Context struct {
 	// in zone configs.
 	Attrs string
 
-	// JoinUsing is a comma-separated list of node addresses that
-	// act as bootstrap hosts for connecting to the gossip network.
-	JoinUsing string
+	// JoinList is a list of node addresses that act as bootstrap hosts for
+	// connecting to the gossip network. Each item in the list can actually be
+	// multiple comma-separated addresses, kept for backward-compatibility.
+	JoinList JoinListType
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
@@ -416,20 +417,21 @@ func (ctx *Context) readEnvironmentVariables() {
 	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("reservations_enabled", ctx.ReservationsEnabled)
 }
 
-// parseGossipBootstrapResolvers parses a comma-separated list of
-// gossip bootstrap resolvers.
+// parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
 func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
-	addresses := strings.Split(ctx.JoinUsing, ",")
-	for _, address := range addresses {
-		if len(address) == 0 {
-			continue
+	for _, commaSeparatedAddresses := range ctx.JoinList {
+		addresses := strings.Split(commaSeparatedAddresses, ",")
+		for _, address := range addresses {
+			if len(address) == 0 {
+				continue
+			}
+			resolver, err := resolver.NewResolver(ctx.Context, address)
+			if err != nil {
+				return nil, err
+			}
+			bootstrapResolvers = append(bootstrapResolvers, resolver)
 		}
-		resolver, err := resolver.NewResolver(ctx.Context, address)
-		if err != nil {
-			return nil, err
-		}
-		bootstrapResolvers = append(bootstrapResolvers, resolver)
 	}
 
 	return bootstrapResolvers, nil

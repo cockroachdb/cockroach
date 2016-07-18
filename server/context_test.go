@@ -47,12 +47,12 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	}
 }
 
-// TestParseJoinUsingAddrs verifies that JoinUsing is parsed
+// TestParseJoinUsingAddrs verifies that JoinList is parsed
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := MakeContext()
-	ctx.JoinUsing = "localhost:12345,,localhost:23456"
+	ctx.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
 	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -70,7 +70,11 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []resolver.Resolver{r1, r2}
+	r3, err := resolver.NewResolver(ctx.Context, "localhost:34567")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := []resolver.Resolver{r1, r2, r3}
 	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
 		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
 	}
