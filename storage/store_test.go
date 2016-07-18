@@ -587,6 +587,59 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 }
 
+func TestProcessRangeDescriptorUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Clobber the existing range so we can test overlaps that aren't KeyMin or KeyMax.
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	rng := createRange(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
+	if err := store.AddReplicaTest(rng); err != nil {
+		t.Fatal(err)
+	}
+
+	newRangeID := roachpb.RangeID(3)
+	desc := &roachpb.RangeDescriptor{
+		RangeID:  newRangeID,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("d"),
+		Replicas: []roachpb.ReplicaDescriptor{{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		}},
+		NextReplicaID: 2,
+	}
+
+	r := &Replica{
+		RangeID:    desc.RangeID,
+		store:      store,
+		abortCache: NewAbortCache(desc.RangeID),
+		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {}),
+	}
+
+	// Pretend the range is initialized.
+	r.mu.Lock()
+	r.mu.state.Desc = desc
+	r.mu.Unlock()
+	store.mu.Lock()
+	store.mu.uninitReplicas[newRangeID] = r
+	store.mu.Unlock()
+
+	if err := store.processRangeDescriptorUpdate(r); err != (rangeAlreadyExists{r}) {
+		t.Errorf("Expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
+	}
+
+}
+
 // TestStoreSend verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreSend(t *testing.T) {
