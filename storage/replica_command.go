@@ -1644,9 +1644,16 @@ func (r *Replica) applyNewLeaseLocked(
 			// mark of the timestamp cache. Note that clock offset scenarios are
 			// handled via a stasis period inherent in the lease which is documented
 			// in on the Lease struct.
+			//
+			// The introduction of lease transfers implies that the previous lease
+			// may have been shortened and we are now applying a formally overlapping
+			// lease (since the old lease holder has promised not to serve any more
+			// requests, this is kosher). This means that we don't use the old
+			// lease's expiration but instead use the new lease's start to initialize
+			// the timestamp cache low water.
 			log.Infof("%s: new range lease %s following %s [physicalTime=%s]",
 				r, lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.tsCache.SetLowWater(prevLease.Expiration)
+			r.mu.tsCache.SetLowWater(lease.Start)
 		} else if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 			if raftGroup.Status().RaftState == raft.StateLeader {
 				// If this replica is the raft leader but it is not the new lease

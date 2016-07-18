@@ -157,20 +157,13 @@ func TestBasicManualReplication(t *testing.T) {
 		t.Fatalf("expected %d replicas, got %+v", expected, desc.Replicas)
 	}
 
-	// TODO(andrei,tobias): Figure out how to fix the test failure:
-	//
-	// testcluster_test.go:169: change replicas of range 1 failed: storage/store.go:1938:
-	//   rejecting command with timestamp in the future: 1468681160641425412 (3.047592914s ahead)
-	//
-	// This is caused by Replica.applyNewLeaseLocked setting the timestamp cache
-	// low water based on the previous lease expiration.
-	// if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
-	// 	t.Fatal(err)
-	// }
+	if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
 
-	// TODO(peter): Removing the range leader (tc.Target(0)) causes the test to
+	// TODO(peter): Removing the range leader (tc.Target(1)) causes the test to
 	// take ~13s vs ~1.5s for removing a non-leader. Track down that slowness.
-	desc, err = tc.RemoveReplicas(desc.StartKey, tc.Target(1))
+	desc, err = tc.RemoveReplicas(desc.StartKey, tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
 	}
