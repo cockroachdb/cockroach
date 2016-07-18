@@ -2438,6 +2438,8 @@ export interface serverpbBuilder {
 	RaftRangeStatus: serverpb.RaftRangeStatusBuilder;
 	RaftDebugRequest: serverpb.RaftDebugRequestBuilder;
 	RaftDebugResponse: serverpb.RaftDebugResponseBuilder;
+	SpanStatsRequest: serverpb.SpanStatsRequestBuilder;
+	SpanStatsResponse: serverpb.SpanStatsResponseBuilder;
 	PrettySpan: serverpb.PrettySpanBuilder;
 	ZoneConfigurationLevel: serverpb.ZoneConfigurationLevel;
 	DrainMode: serverpb.DrainMode;
@@ -4600,6 +4602,105 @@ export interface RaftDebugResponseBuilder {
 	decode(buffer: ArrayBuffer) : RaftDebugResponseMessage;
 	decode(buffer: ByteBuffer) : RaftDebugResponseMessage;
 	decode64(buffer: string) : RaftDebugResponseMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface SpanStatsRequest {
+	
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+start_key?: ByteBuffer;
+		
+
+getStartKey?() : ByteBuffer;
+		setStartKey?(startKey : ByteBuffer): void;
+		
+
+
+
+end_key?: ByteBuffer;
+		
+
+getEndKey?() : ByteBuffer;
+		setEndKey?(endKey : ByteBuffer): void;
+		
+
+
+
+}
+	
+	export interface SpanStatsRequestMessage extends SpanStatsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SpanStatsRequestBuilder {
+	new(data?: SpanStatsRequest): SpanStatsRequestMessage;
+	decode(buffer: ArrayBuffer) : SpanStatsRequestMessage;
+	decode(buffer: ByteBuffer) : SpanStatsRequestMessage;
+	decode64(buffer: string) : SpanStatsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface SpanStatsResponse {
+	
+		
+
+range_count?: number;
+		
+
+getRangeCount?() : number;
+		setRangeCount?(rangeCount : number): void;
+		
+
+
+
+total_stats?: storage.engine.enginepb.MVCCStats;
+		
+
+getTotalStats?() : storage.engine.enginepb.MVCCStats;
+		setTotalStats?(totalStats : storage.engine.enginepb.MVCCStats): void;
+		
+
+
+
+}
+	
+	export interface SpanStatsResponseMessage extends SpanStatsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SpanStatsResponseBuilder {
+	new(data?: SpanStatsResponse): SpanStatsResponseMessage;
+	decode(buffer: ArrayBuffer) : SpanStatsResponseMessage;
+	decode(buffer: ByteBuffer) : SpanStatsResponseMessage;
+	decode64(buffer: string) : SpanStatsResponseMessage;
 	
 }
 	

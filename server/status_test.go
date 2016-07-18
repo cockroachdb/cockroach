@@ -551,3 +551,29 @@ func TestStatusVars(t *testing.T) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
 	}
 }
+
+func TestSpanStatsResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop()
+
+	httpClient, err := ts.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var response serverpb.SpanStatsResponse
+	request := serverpb.SpanStatsRequest{
+		NodeId:   "1",
+		StartKey: []byte(roachpb.RKeyMin),
+		EndKey:   []byte(roachpb.RKeyMax),
+	}
+
+	url := ts.AdminURL() + statusPrefix + "span"
+	if err := util.PostJSON(httpClient, url, &request, &response); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := int(response.RangeCount), ExpectedInitialRangeCount(); a != e {
+		t.Errorf("expected %d ranges, found %d", e, a)
+	}
+}
