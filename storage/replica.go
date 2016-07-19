@@ -2475,14 +2475,17 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
-	if ok, pErr := r.getLeaseForGossip(ctx); !ok || pErr != nil {
+	if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.gossipFirstRangeLocked(ctx)
+	} else {
 		return pErr
 	}
-	r.gossipFirstRange(ctx)
 	return nil
 }
 
-func (r *Replica) gossipFirstRange(ctx context.Context) {
+func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	// Gossip is not provided for the bootstrap store and for some tests.
 	if r.store.Gossip() == nil {
 		return
@@ -2495,9 +2498,11 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.store.StoreID(), r.RangeID)
+		log.Infoc(ctx, "gossiping first range from store %d, range %d: %s",
+			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
 	}
-	if err := r.store.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, r.Desc(), configGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfoProto(
+		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
 }
