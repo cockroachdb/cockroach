@@ -801,7 +801,9 @@ func (sc *StoreContext) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
 func (sc *StoreContext) setDefaults() {
-	sc.RangeRetryOptions = base.DefaultRetryOptions()
+	if (sc.RangeRetryOptions == retry.Options{}) {
+		sc.RangeRetryOptions = base.DefaultRetryOptions()
+	}
 
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = base.DefaultRaftTickInterval
@@ -2605,16 +2607,6 @@ func (s *Store) ComputeMetrics() error {
 		s.metrics.rdbReadAmplification.Update(int64(readAmp))
 	}
 	return nil
-}
-
-// SetRangeRetryOptions sets the retry options used for this store.
-// For unittests only.
-// TODO(bdarnell): have the affected tests pass retry options in through
-// the StoreContext.
-func (s *Store) SetRangeRetryOptions(ro retry.Options) {
-	s.mu.Lock()
-	s.ctx.RangeRetryOptions = ro
-	s.mu.Unlock()
 }
 
 // FrozenStatus returns all of the Store's Replicas which are frozen (if the

@@ -30,8 +30,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -50,15 +51,6 @@ var correctnessTestRetryOptions = retry.Options{
 	MaxBackoff:     10 * time.Millisecond,
 	Multiplier:     10,
 	MaxRetries:     2,
-}
-
-func setCorrectnessRetryOptions(stores *storage.Stores) {
-	if err := stores.VisitStores(func(s *storage.Store) error {
-		s.SetRangeRetryOptions(correctnessTestRetryOptions)
-		return nil
-	}); err != nil {
-		panic(err)
-	}
 }
 
 type retryError struct {
@@ -885,9 +877,12 @@ func checkConcurrency(
 	verifier := newHistoryVerifier(name, txns, verify, t)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.TxnRetryOptions = correctnessTestRetryOptions
-	s, _ := createTestDBWithContext(t, dbCtx)
+	s := &localtestcluster.LocalTestCluster{
+		DBContext:         &dbCtx,
+		RangeRetryOptions: &correctnessTestRetryOptions,
+	}
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	defer s.Stop()
-	setCorrectnessRetryOptions(s.Stores)
 	verifier.run(isolations, s.DB, t)
 }
 
