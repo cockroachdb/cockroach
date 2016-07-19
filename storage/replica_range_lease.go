@@ -272,7 +272,7 @@ func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error
 		defer r.mu.Unlock()
 		lease := r.mu.state.Lease
 		if !lease.OwnedBy(r.store.StoreID()) {
-			return nil, nil, r.newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
+			return nil, nil, r.newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc)
 		}
 		nextLease := r.mu.pendingLeaseRequest.RequestPending()
 		if nextLease != nil && nextLease.Replica != nextLeader {
