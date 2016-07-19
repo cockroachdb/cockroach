@@ -52,7 +52,7 @@ type purgatoryError interface {
 
 // A replicaItem holds a replica and its priority for use with a priority queue.
 type replicaItem struct {
-	value    *Replica
+	value    roachpb.RangeID
 	priority float64
 	// The index is needed by update and is maintained by the heap.Interface methods.
 	index int // The index of the item in the heap.
@@ -185,6 +185,7 @@ type baseQueue struct {
 	// a pointer to a structure which is a copy of the one within which
 	// it is contained. DANGER.
 	impl   queueImpl
+	store  *Store
 	gossip *gossip.Gossip
 	queueConfig
 	incoming chan struct{} // Channel signaled when a new replica is added to the queue.
@@ -210,12 +211,14 @@ type baseQueue struct {
 func makeBaseQueue(
 	name string,
 	impl queueImpl,
+	store *Store,
 	gossip *gossip.Gossip,
 	cfg queueConfig,
 ) baseQueue {
 	bq := baseQueue{
 		name:        name,
 		impl:        impl,
+		store:       store,
 		gossip:      gossip,
 		queueConfig: cfg,
 		incoming:    make(chan struct{}, 1),
@@ -353,7 +356,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	}
 
 	bq.eventLog.VInfof(log.V(3), "%s: adding: priority=%0.3f", repl, priority)
-	item = &replicaItem{value: repl, priority: priority}
+	item = &replicaItem{value: repl.RangeID, priority: priority}
 	heap.Push(&bq.mu.priorityQ, item)
 	bq.mu.replicas[repl.RangeID] = item
 
@@ -413,9 +416,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				}
 			// Process replicas as the timer expires.
 			case <-nextTime:
-				bq.mu.Lock()
 				repl := bq.pop()
-				bq.mu.Unlock()
 				if repl != nil {
 					if stopper.RunTask(func() {
 						if err := bq.processReplica(repl, clock); err != nil {
@@ -505,7 +506,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 
 	bq.eventLog.Error(errors.Wrapf(err, "(purgatory) on %s", repl))
 
-	item := &replicaItem{value: repl}
+	item := &replicaItem{value: repl.RangeID}
 	bq.mu.replicas[repl.RangeID] = item
 
 	// If purgatory already exists, just add to the map and we're done.
@@ -526,14 +527,19 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 			case <-bq.impl.purgatoryChan():
 				// Remove all items from purgatory into a copied slice.
 				bq.mu.Lock()
-				repls := make([]*Replica, 0, len(bq.mu.purgatory))
+				ranges := make([]roachpb.RangeID, 0, len(bq.mu.purgatory))
 				for rangeID := range bq.mu.purgatory {
 					item := bq.mu.replicas[rangeID]
-					repls = append(repls, item.value)
+					ranges = append(ranges, item.value)
 					bq.remove(item)
 				}
 				bq.mu.Unlock()
-				for _, repl := range repls {
+				for _, id := range ranges {
+					repl, err := bq.store.GetReplica(id)
+					if err != nil {
+						bq.eventLog.Error(errors.Wrapf(err, "range %s no longer exists on store", id))
+						return
+					}
 					if stopper.RunTask(func() {
 						if err := bq.processReplica(repl, clock); err != nil {
 							bq.maybeAddToPurgatory(repl, err, clock, stopper)
@@ -572,38 +578,44 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 // replica if not empty; otherwise, returns nil. Expects mutex to be
 // locked.
 func (bq *baseQueue) pop() *Replica {
+	bq.mu.Lock()
+
 	if bq.mu.priorityQ.Len() == 0 {
+		bq.mu.Unlock()
 		return nil
 	}
 	item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
-	delete(bq.mu.replicas, item.value.RangeID)
-	return item.value
+	delete(bq.mu.replicas, item.value)
+	bq.mu.Unlock()
+
+	repl, err := bq.store.GetReplica(item.value)
+	if err != nil {
+		bq.eventLog.Error(errors.Wrapf(err, "range %s no longer exists on store", item.value))
+		return nil
+	}
+	return repl
 }
 
 // remove removes an element from purgatory (if it's experienced an
 // error) or from the priority queue by index. Caller must hold mutex.
 func (bq *baseQueue) remove(item *replicaItem) {
-	if _, ok := bq.mu.purgatory[item.value.RangeID]; ok {
-		delete(bq.mu.purgatory, item.value.RangeID)
+	if _, ok := bq.mu.purgatory[item.value]; ok {
+		delete(bq.mu.purgatory, item.value)
 	} else {
 		heap.Remove(&bq.mu.priorityQ, item.index)
 	}
-	delete(bq.mu.replicas, item.value.RangeID)
+	delete(bq.mu.replicas, item.value)
 }
 
 // DrainQueue locks the queue and processes the remaining queued replicas. It
 // processes the replicas in the order they're queued in, one at a time.
 // Exposed for testing only.
 func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
-	bq.mu.Lock()
 	repl := bq.pop()
-	bq.mu.Unlock()
 	for repl != nil {
 		if err := bq.processReplica(repl, clock); err != nil {
 			bq.eventLog.Error(errors.Wrapf(err, "failed processing replica %s", repl))
 		}
-		bq.mu.Lock()
 		repl = bq.pop()
-		bq.mu.Unlock()
 	}
 }

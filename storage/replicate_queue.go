@@ -49,14 +49,14 @@ type replicateQueue struct {
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
+func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 	options AllocatorOptions) *replicateQueue {
 	rq := &replicateQueue{
 		allocator:  allocator,
 		clock:      clock,
 		updateChan: make(chan struct{}, 1),
 	}
-	rq.baseQueue = makeBaseQueue("replicate", rq, g, queueConfig{
+	rq.baseQueue = makeBaseQueue("replicate", rq, store, g, queueConfig{
 		maxSize:              replicateQueueMaxSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: false,
