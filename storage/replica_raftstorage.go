@@ -330,6 +330,7 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
 		Multiplier:     2,
+		Closer:         r.store.Stopper().ShouldQuiesce(),
 	}
 	for retry := retry.Start(retryOptions); retry.Next(); {
 		r.mu.Lock()
@@ -354,7 +355,7 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 			return snap, err
 		}
 	}
-	panic("unreachable") // due to infinite retries
+	return raftpb.Snapshot{}, &roachpb.NodeUnavailableError{}
 }
 
 func snapshot(
