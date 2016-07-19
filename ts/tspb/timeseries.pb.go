@@ -22,7 +22,7 @@ import fmt "fmt"
 import math "math"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
-// skipping weak import google_api1 "github.com/gengo/grpc-gateway/third_party/googleapis/google/api"
+// skipping weak import google_api1 "github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api"
 
 import (
 	context "golang.org/x/net/context"
