@@ -73,6 +73,9 @@ func AfterTest(t testing.TB) func() {
 		if t.Failed() {
 			return
 		}
+		if r := recover(); r != nil {
+			panic(r)
+		}
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
 		deadline := timeutil.Now().Add(5 * time.Second)
