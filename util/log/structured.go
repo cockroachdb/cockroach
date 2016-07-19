@@ -41,5 +41,6 @@ func makeMessage(format string, args []interface{}) string {
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(format, args)
+	Trace(ctx, msg)
 	logging.outputLogEntry(s, file, line, msg)
 }
