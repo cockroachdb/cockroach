@@ -226,21 +226,25 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
 // set. It attempts to consider which of the provided replicas would be the best
-// candidate for removal.
+// candidate for removal. It also will exclude any replica that belongs to the
+// range lease holder's store ID.
 //
 // TODO(mrtracy): removeTarget eventually needs to accept the attributes from
 // the zone config associated with the provided replicas. This will allow it to
 // make correct decisions in the case of ranges with heterogeneous replica
 // requirements (i.e. multiple data centers).
-func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.ReplicaDescriptor, error) {
+func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
 		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
 	sl := StoreList{}
-	for i := range existing {
-		desc := a.storePool.getStoreDescriptor(existing[i].StoreID)
+	for _, exist := range existing {
+		if exist.StoreID == leaseStoreID {
+			continue
+		}
+		desc := a.storePool.getStoreDescriptor(exist.StoreID)
 		if desc == nil {
 			continue
 		}
@@ -248,9 +252,9 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.R
 	}
 
 	if bad := a.selectBad(sl); bad != nil {
-		for i := range existing {
-			if existing[i].StoreID == bad.StoreID {
-				return existing[i], nil
+		for _, exist := range existing {
+			if exist.StoreID == bad.StoreID {
+				return exist, nil
 			}
 		}
 	}

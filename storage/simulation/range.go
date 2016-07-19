@@ -124,7 +124,9 @@ func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 // getRemoveTarget queries the allocator for the store that contains a replica
 // that can be removed.
 func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
-	removeStore, err := r.allocator.RemoveTarget(r.desc.Replicas)
+	// Pass in an invalid store ID since we don't consider range leases as part
+	// of the simulator.
+	removeStore, err := r.allocator.RemoveTarget(r.desc.Replicas, roachpb.StoreID(-1))
 	if err != nil {
 		return 0, err
 	}
