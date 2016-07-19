@@ -1074,7 +1074,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()
-				if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {
+				if st == nil || !st.LeftDesc.EndKey.Equal(splitKey) {
 					return nil
 				}
 				close(getContinues)
@@ -1164,7 +1164,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			return nil
 		}
 		trigger := protoutil.Clone(et.InternalCommitTrigger.GetSplitTrigger()).(*roachpb.SplitTrigger)
-		if trigger != nil && len(trigger.NewDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 && args.Sid == mtc.stores[0].StoreID() {
+		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 && args.Sid == mtc.stores[0].StoreID() {
 			if _, ok := seen[args.CmdID]; ok {
 				return nil
 			}
@@ -1213,7 +1213,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 
 			trigger := <-currentTrigger // our own copy
 			// Make sure the first node is first for convenience.
-			replicas := trigger.NewDesc.Replicas
+			replicas := trigger.RightDesc.Replicas
 			if replicas[0].NodeID > replicas[1].NodeID {
 				tmp := replicas[1]
 				replicas[1] = replicas[0]
@@ -1227,7 +1227,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
 				if err := mtc.stores[0].HandleRaftMessage(&storage.RaftMessageRequest{
-					RangeID:     trigger.NewDesc.RangeID,
+					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],
 					Message: raftpb.Message{
