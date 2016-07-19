@@ -46,6 +46,23 @@ type TestCluster struct {
 	Conns   []*gosql.DB
 }
 
+var _ serverutils.TestClusterInterface = &TestCluster{}
+
+// NumServers is part of TestClusterInterface.
+func (tc *TestCluster) NumServers() int {
+	return len(tc.Servers)
+}
+
+// Server is part of TestClusterInterface.
+func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
+	return tc.Servers[idx]
+}
+
+// ServerConn is part of TestClusterInterface.
+func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
+	return tc.Conns[idx]
+}
+
 // StartTestCluster starts up a TestCluster made up of `nodes` in-memory testing
 // servers.
 // The cluster should be stopped using cluster.Stopper().Stop().
@@ -459,4 +476,16 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		}
 	}
 	return nil
+}
+
+type testClusterFactoryImpl struct{}
+
+// TestClusterFactory can be passed to serverutils.InitTestClusterFactory
+var TestClusterFactory serverutils.TestClusterFactory = testClusterFactoryImpl{}
+
+// New is part of TestClusterFactory interface.
+func (testClusterFactoryImpl) StartTestCluster(
+	t testing.TB, numNodes int, args base.TestClusterArgs,
+) serverutils.TestClusterInterface {
+	return StartTestCluster(t, numNodes, args)
 }
