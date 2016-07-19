@@ -72,6 +72,8 @@ var flagATCockroachFlags = flag.String("at.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
 var flagATCockroachEnv = flag.String("at.cockroach-env", "",
 	"supervisor-style environment variables to pass to cockroach")
+var flagATDiskType = flag.String("at.disk-type", "pd-standard",
+	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
