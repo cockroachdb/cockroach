@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -31,8 +32,8 @@ func TestGossipFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := testcluster.StartTestCluster(t, 3,
-		testcluster.ClusterArgs{
-			ReplicationMode: testcluster.ReplicationManual,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop()
 

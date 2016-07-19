@@ -32,8 +32,8 @@ func TestManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := StartTestCluster(t, 3,
-		ClusterArgs{
-			ReplicationMode: ReplicationManual,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "t",
 			},
@@ -146,7 +146,7 @@ func TestManualReplication(t *testing.T) {
 func TestBasicManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tc := StartTestCluster(t, 3, ClusterArgs{ReplicationMode: ReplicationManual})
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 	defer tc.Stopper().Stop()
 
 	desc, err := tc.AddReplicas(roachpb.RKey(keys.MinKey), tc.Target(1), tc.Target(2))
@@ -175,7 +175,7 @@ func TestBasicManualReplication(t *testing.T) {
 func TestWaitForFullReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tc := StartTestCluster(t, 3, ClusterArgs{ReplicationMode: ReplicationFull})
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationFull})
 	defer tc.Stopper().Stop()
 	if err := tc.WaitForFullReplication(); err != nil {
 		t.Fatal(err)

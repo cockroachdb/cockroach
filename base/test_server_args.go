@@ -63,3 +63,38 @@ type TestServerArgs struct {
 	// constructed and it can be gotten through TestServerInterface.Stopper().
 	Stopper *stop.Stopper
 }
+
+// TestClusterArgs contains the parameters one can set when creating a test
+// cluster. It contains a TestServerArgs instance which will be copied over to
+// every server.
+//
+// The zero value means "full replication".
+type TestClusterArgs struct {
+	// ServerArgs will be copied to each constituent TestServer.
+	ServerArgs TestServerArgs
+	// ReplicationMode controls how replication is to be done in the cluster.
+	ReplicationMode TestClusterReplicationMode
+	// Stopper can be used to stop the cluster. If not set, a stopper will be
+	// constructed and it can be gotten through TestCluster.Stopper().
+	Stopper *stop.Stopper
+}
+
+// TestClusterReplicationMode represents the replication settings for a TestCluster.
+type TestClusterReplicationMode int
+
+const (
+	// ReplicationFull means that each range is to be replicated everywhere. This
+	// will be done by overriding the default zone config. The replication will be
+	// performed as in production, by the replication queue.
+	// TestCluster.WaitForFullReplication() can be used to wait for replication to
+	// be stable at any point in a test.
+	// TODO(andrei): ReplicationFull should not be an option, or at least not the
+	// default option. Instead, the production default replication should be the
+	// default for TestCluster too. But I'm not sure how to implement
+	// `WaitForFullReplication` for that.
+	ReplicationFull TestClusterReplicationMode = iota
+	// ReplicationManual means that the split and replication queues of all
+	// servers are stopped, and the test must manually control splitting and
+	// replication through the TestServer.
+	ReplicationManual
+)
