@@ -659,6 +659,8 @@ const (
 
 var dateFormats = []string{
 	dateFormat,
+	dateFormat + " -07:00:00",
+	"2006-1-2 -07:00:00",
 	time.RFC3339Nano,
 }
 
@@ -666,11 +668,24 @@ var dateFormats = []string{
 // string in the provided location, or an error if parsing is unsuccessful.
 func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	// No need to ParseInLocation here because we're only parsing dates.
+
 	for _, format := range dateFormats {
 		if t, err := time.Parse(format, string(s)); err == nil {
 			return NewDDateFromTime(t, loc), nil
 		}
 	}
+
+	// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
+	// Thus, if we see `2015-10-05 +0:0:0` we need to change it to `+00:00:00`.
+	if l := len(s); l > 6 && s[l-2] == ':' && s[l-4] == ':' && (s[l-6] == '+' || s[l-6] == '-') {
+		fixed := fmt.Sprintf("%s %c0%c:0%c:0%c", s[:l-6], s[l-6], s[l-5], s[l-3], s[l-1])
+		for _, format := range dateFormats {
+			if t, err := time.Parse(format, fixed); err == nil {
+				return NewDDateFromTime(t, loc), nil
+			}
+		}
+	}
+
 	return nil, makeParseError(s, TypeDate.Type(), nil)
 }
 
