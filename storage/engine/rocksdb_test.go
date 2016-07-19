@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -373,10 +374,11 @@ func TestSSTableInfosString(t *testing.T) {
 		info(3, 24<<20),
 		info(3, 18<<20),
 	}
-	expected := `1 [   8M]: 7M 1M 63K
-2 [ 110M]: 10M 8M 13M 31M 13M 30M 5M
-3 [   2G]: 129M 129M 129M 9M 129M 129M 129M 93M 129M 129M 122M 129M 129M 129M 129M 129M 129M 24M 18M
+	expected := `1 [   8M     3]: 7M 1M 63K
+2 [ 110M     7]: 31M 30M 13M[2] 10M 8M 5M
+3 [   2G    19]: 129M[14] 122M 93M 24M 18M 9M
 `
+	sort.Sort(tables)
 	s := tables.String()
 	if expected != s {
 		t.Fatalf("expected\n%s\ngot\n%s", expected, s)
