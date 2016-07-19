@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -40,31 +41,19 @@ func TestManualReplication(t *testing.T) {
 		})
 	defer tc.Stopper().Stop()
 
-	if _, err := tc.Conns[0].Exec(`CREATE DATABASE t`); err != nil {
-		t.Fatal(err)
-	}
+	s0 := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	s1 := sqlutils.MakeSQLRunner(t, tc.Conns[1])
+	s2 := sqlutils.MakeSQLRunner(t, tc.Conns[2])
 
-	if _, err := tc.Conns[0].Exec(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`); err != nil {
-		t.Fatal(err)
-	}
+	s0.Exec(`CREATE DATABASE t`)
+	s0.Exec(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+	s0.Exec(`INSERT INTO test VALUES (5, 1), (4, 2), (1, 2)`)
 
-	if _, err := tc.Conns[0].Exec(`INSERT INTO test VALUES (5, 1), (4, 2), (1, 2)`); err != nil {
-		t.Fatal(err)
-	}
-
-	if r, err := tc.Conns[1].Query(`SELECT * FROM test WHERE k = 5`); err != nil {
-		t.Fatal(err)
-	} else if !r.Next() {
+	if r := s1.Query(`SELECT * FROM test WHERE k = 5`); !r.Next() {
 		t.Fatal("no rows")
 	}
 
-	if r, err := tc.Conns[2].Exec(`DELETE FROM test`); err != nil {
-		t.Fatal(err)
-	} else if rows, err := r.RowsAffected(); err != nil {
-		t.Fatal(err)
-	} else if expected, actual := int64(3), rows; expected != actual {
-		t.Fatalf("wrong row count deleted: expected %d actual %d", expected, actual)
-	}
+	s2.ExecRowsAffected(3, `DELETE FROM test`)
 
 	// Split the table to a new range.
 	kvDB := tc.Servers[0].DB()
