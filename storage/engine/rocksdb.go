@@ -95,6 +95,10 @@ func (s SSTableInfos) Less(i, j int) bool {
 		return true
 	case s[i].Level > s[j].Level:
 		return false
+	case s[i].Size > s[j].Size:
+		return true
+	case s[i].Size < s[j].Size:
+		return false
 	default:
 		return s[i].Start.Less(s[j].Start)
 	}
@@ -127,31 +131,75 @@ func (s SSTableInfos) String() string {
 		}
 	}
 
+	type levelInfo struct {
+		size  int64
+		count int
+	}
+
+	var levels []*levelInfo
+	for _, t := range s {
+		for i := len(levels); i <= t.Level; i++ {
+			levels = append(levels, &levelInfo{})
+		}
+		info := levels[t.Level]
+		info.size += t.Size
+		info.count++
+	}
+
+	var maxSize int
+	var maxLevelCount int
+	for _, info := range levels {
+		size := len(humanize(info.size))
+		if maxSize < size {
+			maxSize = size
+		}
+		count := 1 + int(math.Log10(float64(info.count)))
+		if maxLevelCount < count {
+			maxLevelCount = count
+		}
+	}
+	levelFormat := fmt.Sprintf("%%d [ %%%ds %%%dd ]:", maxSize, maxLevelCount)
+
 	level := -1
 	var buf bytes.Buffer
+	var lastSize string
+	var lastSizeCount int
+
+	flushLastSize := func() {
+		if lastSizeCount > 0 {
+			fmt.Fprintf(&buf, " %s", lastSize)
+			if lastSizeCount > 1 {
+				fmt.Fprintf(&buf, "[%d]", lastSizeCount)
+			}
+			lastSizeCount = 0
+		}
+	}
 
 	maybeFlush := func(newLevel, i int) {
 		if level == newLevel {
 			return
 		}
+		flushLastSize()
 		if buf.Len() > 0 {
 			buf.WriteString("\n")
 		}
 		level = newLevel
 		if level >= 0 {
-			var sum int64
-			for j := i; j < len(s); j++ {
-				if s[j].Level == level {
-					sum += s[j].Size
-				}
-			}
-			fmt.Fprintf(&buf, "%d [%5s]:", level, humanize(sum))
+			info := levels[level]
+			fmt.Fprintf(&buf, levelFormat, level, humanize(info.size), info.count)
 		}
 	}
 
 	for i, t := range s {
 		maybeFlush(t.Level, i)
-		fmt.Fprintf(&buf, " %s", humanize(t.Size))
+		size := humanize(t.Size)
+		if size == lastSize {
+			lastSizeCount++
+		} else {
+			flushLastSize()
+			lastSize = size
+			lastSizeCount = 1
+		}
 	}
 
 	maybeFlush(-1, 0)
