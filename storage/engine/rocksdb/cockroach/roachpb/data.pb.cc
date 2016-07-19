@@ -1673,8 +1673,8 @@ static ::std::string* MutableUnknownFieldsForSplitTrigger(
 }
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int SplitTrigger::kUpdatedDescFieldNumber;
-const int SplitTrigger::kNewDescFieldNumber;
+const int SplitTrigger::kLeftDescFieldNumber;
+const int SplitTrigger::kRightDescFieldNumber;
 const int SplitTrigger::kInitialLeaderStoreIdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -1686,16 +1686,16 @@ SplitTrigger::SplitTrigger()
 
 void SplitTrigger::InitAsDefaultInstance() {
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  updated_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  left_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
 #else
-  updated_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
+  left_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
 #endif
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  new_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  right_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
 #else
-  new_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
+  right_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
 #endif
 }
 
@@ -1712,8 +1712,8 @@ void SplitTrigger::SharedCtor() {
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  updated_desc_ = NULL;
-  new_desc_ = NULL;
+  left_desc_ = NULL;
+  right_desc_ = NULL;
   initial_leader_store_id_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -1731,8 +1731,8 @@ void SplitTrigger::SharedDtor() {
   #else
   if (this != default_instance_) {
   #endif
-    delete updated_desc_;
-    delete new_desc_;
+    delete left_desc_;
+    delete right_desc_;
   }
 }
 
@@ -1763,11 +1763,11 @@ SplitTrigger* SplitTrigger::New(::google::protobuf::Arena* arena) const {
 void SplitTrigger::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.roachpb.SplitTrigger)
   if (_has_bits_[0 / 32] & 7u) {
-    if (has_updated_desc()) {
-      if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+    if (has_left_desc()) {
+      if (left_desc_ != NULL) left_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
-    if (has_new_desc()) {
-      if (new_desc_ != NULL) new_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+    if (has_right_desc()) {
+      if (right_desc_ != NULL) right_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
     initial_leader_store_id_ = 0;
   }
@@ -1791,24 +1791,24 @@ bool SplitTrigger::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
+      // optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_updated_desc()));
+               input, mutable_left_desc()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_new_desc;
+        if (input->ExpectTag(18)) goto parse_right_desc;
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor new_desc = 2;
+      // optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
       case 2: {
         if (tag == 18) {
-         parse_new_desc:
+         parse_right_desc:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_new_desc()));
+               input, mutable_right_desc()));
         } else {
           goto handle_unusual;
         }
@@ -1856,16 +1856,16 @@ failure:
 void SplitTrigger::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.SplitTrigger)
-  // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
-  if (has_updated_desc()) {
+  // optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
+  if (has_left_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      1, *this->updated_desc_, output);
+      1, *this->left_desc_, output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor new_desc = 2;
-  if (has_new_desc()) {
+  // optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
+  if (has_right_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2, *this->new_desc_, output);
+      2, *this->right_desc_, output);
   }
 
   // optional int32 initial_leader_store_id = 3;
@@ -1883,18 +1883,18 @@ int SplitTrigger::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7u) {
-    // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
-    if (has_updated_desc()) {
+    // optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
+    if (has_left_desc()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->updated_desc_);
+          *this->left_desc_);
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor new_desc = 2;
-    if (has_new_desc()) {
+    // optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
+    if (has_right_desc()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->new_desc_);
+          *this->right_desc_);
     }
 
     // optional int32 initial_leader_store_id = 3;
@@ -1922,11 +1922,11 @@ void SplitTrigger::MergeFrom(const SplitTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.SplitTrigger)
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_updated_desc()) {
-      mutable_updated_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.updated_desc());
+    if (from.has_left_desc()) {
+      mutable_left_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.left_desc());
     }
-    if (from.has_new_desc()) {
-      mutable_new_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.new_desc());
+    if (from.has_right_desc()) {
+      mutable_right_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.right_desc());
     }
     if (from.has_initial_leader_store_id()) {
       set_initial_leader_store_id(from.initial_leader_store_id());
@@ -1954,8 +1954,8 @@ void SplitTrigger::Swap(SplitTrigger* other) {
   InternalSwap(other);
 }
 void SplitTrigger::InternalSwap(SplitTrigger* other) {
-  std::swap(updated_desc_, other->updated_desc_);
-  std::swap(new_desc_, other->new_desc_);
+  std::swap(left_desc_, other->left_desc_);
+  std::swap(right_desc_, other->right_desc_);
   std::swap(initial_leader_store_id_, other->initial_leader_store_id_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _unknown_fields_.Swap(&other->_unknown_fields_);
@@ -1969,100 +1969,100 @@ void SplitTrigger::InternalSwap(SplitTrigger* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // SplitTrigger
 
-// optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
-bool SplitTrigger::has_updated_desc() const {
+// optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
+bool SplitTrigger::has_left_desc() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void SplitTrigger::set_has_updated_desc() {
+void SplitTrigger::set_has_left_desc() {
   _has_bits_[0] |= 0x00000001u;
 }
-void SplitTrigger::clear_has_updated_desc() {
+void SplitTrigger::clear_has_left_desc() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void SplitTrigger::clear_updated_desc() {
-  if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_updated_desc();
+void SplitTrigger::clear_left_desc() {
+  if (left_desc_ != NULL) left_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_left_desc();
 }
-const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::updated_desc() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.updated_desc)
+const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::left_desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.left_desc)
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return updated_desc_ != NULL ? *updated_desc_ : *default_instance().updated_desc_;
+  return left_desc_ != NULL ? *left_desc_ : *default_instance().left_desc_;
 #else
-  return updated_desc_ != NULL ? *updated_desc_ : *default_instance_->updated_desc_;
+  return left_desc_ != NULL ? *left_desc_ : *default_instance_->left_desc_;
 #endif
 }
-::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_updated_desc() {
-  set_has_updated_desc();
-  if (updated_desc_ == NULL) {
-    updated_desc_ = new ::cockroach::roachpb::RangeDescriptor;
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_left_desc() {
+  set_has_left_desc();
+  if (left_desc_ == NULL) {
+    left_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SplitTrigger.updated_desc)
-  return updated_desc_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SplitTrigger.left_desc)
+  return left_desc_;
 }
-::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_updated_desc() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.updated_desc)
-  clear_has_updated_desc();
-  ::cockroach::roachpb::RangeDescriptor* temp = updated_desc_;
-  updated_desc_ = NULL;
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_left_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.left_desc)
+  clear_has_left_desc();
+  ::cockroach::roachpb::RangeDescriptor* temp = left_desc_;
+  left_desc_ = NULL;
   return temp;
 }
-void SplitTrigger::set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc) {
-  delete updated_desc_;
-  updated_desc_ = updated_desc;
-  if (updated_desc) {
-    set_has_updated_desc();
+void SplitTrigger::set_allocated_left_desc(::cockroach::roachpb::RangeDescriptor* left_desc) {
+  delete left_desc_;
+  left_desc_ = left_desc;
+  if (left_desc) {
+    set_has_left_desc();
   } else {
-    clear_has_updated_desc();
+    clear_has_left_desc();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.updated_desc)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.left_desc)
 }
 
-// optional .cockroach.roachpb.RangeDescriptor new_desc = 2;
-bool SplitTrigger::has_new_desc() const {
+// optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
+bool SplitTrigger::has_right_desc() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void SplitTrigger::set_has_new_desc() {
+void SplitTrigger::set_has_right_desc() {
   _has_bits_[0] |= 0x00000002u;
 }
-void SplitTrigger::clear_has_new_desc() {
+void SplitTrigger::clear_has_right_desc() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void SplitTrigger::clear_new_desc() {
-  if (new_desc_ != NULL) new_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_new_desc();
+void SplitTrigger::clear_right_desc() {
+  if (right_desc_ != NULL) right_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_right_desc();
 }
-const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::new_desc() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.new_desc)
+const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::right_desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.right_desc)
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return new_desc_ != NULL ? *new_desc_ : *default_instance().new_desc_;
+  return right_desc_ != NULL ? *right_desc_ : *default_instance().right_desc_;
 #else
-  return new_desc_ != NULL ? *new_desc_ : *default_instance_->new_desc_;
+  return right_desc_ != NULL ? *right_desc_ : *default_instance_->right_desc_;
 #endif
 }
-::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_new_desc() {
-  set_has_new_desc();
-  if (new_desc_ == NULL) {
-    new_desc_ = new ::cockroach::roachpb::RangeDescriptor;
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_right_desc() {
+  set_has_right_desc();
+  if (right_desc_ == NULL) {
+    right_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SplitTrigger.new_desc)
-  return new_desc_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SplitTrigger.right_desc)
+  return right_desc_;
 }
-::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_new_desc() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.new_desc)
-  clear_has_new_desc();
-  ::cockroach::roachpb::RangeDescriptor* temp = new_desc_;
-  new_desc_ = NULL;
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_right_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.right_desc)
+  clear_has_right_desc();
+  ::cockroach::roachpb::RangeDescriptor* temp = right_desc_;
+  right_desc_ = NULL;
   return temp;
 }
-void SplitTrigger::set_allocated_new_desc(::cockroach::roachpb::RangeDescriptor* new_desc) {
-  delete new_desc_;
-  new_desc_ = new_desc;
-  if (new_desc) {
-    set_has_new_desc();
+void SplitTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDescriptor* right_desc) {
+  delete right_desc_;
+  right_desc_ = right_desc;
+  if (right_desc) {
+    set_has_right_desc();
   } else {
-    clear_has_new_desc();
+    clear_has_right_desc();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.new_desc)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.right_desc)
 }
 
 // optional int32 initial_leader_store_id = 3;
@@ -2099,8 +2099,8 @@ static ::std::string* MutableUnknownFieldsForMergeTrigger(
 }
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int MergeTrigger::kUpdatedDescFieldNumber;
-const int MergeTrigger::kSubsumedDescFieldNumber;
+const int MergeTrigger::kLeftDescFieldNumber;
+const int MergeTrigger::kRightDescFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeTrigger::MergeTrigger()
@@ -2111,16 +2111,16 @@ MergeTrigger::MergeTrigger()
 
 void MergeTrigger::InitAsDefaultInstance() {
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  updated_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  left_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
 #else
-  updated_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
+  left_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
 #endif
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  subsumed_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  right_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
 #else
-  subsumed_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
+  right_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
 #endif
 }
 
@@ -2137,8 +2137,8 @@ void MergeTrigger::SharedCtor() {
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  updated_desc_ = NULL;
-  subsumed_desc_ = NULL;
+  left_desc_ = NULL;
+  right_desc_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2155,8 +2155,8 @@ void MergeTrigger::SharedDtor() {
   #else
   if (this != default_instance_) {
   #endif
-    delete updated_desc_;
-    delete subsumed_desc_;
+    delete left_desc_;
+    delete right_desc_;
   }
 }
 
@@ -2187,11 +2187,11 @@ MergeTrigger* MergeTrigger::New(::google::protobuf::Arena* arena) const {
 void MergeTrigger::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.roachpb.MergeTrigger)
   if (_has_bits_[0 / 32] & 3u) {
-    if (has_updated_desc()) {
-      if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+    if (has_left_desc()) {
+      if (left_desc_ != NULL) left_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
-    if (has_subsumed_desc()) {
-      if (subsumed_desc_ != NULL) subsumed_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+    if (has_right_desc()) {
+      if (right_desc_ != NULL) right_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -2214,24 +2214,24 @@ bool MergeTrigger::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
+      // optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_updated_desc()));
+               input, mutable_left_desc()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_subsumed_desc;
+        if (input->ExpectTag(18)) goto parse_right_desc;
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor subsumed_desc = 2;
+      // optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
       case 2: {
         if (tag == 18) {
-         parse_subsumed_desc:
+         parse_right_desc:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_subsumed_desc()));
+               input, mutable_right_desc()));
         } else {
           goto handle_unusual;
         }
@@ -2264,16 +2264,16 @@ failure:
 void MergeTrigger::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.MergeTrigger)
-  // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
-  if (has_updated_desc()) {
+  // optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
+  if (has_left_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      1, *this->updated_desc_, output);
+      1, *this->left_desc_, output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor subsumed_desc = 2;
-  if (has_subsumed_desc()) {
+  // optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
+  if (has_right_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2, *this->subsumed_desc_, output);
+      2, *this->right_desc_, output);
   }
 
   output->WriteRaw(unknown_fields().data(),
@@ -2286,18 +2286,18 @@ int MergeTrigger::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3u) {
-    // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
-    if (has_updated_desc()) {
+    // optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
+    if (has_left_desc()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->updated_desc_);
+          *this->left_desc_);
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor subsumed_desc = 2;
-    if (has_subsumed_desc()) {
+    // optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
+    if (has_right_desc()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->subsumed_desc_);
+          *this->right_desc_);
     }
 
   }
@@ -2318,11 +2318,11 @@ void MergeTrigger::MergeFrom(const MergeTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.MergeTrigger)
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_updated_desc()) {
-      mutable_updated_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.updated_desc());
+    if (from.has_left_desc()) {
+      mutable_left_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.left_desc());
     }
-    if (from.has_subsumed_desc()) {
-      mutable_subsumed_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.subsumed_desc());
+    if (from.has_right_desc()) {
+      mutable_right_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.right_desc());
     }
   }
   if (!from.unknown_fields().empty()) {
@@ -2347,8 +2347,8 @@ void MergeTrigger::Swap(MergeTrigger* other) {
   InternalSwap(other);
 }
 void MergeTrigger::InternalSwap(MergeTrigger* other) {
-  std::swap(updated_desc_, other->updated_desc_);
-  std::swap(subsumed_desc_, other->subsumed_desc_);
+  std::swap(left_desc_, other->left_desc_);
+  std::swap(right_desc_, other->right_desc_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _unknown_fields_.Swap(&other->_unknown_fields_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -2361,100 +2361,100 @@ void MergeTrigger::InternalSwap(MergeTrigger* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // MergeTrigger
 
-// optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
-bool MergeTrigger::has_updated_desc() const {
+// optional .cockroach.roachpb.RangeDescriptor left_desc = 1;
+bool MergeTrigger::has_left_desc() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void MergeTrigger::set_has_updated_desc() {
+void MergeTrigger::set_has_left_desc() {
   _has_bits_[0] |= 0x00000001u;
 }
-void MergeTrigger::clear_has_updated_desc() {
+void MergeTrigger::clear_has_left_desc() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void MergeTrigger::clear_updated_desc() {
-  if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_updated_desc();
+void MergeTrigger::clear_left_desc() {
+  if (left_desc_ != NULL) left_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_left_desc();
 }
-const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::updated_desc() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.updated_desc)
+const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::left_desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.left_desc)
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return updated_desc_ != NULL ? *updated_desc_ : *default_instance().updated_desc_;
+  return left_desc_ != NULL ? *left_desc_ : *default_instance().left_desc_;
 #else
-  return updated_desc_ != NULL ? *updated_desc_ : *default_instance_->updated_desc_;
+  return left_desc_ != NULL ? *left_desc_ : *default_instance_->left_desc_;
 #endif
 }
-::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_updated_desc() {
-  set_has_updated_desc();
-  if (updated_desc_ == NULL) {
-    updated_desc_ = new ::cockroach::roachpb::RangeDescriptor;
+::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_left_desc() {
+  set_has_left_desc();
+  if (left_desc_ == NULL) {
+    left_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.updated_desc)
-  return updated_desc_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.left_desc)
+  return left_desc_;
 }
-::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_updated_desc() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.updated_desc)
-  clear_has_updated_desc();
-  ::cockroach::roachpb::RangeDescriptor* temp = updated_desc_;
-  updated_desc_ = NULL;
+::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_left_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.left_desc)
+  clear_has_left_desc();
+  ::cockroach::roachpb::RangeDescriptor* temp = left_desc_;
+  left_desc_ = NULL;
   return temp;
 }
-void MergeTrigger::set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc) {
-  delete updated_desc_;
-  updated_desc_ = updated_desc;
-  if (updated_desc) {
-    set_has_updated_desc();
+void MergeTrigger::set_allocated_left_desc(::cockroach::roachpb::RangeDescriptor* left_desc) {
+  delete left_desc_;
+  left_desc_ = left_desc;
+  if (left_desc) {
+    set_has_left_desc();
   } else {
-    clear_has_updated_desc();
+    clear_has_left_desc();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.updated_desc)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.left_desc)
 }
 
-// optional .cockroach.roachpb.RangeDescriptor subsumed_desc = 2;
-bool MergeTrigger::has_subsumed_desc() const {
+// optional .cockroach.roachpb.RangeDescriptor right_desc = 2;
+bool MergeTrigger::has_right_desc() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void MergeTrigger::set_has_subsumed_desc() {
+void MergeTrigger::set_has_right_desc() {
   _has_bits_[0] |= 0x00000002u;
 }
-void MergeTrigger::clear_has_subsumed_desc() {
+void MergeTrigger::clear_has_right_desc() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void MergeTrigger::clear_subsumed_desc() {
-  if (subsumed_desc_ != NULL) subsumed_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_subsumed_desc();
+void MergeTrigger::clear_right_desc() {
+  if (right_desc_ != NULL) right_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_right_desc();
 }
-const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::subsumed_desc() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.subsumed_desc)
+const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::right_desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.right_desc)
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return subsumed_desc_ != NULL ? *subsumed_desc_ : *default_instance().subsumed_desc_;
+  return right_desc_ != NULL ? *right_desc_ : *default_instance().right_desc_;
 #else
-  return subsumed_desc_ != NULL ? *subsumed_desc_ : *default_instance_->subsumed_desc_;
+  return right_desc_ != NULL ? *right_desc_ : *default_instance_->right_desc_;
 #endif
 }
-::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_subsumed_desc() {
-  set_has_subsumed_desc();
-  if (subsumed_desc_ == NULL) {
-    subsumed_desc_ = new ::cockroach::roachpb::RangeDescriptor;
+::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_right_desc() {
+  set_has_right_desc();
+  if (right_desc_ == NULL) {
+    right_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.subsumed_desc)
-  return subsumed_desc_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.right_desc)
+  return right_desc_;
 }
-::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_subsumed_desc() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.subsumed_desc)
-  clear_has_subsumed_desc();
-  ::cockroach::roachpb::RangeDescriptor* temp = subsumed_desc_;
-  subsumed_desc_ = NULL;
+::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_right_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.right_desc)
+  clear_has_right_desc();
+  ::cockroach::roachpb::RangeDescriptor* temp = right_desc_;
+  right_desc_ = NULL;
   return temp;
 }
-void MergeTrigger::set_allocated_subsumed_desc(::cockroach::roachpb::RangeDescriptor* subsumed_desc) {
-  delete subsumed_desc_;
-  subsumed_desc_ = subsumed_desc;
-  if (subsumed_desc) {
-    set_has_subsumed_desc();
+void MergeTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDescriptor* right_desc) {
+  delete right_desc_;
+  right_desc_ = right_desc;
+  if (right_desc) {
+    set_has_right_desc();
   } else {
-    clear_has_subsumed_desc();
+    clear_has_right_desc();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.subsumed_desc)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.right_desc)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
