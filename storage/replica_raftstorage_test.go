@@ -47,7 +47,7 @@ func TestApplySnapshotDenyPreemptive(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	snap, err := realRng.GetSnapshot()
+	snap, err := realRng.GetSnapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 
 	fillTestRange(t, rep, snapSize)
 
-	if _, err := rep.GetSnapshot(); err != nil {
+	if _, err := rep.GetSnapshot(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

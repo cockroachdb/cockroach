@@ -3025,7 +3025,7 @@ func (r *Replica) ChangeReplicas(
 		// TODO(bdarnell): Preemptive snapshots are disabled pending resolution of
 		// #7600 and #7619.
 		// We generate a snapshot and discard it for throttling purposes.
-		_, _ = r.GetSnapshot()
+		_, _ = r.GetSnapshot(ctx)
 		log.Trace(ctx, "generated snapshot")
 		/*snap, err := r.GetSnapshot()
 		if err != nil {

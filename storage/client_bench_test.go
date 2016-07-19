@@ -19,6 +19,8 @@ package storage
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -40,7 +42,7 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := rep.GetSnapshot(); err != nil {
+		if _, err := rep.GetSnapshot(context.Background()); err != nil {
 			b.Fatal(err)
 		}
 	}
