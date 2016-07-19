@@ -141,6 +141,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
 	}
+	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
 	log.Infof("creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes, 0 /*writers*/); err != nil {
