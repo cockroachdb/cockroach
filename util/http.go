@@ -23,9 +23,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 )
 
