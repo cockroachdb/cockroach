@@ -20,8 +20,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/proto"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/util/protoutil"

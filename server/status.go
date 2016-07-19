@@ -31,7 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	gwruntime "github.com/gengo/grpc-gateway/runtime"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
