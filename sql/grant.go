@@ -41,16 +41,19 @@ func (p *planner) changePrivileges(
 			changePrivilege(privileges, grantee)
 		}
 
-		if err := descriptor.Validate(); err != nil {
-			return nil, err
-		}
-
-		tableDesc, updatingTable := descriptor.(*sqlbase.TableDescriptor)
-		if updatingTable {
-			if err := tableDesc.SetUpVersion(); err != nil {
+		switch d := descriptor.(type) {
+		case *sqlbase.DatabaseDescriptor:
+			if err := d.Validate(); err != nil {
 				return nil, err
 			}
-			p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
+		case *sqlbase.TableDescriptor:
+			if err := d.Validate(p.txn); err != nil {
+				return nil, err
+			}
+			if err := d.SetUpVersion(); err != nil {
+				return nil, err
+			}
+			p.notifySchemaChange(d.ID, sqlbase.InvalidMutationID)
 		}
 	}
 
