@@ -53,11 +53,10 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn) {
 func CreateTable(
 	t *testing.T, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
 ) {
+	r := MakeSQLRunner(t, sqlDB)
 	stmt := `CREATE DATABASE IF NOT EXISTS test;`
 	stmt += fmt.Sprintf(`CREATE TABLE test.%s (%s);`, tableName, schema)
-	if _, err := sqlDB.Exec(stmt); err != nil {
-		t.Fatal(err)
-	}
+	r.Exec(stmt)
 	for i := 1; i <= numRows; {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `INSERT INTO test.%s VALUES `, tableName)
@@ -66,9 +65,7 @@ func CreateTable(
 			batchEnd = numRows
 		}
 		genValues(&buf, i, batchEnd, fn)
-		if _, err := sqlDB.Exec(buf.String()); err != nil {
-			t.Fatal(err)
-		}
+		r.Exec(buf.String())
 		i = batchEnd + 1
 	}
 }
