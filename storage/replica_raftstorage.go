@@ -18,12 +18,14 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -247,6 +249,12 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	return r.SnapshotWithContext(context.Background())
+}
+
+// SnapshotWithContext is main implementation for Snapshot() but it takes a
+// context to allow tracing.
+func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, error) {
 	rangeID := r.RangeID
 
 	// If a snapshot is in progress, see if it's ready.
@@ -260,6 +268,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 		default:
 			// If the result is not ready, return immediately.
+			log.Trace(ctx, "snapshot not yet ready")
 			return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 		}
 	}
@@ -269,13 +278,14 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		maxBytes := r.mu.maxBytes
 		size := r.mu.state.Stats.Total()
 		r.mu.Unlock()
-		log.Infof(context.Background(),
+		log.Infof(ctx,
 			"%s: not generating snapshot because replica is too large: %d > 2 * %d", r, maxBytes, size)
 		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
 	// See if there is already a snapshot running for this store.
 	if !r.store.AcquireRaftSnapshot() {
+		log.Trace(ctx, "snapshot already running")
 		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
@@ -285,7 +295,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
+		sp := r.store.Tracer().StartSpan(fmt.Sprintf("snapshot async %s", r))
+		ctxInner := opentracing.ContextWithSpan(context.Background(), sp)
+		defer sp.Finish()
 		snap := r.store.NewSnapshot()
+		log.Trace(ctxInner, "new engine snapshot")
 		defer snap.Close()
 		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
@@ -293,16 +307,17 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// state of the Replica). Everything must come from the snapshot.
 		snapData, err := snapshot(snap, rangeID, r.mu.state.Desc.StartKey)
 		if err != nil {
-			log.Errorf(context.Background(), "%s: error generating snapshot: %s", r, err)
+			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
 		} else {
+			log.Trace(ctxInner, "snapshot generated")
 			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
+				log.Trace(ctxInner, "snapshot accepted")
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
-				log.Infof(context.Background(), "%s: abandoning snapshot after %s",
-					r, r.store.ctx.AsyncSnapshotMaxAge)
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
+				log.Infof(ctxInner, "%s: abandoning snapshot after %s", r, r.store.ctx.AsyncSnapshotMaxAge)
 			case <-r.store.Stopper().ShouldQuiesce():
 			}
 		}
@@ -319,6 +334,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 				return snap, nil
 			}
 		case <-time.After(r.store.ctx.BlockingSnapshotDuration):
+			log.Trace(ctx, "snapshot blocking duration exceeded")
 		}
 	}
 	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
@@ -327,15 +343,16 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 // GetSnapshot wraps Snapshot() but does not require the replica lock
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
-func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
+func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 	retryOptions := retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
 		Multiplier:     2,
 	}
 	for retry := retry.Start(retryOptions); retry.Next(); {
+		log.Trace(ctx, fmt.Sprintf("snapshot retry loop pass %d", retry.CurrentAttempt()))
 		r.mu.Lock()
-		snap, err := r.Snapshot()
+		snap, err := r.SnapshotWithContext(ctx)
 		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
