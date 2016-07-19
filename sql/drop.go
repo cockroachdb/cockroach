@@ -251,7 +251,7 @@ func (n *dropIndexNode) Start() error {
 		if err != nil {
 			return err
 		}
-		if err := tableDesc.Validate(); err != nil {
+		if err := tableDesc.Validate(n.p.txn); err != nil {
 			return err
 		}
 		if err := n.p.writeTableDesc(tableDesc); err != nil {

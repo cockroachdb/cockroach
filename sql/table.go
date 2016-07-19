@@ -90,7 +90,7 @@ type SchemaAccessor interface {
 	// is not found.
 	mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
-	// NB: one can use getTableDescFromID() to retrieve a descriptor for
+	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
 	// in the transaction already.
 

@@ -558,16 +558,147 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	err := desc.Validate()
+	err := desc.ValidateTable()
 	desc.ID = savedID
 	return err
 }
 
 // Validate validates that the table descriptor is well formed. Checks include
-// validating the table, column and index names, verifying that column names
-// and index names are unique and verifying that column IDs and index IDs are
-// consistent.
-func (desc *TableDescriptor) Validate() error {
+// both single table and cross table invariants.
+func (desc *TableDescriptor) Validate(txn *client.Txn) error {
+	err := desc.ValidateTable()
+	if err != nil {
+		return err
+	}
+	return desc.validateCrossReferences(txn)
+}
+
+// validateCrossReferences validates that each reference to another table is
+// resolvable and that the necessary back references exist.
+func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
+	tablesByID := map[ID]*TableDescriptor{desc.ID: desc}
+	getTable := func(id ID) (*TableDescriptor, error) {
+		if table, ok := tablesByID[id]; ok {
+			return table, nil
+		}
+		table, err := GetTableDescFromID(txn, id)
+		tablesByID[id] = table
+		return table, err
+	}
+
+	findTargetIndex := func(tableID ID, indexID IndexID) (*TableDescriptor, *IndexDescriptor, error) {
+		targetTable, err := getTable(tableID)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "missing table=%d index=%d", tableID, indexID)
+		}
+		targetIndex, err := targetTable.FindIndexByID(indexID)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "missing table=%s index=%d", targetTable.Name, indexID)
+		}
+		return targetTable, targetIndex, nil
+	}
+
+	for _, index := range desc.AllNonDropIndexes() {
+		if index.ForeignKey != nil {
+			targetTable, targetIndex, err := findTargetIndex(
+				index.ForeignKey.Table, index.ForeignKey.Index)
+			if err != nil {
+				return errors.Wrap(err, "invalid foreign key")
+			}
+			found := false
+			for _, backref := range targetIndex.ReferencedBy {
+				if backref.Table == desc.ID && backref.Index == index.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errors.Errorf("missing fk back reference to %s.%s from %s.%s",
+					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+			}
+		}
+		if len(index.Interleave.Ancestors) > 0 {
+			// Only check the most recent ancestor, the rest of them don't point
+			// back.
+			ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
+			targetTable, targetIndex, err := findTargetIndex(ancestor.TableID, ancestor.IndexID)
+			if err != nil {
+				return errors.Wrap(err, "invalid interleave")
+			}
+			found := false
+			for _, backref := range targetIndex.InterleavedBy {
+				if backref.Table == desc.ID && backref.Index == index.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errors.Errorf(
+					"missing interleave back reference to %s.%s from %s.%s",
+					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+			}
+		}
+		fkBackrefs := make(map[ForeignKeyReference]struct{})
+		for _, backref := range index.ReferencedBy {
+			if _, ok := fkBackrefs[*backref]; ok {
+				return errors.Errorf("duplicated fk backreference %+v", backref)
+			}
+			fkBackrefs[*backref] = struct{}{}
+			targetTable, err := getTable(backref.Table)
+			if err != nil {
+				return errors.Wrapf(err, "invalid fk backreference table=%d index=%d",
+					backref.Table, backref.Index)
+			}
+			targetIndex, err := targetTable.FindIndexByID(backref.Index)
+			if err != nil {
+				return errors.Wrapf(err, "invalid fk backreference table=%s index=%d",
+					targetTable.Name, backref.Index)
+			}
+			if fk := targetIndex.ForeignKey; fk == nil || fk.Table != desc.ID || fk.Index != index.ID {
+				return errors.Errorf("broken fk backward reference from %s.%s to %s.%s",
+					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+			}
+		}
+		interleaveBackrefs := make(map[ForeignKeyReference]struct{})
+		for _, backref := range index.InterleavedBy {
+			if _, ok := interleaveBackrefs[backref]; ok {
+				return errors.Errorf("duplicated interleave backreference %+v", backref)
+			}
+			interleaveBackrefs[backref] = struct{}{}
+			targetTable, err := getTable(backref.Table)
+			if err != nil {
+				return errors.Wrapf(err, "invalid interleave backreference table=%d index=%d",
+					backref.Table, backref.Index)
+			}
+			targetIndex, err := targetTable.FindIndexByID(backref.Index)
+			if err != nil {
+				return errors.Wrapf(err, "invalid interleave backreference table=%s index=%d",
+					targetTable.Name, backref.Index)
+			}
+			if len(targetIndex.Interleave.Ancestors) == 0 {
+				return errors.Errorf(
+					"broken interleave backward reference from %s.%s to %s.%s",
+					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+			}
+			// The last ancestor is required to be a backreference.
+			ancestor := targetIndex.Interleave.Ancestors[len(targetIndex.Interleave.Ancestors)-1]
+			if ancestor.TableID != desc.ID || ancestor.IndexID != index.ID {
+				return errors.Errorf(
+					"broken interleave backward reference from %s.%s to %s.%s",
+					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+			}
+		}
+	}
+	// TODO(dan): Also validate SharedPrefixLen in the interleaves.
+	return nil
+}
+
+// ValidateTable validates that the table descriptor is well formed. Checks
+// include validating the table, column and index names, verifying that column
+// names and index names are unique and verifying that column IDs and index IDs
+// are consistent. Use Validate to validate that cross-table references are
+// correct.
+func (desc *TableDescriptor) ValidateTable() error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
 	}

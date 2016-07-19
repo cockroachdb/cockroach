@@ -48,7 +48,6 @@ type DescriptorProto interface {
 	TypeName() string
 	GetName() string
 	SetName(string)
-	Validate() error
 }
 
 // WrapDescriptor fills in a Descriptor.

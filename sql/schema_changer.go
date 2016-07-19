@@ -714,7 +714,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
-						if err := table.Validate(); err != nil {
+						if err := table.ValidateTable(); err != nil {
 							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}
