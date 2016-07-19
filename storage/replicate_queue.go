@@ -158,6 +158,15 @@ func (rq *replicateQueue) process(
 		if err != nil {
 			return err
 		}
+		// Check to make sure we don't try to remove the replica with the range
+		// lease.
+		lease, _ := repl.getLease()
+		if lease == nil {
+			return errors.Errorf("range %d: could not get current lease", repl.RangeID)
+		}
+		if lease.OwnedBy(removeReplica.StoreID) {
+			return errors.Errorf("range %d: can't remove the replica with the current range lease", repl.RangeID)
+		}
 		if log.V(1) {
 			log.Infof("range %d: removing replica %+v due to over-replication", repl.RangeID, removeReplica)
 		}
