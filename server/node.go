@@ -259,7 +259,7 @@ func (n *Node) context(ctx context.Context) context.Context {
 	if ctx == nil {
 		panic("ctx cannot be nil")
 	}
-	return log.Add(ctx, log.NodeID, n.Descriptor.NodeID)
+	return ctx // TODO(tschottdorf): see #1779
 }
 
 // initDescriptor initializes the node descriptor with the server
