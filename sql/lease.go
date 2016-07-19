@@ -507,7 +507,7 @@ type tableState struct {
 }
 
 // acquire returns a lease at the specifies version. The lease will have its
-// refcount incremented, so the caller is responsible to release() it.
+// refcount incremented, so the caller is responsible to call release() on it.
 func (t *tableState) acquire(
 	txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore,
 ) (*LeaseState, error) {
@@ -578,8 +578,10 @@ func (t *tableState) acquireFromStoreLocked(
 	store LeaseStore,
 	needFreshest bool,
 ) error {
+	// Ensure there is no lease acquisition in progress.
 	if t.acquiring != nil {
-		// There is already a lease acquisition in progress. Wait for it to complete.
+		// There is already a lease acquisition in progress. Wait for it to
+		// complete while releasing the lock.
 		t.acquireWait()
 		// If needFreshest is set, then the lease we were in the process of
 		// acquiring is not good enough. We need to acquire anew.
@@ -587,6 +589,7 @@ func (t *tableState) acquireFromStoreLocked(
 			return nil
 		}
 	}
+
 	t.acquiring = make(chan struct{})
 	minExpirationTime := parser.DTimestamp{}
 	if needFreshest {
@@ -623,12 +626,15 @@ func (t *tableState) releaseLeasesIfNotActive(leases []*LeaseState, store LeaseS
 }
 
 func (t *tableState) acquireWait() {
-	// We're called with mu locked, but need to unlock it while we wait for the
-	// in-progress lease acquisition to finish.
-	acquiring := t.acquiring
-	t.mu.Unlock()
-	defer t.mu.Lock()
-	<-acquiring
+	// Spin until no lease acquisition is in progress.
+	for t.acquiring != nil {
+		// We're called with mu locked, but need to unlock it while we wait
+		// for the in-progress lease acquisition to finish.
+		acquiring := t.acquiring
+		t.mu.Unlock()
+		<-acquiring
+		t.mu.Lock()
+	}
 }
 
 // If the lease cannot be obtained because the descriptor is in the process of
