@@ -795,7 +795,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DDate) == right.(*DDate)), nil
+				return DBool(*left.(*DDate) == *right.(*DDate)), nil
 			},
 		},
 		CmpOp{
