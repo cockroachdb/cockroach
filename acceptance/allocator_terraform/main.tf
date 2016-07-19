@@ -13,6 +13,7 @@ resource "google_compute_instance" "cockroach" {
   disk {
     image = "${var.gce_image}"
     size = "${var.cockroach_disk_size}" # GB
+    # type    = "pd-ssd" # uncomment for persistent SSD
   }
 
   network_interface {
