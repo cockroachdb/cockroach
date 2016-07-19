@@ -627,7 +627,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		case formatText:
 			ts, err := parseTs(string(b))
 			if err != nil {
-				return d, errors.Errorf("could not parse string %q as date", b)
+				if res, err := parser.ParseDDate(string(b), time.UTC); err == nil {
+					d = res
+				} else {
+					return d, errors.Errorf("could not parse string %q as date", b)
+				}
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
