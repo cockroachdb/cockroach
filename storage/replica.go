@@ -266,6 +266,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		// error here as all errors returned from this method are considered fatal.
 		return nil
 	}
+
 	if r.mu.replicaID == 0 {
 		// The replica's raft group has not yet been configured (i.e. the replica
 		// was created from a preemptive snapshot).
@@ -273,18 +274,13 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 	}
 
 	if r.mu.internalRaftGroup == nil {
-		raftGroup, err := raft.NewRawNode(&raft.Config{
-			ID:            uint64(r.mu.replicaID),
-			Applied:       r.mu.state.RaftAppliedIndex,
-			ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
-			HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
-			Storage:       r,
-			// TODO(bdarnell): make these configurable; evaluate defaults.
-			MaxSizePerMsg:   1024 * 1024,
-			MaxInflightMsgs: 256,
-			CheckQuorum:     true,
-			Logger:          &raftLogger{rangeID: r.RangeID},
-		}, nil)
+		raftGroup, err := raft.NewRawNode(newRaftConfig(
+			raft.Storage(r),
+			uint64(r.mu.replicaID),
+			r.mu.state.RaftAppliedIndex,
+			r.store.ctx,
+			&raftLogger{rangeID: r.RangeID},
+		), nil)
 		if err != nil {
 			return err
 		}
@@ -1474,9 +1470,11 @@ func (r *Replica) handleRaftReady() error {
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
+		if err := r.applySnapshot(rd.Snapshot, rd.HardState); err != nil {
+			return err
+		}
 		var err error
-		lastIndex, err = r.applySnapshot(rd.Snapshot, rd.HardState)
-		if err != nil {
+		if lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID); err != nil {
 			return err
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.

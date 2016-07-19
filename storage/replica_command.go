@@ -3025,14 +3025,21 @@ func (r *Replica) ChangeReplicas(
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 		}
 
+		if repDesc.ReplicaID != 0 {
+			return errors.Errorf(
+				"must not specify a ReplicaID (%d) for new Replica",
+				repDesc.ReplicaID,
+			)
+		}
 		r.raftSender.SendAsync(&RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: fromRepDesc,
 			ToReplica:   repDesc,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				To:       uint64(repDesc.ReplicaID),
+				To:       0, // special cased ReplicaID for preemptive snapshots
 				From:     uint64(fromRepDesc.ReplicaID),
+				Term:     snap.Metadata.Term,
 				Snapshot: snap,
 			},
 		})
