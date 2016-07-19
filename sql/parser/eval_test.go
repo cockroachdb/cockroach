@@ -139,6 +139,7 @@ func TestEval(t *testing.T) {
 		{`1.1::decimal > 1.2::decimal`, `false`},
 		{`1.1::decimal >= 1.2::decimal`, `false`},
 		{`'2015-10-01'::date = '2015-10-02'::date`, `false`},
+		{`'2015-10-01'::date = '2015-10-01'::date`, `true`},
 		{`'2015-10-01'::date != '2015-10-02'::date`, `true`},
 		{`'2015-10-01'::date < '2015-10-02'::date`, `true`},
 		{`'2015-10-01'::date <= '2015-10-02'::date`, `true`},
