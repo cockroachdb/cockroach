@@ -6230,7 +6230,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 
 	key := roachpb.RKey("a")
 	firstRng := tc.store.LookupReplica(key, nil)
-	snap, err := firstRng.GetSnapshot()
+	snap, err := firstRng.GetSnapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

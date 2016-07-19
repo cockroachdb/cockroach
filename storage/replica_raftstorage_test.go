@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/coreos/etcd/raft"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/coreos/etcd/raft"
 )
 
 const rangeID = 1
@@ -67,7 +67,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 
 	fillTestRange(t, rep, snapSize)
 
-	if _, err := rep.GetSnapshot(); err != nil {
+	if _, err := rep.GetSnapshot(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
