@@ -2,9 +2,9 @@ cmd github.com/client9/misspell/cmd/misspell
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/stress
-cmd github.com/gengo/grpc-gateway/protoc-gen-grpc-gateway
 cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
+cmd github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/kkaneda/returncheck
@@ -39,7 +39,6 @@ github.com/docker/go-units f2d77a61e3c169b43402a0a1e84f06daf29b8190
 github.com/dustin/go-humanize fef948f2d241bd1fd0631108ecc2c9553bae60bf
 github.com/elastic/gosigar f720d6786aff82d4dae3d0af8c0ea5a34cd04029
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
-github.com/gengo/grpc-gateway faa3576c70e270b37279f045637a7d04f632e353
 github.com/go-sql-driver/mysql 3654d25ec346ee8ce71a68431025458d52a38ac0
 github.com/gogo/protobuf 318371cbef6bab80e8d1c69b470fffa79eebfb54
 github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998
@@ -47,6 +46,7 @@ github.com/golang/lint c7bacac2b21ca01afa1dee0acf64df3ce047c28f
 github.com/golang/protobuf 3852dcfda249c2097355a6aabb199a28d97b30df
 github.com/google/btree 7d79101e329e5a3adf994758c578dab82b90c017
 github.com/gordonklaus/ineffassign 71e35c2a79cb470e72313ec93d6750089dc95fa3
+github.com/grpc-ecosystem/grpc-gateway f52d055dc48aec25854ed7d31862f78913cf17d1
 github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
 github.com/julienschmidt/httprouter fb79d6a91d3e4a9ecb6d945b218d78fc0d9b1939
 github.com/kisielk/errcheck aa69c6199800e8aeeedf51950f830458e4cb73e3
