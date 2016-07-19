@@ -457,14 +457,6 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	return nil
 }
 
-// context returns a context with information about this range, derived from
-// the supplied context (which is not allowed to be nil). It is only relevant
-// when commands need to be executed on this range in the absence of a
-// pre-existing context, such as during range scanner operations.
-func (r *Replica) context(ctx context.Context) context.Context {
-	return r.store.context(ctx) // TODO(tschottdorf): see #1779
-}
-
 // GetMaxBytes atomically gets the range maximum byte limit.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.Lock()
@@ -1757,7 +1749,7 @@ func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 // updating only the applied index.
 func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, raftCmd roachpb.RaftCommand) *roachpb.Error {
 	if index == 0 {
-		log.Fatalc(r.context(context.TODO()), "processRaftCommand requires a non-zero index")
+		log.Fatalf("%s: processRaftCommand requires a non-zero index", r)
 	}
 
 	var forcedErr *roachpb.Error
@@ -1873,7 +1865,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	r.mu.Unlock()
 	if ctx == nil {
 		// TODO(tschottdorf): consider the Trace situation here.
-		ctx = r.context(context.Background())
+		ctx = context.Background()
 	}
 
 	log.Trace(ctx, "applying batch")
@@ -1892,7 +1884,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: err}
 		close(cmd.done)
 	} else if err != nil && log.V(1) {
-		log.Errorc(r.context(context.TODO()), "error executing raft command: %s", err)
+		log.Errorf("%s: error executing raft command: %s", r, err)
 	}
 
 	return err
@@ -2452,7 +2444,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		return nil
 	}
 
-	ctx := r.context(context.TODO())
+	ctx := context.Background()
 
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
@@ -2532,7 +2524,7 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
-	ctx := r.context(context.TODO())
+	ctx := context.Background()
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	kvs, hash, err := r.loadSystemConfigSpan()
 	if err != nil {
@@ -2584,7 +2576,7 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // range, store, node or cluster with corresponding actions taken.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		log.Errorc(r.context(context.TODO()), "stalling replica due to: %s", cErr.ErrorMsg)
+		log.Errorf("%s: stalling replica due to: %s", r, cErr.ErrorMsg)
 		cErr.Processed = true
 		return roachpb.NewError(cErr)
 	}
@@ -2602,7 +2594,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	br, intents, pErr :=
-		r.executeBatch(r.context(context.TODO()), storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+		r.executeBatch(context.Background(), storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}

@@ -774,7 +774,7 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
-			if err := r.splitTrigger(r.context(ctx), batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+			if err := r.splitTrigger(ctx, batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
 				return err
 			}
 			*ms = enginepb.MVCCStats{} // clear stats, as split recomputed.
@@ -1677,7 +1677,7 @@ func (r *Replica) applyNewLeaseLocked(
 func (r *Replica) CheckConsistency(
 	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	ctx := r.context(context.TODO())
+	ctx := context.TODO()
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
@@ -2855,7 +2855,7 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			_ = r.store.Stopper().RunAsyncTask(func() {
 				// Create a new context because this is an asynchronous task and we
 				// don't want to share the trace.
-				ctx := r.context(context.Background())
+				ctx := context.Background()
 				if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
 					r.mu.Lock()
 					defer r.mu.Unlock()
