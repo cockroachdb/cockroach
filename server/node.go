@@ -253,13 +253,9 @@ func NewNode(
 	return n
 }
 
-// context returns a context encapsulating the NodeID, derived from the
-// supplied context (which is not allowed to be nil).
-func (n *Node) context(ctx context.Context) context.Context {
-	if ctx == nil {
-		panic("ctx cannot be nil")
-	}
-	return ctx // TODO(tschottdorf): see #1779
+// String implements fmt.Stringer.
+func (n *Node) String() string {
+	return fmt.Sprintf("node=%d", n.Descriptor.NodeID)
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -352,7 +348,7 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 	// Record node started event.
 	n.recordJoinEvent()
 
-	log.Infoc(n.context(context.TODO()), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
+	log.Infof("%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
 	return nil
 }
 
@@ -713,7 +709,7 @@ func (n *Node) recordJoinEvent() {
 					}{n.Descriptor, n.ClusterID, n.startedAt},
 				)
 			}); err != nil {
-				log.Warningc(n.context(context.TODO()), "unable to log %s event for node %d: %s", logEventType, n.Descriptor.NodeID, err)
+				log.Warningf("%s: unable to log %s event: %s", n, logEventType, err)
 			} else {
 				return
 			}
@@ -791,7 +787,7 @@ func (n *Node) Batch(
 			}
 		}
 		defer sp.Finish()
-		traceCtx := opentracing.ContextWithSpan(n.context(ctx), sp)
+		traceCtx := opentracing.ContextWithSpan(ctx, sp)
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error

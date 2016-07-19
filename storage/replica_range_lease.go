@@ -129,8 +129,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// checks from normal request machinery, (e.g. the command queue).
 		// Note that the command itself isn't traced, but usually the caller
 		// waiting for the result has an active Trace.
-		ch, _, err := replica.proposeRaftCommand(
-			replica.context(context.Background()), ba)
+		ch, _, err := replica.proposeRaftCommand(context.Background(), ba)
 		if err != nil {
 			execPErr = roachpb.NewError(err)
 		} else {
