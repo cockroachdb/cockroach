@@ -2424,6 +2424,12 @@ func (r *Replica) splitTrigger(
 	// Preserve stats for presplit range and begin computing stats delta
 	// for current transaction.
 	origStats := r.GetMVCCStats()
+	// TODO(tschottdorf): something is fishy here. `*ms` at this point is the
+	// stats delta we've written before the split trigger. Now we "fork" off
+	// of that for deltaMS, so any updates to deltaMS will be unknown to `ms`,
+	// which will be added to the replica's stats in the same batch, but after
+	// this commit trigger. We update the stats below, but computed from the
+	// batch which already contains all of the writes that influenced `ms`.
 	deltaMS := *ms
 
 	// Account for MVCCStats' own contribution to the new range's statistics.
@@ -2525,9 +2531,17 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, "computed stats for new range")
 
-	// Note: you must not use the trace inside of this defer since it may
-	// run after the trace has already completed.
-	batch.Defer(func() {
+	// This is the part of the split trigger which coordinates the actual split
+	// with the Store. As such, it tries to avoid using any of the intermediate
+	// results of the code above, the goal being moving it closer to Store's
+	// Raft processing goroutine.
+
+	parametrizedTrigger := func(
+		ctx context.Context,
+		deltaMS enginepb.MVCCStats,
+		split *roachpb.SplitTrigger,
+		r *Replica,
+	) {
 		// Create the new Replica representing the right side of the split.
 		// Our error handling options at this point are very limited, but
 		// we need to do this after our batch has committed.
@@ -2539,7 +2553,6 @@ func (r *Replica) splitTrigger(
 		// Copy the timestamp cache into the new range.
 		r.mu.Lock()
 		newRng.mu.Lock()
-		newRng.mu.state.Stats = rightMS
 		r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
 		newRng.mu.Unlock()
 		r.mu.Unlock()
@@ -2620,7 +2633,16 @@ func (r *Replica) splitTrigger(
 				return
 			}
 		}
-	})
+	}
+
+	theTrigger := func() {
+		parametrizedTrigger(ctx, deltaMS, split, r)
+	}
+
+	// Note: you must not use the trace inside of this defer since it may
+	// run after the trace has already completed.
+	// TODO(tschottdorf): the above doesn't sound right.
+	batch.Defer(theTrigger)
 
 	return nil
 }
