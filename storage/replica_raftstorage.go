@@ -18,12 +18,14 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -279,7 +281,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
+		sp := r.store.Tracer().StartSpan(fmt.Sprintf("Snapshot Async %s", r))
+		ctx := opentracing.ContextWithSpan(r.context(context.Background()), sp)
+		defer sp.Finish()
 		snap := r.store.NewSnapshot()
+		log.Trace(ctx, "got snapshot")
 		defer snap.Close()
 		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
@@ -289,12 +295,15 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		if err != nil {
 			log.Errorf("%s: error generating snapshot: %s", r, err)
 		} else {
+			log.Trace(ctx, "snapshot generated")
 			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
+				log.Trace(ctx, "snapshot accepted")
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
+				log.Trace(ctx, "snapshot abandoned")
 			case <-r.store.Stopper().ShouldQuiesce():
 			}
 		}
@@ -319,13 +328,16 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 // GetSnapshot wraps Snapshot() but does not require the replica lock
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
-func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
+func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 	retryOptions := retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
 		Multiplier:     2,
 	}
+	i := 0
 	for retry := retry.Start(retryOptions); retry.Next(); {
+		i++
+		log.Trace(ctx, fmt.Sprintf("GetSnapshot retry loop pass %d", i))
 		r.mu.Lock()
 		snap, err := r.Snapshot()
 		snapshotChan := r.mu.snapshotChan
