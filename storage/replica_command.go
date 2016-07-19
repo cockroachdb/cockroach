@@ -774,7 +774,7 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
-			if err := r.splitTrigger(r.context(ctx), batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+			if err := r.splitTrigger(ctx, batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
 				return err
 			}
 			*ms = enginepb.MVCCStats{} // clear stats, as split recomputed.
@@ -1677,7 +1677,7 @@ func (r *Replica) applyNewLeaseLocked(
 func (r *Replica) CheckConsistency(
 	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	ctx := r.context(context.TODO())
+	ctx := context.TODO()
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
@@ -2855,7 +2855,7 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			_ = r.store.Stopper().RunAsyncTask(func() {
 				// Create a new context because this is an asynchronous task and we
 				// don't want to share the trace.
-				ctx := r.context(context.Background())
+				ctx := context.Background()
 				if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
 					r.mu.Lock()
 					defer r.mu.Unlock()
@@ -3056,8 +3056,8 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	log.Trace(ctx, "starting txn")
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+		log.Trace(ctx, "attempting txn")
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
 		// Remove when that has been solved. The failure mode is likely based on
@@ -3068,7 +3068,7 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof("%s: change replicas of %d: read existing descriptor %+v", r, rangeID, oldDesc)
+		log.Infoc(ctx, "%s: change replicas of %d: read existing descriptor %+v", r, rangeID, oldDesc)
 
 		{
 			b := txn.NewBatch()
@@ -3111,6 +3111,7 @@ func (r *Replica) ChangeReplicas(
 				},
 			})
 			if err := txn.Run(b); err != nil {
+				log.Trace(ctx, err.Error())
 				return err
 			}
 		}
@@ -3123,6 +3124,7 @@ func (r *Replica) ChangeReplicas(
 		}
 		return nil
 	}); err != nil {
+		log.Trace(ctx, err.Error())
 		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 	}
 	log.Trace(ctx, "txn complete")
