@@ -268,7 +268,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 		return
 	}
 	now := r.store.Clock().Now()
-	ctx := r.context(context.TODO())
+	ctx := context.TODO()
 	stopper := r.store.Stopper()
 
 	for _, item := range intents {
@@ -299,11 +299,11 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// poison.
 				if err := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
 					true /* wait */, true /* poison */); err != nil {
-					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)
+					log.Warningf("%s: failed to resolve intents: %s", r, err)
 					return
 				}
 				if pushErr != nil {
-					log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pushErr)
+					log.Warningf("%s: failed to push during intent resolution: %s", r, pushErr)
 					return
 				}
 			}); err != nil {
@@ -325,7 +325,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// not make it back to the client.
 				if err := ir.resolveIntents(ctxWithTimeout, r, item.intents,
 					true /* wait */, false /* !poison */); err != nil {
-					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)
+					log.Warningf("%s: failed to resolve intents: %s", r, err)
 					return
 				}
 

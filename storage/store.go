@@ -925,9 +925,7 @@ func (s *Store) context(ctx context.Context) context.Context {
 	if ctx == nil {
 		panic("ctx cannot be nil")
 	}
-	return log.Add(ctx,
-		log.NodeID, s.Ident.NodeID,
-		log.StoreID, s.Ident.StoreID)
+	return ctx // TODO(tschottdorf): see #1779
 }
 
 // IsStarted returns true if the Store has been started.

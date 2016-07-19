@@ -145,9 +145,6 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		ba.Replica = repDesc
 	}
 
-	ctx = log.Add(ctx,
-		log.RangeID, ba.RangeID)
-
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
 		return nil, roachpb.NewError(err)
