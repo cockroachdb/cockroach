@@ -26,8 +26,8 @@ import (
 	"sync"
 	"time"
 
-	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/proto"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

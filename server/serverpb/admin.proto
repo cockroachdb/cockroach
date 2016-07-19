@@ -271,8 +271,9 @@ enum DrainMode {
 // all those in 'on'.
 message DrainRequest {
   // These are actually of type DrainMode, but grpc-gateway does not support
-  // proxying enum fields (yet: https://github.com/gengo/grpc-gateway/issues/5)
-  // and it fails in pretty dramatic ways (panics the server).
+  // proxying enum fields (yet: 
+  // https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
+  // pretty dramatic ways (panics the server).
   repeated int32 on = 1;
   repeated int32 off = 2;
   // When true, terminates the process after the given drain modes have been

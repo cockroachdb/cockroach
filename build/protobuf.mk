@@ -39,7 +39,7 @@ CPROTOBUF_PATH  := $(ORG_ROOT)/c-protobuf/internal/src
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
 
-GRPC_GATEWAY_PACKAGE := github.com/gengo/grpc-gateway
+GRPC_GATEWAY_PACKAGE := github.com/grpc-ecosystem/grpc-gateway
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := $(GRPC_GATEWAY_PACKAGE)/third_party/googleapis
 GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 

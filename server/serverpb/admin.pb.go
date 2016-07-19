@@ -62,7 +62,7 @@ import math "math"
 import cockroach_config "github.com/cockroachdb/cockroach/config"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
-// skipping weak import google_api1 "github.com/gengo/grpc-gateway/third_party/googleapis/google/api"
+// skipping weak import google_api1 "github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api"
 
 import (
 	context "golang.org/x/net/context"
@@ -485,8 +485,9 @@ func (*ClusterResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmi
 // all those in 'on'.
 type DrainRequest struct {
 	// These are actually of type DrainMode, but grpc-gateway does not support
-	// proxying enum fields (yet: https://github.com/gengo/grpc-gateway/issues/5)
-	// and it fails in pretty dramatic ways (panics the server).
+	// proxying enum fields (yet:
+	// https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
+	// pretty dramatic ways (panics the server).
 	On  []int32 `protobuf:"varint,1,rep,name=on" json:"on,omitempty"`
 	Off []int32 `protobuf:"varint,2,rep,name=off" json:"off,omitempty"`
 	// When true, terminates the process after the given drain modes have been
