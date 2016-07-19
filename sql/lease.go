@@ -170,7 +170,9 @@ func (s LeaseStore) Acquire(
 	tableDesc.MaybeUpgradeFormatVersion()
 	lease.TableDescriptor = *tableDesc
 
-	if err := lease.Validate(); err != nil {
+	// ValidateTable instead of Validate, even though we have a txn available,
+	// so we don't block reads waiting for this lease.
+	if err := lease.ValidateTable(); err != nil {
 		return nil, err
 	}
 	if lease.Version < minVersion {
@@ -333,7 +335,7 @@ func (s LeaseStore) Publish(
 				log.Infof(context.TODO(), "publish: descID=%d (%s) version=%d mtime=%s",
 					tableDesc.ID, tableDesc.Name, tableDesc.Version, now.GoTime())
 			}
-			if err := tableDesc.Validate(); err != nil {
+			if err := tableDesc.ValidateTable(); err != nil {
 				return err
 			}
 
@@ -1167,7 +1169,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
-						if err := table.Validate(); err != nil {
+						if err := table.ValidateTable(); err != nil {
 							log.Errorf(context.TODO(), "%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}

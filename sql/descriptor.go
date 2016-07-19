@@ -156,17 +156,19 @@ func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlba
 		if table == nil {
 			return false, errors.Errorf("%q is not a table", plainKey.Name())
 		}
+		if err := table.Validate(p.txn); err != nil {
+			return false, err
+		}
 		*t = *table
 	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
 			return false, errors.Errorf("%q is not a database", plainKey.Name())
 		}
+		if err := database.Validate(); err != nil {
+			return false, err
+		}
 		*t = *database
-	}
-
-	if err := descriptor.Validate(); err != nil {
-		return false, err
 	}
 	return true, nil
 }

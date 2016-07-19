@@ -167,7 +167,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 
-	if err := tableDesc.Validate(); err != nil {
+	if err := tableDesc.Validate(p.txn); err != nil {
 		return nil, err
 	}
 
@@ -266,7 +266,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	if err := tableDesc.Validate(); err != nil {
+	if err := tableDesc.Validate(p.txn); err != nil {
 		return nil, err
 	}
 	if err := p.txn.Put(descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
@@ -381,7 +381,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	if err := tableDesc.Validate(); err != nil {
+	if err := tableDesc.Validate(p.txn); err != nil {
 		return nil, err
 	}
 	if err := p.txn.Put(descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
