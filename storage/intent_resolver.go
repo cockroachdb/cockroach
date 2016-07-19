@@ -105,6 +105,12 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 			log.Infoc(ctx, "on %s: %s", method, pushErr)
 		}
 
+		if _, isExpected := pushErr.GetDetail().(*roachpb.TransactionPushError); !isExpected {
+			// If an unexpected error occurred, make sure it bubbles up to the
+			// client. Examples are timeouts and logic errors.
+			return pushErr
+		}
+
 		// For write/write conflicts within a transaction, propagate the
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
