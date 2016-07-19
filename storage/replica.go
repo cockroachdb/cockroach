@@ -462,7 +462,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 // when commands need to be executed on this range in the absence of a
 // pre-existing context, such as during range scanner operations.
 func (r *Replica) context(ctx context.Context) context.Context {
-	return context.WithValue(r.store.context(ctx), log.RangeID, r.RangeID)
+	return r.store.context(ctx) // TODO(tschottdorf): see #1779
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
