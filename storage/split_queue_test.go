@@ -72,7 +72,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 32<<20 + 1, true, 1},
 	}
 
-	splitQ := newSplitQueue(nil, tc.gossip)
+	splitQ := newSplitQueue(tc.store, nil, tc.gossip)
 
 	cfg, ok := tc.gossip.GetSystemConfig()
 	if !ok {
