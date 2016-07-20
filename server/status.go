@@ -93,6 +93,8 @@ const (
 	statusMetricsPrefix = statusPrefix + "metrics/"
 	// statusMetricsPattern exposes transient stats for a node.
 	statusMetricsPattern = statusPrefix + "metrics/:node_id"
+	// statusVars exposes prometheus metrics for monitoring consumption.
+	statusVars = statusPrefix + "vars"
 
 	// statusRangesPrefix exposes range information.
 	statusRangesPrefix = statusPrefix + "ranges/"
@@ -114,11 +116,16 @@ func inconsistentBatch() *client.Batch {
 	return b
 }
 
+type metricMarshaler interface {
+	json.Marshaler
+	PrintAsText(io.Writer) error
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	db           *client.DB
 	gossip       *gossip.Gossip
-	metricSource json.Marshaler
+	metricSource metricMarshaler
 	router       *httprouter.Router
 	rpcCtx       *rpc.Context
 	proxyClient  http.Client
@@ -129,7 +136,7 @@ type statusServer struct {
 func newStatusServer(
 	db *client.DB,
 	gossip *gossip.Gossip,
-	metricSource json.Marshaler,
+	metricSource metricMarshaler,
 	ctx *base.Context,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
@@ -158,6 +165,7 @@ func newStatusServer(
 	// except that this one allows querying by NodeID.
 	server.router.GET(statusStacksPattern, server.handleStacks)
 	server.router.GET(statusMetricsPattern, server.handleMetrics)
+	server.router.GET(statusVars, server.handleVars)
 
 	return server
 }
@@ -621,6 +629,15 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 		}
 	}
 	return &resp, nil
+}
+
+func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
+	err := s.metricSource.PrintAsText(w)
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // Ranges returns range info for the server specified

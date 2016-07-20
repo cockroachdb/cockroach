@@ -20,8 +20,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"regexp"
 	"sync"
 	"time"
+
+	"github.com/gogo/protobuf/proto"
+	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 )
 
 const sep = "-"
@@ -93,6 +99,36 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 		m[name] = v
 	})
 	return json.Marshal(m)
+}
+
+var (
+	nameReplaceRE = regexp.MustCompile("[.-]")
+)
+
+// exportedName takes a metric name and generates a valid prometheus name.
+// see nameReplaceRE for characters to be replaces with '_'.
+func exportedName(name string) string {
+	return nameReplaceRE.ReplaceAllString(name, "_")
+}
+
+// PrintAsText outputs all metrics in text format.
+func (r *Registry) PrintAsText(w io.Writer) error {
+	var metricFamily prometheusgo.MetricFamily
+	var ret error
+	r.Each(func(name string, v interface{}) {
+		if ret != nil {
+			return
+		}
+		if metric, ok := v.(PrometheusExportable); ok {
+			metricFamily.Reset()
+			metricFamily.Name = proto.String(exportedName(name))
+			metric.FillPrometheusMetric(&metricFamily)
+			if _, err := expfmt.MetricFamilyToText(w, &metricFamily); err != nil {
+				ret = err
+			}
+		}
+	})
+	return ret
 }
 
 // Histogram registers a new windowed HDRHistogram with the given parameters.
