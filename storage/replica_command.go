@@ -2860,7 +2860,7 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			// blocks waiting for the lease acquisition to finish but it can't finish
 			// because we're not processing raft messages due to holding
 			// processRaftMu (and running on the processRaft goroutine).
-			_ = r.store.Stopper().RunAsyncTask(func() {
+			if err := r.store.Stopper().RunAsyncTask(func() {
 				// Create a new context because this is an asynchronous task and we
 				// don't want to share the trace.
 				ctx := context.Background()
@@ -2871,7 +2871,9 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 				} else {
 					log.Infof("unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
 				}
-			})
+			}); err != nil {
+				log.Errorf("unable to gossip first range: %v", err)
+			}
 		})
 	}
 
