@@ -4,6 +4,10 @@ variable "example_block_writer_instances" {
   default = 1
 }
 
+variable "benchmark_name" {
+  default = "BenchmarkBlockWriter"
+}
+
 # Despite its name, example_block_writer actually has `photos` too. We're
 # sticking to this name for compatibility with Terrafarm. Since our load
 # generators are rarely CPU-bound, it's fine to have them on a single GCE

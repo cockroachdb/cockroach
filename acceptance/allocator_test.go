@@ -105,16 +105,15 @@ type allocatorTest struct {
 
 func (at *allocatorTest) Run(t *testing.T) {
 	at.f = farmer(t, at.Prefix)
+	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
+		t.Fatalf("%s environment variable must be set for Terraform", e)
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
 		at.f.MustDestroy(t)
 	}()
-
-	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
-		t.Fatalf("%s environment variable must be set for Terraform", e)
-	}
 
 	// Pass on overrides to Terraform input variables.
 	if *flagATCockroachBinary != "" {
