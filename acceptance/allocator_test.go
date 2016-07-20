@@ -114,7 +114,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 		baseDir := filepath.Join(wd, at.f.Cwd)
 		if t.Failed() && at.f.KeepClusterAfterFail {
-			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -state %s)",
+			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -force -state %s)",
 				baseDir, at.f.StateFile)
 			return
 		}
