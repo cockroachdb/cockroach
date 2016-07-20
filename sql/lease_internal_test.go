@@ -20,6 +20,7 @@ package sql
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -453,4 +454,45 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	}
 	close(leaseChan)
+}
+
+// TestAcquireFreshestFromStoreRaces runs
+// LeaseManager.acquireFreshestFromStore() in parallel to test for races.
+func TestAcquireFreshestFromStoreRaces(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	var wg sync.WaitGroup
+	numRoutines := 10
+	wg.Add(numRoutines)
+	for i := 0; i < numRoutines; i++ {
+		go func() {
+			err := kvDB.Txn(func(txn *client.Txn) error {
+				lease, err := leaseManager.acquireFreshestFromStore(txn, tableDesc.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := leaseManager.Release(lease); err != nil {
+					t.Fatal(err)
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
