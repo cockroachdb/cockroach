@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"fmt"
 	"sort"
 	"time"
 
@@ -178,23 +177,11 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
 
-		c := client.conn
-		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
-			if err != nil {
-				done <- BatchCall{Err: err}
-				return
-			}
-			if state == grpc.Shutdown {
-				done <- BatchCall{Err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
-				return
-			}
-		}
-
 		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(context.TODO(), err)
+					log.Error(ctx, err)
 				}
 			}
 		}
