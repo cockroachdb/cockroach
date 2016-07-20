@@ -1483,7 +1483,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for Internal service
 
@@ -1611,7 +1611,8 @@ var _Internal_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Internal_Reserve_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: fileDescriptorApi,
 }
 
 // Client API for External service
@@ -1674,7 +1675,8 @@ var _External_serviceDesc = grpc.ServiceDesc{
 			Handler:    _External_Batch_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: fileDescriptorApi,
 }
 
 func (m *ResponseHeader) Marshal() (data []byte, err error) {

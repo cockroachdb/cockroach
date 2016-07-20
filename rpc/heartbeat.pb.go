@@ -98,7 +98,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for Heartbeat service
 
@@ -160,7 +160,8 @@ var _Heartbeat_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Heartbeat_Ping_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: fileDescriptorHeartbeat,
 }
 
 func (m *RemoteOffset) Marshal() (data []byte, err error) {
