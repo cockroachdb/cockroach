@@ -83,16 +83,12 @@ type TestClusterArgs struct {
 type TestClusterReplicationMode int
 
 const (
-	// ReplicationFull means that each range is to be replicated everywhere. This
-	// will be done by overriding the default zone config. The replication will be
-	// performed as in production, by the replication queue.
-	// TestCluster.WaitForFullReplication() can be used to wait for replication to
-	// be stable at any point in a test.
-	// TODO(andrei): ReplicationFull should not be an option, or at least not the
-	// default option. Instead, the production default replication should be the
-	// default for TestCluster too. But I'm not sure how to implement
-	// `WaitForFullReplication` for that.
-	ReplicationFull TestClusterReplicationMode = iota
+	// ReplicationAuto means that ranges are replicated according to the
+	// production default zone config. Replication is performed as in
+	// production, by the replication queue.
+	// TestCluster.WaitForFullReplication() can be used to wait for
+	// replication to be stable at any point in a test.
+	ReplicationAuto TestClusterReplicationMode = iota
 	// ReplicationManual means that the split and replication queues of all
 	// servers are stopped, and the test must manually control splitting and
 	// replication through the TestServer.

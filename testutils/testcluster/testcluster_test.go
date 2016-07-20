@@ -175,9 +175,9 @@ func TestBasicManualReplication(t *testing.T) {
 func TestWaitForFullReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationFull})
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
 	defer tc.Stopper().Stop()
 	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 }

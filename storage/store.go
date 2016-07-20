@@ -597,11 +597,12 @@ type storeMetrics struct {
 	registry *metric.Registry
 
 	// Range data metrics.
-	replicaCount         *metric.Counter // Does not include reserved replicas.
-	reservedReplicaCount *metric.Counter
-	leaderRangeCount     *metric.Gauge
-	replicatedRangeCount *metric.Gauge
-	availableRangeCount  *metric.Gauge
+	replicaCount                 *metric.Counter // Does not include reserved replicas.
+	reservedReplicaCount         *metric.Counter
+	leaderRangeCount             *metric.Gauge
+	replicatedRangeCount         *metric.Gauge
+	replicationPendingRangeCount *metric.Gauge
+	availableRangeCount          *metric.Gauge
 
 	// Lease data metrics.
 	leaseRequestSuccessCount *metric.Counter
@@ -660,30 +661,31 @@ type storeMetrics struct {
 func newStoreMetrics() *storeMetrics {
 	storeRegistry := metric.NewRegistry()
 	return &storeMetrics{
-		registry:                 storeRegistry,
-		replicaCount:             storeRegistry.Counter("replicas"),
-		reservedReplicaCount:     storeRegistry.Counter("replicas.reserved"),
-		leaderRangeCount:         storeRegistry.Gauge("ranges.leader"),
-		replicatedRangeCount:     storeRegistry.Gauge("ranges.replicated"),
-		availableRangeCount:      storeRegistry.Gauge("ranges.available"),
-		leaseRequestSuccessCount: storeRegistry.Counter("leases.success"),
-		leaseRequestErrorCount:   storeRegistry.Counter("leases.error"),
-		liveBytes:                storeRegistry.Gauge("livebytes"),
-		keyBytes:                 storeRegistry.Gauge("keybytes"),
-		valBytes:                 storeRegistry.Gauge("valbytes"),
-		intentBytes:              storeRegistry.Gauge("intentbytes"),
-		liveCount:                storeRegistry.Gauge("livecount"),
-		keyCount:                 storeRegistry.Gauge("keycount"),
-		valCount:                 storeRegistry.Gauge("valcount"),
-		intentCount:              storeRegistry.Gauge("intentcount"),
-		intentAge:                storeRegistry.Gauge("intentage"),
-		gcBytesAge:               storeRegistry.Gauge("gcbytesage"),
-		lastUpdateNanos:          storeRegistry.Gauge("lastupdatenanos"),
-		capacity:                 storeRegistry.Gauge("capacity"),
-		available:                storeRegistry.Gauge("capacity.available"),
-		reserved:                 storeRegistry.Counter("capacity.reserved"),
-		sysBytes:                 storeRegistry.Gauge("sysbytes"),
-		sysCount:                 storeRegistry.Gauge("syscount"),
+		registry:                     storeRegistry,
+		replicaCount:                 storeRegistry.Counter("replicas"),
+		reservedReplicaCount:         storeRegistry.Counter("replicas.reserved"),
+		leaderRangeCount:             storeRegistry.Gauge("ranges.leader"),
+		replicatedRangeCount:         storeRegistry.Gauge("ranges.replicated"),
+		replicationPendingRangeCount: storeRegistry.Gauge("ranges.replication-pending"),
+		availableRangeCount:          storeRegistry.Gauge("ranges.available"),
+		leaseRequestSuccessCount:     storeRegistry.Counter("leases.success"),
+		leaseRequestErrorCount:       storeRegistry.Counter("leases.error"),
+		liveBytes:                    storeRegistry.Gauge("livebytes"),
+		keyBytes:                     storeRegistry.Gauge("keybytes"),
+		valBytes:                     storeRegistry.Gauge("valbytes"),
+		intentBytes:                  storeRegistry.Gauge("intentbytes"),
+		liveCount:                    storeRegistry.Gauge("livecount"),
+		keyCount:                     storeRegistry.Gauge("keycount"),
+		valCount:                     storeRegistry.Gauge("valcount"),
+		intentCount:                  storeRegistry.Gauge("intentcount"),
+		intentAge:                    storeRegistry.Gauge("intentage"),
+		gcBytesAge:                   storeRegistry.Gauge("gcbytesage"),
+		lastUpdateNanos:              storeRegistry.Gauge("lastupdatenanos"),
+		capacity:                     storeRegistry.Gauge("capacity"),
+		available:                    storeRegistry.Gauge("capacity.available"),
+		reserved:                     storeRegistry.Counter("capacity.reserved"),
+		sysBytes:                     storeRegistry.Gauge("sysbytes"),
+		sysCount:                     storeRegistry.Gauge("syscount"),
 
 		// RocksDB metrics.
 		rdbBlockCacheHits:           storeRegistry.Gauge("rocksdb.block.cache.hits"),
@@ -739,11 +741,12 @@ func (sm *storeMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
 	sm.available.Update(capacity.Available)
 }
 
-func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, available int64) {
+func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, pending, available int64) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.leaderRangeCount.Update(leaders)
 	sm.replicatedRangeCount.Update(replicated)
+	sm.replicationPendingRangeCount.Update(pending)
 	sm.availableRangeCount.Update(available)
 }
 
@@ -1199,6 +1202,10 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			}
 		})
 
+		// Run metrics computation up front to populate initial statistics.
+		if err := s.ComputeMetrics(); err != nil {
+			log.Error(err)
+		}
 	}
 
 	// Set the started flag (for unittests).
@@ -2550,7 +2557,7 @@ func raftEntryFormatter(data []byte) string {
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
 func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, availableRangeCount int64) {
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64) {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
@@ -2562,7 +2569,8 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, rng := range s.mu.replicas {
-		zoneConfig, err := cfg.GetZoneConfigForKey(rng.Desc().StartKey)
+		desc := rng.Desc()
+		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
 			log.Error(err)
 			continue
@@ -2596,6 +2604,10 @@ func (s *Store) computeReplicationStatus(now int64) (
 					availableRangeCount++
 				}
 			}
+
+			if action, _ := s.allocator.ComputeAction(*zoneConfig, desc); action != AllocatorNoop {
+				replicationPendingRangeCount++
+			}
 		}
 	}
 	return
@@ -2614,9 +2626,10 @@ func (s *Store) ComputeMetrics() error {
 
 	// broadcast replication status.
 	now := s.ctx.Clock.Now().WallTime
-	leaderRangeCount, replicatedRangeCount, availableRangeCount :=
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount :=
 		s.computeReplicationStatus(now)
-	s.metrics.updateReplicationGauges(leaderRangeCount, replicatedRangeCount, availableRangeCount)
+	s.metrics.updateReplicationGauges(
+		leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount)
 
 	// Get the latest RocksDB stats.
 	stats, err := s.engine.GetStats()
@@ -2682,15 +2695,6 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 
 // Reserve requests a reservation from the store's bookie.
 func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
-	if s.metrics.capacity.Value() == 0 {
-		// On startup, it takes some time before ComputeMetrics is run. When
-		// this happens, it means the store will reject any incoming
-		// reservations. To avoid this, if there is no capacity information yet
-		// we can force a call to ComputeMetrics.
-		if err := s.ComputeMetrics(); err != nil {
-			log.Error(err)
-		}
-	}
 	return s.bookie.Reserve(req)
 }
 
