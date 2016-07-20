@@ -203,6 +203,16 @@ func (f *Farmer) Exec(i int, cmd string) error {
 	return nil
 }
 
+// ExecWriter executes the given command on the i-th writer, returning
+// (in that order) stdout, stderr and an error.
+func (f *Farmer) ExecWriter(i int, cmd string) error {
+	stdout, stderr, err := f.ssh(f.Writers()[i], f.defaultKeyFile(), cmd)
+	if err != nil {
+		return fmt.Errorf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
+	}
+	return nil
+}
+
 // NewClient implements the Cluster interface.
 func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 	panic("unimplemented")
@@ -271,6 +281,26 @@ func (f *Farmer) Assert(t *testing.T) {
 	}
 }
 
+// AssertStates verifies that the cluster state matches the provided map
+// of process names (e.g. cockroach) to expected states (e.g. RUNNING).
+func (f *Farmer) AssertStates(t *testing.T, procToExpState map[string]string) {
+	for proc, expState := range procToExpState {
+		hosts := f.Nodes()
+		if proc != "cockroach" {
+			hosts = f.Writers()
+		}
+		for i, host := range hosts {
+			out, _, err := f.execSupervisor(host, "status "+proc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out, expState) {
+				t.Fatalf("%s %d (%s) is not in expected state %s:\n%s", proc, i, host, expState, out)
+			}
+		}
+	}
+}
+
 // AssertAndStop performs the same test as Assert but then proceeds to
 // dismantle the cluster.
 func (f *Farmer) AssertAndStop(t *testing.T) {
@@ -298,6 +328,11 @@ func (f *Farmer) Restart(i int) error {
 	_ = f.Kill(i)
 	// supervisorctl is horrible with exit codes (cockroachdb/cockroach-prod#59).
 	_, _, err := f.execSupervisor(f.Nodes()[i], "start cockroach")
+	return err
+}
+
+func (f *Farmer) StartWriter(i int, process string) error {
+	_, _, err := f.execSupervisor(f.Writers()[i], "start "+process)
 	return err
 }
 
