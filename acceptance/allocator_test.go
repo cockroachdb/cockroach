@@ -389,3 +389,14 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 	}
 	at.Run(t)
 }
+
+func TestSteady_6Medium(t *testing.T) {
+	at := allocatorTest{
+		StartNodes:          6,
+		EndNodes:            6,
+		StoreURL:            archivedStoreURL + "/6nodes-1038replicas-56G",
+		Prefix:              "steady-6m",
+		CockroachDiskSizeGB: 250, // GB
+	}
+	at.Run(t)
+}
