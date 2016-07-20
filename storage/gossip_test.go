@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -49,6 +50,23 @@ func TestGossipFirstRange(t *testing.T) {
 			}
 		})
 
+	// Wait for the specified descriptor to be gossiped for the first range. We
+	// loop because the timing of replica addition and lease transfer can cause
+	// extra gossiping of the first range.
+	waitForGossip := func(desc *roachpb.RangeDescriptor) {
+		for {
+			select {
+			case err := <-errors:
+				t.Fatal(err)
+			case gossiped := <-descs:
+				if reflect.DeepEqual(desc, gossiped) {
+					return
+				}
+				log.Infof("expected\n%+v\nbut found\n%+v", desc, gossiped)
+			}
+		}
+	}
+
 	// Expect an initial callback of the first range descriptor.
 	select {
 	case err := <-errors:
@@ -65,14 +83,7 @@ func TestGossipFirstRange(t *testing.T) {
 		if desc, err = tc.AddReplicas(firstRangeKey, tc.Target(i)); err != nil {
 			t.Fatal(err)
 		}
-		select {
-		case err := <-errors:
-			t.Fatal(err)
-		case gossiped := <-descs:
-			if !reflect.DeepEqual(desc, gossiped) {
-				t.Fatalf("expected\n%+v\nbut found\n%+v", desc, gossiped)
-			}
-		}
+		waitForGossip(desc)
 	}
 
 	// Transfer the lease to a new node. This should cause the first range to be
@@ -80,28 +91,14 @@ func TestGossipFirstRange(t *testing.T) {
 	if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case err := <-errors:
-		t.Fatal(err)
-	case gossiped := <-descs:
-		if !reflect.DeepEqual(desc, gossiped) {
-			t.Fatalf("expected\n%+v\nbut found\n%+v", desc, gossiped)
-		}
-	}
+	waitForGossip(desc)
 
 	// Remove a non-lease holder replica.
 	desc, err := tc.RemoveReplicas(firstRangeKey, tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case err := <-errors:
-		t.Fatal(err)
-	case gossiped := <-descs:
-		if !reflect.DeepEqual(desc, gossiped) {
-			t.Fatalf("expected\n%+v\nbut found\n%+v", desc, gossiped)
-		}
-	}
+	waitForGossip(desc)
 
 	// TODO(peter): Re-enable or remove when we've resolved the discussion
 	// about removing the lease-holder replica. See #7872.
