@@ -118,7 +118,10 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 				return err
 			}
 
-			l("read max row for val=%d", exRow.val)
+			sleepDuration := time.Duration(rand.Int63n(int64(10 * time.Millisecond)))
+			time.Sleep(sleepDuration)
+
+			l("read max row for val=%d after sleeping %s", exRow.val, sleepDuration)
 			if err := tx.QueryRow(`SELECT sts, node, tb FROM mono.mono WHERE val = $1`,
 				exRow.val,
 			).Scan(
