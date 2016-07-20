@@ -92,7 +92,7 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 	ctx := makeTestContext()
 	ctx.TestingKnobs = params.Knobs
 	if params.JoinAddr != "" {
-		ctx.JoinUsing = params.JoinAddr
+		ctx.JoinList = []string{params.JoinAddr}
 	}
 	ctx.Insecure = params.Insecure
 	ctx.SocketFile = params.SocketFile
@@ -117,7 +117,7 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 	if params.SSLCertKey != "" {
 		ctx.SSLCertKey = params.SSLCertKey
 	}
-	ctx.JoinUsing = params.JoinAddr
+	ctx.JoinList = []string{params.JoinAddr}
 	return ctx
 }
 
