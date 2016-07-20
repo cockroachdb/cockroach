@@ -58,6 +58,7 @@ github.com/lib/pq 4dd446efc17690bc53e154025146f73203b18309
 github.com/lightstep/lightstep-tracer-go 42c31c53ad6e190563d3a733155a43f10f0691f8
 github.com/mattn/go-isatty 56b76bdf51f7708750eac80fa38b952bb9f32639
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
+github.com/matttproud/golang_protobuf_extensions c12348ce28de40eed0136aa2b644d0ee0650e56c
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
 github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter daf2955e742cf123959884fdff4685aa79b63135
@@ -66,6 +67,8 @@ github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
 github.com/opentracing/basictracer-go 8d298b35c67ed83c7565d36bd2928b7be8c06ba8
 github.com/opentracing/opentracing-go 74bcbcefb667969189ea542337a94d99c9c0e088
 github.com/pkg/errors a2d6902c6d2a2f194eb3fb474981ab7867c81505
+github.com/prometheus/client_model fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+github.com/prometheus/common 4402f4e5ea79ec15f3c574773b6a5198fbea215f
 github.com/rcrowley/go-metrics cfa5a85e9f0abbdf1701b59082c36fc7bff10759
 github.com/robfig/glock e75a83a850fe9ff13fd63720d09d28aab795808e
 github.com/russross/blackfriday 1d6b8e9301e720b08a8938b8c25c018285885438
