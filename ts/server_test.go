@@ -175,7 +175,8 @@ func TestQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := tspb.NewTimeSeriesClient(conn).Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+	tsClient := tspb.NewTimeSeriesClient(conn.ClientConn)
+	response, err := tsClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
 		Queries: []tspb.Query{

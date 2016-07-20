@@ -165,7 +165,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				return err
 			}
 
-			stream, err := NewGossipClient(conn).Gossip(ctx)
+			stream, err := NewGossipClient(conn.ClientConn).Gossip(ctx)
 			if err != nil {
 				return err
 			}

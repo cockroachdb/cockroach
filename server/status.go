@@ -216,7 +216,7 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, e
 	if err != nil {
 		return nil, err
 	}
-	return serverpb.NewStatusClient(conn), nil
+	return serverpb.NewStatusClient(conn.ClientConn), nil
 }
 
 // Gossip returns gossip network status.

@@ -70,7 +70,7 @@ func TestServer(t *testing.T) {
 		}},
 	}}
 
-	distSQLClient := NewDistSQLClient(conn)
+	distSQLClient := NewDistSQLClient(conn.ClientConn)
 	stream, err := distSQLClient.RunSimpleFlow(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
