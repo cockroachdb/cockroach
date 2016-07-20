@@ -1293,6 +1293,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 // rebalancing opportunities and add a new replica on another store.
 func TestStoreRangeRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#7940")
 
 	// Start multiTestContext with replica rebalancing enabled.
 	mtc := &multiTestContext{
