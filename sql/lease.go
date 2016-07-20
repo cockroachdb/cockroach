@@ -507,7 +507,7 @@ type tableState struct {
 }
 
 // acquire returns a lease at the specifies version. The lease will have its
-// refcount incremented, so the caller is responsible to release() it.
+// refcount incremented, so the caller is responsible to call release() on it.
 func (t *tableState) acquire(
 	txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore,
 ) (*LeaseState, error) {
@@ -528,8 +528,7 @@ func (t *tableState) acquire(
 			}
 		}
 
-		if err := t.acquireFromStoreLocked(
-			txn, version, store, false /* need freshest */); err != nil {
+		if err := t.acquireFromStoreLocked(txn, version, store); err != nil {
 			return nil, err
 		}
 		// A new lease was added, so loop and perform the lookup again.
@@ -560,45 +559,58 @@ func (t *tableState) checkLease(
 }
 
 // acquireFromStoreLocked acquires a new lease from the store and inserts it
-// into the active set.
-// If needFreshest is set, we'll guarantee that the lease returned was acquired
-// after the call is made. If not set, we might return a lease that we were
-// already in the process of acquiring. Set it if the lease we want to get needs
-// to see some descriptor updates that we know happened recently (but that
-// didn't cause the version to be incremented). E.g. if we suspect there's a new
-// name for a table, the caller can insist on getting a lease reflecting this
-// new name. Moreover, upon returning, the new lease is guaranteed to be the
-// last lease in t.active (note that this is not generally guaranteed, as leases
-// are assigned random expiration times).
-//
-// t.mu must be locked.
+// into the active set. t.mu must be locked.
 func (t *tableState) acquireFromStoreLocked(
 	txn *client.Txn,
 	version sqlbase.DescriptorVersion,
 	store LeaseStore,
-	needFreshest bool,
 ) error {
-	if t.acquiring != nil {
-		// There is already a lease acquisition in progress. Wait for it to complete.
-		t.acquireWait()
-		// If needFreshest is set, then the lease we were in the process of
-		// acquiring is not good enough. We need to acquire anew.
-		if !needFreshest {
-			return nil
-		}
+	// Ensure there is no lease acquisition in progress.
+	if t.acquireWait() {
+		// There was a lease acquisition in progress; accept the lease just
+		// acquired.
+		return nil
 	}
-	t.acquiring = make(chan struct{})
+
+	s, err := t.acquireNodeLease(txn, version, store, parser.DTimestamp{})
+	if err != nil {
+		return err
+	}
+	t.active.insert(s)
+	return nil
+}
+
+// acquireFreshestFromStoreLocked acquires a new lease from the store and
+// inserts it into the active set. It guarantees that the lease returned is
+// the one acquired after the call is made. Use this if the lease we want to
+// get needs to see some descriptor updates that we know happened recently
+// (but that didn't cause the version to be incremented). E.g. if we suspect
+// there's a new name for a table, the caller can insist on getting a lease
+// reflecting this new name. Moreover, upon returning, the new lease is
+// guaranteed to be the last lease in t.active (note that this is not
+// generally guaranteed, as leases are assigned random expiration times).
+//
+// t.mu must be locked.
+func (t *tableState) acquireFreshestFromStoreLocked(
+	txn *client.Txn,
+	version sqlbase.DescriptorVersion,
+	store LeaseStore,
+) error {
+	// Ensure there is no lease acquisition in progress.
+	t.acquireWait()
+
+	// Move forward to acquire a fresh lease.
+
+	// Set the min expiration time to guarantee that the lease acquired is the
+	// last lease in t.active .
 	minExpirationTime := parser.DTimestamp{}
-	if needFreshest {
-		newestLease := t.active.findNewest(0)
-		if newestLease != nil {
-			minExpirationTime = parser.DTimestamp{
-				Time: newestLease.expiration.Add(time.Millisecond)}
-		}
+	newestLease := t.active.findNewest(0)
+	if newestLease != nil {
+		minExpirationTime = parser.DTimestamp{
+			Time: newestLease.expiration.Add(time.Millisecond)}
 	}
+
 	s, err := t.acquireNodeLease(txn, version, store, minExpirationTime)
-	close(t.acquiring)
-	t.acquiring = nil
 	if err != nil {
 		return err
 	}
@@ -622,13 +634,20 @@ func (t *tableState) releaseLeasesIfNotActive(leases []*LeaseState, store LeaseS
 	}
 }
 
-func (t *tableState) acquireWait() {
-	// We're called with mu locked, but need to unlock it while we wait for the
-	// in-progress lease acquisition to finish.
-	acquiring := t.acquiring
-	t.mu.Unlock()
-	defer t.mu.Lock()
-	<-acquiring
+// acquireWait waits until no lease acquisition is in progress. It returns
+// true if it needed to wait.
+func (t *tableState) acquireWait() bool {
+	wait := t.acquiring != nil
+	// Spin until no lease acquisition is in progress.
+	for t.acquiring != nil {
+		// We're called with mu locked, but need to unlock it while we wait
+		// for the in-progress lease acquisition to finish.
+		acquiring := t.acquiring
+		t.mu.Unlock()
+		<-acquiring
+		t.mu.Lock()
+	}
+	return wait
 }
 
 // If the lease cannot be obtained because the descriptor is in the process of
@@ -646,6 +665,12 @@ func (t *tableState) acquireNodeLease(
 	store LeaseStore,
 	minExpirationTime parser.DTimestamp,
 ) (*LeaseState, error) {
+	// Notify when lease has been acquired.
+	t.acquiring = make(chan struct{})
+	defer func() {
+		close(t.acquiring)
+		t.acquiring = nil
+	}()
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()
@@ -1067,8 +1092,9 @@ func (m *LeaseManager) acquireFreshestFromStore(
 	t := m.findTableState(tableID, true)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if err := t.acquireFromStoreLocked(
-		txn, 0 /* version */, m.LeaseStore, true /* needFreshest */); err != nil {
+	if err := t.acquireFreshestFromStoreLocked(
+		txn, 0 /* version */, m.LeaseStore,
+	); err != nil {
 		return nil, err
 	}
 	lease := t.active.findNewest(0)
