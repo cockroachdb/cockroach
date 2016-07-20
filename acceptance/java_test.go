@@ -37,7 +37,7 @@ public class main {
 
 		String DB_URL = "jdbc:postgresql://";
 		DB_URL += System.getenv("PGHOST") + ":" + System.getenv("PGPORT");
-		DB_URL += "/?ssl=true";
+		DB_URL += "/test?ssl=true";
 		DB_URL += "&sslcert=" + System.getenv("PGSSLCERT");
 		DB_URL += "&sslkey=key.pk8";
 		DB_URL += "&sslrootcert=/certs/ca.crt";
@@ -102,6 +102,19 @@ public class main {
 		if (a != 1 || b != false || c != 3 || !d.equals("true") || !e.equals("-4") || !f.startsWith("5.3") || !g.startsWith("-6.2") || !h.equals("7")) {
 			throw new Exception("unexpected");
 		}
+
+		stmt = conn.prepareStatement("CREATE TABLE accounts (id INT PRIMARY KEY, balance INT, cdate DATE)");
+		res = stmt.executeUpdate();
+		if (res != 0) {
+		    throw new Exception("unexpected: CREATE TABLE reports " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("INSERT INTO accounts (id, balance, cdate) VALUES ( ?, ?, ? )");
+		stmt.setObject(1, 1);
+		stmt.setObject(2, 1000);
+		stmt.setObject(3, new java.sql.Date(System.currentTimeMillis()));
+
+		stmt.executeUpdate();
 	}
 }
 EOF
