@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/pkg/errors"
 )
@@ -90,11 +91,8 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	}
 
 	switch args.ReplicationMode {
-	case base.ReplicationFull:
-		// Force all ranges to be replicated everywhere.
-		cfg := config.DefaultZoneConfig()
-		cfg.ReplicaAttrs = make([]roachpb.Attributes, nodes)
-		fn := config.TestingSetDefaultZoneConfig(cfg)
+	case base.ReplicationAuto:
+		fn := config.TestingSetDefaultZoneConfig(config.DefaultZoneConfig())
 		args.Stopper.AddCloser(stop.CloserFn(fn))
 	case base.ReplicationManual:
 		if args.ServerArgs.Knobs.Store == nil {
@@ -446,23 +444,25 @@ func (tc *TestCluster) findMemberStore(
 	return nil, errors.Errorf("store not found")
 }
 
-// WaitForFullReplication waits until all of the nodes in the cluster have the
-// same number of replicas.
+// WaitForFullReplication waits until all stores in the cluster
+// have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
-	// TODO (WillHaack): Optimize sleep time.
-	for notReplicated := true; notReplicated; time.Sleep(100 * time.Millisecond) {
+	opts := retry.Options{
+		InitialBackoff: time.Millisecond * 10,
+		MaxBackoff:     time.Millisecond * 100,
+		Multiplier:     2,
+		MaxRetries:     100,
+	}
+
+	notReplicated := true
+	for r := retry.Start(opts); r.Next() && notReplicated; {
 		notReplicated = false
-		var numReplicas int
-		err := tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
-			numReplicas = s.ReplicaCount()
-			return nil
-		})
-		if err != nil {
-			return err
-		}
 		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
-				if numReplicas != s.ReplicaCount() {
+				if err := s.ComputeMetrics(); err != nil {
+					return err
+				}
+				if s.Registry().GetGauge("ranges.replication-pending").Value() > 0 {
 					notReplicated = true
 				}
 				return nil
