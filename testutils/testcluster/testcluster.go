@@ -46,45 +46,27 @@ type TestCluster struct {
 	Conns   []*gosql.DB
 }
 
-// ClusterArgs contains the parameters one can set when creating a test
-// cluster. It contains a base.TestServerArgs instance which will be copied over
-// to every server.
-//
-// The zero value means "full replication".
-type ClusterArgs struct {
-	// ServerArgs will be copied to each constituent TestServer.
-	ServerArgs base.TestServerArgs
-	// ReplicationMode controls how replication is to be done in the cluster.
-	ReplicationMode ReplicationMode
-	// Stopper can be used to stop the cluster. If not set, a stopper will be
-	// constructed and it can be gotten through TestCluster.Stopper().
-	Stopper *stop.Stopper
+var _ serverutils.TestClusterInterface = &TestCluster{}
+
+// NumServers is part of TestClusterInterface.
+func (tc *TestCluster) NumServers() int {
+	return len(tc.Servers)
 }
 
-// ReplicationMode represents the replication settings for a TestCluster.
-type ReplicationMode int
+// Server is part of TestClusterInterface.
+func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
+	return tc.Servers[idx]
+}
 
-const (
-	// ReplicationFull means that each range is to be replicated everywhere. This
-	// will be done by overriding the default zone config. The replication will be
-	// performed as in production, by the replication queue.
-	// TestCluster.WaitForFullReplication() can be used to wait for replication to
-	// be stable at any point in a test.
-	// TODO(andrei): ReplicationFull should not be an option, or at least not the
-	// default option. Instead, the production default replication should be the
-	// default for TestCluster too. But I'm not sure how to implement
-	// `WaitForFullReplication` for that.
-	ReplicationFull ReplicationMode = iota
-	// ReplicationManual means that the split and replication queues of all
-	// servers are stopped, and the test must manually control splitting and
-	// replication through the TestServer.
-	ReplicationManual
-)
+// ServerConn is part of TestClusterInterface.
+func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
+	return tc.Conns[idx]
+}
 
 // StartTestCluster starts up a TestCluster made up of `nodes` in-memory testing
 // servers.
 // The cluster should be stopped using cluster.Stopper().Stop().
-func StartTestCluster(t testing.TB, nodes int, args ClusterArgs) *TestCluster {
+func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
@@ -108,13 +90,13 @@ func StartTestCluster(t testing.TB, nodes int, args ClusterArgs) *TestCluster {
 	}
 
 	switch args.ReplicationMode {
-	case ReplicationFull:
+	case base.ReplicationFull:
 		// Force all ranges to be replicated everywhere.
 		cfg := config.DefaultZoneConfig()
 		cfg.ReplicaAttrs = make([]roachpb.Attributes, nodes)
 		fn := config.TestingSetDefaultZoneConfig(cfg)
 		args.Stopper.AddCloser(stop.CloserFn(fn))
-	case ReplicationManual:
+	case base.ReplicationManual:
 		if args.ServerArgs.Knobs.Store == nil {
 			args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{}
 		}
@@ -494,4 +476,16 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		}
 	}
 	return nil
+}
+
+type testClusterFactoryImpl struct{}
+
+// TestClusterFactory can be passed to serverutils.InitTestClusterFactory
+var TestClusterFactory serverutils.TestClusterFactory = testClusterFactoryImpl{}
+
+// New is part of TestClusterFactory interface.
+func (testClusterFactoryImpl) StartTestCluster(
+	t testing.TB, numNodes int, args base.TestClusterArgs,
+) serverutils.TestClusterInterface {
+	return StartTestCluster(t, numNodes, args)
 }
