@@ -27,6 +27,7 @@ github.com/cockroachdb/c-protobuf 3bef67ea4cc857224fced66f98578362bc892f37
 github.com/cockroachdb/c-rocksdb ab57b321a358f4c93fb639331ac3e10911649492
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
 github.com/cockroachdb/cmux bf6fecde181ec0604ff3265fde91123c9395fa1f
+github.com/cockroachdb/cockroach-go 2e4a60d41697eebb308b1def89f0abaf1c056137
 github.com/cockroachdb/pq 40c6b2414c76cdb84aacc955f79dc844e48ad0c0
 github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
 github.com/codahale/hdrhistogram f8ad88b59a584afeee9d334eff879b104439117b
@@ -61,7 +62,6 @@ github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
 github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter daf2955e742cf123959884fdff4685aa79b63135
-github.com/opencontainers/runc 4eb8c2fb1dcb10fa3bf9bd7031f3a25a8ce2fef6
 github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
 github.com/opentracing/basictracer-go 8d298b35c67ed83c7565d36bd2928b7be8c06ba8
 github.com/opentracing/opentracing-go 74bcbcefb667969189ea542337a94d99c9c0e088
