@@ -757,20 +757,20 @@ declare module cockroach.roachpb {
 	
 		
 
-updated_desc?: RangeDescriptor;
+left_desc?: RangeDescriptor;
 		
 
-getUpdatedDesc?() : RangeDescriptor;
-		setUpdatedDesc?(updatedDesc : RangeDescriptor): void;
+getLeftDesc?() : RangeDescriptor;
+		setLeftDesc?(leftDesc : RangeDescriptor): void;
 		
 
 
 
-new_desc?: RangeDescriptor;
+right_desc?: RangeDescriptor;
 		
 
-getNewDesc?() : RangeDescriptor;
-		setNewDesc?(newDesc : RangeDescriptor): void;
+getRightDesc?() : RangeDescriptor;
+		setRightDesc?(rightDesc : RangeDescriptor): void;
 		
 
 
@@ -811,20 +811,20 @@ declare module cockroach.roachpb {
 	
 		
 
-updated_desc?: RangeDescriptor;
+left_desc?: RangeDescriptor;
 		
 
-getUpdatedDesc?() : RangeDescriptor;
-		setUpdatedDesc?(updatedDesc : RangeDescriptor): void;
+getLeftDesc?() : RangeDescriptor;
+		setLeftDesc?(leftDesc : RangeDescriptor): void;
 		
 
 
 
-subsumed_desc?: RangeDescriptor;
+right_desc?: RangeDescriptor;
 		
 
-getSubsumedDesc?() : RangeDescriptor;
-		setSubsumedDesc?(subsumedDesc : RangeDescriptor): void;
+getRightDesc?() : RangeDescriptor;
+		setRightDesc?(rightDesc : RangeDescriptor): void;
 		
 
 
