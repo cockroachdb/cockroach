@@ -89,10 +89,14 @@ func getKeysForDatabaseDescriptor(
 
 // DatabaseAccessor provides helper methods for using SQL database descriptors.
 type DatabaseAccessor interface {
-	// getDatabaseDesc looks up the database descriptor given its name.
-	// Returns nil if the descriptor is not found. If you want to turn the "not
-	// found" condition into an error, use newUndefinedDatabaseError().
+	// getDatabaseDesc looks up the database descriptor given its name,
+	// returning nil if the descriptor is not found. If you want the "not
+	// found" condition to return an error, use mustGetDatabaseDesc() instead.
 	getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
+
+	// mustGetDatabaseDesc looks up the database descriptor given its name,
+	// returning an error if the descriptor is not found.
+	mustGetDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
 	// getCachedDatabaseDesc looks up the database descriptor from
 	// the descriptor cache, given its name.
@@ -114,6 +118,18 @@ func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, err
 		return nil, err
 	}
 	return desc, err
+}
+
+// getDatabaseDesc implements the DatabaseAccessor interface.
+func (p *planner) mustGetDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	desc, err := p.getDatabaseDesc(name)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, sqlbase.NewUndefinedDatabaseError(name)
+	}
+	return desc, nil
 }
 
 // getCachedDatabaseDesc implements the DatabaseAccessor interface.
@@ -167,12 +183,9 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 			log.Infof("%v", err)
 		}
 		var err error
-		desc, err = p.getDatabaseDesc(name)
+		desc, err = p.mustGetDatabaseDesc(name)
 		if err != nil {
 			return 0, err
-		}
-		if desc == nil {
-			return 0, sqlbase.NewUndefinedDatabaseError(name)
 		}
 	}
 

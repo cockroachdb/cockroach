@@ -448,12 +448,9 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		}
 		name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
 	}
-	dbDesc, err := p.getDatabaseDesc(string(name.Base))
+	dbDesc, err := p.mustGetDatabaseDesc(string(name.Base))
 	if err != nil {
 		return nil, err
-	}
-	if dbDesc == nil {
-		return nil, sqlbase.NewUndefinedDatabaseError(string(name.Base))
 	}
 
 	tableNames, err := p.getTableNames(dbDesc)
