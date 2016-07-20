@@ -128,28 +128,25 @@ func TestRetryableError(t *testing.T) {
 	s, ln := newTestServer(t, serverContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	grpcConn, err := clientContext.GRPCDial(ln.Addr().String())
-	if err != nil {
+	addr := ln.Addr().String()
+	if _, err := clientContext.GRPCDial(addr); err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	waitForConnState := func(desiredState grpc.ConnectivityState) {
-		clientState, err := grpcConn.State()
-		for clientState != desiredState {
-			if err != nil {
-				t.Fatal(err)
-			}
-			if clientState == grpc.Shutdown {
-				t.Fatalf("%v has unexpectedly shut down", grpcConn)
-			}
-			clientState, err = grpcConn.WaitForStateChange(ctx, clientState)
-		}
-	}
 	// Wait until the client becomes healthy and shut down the server.
-	waitForConnState(grpc.Ready)
+	util.SucceedsSoon(t, func() error {
+		if !clientContext.IsConnHealthy(addr) {
+			return errors.Errorf("client not yet healthy")
+		}
+		return nil
+	})
 	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
-	waitForConnState(grpc.TransientFailure)
+	util.SucceedsSoon(t, func() error {
+		if clientContext.IsConnHealthy(addr) {
+			return errors.Errorf("client not yet unhealthy")
+		}
+		return nil
+	})
 
 	opts := SendOptions{
 		SendNextTimeout: 100 * time.Millisecond,
@@ -480,8 +477,8 @@ func TestClientNotReady(t *testing.T) {
 		_, err := sendBatch(SendOptions{
 			Context: context.Background(),
 		}, addrs, nodeContext)
-		if !testutils.IsError(err, "failed as client connection was closed") {
-			errCh <- errors.Errorf("unexpected error: %v", err)
+		if !testutils.IsError(err, grpc.ErrClientConnClosing.Error()) {
+			errCh <- errors.Wrap(err, "unexpected error")
 		} else {
 			close(errCh)
 		}
