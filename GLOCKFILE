@@ -79,7 +79,7 @@ github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 2c99acdd1e9b90d779ca23f632aad86af9909c62
 golang.org/x/net f841c39de738b1d0df95b5a7187744f0e03d8112
 golang.org/x/text d5d7737684e596dbabf914ecf946d2783f35bdc2
-golang.org/x/tools cda5280914a6bccec2b76d8d4341f4f4c5d62592
+golang.org/x/tools d4a8e583a10c1e702d1accc9e66c104f992115c8
 google.golang.org/grpc aecdccadd24d03e42d00ec82f6774a428fc63c30
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
