@@ -197,6 +197,11 @@ type Replica struct {
 	// RWMutex.
 	readOnlyCmdMu sync.RWMutex
 
+	// rangeDesc is a *RangeDescriptor that can be atomically read from in
+	// replica.Desc() without needing to acquire the replica.mu lock. All
+	// updates to state.Desc should be duplicated here
+	rangeDesc atomic.Value
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		sync.Mutex
@@ -204,11 +209,6 @@ type Replica struct {
 		destroyed error
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
-		// rangeDesc is a *RangeDescriptor that can be atomically read from. All
-		// updates to state.Desc should be duplicated here (as is done in
-		// updateRangeDescriptorLocked()) so that it can be read without acquiring
-		// the lock.
-		rangeDesc atomic.Value
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Enforces at most one command is running per key(s).
@@ -363,7 +363,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if r.mu.state, err = loadState(r.store.Engine(), desc); err != nil {
 		return err
 	}
-	r.mu.rangeDesc.Store(r.mu.state.Desc)
+	r.rangeDesc.Store(r.mu.state.Desc)
 
 	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -392,7 +392,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	desc := r.mu.rangeDesc.Load().(*roachpb.RangeDescriptor)
+	desc := r.Desc()
 	return fmt.Sprintf("%s range=%d [%s-%s)", r.store,
 		desc.RangeID, desc.StartKey, desc.EndKey)
 }
@@ -623,9 +623,7 @@ func (r *Replica) isInitializedLocked() bool {
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.state.Desc
+	return r.rangeDesc.Load().(*roachpb.RangeDescriptor)
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -653,11 +651,12 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 // setDescWithoutProcessUpdateLocked requires that the replica lock is held.
 func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescriptor) {
 	if desc.RangeID != r.RangeID {
-		panic(fmt.Sprintf("range descriptor ID (%d) does not match replica's range ID (%d)",
-			desc.RangeID, r.RangeID))
+		r.panicf("range descriptor ID (%d) does not match replica's range ID (%d)",
+			desc.RangeID, r.RangeID)
 	}
+
 	r.mu.state.Desc = desc
-	r.mu.rangeDesc.Store(desc)
+	r.rangeDesc.Store(desc)
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
@@ -800,7 +799,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 func (r *Replica) assertStateLocked(reader engine.Reader) {
 	diskState, err := loadState(reader, r.mu.state.Desc)
 	if err != nil {
-		panic(err)
+		r.panic(err)
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
 		log.Fatalf("%s: on-disk and in-memory state diverged:\n%+v\n%+v", r, diskState, r.mu.state)
@@ -839,9 +838,9 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		panic("empty batch")
+		r.panicf("empty batch")
 	} else {
-		panic(fmt.Sprintf("don't know how to handle command %s", ba))
+		r.panicf("don't know how to handle command %s", ba)
 	}
 	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
@@ -1702,7 +1701,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			raftGroup.ReportUnreachable(msg.To)
 			return nil
 		}); err != nil {
-			panic(err)
+			r.panic(err)
 		}
 	}
 }
@@ -1717,7 +1716,7 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		raftGroup.ReportSnapshot(to, snapStatus)
 		return nil
 	}); err != nil {
-		panic(err)
+		r.panic(err)
 	}
 }
 
@@ -2356,7 +2355,8 @@ func (r *Replica) executeBatch(
 			if cReply, ok := reply.(roachpb.Countable); ok {
 				retResults := cReply.Count()
 				if retResults > remScanResults {
-					panic(fmt.Sprintf("received %d results, limit was %d", retResults, remScanResults))
+					r.panicf("received %d results, limit was %d",
+						retResults, remScanResults)
 				}
 				remScanResults -= retResults
 			}
@@ -2641,4 +2641,12 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+func (r *Replica) panic(err error) {
+	panic(r.String() + ": " + err.Error())
+}
+
+func (r *Replica) panicf(format string, vals ...interface{}) {
+	panic(r.String() + ": " + fmt.Sprintf(format, vals...))
 }
