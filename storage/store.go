@@ -1398,8 +1398,8 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	defer s.mu.Unlock()
 
 	var rng *Replica
-	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(start.Next()), func(i btree.Item) bool {
-		rng = i.(*Replica)
+	s.visitReplicasLocked(start, roachpb.RKeyMax, func(repl *Replica) bool {
+		rng = repl
 		return false
 	})
 	if rng == nil || !rng.Desc().ContainsKeyRange(start, end) {
@@ -1412,8 +1412,8 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 // descriptor is present on the Store.
 func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bool {
 	var rng *Replica
-	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(rngDesc.StartKey.Next()), func(i btree.Item) bool {
-		rng = i.(*Replica)
+	s.visitReplicasLocked(rngDesc.StartKey, roachpb.RKeyMax, func(repl *Replica) bool {
+		rng = repl
 		return false
 	})
 
@@ -1422,6 +1422,32 @@ func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bo
 	}
 
 	return false
+}
+
+// visitReplicasLocked will call iterator for every replica on the store which
+// contains any keys in the span between startKey and endKey. Iteration will be
+// in ascending order. Iteration can be stopped early by returning false from
+// iterator.
+func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func(r *Replica) bool) {
+	// Iterate over replicasByKey to visit all ranges containing keys in the
+	// specified range. We use `startKey.Next()`` because btree's `Ascend`
+	// methods are inclusive of the start bound and exclusive of the end bound,
+	// but ranges are stored in the BTree by EndKey; in cockroach, end keys have
+	// the opposite behavior (a range's EndKey is contained by the subsequent
+	// range). We want ComputeStatsForKeySpan to match cockroach's behavior;
+	// using `startKey.Next()`, will ignore a range which has EndKey exactly
+	// equal to the supplied startKey.
+	// Iteration ends when all ranges are exhausted, or the next range contains
+	// no keys in the supplied span.
+	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(startKey.Next()),
+		func(item btree.Item) bool {
+			repl := item.(*Replica)
+			if !repl.Desc().StartKey.Less(endKey) {
+				// This properly checks if this range contains any keys in the supplied span.
+				return false
+			}
+			return iterator(repl)
+		})
 }
 
 // RaftStatus returns the current raft status of the local replica of
@@ -2607,6 +2633,25 @@ func (s *Store) ComputeMetrics() error {
 		s.metrics.rdbReadAmplification.Update(int64(readAmp))
 	}
 	return nil
+}
+
+// ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
+// this store which contain any keys in the supplied range.
+func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.MVCCStats, int) {
+	var output enginepb.MVCCStats
+	var count int
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.visitReplicasLocked(startKey, endKey, func(repl *Replica) bool {
+		repl.mu.Lock()
+		output.Add(repl.mu.state.Stats)
+		repl.mu.Unlock()
+		count++
+		return true
+	})
+
+	return output, count
 }
 
 // FrozenStatus returns all of the Store's Replicas which are frozen (if the
