@@ -487,7 +487,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 
 	}
 	env := []string{
-		"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",
+		//"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",
 		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true",
 		"COCKROACH_SKIP_UPDATE_CHECK=1",
 	}
