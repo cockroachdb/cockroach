@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -65,9 +66,23 @@ func NewServer(ctx *Context) *grpc.Server {
 	return s
 }
 
+// ConnectivityState indicates the state of a connection.
+type ConnectivityState int
+
+const (
+	// Unknown indicates that the health status of the remote server isn't known.
+	Unknown ConnectivityState = iota
+	// Healthy indicates that the connection is healthy and heartbeats work.
+	Healthy
+	// Unhealthy indicates that the connection was unable to respond to the last
+	// heartbeat.
+	Unhealthy
+)
+
 type connMeta struct {
-	conn    *grpc.ClientConn
-	healthy bool
+	conn      *grpc.ClientConn
+	state     ConnectivityState
+	stateChan chan ConnectivityState
 }
 
 // Context contains the fields required by the rpc framework.
@@ -170,7 +185,10 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if ctx.conns.cache == nil {
 			ctx.conns.cache = make(map[string]connMeta)
 		}
-		ctx.conns.cache[target] = connMeta{conn: conn}
+		ctx.conns.cache[target] = connMeta{
+			conn:      conn,
+			stateChan: make(chan ConnectivityState),
+		}
 
 		if ctx.Stopper.RunTask(func() {
 			ctx.Stopper.RunWorker(func() {
@@ -193,21 +211,71 @@ func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
 
+	var state ConnectivityState
+	if healthy {
+		state = Healthy
+	} else {
+		state = Unhealthy
+	}
+
 	meta, ok := ctx.conns.cache[remoteAddr]
-	if ok {
-		meta.healthy = healthy
-		ctx.conns.cache[remoteAddr] = meta
+	if !ok || meta.state == state {
+		return
+	}
+	meta.state = state
+	ctx.conns.cache[remoteAddr] = meta
+
+	// Notify all waiting listeners to the health channel.
+	for {
+		select {
+		case meta.stateChan <- state:
+		default:
+			return
+		}
 	}
 }
 
-// IsConnHealthy returns whether the most recent heartbeat succeeded or not.
-// This should not be used as a definite status of a nodes health and just used
-// to prioritized healthy nodes over unhealthy ones.
-func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
+// ConnState returns whether the most recent heartbeat succeeded or not. This
+// should not be used as a definite status of a nodes health and just used to
+// prioritized healthy nodes over unhealthy ones.
+func (ctx *Context) ConnState(remoteAddr string) ConnectivityState {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
 
-	return ctx.conns.cache[remoteAddr].healthy
+	return ctx.conns.cache[remoteAddr].state
+}
+
+// ConnStateChange returns a channel that will trigger when the connection
+// health state changes.
+func (ctx *Context) ConnStateChange(remoteAddr string) <-chan ConnectivityState {
+	ctx.conns.Lock()
+	defer ctx.conns.Unlock()
+
+	return ctx.conns.cache[remoteAddr].stateChan
+}
+
+// WaitForConnected waits until the connection is no longer in the unknown
+// state. If the state is unhealthy, or times out it returns an error.
+// state.
+func (ctx *Context) WaitForConnected(remoteAddr string, timeout time.Duration) error {
+	var timerC <-chan time.Time
+	if timeout > 0 {
+		timerC = time.NewTimer(timeout).C
+	}
+	for state := ctx.ConnState(remoteAddr); state != Healthy; {
+		if state == Unhealthy {
+			return errors.Errorf("%s: failed as client connection was unhealthy", remoteAddr)
+		}
+
+		select {
+		case state = <-ctx.ConnStateChange(remoteAddr):
+		case <-timerC:
+			return errors.Errorf("%s: timed out waiting for healthy state", remoteAddr)
+		case <-ctx.Stopper.ShouldStop():
+			return errors.Errorf("%s: stopping", remoteAddr)
+		}
+	}
+	return nil
 }
 
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {

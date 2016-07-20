@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"fmt"
 	"sort"
 	"time"
 
@@ -129,7 +128,7 @@ func grpcTransportFactory(
 			conn:       conn,
 			client:     roachpb.NewInternalClient(conn),
 			args:       argsCopy,
-			healthy:    rpcContext.IsConnHealthy(remoteAddr),
+			healthy:    rpcContext.ConnState(remoteAddr) == rpc.Healthy,
 		})
 	}
 
@@ -178,16 +177,9 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
 
-		c := client.conn
-		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
-			if err != nil {
-				done <- BatchCall{Err: err}
-				return
-			}
-			if state == grpc.Shutdown {
-				done <- BatchCall{Err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
-				return
-			}
+		if err := gt.rpcContext.WaitForConnected(addr, gt.opts.Timeout); err != nil {
+			done <- BatchCall{Err: err}
+			return
 		}
 
 		reply, err := client.client.Batch(ctx, &client.args)

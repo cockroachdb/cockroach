@@ -138,7 +138,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Should be healthy after the first successful heartbeat.
 	stopHeartbeats := sendHeartbeats()
 	util.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
+		if clientCtx.ConnState(remoteAddr) != Healthy {
 			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
@@ -147,7 +147,7 @@ func TestHeartbeatHealth(t *testing.T) {
 
 	// Should no longer be healthy after heartbeating stops.
 	util.SucceedsSoon(t, func() error {
-		if clientCtx.IsConnHealthy(remoteAddr) {
+		if clientCtx.ConnState(remoteAddr) != Unhealthy {
 			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
 		}
 		return nil
@@ -156,15 +156,15 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Should return to healthy after another successful heartbeat.
 	stopHeartbeats = sendHeartbeats()
 	util.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
+		if clientCtx.ConnState(remoteAddr) != Healthy {
 			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
 	})
 	stopHeartbeats()
 
-	if clientCtx.IsConnHealthy("non-existent connection") {
-		t.Errorf("non-existent connection is reported as healthy")
+	if clientCtx.ConnState("non-existent connection") != Unknown {
+		t.Errorf("expected non-existent connection to be unknown")
 	}
 }
 
