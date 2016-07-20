@@ -394,7 +394,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 type testServerFactoryImpl struct{}
 
-// TestServerFactory can be passed to testingshim.InitTestServerFactory
+// TestServerFactory can be passed to serverutils.InitTestServerFactory
 var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.
