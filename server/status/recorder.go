@@ -19,6 +19,7 @@ package status
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 
@@ -169,6 +170,29 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	}
 	topLevel["stores"] = storeLevel
 	return json.Marshal(topLevel)
+}
+
+// PrintAsText writes the current metrics values as plain-text to the writer.
+func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	if mr.mu.nodeID == 0 {
+		// We haven't yet processed initialization information; output nothing.
+		if log.V(1) {
+			log.Warning("MetricsRecorder.MarshalText() called before NodeID allocation")
+		}
+		return nil
+	}
+
+	if err := mr.nodeRegistry.PrintAsText(w); err != nil {
+		return err
+	}
+	for _, reg := range mr.mu.storeRegistries {
+		if err := reg.PrintAsText(w); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by

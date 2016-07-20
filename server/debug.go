@@ -92,7 +92,10 @@ table tr td {
 </tr>
 <tr>
 <td>metrics</td>
-<td><a href="./metrics">variables</a></td>
+<td>
+<a href="./metrics">variables</a>
+<a href="/_status/vars">prometheus</a>
+</td>
 </tr>
 <tr>
 <td>node status</td>
