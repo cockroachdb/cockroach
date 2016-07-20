@@ -390,3 +390,18 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 	}
 	at.Run(t)
 }
+
+// TestSteady_6Medium is useful for creating a medium-size balanced cluster
+// (when used with the -tf.keep-cluster flag).
+// TODO(tschottdorf): use for tests which run schema changes or drop large
+// amounts of data.
+func TestSteady_6Medium(t *testing.T) {
+	at := allocatorTest{
+		StartNodes:          6,
+		EndNodes:            6,
+		StoreURL:            archivedStoreURL + "/6nodes-1038replicas-56G",
+		Prefix:              "steady-6m",
+		CockroachDiskSizeGB: 250, // GB
+	}
+	at.Run(t)
+}
