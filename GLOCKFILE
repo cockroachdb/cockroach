@@ -40,7 +40,7 @@ github.com/dustin/go-humanize fef948f2d241bd1fd0631108ecc2c9553bae60bf
 github.com/elastic/gosigar f720d6786aff82d4dae3d0af8c0ea5a34cd04029
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/go-sql-driver/mysql 3654d25ec346ee8ce71a68431025458d52a38ac0
-github.com/gogo/protobuf 318371cbef6bab80e8d1c69b470fffa79eebfb54
+github.com/gogo/protobuf 5f813990bfffa3c2f4414dbea480e705ab280358
 github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 github.com/golang/lint c7bacac2b21ca01afa1dee0acf64df3ce047c28f
 github.com/golang/protobuf 3852dcfda249c2097355a6aabb199a28d97b30df
@@ -80,10 +80,10 @@ github.com/stripe/safesql 452e37ed794488bd0d99676532f346e03cc6cd2c
 github.com/tebeka/go2xunit aeab35ab3263fc37dc7664e8ea1b3aea87f98205
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 2c99acdd1e9b90d779ca23f632aad86af9909c62
-golang.org/x/net f841c39de738b1d0df95b5a7187744f0e03d8112
+golang.org/x/net 4d38db76854b199960801a1734443fd02870d7e1
 golang.org/x/text d5d7737684e596dbabf914ecf946d2783f35bdc2
 golang.org/x/tools d4a8e583a10c1e702d1accc9e66c104f992115c8
-google.golang.org/grpc aecdccadd24d03e42d00ec82f6774a428fc63c30
+google.golang.org/grpc d017580d29c7407650a21d78959701936645a3af
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
 honnef.co/go/unused 9057d575b3bb51f1e1251088a8b8196f4226f936
