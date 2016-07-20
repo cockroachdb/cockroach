@@ -8,6 +8,7 @@ cmd github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/kkaneda/returncheck
+cmd github.com/mattn/goveralls
 cmd github.com/mibk/dupl
 cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
@@ -58,6 +59,7 @@ github.com/lib/pq 4dd446efc17690bc53e154025146f73203b18309
 github.com/lightstep/lightstep-tracer-go 42c31c53ad6e190563d3a733155a43f10f0691f8
 github.com/mattn/go-isatty 56b76bdf51f7708750eac80fa38b952bb9f32639
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
+github.com/mattn/goveralls f4d273b02ce1b4e48acf3662b717aa987bfc4118
 github.com/matttproud/golang_protobuf_extensions c12348ce28de40eed0136aa2b644d0ee0650e56c
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
 github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
