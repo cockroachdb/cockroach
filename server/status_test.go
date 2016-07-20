@@ -537,3 +537,17 @@ func TestRaftDebug(t *testing.T) {
 		t.Errorf("didn't get any ranges")
 	}
 }
+
+// TestStatusVars verifies that prometheus metrics are available via the
+// /_status/vars endpoint.
+func TestStatusVars(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	if body, err := getText(s.AdminURL() + "/_status/vars"); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
+		t.Errorf("expected sql_bytesout, got: %s", body)
+	}
+}
