@@ -414,7 +414,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "rule": "optional",
                             "type": "RangeDescriptor",
-                            "name": "updated_desc",
+                            "name": "left_desc",
                             "id": 1,
                             "options": {
                                 "(gogoproto.nullable)": false
@@ -423,7 +423,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "rule": "optional",
                             "type": "RangeDescriptor",
-                            "name": "new_desc",
+                            "name": "right_desc",
                             "id": 2,
                             "options": {
                                 "(gogoproto.nullable)": false
@@ -448,7 +448,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "rule": "optional",
                             "type": "RangeDescriptor",
-                            "name": "updated_desc",
+                            "name": "left_desc",
                             "id": 1,
                             "options": {
                                 "(gogoproto.nullable)": false
@@ -457,7 +457,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "rule": "optional",
                             "type": "RangeDescriptor",
-                            "name": "subsumed_desc",
+                            "name": "right_desc",
                             "id": 2,
                             "options": {
                                 "(gogoproto.nullable)": false
