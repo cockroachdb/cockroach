@@ -193,8 +193,7 @@ func (f *Farmer) MustDestroy(t *testing.T) {
 	}
 }
 
-// Exec executes the given command on the i-th node, returning (in that order)
-// stdout, stderr and an error.
+// Exec executes the given command on the i-th node.
 func (f *Farmer) Exec(i int, cmd string) error {
 	stdout, stderr, err := f.ssh(f.Nodes()[i], f.defaultKeyFile(), cmd)
 	if err != nil {
@@ -298,6 +297,12 @@ func (f *Farmer) Restart(i int) error {
 	_ = f.Kill(i)
 	// supervisorctl is horrible with exit codes (cockroachdb/cockroach-prod#59).
 	_, _, err := f.execSupervisor(f.Nodes()[i], "start cockroach")
+	return err
+}
+
+// StartWriter starts the given process on the ith writer instance.
+func (f *Farmer) StartWriter(i int, process string) error {
+	_, _, err := f.execSupervisor(f.Writers()[i], "start "+process)
 	return err
 }
 
