@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -140,7 +141,7 @@ RETURNING val, sts, node, tb`,
 			}
 			l("commit")
 			return nil
-		}); err != nil {
+		}); err != nil && !strings.Contains(err.Error(), "refused") {
 			t.Errorf("%T: %v", err, err)
 		}
 	}
