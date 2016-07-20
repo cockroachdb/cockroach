@@ -36,7 +36,7 @@ environment=${cockroach_env}
 
 [program:block_writer]
 directory=%(here)s
-command=%(here)s/block_writer -concurrency 10 -min-block-bytes=16384 -max-block-bytes=65535 --tolerate-errors 'postgres://root@${node_address}:${cockroach_port}/?sslmode=disable'
+command=%(here)s/block_writer -concurrency 10 -min-block-bytes=16384 -max-block-bytes=65535 --tolerate-errors -benchmark-name ${benchmark_name} 'postgres://root@${node_address}:${cockroach_port}/?sslmode=disable'
 process_name=%(program_name)s
 numprocs=1
 autostart=false
