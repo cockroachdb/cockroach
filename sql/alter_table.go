@@ -39,12 +39,8 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 
-	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
-	if err != nil {
+	if _, err := p.mustGetDatabaseDesc(n.Table.Database()); err != nil {
 		return nil, err
-	}
-	if dbDesc == nil {
-		return nil, sqlbase.NewUndefinedDatabaseError(n.Table.Database())
 	}
 
 	tableDesc, err := p.getTableDesc(n.Table)

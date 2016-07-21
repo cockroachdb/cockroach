@@ -58,12 +58,8 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
-			dbDesc, err := p.getDatabaseDesc(dbName)
-			if err != nil {
+			if _, err := p.mustGetDatabaseDesc(dbName); err != nil {
 				return nil, err
-			}
-			if dbDesc == nil {
-				return nil, sqlbase.NewUndefinedDatabaseError(dbName)
 			}
 		}
 		p.session.Database = dbName
