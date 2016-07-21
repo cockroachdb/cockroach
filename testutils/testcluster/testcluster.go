@@ -213,7 +213,7 @@ func (tc *TestCluster) SplitRange(
 	rightRangeDesc := new(roachpb.RangeDescriptor)
 	if err := tc.Servers[0].DB().GetProto(
 		keys.RangeDescriptorKey(origRangeDesc.StartKey), leftRangeDesc); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "could not look up left-hand side descriptor")
 	}
 	// The split point might not be exactly the one we requested (it can be
 	// adjusted slightly so we don't split in the middle of SQL rows). Update it
@@ -221,7 +221,7 @@ func (tc *TestCluster) SplitRange(
 	splitRKey = leftRangeDesc.EndKey
 	if err := tc.Servers[0].DB().GetProto(
 		keys.RangeDescriptorKey(splitRKey), rightRangeDesc); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "could not look up right-hand side descriptor")
 	}
 	return leftRangeDesc, rightRangeDesc, nil
 }
