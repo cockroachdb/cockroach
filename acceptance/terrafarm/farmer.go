@@ -32,6 +32,17 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/pkg/errors"
+)
+
+// The constants below are the possible values of the KeepCluster field.
+const (
+	// KeepClusterAlways lets Farmer always keep the test cluster.
+	KeepClusterAlways = "always"
+	// KeepClusterFailed lets Farmer keep only failed test clusters.
+	KeepClusterFailed = "failed"
+	// KeepClusterNever lets Farmer always destroy the test cluster.
+	KeepClusterNever = "never"
 )
 
 // A Farmer sets up and manipulates a test cluster via terraform.
@@ -46,10 +57,9 @@ type Farmer struct {
 	// state.
 	StateFile string
 	// AddVars are additional Terraform variables to be set during calls to Add.
-	AddVars              map[string]string
-	KeepClusterAfterTest bool
-	KeepClusterAfterFail bool
-	nodes, writers       []string
+	AddVars        map[string]string
+	KeepCluster    string
+	nodes, writers []string
 }
 
 func (f *Farmer) refresh() {
@@ -145,28 +155,41 @@ func (f *Farmer) CollectLogs() {
 		dest += strconv.Itoa(i)
 		if err := f.scp(host, f.defaultKeyFile(), src,
 			filepath.Join(f.AbsLogDir(), dest)); err != nil {
-			f.logf("error collecting %s from host %s: %s", src, host, err)
+			f.logf("error collecting %s from host %s: %s\n", src, host, err)
 		}
 	}
 }
 
 // Destroy collects the logs and tears down the cluster.
-func (f *Farmer) Destroy() error {
+func (f *Farmer) Destroy(t *testing.T) error {
 	f.CollectLogs()
 	if f.LogDir != "" {
-		defer f.logf("logs copied to %s", f.AbsLogDir())
+		defer f.logf("logs copied to %s\n", f.AbsLogDir())
 	}
-	if f.KeepClusterAfterTest {
-		f.logf("not destroying cluster")
+
+	wd, err := os.Getwd()
+	if err != nil {
+		wd = "acceptance"
+	}
+	baseDir := filepath.Join(wd, f.Cwd)
+	if (t.Failed() && f.KeepCluster == KeepClusterFailed) ||
+		f.KeepCluster == KeepClusterAlways {
+
+		t.Logf("not destroying; run:\n(cd %s && terraform destroy -force -state %s)",
+			baseDir, f.StateFile)
 		return nil
 	}
-	return f.Resize(0, 0)
+
+	if err := f.Resize(0, 0); err != nil {
+		return err
+	}
+	return os.Remove(filepath.Join(baseDir, f.StateFile))
 }
 
-// MustDestroy calls Destroy(), panicking on error.
-func (f *Farmer) MustDestroy() {
-	if err := f.Destroy(); err != nil {
-		panic(err)
+// MustDestroy calls Destroy(), fataling on error.
+func (f *Farmer) MustDestroy(t *testing.T) {
+	if err := f.Destroy(t); err != nil {
+		t.Fatal(errors.Wrap(err, "cannot destroy cluster"))
 	}
 }
 
@@ -251,9 +274,8 @@ func (f *Farmer) Assert(t *testing.T) {
 // AssertAndStop performs the same test as Assert but then proceeds to
 // dismantle the cluster.
 func (f *Farmer) AssertAndStop(t *testing.T) {
-	if err := f.Destroy(); err != nil {
-		t.Fatal(err)
-	}
+	f.Assert(t)
+	f.MustDestroy(t)
 }
 
 // ExecRoot executes the given command with super-user privileges.

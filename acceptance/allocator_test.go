@@ -34,7 +34,7 @@ package acceptance
 //	 TESTTIMEOUT=48h \
 //	 PKG=./acceptance \
 //	 TESTS=Rebalance_3To5Small \
-//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster-fail'
+//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster=failed'
 //
 // Things to note:
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
@@ -61,7 +61,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -108,20 +107,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
-		wd, err := os.Getwd()
-		if err != nil {
-			wd = "acceptance"
-		}
-		baseDir := filepath.Join(wd, at.f.Cwd)
-		if t.Failed() && at.f.KeepClusterAfterFail {
-			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -state %s)",
-				baseDir, at.f.StateFile)
-			return
-		}
-		at.f.MustDestroy()
-		if err := os.Remove(filepath.Join(baseDir, at.f.StateFile)); err != nil {
-			t.Log(err)
-		}
+		at.f.MustDestroy(t)
 	}()
 
 	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
@@ -386,6 +372,21 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 		EndNodes:            6,
 		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
 		Prefix:              "uprep-1to6m",
+		CockroachDiskSizeGB: 250, // GB
+	}
+	at.Run(t)
+}
+
+// TestSteady_6Medium is useful for creating a medium-size balanced cluster
+// (when used with the -tf.keep-cluster flag).
+// TODO(tschottdorf): use for tests which run schema changes or drop large
+// amounts of data.
+func TestSteady_6Medium(t *testing.T) {
+	at := allocatorTest{
+		StartNodes:          6,
+		EndNodes:            6,
+		StoreURL:            archivedStoreURL + "/6nodes-1038replicas-56G",
+		Prefix:              "steady-6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
 	at.Run(t)
