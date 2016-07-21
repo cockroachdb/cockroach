@@ -233,12 +233,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
+	dbDesc, err := p.mustGetDatabaseDesc(n.Table.Database())
 	if err != nil {
 		return nil, err
-	}
-	if dbDesc == nil {
-		return nil, sqlbase.NewUndefinedDatabaseError(n.Table.Database())
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {

@@ -178,12 +178,9 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 		}
 		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.getDatabaseDesc(database)
+			descriptor, err := p.mustGetDatabaseDesc(database)
 			if err != nil {
 				return nil, err
-			}
-			if descriptor == nil {
-				return nil, sqlbase.NewUndefinedDatabaseError(database)
 			}
 			descs = append(descs, descriptor)
 		}

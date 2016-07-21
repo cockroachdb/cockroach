@@ -102,7 +102,7 @@ type SchemaAccessor interface {
 	expandTableGlob(expr *parser.QualifiedName) (parser.QualifiedNames, error)
 
 	// getTableDesc returns a table descriptor, or nil if the descriptor
-	// is not found. If you want the not found condition to return an error,
+	// is not found. If you want the "not found" condition to return an error,
 	// use mustGetTableDesc() instead.
 	getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
@@ -141,12 +141,9 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
-	dbDesc, err := p.getDatabaseDesc(qname.Database())
+	dbDesc, err := p.mustGetDatabaseDesc(qname.Database())
 	if err != nil {
 		return nil, err
-	}
-	if dbDesc == nil {
-		return nil, sqlbase.NewUndefinedDatabaseError(qname.Database())
 	}
 
 	desc := sqlbase.TableDescriptor{}
@@ -399,12 +396,9 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 	case parser.NameIndirection:
 		return parser.QualifiedNames{expr}, nil
 	case parser.StarIndirection:
-		dbDesc, err := p.getDatabaseDesc(string(expr.Base))
+		dbDesc, err := p.mustGetDatabaseDesc(string(expr.Base))
 		if err != nil {
 			return nil, err
-		}
-		if dbDesc == nil {
-			return nil, sqlbase.NewUndefinedDatabaseError(string(expr.Base))
 		}
 		tableNames, err := p.getTableNames(dbDesc)
 		if err != nil {
