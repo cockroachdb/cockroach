@@ -21,19 +21,19 @@ describe("reducerObj", function () {
 
   describe("actions", function () {
     it("requestData() creates the correct action type.", function() {
-      assert.equal(testReducerObj.requestData().type, testReducerObj.REQUEST);
+      assert.equal(testReducerObj.requestData(null).type, testReducerObj.REQUEST);
     });
 
     it("receiveData() creates the correct action type.", function() {
-      assert.equal(testReducerObj.receiveData(null).type, testReducerObj.RECEIVE);
+      assert.equal(testReducerObj.receiveData(null, null).type, testReducerObj.RECEIVE);
     });
 
     it("errorData() creates the correct action type.", function() {
-      assert.equal(testReducerObj.errorData(null).type, testReducerObj.ERROR);
+      assert.equal(testReducerObj.errorData(null, null).type, testReducerObj.ERROR);
     });
 
     it("invalidateData() creates the correct action type.", function() {
-      assert.equal(testReducerObj.invalidateData().type, testReducerObj.INVALIDATE);
+      assert.equal(testReducerObj.invalidateData(null).type, testReducerObj.INVALIDATE);
     });
   });
 
@@ -51,7 +51,7 @@ describe("reducerObj", function () {
     });
 
     it("should correctly dispatch requestData", function () {
-      state = reducer(state, testReducerObj.requestData());
+      state = reducer(state, testReducerObj.requestData(null));
       expected = new CachedDataReducerState<Response>();
       expected.inFlight = true;
       assert.deepEqual(state, expected);
@@ -60,7 +60,7 @@ describe("reducerObj", function () {
     it("should correctly dispatch receiveData", function () {
       let expectedResponse = new Response(null);
 
-      state = reducer(state, testReducerObj.receiveData(expectedResponse));
+      state = reducer(state, testReducerObj.receiveData(expectedResponse, null));
       expected = new CachedDataReducerState<Response>();
       expected.valid = true;
       expected.data = expectedResponse;
@@ -71,14 +71,14 @@ describe("reducerObj", function () {
     it("should correctly dispatch errorData", function() {
       let e = new Error();
 
-      state = reducer(state, testReducerObj.errorData(e));
+      state = reducer(state, testReducerObj.errorData(e, null));
       expected = new CachedDataReducerState<Response>();
       expected.lastError = e;
       assert.deepEqual(state, expected);
     });
 
     it("should correctly dispatch invalidateData", function() {
-      state = reducer(state, testReducerObj.invalidateData());
+      state = reducer(state, testReducerObj.invalidateData(null));
       expected = new CachedDataReducerState<Response>();
       assert.deepEqual(state, expected);
     });

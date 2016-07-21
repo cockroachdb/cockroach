@@ -8,7 +8,7 @@ import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
-import { refreshDatabases } from "../../redux/databaseInfo";
+import { refreshDatabases } from "../../redux/apiReducers";
 
 // Constant used to store sort settings in the redux UI store.
 const UI_DATABASES_SORT_SETTING_KEY = "databaseList/sort_setting";
@@ -157,7 +157,7 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
  */
 
 // Base selectors to extract data from redux state.
-let databases = (state: AdminUIState): string[] => state.databaseInfo && state.databaseInfo.databases && state.databaseInfo.databases.data  && state.databaseInfo.databases.data.databases;
+let databases = (state: AdminUIState): string[] => state.cachedData.databases.data  && state.cachedData.databases.data.databases;
 let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASES_SORT_SETTING_KEY] || {};
 
 // Selector which sorts statuses according to current sort setting.
