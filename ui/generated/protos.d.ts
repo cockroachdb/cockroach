@@ -32,13 +32,13 @@ declare module cockroach {
 }
 
 declare module cockroach {
-
+	
 	export interface util {
-
+	
 		
 
 }
-
+	
 	export interface utilMessage extends util {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -56,13 +56,13 @@ export interface utilBuilder {
 	hlc: util.hlcBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.util {
-
+	
 	export interface UnresolvedAddr {
-
+	
 		
 
 network_field?: string;
@@ -84,7 +84,7 @@ getAddressField?() : string;
 
 
 }
-
+	
 	export interface UnresolvedAddrMessage extends UnresolvedAddr {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -100,18 +100,18 @@ export interface UnresolvedAddrBuilder {
 	decode64(buffer: string) : UnresolvedAddrMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.util {
-
+	
 	export interface hlc {
-
+	
 		
 
 }
-
+	
 	export interface hlcMessage extends hlc {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -128,13 +128,13 @@ export interface hlcBuilder {
 	Timestamp: hlc.TimestampBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.util.hlc {
-
+	
 	export interface Timestamp {
-
+	
 		
 
 wall_time?: Long;
@@ -156,7 +156,7 @@ getLogical?() : number;
 
 
 }
-
+	
 	export interface TimestampMessage extends Timestamp {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -172,20 +172,20 @@ export interface TimestampBuilder {
 	decode64(buffer: string) : TimestampMessage;
 	
 }
-
+	
 }
 
 
 
 
 declare module cockroach {
-
+	
 	export interface roachpb {
-
+	
 		
 
 }
-
+	
 	export interface roachpbMessage extends roachpb {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -226,13 +226,13 @@ export interface roachpbBuilder {
 	TransactionStatus: roachpb.TransactionStatus;
 	
 }
-
+	
 }
 
 declare module cockroach.roachpb {
-
+	
 	export interface Attributes {
-
+	
 		
 
 attrs?: string[];
@@ -245,7 +245,7 @@ getAttrs?() : string[];
 
 
 }
-
+	
 	export interface AttributesMessage extends Attributes {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -261,14 +261,14 @@ export interface AttributesBuilder {
 	decode64(buffer: string) : AttributesMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface ReplicaDescriptor {
-
+	
 		
 
 node_id?: number;
@@ -299,7 +299,7 @@ getReplicaId?() : number;
 
 
 }
-
+	
 	export interface ReplicaDescriptorMessage extends ReplicaDescriptor {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -315,14 +315,14 @@ export interface ReplicaDescriptorBuilder {
 	decode64(buffer: string) : ReplicaDescriptorMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface RangeDescriptor {
-
+	
 		
 
 range_id?: Long;
@@ -371,7 +371,7 @@ getNextReplicaId?() : number;
 
 
 }
-
+	
 	export interface RangeDescriptorMessage extends RangeDescriptor {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -387,14 +387,14 @@ export interface RangeDescriptorBuilder {
 	decode64(buffer: string) : RangeDescriptorMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface StoreCapacity {
-
+	
 		
 
 capacity?: Long;
@@ -425,7 +425,7 @@ getRangeCount?() : number;
 
 
 }
-
+	
 	export interface StoreCapacityMessage extends StoreCapacity {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -441,14 +441,14 @@ export interface StoreCapacityBuilder {
 	decode64(buffer: string) : StoreCapacityMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface NodeDescriptor {
-
+	
 		
 
 node_id?: number;
@@ -479,7 +479,7 @@ getAttrs?() : Attributes;
 
 
 }
-
+	
 	export interface NodeDescriptorMessage extends NodeDescriptor {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -495,14 +495,14 @@ export interface NodeDescriptorBuilder {
 	decode64(buffer: string) : NodeDescriptorMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface StoreDescriptor {
-
+	
 		
 
 store_id?: number;
@@ -542,7 +542,7 @@ getCapacity?() : StoreCapacity;
 
 
 }
-
+	
 	export interface StoreDescriptorMessage extends StoreDescriptor {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -558,14 +558,14 @@ export interface StoreDescriptorBuilder {
 	decode64(buffer: string) : StoreDescriptorMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface Span {
-
+	
 		
 
 key?: ByteBuffer;
@@ -587,7 +587,7 @@ getEndKey?() : ByteBuffer;
 
 
 }
-
+	
 	export interface SpanMessage extends Span {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -603,14 +603,14 @@ export interface SpanBuilder {
 	decode64(buffer: string) : SpanMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface Value {
-
+	
 		
 
 raw_bytes?: ByteBuffer;
@@ -632,7 +632,7 @@ getTimestamp?() : util.hlc.Timestamp;
 
 
 }
-
+	
 	export interface ValueMessage extends Value {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -648,14 +648,14 @@ export interface ValueBuilder {
 	decode64(buffer: string) : ValueMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface KeyValue {
-
+	
 		
 
 key?: ByteBuffer;
@@ -677,7 +677,7 @@ getValue?() : Value;
 
 
 }
-
+	
 	export interface KeyValueMessage extends KeyValue {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -693,14 +693,14 @@ export interface KeyValueBuilder {
 	decode64(buffer: string) : KeyValueMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface StoreIdent {
-
+	
 		
 
 cluster_id?: ByteBuffer;
@@ -731,7 +731,7 @@ getStoreId?() : number;
 
 
 }
-
+	
 	export interface StoreIdentMessage extends StoreIdent {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -747,14 +747,14 @@ export interface StoreIdentBuilder {
 	decode64(buffer: string) : StoreIdentMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface SplitTrigger {
-
+	
 		
 
 left_desc?: RangeDescriptor;
@@ -776,7 +776,7 @@ getRightDesc?() : RangeDescriptor;
 
 
 }
-
+	
 	export interface SplitTriggerMessage extends SplitTrigger {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -792,14 +792,14 @@ export interface SplitTriggerBuilder {
 	decode64(buffer: string) : SplitTriggerMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface MergeTrigger {
-
+	
 		
 
 left_desc?: RangeDescriptor;
@@ -821,7 +821,7 @@ getRightDesc?() : RangeDescriptor;
 
 
 }
-
+	
 	export interface MergeTriggerMessage extends MergeTrigger {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -837,14 +837,14 @@ export interface MergeTriggerBuilder {
 	decode64(buffer: string) : MergeTriggerMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface ChangeReplicasTrigger {
-
+	
 		
 
 change_type?: ReplicaChangeType;
@@ -884,7 +884,7 @@ getNextReplicaId?() : number;
 
 
 }
-
+	
 	export interface ChangeReplicasTriggerMessage extends ChangeReplicasTrigger {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -900,14 +900,14 @@ export interface ChangeReplicasTriggerBuilder {
 	decode64(buffer: string) : ChangeReplicasTriggerMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface ModifiedSpanTrigger {
-
+	
 		
 
 system_config_span?: boolean;
@@ -920,7 +920,7 @@ getSystemConfigSpan?() : boolean;
 
 
 }
-
+	
 	export interface ModifiedSpanTriggerMessage extends ModifiedSpanTrigger {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -936,14 +936,14 @@ export interface ModifiedSpanTriggerBuilder {
 	decode64(buffer: string) : ModifiedSpanTriggerMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface InternalCommitTrigger {
-
+	
 		
 
 split_trigger?: SplitTrigger;
@@ -983,7 +983,7 @@ getModifiedSpanTrigger?() : ModifiedSpanTrigger;
 
 
 }
-
+	
 	export interface InternalCommitTriggerMessage extends InternalCommitTrigger {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -999,14 +999,14 @@ export interface InternalCommitTriggerBuilder {
 	decode64(buffer: string) : InternalCommitTriggerMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface Transaction {
-
+	
 		
 
 meta?: storage.engine.enginepb.TxnMeta;
@@ -1109,7 +1109,7 @@ getIntents?() : Span[];
 
 
 }
-
+	
 	export interface TransactionMessage extends Transaction {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1125,14 +1125,14 @@ export interface TransactionBuilder {
 	decode64(buffer: string) : TransactionMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface Intent {
-
+	
 		
 
 span?: Span;
@@ -1163,7 +1163,7 @@ getStatus?() : TransactionStatus;
 
 
 }
-
+	
 	export interface IntentMessage extends Intent {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1179,14 +1179,14 @@ export interface IntentBuilder {
 	decode64(buffer: string) : IntentMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface Lease {
-
+	
 		
 
 start?: util.hlc.Timestamp;
@@ -1226,7 +1226,7 @@ getReplica?() : ReplicaDescriptor;
 
 
 }
-
+	
 	export interface LeaseMessage extends Lease {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1242,14 +1242,14 @@ export interface LeaseBuilder {
 	decode64(buffer: string) : LeaseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface AbortCacheEntry {
-
+	
 		
 
 key?: ByteBuffer;
@@ -1280,7 +1280,7 @@ getPriority?() : number;
 
 
 }
-
+	
 	export interface AbortCacheEntryMessage extends AbortCacheEntry {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1296,14 +1296,14 @@ export interface AbortCacheEntryBuilder {
 	decode64(buffer: string) : AbortCacheEntryMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface RaftTruncatedState {
-
+	
 		
 
 index?: Long;
@@ -1325,7 +1325,7 @@ getTerm?() : Long;
 
 
 }
-
+	
 	export interface RaftTruncatedStateMessage extends RaftTruncatedState {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1341,14 +1341,14 @@ export interface RaftTruncatedStateBuilder {
 	decode64(buffer: string) : RaftTruncatedStateMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface RaftTombstone {
-
+	
 		
 
 next_replica_id?: number;
@@ -1361,7 +1361,7 @@ getNextReplicaId?() : number;
 
 
 }
-
+	
 	export interface RaftTombstoneMessage extends RaftTombstone {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1377,14 +1377,14 @@ export interface RaftTombstoneBuilder {
 	decode64(buffer: string) : RaftTombstoneMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.roachpb {
-
+	
 	export interface RaftSnapshotData {
-
+	
 		
 
 range_descriptor?: RangeDescriptor;
@@ -1415,7 +1415,7 @@ getLogEntries?() : ByteBuffer[];
 
 
 }
-
+	
 	export interface RaftSnapshotDataMessage extends RaftSnapshotData {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1432,13 +1432,13 @@ export interface RaftSnapshotDataBuilder {
 	KeyValue: RaftSnapshotData.KeyValueBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.roachpb.RaftSnapshotData {
-
+	
 	export interface KeyValue {
-
+	
 		
 
 key?: ByteBuffer;
@@ -1469,7 +1469,7 @@ getTimestamp?() : util.hlc.Timestamp;
 
 
 }
-
+	
 	export interface KeyValueMessage extends KeyValue {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1485,7 +1485,7 @@ export interface KeyValueBuilder {
 	decode64(buffer: string) : KeyValueMessage;
 	
 }
-
+	
 }
 
 
@@ -1527,13 +1527,13 @@ declare module cockroach.roachpb {
 
 
 declare module cockroach {
-
+	
 	export interface storage {
-
+	
 		
 
 }
-
+	
 	export interface storageMessage extends storage {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1551,17 +1551,17 @@ export interface storageBuilder {
 	storagebase: storage.storagebaseBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.storage {
-
+	
 	export interface engine {
-
+	
 		
 
 }
-
+	
 	export interface engineMessage extends engine {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1578,17 +1578,17 @@ export interface engineBuilder {
 	enginepb: engine.enginepbBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.storage.engine {
-
+	
 	export interface enginepb {
-
+	
 		
 
 }
-
+	
 	export interface enginepbMessage extends enginepb {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1608,13 +1608,13 @@ export interface enginepbBuilder {
 	IsolationType: enginepb.IsolationType;
 	
 }
-
+	
 }
 
 declare module cockroach.storage.engine.enginepb {
-
+	
 	export interface TxnMeta {
-
+	
 		
 
 id?: ByteBuffer;
@@ -1690,7 +1690,7 @@ getBatchIndex?() : number;
 
 
 }
-
+	
 	export interface TxnMetaMessage extends TxnMeta {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1706,14 +1706,14 @@ export interface TxnMetaBuilder {
 	decode64(buffer: string) : TxnMetaMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.storage.engine.enginepb {
-
+	
 	export interface MVCCMetadata {
-
+	
 		
 
 txn?: TxnMeta;
@@ -1780,7 +1780,7 @@ getMergeTimestamp?() : util.hlc.Timestamp;
 
 
 }
-
+	
 	export interface MVCCMetadataMessage extends MVCCMetadata {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1796,14 +1796,14 @@ export interface MVCCMetadataBuilder {
 	decode64(buffer: string) : MVCCMetadataMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.storage.engine.enginepb {
-
+	
 	export interface MVCCStats {
-
+	
 		
 
 contains_estimates?: boolean;
@@ -1933,7 +1933,7 @@ getSysCount?() : Long;
 
 
 }
-
+	
 	export interface MVCCStatsMessage extends MVCCStats {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1949,7 +1949,7 @@ export interface MVCCStatsBuilder {
 	decode64(buffer: string) : MVCCStatsMessage;
 	
 }
-
+	
 }
 
 
@@ -1964,13 +1964,13 @@ declare module cockroach.storage.engine.enginepb {
 
 
 declare module cockroach.storage {
-
+	
 	export interface storagebase {
-
+	
 		
 
 }
-
+	
 	export interface storagebaseMessage extends storagebase {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -1988,13 +1988,13 @@ export interface storagebaseBuilder {
 	RangeInfo: storagebase.RangeInfoBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.storage.storagebase {
-
+	
 	export interface ReplicaState {
-
+	
 		
 
 raft_applied_index?: Long;
@@ -2070,7 +2070,7 @@ getFrozen?() : boolean;
 
 
 }
-
+	
 	export interface ReplicaStateMessage extends ReplicaState {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2086,14 +2086,14 @@ export interface ReplicaStateBuilder {
 	decode64(buffer: string) : ReplicaStateMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.storage.storagebase {
-
+	
 	export interface RangeInfo {
-
+	
 		
 
 state?: ReplicaState;
@@ -2151,7 +2151,7 @@ getRaftLogSize?() : Long;
 
 
 }
-
+	
 	export interface RangeInfoMessage extends RangeInfo {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2167,20 +2167,20 @@ export interface RangeInfoBuilder {
 	decode64(buffer: string) : RangeInfoMessage;
 	
 }
-
+	
 }
 
 
 
 
 declare module cockroach {
-
+	
 	export interface config {
-
+	
 		
 
 }
-
+	
 	export interface configMessage extends config {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2199,13 +2199,13 @@ export interface configBuilder {
 	SystemConfig: config.SystemConfigBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.config {
-
+	
 	export interface GCPolicy {
-
+	
 		
 
 ttl_seconds?: number;
@@ -2218,7 +2218,7 @@ getTtlSeconds?() : number;
 
 
 }
-
+	
 	export interface GCPolicyMessage extends GCPolicy {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2234,14 +2234,14 @@ export interface GCPolicyBuilder {
 	decode64(buffer: string) : GCPolicyMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.config {
-
+	
 	export interface ZoneConfig {
-
+	
 		
 
 replica_attrs?: roachpb.Attributes[];
@@ -2281,7 +2281,7 @@ getGc?() : GCPolicy;
 
 
 }
-
+	
 	export interface ZoneConfigMessage extends ZoneConfig {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2297,14 +2297,14 @@ export interface ZoneConfigBuilder {
 	decode64(buffer: string) : ZoneConfigMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.config {
-
+	
 	export interface SystemConfig {
-
+	
 		
 
 values?: roachpb.KeyValue[];
@@ -2317,7 +2317,7 @@ getValues?() : roachpb.KeyValue[];
 
 
 }
-
+	
 	export interface SystemConfigMessage extends SystemConfig {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2333,19 +2333,19 @@ export interface SystemConfigBuilder {
 	decode64(buffer: string) : SystemConfigMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach {
-
+	
 	export interface server {
-
+	
 		
 
 }
-
+	
 	export interface serverMessage extends server {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2363,17 +2363,17 @@ export interface serverBuilder {
 	status: server.statusBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server {
-
+	
 	export interface serverpb {
-
+	
 		
 
 }
-
+	
 	export interface serverpbMessage extends serverpb {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2436,17 +2436,17 @@ export interface serverpbBuilder {
 	DrainMode: serverpb.DrainMode;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DatabasesRequest {
-
+	
 		
 
 }
-
+	
 	export interface DatabasesRequestMessage extends DatabasesRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2462,14 +2462,14 @@ export interface DatabasesRequestBuilder {
 	decode64(buffer: string) : DatabasesRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DatabasesResponse {
-
+	
 		
 
 databases?: string[];
@@ -2482,7 +2482,7 @@ getDatabases?() : string[];
 
 
 }
-
+	
 	export interface DatabasesResponseMessage extends DatabasesResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2498,14 +2498,14 @@ export interface DatabasesResponseBuilder {
 	decode64(buffer: string) : DatabasesResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DatabaseDetailsRequest {
-
+	
 		
 
 database?: string;
@@ -2518,7 +2518,7 @@ getDatabase?() : string;
 
 
 }
-
+	
 	export interface DatabaseDetailsRequestMessage extends DatabaseDetailsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2534,14 +2534,14 @@ export interface DatabaseDetailsRequestBuilder {
 	decode64(buffer: string) : DatabaseDetailsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DatabaseDetailsResponse {
-
+	
 		
 
 grants?: DatabaseDetailsResponse.Grant[];
@@ -2563,7 +2563,7 @@ getTableNames?() : string[];
 
 
 }
-
+	
 	export interface DatabaseDetailsResponseMessage extends DatabaseDetailsResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2580,13 +2580,13 @@ export interface DatabaseDetailsResponseBuilder {
 	Grant: DatabaseDetailsResponse.GrantBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb.DatabaseDetailsResponse {
-
+	
 	export interface Grant {
-
+	
 		
 
 user?: string;
@@ -2608,7 +2608,7 @@ getPrivileges?() : string[];
 
 
 }
-
+	
 	export interface GrantMessage extends Grant {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2624,15 +2624,15 @@ export interface GrantBuilder {
 	decode64(buffer: string) : GrantMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface TableDetailsRequest {
-
+	
 		
 
 database?: string;
@@ -2654,7 +2654,7 @@ getTable?() : string;
 
 
 }
-
+	
 	export interface TableDetailsRequestMessage extends TableDetailsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2670,14 +2670,14 @@ export interface TableDetailsRequestBuilder {
 	decode64(buffer: string) : TableDetailsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface TableDetailsResponse {
-
+	
 		
 
 grants?: TableDetailsResponse.Grant[];
@@ -2744,7 +2744,7 @@ getZoneConfigLevel?() : ZoneConfigurationLevel;
 
 
 }
-
+	
 	export interface TableDetailsResponseMessage extends TableDetailsResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2763,13 +2763,13 @@ export interface TableDetailsResponseBuilder {
 	Index: TableDetailsResponse.IndexBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb.TableDetailsResponse {
-
+	
 	export interface Grant {
-
+	
 		
 
 user?: string;
@@ -2791,7 +2791,7 @@ getPrivileges?() : string[];
 
 
 }
-
+	
 	export interface GrantMessage extends Grant {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2807,14 +2807,14 @@ export interface GrantBuilder {
 	decode64(buffer: string) : GrantMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb.TableDetailsResponse {
-
+	
 	export interface Column {
-
+	
 		
 
 name?: string;
@@ -2854,7 +2854,7 @@ getDefaultValue?() : string;
 
 
 }
-
+	
 	export interface ColumnMessage extends Column {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2870,14 +2870,14 @@ export interface ColumnBuilder {
 	decode64(buffer: string) : ColumnMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb.TableDetailsResponse {
-
+	
 	export interface Index {
-
+	
 		
 
 name?: string;
@@ -2935,7 +2935,7 @@ getStoring?() : boolean;
 
 
 }
-
+	
 	export interface IndexMessage extends Index {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2951,19 +2951,19 @@ export interface IndexBuilder {
 	decode64(buffer: string) : IndexMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface UsersRequest {
-
+	
 		
 
 }
-
+	
 	export interface UsersRequestMessage extends UsersRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -2979,14 +2979,14 @@ export interface UsersRequestBuilder {
 	decode64(buffer: string) : UsersRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface UsersResponse {
-
+	
 		
 
 users?: UsersResponse.User[];
@@ -2999,7 +2999,7 @@ getUsers?() : UsersResponse.User[];
 
 
 }
-
+	
 	export interface UsersResponseMessage extends UsersResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3016,13 +3016,13 @@ export interface UsersResponseBuilder {
 	User: UsersResponse.UserBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb.UsersResponse {
-
+	
 	export interface User {
-
+	
 		
 
 username?: string;
@@ -3035,7 +3035,7 @@ getUsername?() : string;
 
 
 }
-
+	
 	export interface UserMessage extends User {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3051,15 +3051,15 @@ export interface UserBuilder {
 	decode64(buffer: string) : UserMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface EventsRequest {
-
+	
 		
 
 type?: string;
@@ -3081,7 +3081,7 @@ getTargetId?() : Long;
 
 
 }
-
+	
 	export interface EventsRequestMessage extends EventsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3097,14 +3097,14 @@ export interface EventsRequestBuilder {
 	decode64(buffer: string) : EventsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface EventsResponse {
-
+	
 		
 
 events?: EventsResponse.Event[];
@@ -3117,7 +3117,7 @@ getEvents?() : EventsResponse.Event[];
 
 
 }
-
+	
 	export interface EventsResponseMessage extends EventsResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3134,13 +3134,13 @@ export interface EventsResponseBuilder {
 	Event: EventsResponse.EventBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb.EventsResponse {
-
+	
 	export interface Event {
-
+	
 		
 
 timestamp?: Event.Timestamp;
@@ -3198,7 +3198,7 @@ getUniqueId?() : ByteBuffer;
 
 
 }
-
+	
 	export interface EventMessage extends Event {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3215,13 +3215,13 @@ export interface EventBuilder {
 	Timestamp: Event.TimestampBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb.EventsResponse.Event {
-
+	
 	export interface Timestamp {
-
+	
 		
 
 sec?: Long;
@@ -3243,7 +3243,7 @@ getNsec?() : number;
 
 
 }
-
+	
 	export interface TimestampMessage extends Timestamp {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3259,16 +3259,16 @@ export interface TimestampBuilder {
 	decode64(buffer: string) : TimestampMessage;
 	
 }
-
+	
 }
 
 
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface SetUIDataRequest {
-
+	
 		
 
 key_values?: ProtoBufMap<string, ByteBuffer>;
@@ -3281,7 +3281,7 @@ getKeyValues?() : ProtoBufMap<string, ByteBuffer>;
 
 
 }
-
+	
 	export interface SetUIDataRequestMessage extends SetUIDataRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3297,18 +3297,18 @@ export interface SetUIDataRequestBuilder {
 	decode64(buffer: string) : SetUIDataRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface SetUIDataResponse {
-
+	
 		
 
 }
-
+	
 	export interface SetUIDataResponseMessage extends SetUIDataResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3324,14 +3324,14 @@ export interface SetUIDataResponseBuilder {
 	decode64(buffer: string) : SetUIDataResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface GetUIDataRequest {
-
+	
 		
 
 keys?: string[];
@@ -3344,7 +3344,7 @@ getKeys?() : string[];
 
 
 }
-
+	
 	export interface GetUIDataRequestMessage extends GetUIDataRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3360,14 +3360,14 @@ export interface GetUIDataRequestBuilder {
 	decode64(buffer: string) : GetUIDataRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface GetUIDataResponse {
-
+	
 		
 
 key_values?: ProtoBufMap<string, GetUIDataResponse.Value>;
@@ -3380,7 +3380,7 @@ getKeyValues?() : ProtoBufMap<string, GetUIDataResponse.Value>;
 
 
 }
-
+	
 	export interface GetUIDataResponseMessage extends GetUIDataResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3398,13 +3398,13 @@ export interface GetUIDataResponseBuilder {
 	Value: GetUIDataResponse.ValueBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.serverpb.GetUIDataResponse {
-
+	
 	export interface Timestamp {
-
+	
 		
 
 sec?: Long;
@@ -3426,7 +3426,7 @@ getNsec?() : number;
 
 
 }
-
+	
 	export interface TimestampMessage extends Timestamp {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3442,14 +3442,14 @@ export interface TimestampBuilder {
 	decode64(buffer: string) : TimestampMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb.GetUIDataResponse {
-
+	
 	export interface Value {
-
+	
 		
 
 value?: ByteBuffer;
@@ -3471,7 +3471,7 @@ getLastUpdated?() : Timestamp;
 
 
 }
-
+	
 	export interface ValueMessage extends Value {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3487,19 +3487,19 @@ export interface ValueBuilder {
 	decode64(buffer: string) : ValueMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface ClusterRequest {
-
+	
 		
 
 }
-
+	
 	export interface ClusterRequestMessage extends ClusterRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3515,14 +3515,14 @@ export interface ClusterRequestBuilder {
 	decode64(buffer: string) : ClusterRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface ClusterResponse {
-
+	
 		
 
 cluster_id?: string;
@@ -3535,7 +3535,7 @@ getClusterId?() : string;
 
 
 }
-
+	
 	export interface ClusterResponseMessage extends ClusterResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3551,14 +3551,14 @@ export interface ClusterResponseBuilder {
 	decode64(buffer: string) : ClusterResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DrainRequest {
-
+	
 		
 
 on?: number[];
@@ -3589,7 +3589,7 @@ getShutdown?() : boolean;
 
 
 }
-
+	
 	export interface DrainRequestMessage extends DrainRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3605,14 +3605,14 @@ export interface DrainRequestBuilder {
 	decode64(buffer: string) : DrainRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DrainResponse {
-
+	
 		
 
 on?: number[];
@@ -3625,7 +3625,7 @@ getOn?() : number[];
 
 
 }
-
+	
 	export interface DrainResponseMessage extends DrainResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3641,18 +3641,18 @@ export interface DrainResponseBuilder {
 	decode64(buffer: string) : DrainResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface HealthRequest {
-
+	
 		
 
 }
-
+	
 	export interface HealthRequestMessage extends HealthRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3668,18 +3668,18 @@ export interface HealthRequestBuilder {
 	decode64(buffer: string) : HealthRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface HealthResponse {
-
+	
 		
 
 }
-
+	
 	export interface HealthResponseMessage extends HealthResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3695,14 +3695,14 @@ export interface HealthResponseBuilder {
 	decode64(buffer: string) : HealthResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface ClusterFreezeRequest {
-
+	
 		
 
 freeze?: boolean;
@@ -3715,7 +3715,7 @@ getFreeze?() : boolean;
 
 
 }
-
+	
 	export interface ClusterFreezeRequestMessage extends ClusterFreezeRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3731,14 +3731,14 @@ export interface ClusterFreezeRequestBuilder {
 	decode64(buffer: string) : ClusterFreezeRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface ClusterFreezeResponse {
-
+	
 		
 
 ranges_affected?: Long;
@@ -3760,7 +3760,7 @@ getMessage?() : string;
 
 
 }
-
+	
 	export interface ClusterFreezeResponseMessage extends ClusterFreezeResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3776,14 +3776,14 @@ export interface ClusterFreezeResponseBuilder {
 	decode64(buffer: string) : ClusterFreezeResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DetailsRequest {
-
+	
 		
 
 node_id?: string;
@@ -3796,7 +3796,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface DetailsRequestMessage extends DetailsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3812,14 +3812,14 @@ export interface DetailsRequestBuilder {
 	decode64(buffer: string) : DetailsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface DetailsResponse {
-
+	
 		
 
 node_id?: number;
@@ -3850,7 +3850,7 @@ getBuildInfo?() : build.Info;
 
 
 }
-
+	
 	export interface DetailsResponseMessage extends DetailsResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3866,18 +3866,18 @@ export interface DetailsResponseBuilder {
 	decode64(buffer: string) : DetailsResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface NodesRequest {
-
+	
 		
 
 }
-
+	
 	export interface NodesRequestMessage extends NodesRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3893,14 +3893,14 @@ export interface NodesRequestBuilder {
 	decode64(buffer: string) : NodesRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface NodesResponse {
-
+	
 		
 
 nodes?: status.NodeStatus[];
@@ -3913,7 +3913,7 @@ getNodes?() : status.NodeStatus[];
 
 
 }
-
+	
 	export interface NodesResponseMessage extends NodesResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3929,14 +3929,14 @@ export interface NodesResponseBuilder {
 	decode64(buffer: string) : NodesResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface NodeRequest {
-
+	
 		
 
 node_id?: string;
@@ -3949,7 +3949,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface NodeRequestMessage extends NodeRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -3965,14 +3965,14 @@ export interface NodeRequestBuilder {
 	decode64(buffer: string) : NodeRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RangeInfo {
-
+	
 		
 
 span?: PrettySpan;
@@ -4003,7 +4003,7 @@ getState?() : storage.storagebase.RangeInfo;
 
 
 }
-
+	
 	export interface RangeInfoMessage extends RangeInfo {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4019,14 +4019,14 @@ export interface RangeInfoBuilder {
 	decode64(buffer: string) : RangeInfoMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RangesRequest {
-
+	
 		
 
 node_id?: string;
@@ -4039,7 +4039,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface RangesRequestMessage extends RangesRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4055,14 +4055,14 @@ export interface RangesRequestBuilder {
 	decode64(buffer: string) : RangesRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RangesResponse {
-
+	
 		
 
 ranges?: RangeInfo[];
@@ -4075,7 +4075,7 @@ getRanges?() : RangeInfo[];
 
 
 }
-
+	
 	export interface RangesResponseMessage extends RangesResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4091,14 +4091,14 @@ export interface RangesResponseBuilder {
 	decode64(buffer: string) : RangesResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface GossipRequest {
-
+	
 		
 
 node_id?: string;
@@ -4111,7 +4111,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface GossipRequestMessage extends GossipRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4127,14 +4127,14 @@ export interface GossipRequestBuilder {
 	decode64(buffer: string) : GossipRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface JSONResponse {
-
+	
 		
 
 data?: ByteBuffer;
@@ -4147,7 +4147,7 @@ getData?() : ByteBuffer;
 
 
 }
-
+	
 	export interface JSONResponseMessage extends JSONResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4163,14 +4163,14 @@ export interface JSONResponseBuilder {
 	decode64(buffer: string) : JSONResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface LogsRequest {
-
+	
 		
 
 node_id?: string;
@@ -4228,7 +4228,7 @@ getPattern?() : string;
 
 
 }
-
+	
 	export interface LogsRequestMessage extends LogsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4244,14 +4244,14 @@ export interface LogsRequestBuilder {
 	decode64(buffer: string) : LogsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface LogFilesListRequest {
-
+	
 		
 
 node_id?: string;
@@ -4264,7 +4264,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface LogFilesListRequestMessage extends LogFilesListRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4280,14 +4280,14 @@ export interface LogFilesListRequestBuilder {
 	decode64(buffer: string) : LogFilesListRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface LogFileRequest {
-
+	
 		
 
 node_id?: string;
@@ -4309,7 +4309,7 @@ getFile?() : string;
 
 
 }
-
+	
 	export interface LogFileRequestMessage extends LogFileRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4325,14 +4325,14 @@ export interface LogFileRequestBuilder {
 	decode64(buffer: string) : LogFileRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface StacksRequest {
-
+	
 		
 
 node_id?: string;
@@ -4345,7 +4345,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface StacksRequestMessage extends StacksRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4361,14 +4361,14 @@ export interface StacksRequestBuilder {
 	decode64(buffer: string) : StacksRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface MetricsRequest {
-
+	
 		
 
 node_id?: string;
@@ -4381,7 +4381,7 @@ getNodeId?() : string;
 
 
 }
-
+	
 	export interface MetricsRequestMessage extends MetricsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4397,14 +4397,14 @@ export interface MetricsRequestBuilder {
 	decode64(buffer: string) : MetricsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RaftRangeNode {
-
+	
 		
 
 node_id?: number;
@@ -4426,7 +4426,7 @@ getRange?() : RangeInfo;
 
 
 }
-
+	
 	export interface RaftRangeNodeMessage extends RaftRangeNode {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4442,14 +4442,14 @@ export interface RaftRangeNodeBuilder {
 	decode64(buffer: string) : RaftRangeNodeMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RaftRangeError {
-
+	
 		
 
 message?: string;
@@ -4462,7 +4462,7 @@ getMessage?() : string;
 
 
 }
-
+	
 	export interface RaftRangeErrorMessage extends RaftRangeError {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4478,14 +4478,14 @@ export interface RaftRangeErrorBuilder {
 	decode64(buffer: string) : RaftRangeErrorMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RaftRangeStatus {
-
+	
 		
 
 range_id?: Long;
@@ -4516,7 +4516,7 @@ getNodes?() : RaftRangeNode[];
 
 
 }
-
+	
 	export interface RaftRangeStatusMessage extends RaftRangeStatus {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4532,18 +4532,18 @@ export interface RaftRangeStatusBuilder {
 	decode64(buffer: string) : RaftRangeStatusMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RaftDebugRequest {
-
+	
 		
 
 }
-
+	
 	export interface RaftDebugRequestMessage extends RaftDebugRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4559,14 +4559,14 @@ export interface RaftDebugRequestBuilder {
 	decode64(buffer: string) : RaftDebugRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface RaftDebugResponse {
-
+	
 		
 
 ranges?: ProtoBufMap<Long, RaftRangeStatus>;
@@ -4579,7 +4579,7 @@ getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
 
 
 }
-
+	
 	export interface RaftDebugResponseMessage extends RaftDebugResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4595,14 +4595,14 @@ export interface RaftDebugResponseBuilder {
 	decode64(buffer: string) : RaftDebugResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface SpanStatsRequest {
-
+	
 		
 
 node_id?: string;
@@ -4633,7 +4633,7 @@ getEndKey?() : ByteBuffer;
 
 
 }
-
+	
 	export interface SpanStatsRequestMessage extends SpanStatsRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4649,14 +4649,14 @@ export interface SpanStatsRequestBuilder {
 	decode64(buffer: string) : SpanStatsRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface SpanStatsResponse {
-
+	
 		
 
 range_count?: number;
@@ -4678,7 +4678,7 @@ getTotalStats?() : storage.engine.enginepb.MVCCStats;
 
 
 }
-
+	
 	export interface SpanStatsResponseMessage extends SpanStatsResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4694,14 +4694,14 @@ export interface SpanStatsResponseBuilder {
 	decode64(buffer: string) : SpanStatsResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.serverpb {
-
+	
 	export interface PrettySpan {
-
+	
 		
 
 start_key?: string;
@@ -4723,7 +4723,7 @@ getEndKey?() : string;
 
 
 }
-
+	
 	export interface PrettySpanMessage extends PrettySpan {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4739,7 +4739,7 @@ export interface PrettySpanBuilder {
 	decode64(buffer: string) : PrettySpanMessage;
 	
 }
-
+	
 }
 
 
@@ -4763,13 +4763,13 @@ declare module cockroach.server.serverpb {
 
 
 declare module cockroach.server {
-
+	
 	export interface status {
-
+	
 		
 
 }
-
+	
 	export interface statusMessage extends status {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4787,13 +4787,13 @@ export interface statusBuilder {
 	NodeStatus: status.NodeStatusBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.server.status {
-
+	
 	export interface StoreStatus {
-
+	
 		
 
 desc?: roachpb.StoreDescriptor;
@@ -4815,7 +4815,7 @@ getMetrics?() : ProtoBufMap<string, number>;
 
 
 }
-
+	
 	export interface StoreStatusMessage extends StoreStatus {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4831,14 +4831,14 @@ export interface StoreStatusBuilder {
 	decode64(buffer: string) : StoreStatusMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.server.status {
-
+	
 	export interface NodeStatus {
-
+	
 		
 
 desc?: roachpb.NodeDescriptor;
@@ -4896,7 +4896,7 @@ getStoreStatuses?() : StoreStatus[];
 
 
 }
-
+	
 	export interface NodeStatusMessage extends NodeStatus {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4912,20 +4912,20 @@ export interface NodeStatusBuilder {
 	decode64(buffer: string) : NodeStatusMessage;
 	
 }
-
+	
 }
 
 
 
 
 declare module cockroach {
-
+	
 	export interface build {
-
+	
 		
 
 }
-
+	
 	export interface buildMessage extends build {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -4942,13 +4942,13 @@ export interface buildBuilder {
 	Info: build.InfoBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.build {
-
+	
 	export interface Info {
-
+	
 		
 
 go_version?: string;
@@ -5006,7 +5006,7 @@ getPlatform?() : string;
 
 
 }
-
+	
 	export interface InfoMessage extends Info {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5022,19 +5022,19 @@ export interface InfoBuilder {
 	decode64(buffer: string) : InfoMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach {
-
+	
 	export interface gossip {
-
+	
 		
 
 }
-
+	
 	export interface gossipMessage extends gossip {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5055,13 +5055,13 @@ export interface gossipBuilder {
 	Info: gossip.InfoBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.gossip {
-
+	
 	export interface BootstrapInfo {
-
+	
 		
 
 addresses?: util.UnresolvedAddr[];
@@ -5083,7 +5083,7 @@ getTimestamp?() : util.hlc.Timestamp;
 
 
 }
-
+	
 	export interface BootstrapInfoMessage extends BootstrapInfo {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5099,14 +5099,14 @@ export interface BootstrapInfoBuilder {
 	decode64(buffer: string) : BootstrapInfoMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.gossip {
-
+	
 	export interface Request {
-
+	
 		
 
 node_id?: number;
@@ -5146,7 +5146,7 @@ getDelta?() : ProtoBufMap<string, Info>;
 
 
 }
-
+	
 	export interface RequestMessage extends Request {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5162,14 +5162,14 @@ export interface RequestBuilder {
 	decode64(buffer: string) : RequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.gossip {
-
+	
 	export interface Response {
-
+	
 		
 
 node_id?: number;
@@ -5227,7 +5227,7 @@ getHighWaterStamps?() : ProtoBufMap<number, Long>;
 
 
 }
-
+	
 	export interface ResponseMessage extends Response {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5243,14 +5243,14 @@ export interface ResponseBuilder {
 	decode64(buffer: string) : ResponseMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.gossip {
-
+	
 	export interface InfoStatus {
-
+	
 		
 
 infos?: ProtoBufMap<string, Info>;
@@ -5263,7 +5263,7 @@ getInfos?() : ProtoBufMap<string, Info>;
 
 
 }
-
+	
 	export interface InfoStatusMessage extends InfoStatus {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5279,14 +5279,14 @@ export interface InfoStatusBuilder {
 	decode64(buffer: string) : InfoStatusMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.gossip {
-
+	
 	export interface Info {
-
+	
 		
 
 value?: roachpb.Value;
@@ -5344,7 +5344,7 @@ getPeerId?() : number;
 
 
 }
-
+	
 	export interface InfoMessage extends Info {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5360,19 +5360,19 @@ export interface InfoBuilder {
 	decode64(buffer: string) : InfoMessage;
 	
 }
-
+	
 }
 
 
 
 declare module cockroach {
-
+	
 	export interface ts {
-
+	
 		
 
 }
-
+	
 	export interface tsMessage extends ts {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5389,17 +5389,17 @@ export interface tsBuilder {
 	tspb: ts.tspbBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.ts {
-
+	
 	export interface tspb {
-
+	
 		
 
 }
-
+	
 	export interface tspbMessage extends tspb {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5422,13 +5422,13 @@ export interface tspbBuilder {
 	TimeSeriesQueryDerivative: tspb.TimeSeriesQueryDerivative;
 	
 }
-
+	
 }
 
 declare module cockroach.ts.tspb {
-
+	
 	export interface TimeSeriesDatapoint {
-
+	
 		
 
 timestamp_nanos?: Long;
@@ -5450,7 +5450,7 @@ getValue?() : number;
 
 
 }
-
+	
 	export interface TimeSeriesDatapointMessage extends TimeSeriesDatapoint {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5466,14 +5466,14 @@ export interface TimeSeriesDatapointBuilder {
 	decode64(buffer: string) : TimeSeriesDatapointMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.ts.tspb {
-
+	
 	export interface TimeSeriesData {
-
+	
 		
 
 name?: string;
@@ -5504,7 +5504,7 @@ getDatapoints?() : TimeSeriesDatapoint[];
 
 
 }
-
+	
 	export interface TimeSeriesDataMessage extends TimeSeriesData {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5520,14 +5520,14 @@ export interface TimeSeriesDataBuilder {
 	decode64(buffer: string) : TimeSeriesDataMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.ts.tspb {
-
+	
 	export interface Query {
-
+	
 		
 
 name?: string;
@@ -5576,7 +5576,7 @@ getSources?() : string[];
 
 
 }
-
+	
 	export interface QueryMessage extends Query {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5592,14 +5592,14 @@ export interface QueryBuilder {
 	decode64(buffer: string) : QueryMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.ts.tspb {
-
+	
 	export interface TimeSeriesQueryRequest {
-
+	
 		
 
 start_nanos?: Long;
@@ -5630,7 +5630,7 @@ getQueries?() : Query[];
 
 
 }
-
+	
 	export interface TimeSeriesQueryRequestMessage extends TimeSeriesQueryRequest {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5646,14 +5646,14 @@ export interface TimeSeriesQueryRequestBuilder {
 	decode64(buffer: string) : TimeSeriesQueryRequestMessage;
 	
 }
-
+	
 }
 
 
 declare module cockroach.ts.tspb {
-
+	
 	export interface TimeSeriesQueryResponse {
-
+	
 		
 
 results?: TimeSeriesQueryResponse.Result[];
@@ -5666,7 +5666,7 @@ getResults?() : TimeSeriesQueryResponse.Result[];
 
 
 }
-
+	
 	export interface TimeSeriesQueryResponseMessage extends TimeSeriesQueryResponse {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5683,13 +5683,13 @@ export interface TimeSeriesQueryResponseBuilder {
 	Result: TimeSeriesQueryResponse.ResultBuilder;
 	
 }
-
+	
 }
 
 declare module cockroach.ts.tspb.TimeSeriesQueryResponse {
-
+	
 	export interface Result {
-
+	
 		
 
 query?: Query;
@@ -5711,7 +5711,7 @@ getDatapoints?() : TimeSeriesDatapoint[];
 
 
 }
-
+	
 	export interface ResultMessage extends Result {
 	toArrayBuffer(): ArrayBuffer;
 	encode(): ByteBuffer;
@@ -5727,7 +5727,7 @@ export interface ResultBuilder {
 	decode64(buffer: string) : ResultMessage;
 	
 }
-
+	
 }
 
 
