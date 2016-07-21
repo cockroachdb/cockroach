@@ -48,6 +48,9 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.txn.Proto.Isolation.String())})
 	case `TRANSACTION PRIORITY`:
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.txn.UserPriority.String())})
+	case `PANIC`:
+		// TODO(peter): Remove. This is just for testing.
+		panic("testing")
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
