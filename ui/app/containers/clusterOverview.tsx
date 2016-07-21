@@ -105,7 +105,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
           </StackedAreaGraph>
 
           <LineGraph title="Memory Usage"
-                     tooltip="The memory in use across all nodes.">
+                     tooltip="The total memory in use across all nodes.">
             <Axis format={ Bytes }>
               <Metric name="cr.node.sys.rss" title="Memory" />
             </Axis>
@@ -116,29 +116,29 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
         <GraphGroup groupId="cluster.big">
 
           <LineGraph title="SQL Connections"
-                     tooltip="The total number of active SQL connections to the cluster.">
+                     tooltip="The total number of active SQL connections across all nodes.">
             <Axis format={ d3.format(".1f") }>
               <Metric name="cr.node.sql.conns" title="Connections" />
             </Axis>
           </LineGraph>
 
           <LineGraph title="SQL Traffic"
-                     tooltip="The amount of network traffic sent to and from the SQL system, in bytes.">
+                     tooltip="The average amount of SQL client network traffic in bytes per second across all nodes.">
             <Axis format={ Bytes }>
               <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
               <Metric name="cr.node.sql.inserts" title="Bytes Out" nonNegativeRate />
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Reads Per Second"
-                     tooltip="The number of SELECT statements, averaged over a 10 second period.">
+          <LineGraph title="Reads"
+                     tooltip="The average number of SELECT statements per second across all nodes.">
             <Axis format={ d3.format(".1f") }>
               <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Writes Per Second"
-                     tooltip="The number of INSERT, UPDATE, and DELETE statements, averaged over a 10 second period.">
+          <LineGraph title="Writes"
+                     tooltip="The average number of INSERT, UPDATE, and DELETE statements per second across all nodes.">
             <Axis format={ d3.format(".1f") }>
               <Metric name="cr.node.sql.insert.count" title="Insert" nonNegativeRate />
               <Metric name="cr.node.sql.update.count" title="Update" nonNegativeRate />
