@@ -19,8 +19,12 @@ package distsql
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -39,13 +43,35 @@ type FlowID struct {
 	uuid.UUID
 }
 
+// FlowCtx encompasses the contexts needed for various flow components.
+type FlowCtx struct {
+	context.Context
+	id      FlowID
+	evalCtx *parser.EvalContext
+	rpcCtx  *rpc.Context
+	txn     *client.Txn
+}
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
-	evalCtx            *parser.EvalContext
-	txn                *client.Txn
+	FlowCtx
 	simpleFlowConsumer RowReceiver
 	waitGroup          sync.WaitGroup
 	processors         []processor
+}
+
+func newFlow(
+	ctx FlowCtx,
+	flowReg *flowRegistry,
+	simpleFlowConsumer RowReceiver,
+) *Flow {
+	// TODO(radu): add Flow ID to ctx.
+	return &Flow{
+		FlowCtx:            ctx,
+		flowRegistry:       flowReg,
+		simpleFlowConsumer: simpleFlowConsumer,
+		status:             FlowNotStarted,
+	}
 }
 
 func (f *Flow) setupMailbox(sp *MailboxSpec) (RowReceiver, error) {

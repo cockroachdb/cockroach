@@ -99,6 +99,11 @@ func TestJoinReader(t *testing.T) {
 		js.Table = *td
 
 		txn := client.NewTxn(context.Background(), *kvDB)
+		flowCtx := FlowCtx{
+			Context: context.Background(),
+			evalCtx: &parser.EvalContext{},
+			txn:     txn,
+		}
 
 		in := &RowBuffer{}
 		for _, row := range c.input {
@@ -110,7 +115,7 @@ func TestJoinReader(t *testing.T) {
 		}
 
 		out := &RowBuffer{}
-		jr, err := newJoinReader(&js, txn, in, out, &parser.EvalContext{})
+		jr, err := newJoinReader(&flowCtx, &js, in, out)
 		if err != nil {
 			t.Fatal(err)
 		}
