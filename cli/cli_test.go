@@ -482,30 +482,43 @@ func Example_max_results() {
 func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
+	zone1 := "zone1.yaml"
+	zone2 := "zone2.yaml"
+	defer func() {
+		if err := os.Remove(zone1); err != nil {
+			log.Fatalf("could not remove zone config file: %v", err)
+		}
+		if err := os.Remove(zone2); err != nil {
+			log.Fatalf("could not remove zone config file: %v", err)
+		}
+	}()
 
-	const zone1 = `replicas:
-- attrs: [us-east-1a,ssd]`
-	const zone2 = `range_max_bytes: 134217728`
+	if err := ioutil.WriteFile(zone1, []byte("replicas:\n- attrs: [us-east-1a,ssd]\n"), 0777); err != nil {
+		log.Fatalf("could not write string: %v", err)
+	}
+
+	if err := ioutil.WriteFile(zone2, []byte("range_max_bytes: 134217728\n"), 0777); err != nil {
+		log.Fatalf("could not write string: %v", err)
+	}
 
 	c.Run("zone ls")
 	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
-	c.RunWithArgs([]string{"zone", "set", "system", zone1})
+	c.RunWithArgs([]string{"zone", "set", "system", "--file=" + zone1})
 	c.Run("zone ls")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.lease")
-	c.RunWithArgs([]string{"zone", "set", "system", zone2})
+	c.RunWithArgs([]string{"zone", "set", "system", "--file=" + zone2})
 	c.Run("zone get system")
 	c.Run("zone rm system")
 	c.Run("zone ls")
 	c.Run("zone rm .default")
-	c.RunWithArgs([]string{"zone", "set", ".default", zone2})
+	c.RunWithArgs([]string{"zone", "set", ".default", "--file=" + zone2})
 	c.Run("zone get system")
 
 	// Output:
 	// zone ls
 	// .default
-	// zone set system replicas:
-	// - attrs: [us-east-1a,ssd]
+	// zone set system --file=zone1.yaml
 	// INSERT 1
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -526,7 +539,7 @@ func Example_zone() {
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
-	// zone set system range_max_bytes: 134217728
+	// zone set system --file=zone2.yaml
 	// UPDATE 1
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -548,7 +561,7 @@ func Example_zone() {
 	// .default
 	// zone rm .default
 	// unable to remove .default
-	// zone set .default range_max_bytes: 134217728
+	// zone set .default --file=zone2.yaml
 	// UPDATE 1
 	// replicas:
 	// - attrs: []

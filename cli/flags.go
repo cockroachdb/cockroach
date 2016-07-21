@@ -40,7 +40,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connPort, httpPort, httpAddr, connDBName string
+var connUser, connHost, connPort, httpPort, httpAddr, connDBName, zoneConfig string
 var startBackground bool
 var undoFreezeCluster bool
 
@@ -70,6 +70,9 @@ nodes. For example:`) + `
 
   --attrs=us-west-1b:gpu
 `,
+
+	cliflags.ZoneConfigName: wrapText(`
+File to read the zone configuration from. Use "-" to specify read from stdin`),
 
 	cliflags.BackgroundName: wrapText(`
 Start the server in the background. This is similar to appending "&"
@@ -463,7 +466,10 @@ func init() {
 		// to a file. The user can override with --pretty.
 		f.BoolVar(&cliCtx.prettyFmt, cliflags.PrettyName, isInteractive, usageNoEnv(cliflags.PrettyName))
 	}
-
+	{
+		f := setZoneCmd.Flags()
+		f.StringVarP(&zoneConfig, cliflags.ZoneConfigName, "f", "", usageNoEnv(cliflags.ZoneConfigName))
+	}
 	{
 		f := sqlShellCmd.Flags()
 		f.VarP(&sqlCtx.execStmts, cliflags.ExecuteName, "e", usageNoEnv(cliflags.ExecuteName))
