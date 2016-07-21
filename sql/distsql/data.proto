@@ -74,11 +74,11 @@ message MailboxSpec {
 // StreamEndpointSpec describes one of the endpoints (input or output) of a physical
 // stream.
 message StreamEndpointSpec {
-  option (gogoproto.onlyone) = true;
-
   // If set, both ends of the stream are part of the flow on this machine. There
-  // will be a corresponding endpoint with the same local stream ID.
-  optional int32 local_stream_id = 1 [(gogoproto.customname) = "LocalStreamID",
+  // will be a corresponding endpoint with the same local stream ID. Can only be
+  // set if mailbox is not set.
+  optional int32 local_stream_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "LocalStreamID",
                                       (gogoproto.casttype) = "LocalStreamID"];
   // If set, the stream crosses flows; the endpoint is a mailbox.
   optional MailboxSpec mailbox = 2;
@@ -95,8 +95,9 @@ message InputSyncSpec {
     // ordering.
     ORDERED = 1;
   }
-  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
-  repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
+  optional Type type = 1 [(gogoproto.nullable) = false];
+  optional Ordering ordering = 2 [(gogoproto.nullable) = false];
+  repeated StreamEndpointSpec streams = 3 [(gogoproto.nullable) = false];
 }
 
 // OutputRouterSpec is the specification for the output router of a processor;
@@ -126,10 +127,9 @@ message DatumInfo {
 
 // StreamHeader is a message that is sent once at the beginning of a stream.
 message StreamHeader {
-  optional bytes flow_id = 1 [
-    (gogoproto.nullable) = false,
-    (gogoproto.customname) = "FlowID",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowID",
+                              (gogoproto.customtype) = "FlowID"];
 
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "StreamID",
