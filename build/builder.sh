@@ -86,6 +86,7 @@ docker run -i ${tty-} ${rm} \
   --volume="${HOME}/.jspm:/root/.jspm" \
   --volume="${HOME}/.npm:/root/.npm" \
   --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
+  --volume="${cockroach_toplevel}/../../cockroachlabs/backtrace:/opt/backtrace" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="PAGER=cat" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
