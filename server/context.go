@@ -211,11 +211,18 @@ func GetTotalMemory() (int64, error) {
 	return totalMem, nil
 }
 
-// setOpenFileLimit sets the current limit for open file descriptors to the max
+// setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
+// Minimum - 256 per store, 256 saved for networking
+// Constrained - 256 saved for networking, rest divided evenly per store
+// Constrained (network only) - 5000 per store, rest saved for networking
+// Recommended - 5000 per store, 5000 for network
+// Also, please note that current and max limits are commonly referred to as
+// the soft and hard limits respectively.
 func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
+	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.DefaultMaxOpenFiles + minimumNetworkFileDescriptors)
 	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.DefaultMaxOpenFiles + recommendedNetworkFileDescriptors)
 	// TODO(bram): Test this out on windows.
 	var rLimit syscall.Rlimit
@@ -228,7 +235,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 
 	// The max open file descriptor limit is too low.
 	if rLimit.Max < minimumOpenFileLimit {
-		return 0, fmt.Errorf("max open file descriptor limit of %d is under the minimum required %d\n%s",
+		return 0, fmt.Errorf("hard open file descriptor limit of %d is under the minimum required %d\n%s",
 			rLimit.Max,
 			minimumOpenFileLimit,
 			productionSettingsWebpage)
@@ -250,7 +257,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	}
 	if rLimit.Cur < newCurrent {
 		if log.V(1) {
-			log.Infof("setting the current limit for open file descriptors %d to %d",
+			log.Infof("setting the soft limit for open file descriptors from %d to %d",
 				rLimit.Cur, newCurrent)
 		}
 		rLimit.Cur = newCurrent
@@ -263,13 +270,13 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 			return 0, err
 		}
 		if log.V(1) {
-			log.Infof("current open file descriptor limit is now %d", rLimit.Cur)
+			log.Infof("soft open file descriptor limit is now %d", rLimit.Cur)
 		}
 	}
 
 	// The current open file descriptor limit is still too low.
 	if rLimit.Cur < minimumOpenFileLimit {
-		return 0, fmt.Errorf("current open file descriptor limit of %d is under the minimum required %d and cannot be increased\n%s",
+		return 0, fmt.Errorf("soft open file descriptor limit of %d is under the minimum required %d and cannot be increased\n%s",
 			rLimit.Cur,
 			minimumOpenFileLimit,
 			productionSettingsWebpage)
@@ -282,10 +289,22 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 
 	// We're still below the recommended amount, we should always show a
 	// warning.
-	log.Warningf("current open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
+	log.Warningf("soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
 		rLimit.Cur,
 		recommendedOpenFileLimit,
 		productionSettingsWebpage)
+
+	// if we have no physical stores, return 0.
+	if physicalStoreCount == 0 {
+		return 0, nil
+	}
+
+	// If we have more than enough file descriptors to hit the recommend number
+	// for each store, than only constrain the network ones by giving the stores
+	// their full recommended number.
+	if rLimit.Cur >= networkConstrainedFileLimit {
+		return engine.DefaultMaxOpenFiles, nil
+	}
 
 	// Always sacrifice all but the minimum needed network descriptors to be
 	// used by the stores.
