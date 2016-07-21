@@ -128,7 +128,6 @@ type statusServer struct {
 	metricSource metricMarshaler
 	router       *httprouter.Router
 	rpcCtx       *rpc.Context
-	proxyClient  http.Client
 	stores       *storage.Stores
 }
 
@@ -141,20 +140,12 @@ func newStatusServer(
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
-	// Create an http client with a timeout
-	httpClient, err := ctx.GetHTTPClient()
-	if err != nil {
-		log.Error(err)
-		return nil
-	}
-
 	server := &statusServer{
 		db:           db,
 		gossip:       gossip,
 		metricSource: metricSource,
 		router:       httprouter.New(),
 		rpcCtx:       rpcCtx,
-		proxyClient:  httpClient,
 		stores:       stores,
 	}
 
