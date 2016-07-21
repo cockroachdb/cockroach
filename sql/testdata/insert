@@ -5,7 +5,9 @@ statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
   v CHAR,
-  UNIQUE INDEX a (v)
+  UNIQUE INDEX a (v),
+  FAMILY (k),
+  FAMILY (v)
 )
 
 query TT
