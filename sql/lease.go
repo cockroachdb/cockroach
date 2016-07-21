@@ -152,7 +152,7 @@ func (s LeaseStore) Acquire(
 		return nil, err
 	}
 	if values == nil {
-		return nil, errDescriptorNotFound
+		return nil, sqlbase.ErrDescriptorNotFound
 	}
 	desc := &sqlbase.Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
@@ -1046,14 +1046,14 @@ func (m *LeaseManager) AcquireByName(
 			if err := m.Release(lease); err != nil {
 				log.Warningf(context.TODO(), "error releasing lease: %s", err)
 			}
-			return nil, errDescriptorNotFound
+			return nil, sqlbase.ErrDescriptorNotFound
 		}
 	}
 	return lease, nil
 }
 
 // resolveName resolves a table name to a descriptor ID by looking in the
-// database. If the mapping is not found, errDescriptorNotFound is returned.
+// database. If the mapping is not found, sqlbase.ErrDescriptorNotFound is returned.
 func (m *LeaseManager) resolveName(
 	txn *client.Txn, dbID sqlbase.ID, tableName string,
 ) (sqlbase.ID, error) {
@@ -1064,7 +1064,7 @@ func (m *LeaseManager) resolveName(
 		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, errDescriptorNotFound
+		return 0, sqlbase.ErrDescriptorNotFound
 	}
 	return sqlbase.ID(gr.ValueInt()), nil
 }
