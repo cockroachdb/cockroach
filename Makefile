@@ -235,9 +235,9 @@ $(GLOCK):
 	@unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
 	touch $@
 
-.PHONY: coveralls
-coveralls:
-	@build/coveralls.sh
+.PHONY: upload-coverage
+upload-coverage:
+	@build/upload-coverage.sh
 
 include .bootstrap
 
