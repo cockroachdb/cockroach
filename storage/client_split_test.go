@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
@@ -1140,6 +1142,136 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 		if respH.Timestamp.Less(ts(i)) {
 			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), respH.Timestamp)
 		}
+	}
+}
+
+func addr(k roachpb.Key) roachpb.RKey {
+	rk, err := keys.Addr(k)
+	if err != nil {
+		panic(errors.Wrapf(err, "cannot take address of '%s'", k))
+	}
+	return rk
+}
+
+// TestStoreSplitTimestampCacheDifferentLeaseHolder prevents regression of
+// #7899. When the first lease holder of the right-hand side of a Split was
+// not equal to the left-hand side lease holder (at the time of the split),
+// its timestamp cache would not be properly initialized, which would allow
+// for writes which violated reads previously served by the pre-split lease.
+func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	leftKey := roachpb.Key("a")
+	splitKey := roachpb.Key("b")
+	rightKey := roachpb.Key("c")
+	var noLeaseForDesc atomic.Value
+	// This filter is better understood when reading the meat of the test
+	// below first.
+	filter := func(args storagebase.FilterArgs) *roachpb.Error {
+		leaseReq, argOK := args.Req.(*roachpb.RequestLeaseRequest)
+		forbiddenDesc, descOK := noLeaseForDesc.Load().(*roachpb.ReplicaDescriptor)
+		if !argOK || !descOK ||
+			!reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) ||
+			!bytes.Equal(leaseReq.Key, splitKey) {
+			return nil
+		}
+		log.Infof("refusing %+v because %+v held lease for LHS of split",
+			leaseReq, forbiddenDesc)
+		return roachpb.NewError(&roachpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
+	}
+
+	var args base.TestClusterArgs
+	args.ReplicationMode = base.ReplicationManual
+	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingCommandFilter: filter,
+	}
+
+	tc := testcluster.StartTestCluster(t, 2, args)
+	defer tc.Stopper().Stop()
+
+	// Split the data range, mainly to avoid other splits getting in our way.
+	for _, k := range []roachpb.Key{leftKey, rightKey} {
+		if _, _, err := tc.SplitRange(k); err != nil {
+			t.Fatal(errors.Wrapf(err, "split at %s", k))
+		}
+	}
+	if _, err := tc.AddReplicas(addr(leftKey), tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	db := tc.Servers[0].DB()
+	txnCh := make(chan *client.Txn)
+	{
+		if err := tc.Stopper().RunAsyncTask(func() {
+			_ = db.Txn(func(innerTxn *client.Txn) error {
+				txnCh <- innerTxn // sneakily move txn outside
+				<-tc.Stopper().ShouldQuiesce()
+				return errors.New("intentional boom")
+			})
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	txnOld := <-txnCh
+
+	// Do something with txnOld so that its timestamp gets fixed.
+	if _, err := txnOld.Scan("a", "b", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another client comes along at higher timestamp, touching everything on
+	// the right of the (soon-to-be) split key.
+	if _, err := db.Scan(splitKey, rightKey, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// This block makes sure that from now on, we don't allow the current
+	// lease holder of our range to extend. Any attempt of doing so will
+	// catch a NotLeaseHolderError, which means a retry by DistSender (until
+	// the other node gets to be the lease holder instead).
+	// This makes sure that once we split, we'll be in the situation described
+	// in #7899: The first lease holder of the right hand side of the Split
+	// will not be that of the pre-split Range.
+	{
+		lhsDesc, err := tc.LookupRange(addr(leftKey))
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaseHolder, err := tc.FindRangeLeaseHolder(&lhsDesc, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replica, found := lhsDesc.GetReplicaDescriptor(leaseHolder.StoreID)
+		if !found {
+			t.Fatalf("no replica on store %d found in %+v", leaseHolder.StoreID, lhsDesc)
+		}
+		noLeaseForDesc.Store(&replica)
+	}
+
+	// Pull the trigger. This actually also reads the RHS descriptor after the
+	// split, so when this returns, we've got the leases set up already (not
+	// that it would matter).
+	// There's a slight race here - if the LHS lease expired just before (or
+	// during) the split, perhaps leases would've changed hands in the
+	// meantime, in which case both nodes have a populated timestamp cache and
+	// the transaction would restart even with the bug in place. This should
+	// only be possible if second-long delays occur in precisely the right
+	// places.
+	if _, _, err := tc.SplitRange(splitKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// This write (to the right-hand side of the split) should hit the
+	// timestamp cache and flag the txn for a restart when we try to commit it
+	// below. With the bug in #7899, the RHS of the split had an empty
+	// timestamp cache and would simply let us write behind the previous read.
+	if err := txnOld.Put("bb", "bump"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := txnOld.Commit(); !testutils.IsError(err, "retry txn") {
+		t.Fatalf("expected txn retry, got %v", err)
 	}
 }
 
