@@ -1,0 +1,11 @@
+run:
+   # First run setup
+   - - file: setup
+
+   # Run txn from multiple clients in parallel.
+   - - file: txn
+     - file: txn
+     - file: txn
+
+   # Run final.
+   - - file: final

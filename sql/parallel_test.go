@@ -32,10 +32,12 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v1"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
@@ -105,6 +107,15 @@ func (t *parallelTest) processTestFile(path string, db *gosql.DB, ch chan bool) 
 	}
 }
 
+type parTestRunEntry struct {
+	Node int    `yaml:"client"`
+	File string `yaml:"file"`
+}
+
+type parTestSpec struct {
+	Run [][]parTestRunEntry `yaml:"run"`
+}
+
 func (t *parallelTest) run(dir string) {
 	defer t.close()
 	t.setup()
@@ -112,44 +123,38 @@ func (t *parallelTest) run(dir string) {
 	// Add the main client and set up the database.
 	t.addClient(true)
 
-	// Open the main faile.
+	// Open the main file.
 	fmt.Printf("Running test %s\n", dir)
-	mainFile := filepath.Join(dir, "main")
-	file, err := os.Open(mainFile)
+
+	mainFile := filepath.Join(dir, "test.yaml")
+	yamlData, err := ioutil.ReadFile(mainFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
-	s := newLineScanner(file)
-	for s.Scan() {
-		fields := strings.Fields(s.Text())
-		if len(fields) == 0 {
-			continue
+	var spec parTestSpec
+	err = yaml.Unmarshal(yamlData, &spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for runListIdx, runList := range spec.Run {
+		for len(t.clients) < len(runList) {
+			t.addClient(false)
 		}
-		cmd := fields[0]
-		if strings.HasPrefix(cmd, "#") {
-			// Skip comment lines.
-			continue
+		if testing.Verbose() || log.V(1) {
+			var descr []string
+			for _, re := range runList {
+				descr = append(descr, fmt.Sprintf("%d:%s", re.Node, re.File))
+			}
+			fmt.Printf("%s: run list %d: %s\n", mainFile, runListIdx, strings.Join(descr, ", "))
 		}
-		switch cmd {
-		case "run":
-			testFiles := fields[1:]
-			for len(t.clients) < len(testFiles) {
-				t.addClient(false)
-			}
-			if testing.Verbose() || log.V(1) {
-				fmt.Printf("%s:%d: running %s\n", mainFile, s.line, strings.Join(testFiles, ","))
-			}
-			ch := make(chan bool)
-			for i, f := range testFiles {
-				go t.processTestFile(filepath.Join(dir, f), t.clients[i].db, ch)
-			}
-			// Wait for all clients to complete.
-			for range testFiles {
-				<-ch
-			}
-		default:
-			t.Fatalf("%s:%d: unknown command: %s", mainFile, s.line, cmd)
+		ch := make(chan bool)
+		for i, re := range runList {
+			go t.processTestFile(filepath.Join(dir, re.File), t.clients[i].db, ch)
+		}
+		// Wait for all clients to complete.
+		for range runList {
+			<-ch
 		}
 	}
 }
