@@ -44,3 +44,6 @@ _testmain.go
 *.iml
 
 .bootstrap
+
+# vs code project files
+.vscode/
