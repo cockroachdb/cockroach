@@ -1,46 +1,18 @@
-# Compiled Object files, Static and Dynamic libs (Shared Objects)
-*.o
-*.a
-*.so
-*~
-.#*
-*.test
-
-# Log Files
-*.ERROR
-*.ERROR.*
-*.INFO
-*.INFO.*
-*.WARNING
-*.WARNING.*
-*.FATAL
-*.FATAL.*
-stderr.*
-npm-debug.log
-
-# Folders
-_obj
-_test
-certs
-
-Architecture specific extensions/prefixes
-*.cgo1.go
-*.cgo2.c
-_cgo_defun.c
-_cgo_gotypes.go
-_cgo_export.*
-
-_testmain.go
-
-*.exe
-
-.DS_Store
+# Editor or environment-specific entries should not be committed to the
+# repository but can be kept in git's global configuration:
+#
+# https://help.github.com/articles/ignoring-files/#create-a-global-gitignore
+#
+# To initialize a global gitignore which combines all of Github's per-language
+# gitignore templates, run the following:
+#
+# (cd $(mktemp -d) &&
+#   git clone https://github.com/github/gitignore . &&
+#   git ls-files '*.gitignore' | xargs cat >> ~/.gitignore_global &&
+#   git config --global core.excludesfile ~/.gitignore_global)
 
 /cockroach
 /cockroach-data
-/cockroach-darwin-10.9-amd64
-*.swp
-*.idea
-*.iml
-
+/cockroach-darwin*
 .bootstrap
+/certs
