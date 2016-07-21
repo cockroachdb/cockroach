@@ -92,6 +92,7 @@ message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
   optional TableReaderSpec tableReader = 1;
+  optional JoinReaderSpec joinReader = 2;
   // TODO(radu): other "processor core" types will go here.
 }
 
