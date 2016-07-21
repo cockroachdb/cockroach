@@ -55,7 +55,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type SetupFlowsRequest struct {
 	Txn   cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
@@ -87,7 +89,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for DistSQL service
 
@@ -294,6 +296,7 @@ var _DistSQL_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
+	Metadata: fileDescriptorApi,
 }
 
 func (m *SetupFlowsRequest) Marshal() (data []byte, err error) {
@@ -724,6 +727,8 @@ var (
 	ErrInvalidLengthApi = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowApi   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/sql/distsql/api.proto", fileDescriptorApi) }
 
 var fileDescriptorApi = []byte{
 	// 356 bytes of a gzipped FileDescriptorProto

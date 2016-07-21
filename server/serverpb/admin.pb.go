@@ -82,7 +82,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
 // the object level at which the configuration is defined. This is needed
@@ -602,7 +604,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for Admin service
 
@@ -1120,6 +1122,7 @@ var _Admin_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: fileDescriptorAdmin,
 }
 
 func (m *DatabasesRequest) Marshal() (data []byte, err error) {
@@ -1773,16 +1776,22 @@ func (m *SetUIDataRequest) MarshalTo(data []byte) (int, error) {
 			data[i] = 0xa
 			i++
 			v := m.KeyValues[string(k)]
-			mapSize := 1 + len(k) + sovAdmin(uint64(len(k))) + 1 + len(v) + sovAdmin(uint64(len(v)))
+			byteSize := 0
+			if len(v) > 0 {
+				byteSize = 1 + len(v) + sovAdmin(uint64(len(v)))
+			}
+			mapSize := 1 + len(k) + sovAdmin(uint64(len(k))) + byteSize
 			i = encodeVarintAdmin(data, i, uint64(mapSize))
 			data[i] = 0xa
 			i++
 			i = encodeVarintAdmin(data, i, uint64(len(k)))
 			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintAdmin(data, i, uint64(len(v)))
-			i += copy(data[i:], v)
+			if len(v) > 0 {
+				data[i] = 0x12
+				i++
+				i = encodeVarintAdmin(data, i, uint64(len(v)))
+				i += copy(data[i:], v)
+			}
 		}
 	}
 	return i, nil
@@ -1864,8 +1873,12 @@ func (m *GetUIDataResponse) MarshalTo(data []byte) (int, error) {
 			data[i] = 0xa
 			i++
 			v := m.KeyValues[string(k)]
-			msgSize := (&v).Size()
-			mapSize := 1 + len(k) + sovAdmin(uint64(len(k))) + 1 + msgSize + sovAdmin(uint64(msgSize))
+			msgSize := 0
+			if (&v) != nil {
+				msgSize = (&v).Size()
+				msgSize += 1 + sovAdmin(uint64(msgSize))
+			}
+			mapSize := 1 + len(k) + sovAdmin(uint64(len(k))) + msgSize
 			i = encodeVarintAdmin(data, i, uint64(mapSize))
 			data[i] = 0xa
 			i++
@@ -2447,7 +2460,11 @@ func (m *SetUIDataRequest) Size() (n int) {
 		for k, v := range m.KeyValues {
 			_ = k
 			_ = v
-			mapEntrySize := 1 + len(k) + sovAdmin(uint64(len(k))) + 1 + len(v) + sovAdmin(uint64(len(v)))
+			l = 0
+			if len(v) > 0 {
+				l = 1 + len(v) + sovAdmin(uint64(len(v)))
+			}
+			mapEntrySize := 1 + len(k) + sovAdmin(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovAdmin(uint64(mapEntrySize))
 		}
 	}
@@ -4618,51 +4635,56 @@ func (m *SetUIDataRequest) Unmarshal(data []byte) error {
 			}
 			mapkey := string(data[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapbyteLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapbyteLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intMapbyteLen := int(mapbyteLen)
-			if intMapbyteLen < 0 {
-				return ErrInvalidLengthAdmin
-			}
-			postbytesIndex := iNdEx + intMapbyteLen
-			if postbytesIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := make([]byte, mapbyteLen)
-			copy(mapvalue, data[iNdEx:postbytesIndex])
-			iNdEx = postbytesIndex
 			if m.KeyValues == nil {
 				m.KeyValues = make(map[string][]byte)
 			}
-			m.KeyValues[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapbyteLen uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					mapbyteLen |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				intMapbyteLen := int(mapbyteLen)
+				if intMapbyteLen < 0 {
+					return ErrInvalidLengthAdmin
+				}
+				postbytesIndex := iNdEx + intMapbyteLen
+				if postbytesIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := make([]byte, mapbyteLen)
+				copy(mapvalue, data[iNdEx:postbytesIndex])
+				iNdEx = postbytesIndex
+				m.KeyValues[mapkey] = mapvalue
+			} else {
+				var mapvalue []byte
+				m.KeyValues[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4909,55 +4931,60 @@ func (m *GetUIDataResponse) Unmarshal(data []byte) error {
 			}
 			mapkey := string(data[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthAdmin
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthAdmin
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &GetUIDataResponse_Value{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.KeyValues == nil {
 				m.KeyValues = make(map[string]GetUIDataResponse_Value)
 			}
-			m.KeyValues[mapkey] = *mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthAdmin
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthAdmin
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &GetUIDataResponse_Value{}
+				if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.KeyValues[mapkey] = *mapvalue
+			} else {
+				var mapvalue GetUIDataResponse_Value
+				m.KeyValues[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5860,6 +5887,8 @@ var (
 	ErrInvalidLengthAdmin = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowAdmin   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/server/serverpb/admin.proto", fileDescriptorAdmin) }
 
 var fileDescriptorAdmin = []byte{
 	// 1648 bytes of a gzipped FileDescriptorProto

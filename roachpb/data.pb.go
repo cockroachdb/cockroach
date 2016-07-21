@@ -927,8 +927,12 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x42
 			i++
 			v := m.ObservedTimestamps[NodeID(k)]
-			msgSize := (&v).Size()
-			mapSize := 1 + sovData(uint64(k)) + 1 + msgSize + sovData(uint64(msgSize))
+			msgSize := 0
+			if (&v) != nil {
+				msgSize = (&v).Size()
+				msgSize += 1 + sovData(uint64(msgSize))
+			}
+			mapSize := 1 + sovData(uint64(k)) + msgSize
 			i = encodeVarintData(data, i, uint64(mapSize))
 			data[i] = 0x8
 			i++
@@ -2845,55 +2849,60 @@ func (m *Transaction) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthData
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthData
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &cockroach_util_hlc.Timestamp{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.ObservedTimestamps == nil {
 				m.ObservedTimestamps = make(map[NodeID]cockroach_util_hlc.Timestamp)
 			}
-			m.ObservedTimestamps[NodeID(mapkey)] = *mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowData
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowData
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthData
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthData
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &cockroach_util_hlc.Timestamp{}
+				if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.ObservedTimestamps[NodeID(mapkey)] = *mapvalue
+			} else {
+				var mapvalue cockroach_util_hlc.Timestamp
+				m.ObservedTimestamps[NodeID(mapkey)] = mapvalue
+			}
 			iNdEx = postIndex
 		case 9:
 			if wireType != 0 {
@@ -3540,6 +3549,8 @@ var (
 	ErrInvalidLengthData = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/roachpb/data.proto", fileDescriptorData) }
 
 var fileDescriptorData = []byte{
 	// 1462 bytes of a gzipped FileDescriptorProto

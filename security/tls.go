@@ -114,6 +114,37 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	}, nil
 }
 
+// CopyTLSConfig returns a copy of c. Only the exported fields are copied.
+// TODO(d4l3k): Replace with (*tls.Config).Clone() when it lands in 1.8. See:
+// https://github.com/golang/go/issues/15771
+// https://github.com/golang/go/issues/16492
+func CopyTLSConfig(c *tls.Config) *tls.Config {
+	if c == nil {
+		return c
+	}
+	return &tls.Config{
+		Rand:                     c.Rand,
+		Time:                     c.Time,
+		Certificates:             c.Certificates,
+		NameToCertificate:        c.NameToCertificate,
+		GetCertificate:           c.GetCertificate,
+		RootCAs:                  c.RootCAs,
+		NextProtos:               c.NextProtos,
+		ServerName:               c.ServerName,
+		ClientAuth:               c.ClientAuth,
+		ClientCAs:                c.ClientCAs,
+		InsecureSkipVerify:       c.InsecureSkipVerify,
+		CipherSuites:             c.CipherSuites,
+		PreferServerCipherSuites: c.PreferServerCipherSuites,
+		SessionTicketsDisabled:   c.SessionTicketsDisabled,
+		SessionTicketKey:         c.SessionTicketKey,
+		ClientSessionCache:       c.ClientSessionCache,
+		MinVersion:               c.MinVersion,
+		MaxVersion:               c.MaxVersion,
+		CurvePreferences:         c.CurvePreferences,
+	}
+}
+
 // LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
 // The following paths must be passed:
 // - sslCA: path to the CA certificate
