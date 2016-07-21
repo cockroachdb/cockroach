@@ -13,3 +13,12 @@ export interface Action {
 export interface PayloadAction<T> extends Action {
   payload: T;
 }
+
+/**
+ * WithID implements the very common case of an action payload that has an
+ * associated ID.
+ */
+interface WithID<T> {
+  id: string;
+  data?: T;
+}
