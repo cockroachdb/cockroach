@@ -718,7 +718,7 @@ func TestFitColumnToFamily(t *testing.T) {
 		},
 
 		// Unbounded size column.
-		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_DECIMAL},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_DECIMAL},
 			existingFamilies: [][]ColumnType{emptyFamily},
 		},
 		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_DECIMAL},

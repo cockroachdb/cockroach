@@ -201,9 +201,11 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
+	// Fix the column families so the key counts below don't change if the
+	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -502,10 +504,12 @@ func TestOperationsWithUniqueColumnMutation(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 
-	// Create a table with column i and an index on v and i.
+	// Create a table with column i and an index on v and i. Fix the column
+	// families so the key counts below don't change if the family heuristics
+	// are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v));
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
 `); err != nil {
 		t.Fatal(err)
 	}
