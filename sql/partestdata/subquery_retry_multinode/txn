@@ -1,0 +1,7 @@
+# This test verifies that the results of the subquery are consistent with the transaction. If we
+# inadvertently reuse the previous results of the subquery during a retry, we might insert
+# duplicate values.
+
+repeat 50
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T), 'This is filler text to make the rows use more space and cause range splits quicker. One morning, when Gregor Samsa woke from troubled dreams, he found himself transformed in his bed into a horrible vermin. He lay on his armour-like back, and if he lifted his head a little he could see his brown belly, slightly domed and divided by arches into stiff sections. The bedding was hardly able to cover it and seemed ready to slide off any moment. His many legs, pitifully thin compared with the size of the rest of him, waved about helplessly as he looked. "Whats happened to me?" he thought. It wasnt a dream.')

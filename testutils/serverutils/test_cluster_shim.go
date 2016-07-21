@@ -43,6 +43,8 @@ type TestClusterInterface interface {
 	ServerConn(idx int) *gosql.DB
 
 	Stopper() *stop.Stopper
+
+	WaitForFullReplication() error
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim
@@ -64,6 +66,10 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 // StartTestCluster starts up a TestCluster made up of numNodes in-memory
 // testing servers. The cluster should be stopped using Stopper().Stop().
 func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+	if srvFactoryImpl == nil {
+		panic("TestClusterFactory not initialized. One needs to be injected " +
+			"from the package's TestMain()")
+	}
 	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
 }
 
