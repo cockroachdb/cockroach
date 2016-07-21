@@ -594,7 +594,7 @@ func (p *planner) finalizeInterleave(
 ) error {
 	// TODO(dan): This is similar to finalizeFKs. Consolidate them.
 	for _, ancestor := range index.Interleave.Ancestors {
-		ancestorTable, err := getTableDescFromID(p.txn, ancestor.TableID)
+		ancestorTable, err := sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
 		if err != nil {
 			return err
 		}
