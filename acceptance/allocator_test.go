@@ -61,7 +61,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -108,20 +107,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
 		}
-		wd, err := os.Getwd()
-		if err != nil {
-			wd = "acceptance"
-		}
-		baseDir := filepath.Join(wd, at.f.Cwd)
-		if t.Failed() && at.f.KeepClusterAfterFail {
-			t.Logf("test has failed, not destroying; run:\n(cd %s && terraform destroy -force -state %s)",
-				baseDir, at.f.StateFile)
-			return
-		}
-		at.f.MustDestroy()
-		if err := os.Remove(filepath.Join(baseDir, at.f.StateFile)); err != nil {
-			t.Log(err)
-		}
+		at.f.MustDestroy(t)
 	}()
 
 	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {

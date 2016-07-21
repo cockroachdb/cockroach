@@ -19,6 +19,7 @@ package acceptance
 import (
 	gosql "database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -42,7 +43,26 @@ import (
 	_ "github.com/cockroachdb/pq"
 )
 
+type keepClusterVar string
+
+func (kcv *keepClusterVar) String() string {
+	return string(*kcv)
+}
+
+func (kcv *keepClusterVar) Set(val string) error {
+	if val != terrafarm.KeepClusterAlways &&
+		val != terrafarm.KeepClusterFailed &&
+		val != terrafarm.KeepClusterNever {
+		return errors.New("invalid value")
+	}
+	*kcv = keepClusterVar(val)
+	return nil
+}
+
 func init() {
+	flag.Var(&flagTFKeepCluster, "tf.keep-cluster",
+		"keep the cluster after the test, either 'always', 'never', or 'failed'")
+
 	flag.Parse()
 }
 
@@ -60,8 +80,8 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
-var flagTFKeepCluster = flag.Bool("tf.keep-cluster", false, "do not destroy Terraform cluster after test finishes, has precedence over tf.keep-cluster-fail")
-var flagTFKeepClusterFail = flag.Bool("tf.keep-cluster-fail", false, "do not destroy Terraform cluster after test finishes only if the test has failed")
+
+var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
 
 // TODO(cuongdo): These should be refactored so that they're not allocator
 // test-specific when we have more than one kind of system test that uses these
@@ -156,16 +176,15 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		t.Fatalf("generated farmer prefix '%s' must match regex %s", prefix, prefixRE)
 	}
 	f := &terrafarm.Farmer{
-		Output:               os.Stderr,
-		Cwd:                  *flagCwd,
-		LogDir:               logDir,
-		KeyName:              *flagKeyName,
-		Stores:               stores,
-		Prefix:               prefix,
-		StateFile:            prefix + ".tfstate",
-		AddVars:              make(map[string]string),
-		KeepClusterAfterTest: *flagTFKeepCluster,
-		KeepClusterAfterFail: *flagTFKeepClusterFail,
+		Output:      os.Stderr,
+		Cwd:         *flagCwd,
+		LogDir:      logDir,
+		KeyName:     *flagKeyName,
+		Stores:      stores,
+		Prefix:      prefix,
+		StateFile:   prefix + ".tfstate",
+		AddVars:     make(map[string]string),
+		KeepCluster: flagTFKeepCluster.String(),
 	}
 	log.Infof("logging to %s", logDir)
 	return f
@@ -276,7 +295,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 		t.Fatal(err)
 	}
 	if err := f.WaitReady(5 * time.Minute); err != nil {
-		_ = f.Destroy()
+		_ = f.Destroy(t)
 		t.Fatalf("cluster not ready in time: %v", err)
 	}
 	checkRangeReplication(t, f, 20*time.Second)
