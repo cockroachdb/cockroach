@@ -114,6 +114,15 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	}, nil
 }
 
+// CopyTLSConfig returns a copy of the TLS config.
+func CopyTLSConfig(cfg *tls.Config) *tls.Config {
+	if cfg == nil {
+		return cfg
+	}
+	newConfig := *cfg
+	return &newConfig
+}
+
 // LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
 // The following paths must be passed:
 // - sslCA: path to the CA certificate

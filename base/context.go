@@ -198,7 +198,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 		}
 	})
 
-	return ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err
+	return security.CopyTLSConfig(ctx.clientTLSConfig.tlsConfig), ctx.clientTLSConfig.err
 }
 
 // GetServerTLSConfig returns the context server TLS config, initializing it if needed.
@@ -223,7 +223,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 		}
 	})
 
-	return ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err
+	return security.CopyTLSConfig(ctx.serverTLSConfig.tlsConfig), ctx.serverTLSConfig.err
 }
 
 // GetHTTPClient returns the context http client, initializing it
