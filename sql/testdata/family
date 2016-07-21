@@ -141,6 +141,19 @@ abcd  CREATE TABLE abcd (
       )
 
 statement ok
+CREATE TABLE f1 (a INT PRIMARY KEY, b STRING)
+
+query TT
+SHOW CREATE TABLE f1
+----
+f1  CREATE TABLE f1 (
+      a INT NOT NULL,
+      b STRING NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a),
+      FAMILY "primary" (a, b)
+	  )
+
+statement ok
 CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)
 
 query TT

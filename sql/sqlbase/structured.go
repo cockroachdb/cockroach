@@ -844,12 +844,26 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 // becomes an issue, make the bookkeeping of the columnSizesByID incremental.
 func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
 	size, isBounded := upperBoundColumnValueEncodedSize(col)
-	if !isBounded || size > FamilyHeuristicTargetBytes {
+	if !isBounded {
+		size = FamilyHeuristicTargetBytes
+	}
+	if size > FamilyHeuristicTargetBytes {
 		return 0, false
+	}
+
+	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+		primaryIndexColIDs[colID] = struct{}{}
 	}
 
 	columnSizesByID := make(map[ColumnID]int, len(desc.Columns))
 	for _, c := range desc.Columns {
+		if _, ok := primaryIndexColIDs[c.ID]; ok {
+			// Primary key columns are stored in the key, so they don't count
+			// against the heuristic limit.
+			columnSizesByID[c.ID] = 0
+			continue
+		}
 		if columnSizesByID[c.ID], isBounded = upperBoundColumnValueEncodedSize(c); !isBounded {
 			// Not bounded in size, so exceed the heuristic max to avoid assigning to
 			// a family that this column is in.

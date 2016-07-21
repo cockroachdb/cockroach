@@ -203,7 +203,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +505,7 @@ func TestOperationsWithUniqueColumnMutation(t *testing.T) {
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v));
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
 `); err != nil {
 		t.Fatal(err)
 	}
