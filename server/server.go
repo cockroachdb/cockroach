@@ -366,7 +366,7 @@ func (s *Server) Start() error {
 	})
 
 	s.stopper.RunWorker(func() {
-		netutil.FatalIfUnexpected(httpServer.ServeWith(pgL, func(conn net.Conn) {
+		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
 				log.Error(err)
 			}
@@ -388,7 +388,7 @@ func (s *Server) Start() error {
 		})
 
 		s.stopper.RunWorker(func() {
-			netutil.FatalIfUnexpected(httpServer.ServeWith(unixLn, func(conn net.Conn) {
+			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
 				if err := s.pgServer.ServeConn(conn); err != nil &&
 					!netutil.IsClosedConnection(err) {
 					log.Error(err)

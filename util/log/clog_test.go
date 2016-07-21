@@ -89,10 +89,10 @@ func contains(s Severity, str string, t *testing.T) bool {
 	return strings.Contains(c, str)
 }
 
-// setFlags configures the logging flags and osExitFunc how the test expects
+// setFlags configures the logging flags and exitFunc how the test expects
 // them.
 func setFlags() {
-	osExitFunc = os.Exit
+	SetExitFunc(os.Exit)
 	logging.stderrThreshold = ErrorLog
 	logging.toStderr = false
 }
@@ -554,7 +554,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	setFlags()
 	logging.stderrThreshold = NumSeverity
 	logging.toStderr = false
-	osExitFunc = func(int) {}
+	SetExitFunc(func(int) {})
 
 	defer setFlags()
 	defer logging.swap(logging.newBuffers())

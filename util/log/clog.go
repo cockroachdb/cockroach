@@ -593,7 +593,7 @@ func init() {
 	logging.stderrThreshold = NumSeverity
 
 	logging.setVState(0, nil, false)
-	osExitFunc = os.Exit
+	logging.exitFunc = os.Exit
 
 	go logging.flushDaemon()
 }
@@ -643,6 +643,7 @@ type loggingT struct {
 	// safely using atomic.LoadInt32.
 	vmodule   moduleSpec // The state of the --vmodule flag.
 	verbosity level      // V logging level, the value of the --verbosity flag/
+	exitFunc  func(int)  // func that will be called on fatal errors
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -780,15 +781,16 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			atomic.AddInt64(&stats.bytes, int64(len(data)))
 		}
 	}
+	exitFunc := l.exitFunc
 	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == FatalLog {
 		// If we got here via Exit rather than Fatal, print no stacks.
 		timeoutFlush(10 * time.Second)
 		if atomic.LoadUint32(&fatalNoStacks) > 0 {
-			osExitFunc(1)
+			exitFunc(1)
 		} else {
-			osExitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 		}
 	}
 }
@@ -873,7 +875,6 @@ func getStacks(all bool) []byte {
 // for fatal logs. Instead, exit could be a function rather than a method but that
 // would make its use clumsier.
 var logExitFunc func(error)
-var osExitFunc func(int)
 
 // exit is called if there is trouble creating or writing log files.
 // It flushes the logs and exits the program; there's no point in hanging around.
@@ -886,7 +887,10 @@ func (l *loggingT) exit(err error) {
 		return
 	}
 	l.flushAll()
-	osExitFunc(2)
+	l.mu.Lock()
+	exitFunc := l.exitFunc
+	l.mu.Unlock()
+	exitFunc(2)
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
