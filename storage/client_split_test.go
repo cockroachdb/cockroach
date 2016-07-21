@@ -1052,13 +1052,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
 }
 
-// TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
-// read requests and lets them complete while a split is happening; the reads
-// hit the second half of the split. If the split happens non-atomically with
-// respect to the reads (and in particular their update of the timestamp
-// cache), then some of them may not be reflected in the timestamp cache of the
-// new range, in which case this test would fail.
-func TestStoreSplitReadRace(t *testing.T) {
+// TestStoreSplitTimestampCacheReadRace prevents regression of #3148. It begins
+// a couple of read requests and lets them complete while a split is happening;
+// the reads hit the right half of the split. If the split happens
+// non-atomically with respect to the reads (and in particular their update of
+// the timestamp cache), then some of them may not be reflected in the
+// timestamp cache of the new range, in which case this test would fail.
+func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	splitKey := roachpb.Key("a")
 	key := func(i int) roachpb.Key {
