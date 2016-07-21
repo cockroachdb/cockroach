@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
@@ -428,7 +429,7 @@ the database or table.
 // runSetZone parses the yaml input file, converts it to proto, and inserts it
 // in the system.zones table.
 func runSetZone(cmd *cobra.Command, args []string) error {
-	if len(args) != 2 {
+	if len(args) != 1 {
 		mustUsage(cmd)
 		return nil
 	}
@@ -461,14 +462,23 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
 	// Convert it to proto and marshal it again to put into the table. This is a
 	// bit more tedious than taking protos directly, but yaml is a more widely
 	// understood format.
 	origReplicaAttrs := zone.ReplicaAttrs
 	zone.ReplicaAttrs = nil
-	if err := yaml.Unmarshal([]byte(args[1]), zone); err != nil {
-		return fmt.Errorf("unable to parse zone config file %q: %s", args[1], err)
+	//Read zoneConfig file to conf
+	var conf []byte
+	if zoneConfig == "-" {
+		conf, err = ioutil.ReadAll(os.Stdin)
+	} else {
+		conf, err = ioutil.ReadFile(zoneConfig)
+	}
+	if err != nil {
+		return fmt.Errorf("error reading zone config: %s", err)
+	}
+	if err := yaml.Unmarshal(conf, zone); err != nil {
+		return fmt.Errorf("unable to parse zoneConfig file: %s", err)
 	}
 	if zone.ReplicaAttrs == nil {
 		zone.ReplicaAttrs = origReplicaAttrs
