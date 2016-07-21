@@ -462,22 +462,23 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// judge whether the specified zone config file exists.
-	if _, err := os.Stat(zoneConfig); err != nil {
-		return fmt.Errorf("the specified zone config file %s is not existed : %s", zoneConfig, err)
-	}
 	// Convert it to proto and marshal it again to put into the table. This is a
 	// bit more tedious than taking protos directly, but yaml is a more widely
 	// understood format.
 	origReplicaAttrs := zone.ReplicaAttrs
 	zone.ReplicaAttrs = nil
-	//Read zoneConfig file to conf.
-	conf, err := ioutil.ReadFile(zoneConfig)
+	//Read zoneConfig file to conf
+	var conf []byte
+	if zoneConfig == "-" {
+		conf, err = ioutil.ReadAll(os.Stdin)
+	} else {
+		conf, err = ioutil.ReadFile(zoneConfig)
+	}
 	if err != nil {
-		return fmt.Errorf("read zoneConfig file error : %s", err)
+		return fmt.Errorf("error reading zone config: %s", err)
 	}
 	if err := yaml.Unmarshal(conf, zone); err != nil {
-		return fmt.Errorf("unable to parse zoneConfig file : %s", err)
+		return fmt.Errorf("unable to parse zoneConfig file: %s", err)
 	}
 	if zone.ReplicaAttrs == nil {
 		zone.ReplicaAttrs = origReplicaAttrs

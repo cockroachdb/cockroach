@@ -484,32 +484,43 @@ func Example_zone() {
 	defer c.stop()
 
 	zone1 := "zone1.yaml"
-	zone1File, err := os.Create(zone1)
+	zoneFile1, err := os.Create(zone1)
 	if err != nil {
-		log.Fatalf("Could not create zone config file : %v", err)
+		log.Fatalf("Could not create zone config file: %v", err)
 	}
-	zone1Writer := bufio.NewWriter(zone1File)
-	zone1Writer.WriteString("replicas:\n")
-	zone1Writer.WriteString("- attrs: [us-east-1a,ssd]\n")
-	zone1Writer.Flush()
+	if _, err := zoneFile1.WriteString("replicas:"); err != nil {
+		log.Fatalf("Could not write string: %v", err)
+	}
+	if _, err := zoneFile1.WriteString("\n"); err != nil {
+		log.Fatalf("Could not write string: %v", err)
+	}
+	if _, err := zoneFile1.WriteString("- attrs: [us-east-1a,ssd]"); err != nil {
+		log.Fatalf("Could not write string: %v", err)
+	}
+	if _, err := zoneFile1.WriteString("\n"); err != nil {
+		log.Fatalf("Could not write string: %v", err)
+	}
+	zoneFile1.Close()
 
 	zone2 := "zone2.yaml"
-	zone2File, err := os.Create(zone2)
+	zoneFile2, err := os.Create(zone2)
 	if err != nil {
-		log.Fatalf("Could not create zone config file : %v", err)
+		log.Fatalf("Could not create zone config file: %v", err)
 	}
-	zone2Writer := bufio.NewWriter(zone2File)
-	zone2Writer.WriteString("range_max_bytes: 134217728\n")
-	zone2Writer.Flush()
+	if _, err := zoneFile2.WriteString("range_max_bytes: 134217728"); err != nil {
+		log.Fatalf("Could not write string: %v", err)
+	}
+	if _, err := zoneFile2.WriteString("\n"); err != nil {
+		log.Fatalf("Could not write string: %v", err)
+	}
+	zoneFile2.Close()
 
 	defer func() {
-		zone1File.Close()
-		zone2File.Close()
 		if err := os.Remove(zone1); err != nil {
-			log.Fatalf("Could not remove zone config file : %v", err)
+			log.Fatalf("Could not remove zone config file:%v", err)
 		}
 		if err := os.Remove(zone2); err != nil {
-			log.Fatalf("Could not remove zone config file : %v", err)
+			log.Fatalf("Could not remove zone config file:%v", err)
 		}
 	}()
 
