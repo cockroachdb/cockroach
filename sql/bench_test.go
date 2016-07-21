@@ -51,7 +51,7 @@ func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB
 	defer tracing.Disable()()
 	tc := testcluster.StartTestCluster(b, 3,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationFull,
+			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "bench",
 			},
