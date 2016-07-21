@@ -2497,6 +2497,33 @@ func (r *Replica) splitTrigger(
 		return errors.Wrap(err, "unable to write initial state")
 	}
 
+	// Initialize the right-hand lease to be the same as the left-hand lease.
+	// This looks like an innocuous performance improvement, but it's more than
+	// that - it ensures that we properly initialize the timestamp cache, which
+	// is only populated on the lease holder, from that of the original Range.
+	// We found out about a regression here the hard way in #7899.
+	{
+		leftLease, err := loadLease(r.store.Engine(), r.RangeID)
+		if err != nil {
+			return errors.Wrap(err, "unable to load lease")
+		}
+
+		replica, found := split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
+		if !found {
+			return errors.Errorf(
+				"pre-split lease holder %+v not found in post-split descriptor %+v",
+				leftLease.Replica, split.RightDesc,
+			)
+		}
+		rightLease := leftLease
+		rightLease.Replica = replica
+		if err := setLease(
+			r.store.Engine(), &deltaMS, split.RightDesc.RangeID, rightLease,
+		); err != nil {
+			return errors.Wrap(err, "unable to seed right-hand side lease")
+		}
+	}
+
 	// Compute stats for new range.
 	var rightMS enginepb.MVCCStats
 	if origStats.ContainsEstimates || deltaMS.ContainsEstimates {
