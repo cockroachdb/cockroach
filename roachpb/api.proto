@@ -155,7 +155,8 @@ message DeleteResponse {
 }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
-// specifies the range of keys to delete.
+// specifies the range of keys to delete and a maximum number of key-value
+// pairs to delete (zero for unlimited).
 message DeleteRangeRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, *all* entries between key (inclusive) and end_key
@@ -174,7 +175,7 @@ message DeleteRangeResponse {
 
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
-// number of results.
+// number of results (unbounded if zero).
 message ScanRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, there is no limit on the number of retrieved entries. Must be >= 0.
@@ -190,7 +191,7 @@ message ScanResponse {
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
-// number of results.
+// number of results (unbounded if zero).
 message ReverseScanRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, there is no limit on the number of retrieved entries. Must be >= 0.
