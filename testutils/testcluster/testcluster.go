@@ -160,8 +160,8 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 	return tc.Servers[0].Stopper()
 }
 
-// lookupRange returns the descriptor of the range containing key.
-func (tc *TestCluster) lookupRange(key roachpb.RKey) (roachpb.RangeDescriptor, error) {
+// LookupRange returns the descriptor of the range containing key.
+func (tc *TestCluster) LookupRange(key roachpb.RKey) (roachpb.RangeDescriptor, error) {
 	rangeLookupReq := roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(key),
@@ -191,7 +191,7 @@ func (tc *TestCluster) SplitRange(
 	if err != nil {
 		return nil, nil, err
 	}
-	origRangeDesc, err := tc.lookupRange(splitRKey)
+	origRangeDesc, err := tc.LookupRange(splitRKey)
 	if err != nil {
 		return nil, nil, err
 	}
