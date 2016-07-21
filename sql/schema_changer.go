@@ -101,7 +101,7 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
-		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 func (sc *SchemaChanger) findTableWithLease(
 	txn *client.Txn, lease sqlbase.TableDescriptor_SchemaChangeLease,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := getTableDescFromID(txn, sc.tableID)
+	tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func (sc *SchemaChanger) ExtendLease(
 
 func isSchemaChangeRetryError(err error) bool {
 	switch err {
-	case errDescriptorNotFound:
+	case sqlbase.ErrDescriptorNotFound:
 		return false
 	default:
 		return !sqlbase.IsIntegrityConstraintError(err)
@@ -586,7 +586,7 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 	var done bool
 	err := sc.db.Txn(func(txn *client.Txn) error {
 		done = true
-		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -776,7 +776,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						err := sc.exec(nil, nil)
 						if err != nil {
 							if err == errExistingSchemaChangeLease {
-							} else if err == errDescriptorNotFound {
+							} else if err == sqlbase.ErrDescriptorNotFound {
 								// Someone deleted this table. Don't try to run the schema
 								// changer again. Note that there's no gossip update for the
 								// deletion which would remove this schemaChanger.

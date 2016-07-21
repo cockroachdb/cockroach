@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -117,6 +118,27 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 	default:
 		return encoding.Ascending, errors.Errorf("invalid direction: %s", dir)
 	}
+}
+
+// ErrDescriptorNotFound is returned by GetTableDescFromID to signal that a
+// descriptor could not be found with the given id.
+var ErrDescriptorNotFound = errors.New("descriptor not found")
+
+// GetTableDescFromID retrieves the table descriptor for the table
+// ID passed in using an existing txn. Teturns an error if the
+// descriptor doesn't exist or if it exists and is not a table.
+func GetTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
+	desc := &Descriptor{}
+	descKey := MakeDescMetadataKey(id)
+
+	if err := txn.GetProto(descKey, desc); err != nil {
+		return nil, err
+	}
+	table := desc.GetTable()
+	if table == nil {
+		return nil, ErrDescriptorNotFound
+	}
+	return table, nil
 }
 
 // allocateName sets desc.Name to a value that is not EqualName to any
