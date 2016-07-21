@@ -18,7 +18,7 @@ package ts
 
 import (
 	"github.com/cockroachdb/cockroach/ts/tspb"
-	gwruntime "github.com/gengo/grpc-gateway/runtime"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

@@ -189,6 +189,56 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	}
 }
 
+// TestStoreRangeSplitIntents executes a split of a range and verifies
+// that all intents are cleared and the transaction record cleaned up.
+func TestStoreRangeSplitIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	defer stopper.Stop()
+
+	// First, write some values left and right of the proposed split key.
+	pArgs := putArgs([]byte("c"), []byte("foo"))
+	if _, pErr := client.SendWrapped(rg1(store), nil, &pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	pArgs = putArgs([]byte("x"), []byte("bar"))
+	if _, pErr := client.SendWrapped(rg1(store), nil, &pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Split the range.
+	splitKey := roachpb.Key("m")
+	args := adminSplitArgs(roachpb.KeyMin, splitKey)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Verify no intents remains on range descriptor keys.
+	splitKeyAddr, err := keys.Addr(splitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
+		if _, _, err := engine.MVCCGet(context.Background(), store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+			t.Errorf("failed to read consistent range descriptor for key %s: %s", key, err)
+		}
+	}
+
+	// Verify the transaction record is gone.
+	start := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
+	end := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
+	iter := store.Engine().NewIterator(false)
+	defer iter.Close()
+	for iter.Seek(start); iter.Valid() && iter.Less(end); iter.Next() {
+		if !bytes.HasPrefix([]byte(iter.Key().Key), keys.RangeDescriptorKey(roachpb.RKeyMin)) &&
+			!bytes.HasPrefix([]byte(iter.Key().Key), keys.RangeDescriptorKey(roachpb.RKey(splitKey))) {
+			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.Key())
+		}
+	}
+}
+
 // TestStoreRangeSplitAtRangeBounds verifies a range cannot be split
 // at its start or end keys (would create zero-length range!). This
 // sort of thing might happen in the wild if two split requests
@@ -260,9 +310,10 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	}
 }
 
-// TestStoreRangeSplit executes a split of a range and verifies that the
-// resulting ranges respond to the right key ranges and that their stats
-// have been properly accounted for and requests can't be replayed.
+// TestStoreRangeSplitIdempotency executes a split of a range and
+// verifies that the resulting ranges respond to the right key ranges
+// and that their stats have been properly accounted for and requests
+// can't be replayed.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sCtx := storage.TestStoreContext()
@@ -1023,7 +1074,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()
-				if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {
+				if st == nil || !st.LeftDesc.EndKey.Equal(splitKey) {
 					return nil
 				}
 				close(getContinues)
@@ -1113,7 +1164,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			return nil
 		}
 		trigger := protoutil.Clone(et.InternalCommitTrigger.GetSplitTrigger()).(*roachpb.SplitTrigger)
-		if trigger != nil && len(trigger.NewDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 && args.Sid == mtc.stores[0].StoreID() {
+		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 && args.Sid == mtc.stores[0].StoreID() {
 			if _, ok := seen[args.CmdID]; ok {
 				return nil
 			}
@@ -1162,7 +1213,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 
 			trigger := <-currentTrigger // our own copy
 			// Make sure the first node is first for convenience.
-			replicas := trigger.NewDesc.Replicas
+			replicas := trigger.RightDesc.Replicas
 			if replicas[0].NodeID > replicas[1].NodeID {
 				tmp := replicas[1]
 				replicas[1] = replicas[0]
@@ -1176,7 +1227,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
 				if err := mtc.stores[0].HandleRaftMessage(&storage.RaftMessageRequest{
-					RangeID:     trigger.NewDesc.RangeID,
+					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],
 					Message: raftpb.Message{

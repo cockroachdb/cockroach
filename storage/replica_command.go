@@ -630,7 +630,7 @@ func (r *Replica) resolveLocalIntents(
 		// which intents are local (note that for a split, we want to use the
 		// pre-split one instead because it's larger).
 		preMergeDesc = desc
-		desc = &mergeTrigger.UpdatedDesc
+		desc = &mergeTrigger.LeftDesc
 	}
 
 	iterAndBuf := engine.GetIterAndBuf(batch)
@@ -774,7 +774,7 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
-			if err := r.splitTrigger(r.context(ctx), batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+			if err := r.splitTrigger(ctx, batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
 				return err
 			}
 			*ms = enginepb.MVCCStats{} // clear stats, as split recomputed.
@@ -1000,7 +1000,7 @@ func (r *Replica) RangeLookup(
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record collocated with a replica
+		// split-related intents or a txn record co-located with a replica
 		// involved in the split. Since we cannot know the correct answer, we
 		// reply with both the pre- and post- transaction values when the
 		// ConsiderIntents flag is set.
@@ -1677,7 +1677,7 @@ func (r *Replica) applyNewLeaseLocked(
 func (r *Replica) CheckConsistency(
 	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	ctx := r.context(context.TODO())
+	ctx := context.TODO()
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
@@ -2135,12 +2135,13 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 }
 
 // AdminSplit divides the range into into two ranges, using either
-// args.SplitKey (if provided) or an internally computed key that aims to
-// roughly equipartition the range by size. The split is done inside of
-// a distributed txn which writes updated and new range descriptors, and
-// updates the range addressing metadata. The handover of responsibility for
-// the reassigned key range is carried out seamlessly through a split trigger
-// carried out as part of the commit of that transaction.
+// args.SplitKey (if provided) or an internally computed key that aims
+// to roughly equipartition the range by size. The split is done
+// inside of a distributed txn which writes updated left and new right
+// hand side range descriptors, and updates the range addressing
+// metadata. The handover of responsibility for the reassigned key
+// range is carried out seamlessly through a split trigger carried out
+// as part of the commit of that transaction.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. An
 // operation which might split a range should obtain a copy of the range's
@@ -2176,7 +2177,7 @@ func (r *Replica) AdminSplit(
 			return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
 		}
 
-		foundSplitKey, err := keys.MakeSplitKey(foundSplitKey)
+		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
 		if err != nil {
 			return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
 				args.SplitKey, err)
@@ -2202,43 +2203,43 @@ func (r *Replica) AdminSplit(
 	}
 	log.Trace(ctx, "found split key")
 
-	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
-	newDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
+	// Create right hand side range descriptor with the newly-allocated Range ID.
+	rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
-		return reply, roachpb.NewErrorf("unable to allocate new range descriptor: %s", err)
+		return reply, roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
 	}
 
 	// Init updated version of existing range descriptor.
-	updatedDesc := *desc
-	updatedDesc.EndKey = splitKey
+	leftDesc := *desc
+	leftDesc.EndKey = splitKey
 
 	log.Infof("%s: initiating a split of this range at key %s", r, splitKey)
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
 		defer log.Trace(ctx, "split closure ends")
-		// Create range descriptor for second half of split.
-		// Note that this put must go first in order to locate the
-		// transaction record on the correct range.
+		// Update existing range descriptor for left hand side of
+		// split. Note that we mutate the descriptor for the left hand
+		// side of the split first to locate the txn record there.
 		b := &client.Batch{}
-		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
-		if err := updateRangeDescriptor(b, desc1Key, nil, newDesc); err != nil {
+		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+		if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
 			return err
 		}
-		// Update existing range descriptor for first half of split.
-		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
-		if err := updateRangeDescriptor(b, desc2Key, desc, &updatedDesc); err != nil {
+		// Create range descriptor for right hand side of the split.
+		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
+		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).
-		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
+		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
 			return err
 		}
 		if err := txn.Run(b); err != nil {
 			return err
 		}
 		// Log the split into the range event log.
-		if err := r.store.logSplit(txn, updatedDesc, *newDesc); err != nil {
+		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
 			return err
 		}
 		b = &client.Batch{}
@@ -2248,8 +2249,8 @@ func (r *Replica) AdminSplit(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
-					UpdatedDesc: updatedDesc,
-					NewDesc:     *newDesc,
+					LeftDesc:  leftDesc,
+					RightDesc: *rightDesc,
 					// Designate this store as the preferred lease holder for the new
 					// range. The choice of store here doesn't matter for
 					// correctness, but for best performance it should be one
@@ -2267,15 +2268,17 @@ func (r *Replica) AdminSplit(
 	return reply, nil
 }
 
-// splitTrigger is called on a successful commit of a transaction containing an
-// AdminSplit operation. It copies the abort cache for the new range and
-// recomputes stats for both the existing, updated range and the new range. For
-// performance it only computes the stats for the old range (the
-// left-hand-side) and infers the RHS stats by subtracting from the original
-// stats. We compute the LHS stats because the split key computation ensures
-// that we do not create large LHS ranges. However, this optimization is
-// only possible if the stats are fully accurate. If they contain estimates,
-// stats for both the LHS and RHS are computed.
+// splitTrigger is called on a successful commit of a transaction
+// containing an AdminSplit operation. It copies the abort cache for
+// the new range and recomputes stats for both the existing, left hand
+// side (LHS) range and the right hand side (RHS) range. For
+// performance it only computes the stats for the original range (the
+// left hand side) and infers the RHS stats by subtracting from the
+// original stats. We compute the LHS stats because the split key
+// computation ensures that we do not create large LHS
+// ranges. However, this optimization is only possible if the stats
+// are fully accurate. If they contain estimates, stats for both the
+// LHS and RHS are computed.
 //
 // Splits are complicated. A split is initiated when a replica receives an
 // AdminSplit request. Note that this request (and other "admin" requests)
@@ -2414,11 +2417,11 @@ func (r *Replica) splitTrigger(
 	sp := r.store.Tracer().StartSpan("split")
 	defer sp.Finish()
 	desc := r.Desc()
-	if !bytes.Equal(desc.StartKey, split.UpdatedDesc.StartKey) ||
-		!bytes.Equal(desc.EndKey, split.NewDesc.EndKey) {
+	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||
+		!bytes.Equal(desc.EndKey, split.RightDesc.EndKey) {
 		return errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
-			split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey,
-			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
+			split.LeftDesc.StartKey, split.LeftDesc.EndKey,
+			split.RightDesc.StartKey, split.RightDesc.EndKey, r)
 	}
 
 	// Preserve stats for presplit range and begin computing stats delta
@@ -2426,20 +2429,21 @@ func (r *Replica) splitTrigger(
 	origStats := r.GetMVCCStats()
 	deltaMS := *ms
 
-	// Account for MVCCStats' own contribution to the new range's statistics.
-	if err := engine.AccountForSelf(&deltaMS, split.NewDesc.RangeID); err != nil {
+	// Account for MVCCStats' own contribution to the RHS range's statistics.
+	if err := engine.AccountForSelf(&deltaMS, split.RightDesc.RangeID); err != nil {
 		return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 	}
 
-	// TODO(d4l3k): we should check which half is smaller and compute stats for it
-	// instead of having a constraint that the left side is smaller.
+	// TODO(d4l3k): we should check which side of the split is smaller
+	// and compute stats for it instead of having a constraint that the
+	// left hand side is smaller.
 
-	// Compute stats for updated range.
-	leftMS, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
+	// Compute stats for LHS range.
+	leftMS, err := ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
-		return errors.Wrap(err, "unable to compute stats for updated range after split")
+		return errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
-	log.Trace(ctx, "computed stats for old range")
+	log.Trace(ctx, "computed stats for left hand side range")
 
 	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
 		return errors.Wrap(err, "unable to write MVCC stats")
@@ -2455,28 +2459,28 @@ func (r *Replica) splitTrigger(
 	if err != nil {
 		return errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
 		return errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 	verifyTS, err := r.getLastVerificationTimestamp()
 	if err != nil {
 		return errors.Wrap(err, "unable to fetch last verification timestamp")
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return errors.Wrap(err, "unable to copy last verification timestamp")
 	}
 
-	// Initialize the new range's abort cache by copying the original's.
-	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.NewDesc.RangeID)
+	// Initialize the RHS range's abort cache by copying the LHS's.
+	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.RightDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return errors.Wrap(err, "unable to copy abort cache to new split range")
+		return errors.Wrap(err, "unable to copy abort cache to RHS split range")
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
 	// TODO(tschottdorf): This is subtle. We are about to commit our batch
 	// and communicate the split to the Store, but we are in fact already
-	// writing to the "other" Range's key space (and in particular to the
+	// writing to the RHS range's key space (and in particular to the
 	// Raft state) in this batch. Between committing and telling the Store,
 	// we could race with an uninitialized version of our new Replica which
 	// might have been created by an incoming message from another node
@@ -2488,7 +2492,7 @@ func (r *Replica) splitTrigger(
 	// Note that the stats need to go into deltaMS (which is the total
 	// difference in bytes reported to the store in the end). We compute the
 	// RHS' stats from it below.
-	deltaMS, err = writeInitialState(batch, deltaMS, split.NewDesc)
+	deltaMS, err = writeInitialState(batch, deltaMS, split.RightDesc)
 	if err != nil {
 		return errors.Wrap(err, "unable to write initial state")
 	}
@@ -2500,9 +2504,9 @@ func (r *Replica) splitTrigger(
 		// estimate values, we cannot perform arithmetic to determine the
 		// new range's stats. Instead, we must recompute by iterating
 		// over the keys and counting.
-		rightMS, err = ComputeStatsForRange(&split.NewDesc, batch, ts.WallTime)
+		rightMS, err = ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
 		if err != nil {
-			return errors.Wrap(err, "unable to compute stats for new range after split")
+			return errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}
 	} else {
 		// Because neither the original stats or the delta stats contain
@@ -2512,7 +2516,7 @@ func (r *Replica) splitTrigger(
 		// where
 		// - old_ms   contains statistics for the pre-split range
 		// - delta_ms contains statistics for modifications made in the current batch
-		// - left_ms  contains statistics computed for the updated (left) half of the split
+		// - left_ms  contains statistics computed for the LHS of split
 		rightMS = deltaMS
 		rightMS.AgeTo(ts.WallTime)
 		// Add in the original range's stats.
@@ -2520,35 +2524,35 @@ func (r *Replica) splitTrigger(
 		// Remove stats from the left side of the split.
 		rightMS.Subtract(leftMS)
 	}
-	if err := setMVCCStats(batch, split.NewDesc.RangeID, rightMS); err != nil {
+	if err := setMVCCStats(batch, split.RightDesc.RangeID, rightMS); err != nil {
 		return errors.Wrap(err, "unable to write MVCC stats")
 	}
-	log.Trace(ctx, "computed stats for new range")
+	log.Trace(ctx, "computed stats for RHS range")
 
 	// Note: you must not use the trace inside of this defer since it may
 	// run after the trace has already completed.
 	batch.Defer(func() {
-		// Create the new Replica representing the right side of the split.
-		// Our error handling options at this point are very limited, but
-		// we need to do this after our batch has committed.
-		newRng, err := NewReplica(&split.NewDesc, r.store, 0)
+		// Create the Replica for the right side of the split. Our error
+		// handling options at this point are very limited, but we need to
+		// do this after our batch has committed.
+		rightRng, err := NewReplica(&split.RightDesc, r.store, 0)
 		if err != nil {
 			panic(err)
 		}
 
-		// Copy the timestamp cache into the new range.
+		// Copy the timestamp cache into the RHS range.
 		r.mu.Lock()
-		newRng.mu.Lock()
-		newRng.mu.state.Stats = rightMS
-		r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
-		newRng.mu.Unlock()
+		rightRng.mu.Lock()
+		rightRng.mu.state.Stats = rightMS
+		r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
+		rightRng.mu.Unlock()
 		r.mu.Unlock()
 		log.Trace(ctx, "copied timestamp cache")
 
-		// Add the new split replica to the store. This step atomically
-		// updates the EndKey of the updated replica and also adds the
-		// new replica to the store's replica map.
-		if err := r.store.SplitRange(r, newRng); err != nil {
+		// Add the RHS replica to the store. This step atomically updates
+		// the EndKey of the LHS replica and also adds the RHS replica
+		// to the store's replica map.
+		if err := r.store.SplitRange(r, rightRng); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("%s: failed to update Store after split: %s", r, err)
 		}
@@ -2556,15 +2560,15 @@ func (r *Replica) splitTrigger(
 		// Update store stats with difference in stats before and after split.
 		r.store.metrics.addMVCCStats(deltaMS)
 
-		// If the range was not properly replicated before the split, the replicate
-		// queue may not have picked it up (due to the need for a split). Enqueue
-		// both new halves to speed up a potentially necessary replication. See
-		// #7022 and #7800.
+		// If the range was not properly replicated before the split, the
+		// replicate queue may not have picked it up (due to the need for
+		// a split). Enqueue both left and right halves to speed up a
+		// potentially necessary replication. See #7022 and #7800.
 		now := r.store.Clock().Now()
 		r.store.replicateQueue.MaybeAdd(r, now)
-		r.store.replicateQueue.MaybeAdd(newRng, now)
+		r.store.replicateQueue.MaybeAdd(rightRng, now)
 
-		// To avoid leaving the new range unavailable as it waits to elect
+		// To avoid leaving the RHS range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
 		// election as soon as the split is processed.
 		//
@@ -2582,7 +2586,7 @@ func (r *Replica) splitTrigger(
 		// Note that in multi-node scenarios the async campaign is safe
 		// because it has exactly the same behavior as an incoming message
 		// from another node; the problem here is only with merges.
-		if len(split.NewDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
+		if len(split.RightDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
 			// Schedule the campaign a short time in the future. As
 			// followers process the split, they destroy and recreate their
 			// raft groups, which can cause messages to be dropped. In
@@ -2594,14 +2598,14 @@ func (r *Replica) splitTrigger(
 			// flaky without a bit of a delay.
 			if err := r.store.stopper.RunAsyncTask(func() {
 				time.Sleep(10 * time.Millisecond)
-				// Make sure that newRng hasn't been removed.
-				replica, err := r.store.GetReplica(newRng.RangeID)
+				// Make sure that rightRng hasn't been removed.
+				replica, err := r.store.GetReplica(rightRng.RangeID)
 				if err != nil {
 					if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-						log.Infof("%s: new replica %d removed before campaigning",
+						log.Infof("%s: RHS replica %d removed before campaigning",
 							r, r.mu.replicaID)
 					} else {
-						log.Infof("%s: new replica %d unable to campaign: %s",
+						log.Infof("%s: RHS replica %d unable to campaign: %s",
 							r, r.mu.replicaID, err)
 					}
 					return
@@ -2625,14 +2629,16 @@ func (r *Replica) splitTrigger(
 	return nil
 }
 
-// AdminMerge extends this range to subsume the range that comes next in
-// the key space. The merge is performed inside of a distributed
-// transaction which writes the updated range descriptor for the subsuming range
-// and deletes the range descriptor for the subsumed one. It also updates the
-// range addressing metadata. The handover of responsibility for
-// the reassigned key range is carried out seamlessly through a merge trigger
-// carried out as part of the commit of that transaction.
-// A merge requires that the two ranges are collocated on the same set of replicas.
+// AdminMerge extends this range to subsume the range that comes next
+// in the key space. The merge is performed inside of a distributed
+// transaction which writes the left hand side range descriptor (the
+// subsuming range) and deletes the range descriptor for the right
+// hand side range (the subsumed range). It also updates the range
+// addressing metadata. The handover of responsibility for the
+// reassigned key range is carried out seamlessly through a merge
+// trigger carried out as part of the commit of that transaction.  A
+// merge requires that the two ranges are collocated on the same set
+// of replicas.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
@@ -2648,12 +2654,13 @@ func (r *Replica) AdminMerge(
 
 	updatedLeftDesc := *origLeftDesc
 
-	// Lookup subsumed (right) range. This really belongs inside the
-	// transaction for consistency, but it is important (for transaction
-	// record placement) that the first action inside the transaction is
-	// the conditional put to change the left descriptor's end key. We
-	// look up the descriptor here only to get the new end key and then
-	// repeat the lookup inside the transaction.
+	// Lookup right hand side range (subsumed). This really belongs
+	// inside the transaction for consistency, but it is important (for
+	// transaction record placement) that the first action inside the
+	// transaction is the conditional put to change the left hand side's
+	// descriptor end key. We look up the descriptor here only to get
+	// the new end key and then repeat the lookup inside the
+	// transaction.
 	{
 		rightRng := r.store.LookupReplica(origLeftDesc.EndKey, nil)
 		if rightRng == nil {
@@ -2681,7 +2688,7 @@ func (r *Replica) AdminMerge(
 			}
 		}
 
-		// Do a consistent read of the second range descriptor.
+		// Do a consistent read of the right hand side's range descriptor.
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 		var rightDesc roachpb.RangeDescriptor
 		if err := txn.GetProto(rightDescKey, &rightDesc); err != nil {
@@ -2716,8 +2723,8 @@ func (r *Replica) AdminMerge(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					UpdatedDesc:  updatedLeftDesc,
-					SubsumedDesc: rightDesc,
+					LeftDesc:  updatedLeftDesc,
+					RightDesc: rightDesc,
 				},
 			},
 		})
@@ -2736,56 +2743,56 @@ func (r *Replica) mergeTrigger(
 	ctx context.Context, batch engine.Batch, ms *enginepb.MVCCStats, merge *roachpb.MergeTrigger, ts hlc.Timestamp,
 ) error {
 	desc := r.Desc()
-	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
-		return errors.Errorf("range and updated range start keys do not match: %s != %s",
-			desc.StartKey, merge.UpdatedDesc.StartKey)
+	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
+		return errors.Errorf("LHS range start keys do not match: %s != %s",
+			desc.StartKey, merge.LeftDesc.StartKey)
 	}
 
-	if !desc.EndKey.Less(merge.UpdatedDesc.EndKey) {
-		return errors.Errorf("range end key is not less than the post merge end key: %s >= %s",
-			desc.EndKey, merge.UpdatedDesc.EndKey)
+	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
+		return errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
+			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
-	subsumedRangeID := merge.SubsumedDesc.RangeID
-	if subsumedRangeID <= 0 {
-		return errors.Errorf("subsumed range ID must be provided: %d", subsumedRangeID)
+	rightRangeID := merge.RightDesc.RangeID
+	if rightRangeID <= 0 {
+		return errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
 	}
 
 	// Compute stats for premerged range, including current transaction.
 	var mergedMS = r.GetMVCCStats()
 	mergedMS.Add(*ms)
 
-	// Add in stats for right half of merge, excluding system-local stats, which
-	// will need to be recomputed.
+	// Add in stats for right hand side of merge, excluding system-local
+	// stats, which will need to be recomputed.
 	var rightMS enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(ctx, batch, subsumedRangeID, &rightMS); err != nil {
+	if err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID, &rightMS); err != nil {
 		return err
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
 
-	// Copy the subsumed range's abort cache to the subsuming one.
-	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, subsumedRangeID)
+	// Copy the RHS range's abort cache to the new LHS one.
+	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID)
 	if err != nil {
 		return errors.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 
-	// Remove the subsumed range's metadata. Note that we don't need to
+	// Remove the RHS range's metadata. Note that we don't need to
 	// keep track of stats here, because we already set the right range's
 	// system-local stats contribution to 0.
-	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(subsumedRangeID)
+	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
 	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, hlc.ZeroTimestamp, nil, false); err != nil {
 		return errors.Errorf("cannot remove range metadata %s", err)
 	}
 
-	// Add in the stats for the subsumed range's range keys.
+	// Add in the stats for the RHS range's range keys.
 	iter := batch.NewIterator(false)
 	defer iter.Close()
-	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.StartKey))
-	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.EndKey))
+	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.StartKey))
+	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.EndKey))
 	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
-		return errors.Errorf("unable to compute subsumed range's local stats: %s", err)
+		return errors.Errorf("unable to compute RHS range's local stats: %s", err)
 	}
 	mergedMS.Add(msRange)
 
@@ -2794,17 +2801,17 @@ func (r *Replica) mergeTrigger(
 		return errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	// Clear the timestamp cache. In the case that this replica and the
-	// subsumed replica each held their respective range leases, we
-	// could merge the timestamp caches for efficiency. But it's unlikely
-	// and not worth the extra logic and potential for error.
+	// Clear the timestamp cache. In case both the LHS and RHS replicas
+	// held their respective range leases, we could merge the timestamp
+	// caches for efficiency. But it's unlikely and not worth the extra
+	// logic and potential for error.
 	r.mu.Lock()
 	r.mu.state.Stats = mergedMS
 	r.mu.tsCache.Clear(r.store.Clock())
 	r.mu.Unlock()
 
 	batch.Defer(func() {
-		if err := r.store.MergeRange(r, merge.UpdatedDesc.EndKey, subsumedRangeID); err != nil {
+		if err := r.store.MergeRange(r, merge.LeftDesc.EndKey, rightRangeID); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("%s: failed to update store after merging range: %s", r, err)
 		}
@@ -2852,10 +2859,10 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 			// blocks waiting for the lease acquisition to finish but it can't finish
 			// because we're not processing raft messages due to holding
 			// processRaftMu (and running on the processRaft goroutine).
-			_ = r.store.Stopper().RunAsyncTask(func() {
+			if err := r.store.Stopper().RunAsyncTask(func() {
 				// Create a new context because this is an asynchronous task and we
 				// don't want to share the trace.
-				ctx := r.context(context.Background())
+				ctx := context.Background()
 				if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
 					r.mu.Lock()
 					defer r.mu.Unlock()
@@ -2863,7 +2870,9 @@ func (r *Replica) changeReplicasTrigger(ctx context.Context, batch engine.Batch,
 				} else {
 					log.Infof("unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
 				}
-			})
+			}); err != nil {
+				log.Errorf("unable to gossip first range: %v", err)
+			}
 		})
 	}
 
@@ -3056,8 +3065,8 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	log.Trace(ctx, "starting txn")
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+		log.Trace(ctx, "attempting txn")
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
 		// Remove when that has been solved. The failure mode is likely based on
@@ -3068,7 +3077,7 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof("%s: change replicas of %d: read existing descriptor %+v", r, rangeID, oldDesc)
+		log.Infoc(ctx, "%s: change replicas of %d: read existing descriptor %+v", r, rangeID, oldDesc)
 
 		{
 			b := txn.NewBatch()
@@ -3111,6 +3120,7 @@ func (r *Replica) ChangeReplicas(
 				},
 			})
 			if err := txn.Run(b); err != nil {
+				log.Trace(ctx, err.Error())
 				return err
 			}
 		}
@@ -3123,6 +3133,7 @@ func (r *Replica) ChangeReplicas(
 		}
 		return nil
 	}); err != nil {
+		log.Trace(ctx, err.Error())
 		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 	}
 	log.Trace(ctx, "txn complete")

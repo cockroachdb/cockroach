@@ -518,7 +518,8 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		},
 	}
 
-	// Setup the stores so that store 3 is the worst candidate.
+	// Setup the stores so that store 3 is the worst candidate and store 2 is
+	// the 2nd worst.
 	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
@@ -528,7 +529,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		{
 			StoreID:  2,
 			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 80, RangeCount: 10},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 12},
 		},
 		{
 			StoreID:  3,
@@ -544,11 +545,21 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	targetRepl, err := a.RemoveTarget(replicas)
+	targetRepl, err := a.RemoveTarget(replicas, stores[0].StoreID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a, e := targetRepl, replicas[2]; a != e {
+		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
+	}
+
+	// Now perform the same test, but pass in the store ID of store 3 so it's
+	// excluded.
+	targetRepl, err = a.RemoveTarget(replicas, stores[2].StoreID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := targetRepl, replicas[1]; a != e {
 		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
 	}
 }

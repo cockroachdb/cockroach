@@ -105,6 +105,12 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 			log.Infoc(ctx, "on %s: %s", method, pushErr)
 		}
 
+		if _, isExpected := pushErr.GetDetail().(*roachpb.TransactionPushError); !isExpected {
+			// If an unexpected error occurred, make sure it bubbles up to the
+			// client. Examples are timeouts and logic errors.
+			return pushErr
+		}
+
 		// For write/write conflicts within a transaction, propagate the
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
@@ -262,7 +268,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 		return
 	}
 	now := r.store.Clock().Now()
-	ctx := r.context(context.TODO())
+	ctx := context.TODO()
 	stopper := r.store.Stopper()
 
 	for _, item := range intents {
@@ -293,11 +299,11 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// poison.
 				if err := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
 					true /* wait */, true /* poison */); err != nil {
-					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)
+					log.Warningf("%s: failed to resolve intents: %s", r, err)
 					return
 				}
 				if pushErr != nil {
-					log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pushErr)
+					log.Warningf("%s: failed to push during intent resolution: %s", r, pushErr)
 					return
 				}
 			}); err != nil {
@@ -319,7 +325,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// not make it back to the client.
 				if err := ir.resolveIntents(ctxWithTimeout, r, item.intents,
 					true /* wait */, false /* !poison */); err != nil {
-					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)
+					log.Warningf("%s: failed to resolve intents: %s", r, err)
 					return
 				}
 
@@ -331,8 +337,8 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				txn := item.intents[0].Txn
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{
-						Key:    r.Desc().StartKey.AsRawKey(),
-						EndKey: r.Desc().EndKey.AsRawKey(),
+						Key:    txn.Key,
+						EndKey: roachpb.Key(txn.Key).Next(),
 					},
 				}
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{

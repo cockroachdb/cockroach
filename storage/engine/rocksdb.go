@@ -95,6 +95,10 @@ func (s SSTableInfos) Less(i, j int) bool {
 		return true
 	case s[i].Level > s[j].Level:
 		return false
+	case s[i].Size > s[j].Size:
+		return true
+	case s[i].Size < s[j].Size:
+		return false
 	default:
 		return s[i].Start.Less(s[j].Start)
 	}
@@ -127,31 +131,75 @@ func (s SSTableInfos) String() string {
 		}
 	}
 
+	type levelInfo struct {
+		size  int64
+		count int
+	}
+
+	var levels []*levelInfo
+	for _, t := range s {
+		for i := len(levels); i <= t.Level; i++ {
+			levels = append(levels, &levelInfo{})
+		}
+		info := levels[t.Level]
+		info.size += t.Size
+		info.count++
+	}
+
+	var maxSize int
+	var maxLevelCount int
+	for _, info := range levels {
+		size := len(humanize(info.size))
+		if maxSize < size {
+			maxSize = size
+		}
+		count := 1 + int(math.Log10(float64(info.count)))
+		if maxLevelCount < count {
+			maxLevelCount = count
+		}
+	}
+	levelFormat := fmt.Sprintf("%%d [ %%%ds %%%dd ]:", maxSize, maxLevelCount)
+
 	level := -1
 	var buf bytes.Buffer
+	var lastSize string
+	var lastSizeCount int
+
+	flushLastSize := func() {
+		if lastSizeCount > 0 {
+			fmt.Fprintf(&buf, " %s", lastSize)
+			if lastSizeCount > 1 {
+				fmt.Fprintf(&buf, "[%d]", lastSizeCount)
+			}
+			lastSizeCount = 0
+		}
+	}
 
 	maybeFlush := func(newLevel, i int) {
 		if level == newLevel {
 			return
 		}
+		flushLastSize()
 		if buf.Len() > 0 {
 			buf.WriteString("\n")
 		}
 		level = newLevel
 		if level >= 0 {
-			var sum int64
-			for j := i; j < len(s); j++ {
-				if s[j].Level == level {
-					sum += s[j].Size
-				}
-			}
-			fmt.Fprintf(&buf, "%d [%5s]:", level, humanize(sum))
+			info := levels[level]
+			fmt.Fprintf(&buf, levelFormat, level, humanize(info.size), info.count)
 		}
 	}
 
 	for i, t := range s {
 		maybeFlush(t.Level, i)
-		fmt.Fprintf(&buf, " %s", humanize(t.Size))
+		size := humanize(t.Size)
+		if size == lastSize {
+			lastSizeCount++
+		} else {
+			flushLastSize()
+			lastSize = size
+			lastSizeCount = 1
+		}
 	}
 
 	maybeFlush(-1, 0)
@@ -709,7 +757,7 @@ func (r *distinctBatch) close() {
 // rocksDBBatchIterator wraps rocksDBIterator and allows reuse of an iterator
 // for the lifetime of a batch.
 type rocksDBBatchIterator struct {
-	rocksDBIterator
+	iter  rocksDBIterator
 	batch *rocksDBBatch
 }
 
@@ -724,32 +772,69 @@ func (r *rocksDBBatchIterator) Close() {
 
 func (r *rocksDBBatchIterator) Seek(key MVCCKey) {
 	r.batch.flushMutations()
-	r.rocksDBIterator.Seek(key)
+	r.iter.Seek(key)
 }
 
 func (r *rocksDBBatchIterator) SeekReverse(key MVCCKey) {
 	r.batch.flushMutations()
-	r.rocksDBIterator.SeekReverse(key)
+	r.iter.SeekReverse(key)
+}
+
+func (r *rocksDBBatchIterator) Valid() bool {
+	return r.iter.Valid()
 }
 
 func (r *rocksDBBatchIterator) Next() {
 	r.batch.flushMutations()
-	r.rocksDBIterator.Next()
+	r.iter.Next()
 }
 
 func (r *rocksDBBatchIterator) Prev() {
 	r.batch.flushMutations()
-	r.rocksDBIterator.Prev()
+	r.iter.Prev()
 }
 
 func (r *rocksDBBatchIterator) NextKey() {
 	r.batch.flushMutations()
-	r.rocksDBIterator.NextKey()
+	r.iter.NextKey()
 }
 
 func (r *rocksDBBatchIterator) PrevKey() {
 	r.batch.flushMutations()
-	r.rocksDBIterator.PrevKey()
+	r.iter.PrevKey()
+}
+
+func (r *rocksDBBatchIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+	r.batch.flushMutations()
+	return r.iter.ComputeStats(start, end, nowNanos)
+}
+
+func (r *rocksDBBatchIterator) Key() MVCCKey {
+	return r.iter.Key()
+}
+
+func (r *rocksDBBatchIterator) Value() []byte {
+	return r.iter.Value()
+}
+
+func (r *rocksDBBatchIterator) ValueProto(msg proto.Message) error {
+	return r.iter.ValueProto(msg)
+}
+
+func (r *rocksDBBatchIterator) unsafeKey() MVCCKey {
+	return r.iter.unsafeKey()
+}
+
+func (r *rocksDBBatchIterator) unsafeValue() []byte {
+	return r.iter.unsafeValue()
+}
+
+func (r *rocksDBBatchIterator) Error() error {
+	return r.iter.Error()
+}
+
+func (r *rocksDBBatchIterator) Less(key MVCCKey) bool {
+	return r.iter.Less(key)
 }
 
 type rocksDBBatch struct {
@@ -776,10 +861,10 @@ func newRocksDBBatch(parent *RocksDB) *rocksDBBatch {
 
 func (r *rocksDBBatch) Close() {
 	r.distinct.close()
-	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
+	if i := &r.prefixIter.iter; i.iter != nil {
 		i.destroy()
 	}
-	if i := &r.normalIter.rocksDBIterator; i.iter != nil {
+	if i := &r.normalIter.iter; i.iter != nil {
 		i.destroy()
 	}
 	if r.batch != nil {
@@ -866,8 +951,8 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	if prefix {
 		iter = &r.prefixIter
 	}
-	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.batch, prefix, r)
+	if iter.iter.iter == nil {
+		iter.iter.init(r.batch, prefix, r)
 	}
 	if iter.batch != nil {
 		panic("iterator already in use")
@@ -939,8 +1024,8 @@ func (r *rocksDBBatch) flushMutations() {
 		panic(err)
 	}
 	// Force a seek of the underlying iterator on the next Seek/ReverseSeek.
-	r.prefixIter.reseek = true
-	r.normalIter.reseek = true
+	r.prefixIter.iter.reseek = true
+	r.normalIter.iter.reseek = true
 }
 
 type rocksDBIterator struct {

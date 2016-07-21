@@ -95,9 +95,9 @@ type gcQueue struct {
 }
 
 // newGCQueue returns a new instance of gcQueue.
-func newGCQueue(gossip *gossip.Gossip) *gcQueue {
+func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = makeBaseQueue("gc", gcq, gossip, queueConfig{
+	gcq.baseQueue = makeBaseQueue("gc", gcq, store, gossip, queueConfig{
 		maxSize:              gcQueueMaxSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: false,

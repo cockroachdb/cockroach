@@ -107,13 +107,14 @@ message StoreIdent {
 }
 
 // A SplitTrigger is run after a successful commit of an AdminSplit
-// command. It provides the updated range descriptor covering the
-// first half of the split and the new range descriptor covering the
-// second half. This information allows the final bookkeeping for
-// the split to be completed and the new range put into operation.
+// command. It provides the updated left hand side of the split's
+// range descriptor (left_desc) and the new range descriptor covering
+// the right hand side of the split (right_desc). This information
+// allows the final bookkeeping for the split to be completed and the
+// new range put into operation.
 message SplitTrigger {
-  optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
-  optional RangeDescriptor new_desc = 2 [(gogoproto.nullable) = false];
+  optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
+  optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
   // initial_leader_store_id designates the replica which should start
   // a raft election upon processing this split.
@@ -123,18 +124,15 @@ message SplitTrigger {
 }
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
-// command. It provides the updated range descriptor that now encompasses
-// what was originally both ranges and the soon to be invalid range
-// descriptor that used to cover the subsumed half of the merge. This
-// information allows the final bookkeeping for the merge to be completed
-// and put into operation.
+// command. It provides the updated left hand side of the split's
+// range descriptor (left_desc) that now encompasses what was
+// originally both ranges and the soon-to-be-invalid range descriptor
+// that used to cover the subsumed, right hand side of the merge
+// (right_desc). This information allows the final bookkeeping for the
+// merge to be completed and put into operation.
 message MergeTrigger {
-  // The updated range descriptor that now encompasses what was originally
-  // both ranges.
-  optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
-  // The soon to be invalid range descriptor that used to cover the subsumed
-  // half of the merge.
-  optional RangeDescriptor subsumed_desc = 2 [(gogoproto.nullable) = false];
+  optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
+  optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

@@ -689,12 +689,12 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 
 	maxTimeout := time.After(10 * time.Second)
 	succeeded := false
+	i := 0
 	for !succeeded {
 		select {
 		case <-maxTimeout:
 			t.Fatalf("Failed to achieve proper replication within 10 seconds")
 		case <-time.After(10 * time.Millisecond):
-			mtc.expireLeases()
 			rangeDesc := getRangeMetadata(rightKeyAddr, mtc, t)
 			if count := len(rangeDesc.Replicas); count < 3 {
 				t.Fatalf("Removed too many replicas; expected at least 3 replicas, found %d", count)
@@ -703,12 +703,26 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 				break
 			}
 
-			// Run replication scans on every store; only the store with the
-			// range lease will actually do anything. If we did not wait
-			// for the scan to complete here it could be interrupted by the
-			// next call to expireLeases.
-			for _, store := range mtc.stores {
-				store.ForceReplicationScanAndProcess()
+			// Cycle the lease to the next replica (on the next store) if that
+			// replica still exists. This avoids the condition in which we try
+			// to continuously remove the replica on a store when
+			// down-replicating while it also still holds the lease.
+			for {
+				i++
+				if i >= len(mtc.stores) {
+					i = 0
+				}
+				rep := mtc.stores[i].LookupReplica(rightKeyAddr, nil)
+				if rep != nil {
+					mtc.expireLeases()
+					// Force the read command request a new lease.
+					getArgs := getArgs(rightKey)
+					if _, err := client.SendWrapped(mtc.distSenders[i], nil, &getArgs); err != nil {
+						t.Fatal(err)
+					}
+					mtc.stores[i].ForceReplicationScanAndProcess()
+					break
+				}
 			}
 		}
 	}
@@ -1279,6 +1293,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 // rebalancing opportunities and add a new replica on another store.
 func TestStoreRangeRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#7940")
 
 	// Start multiTestContext with replica rebalancing enabled.
 	mtc := &multiTestContext{

@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/pkg/errors"
 )
@@ -93,7 +92,7 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 	ctx := makeTestContext()
 	ctx.TestingKnobs = params.Knobs
 	if params.JoinAddr != "" {
-		ctx.JoinUsing = params.JoinAddr
+		ctx.JoinList = []string{params.JoinAddr}
 	}
 	ctx.Insecure = params.Insecure
 	ctx.SocketFile = params.SocketFile
@@ -118,7 +117,7 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 	if params.SSLCertKey != "" {
 		ctx.SSLCertKey = params.SSLCertKey
 	}
-	ctx.JoinUsing = params.JoinAddr
+	ctx.JoinList = []string{params.JoinAddr}
 	return ctx
 }
 
@@ -307,16 +306,6 @@ func (ts *TestServer) ServingPort() (string, error) {
 	return p, err
 }
 
-// SetRangeRetryOptions sets the retry options for stores in TestServer.
-func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
-	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
-		s.SetRangeRetryOptions(ro)
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-}
-
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.node.writeSummaries()
@@ -405,7 +394,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 type testServerFactoryImpl struct{}
 
-// TestServerFactory can be passed to testingshim.InitTestServerFactory
+// TestServerFactory can be passed to serverutils.InitTestServerFactory
 var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.

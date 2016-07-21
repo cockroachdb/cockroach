@@ -57,16 +57,17 @@ var testIdent = roachpb.StoreIdent{
 	StoreID:   1,
 }
 
-// setTestRetryOptions sets aggressive retries with a limit on number
-// of attempts so we don't get stuck behind indefinite backoff/retry
+// testRetryOptions returns retry options with aggressive retries and a limit
+// on number of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
-func setTestRetryOptions(s *Store) {
-	s.SetRangeRetryOptions(retry.Options{
+// Using this is generally considered bad taste and legacy.
+func testRetryOptions() retry.Options {
+	return retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     2 * time.Millisecond,
 		Multiplier:     2,
 		MaxRetries:     1,
-	})
+	}
 }
 
 // testSender is an implementation of the client.Sender interface
@@ -587,6 +588,71 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 }
 
+func TestProcessRangeDescriptorUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Clobber the existing range so we can test overlaps that aren't KeyMin or KeyMax.
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	rng := createRange(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
+	if err := store.AddReplicaTest(rng); err != nil {
+		t.Fatal(err)
+	}
+
+	newRangeID := roachpb.RangeID(3)
+	desc := &roachpb.RangeDescriptor{
+		RangeID: newRangeID,
+		Replicas: []roachpb.ReplicaDescriptor{{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		}},
+		NextReplicaID: 2,
+	}
+
+	r := &Replica{
+		RangeID:    desc.RangeID,
+		store:      store,
+		abortCache: NewAbortCache(desc.RangeID),
+		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {}),
+	}
+	if err := r.newReplicaInner(desc, store.Clock(), 0); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedResult := "attempted to process uninitialized range.*"
+	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
+		t.Errorf("expected processRangeDescriptorUpdate with uninitialized replica to fail, got %v", err)
+	}
+
+	// Initialize the range with start and end keys.
+	r.mu.Lock()
+	r.mu.state.Desc.StartKey = roachpb.RKey("b")
+	r.mu.state.Desc.EndKey = roachpb.RKey("d")
+	r.mu.Unlock()
+
+	if err := store.processRangeDescriptorUpdateLocked(r); err != nil {
+		t.Errorf("expected processRangeDescriptorUpdate on a replica that's not in the uninit map to silently succeed, got %v", err)
+	}
+
+	store.mu.Lock()
+	store.mu.uninitReplicas[newRangeID] = r
+	store.mu.Unlock()
+
+	expectedResult = rangeAlreadyExists{r}.Error()
+	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
+		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
+	}
+}
+
 // TestStoreSend verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreSend(t *testing.T) {
@@ -1073,8 +1139,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 // Verifies no starvation for both serializable and snapshot txns.
 func TestStoreLongTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
-	setTestRetryOptions(store)
+	sCtx := TestStoreContext()
+	sCtx.RangeRetryOptions = testRetryOptions()
+	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
 
 	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
@@ -1237,9 +1304,10 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // push, verify a write intent error is returned with !Resolvable.
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	sCtx := TestStoreContext()
+	sCtx.RangeRetryOptions = testRetryOptions()
+	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
-	setTestRetryOptions(store)
 
 	testCases := []struct {
 		resolvable bool

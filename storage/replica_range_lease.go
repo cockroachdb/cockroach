@@ -129,8 +129,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// checks from normal request machinery, (e.g. the command queue).
 		// Note that the command itself isn't traced, but usually the caller
 		// waiting for the result has an active Trace.
-		ch, _, err := replica.proposeRaftCommand(
-			replica.context(context.Background()), ba)
+		ch, _, err := replica.proposeRaftCommand(context.Background(), ba)
 		if err != nil {
 			execPErr = roachpb.NewError(err)
 		} else {
@@ -273,7 +272,7 @@ func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error
 		defer r.mu.Unlock()
 		lease := r.mu.state.Lease
 		if !lease.OwnedBy(r.store.StoreID()) {
-			return nil, nil, r.newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
+			return nil, nil, r.newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc)
 		}
 		nextLease := r.mu.pendingLeaseRequest.RequestPending()
 		if nextLease != nil && nextLease.Replica != nextLeader {

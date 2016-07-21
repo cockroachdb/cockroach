@@ -801,7 +801,9 @@ func (sc *StoreContext) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
 func (sc *StoreContext) setDefaults() {
-	sc.RangeRetryOptions = base.DefaultRetryOptions()
+	if (sc.RangeRetryOptions == retry.Options{}) {
+		sc.RangeRetryOptions = base.DefaultRetryOptions()
+	}
 
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = base.DefaultRaftTickInterval
@@ -859,17 +861,17 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	if s.ctx.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
-		s.gcQueue = newGCQueue(s.ctx.Gossip)
-		s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
-		s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-		s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
-		s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
-		s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
+		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
+		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
+		s.verifyQueue = newVerifyQueue(s, s.ctx.Gossip, s.ReplicaCount)
+		s.replicateQueue = newReplicateQueue(s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.ctx.Gossip)
+		s.raftLogQueue = newRaftLogQueue(s, s.db, s.ctx.Gossip)
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
 		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
-		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
+		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
 
@@ -923,9 +925,7 @@ func (s *Store) context(ctx context.Context) context.Context {
 	if ctx == nil {
 		panic("ctx cannot be nil")
 	}
-	return log.Add(ctx,
-		log.NodeID, s.Ident.NodeID,
-		log.StoreID, s.Ident.StoreID)
+	return ctx // TODO(tschottdorf): see #1779
 }
 
 // IsStarted returns true if the Store has been started.
@@ -1398,8 +1398,8 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	defer s.mu.Unlock()
 
 	var rng *Replica
-	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(start.Next()), func(i btree.Item) bool {
-		rng = i.(*Replica)
+	s.visitReplicasLocked(start, roachpb.RKeyMax, func(repl *Replica) bool {
+		rng = repl
 		return false
 	})
 	if rng == nil || !rng.Desc().ContainsKeyRange(start, end) {
@@ -1412,8 +1412,8 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 // descriptor is present on the Store.
 func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bool {
 	var rng *Replica
-	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(rngDesc.StartKey.Next()), func(i btree.Item) bool {
-		rng = i.(*Replica)
+	s.visitReplicasLocked(rngDesc.StartKey, roachpb.RKeyMax, func(repl *Replica) bool {
+		rng = repl
 		return false
 	})
 
@@ -1422,6 +1422,32 @@ func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bo
 	}
 
 	return false
+}
+
+// visitReplicasLocked will call iterator for every replica on the store which
+// contains any keys in the span between startKey and endKey. Iteration will be
+// in ascending order. Iteration can be stopped early by returning false from
+// iterator.
+func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func(r *Replica) bool) {
+	// Iterate over replicasByKey to visit all ranges containing keys in the
+	// specified range. We use `startKey.Next()`` because btree's `Ascend`
+	// methods are inclusive of the start bound and exclusive of the end bound,
+	// but ranges are stored in the BTree by EndKey; in cockroach, end keys have
+	// the opposite behavior (a range's EndKey is contained by the subsequent
+	// range). We want ComputeStatsForKeySpan to match cockroach's behavior;
+	// using `startKey.Next()`, will ignore a range which has EndKey exactly
+	// equal to the supplied startKey.
+	// Iteration ends when all ranges are exhausted, or the next range contains
+	// no keys in the supplied span.
+	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(startKey.Next()),
+		func(item btree.Item) bool {
+			repl := item.(*Replica)
+			if !repl.Desc().StartKey.Less(endKey) {
+				// This properly checks if this range contains any keys in the supplied span.
+				return false
+			}
+			return iterator(repl)
+		})
 }
 
 // RaftStatus returns the current raft status of the local replica of
@@ -1550,8 +1576,9 @@ func (s *Store) IsDrainingLeases() bool {
 }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
-// keys and the supplied roachpb.Replicas slice. It allocates new
-// replica IDs to fill out the supplied replicas.
+// keys and the supplied roachpb.Replicas slice. It allocates a new
+// range ID and returns a RangeDescriptor whose Replicas are a copy
+// of the supplied replicas slice, with appropriate ReplicaIDs assigned.
 func (s *Store) NewRangeDescriptor(
 	start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
@@ -1811,16 +1838,17 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	// Add the range and its current stats into metrics.
-	s.metrics.replicaCount.Inc(1)
-
-	if s.mu.replicasByKey.Has(rng) {
+	if s.hasOverlappingReplicaLocked(rng.Desc()) {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
 			(exRngItem.(*Replica)).getKey())
 	}
+
+	// Add the range and its current stats into metrics.
+	s.metrics.replicaCount.Inc(1)
+
 	return nil
 }
 
@@ -2607,14 +2635,23 @@ func (s *Store) ComputeMetrics() error {
 	return nil
 }
 
-// SetRangeRetryOptions sets the retry options used for this store.
-// For unittests only.
-// TODO(bdarnell): have the affected tests pass retry options in through
-// the StoreContext.
-func (s *Store) SetRangeRetryOptions(ro retry.Options) {
+// ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
+// this store which contain any keys in the supplied range.
+func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.MVCCStats, int) {
+	var output enginepb.MVCCStats
+	var count int
+
 	s.mu.Lock()
-	s.ctx.RangeRetryOptions = ro
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.visitReplicasLocked(startKey, endKey, func(repl *Replica) bool {
+		repl.mu.Lock()
+		output.Add(repl.mu.state.Stats)
+		repl.mu.Unlock()
+		count++
+		return true
+	})
+
+	return output, count
 }
 
 // FrozenStatus returns all of the Store's Replicas which are frozen (if the
