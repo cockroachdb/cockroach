@@ -5,7 +5,7 @@
 
 import * as _ from "lodash";
 import { Dispatch } from "redux";
-import { Action, PayloadAction } from "../interfaces/action";
+import { Action, PayloadAction, WithID } from "../interfaces/action";
 import { assert } from "chai";
 
 // CachedDataReducerState is used to track the state of the cached data.
@@ -38,12 +38,12 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
   ERROR: string; // request encountered an error
   INVALIDATE: string; // invalidate data
 
-/**
- *  apiEndpoint - The API endpoint the "refresh" function will use to refresh data.
- *  actionNamespace - A unique namespace for the redux actions.
- *  invalidationPeriodMillis - The number of milliseconds after data is received after which it will be invalidated.
- */
-  constructor(private apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, private invalidationPeriodMillis?: number) {
+  /**
+   *  apiEndpoint - The API endpoint the "refresh" function will use to refresh data.
+   *  actionNamespace - A unique namespace for the redux actions.
+   *  invalidationPeriodMillis - The number of milliseconds after data is received after which it will be invalidated.
+   */
+  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, protected invalidationPeriodMillis?: number) {
     // check actionNamespace
     assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
     CachedDataReducer.namespaces[actionNamespace] = true;
@@ -92,22 +92,22 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
   }
 
   // requestData is the REQUEST action creator.
-  requestData = (): Action => {
+  public requestData = (req: TRequest): Action => {
     return {
       type: this.REQUEST,
     };
   }
 
   // receiveData is the RECEIVE action creator.
-  receiveData = (cluster: TResponseMessage): PayloadAction<TResponseMessage> => {
+  public receiveData = (data: TResponseMessage, req: TRequest): PayloadAction<TResponseMessage|WithID<TResponseMessage>> => {
     return {
       type: this.RECEIVE,
-      payload: cluster,
+      payload: data,
     };
   }
 
   // errorData is the ERROR action creator.
-  errorData = (error: Error): PayloadAction<Error> => {
+  public errorData = (error: Error, req: TRequest): PayloadAction<Error|WithID<Error>> => {
     return {
       type: this.ERROR,
       payload: error,
@@ -115,7 +115,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
   }
 
   // invalidateData is the INVALIDATE action creator.
-  invalidateData = (): Action => {
+  public invalidateData = (req: TRequest): Action => {
     return {
       type: this.INVALIDATE,
     };
@@ -137,18 +137,18 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       }
 
       // Note that after dispatching requestData, state.inFlight is true
-      dispatch(this.requestData());
+      dispatch(this.requestData(req));
       // Fetch data from the servers. The promise is only returned for use in tests.
       return this.apiEndpoint(req).then((data) => {
         // Dispatch the results to the store.
-        dispatch(this.receiveData(data));
+        dispatch(this.receiveData(data, req));
       }).catch((error: Error) => {
         // If an error occurred during the fetch, dispatch the received error to the store.
-        dispatch(this.errorData(error));
+        dispatch(this.errorData(error, req));
       }).then(() => {
         // If an invalidation period is specified, invalidate the data after that time has elapsed.
         if (_.isNumber(this.invalidationPeriodMillis)) {
-          setTimeout(() => dispatch(this.invalidateData()), this.invalidationPeriodMillis);
+          setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriodMillis);
         }
       });
     };
