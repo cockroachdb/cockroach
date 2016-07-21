@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -86,7 +85,9 @@ func TestManualReplication(t *testing.T) {
 	}
 
 	// Replicate the table's range to all the nodes.
-	tableRangeDesc, err = tc.AddReplicas(tableRangeDesc.StartKey, tc.Target(1), tc.Target(2))
+	tableRangeDesc, err = tc.AddReplicas(
+		tableRangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +150,7 @@ func TestBasicManualReplication(t *testing.T) {
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 	defer tc.Stopper().Stop()
 
-	desc, err := tc.AddReplicas(roachpb.RKey(keys.MinKey), tc.Target(1), tc.Target(2))
+	desc, err := tc.AddReplicas(keys.MinKey, tc.Target(1), tc.Target(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +164,7 @@ func TestBasicManualReplication(t *testing.T) {
 
 	// TODO(peter): Removing the range leader (tc.Target(1)) causes the test to
 	// take ~13s vs ~1.5s for removing a non-leader. Track down that slowness.
-	desc, err = tc.RemoveReplicas(desc.StartKey, tc.Target(0))
+	desc, err = tc.RemoveReplicas(desc.StartKey.AsRawKey(), tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
 	}
