@@ -297,7 +297,9 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 		t.Fatal(err)
 	}
 	if err := f.WaitReady(5 * time.Minute); err != nil {
-		_ = f.Destroy(t)
+		if destroyErr := f.Destroy(t); destroyErr != nil {
+			t.Fatalf("could not destroy cluster after error %v: %v", err, destroyErr)
+		}
 		t.Fatalf("cluster not ready in time: %v", err)
 	}
 	checkRangeReplication(t, f, 20*time.Second)
