@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -39,13 +40,11 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`
-		CREATE DATABASE test;
-		CREATE TABLE test.t (a INT PRIMARY KEY, b INT);
-		INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30);
-	`); err != nil {
-		t.Fatal(err)
-	}
+	r := sqlutils.MakeSQLRunner(t, sqlDB)
+
+	r.Exec(`CREATE DATABASE test`)
+	r.Exec(`CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
+	r.Exec(`INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
