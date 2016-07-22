@@ -65,6 +65,14 @@ func DisableLogFileOutput() {
 	logging.stderrThreshold = NumSeverity
 }
 
+// SetExitFunc allows setting a function that will be called to exit the
+// process when a Fatal message is generated.
+func SetExitFunc(f func(int)) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	logging.exitFunc = f
+}
+
 // logDepth uses the PrintWith to format the output string and
 // formulate the context information into the machine-readable
 // dictionary for separate binary-log output.

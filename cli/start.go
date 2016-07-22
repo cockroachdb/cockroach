@@ -308,7 +308,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	}
 
 	// Make sure the path exists.
-	if err := os.MkdirAll(f.Value.String(), 0755); err != nil {
+	logDir := f.Value.String()
+	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
 	}
 
@@ -323,7 +324,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	// Default user for servers.
 	serverCtx.User = security.NodeUser
 
-	stopper := stop.NewStopper()
+	stopper := initBacktrace(logDir)
 	if err := serverCtx.InitStores(stopper); err != nil {
 		return fmt.Errorf("failed to initialize stores: %s", err)
 	}
