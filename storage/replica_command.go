@@ -308,14 +308,10 @@ func (r *Replica) DeleteRange(
 //    remScanResults is the number of remaining results for this batch (MaxInt64 for no
 // limit).
 //    scanMaxResults is the limit in this scan request (0 for no limit)
-func scanMaxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
+func scanMaxResultsValue(remScanResults int64) int64 {
 	if remScanResults == math.MaxInt64 {
 		// Unlimited batch.
-		return scanMaxResults
-	}
-	if scanMaxResults != 0 && scanMaxResults < remScanResults {
-		// Scan limit is less than remaining batch limit.
-		return scanMaxResults
+		return 0
 	}
 	// Remaining batch limit is less than scan limit.
 	return remScanResults
@@ -330,7 +326,7 @@ func (r *Replica) Scan(ctx context.Context, batch engine.ReadWriter, h roachpb.H
 		// We can't return any more results; skip the scan
 		return roachpb.ScanResponse{}, nil, nil
 	}
-	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
+	maxResults := scanMaxResultsValue(remScanResults)
 
 	rows, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxResults, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
@@ -346,7 +342,7 @@ func (r *Replica) ReverseScan(ctx context.Context, batch engine.ReadWriter, h ro
 		// We can't return any more results; skip the scan
 		return roachpb.ReverseScanResponse{}, nil, nil
 	}
-	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
+	maxResults := scanMaxResultsValue(remScanResults)
 
 	rows, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxResults,
 		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
