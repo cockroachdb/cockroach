@@ -946,6 +946,38 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 	},
+
+	// Format functions
+
+	"to_date": {
+		Builtin{
+			Types:		ArgTypes{TypeString, TypeString},
+			ReturnType: TypeDate,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				dateTxt := string(*args[0].(*DString))
+				return ParseDDate(dateTxt, ctx.GetLocation())
+			},
+		},
+	},
+
+	"to_timestamp": {
+		Builtin{
+			Types:		ArgTypes{TypeString, TypeString},
+			ReturnType: TypeTimestamp,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				s := string(*args[0].(*DString))
+				return ParseDTimestamp(s, ctx.GetLocation(), time.Nanosecond)
+			},
+		},
+		Builtin{
+			Types:		ArgTypes{TypeFloat},
+			ReturnType: TypeTimestamp,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				t := int64(*args[0].(*DFloat))
+				return MakeDTimestampTZ(time.Unix(t, 0), time.Nanosecond), nil
+			},
+		},
+	},
 }
 
 func init() {
