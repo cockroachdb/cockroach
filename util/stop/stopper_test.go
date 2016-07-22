@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -336,6 +338,16 @@ func TestStopperRunTaskPanic(t *testing.T) {
 		if recovered != ch {
 			t.Errorf("%d: unexpected recovered value: %+v", i, recovered)
 		}
+	}
+}
+
+func TestStopperWithCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	ctx := s.WithCancel(context.Background())
+	s.Stop()
+	if err := ctx.Err(); err != context.Canceled {
+		t.Fatal(err)
 	}
 }
 
