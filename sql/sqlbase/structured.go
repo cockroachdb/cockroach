@@ -287,6 +287,15 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
 func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
+	if desc.FormatVersion >= InterleavedFormatVersion {
+		return false
+	}
+	desc.maybeUpgradeToFamilyFormatVersion()
+	desc.FormatVersion = InterleavedFormatVersion
+	return true
+}
+
+func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	if desc.FormatVersion >= FamilyFormatVersion {
 		return false
 	}
