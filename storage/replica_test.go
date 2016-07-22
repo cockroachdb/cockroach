@@ -4709,14 +4709,6 @@ func TestReplicaLookup(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	mustAddr := func(k roachpb.Key) roachpb.RKey {
-		rk, err := keys.Addr(k)
-		if err != nil {
-			panic(err)
-		}
-		return rk
-	}
-
 	expected := []roachpb.RangeDescriptor{*tc.rng.Desc()}
 	testCases := []struct {
 		key      roachpb.RKey
@@ -4731,10 +4723,10 @@ func TestReplicaLookup(t *testing.T) {
 		{key: roachpb.RKeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		{key: mustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
-		{key: mustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
-		{key: mustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
-		{key: mustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
+		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
+		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
+		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
+		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
 	}
 
 	for _, c := range testCases {
