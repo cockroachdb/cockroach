@@ -179,7 +179,7 @@ message DeleteRangeResponse {
 message ScanRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, there is no limit on the number of retrieved entries. Must be >= 0.
-  optional int64 max_results = 2 [(gogoproto.nullable) = false];
+  optional int64 deprecated_max_results = 2 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -195,7 +195,7 @@ message ScanResponse {
 message ReverseScanRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, there is no limit on the number of retrieved entries. Must be >= 0.
-  optional int64 max_results = 2 [(gogoproto.nullable) = false];
+  optional int64 deprecated_max_results = 2 [(gogoproto.nullable) = false];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.

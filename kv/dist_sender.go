@@ -839,65 +839,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 		}
 
-		// If this request has a bound (such as MaxResults in ScanRequest) and
-		// we are going to query at least one more range, check whether enough
-		// rows have been retrieved.
-		if needAnother {
-			// Start with the assumption that all requests are saturated.
-			// Below, we look at each and decide whether that's true.
-			// Everything that is indeed saturated is "masked out" from the
-			// batch request; only if that's all requests does needAnother
-			// remain false.
-			needAnother = false
-			if br == nil {
-				// Clone ba.Requests. This is because we're multi-range, and
-				// some requests may be bounded, which could lead to them being
-				// masked out once they're saturated. We don't want to risk
-				// removing requests that way in the "master copy" since that
-				// could lead to omitting requests in certain retry scenarios.
-				ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests...)
-			}
-			for i, union := range ba.Requests {
-				args := union.GetInner()
-				if _, ok := args.(*roachpb.NoopRequest); ok {
-					// NoopRequests are skipped.
-					continue
-				}
-				boundedArg, ok := args.(roachpb.Bounded)
-				if !ok {
-					// Non-bounded request. We will have to continue querying
-					// until this request is satisfied. This request might
-					// have already been satisfied at this stage but we have
-					// to be pessimistic here.
-					needAnother = true
-					continue
-				}
-				prevBound := boundedArg.GetBound()
-				cReply, ok := curReply.Responses[i].GetInner().(roachpb.Countable)
-				if !ok || prevBound <= 0 {
-					// Request bounded, but without max results. Again, will
-					// need to query everything we can. The case in which the reply
-					// isn't countable occurs when the request wasn't active for
-					// that range (since it didn't apply to it), so the response
-					// is a NoopResponse.
-					needAnother = true
-					continue
-				}
-				nextBound := prevBound - cReply.Count()
-				if nextBound <= 0 {
-					// We've hit max results for this piece of the batch. Mask
-					// it out (we've copied the requests slice above, so this
-					// is kosher).
-					union := &ba.Requests[i] // avoid working on copy
-					union.MustSetInner(&noopRequest)
-					continue
-				}
-				// The request isn't saturated yet.
-				needAnother = true
-				boundedArg.SetBound(nextBound)
-			}
-		}
-
 		// If this was the last range accessed by this call, exit loop.
 		if !needAnother {
 			return br, nil, false
@@ -921,15 +862,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		}
 		if err != nil {
 			return nil, roachpb.NewError(err), false
-		}
-
-		// It's possible that the key update has created an empty interval,
-		// indicating that we're done. For example, a bounded scan could have
-		// been masked out as saturated, while an unbounded request that has
-		// completed could have been the reason for needing the next
-		// descriptor (needAnother=true); we now have rs.Key=KeyMax.
-		if !rs.Key.Less(rs.EndKey) {
-			return br, nil, false
 		}
 
 		log.Trace(ctx, "querying next range")
