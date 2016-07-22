@@ -344,33 +344,6 @@ func (ru *ResponseUnion) MustSetInner(reply Response) {
 	}
 }
 
-// Bounded is implemented by request types which have a bounded number of
-// result rows, such as Scan.
-type Bounded interface {
-	GetBound() int64
-	SetBound(bound int64)
-}
-
-// GetBound returns the MaxResults field in ScanRequest.
-func (sr *ScanRequest) GetBound() int64 {
-	return sr.MaxResults
-}
-
-// SetBound sets the MaxResults field in ScanRequest.
-func (sr *ScanRequest) SetBound(bound int64) {
-	sr.MaxResults = bound
-}
-
-// GetBound returns the MaxResults field in ReverseScanRequest.
-func (rsr *ReverseScanRequest) GetBound() int64 {
-	return rsr.MaxResults
-}
-
-// SetBound sets the MaxResults field in ReverseScanRequest.
-func (rsr *ReverseScanRequest) SetBound(bound int64) {
-	rsr.MaxResults = bound
-}
-
 // Countable is implemented by response types which have a number of
 // result rows, such as Scan.
 type Countable interface {
@@ -768,13 +741,12 @@ func NewDeleteRange(startKey, endKey Key, returnKeys bool) Request {
 
 // NewScan returns a Request initialized to scan from start to end keys
 // with max results.
-func NewScan(key, endKey Key, maxResults int64) Request {
+func NewScan(key, endKey Key) Request {
 	return &ScanRequest{
 		Span: Span{
 			Key:    key,
 			EndKey: endKey,
 		},
-		MaxResults: maxResults,
 	}
 }
 
@@ -803,13 +775,12 @@ func NewCheckConsistency(key, endKey Key, withDiff bool) Request {
 
 // NewReverseScan returns a Request initialized to reverse scan from end to
 // start keys with max results.
-func NewReverseScan(key, endKey Key, maxResults int64) Request {
+func NewReverseScan(key, endKey Key) Request {
 	return &ReverseScanRequest{
 		Span: Span{
 			Key:    key,
 			EndKey: endKey,
 		},
-		MaxResults: maxResults,
 	}
 }
 
