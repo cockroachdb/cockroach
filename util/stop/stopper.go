@@ -162,7 +162,11 @@ func NewStopper(options ...Option) *Stopper {
 	return s
 }
 
-func (s *Stopper) maybeHandlePanic() {
+// Recover is used internally be Stopper to provide a hook for recovery of
+// panics on goroutines started by the Stopper. It can also be invoked
+// explicitly (via "defer s.Recover()") on goroutines that are created outside
+// of Stopper.
+func (s *Stopper) Recover() {
 	if r := recover(); r != nil {
 		if s.onPanic != nil {
 			s.onPanic(r)
@@ -177,7 +181,7 @@ func (s *Stopper) maybeHandlePanic() {
 func (s *Stopper) RunWorker(f func()) {
 	s.stop.Add(1)
 	go func() {
-		defer s.maybeHandlePanic()
+		defer s.Recover()
 		defer s.stop.Done()
 		f()
 	}()
@@ -205,7 +209,7 @@ func (s *Stopper) RunTask(f func()) error {
 		return errUnavailable
 	}
 	// Call f.
-	defer s.maybeHandlePanic()
+	defer s.Recover()
 	defer s.runPostlude(key)
 	f()
 	return nil
@@ -221,7 +225,7 @@ func (s *Stopper) RunAsyncTask(f func()) error {
 	}
 	// Call f.
 	go func() {
-		defer s.maybeHandlePanic()
+		defer s.Recover()
 		defer s.runPostlude(key)
 		f()
 	}()
@@ -258,7 +262,7 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 		return errUnavailable
 	}
 	go func() {
-		defer s.maybeHandlePanic()
+		defer s.Recover()
 		defer s.runPostlude(key)
 		defer func() { <-sem }()
 		f()
@@ -328,7 +332,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped.
 func (s *Stopper) Stop() {
-	defer s.maybeHandlePanic()
+	defer s.Recover()
 	defer unregister(s)
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
@@ -388,7 +392,7 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 // Quiesce moves the stopper to state quiesceing and waits until all
 // tasks complete. This is used from Stop() and unittests.
 func (s *Stopper) Quiesce() {
-	defer s.maybeHandlePanic()
+	defer s.Recover()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, cancel := range s.cancels {

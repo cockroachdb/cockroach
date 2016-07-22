@@ -104,7 +104,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 }
 
 // ServeWith accepts connections on ln and serves them using serveConn.
-func (s *Server) ServeWith(l net.Listener, serveConn func(net.Conn)) error {
+func (s *Server) ServeWith(stopper *stop.Stopper, l net.Listener, serveConn func(net.Conn)) error {
 	// Inspired by net/http.(*Server).Serve
 	var tempDelay time.Duration // how long to sleep on accept failure
 	for {
@@ -127,6 +127,7 @@ func (s *Server) ServeWith(l net.Listener, serveConn func(net.Conn)) error {
 		}
 		tempDelay = 0
 		go func() {
+			defer stopper.Recover()
 			s.Server.ConnState(rw, http.StateNew) // before Serve can return
 			serveConn(rw)
 			s.Server.ConnState(rw, http.StateClosed)

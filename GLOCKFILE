@@ -21,6 +21,7 @@ cmd honnef.co/go/unused/cmd/unused
 github.com/Sirupsen/logrus f3cfb454f4c209e6668c95216c4744b8fddb2356
 github.com/VividCortex/ewma 8b9f1311551e712ea8a06b494238b8a2351e1c33
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
+github.com/backtrace-labs/go-bcd 334e611401c4abc065e77ceaa6904f6de17278c7
 github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/chzyer/readline 683bf8ff7cd77265a852553c3c3e37a464339049
 github.com/client9/misspell 940f19ff686fdd0ee8395209994d4e243cb81e37
@@ -85,6 +86,7 @@ github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
 golang.org/x/crypto 2c99acdd1e9b90d779ca23f632aad86af9909c62
 golang.org/x/net f841c39de738b1d0df95b5a7187744f0e03d8112
+golang.org/x/sys a646d33e2ee3172a661fc09bca23bb4889a41bc8
 golang.org/x/text d5d7737684e596dbabf914ecf946d2783f35bdc2
 golang.org/x/tools d4a8e583a10c1e702d1accc9e66c104f992115c8
 google.golang.org/grpc aecdccadd24d03e42d00ec82f6774a428fc63c30
