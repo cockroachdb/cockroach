@@ -299,7 +299,8 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 // Scan retrieves the rows between begin (inclusive) and end (exclusive) in
 // ascending order.
 //
-// The returned []KeyValue will contain up to maxRows elements.
+// The returned []KeyValue will contain up to maxRows elements (or all results
+// when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
@@ -309,7 +310,8 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
 // in descending order.
 //
-// The returned []KeyValue will contain up to maxRows elements.
+// The returned []KeyValue will contain up to maxRows elements (or all results
+// when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {

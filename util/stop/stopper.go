@@ -24,6 +24,8 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
 )
@@ -119,6 +121,7 @@ type Stopper struct {
 	numTasks  int               // number of outstanding tasks
 	tasks     map[taskKey]int
 	closers   []Closer
+	cancels   []func()
 }
 
 // An Option can be passed to NewStopper.
@@ -388,6 +391,9 @@ func (s *Stopper) Quiesce() {
 	defer s.maybeHandlePanic()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, cancel := range s.cancels {
+		cancel()
+	}
 	if !s.quiescing {
 		s.quiescing = true
 		close(s.quiescer)
@@ -398,4 +404,15 @@ func (s *Stopper) Quiesce() {
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.quiesce.Wait()
 	}
+}
+
+// WithCancel returns a child context which is cancelled when the Stopper
+// begins to quiesce.
+func (s *Stopper) WithCancel(ctx context.Context) context.Context {
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancels = append(s.cancels, cancel)
+	return ctx
 }

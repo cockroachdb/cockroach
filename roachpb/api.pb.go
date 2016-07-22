@@ -428,7 +428,8 @@ func (*DeleteResponse) ProtoMessage()               {}
 func (*DeleteResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{12} }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
-// specifies the range of keys to delete.
+// specifies the range of keys to delete and a maximum number of key-value
+// pairs to delete (zero for unlimited).
 type DeleteRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, *all* entries between key (inclusive) and end_key
@@ -457,7 +458,7 @@ func (*DeleteRangeResponse) Descriptor() ([]byte, []int) { return fileDescriptor
 
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
-// number of results.
+// number of results (unbounded if zero).
 type ScanRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
@@ -483,7 +484,7 @@ func (*ScanResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
-// number of results.
+// number of results (unbounded if zero).
 type ReverseScanRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
