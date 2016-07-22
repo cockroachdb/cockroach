@@ -168,8 +168,15 @@ message DeleteRangeRequest {
 // method.
 message DeleteRangeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Number of entries removed.
+  // All the entries removed whenever return_keys is set in the request.
   repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
+  // The next key to resume from when a bound on the keys is set:
+  // either through max_enties_to_delete in the request or
+  // max_scan_results in the batch header. An unset value
+  // indicates that the entire span of keys have been deleted.
+  optional bytes resume_key = 3 [(gogoproto.casttype) = "Key"];
+  // The number of keys deleted.
+  optional int64 num_keys = 4 [(gogoproto.nullable) = false];
 }
 
 // A ScanRequest is the argument to the Scan() method. It specifies the

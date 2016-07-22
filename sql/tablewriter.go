@@ -542,7 +542,7 @@ func (td *tableDeleter) fastDelete(
 		if log.V(2) {
 			log.Infof("Skipping scan and just deleting %s - %s", span.Start, span.End)
 		}
-		td.b.DelRange(span.Start, span.End, true)
+		td.b.DelRange(span.Start, span.End, 0, true)
 	}
 
 	err = td.finalize()

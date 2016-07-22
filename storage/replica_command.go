@@ -110,7 +110,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		*resp, err = r.Delete(ctx, batch, ms, h, *tArgs)
 	case *roachpb.DeleteRangeRequest:
 		resp := reply.(*roachpb.DeleteRangeResponse)
-		*resp, err = r.DeleteRange(ctx, batch, ms, h, *tArgs)
+		*resp, err = r.DeleteRange(ctx, batch, ms, h, remScanResults, *tArgs)
 	case *roachpb.ScanRequest:
 		resp := reply.(*roachpb.ScanResponse)
 		*resp, intents, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
@@ -282,16 +282,28 @@ func (r *Replica) Delete(
 	return reply, engine.MVCCDelete(ctx, batch, ms, args.Key, h.Timestamp, h.Txn)
 }
 
-// DeleteRange deletes the range of key/value pairs specified by
-// start and end keys.
+// DeleteRange deletes the range of key/value pairs specified by start and end
+// keys. remScanResults stores the number of scan results remaining for this
+// batch (MaxInt64 for no limit).
 func (r *Replica) DeleteRange(
 	ctx context.Context, batch engine.ReadWriter, ms *enginepb.MVCCStats,
-	h roachpb.Header, args roachpb.DeleteRangeRequest,
+	h roachpb.Header, remScanResults int64, args roachpb.DeleteRangeRequest,
 ) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
-	deleted, err := engine.MVCCDeleteRange(ctx, batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn, args.ReturnKeys)
+	if remScanResults == 0 {
+		// We can't delete any more keys; skip and set ResumeKey.
+		reply.ResumeKey = args.Key
+		return reply, nil
+	}
+	maxResults := maxResultsValue(remScanResults, args.MaxEntriesToDelete)
+
+	deleted, resumeKey, num, err := engine.MVCCDeleteRange(
+		ctx, batch, ms, args.Key, args.EndKey, maxResults, h.Timestamp, h.Txn, args.ReturnKeys,
+	)
 	if err == nil {
 		reply.Keys = deleted
+		reply.ResumeKey = resumeKey
+		reply.NumKeys = num
 		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
 		if h.Txn != nil {
 			clonedTxn := h.Txn.Clone()
@@ -302,12 +314,12 @@ func (r *Replica) DeleteRange(
 	return reply, err
 }
 
-// scanMaxResultsValue returns the max results value to pass to a scan or reverse scan request (0
-// for no limit).
+// maxResultsValue returns the max results value to pass to a scan, reverse
+// scan or delrange request (0 for no limit).
 //    remScanResults is the number of remaining results for this batch (MaxInt64 for no
 // limit).
 //    scanMaxResults is the limit in this scan request (0 for no limit)
-func scanMaxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
+func maxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
 	if remScanResults == math.MaxInt64 {
 		// Unlimited batch.
 		return scanMaxResults
@@ -326,10 +338,10 @@ func scanMaxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
 func (r *Replica) Scan(ctx context.Context, batch engine.ReadWriter, h roachpb.Header, remScanResults int64,
 	args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
 	if remScanResults == 0 {
-		// We can't return any more results; skip the scan
+		// We can't return any more results; skip the scan.
 		return roachpb.ScanResponse{}, nil, nil
 	}
-	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
+	maxResults := maxResultsValue(remScanResults, args.MaxResults)
 
 	rows, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxResults, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
@@ -342,10 +354,10 @@ func (r *Replica) Scan(ctx context.Context, batch engine.ReadWriter, h roachpb.H
 func (r *Replica) ReverseScan(ctx context.Context, batch engine.ReadWriter, h roachpb.Header, remScanResults int64,
 	args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
 	if remScanResults == 0 {
-		// We can't return any more results; skip the scan
+		// We can't return any more results; skip the scan.
 		return roachpb.ReverseScanResponse{}, nil, nil
 	}
-	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
+	maxResults := maxResultsValue(remScanResults, args.MaxResults)
 
 	rows, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxResults,
 		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
@@ -1464,7 +1476,7 @@ func (r *Replica) TruncateLog(
 	var diff enginepb.MVCCStats
 	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
 	// but it also computes stats.
-	if _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, 0, /* max */
+	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, 0, /* max */
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
 		return reply, err
 	}
@@ -2781,7 +2793,17 @@ func (r *Replica) mergeTrigger(
 	// keep track of stats here, because we already set the right range's
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
-	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, hlc.ZeroTimestamp, nil, false); err != nil {
+	if _, _, _, err := engine.MVCCDeleteRange(
+		ctx,
+		batch,
+		nil,
+		localRangeIDKeyPrefix,
+		localRangeIDKeyPrefix.PrefixEnd(),
+		0,
+		hlc.ZeroTimestamp,
+		nil,
+		false,
+	); err != nil {
 		return errors.Errorf("cannot remove range metadata %s", err)
 	}
 

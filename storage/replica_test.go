@@ -1714,7 +1714,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	t1 := 2 * time.Second
 	key := roachpb.Key([]byte("b"))
 	tc.manualClock.Set(t1.Nanoseconds())
-	drArgs := roachpb.NewDeleteRange(key, key.Next(), false)
+	drArgs := roachpb.NewDeleteRange(key, key.Next(), 0, false)
 	ts = tc.clock.Now()
 
 	_, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, drArgs)
@@ -2832,7 +2832,7 @@ func TestRaftReplayProtection(t *testing.T) {
 	// Send a DeleteRange & increment.
 	incArgs := incrementArgs(key, 1)
 	ba = roachpb.BatchRequest{}
-	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
+	ba.Add(roachpb.NewDeleteRange(key, key.Next(), 0, false))
 	ba.Add(&incArgs)
 	br, pErr = tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
@@ -2849,7 +2849,7 @@ func TestRaftReplayProtection(t *testing.T) {
 
 	// Send just a DeleteRange batch.
 	ba = roachpb.BatchRequest{}
-	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
+	ba.Add(roachpb.NewDeleteRange(key, key.Next(), 0, false))
 	br, pErr = tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
