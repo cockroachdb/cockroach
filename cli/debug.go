@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"syscall"
 
 	"golang.org/x/net/context"
 
@@ -65,19 +66,71 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(512 << 20)
 	defer cache.Release()
+	maxOpenFiles, err := setMaxOpenFiles()
+	if err != nil {
+		return nil, err
+	}
 	db := engine.NewRocksDB(
 		roachpb.Attributes{},
 		dir,
 		cache,
 		10<<20,
 		0,
-		engine.DefaultMaxOpenFiles,
+		maxOpenFiles,
 		stopper,
 	)
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
 	return db, nil
+}
+
+func setMaxOpenFiles() (int, error) {
+	minimumOpenFileLimit := uint64(engine.MinimumMaxOpenFiles)
+	recommendedOpenFileLimit := uint64(engine.DefaultMaxOpenFiles)
+	var rLimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+		return engine.DefaultMaxOpenFiles, nil
+	}
+
+	if rLimit.Max < minimumOpenFileLimit {
+		return 0, fmt.Errorf("hard open file descriptor limit of %d is under the minimum required %d",
+			rLimit.Max,
+			minimumOpenFileLimit)
+	}
+
+	if rLimit.Cur > recommendedOpenFileLimit {
+		return engine.DefaultMaxOpenFiles, nil
+	}
+
+	var newCurrent uint64
+	if rLimit.Max > recommendedOpenFileLimit {
+		newCurrent = recommendedOpenFileLimit
+	} else {
+		newCurrent = rLimit.Max
+	}
+	if rLimit.Cur < newCurrent {
+		rLimit.Cur = newCurrent
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+			return 0, err
+		}
+
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+			return 0, err
+		}
+	}
+
+	if rLimit.Cur < minimumOpenFileLimit {
+		return 0, fmt.Errorf("soft open file descriptor limit of %d is under the minimum required %d and cannot be increased",
+			rLimit.Cur,
+			minimumOpenFileLimit)
+	}
+
+	if rLimit.Cur >= recommendedOpenFileLimit {
+		return engine.DefaultMaxOpenFiles, nil
+	}
+
+	return int(rLimit.Cur), nil
 }
 
 func printKey(kv engine.MVCCKeyValue) (bool, error) {
