@@ -358,10 +358,11 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	return roachpb.RKey(k), nil
 }
 
-func mustAddr(k roachpb.Key) roachpb.RKey {
+// MustAddr calls Addr and panics on errors.
+func MustAddr(k roachpb.Key) roachpb.RKey {
 	rk, err := Addr(k)
 	if err != nil {
-		panic(err)
+		panic(errors.Wrapf(err, "could not take address of '%s'", k))
 	}
 	return rk
 }

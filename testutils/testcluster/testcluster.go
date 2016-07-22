@@ -159,10 +159,10 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 }
 
 // LookupRange returns the descriptor of the range containing key.
-func (tc *TestCluster) LookupRange(key roachpb.RKey) (roachpb.RangeDescriptor, error) {
+func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rangeLookupReq := roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(key),
+			Key: keys.RangeMetaKey(keys.MustAddr(key)),
 		},
 		MaxRanges:       1,
 		ConsiderIntents: false,
@@ -189,7 +189,7 @@ func (tc *TestCluster) SplitRange(
 	if err != nil {
 		return nil, nil, err
 	}
-	origRangeDesc, err := tc.LookupRange(splitRKey)
+	origRangeDesc, err := tc.LookupRange(splitKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -295,9 +295,12 @@ func (tc *TestCluster) changeReplicas(
 // The method blocks until a snapshot of the range has been copied to all the
 // new replicas and the new replicas become part of the Raft group.
 func (tc *TestCluster) AddReplicas(
-	startKey roachpb.RKey, targets ...ReplicationTarget,
+	startKey roachpb.Key, targets ...ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
-	rangeDesc, err := tc.changeReplicas(roachpb.ADD_REPLICA, startKey, targets...)
+	rKey := keys.MustAddr(startKey)
+	rangeDesc, err := tc.changeReplicas(
+		roachpb.ADD_REPLICA, rKey, targets...,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +315,7 @@ func (tc *TestCluster) AddReplicas(
 				log.Errorf("unexpected error: %s", err)
 				return err
 			}
-			if store.LookupReplica(startKey, nil) == nil {
+			if store.LookupReplica(rKey, nil) == nil {
 				return errors.Errorf("range not found on store %d", target)
 			}
 		}
@@ -325,9 +328,9 @@ func (tc *TestCluster) AddReplicas(
 
 // RemoveReplicas removes one or more replicas from a range.
 func (tc *TestCluster) RemoveReplicas(
-	startKey roachpb.RKey, targets ...ReplicationTarget,
+	startKey roachpb.Key, targets ...ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
-	return tc.changeReplicas(roachpb.REMOVE_REPLICA, startKey, targets...)
+	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
 }
 
 // TransferRangeLease transfers the lease for a range from whoever has it to
