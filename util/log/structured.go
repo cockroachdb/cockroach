@@ -26,8 +26,18 @@ import (
 )
 
 // makeMessage creates a structured log entry.
-func makeMessage(format string, args []interface{}) string {
+func makeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf bytes.Buffer
+	tags := contextLogTags(ctx)
+	for _, t := range tags {
+		buf.WriteString("[")
+		buf.WriteString(t.name)
+		if value := t.value(); value != nil {
+			buf.WriteString(": ")
+			fmt.Fprint(&buf, value)
+		}
+		buf.WriteString("] ")
+	}
 	if len(format) == 0 {
 		fmt.Fprint(&buf, args...)
 	} else {
@@ -40,7 +50,7 @@ func makeMessage(format string, args []interface{}) string {
 // specified facility of the logger.
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line, _ := caller.Lookup(depth + 1)
-	msg := makeMessage(format, args)
+	msg := makeMessage(ctx, format, args)
 	Trace(ctx, msg)
 	logging.outputLogEntry(s, file, line, msg)
 }
