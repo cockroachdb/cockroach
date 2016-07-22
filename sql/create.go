@@ -855,8 +855,11 @@ func CreateTableDescriptor(
 func makeTableDescIfAs(
 	p *parser.CreateTable, parentID sqlbase.ID, resultColumns []ResultColumn,
 ) (sqlbase.TableDescriptor, error) {
-	desc := sqlbase.TableDescriptor{ParentID: parentID,
-		FormatVersion: sqlbase.FamilyFormatVersion, Version: 1}
+	desc := sqlbase.TableDescriptor{
+		ParentID:      parentID,
+		FormatVersion: sqlbase.InterleavedFormatVersion,
+		Version:       1,
+	}
 	tableName, err := p.Table.Normalize()
 	if err != nil {
 		return desc, err
@@ -876,8 +879,11 @@ func makeTableDescIfAs(
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDescriptor, error) {
-	desc := sqlbase.TableDescriptor{ParentID: parentID,
-		FormatVersion: sqlbase.FamilyFormatVersion, Version: 1}
+	desc := sqlbase.TableDescriptor{
+		ParentID:      parentID,
+		FormatVersion: sqlbase.InterleavedFormatVersion,
+		Version:       1,
+	}
 	t, err := p.Table.Normalize()
 	if err != nil {
 		return desc, err
@@ -922,7 +928,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				return desc, err
 			}
 			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
+				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *parser.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -943,7 +949,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				}
 			}
 			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
+				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *parser.CheckConstraintTableDef:
 			// CHECK expressions seem to vary across databases. Wikipedia's entry on
