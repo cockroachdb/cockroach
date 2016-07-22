@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -82,38 +80,77 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 	clusterTSStart := vals[0].(int64)
 	clusterTS := time.Unix(0, clusterTSStart).Format(time.RFC3339Nano)
 
-	// Fetch table descriptor.
-	vals, err = conn.QueryRow(`
-		SELECT descriptor
-		FROM system.descriptor
-		JOIN system.namespace tables
-			ON tables.id = descriptor.id
-		JOIN system.namespace dbs
-			ON dbs.id = tables.parentid
-		WHERE tables.name = $1 AND dbs.name = $2`,
-		[]driver.Value{origTableName, origDBName})
-	if err == io.EOF {
-		return errors.Errorf("unknown database or table %s.%s", origTableName, origDBName)
-	} else if err != nil {
-		return err
-	}
-	b := vals[0].([]byte)
-	var desc sqlbase.Descriptor
-	if err := proto.Unmarshal(b, &desc); err != nil {
-		return err
-	}
-	table := desc.GetTable()
-	if table == nil {
-		return errors.New("internal error: expected table descriptor")
-	}
+	// A previous version of the code did a SELECT on system.descriptor. This
+	// required the SELECT privilege to the descriptor table, which only root
+	// has. Allowing non-root to do this would let users see other users' table
+	// descriptors which is a problem in multi-tenancy.
 
+	// Fetch column types.
+	rows, err := conn.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", tablename), nil)
+	if err != nil {
+		return err
+	}
+	vals = make([]driver.Value, 2)
 	coltypes := make(map[string]string)
-	for _, c := range table.Columns {
-		coltypes[c.Name] = c.Type.SQLString()
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		name, ok := vals[0].(string)
+		if !ok {
+			return fmt.Errorf("unexpected value: %T", vals[1])
+
+		}
+		typ, ok := vals[1].(string)
+		if !ok {
+			return fmt.Errorf("unexpected value: %T", vals[4])
+
+		}
+		coltypes[name] = typ
+	}
+	if err := rows.Close(); err != nil {
+		return err
 	}
 
-	primaryIndex := table.PrimaryIndex.Name
-	index := table.PrimaryIndex.ColumnNames
+	// index holds the names, in order, of the primary key columns.
+	var index []string
+	// Primary index is always the first index returned by SHOW INDEX.
+	rows, err = conn.Query(fmt.Sprintf("SHOW INDEX FROM %s", tablename), nil)
+	if err != nil {
+		return err
+	}
+	vals = make([]driver.Value, 5)
+	var primaryIndex string
+	// Find the primary index columns.
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		b, ok := vals[1].(string)
+		if !ok {
+			return fmt.Errorf("unexpected value: %T", vals[1])
+		}
+		if primaryIndex == "" {
+			primaryIndex = b
+		} else if primaryIndex != b {
+			break
+		}
+		b, ok = vals[4].(string)
+		if !ok {
+			return fmt.Errorf("unexpected value: %T", vals[4])
+		}
+		index = append(index, parser.Name(b).String())
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(index) == 0 {
+		return fmt.Errorf("no primary key index found")
+	}
 	indexes := strings.Join(index, ", ")
 
 	// Build the SELECT query.
