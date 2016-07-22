@@ -342,6 +342,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <empty> opt_collate_clause
 
 %type <DropBehavior> opt_drop_behavior
+%type <DropBehavior> opt_interleave_drop_behavior
 
 %type <*StrVal> opt_encoding_clause
 
@@ -1506,9 +1507,8 @@ table_elem:
   }
 
 opt_interleave:
-  INTERLEAVE IN PARENT name '(' name_list ')' opt_drop_behavior
+  INTERLEAVE IN PARENT name '(' name_list ')' opt_interleave_drop_behavior
   {
-    /* SKIP DOC */
     $$.val = &InterleaveDef{
         Parent: &QualifiedName{Base: Name($4)},
         Fields: $6.strs(),
@@ -1518,6 +1518,23 @@ opt_interleave:
 | /* EMPTY */
   {
     $$.val = (*InterleaveDef)(nil)
+  }
+
+// TODO(dan): This can be removed in favor of opt_drop_behavior when #7854 is fixed.
+opt_interleave_drop_behavior:
+  CASCADE
+  {
+    /* SKIP DOC */
+    $$.val = DropCascade
+  }
+| RESTRICT
+  {
+    /* SKIP DOC */
+    $$.val = DropRestrict
+  }
+| /* EMPTY */
+  {
+    $$.val = DropDefault
   }
 
 column_def:

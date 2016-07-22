@@ -42,7 +42,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	}
 	desc.Name = p.Table.Table()
 	desc.ParentID = parentID
-	desc.FormatVersion = FamilyFormatVersion
+	desc.FormatVersion = InterleavedFormatVersion
 	// We don't use version 0.
 	desc.Version = 1
 
