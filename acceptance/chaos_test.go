@@ -32,6 +32,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -146,7 +147,7 @@ func verifyAccounts(t *testing.T, client *testClient) {
 		client.RLock()
 		defer client.RUnlock()
 		err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum)
-		if err != nil && !isRetryableError(err) {
+		if err != nil && !testutils.IsSQLRetryError(err) {
 			t.Fatal(err)
 		}
 		return err
@@ -163,7 +164,7 @@ func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) 
 	for !state.done() {
 		if err := transferMoney(client, numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
-			if !isRetryableError(err) {
+			if !testutils.IsSQLRetryError(err) {
 				// Report the err and terminate.
 				state.errChan <- err
 				break
