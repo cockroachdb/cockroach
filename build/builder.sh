@@ -76,16 +76,24 @@ cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 #
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
+vols="--volume=${gopath0}/src:/go/src"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/go/pkg/linux_amd64"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
+vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
+vols="${vols} --volume=${HOME}/.jspm:/root/.jspm"
+vols="${vols} --volume=${HOME}/.npm:/root/.npm"
+vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+
+backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
+if test -d "${backtrace_dir}"; then
+  vols="${vols} --volume=${backtrace_dir}:/opt/backtrace"
+  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:/root/.coroner.cf"
+fi
+
 docker run -i ${tty-} ${rm} \
-  --volume="${gopath0}/src:/go/src" \
-  --volume="${gopath0}/pkg/docker_amd64:/go/pkg/linux_amd64" \
-  --volume="${gopath0}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race" \
-  --volume="${gopath0}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64" \
-  --volume="${gopath0}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race" \
-  --volume="${gopath0}/bin/docker_amd64:/go/bin" \
-  --volume="${HOME}/.jspm:/root/.jspm" \
-  --volume="${HOME}/.npm:/root/.npm" \
-  --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
+  ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="PAGER=cat" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \

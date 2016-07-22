@@ -1,4 +1,4 @@
-FROM golang:1.6.2
+FROM golang:1.6.3
 
 MAINTAINER Peter Mattis <peter@cockroachlabs.com>
 
@@ -12,7 +12,7 @@ RUN \
  clang/scripts/update.py && \
  rm -rf /tmp/*
 
-ENV PATH=/third_party/llvm-build/Release+Asserts/bin:$PATH
+ENV PATH=/opt/backtrace/bin:/third_party/llvm-build/Release+Asserts/bin:$PATH
 
 ENV SKIP_BOOTSTRAP=1
 
