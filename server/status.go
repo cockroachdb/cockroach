@@ -494,7 +494,7 @@ func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*se
 	endKey := startKey.PrefixEnd()
 
 	b := inconsistentBatch()
-	b.Scan(startKey, endKey, 0)
+	b.Scan(startKey, endKey)
 	if err := s.db.Run(b); err != nil {
 		log.Error(err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())

@@ -715,7 +715,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		TransportFactory: adaptLegacyTransport(testFn),
 	}
 	ds := NewDistSender(ctx, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := client.SendWrapped(ds, nil, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -784,7 +784,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		TransportFactory: adaptLegacyTransport(testFn),
 	}
 	ds := NewDistSender(ctx, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := client.SendWrapped(ds, nil, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -875,8 +875,8 @@ func TestSendRPCRetry(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 1)
-	sr, err := client.SendWrapped(ds, nil, scan)
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
+	sr, err := client.SendWrappedWith(ds, nil, roachpb.Header{MaxScanResults: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -983,10 +983,11 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10)
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
-		Txn: &roachpb.Transaction{},
+		MaxScanResults: 10,
+		Txn:            &roachpb.Transaction{},
 	}, scan)
 	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)
@@ -1301,7 +1302,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	// only the scan on local keys that address from "b" to "d".
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &roachpb.Transaction{Name: "test"}
-	ba.Add(roachpb.NewScan(keys.RangeDescriptorKey(roachpb.RKey("a")), keys.RangeDescriptorKey(roachpb.RKey("c")), 0))
+	ba.Add(roachpb.NewScan(keys.RangeDescriptorKey(roachpb.RKey("a")), keys.RangeDescriptorKey(roachpb.RKey("c"))))
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
