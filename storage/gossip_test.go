@@ -77,7 +77,7 @@ func TestGossipFirstRange(t *testing.T) {
 	// Add two replicas. The first range descriptor should be gossiped after each
 	// addition.
 	var desc *roachpb.RangeDescriptor
-	firstRangeKey := roachpb.RKey(keys.MinKey)
+	firstRangeKey := keys.MinKey
 	for i := 1; i <= 2; i++ {
 		var err error
 		if desc, err = tc.AddReplicas(firstRangeKey, tc.Target(i)); err != nil {

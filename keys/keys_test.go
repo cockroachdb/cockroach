@@ -283,7 +283,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      mustAddr(Meta2Prefix),
+			key:      MustAddr(Meta2Prefix),
 			expStart: Meta1Prefix,
 			expEnd:   Meta2Prefix.Next(),
 			expError: "",
