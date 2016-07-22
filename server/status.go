@@ -674,6 +674,8 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 					// because it contains a map with integer keys. Just extract
 					// the most interesting bit for now.
 					raftState = status.RaftState.String()
+				} else {
+					raftState = "StateDormant"
 				}
 				state := rep.State()
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
