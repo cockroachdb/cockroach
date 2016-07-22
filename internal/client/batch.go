@@ -446,7 +446,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 	b.initResult(1, 1, notRaw, nil)
 }
 
-func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
+func (b *Batch) scan(s, e interface{}, isReverse bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -458,9 +458,9 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.appendReqs(roachpb.NewScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
+		b.appendReqs(roachpb.NewScan(roachpb.Key(begin), roachpb.Key(end)))
 	} else {
-		b.appendReqs(roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end), maxRows))
+		b.appendReqs(roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end)))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -468,25 +468,23 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 // Scan retrieves the key/values between begin (inclusive) and end (exclusive) in
 // ascending order.
 //
-// A new result will be appended to the batch which will contain up to maxRows
-// "rows" (each row is a key/value pair) and Result.Err will indicate success or
-// failure.
+// A new result will be appended to the batch which will contain  "rows" (each
+// row is a key/value pair) and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) Scan(s, e interface{}, maxRows int64) {
-	b.scan(s, e, maxRows, false)
+func (b *Batch) Scan(s, e interface{}) {
+	b.scan(s, e, false)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
 // in descending order.
 //
-// A new result will be appended to the batch which will contain up to maxRows
-// rows (each "row" is a key/value pair) and Result.Err will indicate success or
-// failure.
+// A new result will be appended to the batch which will contain "rows" (each
+// "row" is a key/value pair) and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
-	b.scan(s, e, maxRows, true)
+func (b *Batch) ReverseScan(s, e interface{}) {
+	b.scan(s, e, true)
 }
 
 // CheckConsistency creates a batch request to check the consistency of the
