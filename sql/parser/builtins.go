@@ -994,7 +994,7 @@ var Builtins = map[string][]Builtin{
 
 	"to_date": {
 		Builtin{
-			Types:		ArgTypes{TypeString, TypeString},
+			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeDate,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				dateTxt := string(*args[0].(*DString))
@@ -1005,7 +1005,7 @@ var Builtins = map[string][]Builtin{
 
 	"to_timestamp": {
 		Builtin{
-			Types:		ArgTypes{TypeString, TypeString},
+			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeTimestamp,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				s := string(*args[0].(*DString))
@@ -1013,7 +1013,7 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 		Builtin{
-			Types:		ArgTypes{TypeFloat},
+			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeTimestamp,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				t := int64(*args[0].(*DFloat))
