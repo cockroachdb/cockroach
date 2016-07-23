@@ -25,7 +25,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -92,8 +91,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 	switch args.ReplicationMode {
 	case base.ReplicationAuto:
-		fn := config.TestingSetDefaultZoneConfig(config.DefaultZoneConfig())
-		args.Stopper.AddCloser(stop.CloserFn(fn))
 	case base.ReplicationManual:
 		if args.ServerArgs.Knobs.Store == nil {
 			args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{}
