@@ -1204,7 +1204,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 
 		// Run metrics computation up front to populate initial statistics.
 		if err := s.ComputeMetrics(); err != nil {
-			log.Error(err)
+			return err
 		}
 	}
 
