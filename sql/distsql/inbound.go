@@ -27,8 +27,9 @@ import (
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func ProcessInboundStream(
-	ctx *FlowCtx, stream DistSQL_FlowStreamServer, firstMsg *StreamMessage, dst RowReceiver,
+	flowCtx *FlowCtx, stream DistSQL_FlowStreamServer, firstMsg *StreamMessage, dst RowReceiver,
 ) error {
+	ctx := flowCtx.Context
 	// Function which we call when we are done.
 	finish := func(err error) error {
 		dst.Close(err)

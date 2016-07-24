@@ -33,7 +33,7 @@ import (
 // ServerContext encompasses the configuration required to create a
 // DistSQLServer.
 type ServerContext struct {
-	context.Context
+	Context    context.Context
 	DB         *client.DB
 	RPCContext *rpc.Context
 }
@@ -63,6 +63,11 @@ func NewServer(ctx ServerContext) *ServerImpl {
 	return ds
 }
 
+// SetNodeID sets the NodeID for the server.
+func (ds *ServerImpl) SetNodeID(nodeID roachpb.NodeID) {
+	ds.ServerContext.Context = log.WithLogTagInt(ds.ServerContext.Context, "node", int(nodeID))
+}
+
 func (ds *ServerImpl) setupTxn(
 	ctx context.Context,
 	txnProto *roachpb.Transaction,
@@ -79,7 +84,6 @@ func (ds *ServerImpl) SetupSimpleFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (*Flow, error) {
 	txn := ds.setupTxn(ctx, &req.Txn)
-	// TODO(radu): "merge" information from ctx and the server context.
 	flowCtx := FlowCtx{
 		Context: ds.ServerContext.Context,
 		id:      req.Flow.FlowID,
@@ -91,7 +95,7 @@ func (ds *ServerImpl) SetupSimpleFlow(
 	f := newFlow(flowCtx, ds.flowRegistry, output)
 	err := f.setupFlow(&req.Flow)
 	if err != nil {
-		log.Errorf(ds, err.Error(), "", err)
+		log.Errorf(ds.Context, err.Error(), "", err)
 		return nil, err
 	}
 	return f, nil
@@ -101,16 +105,17 @@ func (ds *ServerImpl) SetupSimpleFlow(
 func (ds *ServerImpl) RunSimpleFlow(
 	req *SetupFlowRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
-	// TODO(radu): merge context with server context.
+	ctx := ds.ServerContext.Context
 
 	// Set up the outgoing mailbox for the stream.
-	mbox := newOutboxSimpleFlowStream(stream.Context(), stream)
+	mbox := newOutboxSimpleFlowStream(stream)
 
-	f, err := ds.SetupSimpleFlow(stream.Context(), req, mbox)
+	f, err := ds.SetupSimpleFlow(ctx, req, mbox)
 	if err != nil {
-		log.Errorf(ds, err.Error(), "", err)
+		log.Errorf(ds.Context, err.Error(), "", err)
 		return err
 	}
+	mbox.setFlowCtx(&f.FlowCtx)
 
 	// TODO(radu): this stuff should probably be run through a stopper.
 	mbox.start(&f.waitGroup)
@@ -127,7 +132,6 @@ func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
 	// Note: ctx will be canceled when the RPC completes, so we can't associate
 	// it with the transaction.
 
-	// TODO(radu): "merge" information from ctx and the server context.
 	txn := ds.setupTxn(ds.ServerContext.Context, &req.Txn)
 	flowCtx := FlowCtx{
 		Context: ds.ServerContext.Context,
@@ -139,7 +143,7 @@ func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
 	f := newFlow(flowCtx, ds.flowRegistry, nil)
 	err := f.setupFlow(&req.Flow)
 	if err != nil {
-		log.Errorf(ds, err.Error(), "", err)
+		log.Errorf(ds.Context, err.Error(), "", err)
 		return nil, err
 	}
 	f.Start()
@@ -180,7 +184,7 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	err := ds.flowStreamInt(stream)
 	if err != nil {
-		log.Errorf(ds, err.Error(), "", err)
+		log.Errorf(ds.Context, err.Error(), "", err)
 	}
 	return err
 }
