@@ -236,7 +236,7 @@ func (tc *TxnCoordSender) startStats() {
 			rMax := restarts.Max()
 			num := durations.TotalCount()
 
-			log.Infof(
+			log.Infof(context.TODO(),
 				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f/%.2f %%cmmt/cmmt1pc/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples)",
 				totalRate, pCommitted, pCommitted1PC, pAborted, pAbandoned,
 				util.TruncateDuration(time.Duration(dMean), res),
@@ -407,7 +407,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	if tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof("%v: waiting %s on EndTransaction for linearizability", br.Txn.ID.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+				log.Infof(context.TODO(), "%v: waiting %s on EndTransaction for linearizability", br.Txn.ID.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
 			}
 			time.Sleep(sleepNS)
 		}()
@@ -660,11 +660,11 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		// before the goroutine.
 		if _, pErr := tc.wrapped.Send(context.Background(), ba); pErr != nil {
 			if log.V(1) {
-				log.Warningf("abort due to inactivity failed for %s: %s ", txn, pErr)
+				log.Warningf(context.TODO(), "abort due to inactivity failed for %s: %s ", txn, pErr)
 			}
 		}
 	}); err != nil {
-		log.Warning(err)
+		log.Warning(context.TODO(), err)
 	}
 }
 
@@ -689,7 +689,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// instead of a timeout.
 	if ctx.Done() == nil && hasAbandoned {
 		if log.V(1) {
-			log.Infof("transaction %s abandoned; stopping heartbeat", txnMeta.txn)
+			log.Infof(context.TODO(), "transaction %s abandoned; stopping heartbeat", txnMeta.txn)
 		}
 		tc.tryAsyncAbort(txnID)
 		return false
@@ -713,7 +713,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// transaction record at all, we're going to have to assume we're aborted
 	// as well.
 	if pErr != nil {
-		log.Warningf("heartbeat to %s failed: %s", txn, pErr)
+		log.Warningf(context.TODO(), "heartbeat to %s failed: %s", txn, pErr)
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up.
 		tc.tryAsyncAbort(*txn.ID)
@@ -925,7 +925,7 @@ func (tc *TxnCoordSender) updateState(
 func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
-		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
+		log.Infof(context.TODO(), "%s: auto-wrapping in txn and re-executing: ", ba)
 	}
 	// TODO(bdarnell): need to be able to pass other parts of DBContext
 	// through here.

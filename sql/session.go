@@ -263,7 +263,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.db = *e.ctx.DB
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
-				log.Warning(err)
+				log.Warning(context.TODO(), err)
 				break
 			} else if done {
 				break
@@ -287,7 +287,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{Err: err}
 				}
-				log.Warningf("Error executing schema change: %s", err)
+				log.Warningf(context.TODO(), "Error executing schema change: %s", err)
 			}
 			break
 		}

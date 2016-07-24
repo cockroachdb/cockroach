@@ -30,6 +30,8 @@ import (
 	"sync"
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/gogo/protobuf/proto"
@@ -66,7 +68,7 @@ const (
 )
 
 func init() {
-	rocksdb.Logger = log.Infof
+	rocksdb.Logger = func(format string, args ...interface{}) { log.Infof(context.TODO(), format, args...) }
 }
 
 // SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
@@ -330,7 +332,7 @@ func (r *RocksDB) Open() error {
 
 	var ver storageVersion
 	if len(r.dir) != 0 {
-		log.Infof("opening rocksdb instance at %q", r.dir)
+		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.dir)
 
 		// Check the version number.
 		var err error
@@ -344,7 +346,7 @@ func (r *RocksDB) Open() error {
 				versionCurrent, ver, versionMinimum)
 		}
 	} else {
-		log.Infof("opening in memory rocksdb instance")
+		log.Infof(context.TODO(), "opening in memory rocksdb instance")
 
 		// In memory dbs are always current.
 		ver = versionCurrent
@@ -384,15 +386,15 @@ func (r *RocksDB) Open() error {
 // Close closes the database by deallocating the underlying handle.
 func (r *RocksDB) Close() {
 	if r.rdb == nil {
-		log.Errorf("closing unopened rocksdb instance")
+		log.Errorf(context.TODO(), "closing unopened rocksdb instance")
 		return
 	}
 	if len(r.dir) == 0 {
 		if log.V(1) {
-			log.Infof("closing in-memory rocksdb instance")
+			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
 		}
 	} else {
-		log.Infof("closing rocksdb instance at %q", r.dir)
+		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.dir)
 	}
 	if r.rdb != nil {
 		C.DBClose(r.rdb)

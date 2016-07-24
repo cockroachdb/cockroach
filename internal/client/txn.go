@@ -370,7 +370,7 @@ func (txn *Txn) CleanupOnError(err error) {
 		panic("no error")
 	}
 	if replyErr := txn.Rollback(); replyErr != nil {
-		log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+		log.Errorf(context.TODO(), "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 	}
 }
 
@@ -583,7 +583,7 @@ func (txn *Txn) Exec(
 			}
 		}
 		if log.V(2) {
-			log.Infof("automatically retrying transaction: %s because of error: %s",
+			log.Infof(context.TODO(), "automatically retrying transaction: %s because of error: %s",
 				txn.DebugName(), err)
 		}
 	}

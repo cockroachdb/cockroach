@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -118,13 +120,13 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			// To update the reservation, fill the original one and add the
 			// new one.
 			if log.V(2) {
-				log.Infof("updating existing reservation for rangeID:%d, %+v", req.RangeID,
+				log.Infof(context.TODO(), "updating existing reservation for rangeID:%d, %+v", req.RangeID,
 					olderReservation)
 			}
 			b.fillReservationLocked(olderReservation)
 		} else {
 			if log.V(2) {
-				log.Infof("there is pre-existing reservation %+v, can't update with %+v",
+				log.Infof(context.TODO(), "there is pre-existing reservation %+v, can't update with %+v",
 					olderReservation, req)
 			}
 			return roachpb.ReservationResponse{Reserved: false}
@@ -134,7 +136,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	// Do we have too many current reservations?
 	if len(b.mu.reservationsByRangeID) >= b.maxReservations {
 		if log.V(1) {
-			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
+			log.Infof(context.TODO(), "could not book reservation %+v, too many reservations already (current:%d, max:%d)",
 				req, len(b.mu.reservationsByRangeID), b.maxReservations)
 		}
 		return roachpb.ReservationResponse{Reserved: false}
@@ -147,7 +149,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	available := b.metrics.available.Value()
 	if b.mu.size+(req.RangeSize*2) > available {
 		if log.V(1) {
-			log.Infof("could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
+			log.Infof(context.TODO(), "could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
 				req, req.RangeSize, b.mu.size, available)
 		}
 		return roachpb.ReservationResponse{Reserved: false}
@@ -156,7 +158,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	// Do we have enough reserved space free for the reservation?
 	if b.mu.size+req.RangeSize > b.maxReservedBytes {
 		if log.V(1) {
-			log.Infof("could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
+			log.Infof(context.TODO(), "could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
 				req, req.RangeSize, b.mu.size, b.maxReservedBytes)
 		}
 		return roachpb.ReservationResponse{Reserved: false}
@@ -176,7 +178,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	b.metrics.reserved.Inc(req.RangeSize)
 
 	if log.V(1) {
-		log.Infof("new reservation added: %+v", newReservation)
+		log.Infof(context.TODO(), "new reservation added: %+v", newReservation)
 	}
 
 	return roachpb.ReservationResponse{Reserved: true}
@@ -192,7 +194,7 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 	res, ok := b.mu.reservationsByRangeID[rangeID]
 	if !ok {
 		if log.V(2) {
-			log.Infof("there is no reservation for rangeID:%d", rangeID)
+			log.Infof(context.TODO(), "there is no reservation for rangeID:%d", rangeID)
 		}
 		return false
 	}
@@ -205,7 +207,7 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 // lock is held. This should only be called internally.
 func (b *bookie) fillReservationLocked(res *reservation) {
 	if log.V(2) {
-		log.Infof("filling reservation: %+v", res)
+		log.Infof(context.TODO(), "filling reservation: %+v", res)
 	}
 
 	// Remove it from reservationsByRangeID. Note that we don't remove it from the
@@ -241,7 +243,7 @@ func (b *bookie) start(stopper *stop.Stopper) {
 					if b.mu.reservationsByRangeID[expiredReservation.RangeID] == expiredReservation {
 						b.fillReservationLocked(expiredReservation)
 					} else if log.V(2) {
-						log.Infof("the reservation for rangeID %d has already been filled.",
+						log.Infof(context.TODO(), "the reservation for rangeID %d has already been filled.",
 							expiredReservation.RangeID)
 					}
 					// Set the timeout to 0 to force another peek.

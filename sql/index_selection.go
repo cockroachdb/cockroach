@@ -22,6 +22,8 @@ import (
 	"reflect"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -118,7 +120,7 @@ func selectIndex(
 		// possibly overlapping ranges.
 		exprs, equivalent := analyzeExpr(s.filter)
 		if log.V(2) {
-			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
+			log.Infof(context.TODO(), "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -188,7 +190,7 @@ func selectIndex(
 
 	if log.V(2) {
 		for i, c := range candidates {
-			log.Infof("%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
+			log.Infof(context.TODO(), "%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
 				i, c.index.Name, c.cost, c.constraints, c.reverse)
 		}
 	}
@@ -218,9 +220,9 @@ func selectIndex(
 	}
 
 	if log.V(3) {
-		log.Infof("%s: filter=%v", c.index.Name, s.filter)
+		log.Infof(context.TODO(), "%s: filter=%v", c.index.Name, s.filter)
 		for i, span := range s.spans {
-			log.Infof("%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
+			log.Infof(context.TODO(), "%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
 		}
 	}
 
@@ -402,7 +404,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	}
 
 	if log.V(2) {
-		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
+		log.Infof(context.TODO(), "%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
 			v.index.Name, weight, v.reverse, match)
 	}
 }

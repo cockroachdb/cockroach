@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -162,7 +164,7 @@ func (c *Clock) getPhysicalClock() int64 {
 		interval := c.lastPhysicalTime - newTime
 		if interval > int64(c.maxOffset/10) {
 			c.monotonicityErrorsCount++
-			log.Warningf("backward time jump detected (%f seconds)", float64(newTime-c.lastPhysicalTime)/1e9)
+			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(newTime-c.lastPhysicalTime)/1e9)
 		}
 	}
 
@@ -233,7 +235,7 @@ func (c *Clock) Update(rt Timestamp) Timestamp {
 	if rt.WallTime > c.state.WallTime {
 		offset := time.Duration(rt.WallTime-physicalClock) * time.Nanosecond
 		if c.maxOffset > 0 && offset > c.maxOffset {
-			log.Warningf("remote wall time is too far ahead (%s) to be trustworthy - updating anyway", offset)
+			log.Warningf(context.TODO(), "remote wall time is too far ahead (%s) to be trustworthy - updating anyway", offset)
 		}
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.

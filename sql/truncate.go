@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 // Truncate deletes all rows from a table.
@@ -70,7 +71,7 @@ func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if log.V(2) {
-		log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
+		log.Infof(context.TODO(), "DelRange %s - %s", tableStartKey, tableEndKey)
 	}
 	b := client.Batch{}
 	b.DelRange(tableStartKey, tableEndKey, false)

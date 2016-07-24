@@ -25,6 +25,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -35,12 +37,12 @@ import (
 func initBacktrace(logDir string) *stop.Stopper {
 	const ptracePath = "/opt/backtrace/bin/ptrace"
 	if _, err := os.Stat(ptracePath); err != nil {
-		log.Infof("backtrace disabled: %s", err)
+		log.Infof(context.TODO(), "backtrace disabled: %s", err)
 		return stop.NewStopper()
 	}
 
 	if err := bcd.EnableTracing(); err != nil {
-		log.Infof("unable to enable backtrace: %s", err)
+		log.Infof(context.TODO(), "unable to enable backtrace: %s", err)
 		return stop.NewStopper()
 	}
 
@@ -95,7 +97,7 @@ func initBacktrace(logDir string) *stop.Stopper {
 	// debugging our usage of backtrace.
 	if f, err := os.OpenFile(filepath.Join(logDir, "backtrace.out"),
 		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
-		log.Infof("unable to open: %s", err)
+		log.Infof(context.TODO(), "unable to open: %s", err)
 	} else {
 		stopper.AddCloser(stop.CloserFn(func() {
 			f.Close()
@@ -104,6 +106,6 @@ func initBacktrace(logDir string) *stop.Stopper {
 	}
 
 	tracer.SetLogLevel(bcd.LogMax)
-	log.Infof("backtrace enabled")
+	log.Infof(context.TODO(), "backtrace enabled")
 	return stopper
 }

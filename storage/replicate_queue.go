@@ -97,7 +97,7 @@ func (rq *replicateQueue) shouldQueue(
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (rq *replicateQueue) process(
 		}
 
 		if log.V(1) {
-			log.Infof("%s: adding replica to %+v due to under-replication", repl, newReplica)
+			log.Infof(context.TODO(), "%s: adding replica to %+v due to under-replication", repl, newReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("adding replica to %+v due to under-replication", newReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
@@ -164,7 +164,7 @@ func (rq *replicateQueue) process(
 			return err
 		}
 		if log.V(1) {
-			log.Infof("%s: removing replica %+v due to over-replication", repl, removeReplica)
+			log.Infof(context.TODO(), "%s: removing replica %+v due to over-replication", repl, removeReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("removing replica %+v due to over-replication", removeReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
@@ -178,13 +178,13 @@ func (rq *replicateQueue) process(
 		log.Trace(ctx, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
-				log.Warningf("Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
+				log.Warningf(context.TODO(), "Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
 			}
 			break
 		}
 		deadReplica := deadReplicas[0]
 		if log.V(1) {
-			log.Infof("%s: removing replica %+v from dead store", repl, deadReplica)
+			log.Infof(context.TODO(), "%s: removing replica %+v from dead store", repl, deadReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
@@ -197,7 +197,7 @@ func (rq *replicateQueue) process(
 		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
 			if log.V(1) {
-				log.Infof("%s: no suitable rebalance target", repl)
+				log.Infof(context.TODO(), "%s: no suitable rebalance target", repl)
 			}
 			log.Trace(ctx, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
@@ -209,7 +209,7 @@ func (rq *replicateQueue) process(
 			StoreID: rebalanceStore.StoreID,
 		}
 		if log.V(1) {
-			log.Infof("%s: rebalancing to %+v", repl, rebalanceReplica)
+			log.Infof(context.TODO(), "%s: rebalancing to %+v", repl, rebalanceReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("rebalancing to %+v", rebalanceReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {

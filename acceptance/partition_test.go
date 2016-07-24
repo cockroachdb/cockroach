@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -107,13 +109,13 @@ func (b *Bank) Verify() {
 }
 
 func (b *Bank) logFailed(i int, v interface{}) {
-	log.Warningf("%d: %v", i, v)
+	log.Warningf(context.TODO(), "%d: %v", i, v)
 }
 func (b *Bank) logBegin(i int, from, to, amount int) {
-	log.Warningf("%d: %d trying to give $%d to %d", i, from, amount, to)
+	log.Warningf(context.TODO(), "%d: %d trying to give $%d to %d", i, from, amount, to)
 }
 func (b *Bank) logSuccess(i int, from, to, amount int) {
-	log.Warningf("%d: %d gave $%d to %d", i, from, amount, to)
+	log.Warningf(context.TODO(), "%d: %d gave $%d to %d", i, from, amount, to)
 }
 
 // Invoke transfers a random amount of money between random accounts.
@@ -194,7 +196,7 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 		case <-stopper:
 		case <-time.After(cfg.Duration):
 		}
-		log.Warningf("finishing test")
+		log.Warningf(context.TODO(), "finishing test")
 		b.Verify()
 	}
 }

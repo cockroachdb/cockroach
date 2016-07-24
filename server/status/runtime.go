@@ -21,6 +21,8 @@ import (
 	"runtime"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -143,11 +145,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	pid := os.Getpid()
 	mem := gosigar.ProcMem{}
 	if err := mem.Get(pid); err != nil {
-		log.Errorf("unable to get mem usage: %v", err)
+		log.Errorf(context.TODO(), "unable to get mem usage: %v", err)
 	}
 	cpu := gosigar.ProcTime{}
 	if err := cpu.Get(pid); err != nil {
-		log.Errorf("unable to get cpu usage: %v", err)
+		log.Errorf(context.TODO(), "unable to get cpu usage: %v", err)
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -171,7 +173,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 		var err error
 		cgoAllocated, cgoTotal, err = getCgoMemStats()
 		if err != nil {
-			log.Warningf("problem fetching CGO memory stats: %s, CGO stats will be empty.", err)
+			log.Warningf(context.TODO(), "problem fetching CGO memory stats: %s, CGO stats will be empty.", err)
 		}
 	}
 
@@ -180,13 +182,13 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-	log.Infof("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, %s/%s CGO alloc/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+	log.Infof(context.TODO(), "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, %s/%s CGO alloc/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
 		humanize.IBytes(mem.Resident), numGoroutine,
 		humanize.IBytes(goAllocated), humanize.IBytes(ms.HeapIdle-ms.HeapReleased), humanize.IBytes(goTotal),
 		humanize.IBytes(cgoAllocated), humanize.IBytes(cgoTotal),
 		cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
 	if log.V(2) {
-		log.Infof("memstats: %+v", ms)
+		log.Infof(context.TODO(), "memstats: %+v", ms)
 	}
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC

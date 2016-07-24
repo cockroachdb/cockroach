@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -347,7 +349,7 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 	if startID <= keys.MaxReservedDescID {
 		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID)
 		if err != nil {
-			log.Errorf("unable to determine largest reserved object ID from system config: %s", err)
+			log.Errorf(context.TODO(), "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
 		}
 		appendSplitKeys(startID, endID)
@@ -357,7 +359,7 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 	// Append keys in the user space.
 	endID, err := s.GetLargestObjectID(0)
 	if err != nil {
-		log.Errorf("unable to determine largest object ID from system config: %s", err)
+		log.Errorf(context.TODO(), "unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
 	appendSplitKeys(startID, endID)

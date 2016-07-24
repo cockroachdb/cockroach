@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -67,12 +69,12 @@ func newCLITest() cliTest {
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
-		log.Fatalf("Could not start server: %v", err)
+		log.Fatalf(context.TODO(), "Could not start server: %v", err)
 	}
 
 	tempDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 
 	// Copy these assets to disk from embedded strings, so this test can
@@ -99,7 +101,7 @@ func newCLITest() cliTest {
 		certsDir:   tempDir,
 		cleanupFunc: func() {
 			if err := os.RemoveAll(tempDir); err != nil {
-				log.Fatal(err)
+				log.Fatal(context.TODO(), err)
 			}
 		},
 	}
@@ -302,7 +304,7 @@ func Example_insecure() {
 	s, err := serverutils.StartServerRaw(
 		base.TestServerArgs{Insecure: true})
 	if err != nil {
-		log.Fatalf("Could not start server: %v", err)
+		log.Fatalf(context.TODO(), "Could not start server: %v", err)
 	}
 	defer s.Stopper().Stop()
 	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
@@ -867,7 +869,7 @@ func Example_node() {
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
-		log.Fatalf("Couldn't write stats summaries: %s", err)
+		log.Fatalf(context.TODO(), "Couldn't write stats summaries: %s", err)
 	}
 
 	c.Run("node ls")

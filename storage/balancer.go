@@ -19,6 +19,8 @@ package storage
 import (
 	"math"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -83,7 +85,7 @@ func (rcb rangeCountBalancer) improve(
 		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
 			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean)) {
 		if log.V(2) {
-			log.Infof("not rebalancing: source store %d wouldn't converge on the mean",
+			log.Infof(context.TODO(), "not rebalancing: source store %d wouldn't converge on the mean",
 				store.StoreID)
 		}
 		return nil
@@ -93,7 +95,7 @@ func (rcb rangeCountBalancer) improve(
 	candidate := rcb.selectGood(sl, excluded)
 	if candidate == nil {
 		if log.V(2) {
-			log.Infof("not rebalancing: no candidate targets (all stores nearly full?)")
+			log.Infof(context.TODO(), "not rebalancing: no candidate targets (all stores nearly full?)")
 		}
 		return nil
 	}
@@ -103,14 +105,14 @@ func (rcb rangeCountBalancer) improve(
 	if math.Abs(float64(candidate.Capacity.RangeCount+1)-sl.candidateCount.mean) >=
 		math.Abs(float64(candidate.Capacity.RangeCount)-sl.candidateCount.mean) {
 		if log.V(2) {
-			log.Infof("not rebalancing: candidate store %d wouldn't converge on the mean",
+			log.Infof(context.TODO(), "not rebalancing: candidate store %d wouldn't converge on the mean",
 				candidate.StoreID)
 		}
 		return nil
 	}
 
 	if log.V(2) {
-		log.Infof("found candidate store %d", candidate.StoreID)
+		log.Infof(context.TODO(), "found candidate store %d", candidate.StoreID)
 	}
 
 	return candidate

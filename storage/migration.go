@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // MIGRATION(tschottdorf): As of #7310, we make sure that a Replica always has
@@ -50,7 +51,7 @@ func migrate7310And6991(batch engine.ReadWriter, desc roachpb.RangeDescriptor) e
 		if _, err := saveState(batch, state); err != nil {
 			return errors.Wrapf(err, "could not migrate TruncatedState to %+v", &state.TruncatedState)
 		}
-		log.Warningf("migration: synthesized TruncatedState for %+v", desc)
+		log.Warningf(context.TODO(), "migration: synthesized TruncatedState for %+v", desc)
 	}
 
 	hs, err := loadHardState(batch, desc.RangeID)

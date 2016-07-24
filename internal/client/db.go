@@ -471,7 +471,7 @@ func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof("failed batch: %s", pErr)
+			log.Infof(context.TODO(), "failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}
