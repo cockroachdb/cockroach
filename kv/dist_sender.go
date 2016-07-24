@@ -306,7 +306,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 			return nodeDesc
 		}
 	}
-	log.Infof("unable to determine this node's attributes for replica " +
+	log.Infof(context.TODO(), "unable to determine this node's attributes for replica "+
 		"selection; node is most likely bootstrapping")
 	return nil
 }
@@ -653,7 +653,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if err != nil {
 				log.Trace(ctx, "range descriptor lookup failed: "+err.Error())
 				if log.V(1) {
-					log.Warning(err)
+					log.Warning(context.TODO(), err)
 				}
 				pErr = roachpb.NewError(err)
 				continue
@@ -726,7 +726,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 
 			if log.V(1) {
-				log.Warningf("failed to invoke %s: %s", ba, pErr)
+				log.Warningf(context.TODO(), "failed to invoke %s: %s", ba, pErr)
 			}
 			log.Trace(ctx, fmt.Sprintf("reply error: %s", pErr))
 
@@ -773,7 +773,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
 				if log.V(1) {
-					log.Warning(tErr)
+					log.Warning(context.TODO(), tErr)
 				}
 				continue
 			}
@@ -788,7 +788,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			case <-ds.rpcRetryOptions.Closer:
 				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
 			default:
-				log.Fatal("exited retry loop with nil error but finished=false")
+				log.Fatal(context.TODO(), "exited retry loop with nil error but finished=false")
 			}
 		}
 
@@ -990,9 +990,9 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof("RPC reply: %+v", call.Reply)
+					log.Infof(context.TODO(), "RPC reply: %+v", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
-					log.Infof("application error: %s", call.Reply.Error)
+					log.Infof(context.TODO(), "application error: %s", call.Reply.Error)
 				}
 
 				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
@@ -1008,7 +1008,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
-				log.Warningf("RPC error: %s", err)
+				log.Warningf(context.TODO(), "RPC error: %s", err)
 			}
 
 			// Send to additional replicas if available.
@@ -1058,12 +1058,12 @@ func (ds *DistSender) updateLeaseHolderCache(
 	if log.V(1) {
 		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(rangeID); ok {
 			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
-				log.Infof("range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
+				log.Infof(context.TODO(), "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
 			} else if newLeaseHolder != oldLeaseHolder {
-				log.Infof("range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
+				log.Infof(context.TODO(), "range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
 			}
 		} else {
-			log.Infof("range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
+			log.Infof(context.TODO(), "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
 		}
 	}
 	ds.leaseHolderCache.Update(rangeID, newLeaseHolder)

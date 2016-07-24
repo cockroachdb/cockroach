@@ -77,7 +77,7 @@ func (sd *storeDetail) markDead(foundDeadOn hlc.Timestamp) {
 	if sd.desc != nil {
 		// sd.desc can still be nil if it was markedAlive and enqueued in getStoreDetailLocked
 		// and never markedAlive again.
-		log.Warningf("store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID)
+		log.Warningf(context.TODO(), "store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID)
 	}
 }
 
@@ -239,7 +239,7 @@ func NewStorePool(
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return
 	}
 
@@ -465,7 +465,7 @@ func (sp *StorePool) reserve(
 	}
 
 	if log.V(2) {
-		log.Infof("proposing new reservation:%+v", req)
+		log.Infof(context.TODO(), "proposing new reservation:%+v", req)
 	}
 
 	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), sp.reserveRPCTimeout)
@@ -479,7 +479,7 @@ func (sp *StorePool) reserve(
 	if err != nil {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		if log.V(2) {
-			log.Infof("reservation failed, store:%s will be throttled for %s until %s",
+			log.Infof(context.TODO(), "reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
 		return errors.Wrapf(err, "reservation failed:%+v", req)
@@ -487,14 +487,14 @@ func (sp *StorePool) reserve(
 	if !resp.Reserved {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
-			log.Infof("reservation failed, store:%s will be throttled for %s until %s",
+			log.Infof(context.TODO(), "reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
 		return errors.Errorf("reservation declined:%+v", req)
 	}
 
 	if log.V(2) {
-		log.Infof("reservation was approved:%+v", req)
+		log.Infof(context.TODO(), "reservation was approved:%+v", req)
 	}
 	return nil
 }

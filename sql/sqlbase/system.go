@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -127,19 +128,19 @@ func createSystemConfigTable(id ID, schema string) TableDescriptor {
 func createTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
 	stmt, err := parser.ParseOneTraditional(schema)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 
 	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), parentID)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 
 	desc.Privileges = privileges
 
 	desc.ID = id
 	if err := desc.AllocateIDs(); err != nil {
-		log.Fatalf("%s: %v", desc.Name, err)
+		log.Fatalf(context.TODO(), "%s: %v", desc.Name, err)
 	}
 
 	return desc
@@ -151,7 +152,7 @@ func createDefaultZoneConfig() []roachpb.KeyValue {
 	value := roachpb.Value{}
 	desc := config.DefaultZoneConfig()
 	if err := value.SetProto(&desc); err != nil {
-		log.Fatalf("could not marshal %v", desc)
+		log.Fatalf(context.TODO(), "could not marshal %v", desc)
 	}
 	ret = append(ret, roachpb.KeyValue{
 		Key:   MakeZoneKey(keys.RootNamespaceID),

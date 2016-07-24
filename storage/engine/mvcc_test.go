@@ -3140,7 +3140,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, seed := randutil.NewPseudoRand()
-	log.Infof("using pseudo random number generator with seed %d", seed)
+	log.Infof(context.TODO(), "using pseudo random number generator with seed %d", seed)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -3158,7 +3158,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		lastWT = ts.WallTime
 
 		if log.V(1) {
-			log.Infof("*** cycle %d @ %s", i, ts)
+			log.Infof(context.TODO(), "*** cycle %d @ %s", i, ts)
 		}
 		// Manually advance aggregate intent age based on one extra second of simulation.
 		// Same for aggregate gc'able bytes age.
@@ -3177,14 +3177,14 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i > 0 && isDelete {
 			idx := rng.Int31n(i)
 			if log.V(1) {
-				log.Infof("*** DELETE index %d", idx)
+				log.Infof(context.TODO(), "*** DELETE index %d", idx)
 			}
 			if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
 				if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
 					wiErr.Intents[0].Status = roachpb.ABORTED
 					if log.V(1) {
-						log.Infof("*** ABORT index %d", idx)
+						log.Infof(context.TODO(), "*** ABORT index %d", idx)
 					}
 					// Note that this already incorporates committing an intent
 					// at a later time (since we use a potentially later ts here
@@ -3194,7 +3194,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 					}
 					// Now, re-delete.
 					if log.V(1) {
-						log.Infof("*** RE-DELETE index %d", idx)
+						log.Infof(context.TODO(), "*** RE-DELETE index %d", idx)
 					}
 					if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
 						t.Fatal(err)
@@ -3206,7 +3206,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		} else {
 			rngVal := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, int(rng.Int31n(128))))
 			if log.V(1) {
-				log.Infof("*** PUT index %d; TXN=%t", i, txn != nil)
+				log.Infof(context.TODO(), "*** PUT index %d; TXN=%t", i, txn != nil)
 			}
 			if err := MVCCPut(context.Background(), engine, ms, key, ts, rngVal, txn); err != nil {
 				t.Fatal(err)
@@ -3218,7 +3218,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				txn.Status = roachpb.ABORTED
 			}
 			if log.V(1) {
-				log.Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
+				log.Infof(context.TODO(), "*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
 			}
 			if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 				t.Fatal(err)
@@ -3302,7 +3302,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i, kv := range kvsn {
-			log.Infof("%d: %s", i, kv.Key)
+			log.Infof(context.TODO(), "%d: %s", i, kv.Key)
 		}
 	}
 

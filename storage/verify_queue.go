@@ -68,7 +68,7 @@ func (*verifyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	// Get last verification timestamp.
 	lastVerify, err := rng.getLastVerificationTimestamp()
 	if err != nil {
-		log.Errorf("unable to fetch last verification timestamp: %s", err)
+		log.Errorf(context.TODO(), "unable to fetch last verification timestamp: %s", err)
 		return
 	}
 	verifyScore := float64(now.WallTime-lastVerify.WallTime) / float64(verificationInterval.Nanoseconds())
@@ -103,7 +103,7 @@ func (*verifyQueue) process(
 		// TODO(spencer): do something other than fatal error here. We
 		// want to quarantine this range, make it a non-participating raft
 		// follower until it can be replaced and then destroyed.
-		log.Fatalf("unhandled failure when scanning range %s; probable data corruption: %s", rng, iter.Error())
+		log.Fatalf(context.TODO(), "unhandled failure when scanning range %s; probable data corruption: %s", rng, iter.Error())
 	}
 
 	// Store current timestamp as last verification for this range.

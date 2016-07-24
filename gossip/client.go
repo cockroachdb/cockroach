@@ -68,7 +68,7 @@ func newClient(addr net.Addr) *client {
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
 func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, stopper *stop.Stopper) {
-	log.Infof("starting client to %s", c.addr)
+	log.Infof(context.TODO(), "starting client to %s", c.addr)
 
 	stopper.RunWorker(func() {
 		defer func() {
@@ -81,7 +81,7 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 		// that ends ups up making `kv` tests take twice as long.
 		conn, err := ctx.GRPCDial(c.addr.String())
 		if err != nil {
-			log.Errorf("failed to dial: %v", err)
+			log.Errorf(context.TODO(), "failed to dial: %v", err)
 			return
 		}
 
@@ -92,9 +92,9 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 				peerID := c.peerID
 				g.mu.Unlock()
 				if peerID != 0 {
-					log.Infof("closing client to node %d (%s): %s", peerID, c.addr, err)
+					log.Infof(context.TODO(), "closing client to node %d (%s): %s", peerID, c.addr, err)
 				} else {
-					log.Infof("closing client to %s: %s", c.addr, err)
+					log.Infof(context.TODO(), "closing client to %s: %s", c.addr, err)
 				}
 			}
 		}
@@ -156,11 +156,11 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 		c.received += len(reply.Delta)
 		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf("node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
+			log.Warningf(context.TODO(), "node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof("node %d received %s from node %d (%d fresh)", g.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(context.TODO(), "node %d received %s from node %d (%d fresh)", g.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTighten()

@@ -328,7 +328,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			t.Fatal(err)
 		}
 		ts[i] = s.Clock().Now()
-		log.Infof("%d: %s %d", i, key, ts[i])
+		log.Infof(context.TODO(), "%d: %s %d", i, key, ts[i])
 		if i == 0 {
 			util.SucceedsSoon(t, func() error {
 				// Enforce that when we write the second key, it's written
@@ -677,14 +677,14 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		if err := db.Txn(func(txn *client.Txn) error {
 			// Set high priority so that the intent will not be pushed.
 			txn.InternalSetPriority(highPriority)
-			log.Infof("Creating a write intent with high priority")
+			log.Infof(context.TODO(), "Creating a write intent with high priority")
 			if err := txn.Put(key, "val"); err != nil {
 				return err
 			}
 			close(waitForWriteIntent)
 			// Wait until another txn in this test is
 			// restarted by a push txn error.
-			log.Infof("Waiting for the txn restart")
+			log.Infof(context.TODO(), "Waiting for the txn restart")
 			<-waitForTxnRestart
 			return txn.CommitInBatch(txn.NewBatch())
 		}); err != nil {
@@ -694,7 +694,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	}()
 
 	// Wait until a write intent is created by the above goroutine.
-	log.Infof("Waiting for the write intent creation")
+	log.Infof(context.TODO(), "Waiting for the write intent creation")
 	<-waitForWriteIntent
 
 	// The transaction below is restarted exactly once. The restart is
@@ -712,7 +712,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		if epoch == 2 {
 			close(waitForTxnRestart)
 			// Wait until the txn created by the goroutine is committed.
-			log.Infof("Waiting for the txn commit")
+			log.Infof(context.TODO(), "Waiting for the txn commit")
 			<-waitForTxnCommit
 			if !roachpb.TxnIDEqual(txn.Proto.ID, txnID) {
 				t.Errorf("txn ID is not propagated; got %s", txn.Proto.ID)
@@ -735,7 +735,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		if epoch == 1 {
 			// Wait for the completion of the goroutine to see if it successfully commits the txn.
 			close(waitForTxnRestart)
-			log.Infof("Waiting for the txn commit")
+			log.Infof(context.TODO(), "Waiting for the txn commit")
 			<-waitForTxnCommit
 		}
 	}

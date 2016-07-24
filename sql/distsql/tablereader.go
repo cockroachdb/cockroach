@@ -19,6 +19,8 @@ package distsql
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -216,7 +218,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 	if log.V(2) {
-		log.Infof("TableReader filter: %s\n", tr.filter.expr)
+		log.Infof(context.TODO(), "TableReader filter: %s\n", tr.filter.expr)
 	}
 
 	if err := tr.fetcher.StartScan(tr.txn, tr.spans, tr.getLimitHint()); err != nil {

@@ -287,7 +287,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// state of the Replica). Everything must come from the snapshot.
 		snapData, err := snapshot(snap, rangeID, r.mu.state.Desc.StartKey)
 		if err != nil {
-			log.Errorf("%s: error generating snapshot: %s", r, err)
+			log.Errorf(context.TODO(), "%s: error generating snapshot: %s", r, err)
 		} else {
 			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
@@ -436,7 +436,7 @@ func snapshot(
 		return raftpb.Snapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	log.Infof("generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
+	log.Infof(context.TODO(), "generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
 		rangeID, appliedIndex, timeutil.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
 
 	return raftpb.Snapshot{
@@ -500,7 +500,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	if !ok {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
-		log.Warningf("%s: no system config available, cannot determine range MaxBytes", r)
+		log.Warningf(context.TODO(), "%s: no system config available, cannot determine range MaxBytes", r)
 		return nil
 	}
 
@@ -563,12 +563,12 @@ func (r *Replica) applySnapshot(
 		snapType = "Raft"
 	}
 
-	log.Infof("%s: with replicaID %s, applying %s snapshot for range %d at index %d "+
+	log.Infof(context.TODO(), "%s: with replicaID %s, applying %s snapshot for range %d at index %d "+
 		"(encoded size=%d, %d KV pairs, %d log entries)",
 		r, replicaIDStr, snapType, desc.RangeID, snap.Metadata.Index,
 		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("%s: with replicaID %s, applied %s snapshot for range %d in %s",
+		log.Infof(context.TODO(), "%s: with replicaID %s, applied %s snapshot for range %d in %s",
 			r, replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
@@ -635,7 +635,7 @@ func (r *Replica) applySnapshot(
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
 	if s.RaftAppliedIndex != snap.Metadata.Index {
-		log.Fatalf("%s with state loaded from %d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+		log.Fatalf(context.TODO(), "%s with state loaded from %d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
 			r, s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
@@ -729,7 +729,7 @@ const (
 
 func encodeRaftCommand(commandID string, command []byte) []byte {
 	if len(commandID) != raftCommandIDLen {
-		log.Fatalf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen)
+		log.Fatalf(context.TODO(), "invalid command ID length; %d != %d", len(commandID), raftCommandIDLen)
 	}
 	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
 	x[0] = raftCommandEncodingVersion
@@ -745,7 +745,7 @@ func encodeRaftCommand(commandID string, command []byte) []byte {
 // but is exported for use by debugging tools.
 func DecodeRaftCommand(data []byte) (commandID string, command []byte) {
 	if data[0] != raftCommandEncodingVersion {
-		log.Fatalf("unknown command encoding version %v", data[0])
+		log.Fatalf(context.TODO(), "unknown command encoding version %v", data[0])
 	}
 	return string(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
 }

@@ -23,6 +23,8 @@ import (
 	"math"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -262,7 +264,7 @@ func (n *sortNode) wrap(plan planNode) (bool, planNode) {
 		// ordering.
 		existingOrdering := plan.Ordering()
 		if log.V(2) {
-			log.Infof("Sort: existing=%+v desired=%+v", existingOrdering, n.ordering)
+			log.Infof(context.TODO(), "Sort: existing=%+v desired=%+v", existingOrdering, n.ordering)
 		}
 		match := computeOrderingMatch(n.ordering, existingOrdering, false)
 		if match < len(n.ordering) {
@@ -279,7 +281,7 @@ func (n *sortNode) wrap(plan planNode) (bool, planNode) {
 		}
 
 		if log.V(2) {
-			log.Infof("Sort: no sorting required")
+			log.Infof(context.TODO(), "Sort: no sorting required")
 		}
 	}
 

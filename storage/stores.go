@@ -99,7 +99,7 @@ func (ls *Stores) AddStore(s *Store) {
 	// all stores have the most recent values.
 	if !ls.biLatestTS.Equal(hlc.ZeroTimestamp) {
 		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
-			log.Errorf("failed to update bootstrap info on newly added store: %s", err)
+			log.Errorf(context.TODO(), "failed to update bootstrap info on newly added store: %s", err)
 		}
 	}
 }
@@ -195,7 +195,7 @@ func (ls *Stores) LookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
-				log.Warningf("range not contained in one range: [%s,%s), but have [%s,%s)",
+				log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
 					start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey)
 				partialDesc = tmpRng.Desc()
 				break
@@ -292,7 +292,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 			*bi = storeBI
 		}
 	}
-	log.Infof("read %d node addresses from persistent storage", len(bi.Addresses))
+	log.Infof(context.TODO(), "read %d node addresses from persistent storage", len(bi.Addresses))
 	return ls.updateBootstrapInfo(bi)
 }
 
@@ -307,7 +307,7 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if err := ls.updateBootstrapInfo(bi); err != nil {
 		return err
 	}
-	log.Infof("wrote %d node addresses to persistent storage", len(bi.Addresses))
+	log.Infof(context.TODO(), "wrote %d node addresses to persistent storage", len(bi.Addresses))
 	return nil
 }
 

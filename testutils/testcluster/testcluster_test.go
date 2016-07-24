@@ -20,6 +20,8 @@ package testcluster
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -63,7 +65,7 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Infof("After split got ranges: %+v and %+v.", leftRangeDesc, tableRangeDesc)
+	log.Infof(context.TODO(), "After split got ranges: %+v and %+v.", leftRangeDesc, tableRangeDesc)
 	if len(tableRangeDesc.Replicas) == 0 {
 		t.Fatalf(
 			"expected replica on node 1, got no replicas: %+v", tableRangeDesc.Replicas)

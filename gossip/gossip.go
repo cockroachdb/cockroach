@@ -61,6 +61,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -265,7 +267,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	var storedBI BootstrapInfo
 	err := storage.ReadBootstrapInfo(&storedBI)
 	if err != nil {
-		log.Warningf("failed to read gossip bootstrap info: %s", err)
+		log.Warningf(context.TODO(), "failed to read gossip bootstrap info: %s", err)
 	}
 
 	// Merge the stored bootstrap info addresses with any we've become
@@ -284,7 +286,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// Persist merged addresses.
 	if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Error(err)
+			log.Error(context.TODO(), err)
 		}
 	}
 
@@ -306,7 +308,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// If a new resolver was found, immediately signal bootstrap.
 	if newResolverFound {
 		if log.V(1) {
-			log.Infof("found new resolvers from storage; signalling bootstrap")
+			log.Infof(context.TODO(), "found new resolvers from storage; signalling bootstrap")
 		}
 		g.signalStalled()
 	}
@@ -358,7 +360,7 @@ func (g *Gossip) LogStatus() {
 	}
 	g.mu.Unlock()
 
-	log.Infof("gossip status (%s, %d node%s)\n%s%s",
+	log.Infof(context.TODO(), "gossip status (%s, %d node%s)\n%s%s",
 		status, n, util.Pluralize(int64(n)),
 		g.clientStatus(), g.server.status())
 }
@@ -409,7 +411,7 @@ func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
 	if _, ok := g.resolverAddrs[addr]; !ok {
 		r, err := resolver.NewResolverFromUnresolvedAddr(addr)
 		if err != nil {
-			log.Warningf("bad address %s: %s", addr, err)
+			log.Warningf(context.TODO(), "bad address %s: %s", addr, err)
 			return false
 		}
 		g.resolvers = append(g.resolvers, r)
@@ -457,7 +459,7 @@ func (g *Gossip) maxPeers(nodeCount int) int {
 func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	var desc roachpb.NodeDescriptor
 	if err := content.GetProto(&desc); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return
 	}
 
@@ -493,7 +495,7 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 		// TODO(spencer): need to clean up ancient gossip nodes, which
 		//   will otherwise stick around in the bootstrap info forever.
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Error(err)
+			log.Error(context.TODO(), err)
 		}
 	}
 }
@@ -609,7 +611,7 @@ type Callback func(string, roachpb.Value)
 // matched pattern. Returns a function to unregister the callback.
 func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
 	if pattern == KeySystemConfig {
-		log.Warningf("raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
+		log.Warningf(context.TODO(), "raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
 			KeySystemConfig)
 	}
 
@@ -656,12 +658,12 @@ func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 // copy and run the callbacks.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	if key != KeySystemConfig {
-		log.Fatalf("wrong key received on SystemConfig callback: %s", key)
+		log.Fatalf(context.TODO(), "wrong key received on SystemConfig callback: %s", key)
 		return
 	}
 	cfg := config.SystemConfig{}
 	if err := content.GetProto(&cfg); err != nil {
-		log.Errorf("could not unmarshal system config on callback: %s", err)
+		log.Errorf(context.TODO(), "could not unmarshal system config on callback: %s", err)
 		return
 	}
 
@@ -749,7 +751,7 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 		g.resolversTried[g.resolverIdx] = struct{}{}
 		resolver := g.resolvers[g.resolverIdx]
 		if addr, err := resolver.GetAddress(); err != nil {
-			log.Errorf("invalid bootstrap address: %+v, %v", resolver, err)
+			log.Errorf(context.TODO(), "invalid bootstrap address: %+v, %v", resolver, err)
 			continue
 		} else {
 			addrStr := addr.String()
@@ -847,7 +849,7 @@ func (g *Gossip) manage() {
 							return c.peerID == leastUsefulID
 						}); c != nil {
 							if log.V(1) {
-								log.Infof("closing least useful client %+v to tighten network graph", c)
+								log.Infof(context.TODO(), "closing least useful client %+v to tighten network graph", c)
 							}
 							c.close()
 
@@ -858,7 +860,7 @@ func (g *Gossip) manage() {
 						} else {
 							if log.V(1) {
 								g.clientsMu.Lock()
-								log.Infof("couldn't find least useful client among %+v", g.clientsMu.clients)
+								log.Infof(context.TODO(), "couldn't find least useful client among %+v", g.clientsMu.clients)
 								g.clientsMu.Unlock()
 							}
 						}
@@ -888,9 +890,9 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 	defer g.mu.Unlock()
 	if g.outgoing.hasSpace() {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf("node %d: %s", distantNodeID, err)
+			log.Errorf(context.TODO(), "node %d: %s", distantNodeID, err)
 		} else {
-			log.Infof("starting client to distant node %d to tighten network graph", distantNodeID)
+			log.Infof(context.TODO(), "starting client to distant node %d to tighten network graph", distantNodeID)
 			g.startClient(nodeAddr)
 		}
 	}
@@ -934,11 +936,11 @@ func (g *Gossip) signalStalled() {
 // never having been initialized.
 func (g *Gossip) warnAboutStall() {
 	if g.outgoing.len()+g.incoming.len() == 0 {
-		log.Warningf("not connected to cluster; use --join to specify a connected node")
+		log.Warningf(context.TODO(), "not connected to cluster; use --join to specify a connected node")
 	} else if len(g.resolversTried) == len(g.resolvers) {
-		log.Warningf("first range unavailable or cluster not initialized")
+		log.Warningf(context.TODO(), "first range unavailable or cluster not initialized")
 	} else {
-		log.Warningf("partition in gossip network; attempting new connection")
+		log.Warningf(context.TODO(), "partition in gossip network; attempting new connection")
 	}
 }
 

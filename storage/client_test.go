@@ -812,13 +812,13 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	for i, eng := range m.engines {
 		val, _, err := engine.MVCCGet(context.Background(), eng, key, m.clock.Now(), true, nil)
 		if err != nil {
-			log.Errorf("engine %d: error reading from key %s: %s", i, key, err)
+			log.Errorf(context.TODO(), "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
-			log.Errorf("engine %d: missing key %s", i, key)
+			log.Errorf(context.TODO(), "engine %d: missing key %s", i, key)
 		} else {
 			results[i], err = val.GetInt()
 			if err != nil {
-				log.Errorf("engine %d: error decoding %s from key %s: %s", i, val, key, err)
+				log.Errorf(context.TODO(), "engine %d: error decoding %s from key %s: %s", i, val, key, err)
 			}
 		}
 	}

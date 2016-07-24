@@ -83,7 +83,7 @@ func hasImage(l *LocalCluster, ref string) bool {
 	name := strings.Split(ref, ":")[0]
 	images, err := l.client.ImageList(context.Background(), types.ImageListOptions{MatchName: name})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 	for _, image := range images {
 		for _, repoTag := range image.RepoTags {
@@ -95,7 +95,7 @@ func hasImage(l *LocalCluster, ref string) bool {
 	}
 	for _, image := range images {
 		for _, tag := range image.RepoTags {
-			log.Infof("ImageList %s %s", tag, image.ID)
+			log.Infof(context.TODO(), "ImageList %s %s", tag, image.ID)
 		}
 	}
 	return false
@@ -106,12 +106,12 @@ func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) erro
 	// acceptance test even though that image is already present. So we first
 	// check to see if our image is present in order to avoid this slowness.
 	if hasImage(l, ref) {
-		log.Infof("ImagePull %s already exists", ref)
+		log.Infof(context.TODO(), "ImagePull %s already exists", ref)
 		return nil
 	}
 
-	log.Infof("ImagePull %s starting", ref)
-	defer log.Infof("ImagePull %s complete", ref)
+	log.Infof(context.TODO(), "ImagePull %s starting", ref)
+	defer log.Infof(context.TODO(), "ImagePull %s complete", ref)
 
 	rc, err := l.client.ImagePull(context.Background(), ref, options)
 	if err != nil {
@@ -132,7 +132,7 @@ func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) erro
 		}
 		// The message is a status bar.
 		if log.V(2) {
-			log.Infof("ImagePull response: %s", message)
+			log.Infof(context.TODO(), "ImagePull response: %s", message)
 		} else {
 			_, _ = fmt.Fprintf(os.Stderr, ".")
 		}
@@ -250,7 +250,7 @@ func (c *Container) Wait() error {
 	}
 	if exitCode != 0 {
 		if err := c.Logs(os.Stderr); err != nil {
-			log.Warning(err)
+			log.Warning(context.TODO(), err)
 		}
 		return fmt.Errorf("non-zero exit code: %d", exitCode)
 	}
@@ -296,7 +296,7 @@ func (c *Container) Inspect() (types.ContainerJSON, error) {
 func (c *Container) Addr(port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect()
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return nil
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
@@ -305,7 +305,7 @@ func (c *Container) Addr(port nat.Port) *net.TCPAddr {
 	}
 	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return nil
 	}
 	return &net.TCPAddr{
@@ -329,13 +329,13 @@ func (cli resilientDockerClient) ContainerCreate(
 ) (types.ContainerCreateResponse, error) {
 	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
-		log.Infof("unable to create container %s: %v", containerName, err)
+		log.Infof(context.TODO(), "unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
 			All:   true,
 			Limit: -1, // no limit, see docker/engine-api/client/container_list.go
 		})
 		if cerr != nil {
-			log.Infof("unable to list containers: %v", cerr)
+			log.Infof(context.TODO(), "unable to list containers: %v", cerr)
 			return types.ContainerCreateResponse{}, err
 		}
 		for _, c := range containers {
@@ -345,19 +345,19 @@ func (cli resilientDockerClient) ContainerCreate(
 				if n != containerName {
 					continue
 				}
-				log.Infof("trying to remove %s", c.ID)
+				log.Infof(context.TODO(), "trying to remove %s", c.ID)
 				options := types.ContainerRemoveOptions{
 					RemoveVolumes: true,
 					Force:         true,
 				}
 				if rerr := cli.ContainerRemove(ctx, c.ID, options); rerr != nil {
-					log.Infof("unable to remove container: %v", rerr)
+					log.Infof(context.TODO(), "unable to remove container: %v", rerr)
 					return types.ContainerCreateResponse{}, err
 				}
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 			}
 		}
-		log.Warningf("error indicated existing container %s, "+
+		log.Warningf(context.TODO(), "error indicated existing container %s, "+
 			"but none found:\nerror: %s\ncontainers: %+v",
 			containerName, err, containers)
 		// We likely raced with a previous (late) removal of the container.
@@ -421,7 +421,7 @@ func retry(
 				continue
 			} else if i > 0 && retryErrorsRE != matchNone {
 				if regexp.MustCompile(retryErrorsRE).MatchString(err.Error()) {
-					log.Infof("%s: swallowing expected error after retry: %v",
+					log.Infof(context.TODO(), "%s: swallowing expected error after retry: %v",
 						name, err)
 					return nil
 				}

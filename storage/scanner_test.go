@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 
@@ -253,7 +255,7 @@ func TestScannerTiming(t *testing.T) {
 			stopper.Stop()
 
 			avg := s.avgScan()
-			log.Infof("%d: average scan: %s", i, avg)
+			log.Infof(context.TODO(), "%d: average scan: %s", i, avg)
 			if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
 				duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
 				return errors.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)

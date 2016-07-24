@@ -970,10 +970,10 @@ func IterateRangeDescriptors(
 func (s *Store) migrate(desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
 	if err := migrate7310And6991(batch, desc); err != nil {
-		log.Fatal(errors.Wrap(err, "during migration"))
+		log.Fatal(context.TODO(), errors.Wrap(err, "during migration"))
 	}
 	if err := batch.Commit(); err != nil {
-		log.Fatal(errors.Wrap(err, "could not migrate Raft state"))
+		log.Fatal(context.TODO(), errors.Wrap(err, "could not migrate Raft state"))
 	}
 }
 
@@ -1125,7 +1125,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				}
 				ba.Add(&fReq)
 				if _, pErr := r.Send(context.TODO(), ba); pErr != nil {
-					log.Errorf("could not unfreeze Range %s on startup: %s", r, pErr)
+					log.Errorf(context.TODO(), "could not unfreeze Range %s on startup: %s", r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -1141,7 +1141,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		})
 		wg.Wait()
 		if unfrozen > 0 {
-			log.Infof("reactivated %d frozen Ranges", unfrozen)
+			log.Infof(context.TODO(), "reactivated %d frozen Ranges", unfrozen)
 		}
 	}) != nil {
 		close(doneUnfreezing)
@@ -1233,7 +1233,7 @@ func (s *Store) startGossip() {
 	s.stopper.RunWorker(func() {
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
-			log.Warningc(ctx, "error gossiping first range data: %s", err)
+			log.Warningf(ctx, "error gossiping first range data: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(sentinelGossipInterval)
@@ -1242,7 +1242,7 @@ func (s *Store) startGossip() {
 			select {
 			case <-ticker.C:
 				if err := s.maybeGossipFirstRange(); err != nil {
-					log.Warningc(ctx, "error gossiping first range data: %s", err)
+					log.Warningf(ctx, "error gossiping first range data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -1252,7 +1252,7 @@ func (s *Store) startGossip() {
 
 	s.stopper.RunWorker(func() {
 		if err := s.maybeGossipSystemConfig(); err != nil {
-			log.Warningc(ctx, "error gossiping system config: %s", err)
+			log.Warningf(ctx, "error gossiping system config: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
@@ -1261,7 +1261,7 @@ func (s *Store) startGossip() {
 			select {
 			case <-ticker.C:
 				if err := s.maybeGossipSystemConfig(); err != nil {
-					log.Warningc(ctx, "error gossiping system config: %s", err)
+					log.Warningf(ctx, "error gossiping system config: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -1331,14 +1331,14 @@ func (s *Store) GossipStore() {
 
 	storeDesc, err := s.Descriptor()
 	if err != nil {
-		log.Warningc(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
+		log.Warningf(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
 		return
 	}
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
-		log.Warningc(ctx, "%s", err)
+		log.Warningf(ctx, "%s", err)
 	}
 }
 
@@ -2114,12 +2114,12 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			if t.Resolved {
 				r.Reset()
 				if log.V(1) {
-					log.Warning(pErr)
+					log.Warning(context.TODO(), pErr)
 				}
 				continue
 			}
 			if log.V(1) {
-				log.Warning(pErr)
+				log.Warning(context.TODO(), pErr)
 			}
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
@@ -2270,7 +2270,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
 		// the only way we can get here is if the replica did not previously exist.
 		if log.V(1) {
-			log.Infof("refusing incoming Raft message %s for range %d from %+v to %+v",
+			log.Infof(context.TODO(), "refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
 		}
 		return errors.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
@@ -2382,7 +2382,7 @@ func (s *Store) processRaft() {
 				s.mu.Lock()
 				for _, r := range s.mu.replicas {
 					if err := r.tick(); err != nil {
-						log.Error(err)
+						log.Error(context.TODO(), err)
 					}
 				}
 				// Enqueue all ranges for readiness checks. Note that we
@@ -2494,7 +2494,7 @@ func (s *Store) cacheReplicaDescriptorLocked(
 	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{rangeID, replicaDesc.ReplicaID}); ok {
 		if old != replicaDesc {
 			rpl, _ := s.getReplicaLocked(rangeID)
-			log.Fatalf("store %+v, range %d: clobbering %+v with %+v "+
+			log.Fatalf(context.TODO(), "store %+v, range %d: clobbering %+v with %+v "+
 				"in replicaDescCache; have replica %+v", s.Ident,
 				rangeID, old, replicaDesc, rpl)
 		}
@@ -2560,7 +2560,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
-		log.Infof("system config not yet available")
+		log.Infof(context.TODO(), "system config not yet available")
 		return
 	}
 
@@ -2571,7 +2571,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 		desc := rng.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
-			log.Error(err)
+			log.Error(context.TODO(), err)
 			continue
 		}
 		raftStatus := rng.RaftStatus()
@@ -2641,7 +2641,7 @@ func (s *Store) ComputeMetrics() error {
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
 		sstables := rocksdb.GetSSTables()
 		readAmp := sstables.ReadAmplification()
-		log.Infof("store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
+		log.Infof(context.TODO(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
 		s.metrics.rdbReadAmplification.Update(int64(readAmp))
 	}
 	return nil
@@ -2680,7 +2680,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
 				return true
 			}
-			log.Fatalf("unexpected error: %s", err)
+			log.Fatalf(context.TODO(), "unexpected error: %s", err)
 		}
 		r.mu.Lock()
 		if r.mu.state.Frozen == collectFrozen {

@@ -132,14 +132,14 @@ type queueLog struct {
 
 func (l queueLog) VInfof(logv bool, format string, a ...interface{}) {
 	if logv {
-		log.InfofDepth(1, l.prefix+format, a...)
+		log.InfofDepth(context.TODO(), 1, l.prefix+format, a...)
 	}
 	l.traceLog.Printf(format, a...)
 }
 
 func (l queueLog) Error(err error) {
 	const format = "%s"
-	log.ErrorfDepth(1, l.prefix+format, err)
+	log.ErrorfDepth(context.TODO(), 1, l.prefix+format, err)
 	l.traceLog.Errorf(format, err)
 }
 

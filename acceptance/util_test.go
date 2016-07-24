@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 
@@ -188,7 +190,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		AddVars:     make(map[string]string),
 		KeepCluster: flagTFKeepCluster.String(),
 	}
-	log.Infof("logging to %s", logDir)
+	log.Infof(context.TODO(), "logging to %s", logDir)
 	return f
 }
 

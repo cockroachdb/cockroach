@@ -73,7 +73,7 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	raftStatus := r.RaftStatus()
 	if raftStatus == nil {
 		if log.V(1) {
-			log.Infof("the raft group doesn't exist for range %d", rangeID)
+			log.Infof(context.TODO(), "the raft group doesn't exist for range %d", rangeID)
 		}
 		return 0, 0, nil
 	}
@@ -141,7 +141,7 @@ func (*raftLogQueue) shouldQueue(
 ) (shouldQ bool, priority float64) {
 	truncatableIndexes, _, err := getTruncatableIndexes(r)
 	if err != nil {
-		log.Warning(err)
+		log.Warning(context.TODO(), err)
 		return false, 0
 	}
 
@@ -165,7 +165,7 @@ func (rlq *raftLogQueue) process(
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
 		if log.V(1) {
-			log.Infof("truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
+			log.Infof(context.TODO(), "truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{

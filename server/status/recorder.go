@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
@@ -155,7 +157,7 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.MarshalJSON() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.MarshalJSON() called before NodeID allocation")
 		}
 		return []byte("{}"), nil
 	}
@@ -179,7 +181,7 @@ func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 	if mr.mu.nodeID == 0 {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.MarshalText() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.MarshalText() called before NodeID allocation")
 		}
 		return nil
 	}
@@ -204,7 +206,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	if mr.mu.desc.NodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
 		}
 		return nil
 	}
@@ -245,7 +247,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 	if mr.mu.nodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.GetStatusSummary called before NodeID allocation.")
+			log.Warning(context.TODO(), "MetricsRecorder.GetStatusSummary called before NodeID allocation.")
 		}
 		return nil
 	}
@@ -276,7 +278,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor()
 		if err != nil {
-			log.Errorf("Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Errorf(context.TODO(), "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
@@ -335,7 +337,7 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 		} else {
 			val, err := extractValue(mtr)
 			if err != nil {
-				log.Warning(err)
+				log.Warning(context.TODO(), err)
 				return
 			}
 			fn(name, val)
