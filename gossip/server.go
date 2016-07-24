@@ -123,7 +123,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, args.NodeID)
+				log.Infof(context.TODO(), "node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, args.NodeID)
 			}
 
 			*reply = Response{
@@ -196,7 +196,7 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 					altIdx--
 				}
 
-				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+				log.Infof(context.TODO(), "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
 					args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
@@ -215,10 +215,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 		s.received += len(args.Delta)
 		freshCount, err := s.is.combine(args.Delta, args.NodeID)
 		if err != nil {
-			log.Warningf("node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
+			log.Warningf(context.TODO(), "node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof("node %d received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Infof(context.TODO(), "node %d received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 		}
 		s.maybeTighten()
 
@@ -273,13 +273,13 @@ func (s *server) InfosReceived() int {
 func (s *server) maybeTighten() {
 	distantNodeID, distantHops := s.is.mostDistant()
 	if log.V(2) {
-		log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+		log.Infof(context.TODO(), "@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
 	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
 			if log.V(1) {
-				log.Infof("if possible, tightening network to node %d (%d > %d)", distantNodeID, distantHops, MaxHops)
+				log.Infof(context.TODO(), "if possible, tightening network to node %d (%d > %d)", distantNodeID, distantHops, MaxHops)
 			}
 		default:
 			// Do nothing.

@@ -290,7 +290,7 @@ func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Re
 	}
 	r, err := NewReplica(desc, s, 0)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 	return r
 }

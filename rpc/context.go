@@ -135,7 +135,7 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
 	if err := conn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
 		if log.V(1) {
-			log.Errorf("failed to close client connection: %s", err)
+			log.Errorf(context.TODO(), "failed to close client connection: %s", err)
 		}
 	}
 	delete(ctx.conns.cache, key)
@@ -175,7 +175,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if ctx.Stopper.RunTask(func() {
 			ctx.Stopper.RunWorker(func() {
 				if err := ctx.runHeartbeat(conn, target); err != nil && !grpcutil.IsClosedConnection(err) {
-					log.Error(err)
+					log.Error(context.TODO(), err)
 				}
 				ctx.conns.Lock()
 				ctx.removeConn(target, conn)

@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"golang.org/x/net/context"
+
 	"github.com/biogo/store/llrb"
 
 	"github.com/cockroachdb/cockroach/util/interval"
@@ -514,14 +516,14 @@ func (ic *IntervalCache) doGet(i interval.Interface) bool {
 
 func (ic *IntervalCache) add(e *Entry) {
 	if err := ic.tree.Insert(e, false); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 	}
 }
 
 func (ic *IntervalCache) del(key interface{}) {
 	ic.tmpEntry.Key = key
 	if err := ic.tree.Delete(&ic.tmpEntry, false); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 	}
 }
 

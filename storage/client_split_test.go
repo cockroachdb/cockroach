@@ -781,7 +781,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			}
 			bytes, err := kv.Value.GetBytes()
 			if err != nil {
-				log.Info(err)
+				log.Info(context.TODO(), err)
 				continue
 			}
 			if err := txn.Put(kv.Key, bytes); err != nil {
@@ -1171,7 +1171,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil
 		}
-		log.Infof("refusing %+v because %+v held lease for LHS of split",
+		log.Infof(context.TODO(), "refusing %+v because %+v held lease for LHS of split",
 			leaseReq, forbiddenDesc)
 		return roachpb.NewError(&roachpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
 	}

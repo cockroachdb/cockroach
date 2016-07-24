@@ -23,6 +23,8 @@ import (
 	"math/rand"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -302,12 +304,12 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 	if log.V(2) {
-		log.Infof("ShouldRebalance from store %d", storeID)
+		log.Infof(context.TODO(), "ShouldRebalance from store %d", storeID)
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
 	if storeDesc == nil {
 		if log.V(2) {
-			log.Warningf(
+			log.Warningf(context.TODO(),
 				"ShouldRebalance couldn't find store with id %d in StorePool",
 				storeID)
 		}

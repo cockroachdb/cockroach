@@ -28,5 +28,5 @@ func TestLogNilArg(t *testing.T) {
 			t.Fatalf("test panicked")
 		}
 	}()
-	Warningc(context.Background(), "test", nil)
+	Warningf(context.Background(), "test", nil)
 }

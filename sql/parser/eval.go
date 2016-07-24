@@ -26,6 +26,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"golang.org/x/net/context"
+
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -1865,14 +1867,14 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *RangeCond) Eval(_ *EvalContext) (Datum, error) {
-	log.Errorf("unhandled type %T passed to Eval", expr)
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *Subquery) Eval(_ *EvalContext) (Datum, error) {
 	// Subquery expressions are handled during subquery expansion.
-	log.Errorf("unhandled type %T passed to Eval", expr)
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
@@ -1890,13 +1892,13 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr DefaultVal) Eval(_ *EvalContext) (Datum, error) {
-	log.Errorf("unhandled type %T passed to Eval", expr)
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *QualifiedName) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf("unhandled type %T passed to Eval", expr)
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 

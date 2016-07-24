@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -171,7 +173,7 @@ func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) 
 			atomic.AddUint64(&client.count, 1)
 		}
 	}
-	log.Infof("client %d shutting down", idx)
+	log.Infof(context.TODO(), "client %d shutting down", idx)
 	state.errChan <- nil
 }
 
@@ -196,7 +198,7 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 				state.clients[i].Lock()
 			}
 		}
-		log.Infof("round %d: restarting nodes %v", curRound, nodes)
+		log.Infof(context.TODO(), "round %d: restarting nodes %v", curRound, nodes)
 		for _, i := range nodes {
 			// Two early exit conditions.
 			select {
@@ -207,7 +209,7 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 			if state.done() {
 				break
 			}
-			log.Infof("round %d: restarting %d", curRound, i)
+			log.Infof(context.TODO(), "round %d: restarting %d", curRound, i)
 			if err := c.Kill(i); err != nil {
 				state.t.Error(err)
 			}
@@ -238,13 +240,13 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		}
 
 		// Sleep until at least one client is writing successfully.
-		log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
+		log.Warningf(context.TODO(), "round %d: monkey sleeping while cluster recovers...", curRound)
 		for !state.done() && !madeProgress() {
 			time.Sleep(time.Second)
 		}
 		c.Assert(state.t)
 		cluster.Consistent(state.t, c)
-		log.Warningf("round %d: cluster recovered", curRound)
+		log.Warningf(context.TODO(), "round %d: cluster recovered", curRound)
 	}
 }
 
@@ -292,7 +294,7 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 			}
 			// This just stops the logs from being a bit too spammy.
 			if newOutput != prevOutput {
-				log.Infof(newOutput)
+				log.Infof(context.TODO(), newOutput)
 				prevOutput = newOutput
 			}
 		}
@@ -335,7 +337,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
-	log.Warningf("monkey starts (seed %d)", seed)
+	log.Warningf(context.TODO(), "monkey starts (seed %d)", seed)
 	pickNodes := func() []int {
 		return rnd.Perm(num)[:rnd.Intn(num)+1]
 	}
@@ -352,7 +354,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 	for _, c := range counts {
 		count += c
 	}
-	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(context.TODO(), "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }
 
 // TestNodeRestart starts up a cluster with an "accounts" table.
@@ -394,7 +396,7 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
-	log.Warningf("monkey starts (seed %d)", seed)
+	log.Warningf(context.TODO(), "monkey starts (seed %d)", seed)
 	pickNodes := func() []int {
 		return []int{rnd.Intn(num - 1)}
 	}
@@ -407,5 +409,5 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 
 	elapsed := timeutil.Since(start)
 	count := atomic.LoadUint64(&client.count)
-	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(context.TODO(), "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }

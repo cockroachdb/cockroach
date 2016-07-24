@@ -56,7 +56,7 @@ func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb
 	rangeBDesc := store.LookupReplica([]byte("c"), nil).Desc()
 
 	if bytes.Equal(rangeADesc.StartKey, rangeBDesc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeBDesc.StartKey)
+		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeBDesc.StartKey)
 	}
 
 	return rangeADesc, rangeBDesc, nil
@@ -341,13 +341,13 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	rangeCDesc := rangeC.Desc()
 
 	if bytes.Equal(rangeADesc.StartKey, rangeBDesc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeBDesc.StartKey)
+		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeBDesc.StartKey)
 	}
 	if bytes.Equal(rangeBDesc.StartKey, rangeCDesc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeBDesc.StartKey, rangeCDesc.StartKey)
+		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeBDesc.StartKey, rangeCDesc.StartKey)
 	}
 	if bytes.Equal(rangeADesc.StartKey, rangeCDesc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeCDesc.StartKey)
+		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeCDesc.StartKey)
 	}
 
 	// Replicate the ranges to different sets of stores. Ranges A and C

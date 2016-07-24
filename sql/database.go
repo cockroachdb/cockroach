@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -180,7 +182,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 	desc, err := p.getCachedDatabaseDesc(name)
 	if err != nil {
 		if log.V(3) {
-			log.Infof("%v", err)
+			log.Infof(context.TODO(), "%v", err)
 		}
 		var err error
 		desc, err = p.mustGetDatabaseDesc(name)

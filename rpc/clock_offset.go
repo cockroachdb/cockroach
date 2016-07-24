@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -97,7 +99,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	}
 
 	if log.V(2) {
-		log.Infof("update offset: %s %v", addr, r.mu.offsets[addr])
+		log.Infof(context.TODO(), "update offset: %s %v", addr, r.mu.offsets[addr])
 	}
 }
 
@@ -132,7 +134,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 			return errors.Errorf("fewer than half the known nodes are within the maximum offset of %s (%d of %d)", maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Infof("%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Infof(context.TODO(), "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
 		}
 	}
 
@@ -161,7 +163,7 @@ func (r RemoteOffset) isHealthy(maxOffset time.Duration) bool {
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
 		if log.V(1) {
-			log.Infof("uncertain remote offset %s for maximum offset %s, treating as healthy", r, maxOffset)
+			log.Infof(context.TODO(), "uncertain remote offset %s for maximum offset %s, treating as healthy", r, maxOffset)
 		}
 		return true
 	}

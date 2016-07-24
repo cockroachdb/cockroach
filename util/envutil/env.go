@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -132,7 +134,7 @@ func EnvOrDefaultBool(name string, value bool) bool {
 	if str, present := getEnv(name); present {
 		v, err := strconv.ParseBool(str)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
 			return value
 		}
 		return v
@@ -146,7 +148,7 @@ func EnvOrDefaultInt(name string, value int) int {
 	if str, present := getEnv(name); present {
 		v, err := strconv.ParseInt(str, 0, 0)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
 			return value
 		}
 		return int(v)
@@ -160,7 +162,7 @@ func EnvOrDefaultInt64(name string, value int64) int64 {
 	if str, present := getEnv(name); present {
 		v, err := strconv.ParseInt(str, 0, 64)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
 			return value
 		}
 		return v
@@ -174,7 +176,7 @@ func EnvOrDefaultBytes(name string, value int64) int64 {
 	if str, present := getEnv(name); present {
 		v, err := humanizeutil.ParseBytes(str)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
 			return value
 		}
 		return v
@@ -188,7 +190,7 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 	if str, present := getEnv(name); present {
 		v, err := time.ParseDuration(str)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
 			return value
 		}
 		return v

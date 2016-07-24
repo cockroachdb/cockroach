@@ -309,7 +309,7 @@ func (tc *TestCluster) AddReplicas(
 			// snapshot has been transferred and the descriptor initialized.
 			store, err := tc.findMemberStore(target.StoreID)
 			if err != nil {
-				log.Errorf("unexpected error: %s", err)
+				log.Errorf(context.TODO(), "unexpected error: %s", err)
 				return err
 			}
 			if store.LookupReplica(rKey, nil) == nil {
@@ -338,7 +338,7 @@ func (tc *TestCluster) TransferRangeLease(
 ) error {
 	destReplicaDesc, ok := rangeDesc.GetReplicaDescriptor(dest.StoreID)
 	if !ok {
-		log.Fatalf("Couldn't find store %d in range %+v", dest.StoreID, rangeDesc)
+		log.Fatalf(context.TODO(), "Couldn't find store %d in range %+v", dest.StoreID, rangeDesc)
 	}
 
 	leaseHolderDesc, err := tc.FindRangeLeaseHolder(rangeDesc,

@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -109,8 +111,8 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
 	if log.V(2) {
-		log.Infof("CPut %s -> %d", idKey, descID)
-		log.Infof("CPut %s -> %s", descKey, descDesc)
+		log.Infof(context.TODO(), "CPut %s -> %d", idKey, descID)
+		log.Infof(context.TODO(), "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)

@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -82,7 +84,7 @@ type replicaScanner struct {
 // loop that function will be called.
 func newReplicaScanner(targetInterval, maxIdleTime time.Duration, replicas replicaSet) *replicaScanner {
 	if targetInterval <= 0 {
-		log.Fatalf("scanner interval must be greater than zero")
+		log.Fatalf(context.TODO(), "scanner interval must be greater than zero")
 	}
 	return &replicaScanner{
 		targetInterval: targetInterval,
@@ -157,7 +159,7 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 	waitInterval := rs.paceInterval(start, timeutil.Now())
 	rs.waitTimer.Reset(waitInterval)
 	if log.V(6) {
-		log.Infof("Wait time interval set to %s", waitInterval)
+		log.Infof(context.TODO(), "Wait time interval set to %s", waitInterval)
 	}
 	for {
 		select {
@@ -184,7 +186,7 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 				q.MaybeRemove(repl)
 			}
 			if log.V(6) {
-				log.Infof("removed replica %s", repl)
+				log.Infof(context.TODO(), "removed replica %s", repl)
 			}
 
 		case <-stopper.ShouldStop():
@@ -224,7 +226,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				rs.completedScan.Broadcast()
 				rs.completedScan.L.Unlock()
 				if log.V(6) {
-					log.Infof("reset replica scan iteration")
+					log.Infof(context.TODO(), "reset replica scan iteration")
 				}
 
 				// Reset iteration and start time.

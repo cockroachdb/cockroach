@@ -140,7 +140,7 @@ func makeV3Conn(
 func (c *v3Conn) finish() {
 	// This is better than always flushing on error.
 	if err := c.wr.Flush(); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 	}
 	_ = c.conn.Close()
 	c.session.Finish()
@@ -168,7 +168,7 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 			args.User = value
 		default:
 			if log.V(1) {
-				log.Warningf("unrecognized configuration parameter %q", key)
+				log.Warningf(context.TODO(), "unrecognized configuration parameter %q", key)
 			}
 		}
 	}
@@ -236,7 +236,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			}
 
 			if log.V(2) {
-				log.Infof("pgwire: %s: %q", serverMsgReady, txnStatus)
+				log.Infof(context.TODO(), "pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
 			c.writeBuf.writeByte(txnStatus)
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -258,12 +258,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		// any messages until we get a sync.
 		if c.ignoreTillSync && typ != clientMsgSync {
 			if log.V(2) {
-				log.Infof("pgwire: ignoring %s till sync", typ)
+				log.Infof(context.TODO(), "pgwire: ignoring %s till sync", typ)
 			}
 			continue
 		}
 		if log.V(2) {
-			log.Infof("pgwire: processing %s", typ)
+			log.Infof(context.TODO(), "pgwire: processing %s", typ)
 		}
 		switch typ {
 		case clientMsgSync:
@@ -803,7 +803,7 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ)
+			log.Infof(context.TODO(), "pgwire writing column %s of type: %T", column.Name, column.Typ)
 		}
 		c.writeBuf.writeTerminatedString(column.Name)
 

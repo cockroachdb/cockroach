@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/encoding"
 
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -190,7 +192,7 @@ func insertCPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
 	if log.V(2) {
-		log.InfofDepth(1, "CPut %s -> %s", *key, value.PrettyPrint())
+		log.InfofDepth(context.TODO(), 1, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
 	b.CPut(key, value, nil)
 }
@@ -199,7 +201,7 @@ func insertCPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
 // logValue is used for pretty printing.
 func insertPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
 	if log.V(2) {
-		log.InfofDepth(1, "Put %s -> %s", *key, value.PrettyPrint())
+		log.InfofDepth(context.TODO(), 1, "Put %s -> %s", *key, value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
@@ -626,7 +628,7 @@ func (ru *rowUpdater) updateRow(
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 			if log.V(2) {
-				log.Infof("Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
+				log.Infof(context.TODO(), "Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.marshalled[idx])
 			ru.key = nil
@@ -677,14 +679,14 @@ func (ru *rowUpdater) updateRow(
 			// The family might have already existed but every column in it is being
 			// set to NULL, so delete it.
 			if log.V(2) {
-				log.Infof("Del %s", ru.key)
+				log.Infof(context.TODO(), "Del %s", ru.key)
 			}
 
 			b.Del(&ru.key)
 		} else {
 			ru.value.SetTuple(ru.valueBuf)
 			if log.V(2) {
-				log.Infof("Put %s -> %v", ru.key, ru.value.PrettyPrint())
+				log.Infof(context.TODO(), "Put %s -> %v", ru.key, ru.value.PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.value)
 		}
@@ -702,13 +704,13 @@ func (ru *rowUpdater) updateRow(
 			}
 
 			if log.V(2) {
-				log.Infof("Del %s", secondaryIndexEntry.Key)
+				log.Infof(context.TODO(), "Del %s", secondaryIndexEntry.Key)
 			}
 			b.Del(secondaryIndexEntry.Key)
 			// Do not update Indexes in the DELETE_ONLY state.
 			if _, ok := ru.deleteOnlyIndex[i]; !ok {
 				if log.V(2) {
-					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
+					log.Infof(context.TODO(), "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
 				}
 				b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
 			}
@@ -816,7 +818,7 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
 		if log.V(2) {
-			log.Infof("Del %s", secondaryIndexEntry.Key)
+			log.Infof(context.TODO(), "Del %s", secondaryIndexEntry.Key)
 		}
 		b.Del(secondaryIndexEntry.Key)
 	}
@@ -825,7 +827,7 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 	rd.startKey = roachpb.Key(primaryIndexKey)
 	rd.endKey = roachpb.Key(encoding.EncodeNotNullDescending(primaryIndexKey))
 	if log.V(2) {
-		log.Infof("DelRange %s - %s", rd.startKey, rd.endKey)
+		log.Infof(context.TODO(), "DelRange %s - %s", rd.startKey, rd.endKey)
 	}
 	b.DelRange(&rd.startKey, &rd.endKey, false)
 	rd.startKey, rd.endKey = nil, nil

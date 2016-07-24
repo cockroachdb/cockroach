@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/iptables"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -87,7 +89,7 @@ func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partiti
 		}
 		ipPartitions = append(ipPartitions, ipPartition)
 	}
-	log.Warningf("partitioning: %v (%v)", partitions, ipPartitions)
+	log.Warningf(context.TODO(), "partitioning: %v (%v)", partitions, ipPartitions)
 	for host, cmds := range iptables.Rules(iptables.Bidirectional(ipPartitions...)) {
 		for _, cmd := range cmds {
 			if err := c.ExecRoot(addrsToNode[host], cmd); err != nil {
@@ -103,5 +105,5 @@ func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partiti
 			}
 		}
 	}
-	log.Warningf("resolved all partitions")
+	log.Warningf(context.TODO(), "resolved all partitions")
 }

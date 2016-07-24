@@ -27,6 +27,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 
 	"github.com/cockroachdb/cmux"
@@ -87,7 +88,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
 	if err := http2.ConfigureServer(server.Server, nil); err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 
 	stopper.RunWorker(func() {
@@ -148,6 +149,6 @@ func IsClosedConnection(err error) bool {
 // cmux.ErrListenerClosed, or the net package's errClosed.
 func FatalIfUnexpected(err error) {
 	if err != nil && !IsClosedConnection(err) {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 }

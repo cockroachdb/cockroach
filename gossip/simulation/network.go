@@ -21,6 +21,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -55,7 +57,7 @@ type Network struct {
 
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(nodeCount int) *Network {
-	log.Infof("simulating gossip network with %d nodes", nodeCount)
+	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
@@ -65,22 +67,22 @@ func NewNetwork(nodeCount int) *Network {
 	var err error
 	n.tlsConfig, err = n.rpcContext.GetServerTLSConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		}
 		// Build a resolver for each instance or we'll get data races.
 		r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr)
 		if err != nil {
-			log.Fatalf("bad gossip address %s: %s", n.Nodes[0].Addr, err)
+			log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr, err)
 		}
 		node.Gossip.SetResolvers([]resolver.Resolver{r})
 		if err := n.StartNode(node); err != nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		}
 	}
 	return n
@@ -148,11 +150,11 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 			gossip.KeySentinel,
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 			time.Hour); err != nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		}
 		if err := nodes[0].Gossip.AddInfo(gossip.KeyClusterID,
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)), 0*time.Second); err != nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		}
 		// Every node gossips cycle.
 		for _, node := range nodes {
@@ -160,13 +162,13 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 				node.Addr.String(),
 				encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 				time.Hour); err != nil {
-				log.Fatal(err)
+				log.Fatal(context.TODO(), err)
 			}
 			node.Gossip.SimulationCycle()
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	log.Infof("gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
+	log.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
 }
 
 // Stop stops all servers and gossip nodes.

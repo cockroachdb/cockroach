@@ -21,6 +21,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -95,7 +97,7 @@ func (ia *idAllocator) start() {
 					if err := ia.stopper.RunTask(func() {
 						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
 					}); err != nil {
-						log.Warning(err)
+						log.Warning(context.TODO(), err)
 						return
 					}
 					if err == nil {
@@ -103,7 +105,7 @@ func (ia *idAllocator) start() {
 						break
 					}
 
-					log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+					log.Warningf(context.TODO(), "unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
 				}
 				if err != nil {
 					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))

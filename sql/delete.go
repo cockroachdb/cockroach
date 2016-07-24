@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -172,13 +174,13 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bo
 	}
 	if n.Returning != nil {
 		if log.V(2) {
-			log.Infof("delete forced to scan: values required for RETURNING")
+			log.Infof(context.TODO(), "delete forced to scan: values required for RETURNING")
 		}
 		return false
 	}
 	if scan.filter != nil {
 		if log.V(2) {
-			log.Infof("delete forced to scan: values required for filter (%s)", scan.filter)
+			log.Infof(context.TODO(), "delete forced to scan: values required for filter (%s)", scan.filter)
 		}
 		return false
 	}

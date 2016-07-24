@@ -19,6 +19,8 @@ package sql
 import (
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -396,7 +398,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			indexStartKey := roachpb.Key(indexPrefix)
 			indexEndKey := indexStartKey.PrefixEnd()
 			if log.V(2) {
-				log.Infof("DelRange %s - %s", indexStartKey, indexEndKey)
+				log.Infof(context.TODO(), "DelRange %s - %s", indexStartKey, indexEndKey)
 			}
 			b := &client.Batch{}
 			b.DelRange(indexStartKey, indexEndKey, false)
@@ -520,7 +522,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 				}
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
-						log.Infof("InitPut %s -> %v", secondaryIndexEntry.Key,
+						log.Infof(context.TODO(), "InitPut %s -> %v", secondaryIndexEntry.Key,
 							secondaryIndexEntry.Value)
 					}
 					b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)

@@ -21,6 +21,8 @@ import (
 	"math/rand"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -58,7 +60,7 @@ func (dc *dynamicClient) Close() {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for i, client := range dc.mu.clients {
-		log.Infof("closing connection to %s", dc.cluster.Addr(i))
+		log.Infof(context.TODO(), "closing connection to %s", dc.cluster.Addr(i))
 		client.Close()
 		delete(dc.mu.clients, i)
 	}
@@ -114,10 +116,10 @@ func (dc *dynamicClient) getClient() (*gosql.DB, error) {
 		}
 		client, err := gosql.Open("postgres", dc.cluster.PGUrl(index))
 		if err != nil {
-			log.Infof("could not establish connection to %s: %s", dc.cluster.Addr(index), err)
+			log.Infof(context.TODO(), "could not establish connection to %s: %s", dc.cluster.Addr(index), err)
 			continue
 		}
-		log.Infof("connection established to %s", dc.cluster.Addr(index))
+		log.Infof(context.TODO(), "connection established to %s", dc.cluster.Addr(index))
 		dc.mu.clients[index] = client
 		return client, nil
 	}

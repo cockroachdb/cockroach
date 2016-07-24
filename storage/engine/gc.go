@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 // GarbageCollector GCs MVCC key/values using a zone-specific GC
@@ -70,7 +71,7 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) hlc.Timestamp
 	delTS := hlc.ZeroTimestamp
 	for i, key = range keys {
 		if !key.IsValue() {
-			log.Errorf("unexpected MVCC metadata encountered: %q", key)
+			log.Errorf(context.TODO(), "unexpected MVCC metadata encountered: %q", key)
 			return hlc.ZeroTimestamp
 		}
 		if gc.Threshold.Less(key.Timestamp) {

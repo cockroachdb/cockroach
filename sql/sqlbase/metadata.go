@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -168,7 +170,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 		value = roachpb.Value{}
 		wrappedDesc := WrapDescriptor(desc)
 		if err := value.SetProto(wrappedDesc); err != nil {
-			log.Fatalf("could not marshal %v", desc)
+			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		ret = append(ret, roachpb.KeyValue{
 			Key:   MakeDescMetadataKey(desc.GetID()),

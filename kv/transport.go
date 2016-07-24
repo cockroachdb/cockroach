@@ -162,7 +162,7 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 
 	addr := client.remoteAddr
 	if log.V(2) {
-		log.Infof("sending request to %s: %+v", addr, client.args)
+		log.Infof(context.TODO(), "sending request to %s: %+v", addr, client.args)
 	}
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
@@ -194,7 +194,7 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(err)
+					log.Error(context.TODO(), err)
 				}
 			}
 		}

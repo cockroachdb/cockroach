@@ -97,7 +97,7 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 // provided transaction.
 func (ev EventLogger) InsertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) error {
 	// Record event record insertion in local log output.
-	log.Infoc(txn.Context, "Event: %q, target: %d, info: %+v",
+	log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",
 		eventType,
 		targetID,
 		info)

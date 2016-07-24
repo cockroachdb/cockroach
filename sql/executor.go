@@ -301,7 +301,7 @@ func (e *Executor) Prepare(
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof("preparing statement: %s", query)
+		log.Infof(context.TODO(), "preparing statement: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -496,7 +496,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 
 		// Until #7881 fixed.
 		if txnState.State != NoTxn && txnState.txn == nil {
-			log.Errorf("txnState not cleared while txn == nil: %+v, execOpt %+v, stmts %+v, remaining %+v", txnState, execOpt, stmts, remainingStmts)
+			log.Errorf(context.TODO(), "txnState not cleared while txn == nil: %+v, execOpt %+v, stmts %+v, remaining %+v", txnState, execOpt, stmts, remainingStmts)
 		}
 
 		// Update the Err field of the last result if the error was coming from
@@ -507,14 +507,14 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// Until #7881 fixed.
 				if txnState.txn == nil {
-					log.Errorf("AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
+					log.Errorf(context.TODO(), "AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
 				e.txnAbortCount.Inc(1)
 				txnState.txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
-				log.Fatalf("error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
+				log.Fatalf(context.TODO(), "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
 			}
 		}
 
@@ -660,7 +660,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 	for i, stmt := range stmts {
 		if log.V(2) {
-			log.Infof("about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
+			log.Infof(context.TODO(), "about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -968,7 +968,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf("txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(context.TODO(), "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
