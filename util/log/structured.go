@@ -54,6 +54,9 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 // addStructured creates a structured log entry to be written to the
 // specified facility of the logger.
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
+	if ctx == nil {
+		panic("nil context")
+	}
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(ctx, format, args)
 	Trace(ctx, msg)

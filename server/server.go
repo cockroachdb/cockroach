@@ -185,7 +185,6 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL server
 	distSQLCtx := distsql.ServerContext{
-		// TODO(radu): set node ID in the context.
 		Context:    context.Background(),
 		DB:         s.db,
 		RPCContext: s.rpcContext,
@@ -421,6 +420,7 @@ func (s *Server) Start() error {
 	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
+	s.distSQLServer.SetNodeID(s.node.Descriptor.NodeID)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
