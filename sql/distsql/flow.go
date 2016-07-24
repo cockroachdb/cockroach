@@ -84,7 +84,7 @@ func newFlow(
 	flowReg *flowRegistry,
 	simpleFlowConsumer RowReceiver,
 ) *Flow {
-	// TODO(radu): add Flow ID to flowCtx.Context.
+	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "flow", flowCtx.id.Short())
 	return &Flow{
 		FlowCtx:            flowCtx,
 		flowRegistry:       flowReg,

@@ -211,16 +211,14 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	// TODO(radu): add info about the tablereader in the context.
+	ctx := log.WithLogTagInt(tr.ctx, "TableReader", int(tr.desc.ID))
 	if log.V(2) {
-		log.Infof(tr.ctx, "TableReader starting (filter: %s)", tr.filter)
-		defer log.Infof(tr.ctx, "TableReader exiting")
+		log.Infof(ctx, "starting (filter: %s)", tr.filter)
+		defer log.Infof(ctx, "exiting")
 	}
 
 	if err := tr.fetcher.StartScan(tr.ctx.txn, tr.spans, tr.getLimitHint()); err != nil {
-		if log.V(1) {
-			log.Errorf(tr.ctx, "TableReader scan error: %s", err)
-		}
+		log.Errorf(ctx, "scan error: %s", err)
 		tr.output.Close(err)
 		return
 	}
@@ -232,13 +230,13 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 			return
 		}
 		if log.V(3) {
-			log.Infof(tr.ctx, "TableReader pushing row %s\n", outRow)
+			log.Infof(ctx, "pushing row %s\n", outRow)
 		}
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
 		if !tr.output.PushRow(outRow) {
 			if log.V(2) {
-				log.Infof(tr.ctx, "TableReader: no more rows required")
+				log.Infof(ctx, "no more rows required")
 			}
 			tr.output.Close(nil)
 			return

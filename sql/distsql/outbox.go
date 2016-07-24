@@ -59,14 +59,21 @@ type outbox struct {
 
 var _ RowReceiver = &outbox{}
 
-func newOutboxSimpleFlowStream(ctx context.Context, stream DistSQL_RunSimpleFlowServer) *outbox {
-	return &outbox{flowCtx: &FlowCtx{Context: ctx}, simpleFlowStream: stream}
-}
-
 func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) *outbox {
 	m := &outbox{flowCtx: flowCtx, addr: addr}
 	m.encoder.setHeaderFields(flowID, streamID)
 	return m
+}
+
+// newOutboxSimpleFlowStream sets up an outbox for the special "sync flow"
+// stream. The flow context should be provided via setFlowCtx when it is
+// available.
+func newOutboxSimpleFlowStream(stream DistSQL_RunSimpleFlowServer) *outbox {
+	return &outbox{simpleFlowStream: stream}
+}
+
+func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
+	m.flowCtx = flowCtx
 }
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated
