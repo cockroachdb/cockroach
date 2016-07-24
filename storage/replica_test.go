@@ -6258,7 +6258,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 
 	// Apply a snapshot and check the reservation was filled. Note that this
 	// out-of-band application could be a root cause if this test ever crashes.
-	if _, err := firstRng.applySnapshot(snap, raftpb.HardState{}); err != nil {
+	if err := firstRng.applySnapshot(snap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
