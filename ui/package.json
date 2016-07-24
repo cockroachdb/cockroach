@@ -25,7 +25,6 @@
       "long": "npm:long@^3.1.0",
       "moment": "npm:moment@^2.13.0",
       "nvd3": "npm:nvd3@^1.8.3",
-      "object-assign": "npm:object-assign@^4.0.1",
       "protobufjs": "npm:protobufjs@^5.0.1",
       "react": "npm:react@^15.0.1",
       "react-dom": "npm:react-dom@^15.0.1",
@@ -41,7 +40,7 @@
     "devDependencies": {
       "chai": "npm:chai@^3.5.0",
       "enzyme": "npm:enzyme@^2.3.0",
-      "fetch-mock": "npm:fetch-mock@^4.5.4",
+      "fetch-mock": "npm:fetch-mock@^5.0.0",
       "react-addons-test-utils": "npm:react-addons-test-utils@^15.1.0",
       "sinon": "npm:sinon@^1.17.4",
       "ts": "github:frankwallis/plugin-typescript@^4.0.5",

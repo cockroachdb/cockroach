@@ -287,7 +287,7 @@ let sortedGrants = createSelector(
 
 // Connect the DatabaseMain class with our redux store.
 let databaseMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
       sortedTables: sortedTables(state, ownProps),
       sortedGrants: sortedGrants(state, ownProps),
