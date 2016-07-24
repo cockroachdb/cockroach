@@ -165,7 +165,7 @@ let clusterInfo = createSelector(
 );
 
 let clusterMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       clusterInfo: clusterInfo(state),
     };

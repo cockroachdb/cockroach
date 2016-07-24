@@ -131,7 +131,7 @@ let buildtag = createSelector(
 
 // Connect the DisconnectedBanner class with our redux store.
 let outdatedBannerConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       clusterID: clusterID(state),
       buildtag: buildtag(state),

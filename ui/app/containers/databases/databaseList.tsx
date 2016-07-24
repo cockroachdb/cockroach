@@ -177,7 +177,7 @@ let sortedDatabases = createSelector(
 
 // Connect the DatabasesMain class with our redux store.
 let databasesMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       sortedDatabases: sortedDatabases(state),
       sortSetting: sortSetting(state),

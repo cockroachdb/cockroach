@@ -101,7 +101,7 @@ let optinAttributes = (state: AdminUIState): OptInAttributes => state && state.u
 
 // Connect the HelpUs class with our redux store.
 let helpusConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       optInAttributes: optinAttributes(state),
     };
