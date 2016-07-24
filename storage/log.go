@@ -78,7 +78,7 @@ func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) error 
 	if event.info != nil {
 		info = *event.info
 	}
-	log.Infoc(txn.Context, "Range Event: %q, range: %d, info: %s",
+	log.Infof(txn.Context, "Range Event: %q, range: %d, info: %s",
 		event.eventType,
 		event.rangeID,
 		info)

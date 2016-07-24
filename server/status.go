@@ -144,7 +144,7 @@ func newStatusServer(
 	// Create an http client with a timeout
 	httpClient, err := ctx.GetHTTPClient()
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return nil
 	}
 
@@ -285,7 +285,7 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesL
 func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	resp, err := s.LogFilesList(context.TODO(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -337,7 +337,7 @@ func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps 
 	}
 	resp, err := s.LogFile(context.TODO(), &req)
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -438,7 +438,7 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 	}
 	resp, err := s.Logs(context.TODO(), &req)
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -496,7 +496,7 @@ func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*se
 	b := inconsistentBatch()
 	b.Scan(startKey, endKey, 0)
 	if err := s.db.Run(b); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	rows := b.Results[0].Rows
@@ -506,7 +506,7 @@ func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*se
 	}
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
-			log.Error(err)
+			log.Error(context.TODO(), err)
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 	}
@@ -524,14 +524,14 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	b := inconsistentBatch()
 	b.Get(key)
 	if err := s.db.Run(b); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 
 	var nodeStatus status.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
@@ -557,7 +557,7 @@ func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	resp, err := s.Metrics(context.TODO(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -579,7 +579,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 		nodeID := node.Desc.NodeID
 		ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String()})
 		if err != nil {
-			log.Infof("Failed to get ranges from %d: %q", node.Desc.NodeID, err)
+			log.Infof(context.TODO(), "Failed to get ranges from %d: %q", node.Desc.NodeID, err)
 			continue
 		}
 		for _, rng := range ranges.Ranges {
@@ -635,7 +635,7 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps htt
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	err := s.metricSource.PrintAsText(w)
 	if err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

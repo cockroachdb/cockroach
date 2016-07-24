@@ -20,16 +20,18 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestMain(m *testing.M) {
 	tmpDir, err := ioutil.TempDir("", "logtest")
 	if err != nil {
-		Fatalf("could not create temporary directory: %s", err)
+		Fatalf(context.Background(), "could not create temporary directory: %s", err)
 	}
 	defer func() {
 		if err := os.RemoveAll(tmpDir); err != nil {
-			Errorf("failed to clean up temp directory: %s", err)
+			Errorf(context.Background(), "failed to clean up temp directory: %s", err)
 		}
 	}()
 	logDir = tmpDir

@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -115,7 +117,7 @@ func (is *infoStore) String() string {
 		prepend = ", "
 		return nil
 	}); err != nil {
-		log.Errorf("failed to properly construct string representation of infoStore: %s", err)
+		log.Errorf(context.TODO(), "failed to properly construct string representation of infoStore: %s", err)
 	}
 	return buf.String()
 }
@@ -286,7 +288,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 			w()
 		}
 	}); err != nil {
-		log.Warning(err)
+		log.Warning(context.TODO(), err)
 	}
 }
 

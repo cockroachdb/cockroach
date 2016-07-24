@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 
@@ -177,7 +179,7 @@ func GetTotalMemory() (int64, error) {
 		var buf []byte
 		if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
 			if log.V(1) {
-				log.Infof("can't read available memory from cgroups (%s), using system memory %s instead", err,
+				log.Infof(context.TODO(), "can't read available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
@@ -185,14 +187,14 @@ func GetTotalMemory() (int64, error) {
 		var cgAvlMem uint64
 		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
 			if log.V(1) {
-				log.Infof("can't parse available memory from cgroups (%s), using system memory %s instead", err,
+				log.Infof(context.TODO(), "can't parse available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
 		}
 		if cgAvlMem > math.MaxInt64 {
 			if log.V(1) {
-				log.Infof("available memory from cgroups is too large and unsupported %s using system memory %s instead",
+				log.Infof(context.TODO(), "available memory from cgroups is too large and unsupported %s using system memory %s instead",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 
 			}
@@ -200,7 +202,7 @@ func GetTotalMemory() (int64, error) {
 		}
 		if cgAvlMem > mem.Total {
 			if log.V(1) {
-				log.Infof("available memory from cgroups %s exceeds system memory %s, using system memory",
+				log.Infof(context.TODO(), "available memory from cgroups %s exceeds system memory %s, using system memory",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
@@ -228,7 +230,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	var rLimit syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
 		if log.V(1) {
-			log.Infof("could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
+			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
 		}
 		return engine.DefaultMaxOpenFiles, nil
 	}
@@ -257,7 +259,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	}
 	if rLimit.Cur < newCurrent {
 		if log.V(1) {
-			log.Infof("setting the soft limit for open file descriptors from %d to %d",
+			log.Infof(context.TODO(), "setting the soft limit for open file descriptors from %d to %d",
 				rLimit.Cur, newCurrent)
 		}
 		rLimit.Cur = newCurrent
@@ -270,7 +272,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 			return 0, err
 		}
 		if log.V(1) {
-			log.Infof("soft open file descriptor limit is now %d", rLimit.Cur)
+			log.Infof(context.TODO(), "soft open file descriptor limit is now %d", rLimit.Cur)
 		}
 	}
 
@@ -289,7 +291,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 
 	// We're still below the recommended amount, we should always show a
 	// warning.
-	log.Warningf("soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
+	log.Warningf(context.TODO(), "soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
 		rLimit.Cur,
 		recommendedOpenFileLimit,
 		productionSettingsWebpage)
@@ -391,9 +393,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	}
 
 	if len(ctx.Engines) == 1 {
-		log.Infof("1 storage engine initialized")
+		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof("%d storage engines initialized", len(ctx.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(ctx.Engines))
 	}
 	return nil
 }

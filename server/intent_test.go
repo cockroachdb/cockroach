@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -74,7 +76,7 @@ func TestIntentResolution(t *testing.T) {
 		// Use deterministic randomness to randomly put the writes in separate
 		// batches or commit them with EndTransaction.
 		rnd, seed := randutil.NewPseudoRand()
-		log.Infof("%d: using intent test seed %d", i, seed)
+		log.Infof(context.TODO(), "%d: using intent test seed %d", i, seed)
 
 		results := map[string]struct{}{}
 		func() {
@@ -103,7 +105,7 @@ func TestIntentResolution(t *testing.T) {
 						}
 					}
 					if entry != "" {
-						log.Infof("got %s", entry)
+						log.Infof(context.TODO(), "got %s", entry)
 						results[entry] = struct{}{}
 					}
 					if len(results) >= len(tc.exp) && !done {
@@ -130,7 +132,7 @@ func TestIntentResolution(t *testing.T) {
 					// The first write must not go to batch, it anchors the
 					// transaction to the correct range.
 					local := i != 0 && rnd.Intn(2) == 0
-					log.Infof("%d: %s: local: %t", i, key, local)
+					log.Infof(context.TODO(), "%d: %s: local: %t", i, key, local)
 					if local {
 						b.Put(key, "test")
 					} else if err := txn.Put(key, "test"); err != nil {
@@ -140,7 +142,7 @@ func TestIntentResolution(t *testing.T) {
 
 				for _, kr := range tc.ranges {
 					local := rnd.Intn(2) == 0
-					log.Infof("%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
+					log.Infof(context.TODO(), "%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
 					if local {
 						b.DelRange(kr[0], kr[1], false)
 					} else if err := txn.DelRange(kr[0], kr[1]); err != nil {

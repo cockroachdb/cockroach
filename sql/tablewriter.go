@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -386,7 +388,7 @@ func (tu *tableUpserter) upsertRowPKs() ([]roachpb.Key, error) {
 			return nil, err
 		}
 		if log.V(2) {
-			log.Infof("Get %s\n", entry.Key)
+			log.Infof(context.TODO(), "Get %s\n", entry.Key)
 		}
 		b.Get(entry.Key)
 	}
@@ -519,13 +521,13 @@ func (td *tableDeleter) finalize() error {
 func (td *tableDeleter) fastPathAvailable() bool {
 	if len(td.rd.helper.indexes) != 0 {
 		if log.V(2) {
-			log.Infof("delete forced to scan: values required to update %d secondary indexes", len(td.rd.helper.indexes))
+			log.Infof(context.TODO(), "delete forced to scan: values required to update %d secondary indexes", len(td.rd.helper.indexes))
 		}
 		return false
 	}
 	if td.rd.helper.tableDesc.IsInterleaved() {
 		if log.V(2) {
-			log.Info("delete forced to scan: table is interleaved")
+			log.Info(context.TODO(), "delete forced to scan: table is interleaved")
 		}
 		return false
 	}
@@ -540,7 +542,7 @@ func (td *tableDeleter) fastDelete(
 ) (rowCount int, err error) {
 	for _, span := range scan.spans {
 		if log.V(2) {
-			log.Infof("Skipping scan and just deleting %s - %s", span.Start, span.End)
+			log.Infof(context.TODO(), "Skipping scan and just deleting %s - %s", span.Start, span.End)
 		}
 		td.b.DelRange(span.Start, span.End, true)
 	}

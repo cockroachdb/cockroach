@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
@@ -556,7 +558,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	runTests := func(query string, tests []preparedQueryTest, queryFunc func(...interface{}) (*gosql.Rows, error)) {
 		for _, test := range tests {
 			if testing.Verbose() || log.V(1) {
-				log.Infof("query: %s", query)
+				log.Infof(context.TODO(), "query: %s", query)
 			}
 			rows, err := queryFunc(test.qargs...)
 			if err != nil {
@@ -812,7 +814,7 @@ func TestPGPreparedExec(t *testing.T) {
 	runTests := func(query string, tests []preparedExecTest, execFunc func(...interface{}) (gosql.Result, error)) {
 		for _, test := range tests {
 			if testing.Verbose() || log.V(1) {
-				log.Infof("exec: %s", query)
+				log.Infof(context.TODO(), "exec: %s", query)
 			}
 			if result, err := execFunc(test.qargs...); err != nil {
 				if test.error == "" {
@@ -838,7 +840,7 @@ func TestPGPreparedExec(t *testing.T) {
 
 	for _, execTest := range execTests {
 		if testing.Verbose() || log.V(1) {
-			log.Infof("prepare: %s", execTest.query)
+			log.Infof(context.TODO(), "prepare: %s", execTest.query)
 		}
 		if stmt, err := db.Prepare(execTest.query); err != nil {
 			t.Errorf("%s: prepare error: %s", execTest.query, err)

@@ -19,6 +19,8 @@ package distsql
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -158,7 +160,7 @@ func (jr *joinReader) mainLoop() error {
 // Run is part of the processor interface.
 func (jr *joinReader) Run(wg *sync.WaitGroup) {
 	if log.V(2) {
-		log.Infof("JoinReader filter: %s\n", jr.filter.expr)
+		log.Infof(context.TODO(), "JoinReader filter: %s\n", jr.filter.expr)
 	}
 	err := jr.mainLoop()
 	jr.output.Close(err)

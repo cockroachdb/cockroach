@@ -62,7 +62,7 @@ func (q *replicaConsistencyQueue) process(
 	req := roachpb.CheckConsistencyRequest{}
 	_, pErr := rng.CheckConsistency(req, rng.Desc())
 	if pErr != nil {
-		log.Error(pErr.GoError())
+		log.Error(context.TODO(), pErr.GoError())
 	}
 	return nil
 }

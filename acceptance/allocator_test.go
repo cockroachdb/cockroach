@@ -65,6 +65,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/montanaflynn/stats"
 
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
@@ -129,25 +131,25 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
-	log.Infof("creating cluster with %d node(s)", at.StartNodes)
+	log.Infof(context.TODO(), "creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes, 0 /*writers*/); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
 	at.f.Assert(t)
-	log.Info("initial cluster is up")
+	log.Info(context.TODO(), "initial cluster is up")
 
 	// We must stop the cluster because a) `nodectl` pokes at the data directory
 	// and, more importantly, b) we don't want the cluster above and the cluster
 	// below to ever talk to each other (see #7224).
-	log.Info("stopping cluster")
+	log.Info(context.TODO(), "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Kill(i); err != nil {
 			t.Fatalf("error stopping node %d: %s", i, err)
 		}
 	}
 
-	log.Info("downloading archived stores from Google Cloud Storage in parallel")
+	log.Info(context.TODO(), "downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(nodeNum int) {
@@ -160,7 +162,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 	}
 
-	log.Info("restarting cluster with archived store(s)")
+	log.Info(context.TODO(), "restarting cluster with archived store(s)")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Restart(i); err != nil {
 			t.Fatalf("error restarting node %d: %s", i, err)
@@ -168,14 +170,14 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.Assert(t)
 
-	log.Infof("resizing cluster to %d nodes", at.EndNodes)
+	log.Infof(context.TODO(), "resizing cluster to %d nodes", at.EndNodes)
 	if err := at.f.Resize(at.EndNodes, 0 /*writers*/); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))
 	at.f.Assert(t)
 
-	log.Info("waiting for rebalance to finish")
+	log.Info(context.TODO(), "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +207,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 			// This can happen with single-node clusters.
 			rebalanceInterval = time.Duration(0)
 		}
-		log.Infof("cluster took %s to rebalance", rebalanceInterval)
+		log.Infof(context.TODO(), "cluster took %s to rebalance", rebalanceInterval)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -216,7 +218,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
-		log.Infof("%d range events", rangeEvents)
+		log.Infof(context.TODO(), "%d range events", rangeEvents)
 	}
 
 	// Output standard deviation of the replica counts for all stores.
@@ -237,7 +239,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 		if err != nil {
 			return err
 		}
-		log.Infof("stddev(replica count) = %.2f", stddev)
+		log.Infof(context.TODO(), "stddev(replica count) = %.2f", stddev)
 	}
 
 	return nil
@@ -261,13 +263,13 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 
 	row := db.QueryRow(q, eventTypes...)
 	if row == nil {
-		log.Errorf("couldn't find any range events")
+		log.Errorf(context.TODO(), "couldn't find any range events")
 		return false, nil
 	}
 	if err := row.Scan(&elapsedStr, &rangeID, &storeID, &eventType); err != nil {
 		// Log but don't return errors, to increase resilience against transient
 		// errors.
-		log.Errorf("error checking rebalancer: %s", err)
+		log.Errorf(context.TODO(), "error checking rebalancer: %s", err)
 		return false, nil
 	}
 	elapsedSinceLastRangeEvent, err := time.ParseDuration(elapsedStr)
@@ -275,7 +277,7 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 		return false, err
 	}
 
-	log.Infof("last range event: %s for range %d/store %d (%s ago)",
+	log.Infof(context.TODO(), "last range event: %s for range %d/store %d (%s ago)",
 		eventType, rangeID, storeID, elapsedSinceLastRangeEvent)
 	return elapsedSinceLastRangeEvent >= StableInterval, nil
 }

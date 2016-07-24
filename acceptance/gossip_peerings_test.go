@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
@@ -117,7 +119,7 @@ func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCo
 		checkGossip(t, c, waitTime, hasPeers(num))
 
 		// Restart the first node.
-		log.Infof("restarting node 0")
+		log.Infof(context.TODO(), "restarting node 0")
 		if err := c.Restart(0); err != nil {
 			t.Fatal(err)
 		}
@@ -128,7 +130,7 @@ func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCo
 		if num > 1 {
 			pickedNode = rand.Intn(num-1) + 1
 		}
-		log.Infof("restarting node %d", pickedNode)
+		log.Infof(context.TODO(), "restarting node %d", pickedNode)
 		if err := c.Restart(pickedNode); err != nil {
 			t.Fatal(err)
 		}
@@ -162,26 +164,26 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 	}
 
 	for timeutil.Now().Before(deadline) {
-		log.Infof("waiting for initial gossip connections")
+		log.Infof(context.TODO(), "waiting for initial gossip connections")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)
 		checkGossip(t, c, waitTime, hasSentinel)
 
-		log.Infof("killing all nodes")
+		log.Infof(context.TODO(), "killing all nodes")
 		for i := 0; i < num; i++ {
 			if err := c.Kill(i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		log.Infof("restarting all nodes")
+		log.Infof(context.TODO(), "restarting all nodes")
 		for i := 0; i < num; i++ {
 			if err := c.Restart(i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		log.Infof("waiting for gossip to be connected")
+		log.Infof(context.TODO(), "waiting for gossip to be connected")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)
 		checkGossip(t, c, waitTime, hasSentinel)

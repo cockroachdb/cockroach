@@ -24,6 +24,8 @@ import (
 	"reflect"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -82,7 +84,7 @@ func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) strin
 	tempPath := filepath.Join(tempdir, name)
 	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
 		if t == nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		} else {
 			t.Fatal(err)
 		}

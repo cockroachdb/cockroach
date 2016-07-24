@@ -73,6 +73,8 @@ import "C"
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	// This is explicit because this Go library does not export any Go symbols.
 	_ "github.com/cockroachdb/c-jemalloc"
 
@@ -97,7 +99,7 @@ func getJemallocStats() (uint64, uint64, error) {
 
 	if log.V(2) {
 		// Summary of jemalloc stats:
-		log.Infof("jemalloc stats: allocated: %s, active: %s, metadata: %s, resident: %s, mapped: %s",
+		log.Infof(context.TODO(), "jemalloc stats: allocated: %s, active: %s, metadata: %s, resident: %s, mapped: %s",
 			humanize.IBytes(uint64(js.allocated)), humanize.IBytes(uint64(js.active)),
 			humanize.IBytes(uint64(js.metadata)), humanize.IBytes(uint64(js.resident)),
 			humanize.IBytes(uint64(js.mapped)))

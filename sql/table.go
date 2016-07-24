@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -172,7 +174,7 @@ func (p *planner) mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableD
 // getTableLease implements the SchemaAccessor interface.
 func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof("planner acquiring lease on table %q", qname)
+		log.Infof(context.TODO(), "planner acquiring lease on table %q", qname)
 	}
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
@@ -201,7 +203,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDesc
 			l.ParentID == dbID {
 			lease = l
 			if log.V(2) {
-				log.Infof("found lease in planner cache for table %q", qname)
+				log.Infof(context.TODO(), "found lease in planner cache for table %q", qname)
 			}
 			break
 		}
@@ -230,7 +232,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDesc
 // getTableLeaseByID is a by-ID variant of getTableLease (i.e. uses same cache).
 func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof("planner acquiring lease on table ID %d", tableID)
+		log.Infof(context.TODO(), "planner acquiring lease on table ID %d", tableID)
 	}
 
 	// First, look to see if we already have a lease for this table -- including
@@ -240,7 +242,7 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		if l.ID == tableID {
 			lease = l
 			if log.V(2) {
-				log.Infof("found lease in planner cache for table %d", tableID)
+				log.Infof(context.TODO(), "found lease in planner cache for table %d", tableID)
 			}
 			break
 		}
@@ -282,7 +284,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 		}
 	}
 	if idx == -1 {
-		log.Warningf("lease (%s) not found", lease)
+		log.Warningf(context.TODO(), "lease (%s) not found", lease)
 		return false
 	}
 	p.leases[idx] = p.leases[len(p.leases)-1]
@@ -290,7 +292,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 	p.leases = p.leases[:len(p.leases)-1]
 
 	if err := p.leaseMgr.Release(lease); err != nil {
-		log.Warning(err)
+		log.Warning(context.TODO(), err)
 	}
 
 	// Reset the deadline so that a new deadline will be set after the lease is acquired.
@@ -359,12 +361,12 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 // releaseLeases implements the SchemaAccessor interface.
 func (p *planner) releaseLeases() {
 	if log.V(2) {
-		log.Infof("planner releasing leases")
+		log.Infof(context.TODO(), "planner releasing leases")
 	}
 	if p.leases != nil {
 		for _, lease := range p.leases {
 			if err := p.leaseMgr.Release(lease); err != nil {
-				log.Warning(err)
+				log.Warning(context.TODO(), err)
 			}
 		}
 		p.leases = nil
