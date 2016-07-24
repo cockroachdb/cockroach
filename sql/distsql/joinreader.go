@@ -19,8 +19,6 @@ package distsql
 import (
 	"sync"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -95,10 +93,10 @@ func (jr *joinReader) mainLoop() error {
 	var alloc sqlbase.DatumAlloc
 	spans := make(sqlbase.Spans, 0, joinReaderBatchSize)
 
-	// TODO(radu): add info about the joinreader in the context.
+	ctx := log.WithLogTagInt(jr.ctx, "JoinReader", int(jr.desc.ID))
 	if log.V(2) {
-		log.Infof(jr.ctx, "JoinReader starting (filter: %s)", jr.filter)
-		defer log.Infof(jr.ctx, "JoinReader exiting")
+		log.Infof(ctx, "starting (filter: %s)", jr.filter)
+		defer log.Infof(ctx, "exiting")
 	}
 
 	for {
@@ -129,6 +127,7 @@ func (jr *joinReader) mainLoop() error {
 
 		err := jr.fetcher.StartScan(jr.ctx.txn, spans, 0)
 		if err != nil {
+			log.Errorf(ctx, "scan error: %s", err)
 			return err
 		}
 
@@ -145,13 +144,13 @@ func (jr *joinReader) mainLoop() error {
 				break
 			}
 			if log.V(3) {
-				log.Infof(jr.ctx, "JoinReader pushing row %s\n", outRow)
+				log.Infof(ctx, "pushing row %s\n", outRow)
 			}
 			// Push the row to the output RowReceiver; stop if they don't need more
 			// rows.
 			if !jr.output.PushRow(outRow) {
 				if log.V(2) {
-					log.Infof(jr.ctx, "JoinReader: no more rows required")
+					log.Infof(ctx, "no more rows required")
 				}
 				return nil
 			}
@@ -166,11 +165,7 @@ func (jr *joinReader) mainLoop() error {
 
 // Run is part of the processor interface.
 func (jr *joinReader) Run(wg *sync.WaitGroup) {
-	log.Infof(context.TODO(), "JoinReader filter: %s\n", jr.filter.expr)
 	err := jr.mainLoop()
-	if err != nil && log.V(1) {
-		log.Errorf(jr.ctx, "JoinReader error: %s", err)
-	}
 	jr.output.Close(err)
 	if wg != nil {
 		wg.Done()

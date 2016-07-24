@@ -63,6 +63,11 @@ func NewServer(ctx ServerContext) *ServerImpl {
 	return ds
 }
 
+// SetNodeID sets the NodeID for the server.
+func (ds *ServerImpl) SetNodeID(nodeID roachpb.NodeID) {
+	ds.ServerContext.Context = log.WithLogTagInt(ds.ServerContext.Context, "node", int(nodeID))
+}
+
 func (ds *ServerImpl) setupTxn(
 	ctx context.Context,
 	txnProto *roachpb.Transaction,
@@ -81,7 +86,6 @@ func (ds *ServerImpl) SetupSimpleFlow(
 	flowSpec := &req.Flows[0]
 
 	txn := ds.setupTxn(ctx, &req.Txn)
-	// TODO(radu): "merge" information from ctx and the server context.
 	flowCtx := FlowCtx{
 		Context: ds.ServerContext.Context,
 		id:      flowSpec.FlowID,
@@ -106,16 +110,17 @@ func (ds *ServerImpl) RunSimpleFlow(
 	if len(req.Flows) != 1 {
 		return errors.Errorf("expected exactly one flow, got %d", len(req.Flows))
 	}
-	// TODO(radu): merge context with server context.
+	ctx := ds.ServerContext.Context
 
 	// Set up the outgoing mailbox for the stream.
-	mbox := newOutboxSimpleFlowStream(stream.Context(), stream)
+	mbox := newOutboxSimpleFlowStream(stream)
 
-	f, err := ds.SetupSimpleFlow(stream.Context(), req, mbox)
+	f, err := ds.SetupSimpleFlow(ctx, req, mbox)
 	if err != nil {
 		log.Errorf(ds, err.Error(), "", err)
 		return err
 	}
+	mbox.setFlowCtx(&f.FlowCtx)
 
 	// TODO(radu): this stuff should probably be run through a stopper.
 	mbox.start(&f.waitGroup)
@@ -139,7 +144,6 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	// Note: ctx will be canceled when the RPC completes, so we can't associate
 	// it with the transaction.
 
-	// TODO(radu): "merge" information from ctx and the server context.
 	txn := ds.setupTxn(ds.ServerContext.Context, &req.Txn)
 	flowCtx := FlowCtx{
 		Context: ds.ServerContext.Context,

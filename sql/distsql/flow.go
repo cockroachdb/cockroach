@@ -82,7 +82,9 @@ func newFlow(
 	flowReg *flowRegistry,
 	simpleFlowConsumer RowReceiver,
 ) *Flow {
-	// TODO(radu): add Flow ID to flowCtx.Context.
+	// TODO(radu): UUIDs are pretty long, perhaps an int64 would be sufficient
+	// for Flow IDs..
+	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "flow", flowCtx.id.String())
 	return &Flow{
 		FlowCtx:            flowCtx,
 		flowRegistry:       flowReg,
