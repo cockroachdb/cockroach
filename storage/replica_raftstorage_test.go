@@ -25,67 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 )
-
-func TestApplySnapshotDenyPreemptive(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var tc testContext
-	tc.Start(t)
-	defer tc.Stop()
-
-	key := roachpb.RKey("a")
-	realRng := tc.store.LookupReplica(key, nil)
-
-	// Use Raft to get a nontrivial term for our snapshot.
-	if pErr := realRng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	snap, err := realRng.GetSnapshot()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Make sure that the Term is behind our first range term (raftInitialLogTerm)
-	snap.Metadata.Term--
-
-	// Create an uninitialized version of the first range. This is only ok
-	// because in the case we test, there's an error (and so we don't clobber
-	// our actual first range in the Store). If we want snapshots to apply
-	// successfully during tests, we need to adapt the snapshots to a new
-	// RangeID first and generally do a lot more work.
-	rng, err := NewReplica(&roachpb.RangeDescriptor{RangeID: 1}, tc.store, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := rng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(
-		err, "cannot apply preemptive snapshot from past term",
-	) {
-		t.Fatal(err)
-	}
-
-	// Do something that extends the Raft log past what we have in the
-	// snapshot.
-	put := putArgs(roachpb.Key("a"), []byte("foo"))
-	if _, pErr := tc.SendWrapped(&put); pErr != nil {
-		t.Fatal(pErr)
-	}
-	snap.Metadata.Term++ // restore the "real" term of the snapshot
-
-	if _, err := rng.applySnapshot(snap, raftpb.HardState{}); !testutils.IsError(
-		err, "would erase acknowledged log entries",
-	) {
-		t.Fatal(err)
-	}
-
-}
 
 const rangeID = 1
 const keySize = 1 << 7   // 128 B
