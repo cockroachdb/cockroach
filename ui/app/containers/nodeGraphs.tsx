@@ -2,7 +2,7 @@ import * as React from "react";
 import * as d3 from "d3";
 import { IInjectedProps } from "react-router";
 
-import { nodeID } from "./../util/constants";
+import { nodeIDAttr } from "./../util/constants";
 
 import GraphGroup from "../components/graphGroup";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
@@ -18,7 +18,7 @@ export default class extends React.Component<IInjectedProps, {}> {
 
   render() {
     let sources: string[];
-    let node = this.props.params[nodeID];
+    let node = this.props.params[nodeIDAttr];
     sources = node ? [node] : null;
     let specifier = node ? `on node ${node}` : "across all nodes";
 
