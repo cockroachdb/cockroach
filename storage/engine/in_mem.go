@@ -28,7 +28,7 @@ type InMem struct {
 
 // NewInMem allocates and returns a new, opened InMem engine.
 func NewInMem(attrs roachpb.Attributes, cacheSize int64, stopper *stop.Stopper) InMem {
-	cache := NewRocksDBCache(cacheSize) // released when db closes
+	cache := NewRocksDBCache(cacheSize)
 	// The cache starts out with a refcount of one, and creating the engine
 	// from it adds another refcount, at which point we release one of them.
 	defer cache.Release()

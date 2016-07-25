@@ -306,6 +306,7 @@ func newMemRocksDB(
 		// dir: empty dir == "mem" RocksDB instance.
 		cache:          cache.ref(),
 		memtableBudget: memtableBudget,
+		maxSize:        memtableBudget,
 		stopper:        stopper,
 		deallocated:    make(chan struct{}),
 	}
@@ -474,7 +475,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	fileSystemUsage := gosigar.FileSystemUsage{}
 	dir := r.dir
 	if dir == "" {
-		dir = "/tmp"
+		// This is an in-memory instance. Pretend we're empty since we
+		// don't know better and only use this for testing. Using any
+		// part of the actual file system here can throw off allocator
+		// rebalancing in a hard-to-trace manner. See #7050.
+		return roachpb.StoreCapacity{
+			Capacity:  r.maxSize,
+			Available: r.maxSize,
+		}, nil
 	}
 	if err := fileSystemUsage.Get(dir); err != nil {
 		return roachpb.StoreCapacity{}, err
