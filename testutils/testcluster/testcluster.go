@@ -18,7 +18,6 @@ package testcluster
 
 import (
 	gosql "database/sql"
-	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -125,7 +125,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 func (tc *TestCluster) waitForStores(t testing.TB) {
 	// Register a gossip callback for the store descriptors.
 	g := tc.Servers[0].Gossip()
-	var storesMu sync.Mutex
+	var storesMu syncutil.Mutex
 	stores := map[roachpb.StoreID]struct{}{}
 	storesDone := make(chan error)
 	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),

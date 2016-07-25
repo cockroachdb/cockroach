@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -420,7 +421,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	const maxConcurrency = 5
 	const duration = 10 * time.Millisecond
 	sem := make(chan struct{}, maxConcurrency)
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	concurrency := 0
 	peakConcurrency := 0
 	var wg sync.WaitGroup
