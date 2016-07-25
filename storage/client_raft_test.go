@@ -1815,24 +1815,50 @@ func TestTransferRaftLeadership(t *testing.T) {
 	const numStores = 3
 	mtc := startMultiTestContext(t, numStores)
 	defer mtc.Stop()
-	// Setup replication of range 1 on store 0 to stores 1 and 2.
-	mtc.replicateRange(1, 1, 2)
 
-	rng, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	status := rng.RaftStatus()
-	if status.Lead != 1 {
-		t.Fatalf("raft leader should be 1, but got %v", status.Lead)
+	key := roachpb.Key("a")
+
+	{
+		// Split off a range to avoid interacting with the initial splits.
+		splitArgs := adminSplitArgs(key, key)
+		if _, err := client.SendWrapped(mtc.distSenders[0], nil, &splitArgs); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	mtc.expireLeases()
-	// Force the read command request a new lease.
+	rng := mtc.stores[0].LookupReplica(keys.MustAddr(key), nil)
+	if rng == nil {
+		t.Fatalf("no replica found for key '%s'", key)
+	}
+	mtc.replicateRange(rng.RangeID, 1, 2)
+
 	getArgs := getArgs([]byte("a"))
-	_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs)
-	if pErr != nil {
+	if _, pErr := client.SendWrappedWith(mtc.stores[0], context.Background(), roachpb.Header{RangeID: rng.RangeID}, &getArgs); pErr != nil {
 		t.Fatalf("expect get nil, actual get %v ", pErr)
+	}
+
+	status := rng.RaftStatus()
+	if status != nil && status.Lead != 1 {
+		t.Fatalf("raft leader should be 1, but got status %+v", status)
+	}
+
+	// Force a read on Store 2 to request a new lease. Other moving parts in
+	// the system could have requested another lease as well, so we
+	// expire-request in a loop until we get our foot in the door.
+	var pErr *roachpb.Error
+	for {
+		mtc.expireLeases()
+		if _, pErr = client.SendWrappedWith(
+			mtc.stores[1],
+			context.Background(),
+			roachpb.Header{RangeID: rng.RangeID},
+			&getArgs,
+		); testutils.IsPError(pErr, "not lease holder") {
+			continue
+		} else if pErr != nil {
+			t.Fatal(pErr)
+		}
+		break
 	}
 	// Wait for raft leadership transferring to be finished.
 	util.SucceedsSoon(t, func() error {
