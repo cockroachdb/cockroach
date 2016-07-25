@@ -19,13 +19,13 @@ package storage
 
 import (
 	"fmt"
-	"sync"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/coreos/etcd/raft"
 )
 
@@ -119,7 +119,7 @@ func (r *raftLogger) Panicf(format string, v ...interface{}) {
 	panic(fmt.Sprintf(r.logPrefix()+format, v...))
 }
 
-var logRaftReadyMu sync.Mutex
+var logRaftReadyMu syncutil.Mutex
 
 func logRaftReady(storeID roachpb.StoreID, rangeID roachpb.RangeID, ready raft.Ready) {
 	if log.V(5) {

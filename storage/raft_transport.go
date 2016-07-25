@@ -19,7 +19,6 @@ package storage
 
 import (
 	"net"
-	"sync"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -84,7 +84,7 @@ type RaftTransport struct {
 	SnapshotStatusChan chan RaftSnapshotStatus
 
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		handlers map[roachpb.StoreID]raftMessageHandler
 		queues   map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
 	}

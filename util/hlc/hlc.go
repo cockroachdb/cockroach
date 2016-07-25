@@ -21,13 +21,13 @@
 package hlc
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -51,7 +51,7 @@ type Clock struct {
 	physicalClock func() int64
 	// Clock contains a mutex used to lock the below
 	// fields while methods operate on them.
-	sync.Mutex
+	syncutil.Mutex
 	state Timestamp
 	// MaxOffset specifies how far ahead of the physical
 	// clock (and cluster time) the wall time can be.

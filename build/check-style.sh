@@ -19,6 +19,11 @@ TestEnvutil() {
   ! git grep -nF 'os.Getenv' -- '*.go' | grep -vE '^((util/(log|envutil|sdnotify))|acceptance(/.*)?)/\w+\.go\b'
 }
 
+TestGrpc() {
+  echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"
+  ! git grep -nF 'grpc.NewServer()' -- '*.go' | grep -vE '^rpc/context(_test)?\.go\b'
+}
+
 TestProtoClone() {
   echo "checking for proto.Clone calls (use protoutil.Clone instead)"
   ! git grep -nE '\.Clone\([^)]+\)' -- '*.go' | grep -vF 'protoutil.Clone' | grep -vE '^util/protoutil/clone(_test)?\.go\b'
@@ -29,9 +34,9 @@ TestProtoMarshal() {
   ! git grep -nE '\.Marshal\([^)]+\)' -- '*.go' | grep -vE '(json|yaml|protoutil)\.Marshal' | grep -vE '^util/protoutil/marshal(_test)?\.go\b'
 }
 
-TestGrpc() {
-  echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"
-  ! git grep -nF 'grpc.NewServer()' -- '*.go' | grep -vE '^rpc/context(_test)?\.go\b'
+TestSyncMutex() {
+  echo "checking for sync.Mutex usage (use syncutil.Mutex instead)"
+  ! git grep -nE 'sync\.Mutex' -- '*.go' | grep -vE '^util/syncutil/mutex_sync\.go\b'
 }
 
 TestMissingLeakTest() {
