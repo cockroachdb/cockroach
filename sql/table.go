@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -56,25 +55,6 @@ func (tk tableKey) Key() roachpb.Key {
 
 func (tk tableKey) Name() string {
 	return tk.name
-}
-
-var errDescriptorNotFound = errors.New("descriptor not found")
-
-// getTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Teturns an error if the
-// descriptor doesn't exist or if it exists and is not a table.
-func getTableDescFromID(txn *client.Txn, id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
-	desc := &sqlbase.Descriptor{}
-	descKey := sqlbase.MakeDescMetadataKey(id)
-
-	if err := txn.GetProto(descKey, desc); err != nil {
-		return nil, err
-	}
-	table := desc.GetTable()
-	if table == nil {
-		return nil, errDescriptorNotFound
-	}
-	return table, nil
 }
 
 // getKeysForTableDescriptor retrieves the KV keys corresponding
@@ -112,7 +92,7 @@ type SchemaAccessor interface {
 	// is not found.
 	mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error)
 
-	// NB: one can use getTableDescFromID() to retrieve a descriptor for
+	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
 	// in the transaction already.
 
@@ -214,7 +194,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDesc
 		var err error
 		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, qname.Table())
 		if err != nil {
-			if err == errDescriptorNotFound {
+			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
 				// table's name.
 				return nil, sqlbase.NewUndefinedTableError(qname.String())
@@ -253,7 +233,7 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		var err error
 		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if err != nil {
-			if err == errDescriptorNotFound {
+			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
 				// table's ID.
 				return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))

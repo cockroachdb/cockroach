@@ -327,7 +327,9 @@ func (n *createTableNode) Start() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	err = desc.Validate()
+	// Only validate the table because backreferences aren't created yet.
+	// Everything is validated below.
+	err = desc.ValidateTable()
 	desc.ID = savedID
 	if err != nil {
 		return err
@@ -339,19 +341,23 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	if err := n.finalizeFKs(&desc, fkTargets); err != nil {
-		return err
-	}
+	if created {
+		if err := n.finalizeFKs(&desc, fkTargets); err != nil {
+			return err
+		}
 
-	for _, index := range desc.AllNonDropIndexes() {
-		if len(index.Interleave.Ancestors) > 0 {
-			if err := n.p.finalizeInterleave(&desc, index); err != nil {
-				return err
+		for _, index := range desc.AllNonDropIndexes() {
+			if len(index.Interleave.Ancestors) > 0 {
+				if err := n.p.finalizeInterleave(&desc, index); err != nil {
+					return err
+				}
 			}
 		}
-	}
 
-	if created {
+		if err := desc.Validate(n.p.txn); err != nil {
+			return err
+		}
+
 		// Log Create Table event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
 		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
@@ -487,7 +493,7 @@ func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
 	if err := td.SetUpVersion(); err != nil {
 		return err
 	}
-	if err := td.Validate(); err != nil {
+	if err := td.ValidateTable(); err != nil {
 		return err
 	}
 	if err := p.writeTableDesc(td); err != nil {
@@ -550,6 +556,7 @@ func (p *planner) addInterleave(
 	}
 	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
 
+	desc.State = sqlbase.TableDescriptor_ADD
 	return nil
 }
 
@@ -592,23 +599,34 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 func (p *planner) finalizeInterleave(
 	desc *sqlbase.TableDescriptor, index sqlbase.IndexDescriptor,
 ) error {
-	// TODO(dan): This is similar to finalizeFKs. Consolidate them.
-	for _, ancestor := range index.Interleave.Ancestors {
-		ancestorTable, err := getTableDescFromID(p.txn, ancestor.TableID)
-		if err != nil {
-			return err
-		}
-		ancestorIndex, err := ancestorTable.FindIndexByID(ancestor.IndexID)
-		if err != nil {
-			return err
-		}
-		ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
-			sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
+	// TODO(dan): This is similar to finalizeFKs. Consolidate them
+	if len(index.Interleave.Ancestors) == 0 {
+		return nil
+	}
+	// Only the last ancestor needs the backreference.
+	ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
+	ancestorTable, err := sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
+	if err != nil {
+		return err
+	}
+	ancestorIndex, err := ancestorTable.FindIndexByID(ancestor.IndexID)
+	if err != nil {
+		return err
+	}
+	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
+		sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
-		// TODO(dan): Only save each referenced table once.
-		if err := p.saveNonmutationAndNotify(ancestorTable); err != nil {
+	if err := p.saveNonmutationAndNotify(ancestorTable); err != nil {
+		return err
+	}
+
+	if desc.State == sqlbase.TableDescriptor_ADD {
+		desc.State = sqlbase.TableDescriptor_PUBLIC
+
+		if err := p.saveNonmutationAndNotify(desc); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
