@@ -10,33 +10,33 @@ import * as protos from "../js/protos";
 let serverpb = protos.cockroach.server.serverpb;
 let ts = protos.cockroach.ts.tspb;
 
-type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
+export type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
 
-type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
-type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+export type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
+export type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
-type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
-type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
+export type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
+export type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
-type EventsRequest = cockroach.server.serverpb.EventsRequest;
-type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
+export type EventsRequest = cockroach.server.serverpb.EventsRequest;
+export type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
 
-type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
+export type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
 
-type GetUIDataRequest = cockroach.server.serverpb.GetUIDataRequest;
-type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessage;
+export type GetUIDataRequest = cockroach.server.serverpb.GetUIDataRequest;
+export type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessage;
 
-type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
-type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
+export type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
+export type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
 
-type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
+export type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
 
-type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+export type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+export type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
-type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
+export type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
 
-type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
+export type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
