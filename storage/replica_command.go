@@ -2265,6 +2265,110 @@ func (r *Replica) AdminSplit(
 	return reply, nil
 }
 
+// splitTriggerPostCommit is the part of the split trigger which coordinates
+// the actual split with the Store.
+func splitTriggerPostCommit(
+	ctx context.Context,
+	deltaMS enginepb.MVCCStats,
+	split *roachpb.SplitTrigger,
+	r *Replica,
+) {
+	// Create the new Replica representing the right side of the split.
+	// Our error handling options at this point are very limited, but
+	// we need to do this after our batch has committed.
+	rightRng, err := NewReplica(&split.RightDesc, r.store, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	// Copy the timestamp cache into the RHS range.
+	r.mu.Lock()
+	rightRng.mu.Lock()
+	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
+	rightRng.mu.Unlock()
+	r.mu.Unlock()
+	log.Trace(ctx, "copied timestamp cache")
+
+	// Add the RHS replica to the store. This step atomically updates
+	// the EndKey of the LHS replica and also adds the RHS replica
+	// to the store's replica map.
+	if err := r.store.SplitRange(r, rightRng); err != nil {
+		// Our in-memory state has diverged from the on-disk state.
+		log.Fatalf(context.TODO(), "%s: failed to update Store after split: %s", r, err)
+	}
+
+	// Update store stats with difference in stats before and after split.
+	r.store.metrics.addMVCCStats(deltaMS)
+
+	// If the range was not properly replicated before the split, the
+	// replicate queue may not have picked it up (due to the need for
+	// a split). Enqueue both left and right halves to speed up a
+	// potentially necessary replication. See #7022 and #7800.
+	now := r.store.Clock().Now()
+	r.store.replicateQueue.MaybeAdd(r, now)
+	r.store.replicateQueue.MaybeAdd(rightRng, now)
+
+	// To avoid leaving the RHS range unavailable as it waits to elect
+	// its leader, one (and only one) of the nodes should start an
+	// election as soon as the split is processed.
+	//
+	// If there is only one replica, raft instantly makes it the leader.
+	// Otherwise, we must trigger a campaign here.
+	//
+	// TODO(bdarnell): The asynchronous campaign can cause a problem
+	// with merges, by recreating a replica that should have been
+	// destroyed. This will probably be addressed as a part of the
+	// general work to be done for merges
+	// (https://github.com/cockroachdb/cockroach/issues/2433), but for
+	// now we're safe because we only perform the asynchronous
+	// campaign when there are multiple replicas, and we only perform
+	// merges in testing scenarios with a single replica.
+	// Note that in multi-node scenarios the async campaign is safe
+	// because it has exactly the same behavior as an incoming message
+	// from another node; the problem here is only with merges.
+	if len(split.RightDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
+		// Schedule the campaign a short time in the future. As
+		// followers process the split, they destroy and recreate their
+		// raft groups, which can cause messages to be dropped. In
+		// general a shorter delay (perhaps all the way down to zero) is
+		// better in production, because the race is rare and the worst
+		// case scenario is that we simply wait for an election timeout.
+		// However, the test for this feature disables election timeouts
+		// and relies solely on this campaign trigger, so it is unacceptably
+		// flaky without a bit of a delay.
+		//
+		// Note: you must not use the context inside of this task since it may
+		// contain a finished trace by the time it runs.
+		if err := r.store.stopper.RunAsyncTask(func() {
+			time.Sleep(10 * time.Millisecond)
+			// Make sure that rightRng hasn't been removed.
+			replica, err := r.store.GetReplica(rightRng.RangeID)
+			if err != nil {
+				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+					log.Infof(context.TODO(), "%s: RHS replica %d removed before campaigning",
+						r, r.mu.replicaID)
+				} else {
+					log.Infof(context.TODO(), "%s: RHS replica %d unable to campaign: %s",
+						r, r.mu.replicaID, err)
+				}
+				return
+			}
+
+			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
+				if err := raftGroup.Campaign(); err != nil {
+					log.Warningf(context.TODO(), "%s: error %v", r, err)
+				}
+				return nil
+			}); err != nil {
+				panic(err)
+			}
+		}); err != nil {
+			log.Warningf(context.TODO(), "%s: error %v", r, err)
+			return
+		}
+	}
+}
+
 // splitTrigger is called on a successful commit of a transaction
 // containing an AdminSplit operation. It copies the abort cache for
 // the new range and recomputes stats for both the existing, left hand
@@ -2424,6 +2528,12 @@ func (r *Replica) splitTrigger(
 	// Preserve stats for presplit range and begin computing stats delta
 	// for current transaction.
 	origStats := r.GetMVCCStats()
+	// TODO(tschottdorf): something is fishy here. `*ms` at this point is the
+	// stats delta we've written before the split trigger. Now we "fork" off
+	// of that for deltaMS, so any updates to deltaMS will be unknown to `ms`,
+	// which will be added to the replica's stats in the same batch, but after
+	// this commit trigger. We update the stats below, but computed from the
+	// batch which already contains all of the writes that influenced `ms`.
 	deltaMS := *ms
 
 	// Account for MVCCStats' own contribution to the RHS range's statistics.
@@ -2564,102 +2674,16 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, "computed stats for RHS range")
 
-	// Note: you must not use the trace inside of this defer since it may
-	// run after the trace has already completed.
-	batch.Defer(func() {
-		// Create the Replica for the right side of the split. Our error
-		// handling options at this point are very limited, but we need to
-		// do this after our batch has committed.
-		rightRng, err := NewReplica(&split.RightDesc, r.store, 0)
-		if err != nil {
-			panic(err)
-		}
+	// This is the part of the split trigger which coordinates the actual split
+	// with the Store. As such, it tries to avoid using any of the intermediate
+	// results of the code above, the goal being moving it closer to Store's
+	// Raft processing goroutine.
 
-		// Copy the timestamp cache into the RHS range.
-		r.mu.Lock()
-		rightRng.mu.Lock()
-		rightRng.mu.state.Stats = rightMS
-		r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
-		rightRng.mu.Unlock()
-		r.mu.Unlock()
-		log.Trace(ctx, "copied timestamp cache")
+	theTrigger := func() {
+		splitTriggerPostCommit(ctx, deltaMS, split, r)
+	}
 
-		// Add the RHS replica to the store. This step atomically updates
-		// the EndKey of the LHS replica and also adds the RHS replica
-		// to the store's replica map.
-		if err := r.store.SplitRange(r, rightRng); err != nil {
-			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf(context.TODO(), "%s: failed to update Store after split: %s", r, err)
-		}
-
-		// Update store stats with difference in stats before and after split.
-		r.store.metrics.addMVCCStats(deltaMS)
-
-		// If the range was not properly replicated before the split, the
-		// replicate queue may not have picked it up (due to the need for
-		// a split). Enqueue both left and right halves to speed up a
-		// potentially necessary replication. See #7022 and #7800.
-		now := r.store.Clock().Now()
-		r.store.replicateQueue.MaybeAdd(r, now)
-		r.store.replicateQueue.MaybeAdd(rightRng, now)
-
-		// To avoid leaving the RHS range unavailable as it waits to elect
-		// its leader, one (and only one) of the nodes should start an
-		// election as soon as the split is processed.
-		//
-		// If there is only one replica, raft instantly makes it the leader.
-		// Otherwise, we must trigger a campaign here.
-		//
-		// TODO(bdarnell): The asynchronous campaign can cause a problem
-		// with merges, by recreating a replica that should have been
-		// destroyed. This will probably be addressed as a part of the
-		// general work to be done for merges
-		// (https://github.com/cockroachdb/cockroach/issues/2433), but for
-		// now we're safe because we only perform the asynchronous
-		// campaign when there are multiple replicas, and we only perform
-		// merges in testing scenarios with a single replica.
-		// Note that in multi-node scenarios the async campaign is safe
-		// because it has exactly the same behavior as an incoming message
-		// from another node; the problem here is only with merges.
-		if len(split.RightDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
-			// Schedule the campaign a short time in the future. As
-			// followers process the split, they destroy and recreate their
-			// raft groups, which can cause messages to be dropped. In
-			// general a shorter delay (perhaps all the way down to zero) is
-			// better in production, because the race is rare and the worst
-			// case scenario is that we simply wait for an election timeout.
-			// However, the test for this feature disables election timeouts
-			// and relies solely on this campaign trigger, so it is unacceptably
-			// flaky without a bit of a delay.
-			if err := r.store.stopper.RunAsyncTask(func() {
-				time.Sleep(10 * time.Millisecond)
-				// Make sure that rightRng hasn't been removed.
-				replica, err := r.store.GetReplica(rightRng.RangeID)
-				if err != nil {
-					if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-						log.Infof(context.TODO(), "%s: RHS replica %d removed before campaigning",
-							r, r.mu.replicaID)
-					} else {
-						log.Infof(context.TODO(), "%s: RHS replica %d unable to campaign: %s",
-							r, r.mu.replicaID, err)
-					}
-					return
-				}
-
-				if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
-					if err := raftGroup.Campaign(); err != nil {
-						log.Warningf(context.TODO(), "%s: error %v", r, err)
-					}
-					return nil
-				}); err != nil {
-					panic(err)
-				}
-			}); err != nil {
-				log.Warningf(context.TODO(), "%s: error %v", r, err)
-				return
-			}
-		}
-	})
+	batch.Defer(theTrigger)
 
 	return nil
 }
