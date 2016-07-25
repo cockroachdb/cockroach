@@ -252,9 +252,9 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
-	escDbName := parser.Name(req.Database).String()
+	escDBName := parser.Name(req.Database).String()
 	escTableName := parser.Name(req.Table).String()
-	escQualTable := fmt.Sprintf("%s.%s", escDbName, escTableName)
+	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
 		escQualTable, escQualTable, escQualTable, escQualTable)
 	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
@@ -387,7 +387,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 		var tableSpan roachpb.Span
 		if err := s.server.db.Txn(func(txn *client.Txn) error {
 			var err error
-			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDbName, escTableName)
+			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
 			return err
 		}); err != nil {
 			return nil, s.serverError(err)
@@ -411,7 +411,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 
 	// Query the zone configuration for this table.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, session, []string{escDbName, escTableName})
+		path, err := s.queryDescriptorIDPath(ctx, session, []string{escDBName, escTableName})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -437,6 +437,123 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 	}
 
 	return &resp, nil
+}
+
+// TableStats is an endpoint that returns columns, indices, and other
+// relevant details for the specified table.
+func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRequest) (
+	*serverpb.TableStatsResponse, error,
+) {
+	escDBName := parser.Name(req.Database).String()
+	escTableName := parser.Name(req.Table).String()
+
+	// Get table span.
+	var tableSpan roachpb.Span
+	var iexecutor sql.InternalExecutor
+	if err := s.server.db.Txn(func(txn *client.Txn) error {
+		var err error
+		tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
+		return err
+	}); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	startKey, err := keys.Addr(tableSpan.Key)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	endKey, err := keys.Addr(tableSpan.EndKey)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Get current range descriptors for table. This is done by scanning over
+	// meta2 keys for the range.
+	rangeDescKVs, err := s.server.db.Scan(keys.RangeMetaKey(startKey), keys.RangeMetaKey(endKey), 0)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Extract a list of node IDs from the response.
+	nodeIDs := make(map[roachpb.NodeID]struct{})
+	for _, kv := range rangeDescKVs {
+		var rng roachpb.RangeDescriptor
+		if err := kv.Value.GetProto(&rng); err != nil {
+			return nil, s.serverError(err)
+		}
+		for _, repl := range rng.Replicas {
+			nodeIDs[repl.NodeID] = struct{}{}
+		}
+	}
+
+	// Construct TableStatsResponse by sending an RPC to every node involved.
+	tableStatResponse := serverpb.TableStatsResponse{
+		NodeCount:  int64(len(nodeIDs)),
+		RangeCount: int64(len(rangeDescKVs)),
+	}
+	type nodeResponse struct {
+		nodeID roachpb.NodeID
+		resp   *serverpb.SpanStatsResponse
+		err    error
+	}
+
+	// Send a SpanStats query to each node.
+	responses := make(chan nodeResponse)
+	for nodeID := range nodeIDs {
+		nodeID := nodeID
+		if err := s.server.stopper.RunAsyncTask(func() {
+			ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+			defer cancel()
+
+			var spanResponse *serverpb.SpanStatsResponse
+			client, err := s.server.status.dialNode(nodeID)
+			if err == nil {
+				req := serverpb.SpanStatsRequest{
+					StartKey: startKey,
+					EndKey:   endKey,
+					NodeId:   nodeID.String(),
+				}
+				spanResponse, err = client.SpanStats(ctxWithTimeout, &req)
+			}
+
+			response := nodeResponse{
+				nodeID: nodeID,
+				resp:   spanResponse,
+				err:    err,
+			}
+			select {
+			case responses <- response:
+				// Response processed.
+			case <-ctx.Done():
+				// Context completed, response no longer needed.
+			}
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for remainingResponses := len(nodeIDs); remainingResponses > 0; remainingResponses-- {
+		select {
+		case resp := <-responses:
+			// For nodes which returned an error, note that the node's data
+			// is missing. For successful calls, aggregate statistics.
+			if resp.err != nil {
+				tableStatResponse.MissingNodes = append(
+					tableStatResponse.MissingNodes,
+					serverpb.TableStatsResponse_MissingNode{
+						NodeId:       resp.nodeID.String(),
+						ErrorMessage: resp.err.Error(),
+					},
+				)
+			} else {
+				tableStatResponse.Stats.Add(resp.resp.TotalStats)
+				tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	return &tableStatResponse, nil
 }
 
 // Users returns a list of users, stripped of any passwords.

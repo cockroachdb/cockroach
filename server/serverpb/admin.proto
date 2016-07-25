@@ -19,6 +19,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "cockroach/config/config.proto";
+import "cockroach/storage/engine/enginepb/mvcc.proto";
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
 
@@ -141,6 +142,45 @@ message TableDetailsResponse {
   cockroach.config.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 7;
+}
+
+// TableStatsRequest is a request for detailed, computationally expensive
+// information about a table.
+message TableStatsRequest {
+  // database is the database that contains the table we're interested in.
+  string database = 1;
+  // table is the name of the table that we're querying.
+  string table = 2;
+}
+
+// TableStatsResponse contains detailed, computationally expensive information
+// about a table.
+message TableStatsResponse {
+  // range_count is the number of ranges, as determined from a query of range
+  // meta keys.
+  int64 range_count = 1;
+  // replica_count is the number of replicas of any range of this table, as
+  // found by querying nodes which are known to have replicas. When compared
+  // with range_count, this can be used to estimate the current replication
+  // factor of the table.
+  int64 replica_count = 2;
+  // node_count is the number of nodes which contain data for this table, 
+  // according to a query of range meta keys.
+  int64 node_count = 3;
+  // stats is the summation of MVCCStats for all replicas of this table
+  // across the cluster.
+  cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  // MissingNode represents information on a node which should contain data
+  // for this table, but could not be contacted during this request.
+  message MissingNode {
+    // The ID of the missing node.
+    string node_id = 1;
+    // The error message that resulted when the query sent to this node failed.
+    string error_message = 2;
+  }
+  // A list of nodes which should contain data for this table (according to
+  // cluster metadata), but could not be contacted during this request.
+  repeated MissingNode missing_nodes = 5 [(gogoproto.nullable) = false];
 }
 
 // UsersRequest requests a list of users.
@@ -271,7 +311,7 @@ enum DrainMode {
 // all those in 'on'.
 message DrainRequest {
   // These are actually of type DrainMode, but grpc-gateway does not support
-  // proxying enum fields (yet: 
+  // proxying enum fields (yet:
   // https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
   // pretty dramatic ways (panics the server).
   repeated int32 on = 1;
@@ -342,6 +382,13 @@ service Admin {
   rpc TableDetails(TableDetailsRequest) returns (TableDetailsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/databases/{database}/tables/{table}"
+    };
+  }
+
+  // Example URL: /_admin/v1/databases/system/tables/ui/stats
+  rpc TableStats(TableStatsRequest) returns (TableStatsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases/{database}/tables/{table}/stats"
     };
   }
 

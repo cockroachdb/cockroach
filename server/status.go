@@ -715,6 +715,7 @@ func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsReq
 	if err != nil {
 		return nil, err
 	}
+
 	return output, nil
 }
 
