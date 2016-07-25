@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"syscall"
@@ -242,6 +243,20 @@ func initCPUProfile(dir string) {
 	}()
 }
 
+func initBlockProfile() {
+	// Enable the block profile for a sample of mutex and channel operations.
+	// Smaller values provide more accurate profiles but are more
+	// expensive. 0 and 1 are special: 0 disables the block profile and
+	// 1 captures 100% of block events. For other values, the profiler
+	// will sample one event per X nanoseconds spent blocking.
+	//
+	// The block profile can be viewed with `go tool pprof
+	// http://HOST:PORT/debug/pprof/block`
+	d := envutil.EnvOrDefaultInt64("block_profile_rate",
+		1000000 /* 1 sample per millisecond spent blocking */)
+	runtime.SetBlockProfileRate(int(d))
+}
+
 func initCheckpointing(engines []engine.Engine) {
 	checkpointInterval := envutil.EnvOrDefaultDuration("checkpoint_interval", -1)
 	if checkpointInterval < 0 {
@@ -320,6 +335,7 @@ func runStart(_ *cobra.Command, args []string) error {
 
 	initMemProfile(f.Value.String())
 	initCPUProfile(f.Value.String())
+	initBlockProfile()
 
 	// Default user for servers.
 	serverCtx.User = security.NodeUser
