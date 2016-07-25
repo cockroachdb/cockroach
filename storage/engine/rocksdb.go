@@ -233,7 +233,9 @@ type RocksDBCache struct {
 	cache *C.DBCache
 }
 
-// NewRocksDBCache creates a new cache of the specified size.
+// NewRocksDBCache creates a new cache of the specified size. Note that the
+// cache is refcounted internally and starts out with a refcount of one (i.e.
+// Release() should be called after having used the cache).
 func NewRocksDBCache(cacheSize int64) RocksDBCache {
 	return RocksDBCache{cache: C.DBNewCache(C.uint64_t(cacheSize))}
 }
@@ -246,7 +248,8 @@ func (c RocksDBCache) ref() RocksDBCache {
 }
 
 // Release releases the cache. Note that the cache will continue to be used
-// until all of the RocksDB engines it was attached to have been closed.
+// until all of the RocksDB engines it was attached to have been closed, and
+// that RocksDB engines which use it auto-release when they close.
 func (c RocksDBCache) Release() {
 	if c.cache != nil {
 		C.DBReleaseCache(c.cache)
