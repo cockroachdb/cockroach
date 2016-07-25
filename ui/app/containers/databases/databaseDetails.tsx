@@ -1,23 +1,31 @@
 import * as _ from "lodash";
 import * as React from "react";
+import * as d3 from "d3";
 import { Link, IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
-import { databaseName } from "../../util/constants";
+import { databaseNameAttr } from "../../util/constants";
 
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
-import { refreshDatabaseDetails } from "../../redux/apiReducers";
+import { refreshDatabaseDetails, refreshTableDetails, generateTableID } from "../../redux/apiReducers";
+import * as protos from "../../js/protos";
 
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
+import Visualization from "../../components/visualization";
 
-type Grant = cockroach.server.serverpb.DatabaseDetailsResponse.Grant;
+import { KeyedCachedDataReducerState } from "../../redux/cachedDataReducer";
 type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_TABLES_SORT_SETTING_KEY = "databaseDetails/sort_setting/tables";
 const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databaseDetails/sort_setting/grants";
+
+class TableInfo {
+  constructor(public name: string, public numColumns: number, public numIndices: number) { };
+}
 
 /******************************
  *      TABLE COLUMN DEFINITION
@@ -28,6 +36,10 @@ const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databaseDetails/sort_setting/grants
  */
 enum TablesTableColumn {
   Name = 1,
+  NumColumns = 2,
+  NumIndices = 3,
+  LastModified = 4,
+  LastModifiedBy = 5,
 }
 
 /**
@@ -40,11 +52,11 @@ interface TablesColumnDescriptor {
   // Title string that should appear in the header column.
   title: string;
   // Function which generates the contents of an individual cell in this table.
-  cell: (s: string, id: string) => React.ReactNode;
+  cell: (tableInfo: TableInfo, id: string) => React.ReactNode;
   // Function which returns a value that can be used to sort a collection of
   // tables. This will be used to sort the table according to the data in
   // this column.
-  sort?: (s: string) => any;
+  sort?: (tableInfo: TableInfo) => any;
   // className to be applied to the td elements
   className?: string;
 }
@@ -55,66 +67,38 @@ interface TablesColumnDescriptor {
  * to right.
  */
 let tablesColumnDescriptors: TablesColumnDescriptor[] = [
-  // Table name column
   {
     key: TablesTableColumn.Name,
     title: "Table Name",
-    cell: (s, id) => {
-      return <Link to={`databases/${id}/${s}`}>{s}</Link>;
+    cell: (tableInfo, id) => {
+      return <Link to={`databases/database/${id}/table/${tableInfo.name}`}>{tableInfo.name}</Link>;
     } ,
+    sort: (tableInfo) => tableInfo.name,
+    className: "expand-link", // don't pad the td element to allow the link to expand
+  },
+  {
+    key: TablesTableColumn.NumColumns,
+    title: "# of Columns",
+    cell: (tableInfo, id) => tableInfo.numColumns,
+    sort: (tableInfo) => tableInfo.numColumns,
+  },
+  {
+    key: TablesTableColumn.NumIndices,
+    title: "# of Indices",
+    cell: (tableInfo, id) => tableInfo.numIndices,
+    sort: (tableInfo) => tableInfo.numIndices,
+  },
+  {
+    key: TablesTableColumn.LastModified,
+    title: "Last Modified",
+    cell: (tableInfo, id) => "",
     sort: _.identity,
-    className: "expand-link",
   },
-];
-
-/******************************
- *      GRANT COLUMN DEFINITION
- */
-
-/**
- * GrantsTableColumn provides an enumeration value for each column in the grants table.
- */
-enum GrantsTableColumn {
-  User = 1,
-  Grants,
-}
-
-/**
- * GrantsColumnDescriptor is used to describe metadata about an individual column
- * in the Grants table.
- */
-interface GrantsColumnDescriptor {
-  // Enumeration key to distinguish this column from others.
-  key: GrantsTableColumn;
-  // Title string that should appear in the header column.
-  title: string;
-  // Function which generates the contents of an individual cell in this table.
-  cell: (g: Grant) => React.ReactNode;
-  // Function which returns a value that can be used to sort a collection of
-  // Grants. This will be used to sort the table according to the data in
-  // this column.
-  sort?: (s: Grant) => string;
-}
-
-/**
- * grantsColumnDescriptors describes all columns that appear in the grants table.
- * Columns are displayed in the same order they do in this collection, from left
- * to right.
- */
-let grantsColumnDescriptors: GrantsColumnDescriptor[] = [
-// user column
   {
-    key: GrantsTableColumn.User,
-    title: "User",
-    cell: (grants) => grants.user,
-    sort: (grants) => grants.user,
-  },
-// grant list column
-  {
-    key: GrantsTableColumn.Grants,
-    title: "Grants",
-    cell: (grants) => grants.privileges.join(", "),
-    sort: (grants) => grants.privileges.join(", "),
+    key: TablesTableColumn.LastModifiedBy,
+    title: "Last Modified By",
+    cell: (tableInfo, id) => "",
+    sort: _.identity,
   },
 ];
 
@@ -128,18 +112,12 @@ let grantsColumnDescriptors: GrantsColumnDescriptor[] = [
  */
 
 interface DatabaseMainData {
-  // Current sort setting for the table table. Incoming rows will already be sorted
-  // according to this setting.
-  tablesSortSetting: SortSetting;
   // Current sort setting for the grant table. Incoming rows will already be sorted
   // according to this setting.
-  grantsSortSetting: SortSetting;
-  // A list of tables, which are possibly sorted according to
-  // sortSetting.
-  sortedTables: string[];
+  tablesSortSetting: SortSetting;
   // A list of grants, which are possibly sorted according to
   // sortSetting.
-  sortedGrants: Grant[];
+  sortedTables: TableInfo[];
 }
 
 /**
@@ -149,8 +127,8 @@ interface DatabaseMainData {
 interface DatabaseMainActions {
   // Call if the user indicates they wish to change the sort of the table data.
   setUISetting: typeof setUISetting;
-  // Call when the data needs to be refreshed.
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
+  refreshTableDetails: typeof refreshTableDetails;
 }
 
 /**
@@ -170,36 +148,16 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
    */
   tableColumns = createSelector(
     (props: DatabaseMainProps) => props.sortedTables,
-    (tables: string[]) => {
+    (tables: TableInfo[]) => {
       return _.map(tablesColumnDescriptors, (cd): SortableColumn => {
         return {
           title: cd.title,
-          cell: (index) => cd.cell(tables[index], this.props.params[databaseName]),
+          cell: (index) => cd.cell(tables[index], this.props.params[databaseNameAttr]),
           sortKey: cd.sort ? cd.key : undefined,
           className: cd.className,
         };
       });
     });
-
-  /**
-   * grantColumns is a selector which computes the input Columns to the grants table,
-   * based on the tableColumnDescriptors and the current sorted table data
-   */
-  grantColumns = createSelector(
-    (props: DatabaseMainProps) => props.sortedGrants,
-    (grants: Grant[]) => {
-      return _.map(grantsColumnDescriptors, (cd): SortableColumn => {
-        return {
-          title: cd.title,
-          cell: (index) => cd.cell(grants[index]),
-          sortKey: cd.sort ? cd.key : undefined,
-        };
-      });
-    });
-
-  static title(props: IInjectedProps) {
-    return <h2><Link to="/databases" >Databases </Link>: { props.params[databaseName] }</h2>;
-  }
 
   // Callback when the user elects to change the table table sort setting.
   changeTableSortSetting(setting: SortSetting) {
@@ -211,27 +169,64 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
     this.props.setUISetting(UI_DATABASE_GRANTS_SORT_SETTING_KEY, setting);
   }
 
+  refreshInfo(props = this.props) {
+    if (props.sortedTables.length) {
+      _.each(props.sortedTables, (tblInfo) => {
+        if (_.isUndefined(tblInfo.numColumns)) {
+          props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
+            database: props.params[databaseNameAttr],
+            table: tblInfo.name,
+          }));
+        }
+      });
+    }
+  }
+
   // refresh when the component is mounted
   componentWillMount() {
-    this.props.refreshDatabaseDetails({ database: this.props.params[databaseName] });
+    this.props.refreshDatabaseDetails({ database: this.props.params[databaseNameAttr] });
+    this.refreshInfo();
+  }
+
+  componentWillReceiveProps(props: DatabaseMainProps) {
+    this.refreshInfo(props);
   }
 
   render() {
-    let { sortedTables, sortedGrants, tablesSortSetting, grantsSortSetting } = this.props;
+    let { sortedTables, tablesSortSetting } = this.props;
 
-    if (sortedTables && sortedGrants) {
+    let numTables = this.props.sortedTables.length;
+
+    if (sortedTables) {
       return <div className="sql-table">
-          <h2> Tables </h2>
+                <div className="table-stats small half">
+          <Visualization
+            title={ (numTables === 1) ? "Table" : "Tables" }
+            tooltip="The total number of tables in this database.">
+            <div className="visualization">
+              <div style={{zoom:"100%"}} className="number">{ d3.format("s")(numTables) }</div>
+            </div>
+          </Visualization>
+          <Visualization title="Size (MiB)" tooltip="Not yet implemented.">
+            <div className="visualization">
+              <div>Not Implemented</div>
+            </div>
+          </Visualization>
+          <Visualization title="Replication Factor" tooltip="Not yet implemented.">
+            <div className="visualization">
+              <div>Not Implemented</div>
+            </div>
+          </Visualization>
+          <Visualization title="Target Range Size (MiB)" tooltip="Not yet implemented.">
+            <div className="visualization">
+              <div>Not Implemented</div>
+            </div>
+          </Visualization>
+        </div>
           <SortableTable count={sortedTables.length}
             sortSetting={tablesSortSetting}
             onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }>
             {this.tableColumns(this.props) }
-          </SortableTable>
-          <h2> Grants </h2>
-          <SortableTable count={sortedGrants.length}
-            sortSetting={grantsSortSetting}
-            onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }>
-            {this.grantColumns(this.props) }
           </SortableTable>
         </div>;
     }
@@ -243,27 +238,50 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
  *         SELECTORS
  */
 
+// Helper function that gets the current database name given a state and props
+function databaseName(state: AdminUIState, props: IInjectedProps): string {
+  return props.params[databaseNameAttr];
+}
+
 // Helper function that gets a DatabaseDetailsResponseMessage given a state and props
-function getDatabaseDetails(state: AdminUIState, props: IInjectedProps): DatabaseDetailsResponseMessage {
-  let details = state.cachedData.databaseDetails[props.params[databaseName]];
+function databaseDetails(state: AdminUIState, props: IInjectedProps): DatabaseDetailsResponseMessage {
+  let details = state.cachedData.databaseDetails[props.params[databaseNameAttr]];
   return details && details.data;
 }
 
 // Base selectors to extract data from redux state.
-let tables = (state: AdminUIState, props: IInjectedProps): string[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).table_names : [];
-let grants = (state: AdminUIState, props: IInjectedProps): Grant[] => getDatabaseDetails(state, props) ? getDatabaseDetails(state, props).grants : [];
+let tables = (state: AdminUIState, props: IInjectedProps): string[] => databaseDetails(state, props) ? databaseDetails(state, props).table_names : [];
 let tablesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
-let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
+
+// table details
+let tableDetails = (state: AdminUIState, props: IInjectedProps) => state.cachedData.tableDetails;
 
 // Selectors which sorts statuses according to current sort setting.
-let tablesSortFunctionLookup = _(tablesColumnDescriptors).keyBy("key").mapValues<(s: string) => any>("sort").value();
-let grantsSortFunctionLookup = _(grantsColumnDescriptors).keyBy("key").mapValues<(s: Grant) => any>("sort").value();
+let tablesSortFunctionLookup = _(tablesColumnDescriptors).keyBy("key").mapValues<(s: TableInfo) => any>("sort").value();
+
+// table info
+let tableInfo = createSelector(
+  databaseName,
+  tables,
+  tableDetails,
+  (dbName: string, tableNames: string[],
+    tblDetails: KeyedCachedDataReducerState<TableDetailsResponseMessage>): TableInfo[] => {
+      return _.map(tableNames, (tableName) => {
+        let curTableDetails = tblDetails[generateTableID(dbName, tableName)] && tblDetails[generateTableID(dbName, tableName)].data;
+        return new TableInfo(
+          tableName,
+          curTableDetails && curTableDetails.columns && curTableDetails.columns.length,
+          curTableDetails && curTableDetails.indexes && curTableDetails.indexes.length
+        );
+      });
+    }
+);
 
 // Sorted tableNames
 let sortedTables = createSelector(
-  tables,
+  tableInfo,
   tablesSortSetting,
-  (t, sort) => {
+  (t: TableInfo[], sort: SortSetting) => {
     let sortFn = tablesSortFunctionLookup[sort.sortKey];
     if (sort && sortFn) {
       return _.orderBy(t, sortFn, sort.ascending ? "asc" : "desc");
@@ -272,32 +290,18 @@ let sortedTables = createSelector(
     }
   });
 
-// Sorted grants
-let sortedGrants = createSelector(
-  grants,
-  grantsSortSetting,
-  (g, sort) => {
-    let sortFn = grantsSortFunctionLookup[sort.sortKey];
-    if (sort && sortFn) {
-      return _.orderBy(g, sortFn, sort.ascending ? "asc" : "desc");
-    } else {
-      return g;
-    }
-  });
-
 // Connect the DatabaseMain class with our redux store.
 let databaseMainConnected = connect(
   (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
       sortedTables: sortedTables(state, ownProps),
-      sortedGrants: sortedGrants(state, ownProps),
       tablesSortSetting: tablesSortSetting(state),
-      grantsSortSetting: grantsSortSetting(state),
     };
   },
   {
     setUISetting,
     refreshDatabaseDetails,
+    refreshTableDetails,
   }
 )(DatabaseMain);
 
