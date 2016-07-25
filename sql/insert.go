@@ -333,17 +333,23 @@ func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
 	cols := make([]sqlbase.ColumnDescriptor, len(node))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
 	for i, n := range node {
-		// TODO(pmattis): If the name is qualified, verify the table name matches
-		// tableDesc.Name.
-		if err := n.NormalizeColumnName(); err != nil {
-			return nil, err
-		}
-		col, err := tableDesc.FindActiveColumnByName(n.Column())
+		// Qualified names in the column list for INSERT and for the LHS
+		// in UPDATE ... SET statements work differently than qualified
+		// column names elsewhere:
+		// - they always start with the column name,
+		// - notation X.Y means access field Y when column X has composite type,
+		// - notation X.* is never allowed.
+		// So NormalizeColumnName() cannot be used here.
+		col, err := tableDesc.FindActiveColumnByName(string(n.Base))
 		if err != nil {
 			return nil, err
 		}
+		if len(n.Indirect) != 0 {
+			// We do not support anything but simple column names yet.
+			return nil, fmt.Errorf("column name \"%s\" cannot be assigned to", n)
+		}
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
+			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Base)
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col
