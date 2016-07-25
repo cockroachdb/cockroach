@@ -2402,6 +2402,8 @@ export interface serverpbBuilder {
 	DatabaseDetailsResponse: serverpb.DatabaseDetailsResponseBuilder;
 	TableDetailsRequest: serverpb.TableDetailsRequestBuilder;
 	TableDetailsResponse: serverpb.TableDetailsResponseBuilder;
+	TableStatsRequest: serverpb.TableStatsRequestBuilder;
+	TableStatsResponse: serverpb.TableStatsResponseBuilder;
 	UsersRequest: serverpb.UsersRequestBuilder;
 	UsersResponse: serverpb.UsersResponseBuilder;
 	EventsRequest: serverpb.EventsRequestBuilder;
@@ -2963,6 +2965,123 @@ export interface IndexBuilder {
 	
 }
 
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface TableStatsRequest {
+	
+		
+
+database?: string;
+		
+
+getDatabase?() : string;
+		setDatabase?(database : string): void;
+		
+
+
+
+table?: string;
+		
+
+getTable?() : string;
+		setTable?(table : string): void;
+		
+
+
+
+}
+	
+	export interface TableStatsRequestMessage extends TableStatsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TableStatsRequestBuilder {
+	new(data?: TableStatsRequest): TableStatsRequestMessage;
+	decode(buffer: ArrayBuffer) : TableStatsRequestMessage;
+	decode(buffer: ByteBuffer) : TableStatsRequestMessage;
+	decode64(buffer: string) : TableStatsRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.server.serverpb {
+	
+	export interface TableStatsResponse {
+	
+		
+
+range_count?: Long;
+		
+
+getRangeCount?() : Long;
+		setRangeCount?(rangeCount : Long): void;
+		
+
+
+
+replica_count?: Long;
+		
+
+getReplicaCount?() : Long;
+		setReplicaCount?(replicaCount : Long): void;
+		
+
+
+
+node_count?: Long;
+		
+
+getNodeCount?() : Long;
+		setNodeCount?(nodeCount : Long): void;
+		
+
+
+
+mvcc_stats?: storage.engine.enginepb.MVCCStats;
+		
+
+getMvccStats?() : storage.engine.enginepb.MVCCStats;
+		setMvccStats?(mvccStats : storage.engine.enginepb.MVCCStats): void;
+		
+
+
+
+missing_nodes?: string[];
+		
+
+getMissingNodes?() : string[];
+		setMissingNodes?(missingNodes : string[]): void;
+		
+
+
+
+}
+	
+	export interface TableStatsResponseMessage extends TableStatsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TableStatsResponseBuilder {
+	new(data?: TableStatsResponse): TableStatsResponseMessage;
+	decode(buffer: ArrayBuffer) : TableStatsResponseMessage;
+	decode(buffer: ByteBuffer) : TableStatsResponseMessage;
+	decode64(buffer: string) : TableStatsResponseMessage;
+	
+}
+	
+}
 
 
 declare module cockroach.server.serverpb {

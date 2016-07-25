@@ -1724,6 +1724,61 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "TableStatsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "database",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "table",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "TableStatsResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "range_count",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "replica_count",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "node_count",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "storage.engine.enginepb.MVCCStats",
+                                    "name": "mvcc_stats",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "string",
+                                    "name": "missing_nodes",
+                                    "id": 5
+                                }
+                            ]
+                        },
+                        {
                             "name": "UsersRequest",
                             "fields": []
                         },
@@ -2490,6 +2545,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "response": "TableDetailsResponse",
                                     "options": {
                                         "(google.api.http).get": "/_admin/v1/databases/{database}/tables/{table}"
+                                    }
+                                },
+                                "TableStats": {
+                                    "request": "TableStatsRequest",
+                                    "response": "TableStatsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/databases/{database}/tables/{table}/stats"
                                     }
                                 },
                                 "Events": {

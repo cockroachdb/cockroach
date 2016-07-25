@@ -439,6 +439,164 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 	return &resp, nil
 }
 
+// TableStats is an endpoint that returns columns, indices, and other
+// relevant details for the specified table.
+func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRequest) (
+	*serverpb.TableStatsResponse, error,
+) {
+	escDbName := parser.Name(req.Database).String()
+	escTableName := parser.Name(req.Table).String()
+
+	// Get table span.
+	var tableSpan roachpb.Span
+	{
+		var iexecutor sql.InternalExecutor
+		if err := s.server.db.Txn(func(txn *client.Txn) error {
+			var err error
+			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDbName, escTableName)
+			return err
+		}); err != nil {
+			return nil, s.serverError(err)
+		}
+	}
+
+	startKey, err := keys.Addr(tableSpan.Key)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	endKey, err := keys.Addr(tableSpan.EndKey)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Get current range descriptors for table. This is done by scanning over
+	// meta2 keys for the range.
+	var resp *roachpb.ScanResponse
+	{
+		// Directly scan metadata keys for the table.
+		ba := roachpb.BatchRequest{}
+		ba.ReadConsistency = roachpb.CONSISTENT
+		ba.Add(&roachpb.ScanRequest{
+			Span: roachpb.Span{
+				Key:    keys.RangeMetaKey(startKey),
+				EndKey: keys.RangeMetaKey(endKey),
+			},
+		})
+		br, pErr := s.server.distSender.Send(ctx, ba)
+		if pErr != nil {
+			return nil, s.serverError(pErr.GoError())
+		}
+		resp = br.Responses[0].GetInner().(*roachpb.ScanResponse)
+	}
+
+	// Extract a list of node IDs from the response.
+	nodeIDs := make(map[roachpb.NodeID]struct{})
+	{
+		for _, row := range resp.Rows {
+			var rng roachpb.RangeDescriptor
+			if err := row.Value.GetProto(&rng); err != nil {
+				return nil, s.serverError(err)
+			}
+			for _, repl := range rng.Replicas {
+				nodeIDs[repl.NodeID] = struct{}{}
+			}
+		}
+	}
+
+	// Construct TableStatsResponse by sending an RPC to every node involved.
+	tableStatResponse := serverpb.TableStatsResponse{
+		NodeCount:  int64(len(nodeIDs)),
+		RangeCount: resp.Count(),
+	}
+	{
+		type nodeResponse struct {
+			nodeID roachpb.NodeID
+			resp   *serverpb.SpanStatsResponse
+			err    error
+		}
+		responses := make(chan nodeResponse)
+
+		// Establish a deadline for fan-out queries based on the deadline of the
+		// parent context. The goal is to allow enough time for individual
+		// queries to complete, while leaving some amount of time to return an
+		// answer to the caller even if some of the fan-out queries time out.
+		var (
+			fanoutDeadline  time.Time
+			ctxWithDeadline context.Context
+			cancel          context.CancelFunc
+		)
+		now := s.server.clock.PhysicalTime()
+		deadline, ok := ctx.Deadline()
+		switch {
+		case !ok:
+			// No deadline for parent context; use base network timeout.
+			fanoutDeadline = now.Add(base.NetworkTimeout)
+		case now.Add(base.NetworkTimeout).After(deadline):
+			// Deadline will arrive in less than base.NetworkTimeout. In this
+			// case, use parent deadline and hope for the best.
+			fanoutDeadline = deadline
+		case deadline.Sub(now.Add(base.NetworkTimeout)) < base.NetworkTimeout:
+			// Deadline is more than base.NetworkTimeout in the future, but less
+			// than 2x base.NetworkTimeout. We will use base.NetworkTimeout in
+			// this situation.
+			fanoutDeadline = now.Add(base.NetworkTimeout)
+		default:
+			// Allow downstream clients as much time as possible, reserving
+			// base.NetworkTimeout to complete the result aggregation on
+			// this server.
+			fanoutDeadline = deadline.Add(-1 * base.NetworkTimeout)
+		}
+
+		ctxWithDeadline, cancel = context.WithDeadline(context.Background(), fanoutDeadline)
+		defer cancel()
+
+		// Send a SpanStats query to each node.
+		for nodeID := range nodeIDs {
+			id := nodeID
+			if err := s.server.stopper.RunAsyncTask(func() {
+				client, err := s.server.status.dialNode(id)
+				if err != nil {
+					responses <- nodeResponse{nodeID: id, err: err}
+					return
+				}
+				req := serverpb.SpanStatsRequest{
+					StartKey: startKey,
+					EndKey:   endKey,
+					NodeId:   id.String(),
+				}
+				resp, err := client.SpanStats(ctxWithDeadline, &req)
+				responses <- nodeResponse{
+					nodeID: id,
+					resp:   resp,
+					err:    err,
+				}
+			}); err != nil {
+				return nil, err
+			}
+		}
+		remainingResponses := len(nodeIDs)
+		for remainingResponses > 0 {
+			select {
+			case resp := <-responses:
+				// For nodes which returned an error, note that the node's data
+				// is missing. For successful calls, aggregate statistics.
+				if resp.err != nil {
+					tableStatResponse.MissingNodes =
+						append(tableStatResponse.MissingNodes, resp.nodeID.String())
+				} else {
+					tableStatResponse.MvccStats.Add(resp.resp.TotalStats)
+					tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
+				}
+				remainingResponses--
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+	}
+
+	return &tableStatResponse, nil
+}
+
 // Users returns a list of users, stripped of any passwords.
 func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)

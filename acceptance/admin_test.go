@@ -22,12 +22,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func TestAdminLossOfQuorum(t *testing.T) {
@@ -87,4 +89,96 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 
 	// TODO(cdo): When we're able to issue SQL queries without a quorum, test all
 	// admin endpoints that issue SQL queries here.
+}
+
+func TestAdminTableStats(t *testing.T) {
+	runTestOnConfigs(t, testAdminTableStatsInner)
+}
+
+func testAdminTableStatsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+	if c.NumNodes() < 3 {
+		t.Logf("skipping test %s because given cluster has too few nodes", cfg.Name)
+		return
+	}
+
+	// Make a single table and insert some data.
+	db := makePGClient(t, c.PGUrl(0))
+	defer db.Close()
+	if _, err := db.Exec("CREATE DATABASE test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE test.foo (
+			id INT PRIMARY KEY,
+			val STRING
+		)`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 10; i++ {
+		if _, err := db.Exec(`INSERT INTO test.foo VALUES(
+			$1, $2
+		)`, i, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var tsResponse serverpb.TableStatsResponse
+	url := c.URL(0) + "/_admin/v1/databases/test/tables/foo/stats"
+
+	// The new SQL table may not yet have split into its own range yet. Wait
+	// for this to occur, and for full replication.
+	util.SucceedsSoon(t, func() error {
+		if err := util.GetJSON(cluster.HTTPClient, url, &tsResponse); err != nil {
+			return err
+		}
+		if tsResponse.RangeCount != 1 {
+			return errors.Errorf("Table range not yet separated.")
+		}
+		if tsResponse.NodeCount != 3 {
+			return errors.Errorf("Table range not yet replicated to %d nodes.", 3)
+		}
+		if a, e := tsResponse.ReplicaCount, int64(3); a != e {
+			return errors.Errorf("Expected %d replicas, found %d", e, a)
+		}
+		return nil
+	})
+
+	// These two conditions *must* be true, given the above conditions.
+	if a, e := tsResponse.MvccStats.KeyCount, int64(20); a < e {
+		t.Fatalf("Expected at least 20 total keys, found %d", a)
+	}
+	if len(tsResponse.MissingNodes) > 0 {
+		t.Fatalf("Expected no missing nodes, found %v", tsResponse.MissingNodes)
+	}
+
+	// Kill a node, ensure it shows up in MissingNodes and
+	// that ReplicaCount is lower.
+	if err := c.Kill(1); err != nil {
+		t.Fatal(err)
+	}
+
+	client := cluster.HTTPClient
+	client.Timeout = base.NetworkTimeout * 10
+	if err := util.GetJSON(client, url, &tsResponse); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := tsResponse.NodeCount, int64(3); a != e {
+		t.Errorf("Expected %d nodes, found %d", e, a)
+	}
+	if a, e := tsResponse.RangeCount, int64(1); a != e {
+		t.Errorf("Expected %d ranges, found %d", e, a)
+	}
+	if a, e := tsResponse.ReplicaCount, int64(2); a != e {
+		t.Errorf("Expected %d replicas, found %d", e, a)
+	}
+	if a, e := tsResponse.MvccStats.KeyCount, int64(10); a < e {
+		t.Errorf("Expected at least 10 total keys, found %d", a)
+	}
+	if len(tsResponse.MissingNodes) != 1 {
+		t.Errorf("Expected one missing node, found %v", tsResponse.MissingNodes)
+	}
+
+	if t.Failed() {
+		t.FailNow()
+	}
 }
