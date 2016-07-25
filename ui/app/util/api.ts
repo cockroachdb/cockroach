@@ -1,3 +1,5 @@
+/// <reference path="../../typings/index.d.ts" />
+
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
@@ -10,33 +12,36 @@ import * as protos from "../js/protos";
 let serverpb = protos.cockroach.server.serverpb;
 let ts = protos.cockroach.ts.tspb;
 
-type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
+export type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
 
-type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
-type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+export type DatabaseDetailsRequest = cockroach.server.serverpb.DatabaseDetailsRequest;
+export type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
-type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
-type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
+export type TableDetailsRequest = cockroach.server.serverpb.TableDetailsRequest;
+export type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
 
-type EventsRequest = cockroach.server.serverpb.EventsRequest;
-type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
+export type EventsRequest = cockroach.server.serverpb.EventsRequest;
+export type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
 
-type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
+export type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
 
-type GetUIDataRequest = cockroach.server.serverpb.GetUIDataRequest;
-type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessage;
+export type GetUIDataRequest = cockroach.server.serverpb.GetUIDataRequest;
+export type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessage;
 
-type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
-type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
+export type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
+export type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
 
-type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
+export type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
 
-type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+export type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+export type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
-type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
+export type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
 
-type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
+export type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
+
+export type TableStatsRequest = cockroach.server.serverpb.TableStatsRequest;
+export type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 let TIMEOUT = 10000; // 10 seconds
@@ -157,4 +162,9 @@ export function getHealth(): Promise<HealthResponseMessage> {
 // getCluster gets info about the cluster
 export function getCluster(): Promise<ClusterResponseMessage> {
   return Fetch(serverpb.ClusterResponse, `${API_PREFIX}/cluster`);
+}
+
+// getTableStats gets details stats about the current table
+export function getTableStats(req: TableStatsRequest): Promise<TableStatsResponseMessage> {
+  return Fetch(serverpb.TableStatsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`);
 }
