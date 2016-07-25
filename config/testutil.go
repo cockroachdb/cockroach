@@ -33,6 +33,8 @@ var (
 // to 'testingZoneConfigHook' which uses 'testingZoneConfig'.
 // Settings go back to their previous values when the stopper runs our closer.
 func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
+	stopper.AddCloser(stop.CloserFn(testingResetZoneConfigHook))
+
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if testingHasHook {
@@ -55,8 +57,6 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 		}
 		return
 	}
-
-	stopper.AddCloser(stop.CloserFn(testingResetZoneConfigHook))
 }
 
 // testingResetZoneConfigHook resets the zone config hook back to what it was

@@ -259,16 +259,15 @@ func (g *Gossip) SetCullInterval(interval time.Duration) {
 // storage. This should be invoked as early in the lifecycle of a
 // gossip instance as possible, but can be called at any time.
 func (g *Gossip) SetStorage(storage Storage) error {
+	// Maintain lock ordering.
+	var storedBI BootstrapInfo
+	if err := storage.ReadBootstrapInfo(&storedBI); err != nil {
+		log.Warningf(context.TODO(), "failed to read gossip bootstrap info: %s", err)
+	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.storage = storage
-
-	// Read the bootstrap info from the persistent store.
-	var storedBI BootstrapInfo
-	err := storage.ReadBootstrapInfo(&storedBI)
-	if err != nil {
-		log.Warningf(context.TODO(), "failed to read gossip bootstrap info: %s", err)
-	}
 
 	// Merge the stored bootstrap info addresses with any we've become
 	// aware of through gossip.
@@ -491,10 +490,13 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
-	if g.maybeAddBootstrapAddress(desc.Address) && g.storage != nil {
+	if storage := g.storage; g.maybeAddBootstrapAddress(desc.Address) && storage != nil {
+		// HACK: gymnastics to maintain lock ordering.
+		g.mu.Unlock()
+		defer g.mu.Lock()
 		// TODO(spencer): need to clean up ancient gossip nodes, which
 		//   will otherwise stick around in the bootstrap info forever.
-		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+		if err := storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
 			log.Error(context.TODO(), err)
 		}
 	}
