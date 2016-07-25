@@ -137,9 +137,11 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, TypeFloat, []Expr{Placeholder{"a"}, Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
 		// Sub-expressions.
 		{nil, nil, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn},
+		{nil, nil, []Expr{decConst("1.1"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, nil},
 		{nil, nil, []Expr{NewDFloat(1.1), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn, binaryFloatFn}, binaryFloatFn},
 		{nil, TypeDecimal, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn},        // Limitation.
 		{nil, nil, []Expr{plus(intConst("1"), intConst("2")), plus(decConst("1.1"), decConst("2.2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, nil}, // Limitation.
+		{nil, nil, []Expr{plus(decConst("1.1"), decConst("2.2")), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, nil},
 		{nil, nil, []Expr{plus(NewDFloat(1.1), NewDFloat(2.2)), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn},
 		// Homogenous preference.
 		{nil, nil, []Expr{NewDInt(1), Placeholder{"b"}}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn},
