@@ -366,7 +366,7 @@ message TableDescriptor {
     // The database that the table belonged to before the rename (tables can be
     // renamed from one db to another).
     optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "OldParentID"];
+      (gogoproto.customname) = "OldParentID", (gogoproto.casttype) = "ID"];
     optional string old_name = 2 [(gogoproto.nullable) = false];
   }
 

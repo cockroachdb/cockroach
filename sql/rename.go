@@ -178,7 +178,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 	renameDetails := sqlbase.TableDescriptor_RenameInfo{
-		OldParentID: uint32(dbDesc.ID),
+		OldParentID: dbDesc.ID,
 		OldName:     n.Name.Table()}
 	tableDesc.Renames = append(tableDesc.Renames, renameDetails)
 	if err := p.writeTableDesc(tableDesc); err != nil {

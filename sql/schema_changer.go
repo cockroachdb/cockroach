@@ -262,8 +262,7 @@ func (sc SchemaChanger) exec(
 		err := sc.db.Txn(func(txn *client.Txn) error {
 			b := client.Batch{}
 			for _, renameDetails := range desc.GetTable().Renames {
-				tbKey := tableKey{
-					sqlbase.ID(renameDetails.OldParentID), renameDetails.OldName}.Key()
+				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
 				b.Del(tbKey)
 			}
 			if err := txn.Run(&b); err != nil {
