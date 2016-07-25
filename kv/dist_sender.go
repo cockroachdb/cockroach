@@ -534,7 +534,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		panic("empty batch")
 	}
 
-	if ba.MaxScanResults != 0 {
+	if ba.MaxSpanRequestKeys != 0 {
 		// Verify that the batch contains only Scan or ReverseScan requests.
 		fwd, rev := false, false
 		for _, req := range ba.Requests {
@@ -554,10 +554,10 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 
 	var rplChunks []*roachpb.BatchResponse
 	parts := ba.Split(false /* don't split ET */)
-	if len(parts) > 1 && ba.MaxScanResults != 0 {
+	if len(parts) > 1 && ba.MaxSpanRequestKeys != 0 {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
-		panic("batch with MaxScanResults needs splitting")
+		panic("batch with MaxSpanRequestKeys needs splitting")
 	}
 	for len(parts) > 0 {
 		part := parts[0]
@@ -805,7 +805,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 		}
 
-		if ba.MaxScanResults > 0 {
+		if ba.MaxSpanRequestKeys > 0 {
 			// Count how many results we received.
 			var numResults int64
 			for _, resp := range curReply.Responses {
@@ -813,11 +813,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					numResults += cResp.Count()
 				}
 			}
-			if numResults > ba.MaxScanResults {
-				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxScanResults))
+			if numResults > ba.MaxSpanRequestKeys {
+				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
 			}
-			ba.MaxScanResults -= numResults
-			if ba.MaxScanResults == 0 {
+			ba.MaxSpanRequestKeys -= numResults
+			if ba.MaxSpanRequestKeys == 0 {
 				// We are done with this batch. Some requests might have NoopResponses; we must
 				// replace them with empty responses of the proper type.
 				for i, req := range ba.Requests {

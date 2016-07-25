@@ -348,7 +348,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
 				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
 				reply, err := client.SendWrappedWith(
-					tds, nil, roachpb.Header{MaxScanResults: int64(maxResults)}, scan,
+					tds, nil, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
 				)
 				if err != nil {
 					t.Fatal(err)

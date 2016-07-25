@@ -288,7 +288,7 @@ func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
 	b := txn.NewBatch()
 	if maxRows > 0 {
-		b.Header.MaxScanResults = maxRows
+		b.Header.MaxSpanRequestKeys = maxRows
 	}
 	if !isReverse {
 		b.Scan(begin, end)

@@ -140,7 +140,7 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 
 	for bound := 1; bound <= 20; bound++ {
 		b := db.NewBatch()
-		b.Header.MaxScanResults = int64(bound)
+		b.Header.MaxSpanRequestKeys = int64(bound)
 
 		b.Scan("a", "c")
 		b.Scan("b", "c2")

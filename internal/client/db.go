@@ -296,7 +296,7 @@ func (db *DB) scan(
 	b := db.NewBatch()
 	b.Header.ReadConsistency = readConsistency
 	if maxRows > 0 {
-		b.Header.MaxScanResults = maxRows
+		b.Header.MaxSpanRequestKeys = maxRows
 	}
 	if !isReverse {
 		b.Scan(begin, end)

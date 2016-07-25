@@ -876,7 +876,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
-	sr, err := client.SendWrappedWith(ds, nil, roachpb.Header{MaxScanResults: 1}, scan)
+	sr, err := client.SendWrappedWith(ds, nil, roachpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -986,8 +986,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
-		MaxScanResults: 10,
-		Txn:            &roachpb.Transaction{},
+		MaxSpanRequestKeys: 10,
+		Txn:                &roachpb.Transaction{},
 	}, scan)
 	if err != nil {
 		t.Fatalf("scan encountered error: %s", err)

@@ -513,7 +513,7 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
+		b.Header.MaxSpanRequestKeys = 7
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
@@ -526,7 +526,7 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
+		b.Header.MaxSpanRequestKeys = 7
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		if err := db.Run(b); err != nil {
@@ -539,7 +539,7 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 3
+		b.Header.MaxSpanRequestKeys = 3
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
@@ -564,7 +564,7 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
+		b.Header.MaxSpanRequestKeys = 7
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
@@ -577,7 +577,7 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
+		b.Header.MaxSpanRequestKeys = 7
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		if err := db.Run(b); err != nil {
@@ -590,7 +590,7 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 3
+		b.Header.MaxSpanRequestKeys = 3
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
@@ -826,7 +826,7 @@ func TestInconsistentReads(t *testing.T) {
 
 	{
 		b := prepInconsistent()
-		b.Header.MaxScanResults = 1000
+		b.Header.MaxSpanRequestKeys = 1000
 		key1 := roachpb.Key([]byte("key1"))
 		key2 := roachpb.Key([]byte("key2"))
 		b.Scan(key1, key2)

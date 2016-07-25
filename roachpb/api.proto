@@ -758,9 +758,11 @@ message Header {
   optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
   // trace, if set, is the active span of an OpenTracing distributed trace.
   optional util.tracing.Span trace = 7;
-  // if set to a non-zero value, limits the total number of results for
-  // Scan/ReverseScan requests in the batch.
-  optional int64 max_scan_results = 8 [(gogoproto.nullable) = false];
+  // If set to a non-zero value, it limits the total number of keys touched
+  // by span requests in the batch. Span requests are requests like
+  // Scan, ReverseScan, and DelRange. If two requests touch the
+  // same key it is double counted.
+  optional int64 max_span_request_keys = 8 [(gogoproto.nullable) = false];
   // if set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTransactionRequest. Currently set conservatively: a request

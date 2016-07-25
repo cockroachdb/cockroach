@@ -161,7 +161,7 @@ func (f *kvFetcher) fetch() error {
 	batchSize := f.getBatchSize()
 
 	b := &client.Batch{}
-	b.Header.MaxScanResults = batchSize
+	b.Header.MaxSpanRequestKeys = batchSize
 
 	var resumeKey roachpb.Key
 	if len(f.kvs) > 0 {
