@@ -434,7 +434,7 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 		endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
 		var b client.Batch
 		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		b.Scan(startKey, endKey, 0)
+		b.Scan(startKey, endKey)
 
 		if err := db.db.Run(&b); err != nil {
 			return nil, nil, err
