@@ -11,8 +11,8 @@ cmd github.com/kkaneda/returncheck
 cmd github.com/mattn/goveralls
 cmd github.com/mibk/dupl
 cmd github.com/opennota/check/cmd/varcheck
+cmd github.com/robfig/glock
 cmd github.com/stripe/safesql
-cmd github.com/tamird/glock
 cmd github.com/tebeka/go2xunit
 cmd github.com/wadey/gocovmerge
 cmd golang.org/x/tools/cmd/goimports
@@ -42,7 +42,7 @@ github.com/coreos/etcd fb64c8ccfeb9408b80c3f657a52ec6cad2fdb3f8
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/davecgh/go-spew 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
 github.com/docker/distribution 4abae2ae560ba91db98779db2739eb97d7592fba
-github.com/docker/engine-api 53b6b19ee622c8584c28fdde0e3893383b290da3
+github.com/docker/engine-api 3c6d71a7e85cf5221b07630e1c17cf26baf74f97
 github.com/docker/go-connections 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
 github.com/docker/go-units f2d77a61e3c169b43402a0a1e84f06daf29b8190
 github.com/dustin/go-humanize 2fcb5204cdc65b4bec9fd0a87606bb0d0e3c54e8
@@ -55,7 +55,7 @@ github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 github.com/golang/lint c7bacac2b21ca01afa1dee0acf64df3ce047c28f
 github.com/golang/protobuf 874264fbbb43f4d91e999fecb4b40143ed611400
 github.com/google/btree 7d79101e329e5a3adf994758c578dab82b90c017
-github.com/gordonklaus/ineffassign 991b6f5001ee9af9ed95fb7e3ea2c32badaadbb0
+github.com/gordonklaus/ineffassign cb7fbaf18166b1f12a02c381e89ab5ce538a02ec
 github.com/grpc-ecosystem/grpc-gateway a8f25bd1ab549f8b87afd48aa9181221e9d439bb
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
@@ -83,6 +83,7 @@ github.com/pkg/errors 1d2e60385a13aaa66134984235061c2f9302520e
 github.com/prometheus/client_model fa8ad6fec33561be4280a8f0514318c79d7f6cb6
 github.com/prometheus/common 610701b0cb96fe82d0166b8e07979b174b6f06ae
 github.com/rcrowley/go-metrics bdb33529eca3e55eac7328e07c57012a797af602
+github.com/robfig/glock c7fb89f56fbead624f7424f81f70af3a742433c5
 github.com/russross/blackfriday 93622da34e54fb6529bfb7c57e710f37a8d9cbd8
 github.com/satori/go.uuid 0aa62d5ddceb50dbcb909d790b5345affd3669b6
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
@@ -90,14 +91,13 @@ github.com/spf13/cobra f62e98d28ab7ad31d707ba837a966378465c7b57
 github.com/spf13/pflag 1560c1005499d61b80f865c04d39ca7505bf7f0b
 github.com/stretchr/testify d77da356e56a7428ad25149ca77381849a6a5232
 github.com/stripe/safesql 452e37ed794488bd0d99676532f346e03cc6cd2c
-github.com/tamird/glock ff1e1650504e7f4475be80db5e82c01bd818adba
 github.com/tebeka/go2xunit aeab35ab3263fc37dc7664e8ea1b3aea87f98205
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
 golang.org/x/crypto bc89c496413265e715159bdc8478ee9a92fdc265
 golang.org/x/net 4d38db76854b199960801a1734443fd02870d7e1
 golang.org/x/sys a646d33e2ee3172a661fc09bca23bb4889a41bc8
-golang.org/x/text 0a5a09ee4409a616bfa03115120f0bffacdff508
+golang.org/x/text 784b12aec457d4ae6fb9107ff08748b8ea946b76
 golang.org/x/tools ed69e84b1518b5857a9f4e01d1f9cefdcc45246e
 google.golang.org/grpc aecdccadd24d03e42d00ec82f6774a428fc63c30
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
