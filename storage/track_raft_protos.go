@@ -21,12 +21,12 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"sync"
 
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // TrackRaftProtos instruments proto marshalling to track protos which are
@@ -40,7 +40,7 @@ func TrackRaftProtos() func() []reflect.Type {
 	addInfoFunc := runtime.FuncForPC(reflect.ValueOf((*gossip.Gossip).AddInfoProto).Pointer()).Name()
 
 	belowRaftProtos := struct {
-		sync.Mutex
+		syncutil.Mutex
 		inner map[reflect.Type]struct{}
 	}{
 		inner: make(map[reflect.Type]struct{}),

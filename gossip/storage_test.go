@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,10 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 type testStorage struct {
-	sync.Mutex
+	syncutil.Mutex
 	read, write bool
 	info        gossip.BootstrapInfo
 }

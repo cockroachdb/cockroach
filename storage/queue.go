@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -227,7 +228,7 @@ func makeBaseQueue(
 			prefix:   fmt.Sprintf("[%s] ", name),
 		},
 	}
-	bq.mu.Locker = new(sync.Mutex)
+	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 	return bq
 }

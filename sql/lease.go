@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -61,7 +61,7 @@ type LeaseState struct {
 	sqlbase.TableDescriptor
 	expiration parser.DTimestamp
 	// mu protects refcount and released
-	mu       sync.Mutex
+	mu       syncutil.Mutex
 	refcount int
 	// Set if the lease has been released and cannot be handed out any more. The
 	// table name cache can have references to such leases since releasing a lease
@@ -493,7 +493,7 @@ type tableState struct {
 	tableNameCache *tableNameCache
 	stopper        *stop.Stopper
 	// Protects both active and acquiring.
-	mu sync.Mutex
+	mu syncutil.Mutex
 	// The active leases for the table: sorted by their version and expiration
 	// time. There may be more than one active lease when the system is
 	// transitioning from one version of the descriptor to another or when the
@@ -838,7 +838,7 @@ type tableNameCacheKey struct {
 // from the store. The cache maintains the newest lease for each table name.
 // All methods are thread-safe.
 type tableNameCache struct {
-	mu     sync.Mutex
+	mu     syncutil.Mutex
 	tables map[tableNameCacheKey]*LeaseState
 }
 
@@ -934,7 +934,7 @@ func (c *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNa
 // LeaseManager.mu > tableState.mu > tableNameCache.mu > LeaseState.mu
 type LeaseManager struct {
 	LeaseStore
-	mu     sync.Mutex
+	mu     syncutil.Mutex
 	tables map[sqlbase.ID]*tableState
 
 	// tableNames is a cache for name -> id mappings. A mapping for the cache

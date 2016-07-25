@@ -18,8 +18,9 @@ package distsql
 
 import (
 	"fmt"
-	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // flowEntry is a structure associated with a (potential) flow.
@@ -40,7 +41,7 @@ type flowEntry struct {
 // flowRegistry allows clients to look up flows by ID and to wait for flows to
 // be registered. Multiple clients can wait concurrently for the same flow.
 type flowRegistry struct {
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	flows map[FlowID]*flowEntry
 }
 
