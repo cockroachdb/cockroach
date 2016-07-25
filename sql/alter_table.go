@@ -35,14 +35,6 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
-	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
-	}
-
-	if _, err := p.mustGetDatabaseDesc(n.Table.Database()); err != nil {
-		return nil, err
-	}
-
 	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
 		return nil, err
