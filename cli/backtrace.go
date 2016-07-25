@@ -46,7 +46,7 @@ func initBacktrace(logDir string) *stop.Stopper {
 		return stop.NewStopper()
 	}
 
-	bcd.UpdateConfig(&bcd.GlobalConfig{
+	bcd.UpdateConfig(bcd.GlobalConfig{
 		PanicOnKillFailure: true,
 		ResendSignal:       true,
 		RateLimit:          time.Second * 3,
@@ -55,7 +55,9 @@ func initBacktrace(logDir string) *stop.Stopper {
 
 	// Use the default tracer implementation.
 	// false: Exclude system goroutines.
-	tracer := bcd.New(false)
+	tracer := bcd.New(bcd.NewOptions{
+		IncludeSystemGs: false,
+	})
 
 	// Enable WARNING log output from the tracer.
 	tracer.AddOptions(nil, "-L", "WARNING")
