@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -277,7 +278,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 }
 
 type AdvancingClock struct {
-	sync.Mutex
+	syncutil.Mutex
 	time                time.Time
 	advancementInterval atomic.Value // time.Duration
 }

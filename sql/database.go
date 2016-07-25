@@ -18,7 +18,6 @@ package sql
 
 import (
 	"fmt"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -49,7 +49,7 @@ func (dk databaseKey) Name() string {
 // which is naturally limited by the number of database descriptors in the
 // system the periodic reset whenever the system config is gossiped.
 type databaseCache struct {
-	mu        sync.Mutex
+	mu        syncutil.Mutex
 	databases map[string]sqlbase.ID
 }
 

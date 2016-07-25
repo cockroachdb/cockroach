@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -91,7 +92,7 @@ func newReplicaScanner(targetInterval, maxIdleTime time.Duration, replicas repli
 		maxIdleTime:    maxIdleTime,
 		replicas:       replicas,
 		removed:        make(chan *Replica, 10),
-		completedScan:  sync.NewCond(&sync.Mutex{}),
+		completedScan:  sync.NewCond(&syncutil.Mutex{}),
 	}
 }
 

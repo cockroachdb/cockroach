@@ -21,7 +21,6 @@ package storage
 import (
 	"fmt"
 	"math/rand"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -95,13 +95,13 @@ var _ purgatoryError = &allocatorError{}
 // replication queue during the forced scan, then this rand could be used
 // without a mutex.
 type allocatorRand struct {
-	*sync.Mutex
+	*syncutil.Mutex
 	*rand.Rand
 }
 
 func makeAllocatorRand(source rand.Source) allocatorRand {
 	return allocatorRand{
-		Mutex: &sync.Mutex{},
+		Mutex: &syncutil.Mutex{},
 		Rand:  rand.New(source),
 	}
 }

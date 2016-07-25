@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -703,7 +703,7 @@ func (s *adminServer) waitForStoreFrozen(
 	wantFrozen bool,
 ) error {
 	mu := struct {
-		sync.Mutex
+		syncutil.Mutex
 		oks map[roachpb.StoreID]bool
 	}{
 		oks: make(map[roachpb.StoreID]bool),

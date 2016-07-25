@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -440,9 +441,9 @@ type Store struct {
 	// processRaftMu to ensure that this is not modified by a concurrent
 	// handleRaftMessage. (#4476)
 
-	processRaftMu sync.Mutex
+	processRaftMu syncutil.Mutex
 	mu            struct {
-		sync.Mutex                                  // Protects all variables in the mu struct.
+		syncutil.Mutex                              // Protects all variables in the mu struct.
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
@@ -498,7 +499,7 @@ type Store struct {
 	// updates. After updating this map, write to wakeRaftLoop to
 	// trigger the check.
 	pendingRaftGroups struct {
-		sync.Mutex
+		syncutil.Mutex
 		value map[roachpb.RangeID]struct{}
 	}
 }
@@ -680,7 +681,7 @@ type storeMetrics struct {
 	// maintained to keep the current structure of StatusSummaries; it would be
 	// better to convert the Gauges above into counters which are adjusted
 	// accordingly.
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	stats enginepb.MVCCStats
 }
 

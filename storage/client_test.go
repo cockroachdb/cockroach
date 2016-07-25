@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -186,7 +187,7 @@ type multiTestContext struct {
 
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
-	mu       *sync.RWMutex
+	mu       *syncutil.RWMutex
 	senders  []*storage.Stores
 	stores   []*storage.Store
 	stoppers []*stop.Stopper
@@ -228,7 +229,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	m.t = t
 
-	m.mu = &sync.RWMutex{}
+	m.mu = &syncutil.RWMutex{}
 	m.stores = make([]*storage.Store, numStores)
 	m.storePools = make([]*storage.StorePool, numStores)
 	m.distSenders = make([]*kv.DistSender, numStores)

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -84,7 +84,7 @@ type MetricsRecorder struct {
 
 	// Fields below are locked by this mutex.
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		// storeRegistries contains a registry for each store on the node. These
 		// are not stored as subregistries, but rather are treated as wholly
 		// independent.

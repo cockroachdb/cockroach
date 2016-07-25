@@ -19,7 +19,6 @@ package storage
 import (
 	"container/heap"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -196,7 +196,7 @@ type StorePool struct {
 	declinedReservationsTimeout time.Duration
 	reserveRPCTimeout           time.Duration
 	mu                          struct {
-		sync.RWMutex
+		syncutil.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
 		// pointers are used so that data can be kept in sync.
 		stores map[roachpb.StoreID]*storeDetail

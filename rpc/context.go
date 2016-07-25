@@ -17,7 +17,6 @@
 package rpc
 
 import (
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -85,7 +85,7 @@ type Context struct {
 	localInternalServer roachpb.InternalServer
 
 	conns struct {
-		sync.Mutex
+		syncutil.Mutex
 		cache map[string]connMeta
 	}
 }

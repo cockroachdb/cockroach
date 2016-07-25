@@ -24,7 +24,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -45,7 +45,7 @@ var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in o
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 
 type testClient struct {
-	sync.RWMutex
+	syncutil.RWMutex
 	db    *gosql.DB
 	count uint64
 }
