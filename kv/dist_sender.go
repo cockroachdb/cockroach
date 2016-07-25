@@ -427,7 +427,7 @@ func (ds *DistSender) getDescriptors(
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Hack: avoid formatting the message passed to Span.LogEvent for
+	// HACK: avoid formatting the message passed to Span.LogEvent for
 	// opentracing.noopSpans. We can't actually tell if we have a noopSpan, but
 	// we can see if the span as a NoopTracer. Note that this particular
 	// invocation is expensive because we're pretty-printing keys.

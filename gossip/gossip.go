@@ -492,7 +492,7 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
 	if storage := g.storage; g.maybeAddBootstrapAddress(desc.Address) && storage != nil {
-		// Hack: gymnastics to maintain lock ordering.
+		// HACK: gymnastics to maintain lock ordering.
 		g.mu.Unlock()
 		defer g.mu.Lock()
 		// TODO(spencer): need to clean up ancient gossip nodes, which
