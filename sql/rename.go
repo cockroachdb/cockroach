@@ -217,10 +217,6 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, errEmptyIndexName
 	}
 
-	if err := n.Index.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
-	}
-
 	tableDesc, err := p.mustGetTableDesc(n.Index.Table)
 	if err != nil {
 		return nil, err
@@ -280,14 +276,6 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, errEmptyColumnName
 	}
 
-	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
-	}
-
-	_, err := p.mustGetDatabaseDesc(n.Table.Database())
-	if err != nil {
-		return nil, err
-	}
 	// Check if table exists.
 	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
