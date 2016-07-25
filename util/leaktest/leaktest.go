@@ -44,6 +44,7 @@ func interestingGoroutines() (gs []string) {
 			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).serverHandshake") ||
 			ignorestdlibleaks && strings.Contains(stack, "net/http.(*Transport).getConn") ||
 			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*block).readFromUntil") ||
+			ignorestdlibleaks && strings.Contains(stack, "net/http.(*Transport).dialConn") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||
