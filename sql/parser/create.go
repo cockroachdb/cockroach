@@ -443,6 +443,39 @@ func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+type ForeignKeyConstraintTableDef struct {
+	Name     Name
+	Table    *QualifiedName
+	FromCols NameList
+	ToCols   NameList
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ForeignKeyConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Name != "" {
+		fmt.Fprintf(buf, "CONSTRAINT %s ", node.Name)
+	}
+	buf.WriteString("FOREIGN KEY ")
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.FromCols)
+	buf.WriteString(") REFERENCES ")
+	FormatNode(buf, f, node.Table)
+
+	if len(node.ToCols) > 0 {
+		buf.WriteByte(' ')
+		buf.WriteByte('(')
+		FormatNode(buf, f, node.ToCols)
+		buf.WriteByte(')')
+	}
+}
+
+func (node *ForeignKeyConstraintTableDef) setName(name Name) {
+	node.Name = name
+}
+
+func (*ForeignKeyConstraintTableDef) tableDef()           {}
+func (*ForeignKeyConstraintTableDef) constraintTableDef() {}
+
 func (*CheckConstraintTableDef) tableDef()           {}
 func (*CheckConstraintTableDef) constraintTableDef() {}
 
