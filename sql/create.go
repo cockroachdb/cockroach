@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -312,7 +313,11 @@ func (n *createTableNode) Start() error {
 	for _, def := range n.n.Defs {
 		if col, ok := def.(*parser.ColumnTableDef); ok {
 			if col.References.Table != nil {
-				modified, err := n.resolveColFK(&desc, col.Name, col.References.Table, col.References.Col, col.References.ConstraintName)
+				var targetCol parser.NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, string(col.References.Col))
+				}
+				modified, err := n.resolveFK(&desc, parser.NameList{string(col.Name)}, col.References.Table, targetCol, col.References.ConstraintName)
 				if err != nil {
 					return err
 				}
@@ -393,17 +398,21 @@ type fkTargetUpdate struct {
 	targetIdx sqlbase.IndexID          // ID of target (referenced) index
 }
 
-func (n *createTableNode) resolveColFK(
+func (n *createTableNode) resolveFK(
 	tbl *sqlbase.TableDescriptor,
-	fromCol parser.Name,
+	fromCols parser.NameList,
 	targetTable *parser.QualifiedName,
-	targetColName parser.Name,
+	targetColNames parser.NameList,
 	constraintName parser.Name,
 ) (fkTargetUpdate, error) {
 	var ret fkTargetUpdate
-	src, err := tbl.FindActiveColumnByName(string(fromCol))
-	if err != nil {
-		return ret, err
+	srcCols := make([]sqlbase.ColumnDescriptor, len(fromCols))
+	for i := range fromCols {
+		c, err := tbl.FindActiveColumnByName(string(fromCols[i]))
+		if err != nil {
+			return ret, err
+		}
+		srcCols[i] = c
 	}
 
 	target, err := n.p.getTableDesc(targetTable)
@@ -418,69 +427,106 @@ func (n *createTableNode) resolveColFK(
 		}
 	}
 	ret.target = target
+
 	// If a column isn't specified, attempt to default to PK.
-	if targetColName == "" {
-		if len(target.PrimaryIndex.ColumnNames) != 1 {
-			return ret, errors.Errorf("must specify a single unique column to reference %q", targetTable.String())
+	if len(targetColNames) == 0 {
+		if len(target.PrimaryIndex.ColumnNames) != len(srcCols) {
+			return ret, errors.Errorf("must specify column(s) to reference in %q", targetTable.String())
 		}
-		targetColName = parser.Name(target.PrimaryIndex.ColumnNames[0])
+		targetColNames = target.PrimaryIndex.ColumnNames
 	}
 
-	targetCol, err := target.FindActiveColumnByName(string(targetColName))
-	if err != nil {
-		return ret, err
+	targetCols := make([]sqlbase.ColumnDescriptor, len(targetColNames))
+	for i := range targetColNames {
+		c, err := target.FindActiveColumnByName(string(targetColNames[i]))
+		if err != nil {
+			return ret, err
+		}
+		targetCols[i] = c
 	}
 
-	if src.Type.Kind != targetCol.Type.Kind {
-		return ret, fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
-			fromCol, src.Type.Kind, target.Name, targetCol.Name, targetCol.Type.Kind)
+	if len(targetCols) != len(srcCols) {
+		return ret, errors.Errorf("%d columns must reference exactly %d columns in referenced table (found %d)",
+			len(srcCols), len(srcCols), len(targetCols))
 	}
 
-	found := false
-	if target.PrimaryIndex.ColumnIDs[0] == targetCol.ID {
-		found = true
+	for i := range srcCols {
+		if s, t := srcCols[i], targetCols[i]; s.Type.Kind != t.Type.Kind {
+			return ret, fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
+				s.Name, s.Type.Kind, target.Name, t.Name, t.Type.Kind)
+		}
+	}
+
+	if matchesIndex(targetCols, target.PrimaryIndex) {
 		ret.targetIdx = target.PrimaryIndex.ID
 	} else {
+		found := false
 		// Find the index corresponding to the referenced column.
 		for _, idx := range target.Indexes {
-			if idx.Unique && idx.ColumnIDs[0] == targetCol.ID {
+			if idx.Unique && matchesIndex(targetCols, idx) {
 				ret.targetIdx = idx.ID
 				found = true
 				break
 			}
 		}
-	}
-	if !found {
-		return ret, fmt.Errorf("foreign key requires a unique index on %s.%s", targetTable.String(), targetCol.Name)
+		if !found {
+			return ret, fmt.Errorf("foreign key requires table %q have a unique index on %s", targetTable.String(), colNames(targetCols))
+		}
 	}
 
 	if constraintName == "" {
-		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s_%s", fromCol, target.Name, targetColName))
+		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromCols[0], target.Name))
 	}
 
 	ref := &sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
 
-	found = false
-	if tbl.PrimaryIndex.ColumnIDs[0] == src.ID {
+	if matchesIndex(srcCols, tbl.PrimaryIndex) {
 		tbl.PrimaryIndex.ForeignKey = ref
 		ret.srcIdx = tbl.PrimaryIndex.ID
-		found = true
 	} else {
-		for i, idx := range tbl.Indexes {
-			if tbl.Indexes[i].ColumnIDs[0] == src.ID {
+		found := false
+		for i := range tbl.Indexes {
+			if matchesIndex(srcCols, tbl.Indexes[i]) {
 				tbl.Indexes[i].ForeignKey = ref
-				ret.srcIdx = idx.ID
+				ret.srcIdx = tbl.Indexes[i].ID
 				found = true
 				break
 			}
 		}
-	}
-	if !found {
-		return ret, fmt.Errorf("foreign key column %q must be the prefix of an index", src.Name)
+		if !found {
+			return ret, fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
+		}
 	}
 
 	tbl.State = sqlbase.TableDescriptor_ADD
 	return ret, nil
+}
+
+// colNames converts a []colDesc to a human-readable string for use in error messages.
+func colNames(cols []sqlbase.ColumnDescriptor) string {
+	var s bytes.Buffer
+	s.WriteString("(\"")
+	for i, c := range cols {
+		if i != 0 {
+			s.WriteString("\", \"")
+		}
+		s.WriteString(c.Name)
+	}
+	s.WriteString("\")")
+	return s.String()
+}
+
+func matchesIndex(cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor) bool {
+	if len(cols) != len(idx.ColumnIDs) {
+		return false
+	}
+
+	for i := range cols {
+		if cols[i].ID != idx.ColumnIDs[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
