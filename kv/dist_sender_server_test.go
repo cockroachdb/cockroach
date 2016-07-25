@@ -126,71 +126,6 @@ func checkScanResults(t *testing.T, results []client.Result, expResults [][]stri
 	}
 }
 
-// TestMultiRangeBatchBoundedScans runs a batch request with scans that are
-// all bounded.
-func TestMultiRangeBatchBoundedScans(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
-	for _, key := range []string{"a", "aa", "aaa", "b", "bb", "cc", "d", "dd", "ff"} {
-		if err := db.Put(key, "value"); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	b := db.NewBatch()
-	b.Scan("aaa", "dd", 3)
-	b.Scan("a", "z", 2)
-	b.Scan("cc", "ff", 3)
-
-	if err := db.Run(b); err != nil {
-		t.Fatal(err)
-	}
-
-	checkScanResults(t, b.Results, [][]string{
-		{"aaa", "b", "bb"},
-		{"a", "aa"},
-		{"cc", "d", "dd"},
-	})
-}
-
-// TestMultiRangeBoundedWithCompletedUnboundedScan runs a batch request with a
-// bounded and unbounded scan, such that the bounded scan is saturated after
-// the unbounded scan has already completed. Additionally, the bound for the
-// bounded scan is picked to end at the boundary of a range. It exercises an
-// edge case in DistSender in which a saturated scan being masked out means
-// that a multi-range request ends before the originally assumed key range is
-// exhausted.
-func TestMultiRangeBoundedWithCompletedUnboundedScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
-	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(key, "value"); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	b := db.NewBatch()
-	// An unbounded scan that is completed before the bounded scan below.
-	b.Scan("a", "d", 0)
-	// A bounded scan that ends at the boundary of range "d".
-	b.Scan("c", "g", 3)
-	if err := db.Run(b); err != nil {
-		t.Fatal(err)
-	}
-
-	// These are the expected results.
-	expResults := [][]string{
-		{"a1", "a2", "a3", "b1", "b2", "c1", "c2"},
-		{"c1", "c2", "d1"},
-	}
-	checkScanResults(t, b.Results, expResults)
-}
-
 func TestMultiRangeBoundedBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -205,12 +140,12 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 
 	for bound := 1; bound <= 20; bound++ {
 		b := db.NewBatch()
-		b.Header.MaxScanResults = int64(bound)
+		b.Header.MaxSpanRequestKeys = int64(bound)
 
-		b.Scan("a", "c", 0)
-		b.Scan("b", "f", 3)
-		b.Scan("c", "g", 0)
-		b.Scan("f1a", "g", 1)
+		b.Scan("a", "c")
+		b.Scan("b", "c2")
+		b.Scan("c", "g")
+		b.Scan("f1a", "f2a")
 		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}
@@ -348,8 +283,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// OpRequiresTxnError. We set the local clock to the timestamp of
 	// just above the first key to verify it's used to read only key "a".
 	for i, request := range []roachpb.Request{
-		roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0),
-		roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0),
+		roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c")),
+		roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
 	} {
 		manual := hlc.NewManualClock(ts[0].WallTime + 1)
 		clock := hlc.NewClock(manual.UnixNano)

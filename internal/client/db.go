@@ -295,10 +295,13 @@ func (db *DB) scan(
 ) ([]KeyValue, error) {
 	b := db.NewBatch()
 	b.Header.ReadConsistency = readConsistency
+	if maxRows > 0 {
+		b.Header.MaxSpanRequestKeys = maxRows
+	}
 	if !isReverse {
-		b.Scan(begin, end, maxRows)
+		b.Scan(begin, end)
 	} else {
-		b.ReverseScan(begin, end, maxRows)
+		b.ReverseScan(begin, end)
 	}
 	r, err := runOneResult(db, b)
 	return r.Rows, err

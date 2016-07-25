@@ -501,8 +501,8 @@ func TestClientBatch(t *testing.T) {
 	// Now try 2 scans.
 	{
 		b := &client.Batch{}
-		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
-		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.Scan(testUser+"/key 00", testUser+"/key 05")
+		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -513,9 +513,9 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
-		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
-		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.Header.MaxSpanRequestKeys = 7
+		b.Scan(testUser+"/key 00", testUser+"/key 05")
+		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -526,9 +526,9 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
-		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
-		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.Header.MaxSpanRequestKeys = 7
+		b.Scan(testUser+"/key 05", testUser+"/key 10")
+		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -539,9 +539,9 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 3
-		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
-		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.Header.MaxSpanRequestKeys = 3
+		b.Scan(testUser+"/key 00", testUser+"/key 05")
+		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -552,8 +552,8 @@ func TestClientBatch(t *testing.T) {
 	// Try 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
-		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -564,9 +564,9 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
-		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
-		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.Header.MaxSpanRequestKeys = 7
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -577,9 +577,9 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 7
-		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
-		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.Header.MaxSpanRequestKeys = 7
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -590,9 +590,9 @@ func TestClientBatch(t *testing.T) {
 	// Try a limited batch of 2 reverse scans.
 	{
 		b := &client.Batch{}
-		b.Header.MaxScanResults = 3
-		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
-		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.Header.MaxSpanRequestKeys = 3
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(b); err != nil {
 			t.Error(err)
 		}
@@ -828,8 +828,7 @@ func TestInconsistentReads(t *testing.T) {
 		b := prepInconsistent()
 		key1 := roachpb.Key([]byte("key1"))
 		key2 := roachpb.Key([]byte("key2"))
-		const dontCareMaxRows = 1000
-		b.Scan(key1, key2, dontCareMaxRows)
+		b.Scan(key1, key2)
 		if err := db.Run(b); err != nil {
 			t.Fatal(err)
 		}

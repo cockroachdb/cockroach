@@ -2268,10 +2268,10 @@ func (r *Replica) executeBatch(
 	}
 
 	remScanResults := int64(math.MaxInt64)
-	if ba.Header.MaxScanResults != 0 {
+	if ba.Header.MaxSpanRequestKeys != 0 {
 		// We have a batch of Scan or ReverseScan requests with a limit. We keep track of how many
 		// remaining results we can return.
-		remScanResults = ba.Header.MaxScanResults
+		remScanResults = ba.Header.MaxSpanRequestKeys
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
