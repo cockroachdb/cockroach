@@ -17,16 +17,15 @@
 package config
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 var (
 	testingZoneConfig   map[uint32]*ZoneConfig
 	testingHasHook      bool
 	testingPreviousHook func(SystemConfig, uint32) (*ZoneConfig, error)
-	testingLock         sync.Mutex
+	testingLock         syncutil.Mutex
 )
 
 // TestingSetupZoneConfigHook initializes the zone config hook

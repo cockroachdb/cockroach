@@ -28,7 +28,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -128,7 +128,7 @@ type testNode struct {
 type LocalCluster struct {
 	client               client.APIClient
 	stopper              chan struct{}
-	mu                   sync.Mutex // Protects the fields below
+	mu                   syncutil.Mutex // Protects the fields below
 	vols                 *Container
 	config               TestConfig
 	Nodes                []*testNode

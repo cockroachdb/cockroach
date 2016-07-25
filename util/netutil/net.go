@@ -22,7 +22,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // ListenAndServeGRPC creates a listener and serves the specified grpc Server
@@ -65,7 +65,7 @@ type Server struct {
 // MakeServer constructs a Server that tracks active connections, closing them
 // when signalled by stopper.
 func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})
 	server := Server{
 		Server: &http.Server{

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -159,7 +160,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	// Set up a command filter which tracks which one of our test keys have
 	// been attempted to be pushed.
 	mu := struct {
-		sync.Mutex
+		syncutil.Mutex
 		m map[string]struct{}
 	}{
 		m: make(map[string]struct{}),

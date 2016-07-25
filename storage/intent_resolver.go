@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/opentracing/opentracing-go"
@@ -49,7 +50,7 @@ type intentResolver struct {
 	sem chan struct{} // Semaphore to limit async goroutines.
 
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		// Maps transaction ids to a refcount.
 		inFlight map[uuid.UUID]int
 	}

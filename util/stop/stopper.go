@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 var errUnavailable = &roachpb.NodeUnavailableError{}
@@ -52,7 +53,7 @@ func unregister(s *Stopper) {
 }
 
 var trackedStoppers struct {
-	sync.Mutex
+	syncutil.Mutex
 	stoppers []*Stopper
 }
 
@@ -115,7 +116,7 @@ type Stopper struct {
 	stopped   chan struct{}     // Closed when stopped completely
 	onPanic   func(interface{}) // called with recover() on panic on any goroutine
 	stop      sync.WaitGroup    // Incremented for outstanding workers
-	mu        sync.Mutex        // Protects the fields below
+	mu        syncutil.Mutex    // Protects the fields below
 	quiesce   *sync.Cond        // Conditional variable to wait for outstanding tasks
 	quiescing bool              // true when Stop() has been called
 	numTasks  int               // number of outstanding tasks

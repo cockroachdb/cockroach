@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"sync"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 func TestIntentResolution(t *testing.T) {
@@ -81,7 +81,7 @@ func TestIntentResolution(t *testing.T) {
 		results := map[string]struct{}{}
 		func() {
 			var storeKnobs storage.StoreTestingKnobs
-			var mu sync.Mutex
+			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
 			storeKnobs.TestingCommandFilter =

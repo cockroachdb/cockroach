@@ -19,7 +19,6 @@ package kv
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -150,7 +150,7 @@ type TxnCoordSender struct {
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
-	sync.Mutex                                   // protects txns and txnStats
+	syncutil.Mutex                               // protects txns and txnStats
 	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
 	linearizable      bool                       // enables linearizable behaviour
 	tracer            opentracing.Tracer

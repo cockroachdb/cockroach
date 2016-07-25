@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -143,7 +144,7 @@ type Executor struct {
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
 	databaseCache  *databaseCache
-	systemConfigMu sync.RWMutex
+	systemConfigMu syncutil.RWMutex
 	// This uses systemConfigMu in RLocker mode to not block
 	// execution of statements. So don't go on changing state after you've
 	// Wait()ed on it.

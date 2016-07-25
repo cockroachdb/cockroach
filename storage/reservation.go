@@ -15,7 +15,6 @@
 package storage
 
 import (
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -81,7 +81,7 @@ type bookie struct {
 	maxReservations    int           // Maximum number of allowed reservations.
 	maxReservedBytes   int64         // Maximum bytes allowed for all reservations combined.
 	mu                 struct {
-		sync.Mutex                                             // Protects all values within the mu struct.
+		syncutil.Mutex                                         // Protects all values within the mu struct.
 		queue                 reservationQ                     // Queue used to handle expiring of reservations.
 		reservationsByRangeID map[roachpb.RangeID]*reservation // All active reservations
 		size                  int64                            // Total bytes required for all reservations.

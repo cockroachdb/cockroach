@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -142,7 +143,7 @@ type Gossip struct {
 	// Note that access to each client's internal state is serialized by the
 	// embedded server's mutex. This is surprising!
 	clientsMu struct {
-		sync.Mutex
+		syncutil.Mutex
 		clients []*client
 	}
 
@@ -160,7 +161,7 @@ type Gossip struct {
 	// main gossip lock.
 	systemConfig         config.SystemConfig
 	systemConfigSet      bool
-	systemConfigMu       sync.RWMutex
+	systemConfigMu       syncutil.RWMutex
 	systemConfigChannels []chan<- struct{}
 
 	// resolvers is a list of resolvers used to determine

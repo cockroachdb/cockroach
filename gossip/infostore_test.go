@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -343,7 +344,7 @@ func TestLeastUseful(t *testing.T) {
 type callbackRecord struct {
 	keys []string
 	wg   *sync.WaitGroup
-	sync.Mutex
+	syncutil.Mutex
 }
 
 func (cr *callbackRecord) Add(key string, _ roachpb.Value) {
