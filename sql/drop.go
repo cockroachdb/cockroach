@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -30,6 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
+
+// TableTruncateChunkNumKeys is the size of each chunk during table truncation
+// during table deletion.
+const TableTruncateChunkNumKeys = 2000
 
 type dropDatabaseNode struct {
 	p      *planner
@@ -497,14 +502,51 @@ func (p *planner) removeFKBackReference(
 	return p.saveNonmutationAndNotify(t)
 }
 
+// truncateTable truncates the data of a table in many chunks.
+// It deletes a range of data for the table, which includes the PK and all
+// indexes.
+func truncateTable(tableDesc sqlbase.TableDescriptor, db *client.DB) error {
+	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
+
+	// Delete rows and indexes starting with the table's prefix.
+	startKey := roachpb.Key(tablePrefix)
+	endKey := startKey.PrefixEnd()
+
+	// loop, processing one chunk at a time.
+	for done := false; !done; {
+		if log.V(2) {
+			log.Infof(context.TODO(), "DelRange %s - %s", startKey, endKey)
+		}
+		if err := db.Txn(func(txn *client.Txn) error {
+			b := client.Batch{}
+			b.Header.MaxSpanRequestKeys = TableTruncateChunkNumKeys
+			b.DelRange(startKey, endKey, false)
+			if err := txn.Run(&b); err != nil {
+				return err
+			}
+			// The table has been completely truncated once ResumeKey is nil.
+			if len(b.Results) != 1 {
+				panic("incorrect number of results returned")
+			}
+			startKey = b.Results[0].ResumeKey
+			done = startKey == nil
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // truncateAndDropTable batches all the commands required for truncating and deleting the
 // table descriptor.
 // It is called from a mutation, async wrt the DROP statement.
 func truncateAndDropTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) error {
+	if err := truncateTable(*tableDesc, db); err != nil {
+		return err
+	}
+
 	return db.Txn(func(txn *client.Txn) error {
-		if err := truncateTable(tableDesc, txn); err != nil {
-			return err
-		}
 		zoneKey, nameKey, descKey := getKeysForTableDescriptor(tableDesc)
 		// Delete table descriptor
 		b := client.Batch{}

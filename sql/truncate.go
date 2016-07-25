@@ -42,7 +42,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		if err := truncateTable(tableDesc, p.txn); err != nil {
+		if err := truncateTableInTxn(tableDesc, p.txn); err != nil {
 			return nil, err
 		}
 
@@ -61,10 +61,12 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	return &emptyNode{}, nil
 }
 
-// truncateTable truncates the data of a table.
+// truncateTableInTxn truncates the data of a table in a single transaction.
 // It deletes a range of data for the table, which includes the PK and all
 // indexes.
-func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
+//
+// TODO(vivek): fix 2003
+func truncateTableInTxn(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 	// Delete rows and indexes starting with the table's prefix.

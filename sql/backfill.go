@@ -376,39 +376,52 @@ func (sc *SchemaChanger) truncateIndexes(
 	dropped []sqlbase.IndexDescriptor,
 ) error {
 	for _, desc := range dropped {
-		// First extend the schema change lease.
-		l, err := sc.ExtendLease(*lease)
-		if err != nil {
-			return err
-		}
-		*lease = l
-		if err := sc.db.Txn(func(txn *client.Txn) error {
-			tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		var startKey, endKey roachpb.Key
+		for done := false; !done; {
+			// First extend the schema change lease.
+			l, err := sc.ExtendLease(*lease)
 			if err != nil {
 				return err
 			}
-			// Short circuit the truncation if the table has been deleted.
-			if tableDesc.Deleted() {
+			*lease = l
+
+			if err := sc.db.Txn(func(txn *client.Txn) error {
+				tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+				if err != nil {
+					return err
+				}
+				// Short circuit the truncation if the table has been deleted.
+				if tableDesc.Deleted() {
+					return nil
+				}
+
+				// Initialize the start and end key for the first iteration.
+				if startKey == nil {
+					indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, desc.ID)
+					startKey = roachpb.Key(indexPrefix)
+					endKey = startKey.PrefixEnd()
+				}
+				if log.V(2) {
+					log.Infof(context.TODO(), "DelRange %s - %s", startKey, endKey)
+				}
+				b := &client.Batch{}
+				b.Header.MaxSpanRequestKeys = IndexBackfillChunkSize
+				b.DelRange(startKey, endKey, false)
+
+				if err := txn.Run(b); err != nil {
+					return err
+				}
+				// The index has been completely truncated once startKey is
+				// nil.
+				if len(b.Results) != 1 {
+					panic("incorrect number of results returned")
+				}
+				startKey = b.Results[0].ResumeKey
+				done = startKey == nil
 				return nil
-			}
-
-			indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, desc.ID)
-
-			// Delete the index.
-			indexStartKey := roachpb.Key(indexPrefix)
-			indexEndKey := indexStartKey.PrefixEnd()
-			if log.V(2) {
-				log.Infof(context.TODO(), "DelRange %s - %s", indexStartKey, indexEndKey)
-			}
-			b := &client.Batch{}
-			b.DelRange(indexStartKey, indexEndKey, false)
-
-			if err := txn.Run(b); err != nil {
+			}); err != nil {
 				return err
 			}
-			return nil
-		}); err != nil {
-			return err
 		}
 	}
 	return nil

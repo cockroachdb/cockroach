@@ -17,11 +17,13 @@
 package sql_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -164,10 +166,19 @@ func TestDropIndex(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.kv (k INT PRIMARY KEY, v INT);
 CREATE INDEX foo on t.kv (v);
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 2*sql.IndexBackfillChunkSize + 1
+	insert := fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,7 +197,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	indexEndKey := indexStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)
-	} else if l := 3; len(kvs) != l {
+	} else if l := maxValue + 1; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
@@ -220,9 +231,18 @@ func TestDropTable(t *testing.T) {
 	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
 `); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 2*sql.TableTruncateChunkNumKeys + 1
+	insert := fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
 		t.Fatal(err)
 	}
 
@@ -262,7 +282,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
-	} else if l := 6; len(kvs) != l {
+	} else if l := 2 * (maxValue + 1); len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 

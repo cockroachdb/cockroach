@@ -1312,8 +1312,10 @@ func MVCCMerge(
 	return nil
 }
 
-// MVCCDeleteRange deletes the range of key/value pairs specified by
-// start and end keys. Specify max=0 for unbounded deletes.
+// MVCCDeleteRange deletes the range of key/value pairs specified by start and
+// end keys. Specify max=0 for unbounded deletes. It returns the range of keys
+// deleted when returnedKeys is set, the next key to resume from for
+// bounded deletes, and the number of keys deleted.
 func MVCCDeleteRange(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1324,8 +1326,9 @@ func MVCCDeleteRange(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
-) ([]roachpb.Key, error) {
+) ([]roachpb.Key, roachpb.Key, int64, error) {
 	var keys []roachpb.Key
+	var resumeKey roachpb.Key
 	num := int64(0)
 	buf := newPutBuffer()
 	iter := engine.NewIterator(true)
@@ -1338,7 +1341,8 @@ func MVCCDeleteRange(
 		}
 		num++
 		// We check num rather than len(keys) since returnKeys could be false.
-		if max != 0 && max >= num {
+		if max != 0 && max <= num {
+			resumeKey = kv.Key.Next()
 			return true, nil
 		}
 		return false, nil
@@ -1351,7 +1355,7 @@ func MVCCDeleteRange(
 
 	iter.Close()
 	buf.release()
-	return keys, err
+	return keys, resumeKey, num, err
 }
 
 // getScanMeta returns the MVCCMetadata the iterator is currently pointed at
