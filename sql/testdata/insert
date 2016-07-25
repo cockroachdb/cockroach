@@ -443,3 +443,15 @@ CREATE TABLE nocols()
 
 statement error INSERT error: table nocols has \d+ columns but \d+ values were supplied
 INSERT INTO nocols VALUES (true, default)
+
+statement error column "kv" does not exist
+INSERT INTO kv (kv.k) VALUES ('hello')
+
+statement error column name "k\.\*" cannot be assigned to
+INSERT INTO kv (k.*) VALUES ('hello')
+
+statement error column name "k\[0\]" cannot be assigned to
+INSERT INTO kv (k[0]) VALUES ('hello')
+
+statement error column name "k\.v" cannot be assigned to
+INSERT INTO kv (k.v) VALUES ('hello')
