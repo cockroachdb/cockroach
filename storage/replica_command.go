@@ -774,13 +774,11 @@ func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Batch, ms *
 			if err := r.splitTrigger(ctx, batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
 				return err
 			}
-			*ms = enginepb.MVCCStats{} // clear stats, as split recomputed.
 		}
 		if ct.GetMergeTrigger() != nil {
 			if err := r.mergeTrigger(ctx, batch, ms, ct.MergeTrigger, txn.Timestamp); err != nil {
 				return err
 			}
-			*ms = enginepb.MVCCStats{} // clear stats, as merge recomputed.
 		}
 		if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 			r.changeReplicasTrigger(ctx, batch, crt)
@@ -2535,6 +2533,9 @@ func (r *Replica) splitTrigger(
 	// this commit trigger. We update the stats below, but computed from the
 	// batch which already contains all of the writes that influenced `ms`.
 	deltaMS := *ms
+	// We will recompute the stats below and update the state, so when the
+	// batch commits it has already taken ms into account.
+	*ms = enginepb.MVCCStats{}
 
 	// Account for MVCCStats' own contribution to the RHS range's statistics.
 	if err := engine.AccountForSelf(&deltaMS, split.RightDesc.RangeID); err != nil {
@@ -2820,6 +2821,9 @@ func (r *Replica) mergeTrigger(
 	// Compute stats for premerged range, including current transaction.
 	var mergedMS = r.GetMVCCStats()
 	mergedMS.Add(*ms)
+	// We will recompute the stats below and update the state, so when the
+	// batch commits it has already taken ms into account.
+	*ms = enginepb.MVCCStats{}
 
 	// Add in stats for right hand side of merge, excluding system-local
 	// stats, which will need to be recomputed.
