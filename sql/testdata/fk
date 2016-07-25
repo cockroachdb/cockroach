@@ -19,10 +19,10 @@ CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 statement error column "idz" does not exist
 CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 
-statement error foreign key column "customer" must be the prefix of an index
+statement error foreign key columns \("customer"\) must be the prefix of an index
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
-statement error foreign key requires a unique index on products.vendor
+statement error foreign key requires table "products" have a unique index on \("vendor"\)
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
@@ -160,7 +160,7 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM orders
 ----
 Table   Name                        Type         Column(s)   Details
-orders  fk_product_ref_products_sku FOREIGN KEY  [product]   products.[sku]
+orders  fk_product_ref_products     FOREIGN KEY  [product]   products.[sku]
 orders  primary                     PRIMARY KEY  [id]        NULL
 orders  valid_customer              FOREIGN KEY  [customer]  customers.[id]
 
