@@ -28,6 +28,9 @@ CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
+statement error unsupported
+CREATE TABLE tabledef (customer INT, CONSTRAINT fk FOREIGN KEY (customer) REFERENCES customers)
+
 statement ok
 CREATE TABLE orders (
   id INT PRIMARY KEY,

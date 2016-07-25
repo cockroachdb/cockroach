@@ -1676,7 +1676,14 @@ constraint_elem:
     }
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
-    opt_column_list key_match key_actions { unimplemented() }
+    opt_column_list key_match key_actions
+  {
+    $$.val = &ForeignKeyConstraintTableDef{
+      Table: $7.qname(),
+      FromCols: $4.strs(),
+      ToCols: $8.strs(),
+    }
+  }
 
 storing:
   COVERING
