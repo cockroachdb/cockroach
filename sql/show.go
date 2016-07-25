@@ -96,7 +96,7 @@ func (p *planner) showCreateInterleave(idx *sqlbase.IndexDescriptor) (string, er
 		return "", nil
 	}
 	intl := idx.Interleave
-	parentTable, err := getTableDescFromID(p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
+	parentTable, err := sqlbase.GetTableDescFromID(p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
 	if err != nil {
 		return "", err
 	}

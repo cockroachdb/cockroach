@@ -253,7 +253,7 @@ func (n *dropIndexNode) Start() error {
 		if err != nil {
 			return err
 		}
-		if err := tableDesc.Validate(); err != nil {
+		if err := tableDesc.Validate(n.p.txn); err != nil {
 			return err
 		}
 		if err := n.p.writeTableDesc(tableDesc); err != nil {
@@ -341,7 +341,7 @@ func (n *dropTableNode) expandPlan() error {
 func (p *planner) canRemoveFK(
 	from string, ref *sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
-	table, err := getTableDescFromID(p.txn, ref.Table)
+	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (p *planner) canRemoveFK(
 func (p *planner) removeFK(ref *sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor) error {
 	if table == nil {
 		var err error
-		table, err = getTableDescFromID(p.txn, ref.Table)
+		table, err = sqlbase.GetTableDescFromID(p.txn, ref.Table)
 		if err != nil {
 			return err
 		}
@@ -485,7 +485,7 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 func (p *planner) removeFKBackReference(
 	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
-	t, err := getTableDescFromID(p.txn, idx.ForeignKey.Table)
+	t, err := sqlbase.GetTableDescFromID(p.txn, idx.ForeignKey.Table)
 	if err != nil {
 		return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
 	}
