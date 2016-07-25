@@ -170,10 +170,6 @@ type dropIndexNode struct {
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 	for _, index := range n.IndexList {
-		if err := index.Table.NormalizeTableName(p.session.Database); err != nil {
-			return nil, err
-		}
-
 		tableDesc, err := p.mustGetTableDesc(index.Table)
 		if err != nil {
 			return nil, err

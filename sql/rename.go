@@ -119,14 +119,12 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	tbKey := tableKey{dbDesc.ID, n.Name.Table()}.Key()
-
-	// Check if table exists.
-	gr, err := p.txn.Get(tbKey)
+	// Check if source table exists.
+	tableDesc, err := p.getTableDesc(n.Name)
 	if err != nil {
 		return nil, err
 	}
-	if !gr.Exists() {
+	if tableDesc == nil {
 		if n.IfExists {
 			// Noop.
 			return &emptyNode{}, nil
@@ -134,7 +132,15 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		// Key does not exist, but we want it to: error out.
 		return nil, fmt.Errorf("table %q does not exist", n.Name.Table())
 	}
+	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+		return nil, sqlbase.NewUndefinedTableError(n.Name.String())
+	}
 
+	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+		return nil, err
+	}
+
+	// Check if target database exists.
 	targetDbDesc, err := p.mustGetDatabaseDesc(n.NewName.Database())
 	if err != nil {
 		return nil, err
@@ -147,18 +153,6 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
 		// Noop.
 		return &emptyNode{}, nil
-	}
-
-	tableDesc, err := p.mustGetTableDesc(n.Name)
-	if err != nil {
-		return nil, err
-	}
-	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedTableError(n.Name.String())
-	}
-
-	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
-		return nil, err
 	}
 
 	tableDesc.SetName(n.NewName.Table())
@@ -223,10 +217,6 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, errEmptyIndexName
 	}
 
-	if err := n.Index.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
-	}
-
 	tableDesc, err := p.mustGetTableDesc(n.Index.Table)
 	if err != nil {
 		return nil, err
@@ -286,22 +276,12 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, errEmptyColumnName
 	}
 
-	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
-	}
-
-	dbDesc, err := p.mustGetDatabaseDesc(n.Table.Database())
-	if err != nil {
-		return nil, err
-	}
-
 	// Check if table exists.
-	tbKey := tableKey{dbDesc.ID, n.Table.Table()}.Key()
-	gr, err := p.txn.Get(tbKey)
+	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
 		return nil, err
 	}
-	if !gr.Exists() {
+	if tableDesc == nil {
 		if n.IfExists {
 			// Noop.
 			return &emptyNode{}, nil
@@ -310,8 +290,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, fmt.Errorf("table %q does not exist", n.Table.Table())
 	}
 
-	tableDesc, err := p.mustGetTableDesc(n.Table)
-	if err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -326,10 +305,6 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		column = &tableDesc.Columns[i]
 	} else {
 		column = tableDesc.Mutations[i].GetColumn()
-	}
-
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
-		return nil, err
 	}
 
 	if sqlbase.EqualName(colName, newColName) {
