@@ -23,13 +23,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 type envVarInfo struct {
@@ -39,7 +39,7 @@ type envVarInfo struct {
 }
 
 var envVarRegistry struct {
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	cache map[string]envVarInfo
 }
 

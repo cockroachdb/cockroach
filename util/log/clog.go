@@ -32,12 +32,12 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -617,7 +617,7 @@ type loggingT struct {
 	// freeListMu maintains the free list. It is separate from the main mutex
 	// so buffers can be grabbed and printed to without holding the main lock,
 	// for better parallelization.
-	freeListMu sync.Mutex
+	freeListMu syncutil.Mutex
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -625,7 +625,7 @@ type loggingT struct {
 	// Boolean flags. Also protected by mu (see flags.go).
 	toStderr bool // The -logtostderr flag.
 
-	mu sync.Mutex
+	mu syncutil.Mutex
 	// file holds writer for each of the log types.
 	file [NumSeverity]flushSyncWriter
 	// pcs is used in V to avoid an allocation when computing the caller's PC.

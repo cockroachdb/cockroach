@@ -18,7 +18,6 @@ package storage
 
 import (
 	"fmt"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +42,7 @@ import (
 // information to be read at node startup.
 type Stores struct {
 	clock      *hlc.Clock
-	mu         sync.RWMutex               // Protects storeMap and addrs
+	mu         syncutil.RWMutex           // Protects storeMap and addrs
 	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
 	biLatestTS hlc.Timestamp              // Timestamp of gossip bootstrap info
 	latestBI   *gossip.BootstrapInfo      // Latest cached bootstrap info

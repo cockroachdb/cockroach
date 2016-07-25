@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -633,7 +634,7 @@ type historyVerifier struct {
 	retriedTxns map[int]struct{}
 
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		actual []string
 	}
 }

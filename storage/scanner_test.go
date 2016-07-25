@@ -18,7 +18,6 @@ package storage
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -34,12 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Test implementation of a range set backed by btree.BTree.
 type testRangeSet struct {
-	sync.Mutex
+	syncutil.Mutex
 	replicasByKey *btree.BTree
 	visited       int
 }
@@ -111,11 +111,11 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 // Test implementation of a range queue which adds range to an
 // internal slice.
 type testQueue struct {
-	sync.Mutex // Protects ranges, done & processed count
-	ranges     []*Replica
-	done       bool
-	processed  int
-	disabled   bool
+	syncutil.Mutex // Protects ranges, done & processed count
+	ranges         []*Replica
+	done           bool
+	processed      int
+	disabled       bool
 }
 
 // setDisabled suspends processing of items from the queue.

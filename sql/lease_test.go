@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -400,7 +401,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	clearSchemaChangers := false
 
 	params, _ := createTestServerParams()
@@ -483,7 +484,7 @@ func acquire(s *server.TestServer, descID sqlbase.ID, version sqlbase.Descriptor
 func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	clearSchemaChangers := false
 
 	var waitTableID sqlbase.ID

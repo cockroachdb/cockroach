@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -142,7 +143,7 @@ type Gossip struct {
 	// Note that access to each client's internal state is serialized by the
 	// embedded server's mutex. This is surprising!
 	clientsMu struct {
-		sync.Mutex
+		syncutil.Mutex
 		clients []*client
 	}
 
@@ -160,7 +161,7 @@ type Gossip struct {
 	// main gossip lock.
 	systemConfig         config.SystemConfig
 	systemConfigSet      bool
-	systemConfigMu       sync.RWMutex
+	systemConfigMu       syncutil.RWMutex
 	systemConfigChannels []chan<- struct{}
 
 	// resolvers is a list of resolvers used to determine
@@ -259,16 +260,15 @@ func (g *Gossip) SetCullInterval(interval time.Duration) {
 // storage. This should be invoked as early in the lifecycle of a
 // gossip instance as possible, but can be called at any time.
 func (g *Gossip) SetStorage(storage Storage) error {
+	// Maintain lock ordering.
+	var storedBI BootstrapInfo
+	if err := storage.ReadBootstrapInfo(&storedBI); err != nil {
+		log.Warningf(context.TODO(), "failed to read gossip bootstrap info: %s", err)
+	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.storage = storage
-
-	// Read the bootstrap info from the persistent store.
-	var storedBI BootstrapInfo
-	err := storage.ReadBootstrapInfo(&storedBI)
-	if err != nil {
-		log.Warningf(context.TODO(), "failed to read gossip bootstrap info: %s", err)
-	}
 
 	// Merge the stored bootstrap info addresses with any we've become
 	// aware of through gossip.
@@ -491,10 +491,13 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
-	if g.maybeAddBootstrapAddress(desc.Address) && g.storage != nil {
+	if storage := g.storage; g.maybeAddBootstrapAddress(desc.Address) && storage != nil {
+		// Hack: gymnastics to maintain lock ordering.
+		g.mu.Unlock()
+		defer g.mu.Lock()
 		// TODO(spencer): need to clean up ancient gossip nodes, which
 		//   will otherwise stick around in the bootstrap info forever.
-		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+		if err := storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
 			log.Error(context.TODO(), err)
 		}
 	}

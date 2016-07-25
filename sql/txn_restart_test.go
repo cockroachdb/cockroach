@@ -20,7 +20,6 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/cockroachdb/pq"
 )
@@ -45,7 +45,7 @@ type failureRecord struct {
 }
 
 type filterVals struct {
-	sync.Mutex
+	syncutil.Mutex
 	// key -> number of times an retriable error will be injected when that key
 	// is written.
 	restartCounts map[string]int
