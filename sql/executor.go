@@ -492,10 +492,10 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
-		err := txnState.txn.Exec(execOpt, txnClosure)
+		err := txn.Exec(execOpt, txnClosure)
 
 		// Until #7881 fixed.
-		if txnState.State != NoTxn && txnState.txn == nil {
+		if txnState.State != NoTxn && (txn == nil || txnState.txn == nil) {
 			log.Errorf(context.TODO(), "txnState not cleared while txn == nil: %+v, execOpt %+v, stmts %+v, remaining %+v", txnState, execOpt, stmts, remainingStmts)
 		}
 
@@ -506,12 +506,12 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			lastResult := &results[len(results)-1]
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// Until #7881 fixed.
-				if txnState.txn == nil {
+				if txn == nil {
 					log.Errorf(context.TODO(), "AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
 				e.txnAbortCount.Inc(1)
-				txnState.txn.CleanupOnError(err)
+				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
 				log.Fatalf(context.TODO(), "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
