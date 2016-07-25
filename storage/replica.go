@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -195,7 +196,7 @@ type Replica struct {
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex.
-	readOnlyCmdMu sync.RWMutex
+	readOnlyCmdMu syncutil.RWMutex
 
 	// rangeDesc is a *RangeDescriptor that can be atomically read from in
 	// replica.Desc() without needing to acquire the replica.mu lock. All
@@ -204,7 +205,7 @@ type Replica struct {
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		sync.Mutex
+		syncutil.Mutex
 		// Has the replica been destroyed.
 		destroyed error
 		// The state of the Raft state machine.

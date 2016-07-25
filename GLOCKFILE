@@ -85,6 +85,7 @@ github.com/prometheus/common 610701b0cb96fe82d0166b8e07979b174b6f06ae
 github.com/rcrowley/go-metrics bdb33529eca3e55eac7328e07c57012a797af602
 github.com/robfig/glock c7fb89f56fbead624f7424f81f70af3a742433c5
 github.com/russross/blackfriday 93622da34e54fb6529bfb7c57e710f37a8d9cbd8
+github.com/sasha-s/go-deadlock 2248e9899ae84e5299201f9a4f8c75ac727f0772
 github.com/satori/go.uuid 0aa62d5ddceb50dbcb909d790b5345affd3669b6
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
 github.com/spf13/cobra f62e98d28ab7ad31d707ba837a966378465c7b57

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -372,7 +373,7 @@ type GCInfo struct {
 }
 
 type lockableGCInfo struct {
-	sync.Mutex
+	syncutil.Mutex
 	GCInfo
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
@@ -99,7 +100,7 @@ type rangeDescriptorCache struct {
 	// filled while servicing read and write requests to the key value
 	// store.
 	rangeCache struct {
-		sync.RWMutex
+		syncutil.RWMutex
 		cache *cache.OrderedCache
 	}
 	// lookupRequests stores all inflight requests retrieving range
@@ -108,7 +109,7 @@ type rangeDescriptorCache struct {
 	// multiplexed onto the same database lookup. See makeLookupRequestKey
 	// for details on this inference.
 	lookupRequests struct {
-		sync.Mutex
+		syncutil.Mutex
 		inflight map[lookupRequestKey]lookupRequest
 	}
 }

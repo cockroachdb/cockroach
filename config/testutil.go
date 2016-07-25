@@ -17,22 +17,23 @@
 package config
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 var (
 	testingZoneConfig   map[uint32]*ZoneConfig
 	testingHasHook      bool
 	testingPreviousHook func(SystemConfig, uint32) (*ZoneConfig, error)
-	testingLock         sync.Mutex
+	testingLock         syncutil.Mutex
 )
 
 // TestingSetupZoneConfigHook initializes the zone config hook
 // to 'testingZoneConfigHook' which uses 'testingZoneConfig'.
 // Settings go back to their previous values when the stopper runs our closer.
 func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
+	stopper.AddCloser(stop.CloserFn(testingResetZoneConfigHook))
+
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if testingHasHook {
@@ -55,8 +56,6 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 		}
 		return
 	}
-
-	stopper.AddCloser(stop.CloserFn(testingResetZoneConfigHook))
 }
 
 // testingResetZoneConfigHook resets the zone config hook back to what it was

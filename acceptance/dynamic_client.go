@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // dynamicClient should be used in acceptance tests when connecting to a
@@ -36,7 +36,7 @@ type dynamicClient struct {
 	stopper *stop.Stopper
 
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		// clients is a map from node indexes used by methods passed to the
 		// cluster `c` to db clients.
 		clients map[int]*gosql.DB

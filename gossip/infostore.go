@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -71,13 +71,13 @@ type infoStore struct {
 	highWaterStamps map[roachpb.NodeID]int64 // Per-node information for gossip peers
 	callbacks       []*callback
 
-	callbackMu     sync.Mutex // Serializes callbacks
-	callbackWorkMu sync.Mutex // Protects callbackWork
+	callbackMu     syncutil.Mutex // Serializes callbacks
+	callbackWorkMu syncutil.Mutex // Protects callbackWork
 	callbackWork   []func()
 }
 
 var monoTime struct {
-	sync.Mutex
+	syncutil.Mutex
 	last int64
 }
 

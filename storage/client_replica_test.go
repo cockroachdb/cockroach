@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -462,7 +463,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := storage.TestStoreContext()
-	var filterMu sync.Mutex
+	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
 	ctx.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {

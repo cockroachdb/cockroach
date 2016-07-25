@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -45,7 +46,7 @@ type serverInfo struct {
 type server struct {
 	stopper *stop.Stopper
 
-	mu       sync.Mutex                         // Protects the fields below
+	mu       syncutil.Mutex                     // Protects the fields below
 	is       *infoStore                         // The backing infostore
 	incoming nodeSet                            // Incoming client node IDs
 	nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo

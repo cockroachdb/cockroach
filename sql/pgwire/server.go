@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -63,7 +63,7 @@ type Server struct {
 	metrics  *serverMetrics
 
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		draining bool
 	}
 }

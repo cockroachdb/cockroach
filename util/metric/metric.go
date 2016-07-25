@@ -19,7 +19,6 @@ package metric
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -28,6 +27,7 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -116,7 +116,7 @@ func maybeTick(m periodic) {
 type Histogram struct {
 	maxVal int64
 
-	mu       sync.Mutex
+	mu       syncutil.Mutex
 	windowed *hdrhistogram.WindowedHistogram
 	nextT    time.Time
 	duration time.Duration
@@ -297,7 +297,7 @@ func (g *GaugeFloat64) FillPrometheusMetric(promMetric *prometheusgo.MetricFamil
 
 // A Rate is a exponential weighted moving average.
 type Rate struct {
-	mu       sync.Mutex // protects fields below
+	mu       syncutil.Mutex // protects fields below
 	curSum   float64
 	wrapped  ewma.MovingAverage
 	interval time.Duration

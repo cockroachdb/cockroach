@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -42,7 +42,7 @@ var DefaultTimeScales = []TimeScale{Scale1M, Scale10M, Scale1H}
 // A Registry can be added to another Registry through the Add/MustAdd methods. This allows a
 // hierarchy of Registry instances to be created.
 type Registry struct {
-	sync.Mutex
+	syncutil.Mutex
 	tracked map[string]Iterable
 }
 

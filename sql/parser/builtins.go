@@ -30,7 +30,6 @@ import (
 	"regexp/syntax"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -1446,7 +1446,7 @@ func pickFromTuple(ctx *EvalContext, greatest bool, args DTuple) (Datum, error) 
 }
 
 var uniqueBytesState struct {
-	sync.Mutex
+	syncutil.Mutex
 	nanos uint64
 }
 
@@ -1478,7 +1478,7 @@ func generateUniqueBytes(nodeID roachpb.NodeID) DBytes {
 }
 
 var uniqueIntState struct {
-	sync.Mutex
+	syncutil.Mutex
 	timestamp uint64
 }
 
