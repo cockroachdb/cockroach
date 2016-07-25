@@ -1738,6 +1738,86 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "TableStatsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "database",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "table",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "TableStatsResponse",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "range_count",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "replica_count",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "node_count",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "storage.engine.enginepb.MVCCStats",
+                                    "name": "stats",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "MissingNode",
+                                    "name": "missing_nodes",
+                                    "id": 5,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "MissingNode",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "node_id",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.customname)": "NodeID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "error_message",
+                                            "id": 2
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
                             "name": "UsersRequest",
                             "fields": []
                         },
@@ -2377,7 +2457,10 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "rule": "optional",
                                     "type": "string",
                                     "name": "node_id",
-                                    "id": 1
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "NodeID"
+                                    }
                                 },
                                 {
                                     "rule": "optional",
@@ -2504,6 +2587,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "response": "TableDetailsResponse",
                                     "options": {
                                         "(google.api.http).get": "/_admin/v1/databases/{database}/tables/{table}"
+                                    }
+                                },
+                                "TableStats": {
+                                    "request": "TableStatsRequest",
+                                    "response": "TableStatsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/databases/{database}/tables/{table}/stats"
                                     }
                                 },
                                 "Events": {
