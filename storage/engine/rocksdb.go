@@ -246,7 +246,8 @@ func (c RocksDBCache) ref() RocksDBCache {
 }
 
 // Release releases the cache. Note that the cache will continue to be used
-// until all of the RocksDB engines it was attached to have been closed.
+// until all of the RocksDB engines it was attached to have been closed, and
+// that RocksDB engines which use it auto-release when they close.
 func (c RocksDBCache) Release() {
 	if c.cache != nil {
 		C.DBReleaseCache(c.cache)
