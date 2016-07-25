@@ -66,13 +66,6 @@ func (dc *dynamicClient) Close() {
 	}
 }
 
-// isRetryableError returns true for any errors that show a connection issue
-// or an issue with the node itself. This can occur when a node is restarting
-// or is unstable in some other way.
-func isRetryableError(err error) bool {
-	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|context deadline exceeded)")
-}
-
 var errTestFinished = errors.New("test is shutting down")
 
 // exec calls exec on a client using a preexisting or new connection.
@@ -82,7 +75,9 @@ func (dc *dynamicClient) exec(query string, args ...interface{}) (gosql.Result, 
 		if err != nil {
 			return nil, err
 		}
-		if result, err := client.Exec(query, args...); err == nil || !isRetryableError(err) {
+		if result, err := client.Exec(
+			query, args...,
+		); err == nil || !testutils.IsSQLRetryError(err) {
 			return result, err
 		}
 	}
@@ -97,7 +92,9 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 		if err != nil {
 			return err
 		}
-		if err := client.QueryRow(query, queryArgs...).Scan(destArgs...); err == nil || !isRetryableError(err) {
+		if err := client.QueryRow(
+			query, queryArgs...,
+		).Scan(destArgs...); err == nil || !testutils.IsSQLRetryError(err) {
 			return err
 		}
 	}
