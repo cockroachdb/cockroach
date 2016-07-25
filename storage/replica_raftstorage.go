@@ -247,10 +247,6 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
-	if r.exceedsDoubleSplitSizeLocked() {
-		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
-	}
-
 	rangeID := r.RangeID
 
 	// If a snapshot is in progress, see if it's ready.
@@ -266,6 +262,16 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			// If the result is not ready, return immediately.
 			return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 		}
+	}
+
+	if r.exceedsDoubleSplitSizeLocked() {
+		r.mu.Lock()
+		maxBytes := r.mu.maxBytes
+		size := r.mu.state.Stats.Total()
+		r.mu.Unlock()
+		log.Infof(context.Background(),
+			"%s: not generating snapshot because replica is too large: %d > 2 * %d", r, maxBytes, size)
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
 	// See if there is already a snapshot running for this store.
@@ -287,12 +293,14 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		// state of the Replica). Everything must come from the snapshot.
 		snapData, err := snapshot(snap, rangeID, r.mu.state.Desc.StartKey)
 		if err != nil {
-			log.Errorf(context.TODO(), "%s: error generating snapshot: %s", r, err)
+			log.Errorf(context.Background(), "%s: error generating snapshot: %s", r, err)
 		} else {
 			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
+				log.Infof(context.Background(), "%s: abandoning snapshot after %s",
+					r, r.store.ctx.AsyncSnapshotMaxAge)
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
 			case <-r.store.Stopper().ShouldQuiesce():
