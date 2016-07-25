@@ -5300,9 +5300,10 @@ func TestReplicaCancelRaft(t *testing.T) {
 
 // verify the checksum for the range and return it.
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
+	ctx := context.Background()
 	id := uuid.MakeV4()
 	if _, err := rng.ComputeChecksum(
-		context.Background(),
+		ctx,
 		nil,
 		nil,
 		roachpb.Header{},
@@ -5313,7 +5314,7 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	); err != nil {
 		t.Fatal(err)
 	}
-	c, ok := rng.getChecksum(id)
+	c, ok := rng.getChecksum(ctx, id)
 	if !ok {
 		t.Fatalf("checksum for id = %v not found", id)
 	}
@@ -5321,7 +5322,7 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 		t.Fatal("couldn't compute checksum")
 	}
 	if _, err := rng.VerifyChecksum(
-		context.Background(),
+		ctx,
 		nil,
 		nil,
 		roachpb.Header{},

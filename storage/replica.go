@@ -61,7 +61,7 @@ const (
 	// expire on a reasonable basis and be continually re-gossiped. The
 	// replica which is the lease holder of the first range gossips it.
 	sentinelGossipTTL = 2 * time.Minute
-	// sentinalGossipInterval is the approximate interval at which the
+	// sentinelGossipInterval is the approximate interval at which the
 	// sentinel info is gossiped.
 	sentinelGossipInterval = sentinelGossipTTL / 2
 
