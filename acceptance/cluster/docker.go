@@ -102,7 +102,7 @@ func hasImage(l *LocalCluster, ref string) bool {
 }
 
 func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) error {
-	// Hack: on CircleCI, docker pulls the image on the first access from an
+	// HACK: on CircleCI, docker pulls the image on the first access from an
 	// acceptance test even though that image is already present. So we first
 	// check to see if our image is present in order to avoid this slowness.
 	if hasImage(l, ref) {
