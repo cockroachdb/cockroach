@@ -84,6 +84,7 @@ const (
 )
 
 type allocatorTest struct {
+	ctx context.Context
 	// StartNodes is the starting number of nodes this cluster will have.
 	StartNodes int
 	// EndNodes is the final number of nodes this cluster will have.
@@ -131,25 +132,25 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
-	log.Infof(context.TODO(), "creating cluster with %d node(s)", at.StartNodes)
+	log.Infof(at.ctx, "creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes, 0 /*writers*/); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
 	at.f.Assert(t)
-	log.Info(context.TODO(), "initial cluster is up")
+	log.Info(at.ctx, "initial cluster is up")
 
 	// We must stop the cluster because a) `nodectl` pokes at the data directory
 	// and, more importantly, b) we don't want the cluster above and the cluster
 	// below to ever talk to each other (see #7224).
-	log.Info(context.TODO(), "stopping cluster")
+	log.Info(at.ctx, "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Kill(i); err != nil {
 			t.Fatalf("error stopping node %d: %s", i, err)
 		}
 	}
 
-	log.Info(context.TODO(), "downloading archived stores from Google Cloud Storage in parallel")
+	log.Info(at.ctx, "downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(nodeNum int) {
@@ -162,7 +163,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 	}
 
-	log.Info(context.TODO(), "restarting cluster with archived store(s)")
+	log.Info(at.ctx, "restarting cluster with archived store(s)")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Restart(i); err != nil {
 			t.Fatalf("error restarting node %d: %s", i, err)
@@ -170,14 +171,14 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.Assert(t)
 
-	log.Infof(context.TODO(), "resizing cluster to %d nodes", at.EndNodes)
+	log.Infof(at.ctx, "resizing cluster to %d nodes", at.EndNodes)
 	if err := at.f.Resize(at.EndNodes, 0 /*writers*/); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))
 	at.f.Assert(t)
 
-	log.Info(context.TODO(), "waiting for rebalance to finish")
+	log.Info(at.ctx, "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +212,6 @@ func (at *allocatorTest) printRebalanceStats(
 	db *gosql.DB, host string, adminPort int, rebalanceDuration time.Duration,
 ) error {
 	// TODO(cuongdo): Output these in a machine-friendly way and graph.
-	ctx := context.TODO()
 
 	// Output time it took to rebalance.
 	{
@@ -230,9 +230,9 @@ func (at *allocatorTest) printRebalanceStats(
 			// This can happen with single-node clusters.
 			rebalanceInterval = time.Duration(0)
 		}
-		log.Infof(ctx, "cluster took %s to rebalance", rebalanceDuration)
-		log.Infof(ctx, "cluster took %s to reach equilibrium", rebalanceInterval-rebalanceDuration)
-		log.Infof(ctx, "for a total of %s", rebalanceInterval)
+		log.Infof(at.ctx, "cluster took %s to rebalance", rebalanceDuration)
+		log.Infof(at.ctx, "cluster took %s to reach equilibrium", rebalanceInterval-rebalanceDuration)
+		log.Infof(at.ctx, "for a total of %s", rebalanceInterval)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -243,7 +243,7 @@ func (at *allocatorTest) printRebalanceStats(
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
-		log.Infof(ctx, "%d range events", rangeEvents)
+		log.Infof(at.ctx, "%d range events", rangeEvents)
 	}
 
 	// Output standard deviation of the replica counts for all stores.
@@ -252,7 +252,7 @@ func (at *allocatorTest) printRebalanceStats(
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "stddev(replica count) = %.2f", stddev)
+		log.Infof(at.ctx, "stddev(replica count) = %.2f", stddev)
 	}
 
 	return nil
@@ -276,13 +276,13 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 
 	row := db.QueryRow(q, eventTypes...)
 	if row == nil {
-		log.Errorf(context.TODO(), "couldn't find any range events")
+		log.Errorf(at.ctx, "couldn't find any range events")
 		return false, nil
 	}
 	if err := row.Scan(&elapsedStr, &rangeID, &storeID, &eventType); err != nil {
 		// Log but don't return errors, to increase resilience against transient
 		// errors.
-		log.Errorf(context.TODO(), "error checking rebalancer: %s", err)
+		log.Errorf(at.ctx, "error checking rebalancer: %s", err)
 		return false, nil
 	}
 	elapsedSinceLastRangeEvent, err := time.ParseDuration(elapsedStr)
@@ -290,7 +290,7 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 		return false, err
 	}
 
-	log.Infof(context.TODO(), "last range event: %s for range %d/store %d (%s ago)",
+	log.Infof(at.ctx, "last range event: %s for range %d/store %d (%s ago)",
 		eventType, rangeID, storeID, elapsedSinceLastRangeEvent)
 	return elapsedSinceLastRangeEvent >= StableInterval, nil
 }
@@ -362,6 +362,7 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 // containing 10 GiB of data and growing to 3 nodes.
 func TestUpreplicate_1To3Small(t *testing.T) {
 	at := allocatorTest{
+		ctx:        context.Background(),
 		StartNodes: 1,
 		EndNodes:   3,
 		StoreURL:   archivedStoreURL + "/1node-10g-262ranges",
@@ -374,6 +375,7 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 // containing 10 GiB of data) and growing to 5 nodes.
 func TestRebalance_3To5Small(t *testing.T) {
 	at := allocatorTest{
+		ctx:        context.Background(),
 		StartNodes: 3,
 		EndNodes:   5,
 		StoreURL:   archivedStoreURL + "/3nodes-10g-262ranges",
@@ -386,6 +388,7 @@ func TestRebalance_3To5Small(t *testing.T) {
 // containing 108 GiB of data and growing to 3 nodes.
 func TestUpreplicate_1To3Medium(t *testing.T) {
 	at := allocatorTest{
+		ctx:                 context.Background(),
 		StartNodes:          1,
 		EndNodes:            3,
 		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
@@ -397,6 +400,7 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 
 func TestUpreplicate_1To6Medium(t *testing.T) {
 	at := allocatorTest{
+		ctx:                 context.Background(),
 		StartNodes:          1,
 		EndNodes:            6,
 		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
@@ -412,6 +416,7 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 // amounts of data.
 func TestSteady_6Medium(t *testing.T) {
 	at := allocatorTest{
+		ctx:                 context.Background(),
 		StartNodes:          6,
 		EndNodes:            6,
 		StoreURL:            archivedStoreURL + "/6nodes-1038replicas-56G",
