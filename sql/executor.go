@@ -511,7 +511,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 				}
 				lastResult.Err = aErr
 				e.txnAbortCount.Inc(1)
-				txnState.txn.CleanupOnError(err)
+				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
 				log.Fatalf(context.TODO(), "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
