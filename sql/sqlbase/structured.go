@@ -1156,6 +1156,20 @@ func (desc *TableDescriptor) RenameColumn(colID ColumnID, newColName string) {
 	}
 }
 
+// FindActiveColumnsByNames finds all requested columns (in the requested order)
+// or returns an error.
+func (desc *TableDescriptor) FindActiveColumnsByNames(names parser.NameList) ([]ColumnDescriptor, error) {
+	cols := make([]ColumnDescriptor, len(names))
+	for i := range names {
+		c, err := desc.FindActiveColumnByName(string(names[i]))
+		if err != nil {
+			return nil, err
+		}
+		cols[i] = c
+	}
+	return cols, nil
+}
+
 // FindColumnByName finds the column with the specified name. It returns
 // DescriptorStatus for the column, and an index into either the columns
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
