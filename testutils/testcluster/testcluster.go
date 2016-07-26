@@ -353,17 +353,11 @@ func (tc *TestCluster) TransferRangeLease(
 		// The intended replica already has the lease. Nothing to do.
 		return nil
 	}
-	oldStore, err := tc.findMemberStore(leaseHolderDesc.StoreID)
+
+	err = tc.Servers[0].DB().AdminTransferLease(rangeDesc.StartKey.AsRawKey(), destReplicaDesc)
 	if err != nil {
-		return err
-	}
-	oldReplica, err := oldStore.GetReplica(rangeDesc.RangeID)
-	if err != nil {
-		return err
-	}
-	// Ask the lease holder to transfer the lease.
-	if err := oldReplica.AdminTransferLease(destReplicaDesc); err != nil {
-		return err
+		return errors.Errorf(
+			"%q: transfer lease unexpected error: %s", rangeDesc.StartKey, err)
 	}
 	return nil
 }

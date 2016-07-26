@@ -262,7 +262,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 //
 // TODO(andrei): figure out how to persist the "not serving" state across node
 // restarts.
-func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error {
+func (r *Replica) AdminTransferLease(nextLeaseHolder roachpb.ReplicaDescriptor) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -275,7 +275,7 @@ func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error
 			return nil, nil, r.newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc)
 		}
 		nextLease := r.mu.pendingLeaseRequest.RequestPending()
-		if nextLease != nil && nextLease.Replica != nextLeader {
+		if nextLease != nil && nextLease.Replica != nextLeaseHolder {
 			repDesc, err := r.getReplicaDescriptorLocked()
 			if err != nil {
 				return nil, nil, err
@@ -296,7 +296,7 @@ func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error
 		nextLeaseBegin.Forward(
 			hlc.ZeroTimestamp.Add(r.store.startedAt+int64(r.store.Clock().MaxOffset()), 0))
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			r, nextLeader, nextLeaseBegin,
+			r, nextLeaseHolder, nextLeaseBegin,
 			r.mu.state.Desc.StartKey.AsRawKey(), true /* transfer */)
 		return nil, transfer, nil
 	}
@@ -314,7 +314,7 @@ func (r *Replica) AdminTransferLease(nextLeader roachpb.ReplicaDescriptor) error
 		}
 		// Wait for the in-progress extension without holding the mutex.
 		if r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent != nil {
-			r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent(nextLeader)
+			r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent(nextLeaseHolder)
 		}
 		<-extension
 	}

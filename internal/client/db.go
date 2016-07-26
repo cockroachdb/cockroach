@@ -372,6 +372,18 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 	return err
 }
 
+// AdminTransferLease transfers the lease for the range containing key to the
+// specified target. The target replica for the lease transfer must be one of
+// the existing replicas of the range.
+//
+// key can be either a byte slice or a string.
+func (db *DB) AdminTransferLease(key interface{}, target roachpb.ReplicaDescriptor) error {
+	b := db.NewBatch()
+	b.adminTransferLease(key, target)
+	_, err := runOneResult(db, b)
+	return err
+}
+
 // CheckConsistency runs a consistency check on all the ranges containing
 // the key span. It logs a diff of all the keys that are inconsistent
 // when withDiff is set to true.

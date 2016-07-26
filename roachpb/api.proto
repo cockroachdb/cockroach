@@ -348,6 +348,19 @@ message AdminMergeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An AdminTransferLeaseRequest is the argument to the AdminTransferLease()
+// method. A lease transfer allows an external entity to control the lease
+// holder for a range. The target of the lease transfer needs to be a valid
+// replica of the range.
+message AdminTransferLeaseRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional ReplicaDescriptor target = 2 [(gogoproto.nullable) = false];
+}
+
+message AdminTransferLeaseResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RangeLookupRequest is arguments to the RangeLookup() method. A
 // forward lookup request returns a range containing the requested
 // key. A reverse lookup request returns a range containing the
@@ -588,7 +601,8 @@ message RequestLeaseRequest {
 // A TransferLeaseRequest represents the arguments to the TransferLease()
 // method. It is sent by a replica that currently holds the range lease and
 // wants to transfer it away.
-// Like a LeaderLeaseRequest, this request has the effect of instituting a new
+//
+// Like a RequstLeaseRequest, this request has the effect of instituting a new
 // lease. The difference is that the new lease is allowed to overlap the
 // existing one. It is a separate request because the LeaderLeaseRequest is
 // special - it's not subject to the same replay protection restrictions as
@@ -668,6 +682,7 @@ message RequestUnion {
   optional EndTransactionRequest end_transaction = 9;
   optional AdminSplitRequest admin_split = 10;
   optional AdminMergeRequest admin_merge = 11;
+  optional AdminTransferLeaseRequest admin_transfer_lease = 29;
   optional HeartbeatTxnRequest heartbeat_txn = 12;
   optional GCRequest gc = 13;
   optional PushTxnRequest push_txn = 14;
@@ -703,6 +718,7 @@ message ResponseUnion {
   optional EndTransactionResponse end_transaction = 9;
   optional AdminSplitResponse admin_split = 10;
   optional AdminMergeResponse admin_merge = 11;
+  optional AdminTransferLeaseResponse admin_transfer_lease = 29;
   optional HeartbeatTxnResponse heartbeat_txn = 12;
   optional GCResponse gc = 13;
   optional PushTxnResponse push_txn = 14;
