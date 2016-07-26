@@ -83,6 +83,13 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
 
+var flagTFReuseCluster = flag.String("reuse", "",
+	`attempt to use the cluster with the given name.
+	  Tests which don't support this may behave unexpectedly.
+	  This flag can also be set to have a test create a cluster
+	  with predetermined name.`,
+)
+
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
 
 // TODO(cuongdo): These should be refactored so that they're not allocator
@@ -155,29 +162,38 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		stores += " --store=data" + strconv.Itoa(j)
 	}
 
-	// We concatenate a random name to the prefix (for Terraform resource
-	// names) to allow multiple instances of the same test to run concurrently.
-	// The prefix is also used as the name of the Terraform state file.
-	if prefix != "" {
-		prefix += "-"
-	}
-	prefix += getRandomName()
+	var name string
+	if *flagTFReuseCluster == "" {
+		// We concatenate a random name to the prefix (for Terraform resource
+		// names) to allow multiple instances of the same test to run
+		// concurrently. The prefix is also used as the name of the Terraform
+		// state file.
 
-	// Rudimentary collision control.
-	for i := 0; ; i++ {
-		newPrefix := prefix
-		if i > 0 {
-			newPrefix += strconv.Itoa(i)
+		name = prefix
+		if name != "" {
+			name += "-"
 		}
-		_, err := os.Stat(filepath.Join(*flagCwd, newPrefix+".tfstate"))
-		if os.IsNotExist(err) {
-			prefix = newPrefix
-			break
+
+		name += "-" + getRandomName()
+
+		// Rudimentary collision control.
+		for i := 0; ; i++ {
+			newName := name
+			if i > 0 {
+				newName += strconv.Itoa(i)
+			}
+			_, err := os.Stat(filepath.Join(*flagCwd, newName+".tfstate"))
+			if os.IsNotExist(err) {
+				name = newName
+				break
+			}
 		}
+	} else {
+		name = *flagTFReuseCluster
 	}
 
-	if !prefixRE.MatchString(prefix) {
-		t.Fatalf("generated farmer prefix '%s' must match regex %s", prefix, prefixRE)
+	if !prefixRE.MatchString(name) {
+		t.Fatalf("generated cluster name '%s' must match regex %s", name, prefixRE)
 	}
 	f := &terrafarm.Farmer{
 		Output:      os.Stderr,
@@ -185,8 +201,8 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		LogDir:      logDir,
 		KeyName:     *flagKeyName,
 		Stores:      stores,
-		Prefix:      prefix,
-		StateFile:   prefix + ".tfstate",
+		Prefix:      name,
+		StateFile:   name + ".tfstate",
 		AddVars:     make(map[string]string),
 		KeepCluster: flagTFKeepCluster.String(),
 	}
