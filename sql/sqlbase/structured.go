@@ -809,6 +809,8 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 	}
 
+	// TODO(dt): Validate each column only appears at-most-once in any FKs.
+
 	if len(desc.Families) < 1 {
 		return fmt.Errorf("at least 1 column family must be specified")
 	}

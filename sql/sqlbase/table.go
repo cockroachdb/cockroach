@@ -167,6 +167,10 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			}
 			desc.AddFamily(fam)
 
+		case *parser.ForeignKeyConstraintTableDef:
+			// Pass for now since FKs can reference other elements and thus are
+			// resolved only after the rest of the desc is constructed.
+
 		default:
 			return desc, errors.Errorf("unsupported table def: %T", def)
 		}
