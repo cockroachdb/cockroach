@@ -336,34 +336,9 @@ func (tc *TestCluster) RemoveReplicas(
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc *roachpb.RangeDescriptor, dest ReplicationTarget,
 ) error {
-	destReplicaDesc, ok := rangeDesc.GetReplicaDescriptor(dest.StoreID)
-	if !ok {
-		log.Fatalf(context.TODO(), "Couldn't find store %d in range %+v", dest.StoreID, rangeDesc)
-	}
-
-	leaseHolderDesc, err := tc.FindRangeLeaseHolder(rangeDesc,
-		&ReplicationTarget{
-			NodeID:  destReplicaDesc.NodeID,
-			StoreID: destReplicaDesc.StoreID,
-		})
+	err := tc.Servers[0].DB().AdminTransferLease(rangeDesc.StartKey.AsRawKey(), dest.StoreID)
 	if err != nil {
-		return err
-	}
-	if leaseHolderDesc.StoreID == dest.StoreID {
-		// The intended replica already has the lease. Nothing to do.
-		return nil
-	}
-	oldStore, err := tc.findMemberStore(leaseHolderDesc.StoreID)
-	if err != nil {
-		return err
-	}
-	oldReplica, err := oldStore.GetReplica(rangeDesc.RangeID)
-	if err != nil {
-		return err
-	}
-	// Ask the lease holder to transfer the lease.
-	if err := oldReplica.AdminTransferLease(destReplicaDesc); err != nil {
-		return err
+		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
 	}
 	return nil
 }
