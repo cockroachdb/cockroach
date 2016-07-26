@@ -1312,8 +1312,9 @@ func MVCCMerge(
 	return nil
 }
 
-// MVCCDeleteRange deletes the range of key/value pairs specified by
-// start and end keys. Specify max=0 for unbounded deletes.
+// MVCCDeleteRange deletes the range of key/value pairs specified by start and
+// end keys. It returns the range of keys deleted when returnedKeys is set,
+// the next key to resume from, and the number of keys deleted.
 func MVCCDeleteRange(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1324,16 +1325,31 @@ func MVCCDeleteRange(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
-) ([]roachpb.Key, error) {
+) ([]roachpb.Key, roachpb.Key, int64, error) {
+	if max == 0 {
+		return nil, key, 0, nil
+	}
 	var keys []roachpb.Key
+	resumeKey := endKey
+	var setResumeKey roachpb.Key
+	var num int64
 	buf := newPutBuffer()
 	iter := engine.NewIterator(true)
 	f := func(kv roachpb.KeyValue) (bool, error) {
+		if num == max {
+			// Another key was found beyond the max limit.
+			resumeKey = setResumeKey
+			return true, nil
+		}
 		if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
 			return true, err
 		}
 		if returnKeys {
 			keys = append(keys, kv.Key)
+		}
+		num++
+		if num == max {
+			setResumeKey = kv.Key.Next()
 		}
 		return false, nil
 	}
@@ -1341,11 +1357,10 @@ func MVCCDeleteRange(
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	_, err := MVCCBoundedIterate(ctx, engine, key, endKey, max, hlc.MaxTimestamp, true, txn, false, f)
-
+	_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
 	iter.Close()
 	buf.release()
-	return keys, err
+	return keys, resumeKey, num, err
 }
 
 // getScanMeta returns the MVCCMetadata the iterator is currently pointed at
@@ -1432,9 +1447,15 @@ func mvccScanInternal(
 	reverse bool,
 ) ([]roachpb.KeyValue, []roachpb.Intent, error) {
 	var res []roachpb.KeyValue
-	intents, err := MVCCBoundedIterate(ctx, engine, key, endKey, max, timestamp, consistent, txn, reverse,
+	if max == 0 {
+		return nil, nil, nil
+	}
+	intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
 		func(kv roachpb.KeyValue) (bool, error) {
 			res = append(res, kv)
+			if int64(len(res)) == max {
+				return true, nil
+			}
 			return false, nil
 		})
 
@@ -1479,8 +1500,7 @@ func MVCCReverseScan(
 // MVCCIterate iterates over the key range [start,end). At each step of the
 // iteration, f() is invoked with the current key/value pair. If f returns
 // true (done) or an error, the iteration stops and the error is propagated.
-// If the reverse is flag set the iterator will be moved in reverse order. It
-// can run for a max number of iterations.
+// If the reverse is flag set the iterator will be moved in reverse order.
 func MVCCIterate(ctx context.Context,
 	engine Reader,
 	startKey,
@@ -1491,25 +1511,6 @@ func MVCCIterate(ctx context.Context,
 	reverse bool,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
-	return MVCCBoundedIterate(ctx, engine, startKey, endKey, math.MaxInt64, timestamp, consistent, txn, reverse, f)
-}
-
-// MVCCBoundedIterate same as MVCCIterate with a max bound on the number of
-// keys.
-func MVCCBoundedIterate(ctx context.Context,
-	engine Reader,
-	startKey,
-	endKey roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-	reverse bool,
-	f func(roachpb.KeyValue) (bool, error),
-) ([]roachpb.Intent, error) {
-	if max == 0 {
-		return nil, nil
-	}
 	if !consistent && txn != nil {
 		return nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -1572,7 +1573,7 @@ func MVCCBoundedIterate(ctx context.Context,
 	var wiErr error
 	var alloc bufalloc.ByteAllocator
 
-	for count := int64(0); ; {
+	for {
 		metaKey, err := getMeta(iter, encEndKey, &buf.meta)
 		if err != nil {
 			return nil, err
@@ -1598,10 +1599,6 @@ func MVCCBoundedIterate(ctx context.Context,
 				return nil, err
 			}
 			if done {
-				break
-			}
-			count++
-			if count == max {
 				break
 			}
 		}
