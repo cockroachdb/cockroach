@@ -58,41 +58,9 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return &emptyNode{}, nil
 	}
 
-	// Now update the nameMetadataKey and the descriptor.
-	descKey := sqlbase.MakeDescMetadataKey(dbDesc.GetID())
-	dbDesc.SetName(string(n.NewName))
-
-	if err := dbDesc.Validate(); err != nil {
+	if err := p.renameDatabase(dbDesc, string(n.NewName)); err != nil {
 		return nil, err
 	}
-
-	newKey := databaseKey{string(n.NewName)}.Key()
-	oldKey := databaseKey{string(n.Name)}.Key()
-	descID := dbDesc.GetID()
-	descDesc := sqlbase.WrapDescriptor(dbDesc)
-
-	b := client.Batch{}
-	b.CPut(newKey, descID, nil)
-	b.Put(descKey, descDesc)
-	b.Del(oldKey)
-
-	if err := p.txn.Run(&b); err != nil {
-		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return nil, fmt.Errorf("the new database name %q already exists", string(n.NewName))
-		}
-		return nil, err
-	}
-
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
-			return err
-		}
-		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
-			return err
-		}
-		return expectDeleted(systemConfig, oldKey)
-	})
-
 	return &emptyNode{}, nil
 }
 
