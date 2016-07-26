@@ -21,6 +21,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cenk/backoff"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -29,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/rubyist/circuitbreaker"
 )
 
 const (
@@ -85,8 +88,9 @@ type RaftTransport struct {
 
 	mu struct {
 		syncutil.Mutex
-		handlers map[roachpb.StoreID]raftMessageHandler
-		queues   map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
+		handlers     map[roachpb.StoreID]raftMessageHandler
+		queues       map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
+		connBreakers map[roachpb.NodeID]*circuit.Breaker
 	}
 }
 
@@ -106,6 +110,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
 	t.mu.queues = make(map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
+	t.mu.connBreakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -170,6 +175,66 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 	t.mu.Unlock()
 }
 
+// GetCircuitBreaker returns the circuit breaker controlling
+// connection attempts to the specified node.
+// NOTE: For unittesting.
+func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.connBreakers[nodeID]
+}
+
+// getNodeConn returns a shared instance of a GRPC connection to the
+// node specified by nodeID. Returns null if the remote node is not
+// available (e.g. because the node ID can't be resolved or the remote
+// node is not responding or is timing out, or the network is
+// partitioned, etc.).
+func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
+	t.mu.Lock()
+	cb, ok := t.mu.connBreakers[nodeID]
+	if !ok {
+		// This exponential backoff limits the circuit breaker to 1 second
+		// intervals between successive attempts to resolve a node address
+		// and connect via GRPC.
+		expBO := backoff.NewExponentialBackOff()
+		expBO.MaxInterval = 1 * time.Second
+		expBO.MaxElapsedTime = 0 * time.Second
+
+		cb = circuit.NewBreakerWithOptions(&circuit.Options{
+			BackOff:    expBO,
+			ShouldTrip: circuit.ThresholdTripFunc(1),
+		})
+		t.mu.connBreakers[nodeID] = cb
+	}
+	t.mu.Unlock()
+
+	// The number of consecutive failures suffered by the circuit breaker
+	// is used to log only state changes in our connection status to the
+	// remote node.
+	consecFailures := cb.ConsecFailures()
+	var conn *grpc.ClientConn
+	if err := cb.Call(func() error {
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err = t.rpcContext.GRPCDial(addr.String())
+		if err != nil {
+			return err
+		}
+		if consecFailures > 0 {
+			log.Infof(context.TODO(), "connection succeeded to node %s", nodeID)
+		}
+		return nil
+	}, 0); err != nil {
+		if consecFailures == 0 {
+			log.Warningf(context.TODO(), "failed to connect to node %s: %s", nodeID, err)
+		}
+		return nil
+	}
+	return conn
+}
+
 // processQueue creates a client and sends messages from its designated queue
 // via that client, exiting when the client fails or when it idles out. All
 // messages remaining in the queue at that point are lost and a new instance of
@@ -177,18 +242,8 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 // TODO(tschottdorf) should let raft know if the node is down;
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
-func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roachpb.ReplicaDescriptor) error {
-	addr, err := t.resolver(toReplica.NodeID)
-	if err != nil {
-		return err
-	}
-
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		return err
-	}
+func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
 	client := NewMultiRaftClient(conn)
-
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	stream, err := client.RaftMessage(ctx)
@@ -263,6 +318,14 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 	}
 	isSnap := req.Message.Type == raftpb.MsgSnap
 	toReplica := req.ToReplica
+	// Get a connection to the node specified by the replica's node
+	// ID. If no connection can be made, return false to indicate caller
+	// should drop the Raft message.
+	conn := s.transport.getNodeConn(toReplica.NodeID)
+	if conn == nil {
+		return false
+	}
+
 	s.transport.mu.Lock()
 	// We use two queues; one will be used for snapshots, the other for all other
 	// traffic. This is done to prevent snapshots from blocking other traffic.
@@ -282,7 +345,7 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 		// Starting workers in a task prevents data races during shutdown.
 		if err := s.transport.rpcContext.Stopper.RunTask(func() {
 			s.transport.rpcContext.Stopper.RunWorker(func() {
-				s.onError(s.transport.processQueue(ch, toReplica), toReplica)
+				s.onError(s.transport.processQueue(ch, conn), toReplica)
 
 				s.transport.mu.Lock()
 				delete(queues, toReplica)
