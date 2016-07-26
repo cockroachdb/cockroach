@@ -428,17 +428,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "options": {
                                 "(gogoproto.nullable)": false
                             }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "int32",
-                            "name": "initial_leader_store_id",
-                            "id": 3,
-                            "options": {
-                                "(gogoproto.nullable)": false,
-                                "(gogoproto.customname)": "InitialLeaderStoreID",
-                                "(gogoproto.casttype)": "StoreID"
-                            }
                         }
                     ]
                 },
