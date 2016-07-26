@@ -2617,7 +2617,12 @@ func splitTriggerPostCommit(
 func (r *Replica) splitTrigger(
 	ctx context.Context,
 	batch engine.Batch,
-	ms *enginepb.MVCCStats,
+	// The split trigger will bootstrap the new right hand side of the split,
+	// but updates this such that after the trigger, it represents precisely
+	// the change in stats that the left-hand side experienced as a result of
+	// the split, which is usually characterized by losing the keys which are
+	// moved to the right-hand side.
+	deltaMS *enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
 ) error {
@@ -2633,22 +2638,17 @@ func (r *Replica) splitTrigger(
 			split.RightDesc.StartKey, split.RightDesc.EndKey, r)
 	}
 
-	// Preserve stats for presplit range and begin computing stats delta
-	// for current transaction.
-	origStats := r.GetMVCCStats()
-	// TODO(tschottdorf): something is fishy here. `*ms` at this point is the
-	// stats delta we've written before the split trigger. Now we "fork" off
-	// of that for deltaMS, so any updates to deltaMS will be unknown to `ms`,
-	// which will be added to the replica's stats in the same batch, but after
-	// this commit trigger. We update the stats below, but computed from the
-	// batch which already contains all of the writes that influenced `ms`.
-	deltaMS := *ms
-	// We will recompute the stats below and update the state, so when the
-	// batch commits it has already taken ms into account.
-	*ms = enginepb.MVCCStats{}
+	// A note on stats handling: After we return, the below variable holds the
+	// stats delta for the (updated) left-hand side of the Split. However,
+	// during this method, we will first account for all writes (to both sides)
+	// and finally compute the correct delta.
+	_ = deltaMS
+
+	// Preserve stats for presplit range, excluding the current batch.
+	origBothMS := r.GetMVCCStats()
 
 	// Account for MVCCStats' own contribution to the RHS range's statistics.
-	if err := engine.AccountForSelf(&deltaMS, split.RightDesc.RangeID); err != nil {
+	if err := engine.AccountForSelf(deltaMS, split.RightDesc.RangeID); err != nil {
 		return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 	}
 
@@ -2656,19 +2656,13 @@ func (r *Replica) splitTrigger(
 	// and compute stats for it instead of having a constraint that the
 	// left hand side is smaller.
 
-	// Compute stats for LHS range.
+	// Compute (absolute) stats for LHS range. This means that no more writes
+	// to the LHS must happen below this point.
 	leftMS, err := ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
 		return errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
 	log.Trace(ctx, "computed stats for left hand side range")
-
-	if err := setMVCCStats(batch, r.RangeID, leftMS); err != nil {
-		return errors.Wrap(err, "unable to write MVCC stats")
-	}
-	r.mu.Lock()
-	r.mu.state.Stats = leftMS
-	r.mu.Unlock()
 
 	// Copy the last replica GC and verification timestamps. These
 	// values are unreplicated, which is why the MVCC stats are set to
@@ -2689,7 +2683,7 @@ func (r *Replica) splitTrigger(
 	}
 
 	// Initialize the RHS range's abort cache by copying the LHS's.
-	seqCount, err := r.abortCache.CopyInto(batch, &deltaMS, split.RightDesc.RangeID)
+	seqCount, err := r.abortCache.CopyInto(batch, deltaMS, split.RightDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return errors.Wrap(err, "unable to copy abort cache to RHS split range")
@@ -2707,10 +2701,10 @@ func (r *Replica) splitTrigger(
 	// Note also that it is crucial that writeInitialState *absorbs* an
 	// existing HardState (which might contain a cast vote).
 	//
-	// Note that the stats need to go into deltaMS (which is the total
-	// difference in bytes reported to the store in the end). We compute the
-	// RHS' stats from it below.
-	deltaMS, err = writeInitialState(batch, deltaMS, split.RightDesc)
+	// The call below will persist some bogus stats for the right-hand side
+	// owing to the contract of writeInitialState, but they are fixed below.
+	// TODO(tschottdorf): might be able to avoid that by moving this down.
+	*deltaMS, err = writeInitialState(batch, *deltaMS, split.RightDesc)
 	if err != nil {
 		return errors.Wrap(err, "unable to write initial state")
 	}
@@ -2747,15 +2741,15 @@ func (r *Replica) splitTrigger(
 		rightLease := leftLease
 		rightLease.Replica = replica
 		if err := setLease(
-			batch, &deltaMS, split.RightDesc.RangeID, rightLease,
+			batch, deltaMS, split.RightDesc.RangeID, rightLease,
 		); err != nil {
 			return errors.Wrap(err, "unable to seed right-hand side lease")
 		}
 	}
 
-	// Compute stats for new range.
+	// Compute (absolute) stats for RHS range.
 	var rightMS enginepb.MVCCStats
-	if origStats.ContainsEstimates || deltaMS.ContainsEstimates {
+	if origBothMS.ContainsEstimates || deltaMS.ContainsEstimates {
 		// Because either the original stats or the delta stats contain
 		// estimate values, we cannot perform arithmetic to determine the
 		// new range's stats. Instead, we must recompute by iterating
@@ -2768,22 +2762,64 @@ func (r *Replica) splitTrigger(
 		// Because neither the original stats or the delta stats contain
 		// estimate values, we can safely perform arithmetic to determine the
 		// new range's stats. The calculation looks like:
-		//   new_ms = old_ms + delta_ms - left_ms
-		// where
-		// - old_ms   contains statistics for the pre-split range
-		// - delta_ms contains statistics for modifications made in the current batch
-		// - left_ms  contains statistics computed for the LHS of split
-		rightMS = deltaMS
-		rightMS.AgeTo(ts.WallTime)
-		// Add in the original range's stats.
-		rightMS.Add(origStats)
-		// Remove stats from the left side of the split.
+		//   rhs_ms = orig_both_ms - orig_left_ms + right_delta_ms
+		//          = orig_both_ms - left_ms + left_delta_ms + right_delta_ms
+		//          = orig_both_ms - left_ms + delta_ms
+		// where the following extra helper variables are used:
+		// - orig_left_ms: the left-hand side key range, before the split
+		// - (left|right)_delta_ms: the contributions to deltaMS in this batch,
+		//   itemized by the side of the split.
+		//
+		// Note that the result of that computation never has ContainsEstimates
+		// set due to none of the inputs having it.
+
+		// Start with the full stats before the split.
+		rightMS = origBothMS
+		// Remove stats from the left side of the split, at the same time adding
+		// the batch contributions for the right-hand side.
 		rightMS.Subtract(leftMS)
+		rightMS.Add(*deltaMS)
 	}
 	if err := setMVCCStats(batch, split.RightDesc.RangeID, rightMS); err != nil {
 		return errors.Wrap(err, "unable to write MVCC stats")
 	}
 	log.Trace(ctx, "computed stats for RHS range")
+
+	bothDeltaMS := *deltaMS
+	// Up to this point, we've tracked the contributions for both halves of the
+	// split in deltaMS, but now it's time to update it so that it accurately
+	// reflects how much data the left-hand side has shed by splitting.
+	// We've already recomputed that in absolute terms, so all we need to do is
+	// to turn it into a delta so the upstream machinery can digest it.
+	{
+		*deltaMS = leftMS                  // start with new left-hand side absolute stats
+		deltaMS.Subtract(r.GetMVCCStats()) // subtract pre-split absolute stats
+		deltaMS.ContainsEstimates = false  // if there were any, recomputation removed them
+	}
+
+	// We have to track the stats delta for the right hand side (i.e. actual
+	// writes, not the newly one piece of keyspace) separately since they need
+	// to be communicated to the store. We have that quantity for the left side
+	// of the split and for the combined range, so we can easily get it.
+	rhsDeltaMS := bothDeltaMS
+	rhsDeltaMS.Subtract(*deltaMS)
+
+	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
+	// machinery update our stats for the left-hand side. But there is no
+	// way to pass up an MVCCStats object that will clear out the
+	// ContainsEstimates flag. We should introduce one, but the migration
+	// makes this worth a separate effort (ContainsEstimates would need to
+	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
+	{
+		origCopy := origBothMS
+		origCopy.ContainsEstimates = false
+		if err := setMVCCStats(batch, r.RangeID, origCopy); err != nil {
+			return errors.Wrap(err, "unable to write MVCC stats")
+		}
+		r.mu.Lock()
+		r.mu.state.Stats.ContainsEstimates = false
+		r.mu.Unlock()
+	}
 
 	// This is the part of the split trigger which coordinates the actual split
 	// with the Store. As such, it tries to avoid using any of the intermediate
@@ -2791,7 +2827,7 @@ func (r *Replica) splitTrigger(
 	// Raft processing goroutine.
 
 	theTrigger := func() {
-		splitTriggerPostCommit(ctx, deltaMS, split, r)
+		splitTriggerPostCommit(ctx, rhsDeltaMS, split, r)
 	}
 
 	batch.Defer(theTrigger)
@@ -2909,6 +2945,9 @@ func (r *Replica) AdminMerge(
 
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
+//
+// TODO(tschottdorf): give mergeTrigger more idiomatic stats computation as
+// in splitTrigger.
 func (r *Replica) mergeTrigger(
 	ctx context.Context,
 	batch engine.Batch,
