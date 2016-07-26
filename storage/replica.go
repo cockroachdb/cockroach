@@ -2475,8 +2475,9 @@ func (r *Replica) executeBatch(
 		}
 
 		if maxKeys != math.MaxInt64 {
-			if cReply, ok := reply.(roachpb.Countable); ok {
-				retResults := cReply.Count()
+			hdr := reply.Header()
+			if hdr.ResumeKey != nil {
+				retResults := hdr.NumKeys
 				if retResults > maxKeys {
 					r.panicf("received %d results, limit was %d",
 						retResults, maxKeys)

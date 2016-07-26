@@ -19,6 +19,7 @@ package kv
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -554,20 +555,28 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	}
 
 	if ba.MaxSpanRequestKeys != 0 {
-		// Verify that the batch contains only Scan or ReverseScan requests.
-		fwd, rev := false, false
+		// Verify that the batch contains only range requests or the
+		// Begin/EndTransactionRequest. Verify that it cannot contain range
+		// requests of different types; we might relax this condition if
+		// needed later.
+		var currentType reflect.Type
 		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
-			case *roachpb.ScanRequest:
-				fwd = true
-			case *roachpb.ReverseScanRequest:
-				rev = true
+			inner := req.GetInner()
+			switch inner.(type) {
+			case *roachpb.ScanRequest, *roachpb.ReverseScanRequest, *roachpb.DeleteRangeRequest:
+				// Accepted range requests.
+
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+				continue
+
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+				return nil, roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
-		}
-		if fwd && rev {
-			return nil, roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
+			nextType := reflect.TypeOf(inner)
+			if currentType != nil && currentType != nextType {
+				return nil, roachpb.NewErrorf("batch with limit contains requests of many types: %s, %s", currentType, nextType)
+			}
+			currentType = nextType
 		}
 	}
 
@@ -827,8 +836,9 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Count how many results we received.
 			var numResults int64
 			for _, resp := range curReply.Responses {
-				if cResp, ok := resp.GetInner().(roachpb.Countable); ok {
-					numResults += cResp.Count()
+				hdr := resp.GetInner().Header()
+				if hdr.ResumeKey != nil {
+					numResults += hdr.NumKeys
 				}
 			}
 			if numResults > ba.MaxSpanRequestKeys {
@@ -844,12 +854,31 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 					union := roachpb.ResponseUnion{}
 					var reply roachpb.Response
-					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
+					// Set the resume key to the start key.
+					resumeKey := req.GetInner().Header().Key
+					switch t := req.GetInner().(type) {
+					case *roachpb.ScanRequest:
 						reply = &roachpb.ScanResponse{}
-					} else {
-						_ = req.GetInner().(*roachpb.ReverseScanRequest)
+
+					case *roachpb.ReverseScanRequest:
 						reply = &roachpb.ReverseScanResponse{}
+						// Set the resume key to the end key.
+						resumeKey = req.GetInner().Header().EndKey
+
+					case *roachpb.DeleteRangeRequest:
+						reply = &roachpb.DeleteRangeResponse{}
+
+					case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+						continue
+
+					default:
+						panic(fmt.Sprintf("bad type %T", t))
 					}
+					// Set the resume key.
+					hdr := reply.Header()
+					hdr.ResumeKey = resumeKey
+					reply.SetHeader(hdr)
+
 					union.MustSetInner(reply)
 					br.Responses[i] = union
 				}
