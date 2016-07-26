@@ -21,6 +21,8 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -114,6 +116,11 @@ type DatabaseAccessor interface {
 	// or an error if one was encountered. The ifNotExists flag is used to declare
 	// if the "already existed" state should be an error (false) or a no-op (true).
 	createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error)
+
+	// renameDatabase attempts to rename the database with the provided DatabaseDescriptor
+	// to a new name. The method will mutate the provided DatabaseDescriptor, updating it's
+	// name with the new name.
+	renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName string) error
 }
 
 var _ DatabaseAccessor = &planner{}
@@ -207,4 +214,43 @@ func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists b
 		panic("DatabaseDescriptor must include a non-empty database name")
 	}
 	return p.createDescriptor(databaseKey{desc.Name}, desc, ifNotExists)
+}
+
+// renameDatabase implements the DatabaseAccessor interface.
+func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName string) error {
+	descKey := sqlbase.MakeDescMetadataKey(oldDesc.GetID())
+
+	oldName := oldDesc.Name
+	oldDesc.SetName(newName)
+	if err := oldDesc.Validate(); err != nil {
+		return err
+	}
+
+	oldKey := databaseKey{oldName}.Key()
+	newKey := databaseKey{newName}.Key()
+	descID := oldDesc.GetID()
+	descDesc := sqlbase.WrapDescriptor(oldDesc)
+
+	b := client.Batch{}
+	b.CPut(newKey, descID, nil)
+	b.Put(descKey, descDesc)
+	b.Del(oldKey)
+
+	if err := p.txn.Run(&b); err != nil {
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
+			return fmt.Errorf("the new database name %q already exists", newName)
+		}
+		return err
+	}
+
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
+			return err
+		}
+		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
+			return err
+		}
+		return expectDeleted(systemConfig, oldKey)
+	})
+	return nil
 }
