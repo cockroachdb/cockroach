@@ -201,7 +201,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			if otherNode == simNode {
 				continue // skip the node's own info
 			}
-			infoKey := otherNode.Addr.String()
+			infoKey := otherNode.Addr().String()
 			// GetInfo returns an error if the info is missing.
 			if info, err := node.GetInfo(infoKey); err != nil {
 				missing = append(missing, otherNode.Gossip.GetNodeID())
@@ -303,7 +303,7 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount)
+	n := simulation.NewNetwork(nodeCount, true)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			// Output dot graph.
