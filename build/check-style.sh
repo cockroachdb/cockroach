@@ -148,10 +148,10 @@ runcheck() {
   echo "=== RUN $name"
   local output
   if output=$(eval "$name"); then
-    echo "--- PASS: $name (0.0s)"
+    echo "--- PASS: $name (0.00s)"
   else
+    echo "--- FAIL: $name (0.00s)"
     echo "$output"
-    echo "--- FAIL: $name (0.0s)"
     failed=1
   fi
 }
@@ -164,8 +164,8 @@ for i in $(declare -F|cut -d' ' -f3|grep '^Test'); do
 done
 
 if [ "$failed" = "0" ]; then
-  echo "ok check-style 0.0s"
+  echo "ok check-style 0.000s"
 else
-  echo "FAIL check-style 0.0s"
+  echo "FAIL check-style 0.000s"
   exit 1
 fi
