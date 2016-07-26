@@ -150,6 +150,16 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	if rh.Txn != nil && otherRH.Txn == nil {
 		rh.Txn = nil
 	}
+	if (rh.Completion != nil && otherRH.Completion == nil) ||
+		(rh.Completion == nil && otherRH.Completion != nil) {
+		panic(fmt.Errorf("missing Completion header on one of %q or %q", rh, otherRH))
+	}
+	if rh.Completion != nil {
+		rh.Completion = &ResponseHeader_Completion{
+			ResumeKey: otherRH.Completion.ResumeKey,
+			NumKeys:   rh.Completion.NumKeys + otherRH.Completion.NumKeys,
+		}
+	}
 	return nil
 }
 
@@ -358,6 +368,14 @@ func (sr *ScanResponse) Count() int64 {
 // Count returns the number of rows in ReverseScanResponse.
 func (sr *ReverseScanResponse) Count() int64 {
 	return int64(len(sr.Rows))
+}
+
+// Count returns the number of rows in DeleteRangeResponse.
+func (dr *DeleteRangeResponse) Count() int64 {
+	if dr.Completion != nil {
+		return dr.Completion.NumKeys
+	}
+	return 0
 }
 
 // Method implements the Request interface.

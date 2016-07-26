@@ -1312,8 +1312,9 @@ func MVCCMerge(
 	return nil
 }
 
-// MVCCDeleteRange deletes the range of key/value pairs specified by
-// start and end keys. Specify max=0 for unbounded deletes.
+// MVCCDeleteRange deletes the range of key/value pairs specified by start and
+// end keys. It returns the range of keys deleted when returnedKeys is set,
+// the next key to resume from, and the number of keys deleted.
 func MVCCDeleteRange(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1324,8 +1325,10 @@ func MVCCDeleteRange(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
-) ([]roachpb.Key, error) {
+) ([]roachpb.Key, roachpb.Key, int64, error) {
 	var keys []roachpb.Key
+	var resumeKey roachpb.Key
+	num := int64(0)
 	buf := newPutBuffer()
 	iter := engine.NewIterator(true)
 	f := func(kv roachpb.KeyValue) (bool, error) {
@@ -1335,6 +1338,8 @@ func MVCCDeleteRange(
 		if returnKeys {
 			keys = append(keys, kv.Key)
 		}
+		num++
+		resumeKey = kv.Key
 		return false, nil
 	}
 
@@ -1342,10 +1347,14 @@ func MVCCDeleteRange(
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
 	_, err := MVCCBoundedIterate(ctx, engine, key, endKey, max, hlc.MaxTimestamp, true, txn, false, f)
-
+	if resumeKey != nil {
+		resumeKey = resumeKey.Next()
+	} else {
+		resumeKey = key
+	}
 	iter.Close()
 	buf.release()
-	return keys, err
+	return keys, resumeKey, num, err
 }
 
 // getScanMeta returns the MVCCMetadata the iterator is currently pointed at

@@ -132,6 +132,13 @@ type Result struct {
 
 	// Keys is set by some operations instead of returning the rows themselves.
 	Keys []roachpb.Key
+
+	// ResumeKey is the the start key to be used on the next operation in a
+	// sequence of operations. It is returned whenever an operation over a
+	// span of keys is bounded and the operation returns before completely
+	// running over the span. It allows the operation to be called again with
+	// a new start key and over a shorter span of keys.
+	ResumeKey roachpb.Key
 }
 
 func (r Result) String() string {

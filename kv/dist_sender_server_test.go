@@ -126,6 +126,52 @@ func checkScanResults(t *testing.T, results []client.Result, expResults [][]stri
 	}
 }
 
+func checkDelRangeResults(t *testing.T, results []client.Result, expResults [][]string, bound int, maxBounds []int, startKeys []string) {
+	if len(expResults) != len(results) {
+		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
+	}
+	// Check the returned keys.
+	for i, res := range results {
+		keys := expResults[i]
+		if len(keys) != len(res.Keys) {
+			t.Errorf("%s: expected %d results, got %d", errInfo(), len(keys), len(res.Keys))
+			return
+		}
+		for j, k := range res.Keys {
+			expKey := keys[j]
+			if key := string(k); key != expKey {
+				t.Errorf("%s: expected key %d, %d to be %q; got %q", errInfo(), i, j, expKey, key)
+			}
+		}
+	}
+
+	// Check the ResumeKey.
+	for i, res := range results {
+		key := res.ResumeKey
+		var expKey roachpb.Key
+		if len(expResults[i]) > 0 {
+			// The expected ResumeKey is the next key after the last key that
+			// has been deleted.
+			expKey = roachpb.Key(expResults[i][len(expResults[i])-1]).Next()
+		}
+		// Until a request is processed the ResumeKey is set to the start key.
+		if bound <= maxBounds[i] {
+			expKey = roachpb.Key(startKeys[i])
+		}
+		if bound > maxBounds[i+1] {
+			// Once a request is fully processed the ResumeKey is after the end key
+			//if !key.Equal(expKey) {
+			//	t.Errorf("%s: (%d, %d) expected key to be nil; got %q", errInfo(), i, bound, key)
+			//}
+			if key == nil {
+				t.Errorf("%s: (%d, %d) expected key to be non nil; got %q", errInfo(), i, bound, key)
+			}
+		} else if !key.Equal(expKey) {
+			t.Errorf("%s: (%d, %d) expected key to be %q; got %q", errInfo(), i, bound, expKey, key)
+		}
+	}
+}
+
 func TestMultiRangeBoundedBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -165,6 +211,114 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 			rem -= len(expResults[i])
 		}
 		checkScanResults(t, b.Results, expResults)
+	}
+}
+
+// Tests a batch of bounded DelRange() requests.
+func TestMultiRangeBoundedBatchWithDelRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f", "g", "h")
+
+	for bound := 1; bound <= 20; bound++ {
+		// Initialize all keys.
+		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3", "g1", "g2", "h1"} {
+			if err := db.Put(key, "value"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		b := db.NewBatch()
+		b.Header.MaxSpanRequestKeys = int64(bound)
+
+		b.DelRange("a", "c", true)
+		b.DelRange("c", "f", true)
+		b.DelRange("g", "h", true)
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+
+		// These are the expected results if there is no bound; we trim them below.
+		expResults := [][]string{
+			{"a1", "a2", "a3", "b1", "b2"},
+			{"c1", "c2", "d1"},
+			{"g1", "g2"},
+		}
+		// List all the startKeys from the key spans above.
+		startKeys := []string{"a", "c", "g"}
+		// maxBounds marks the boundaries of the different spans. A dmmy value
+		// of 0 is added for the start of the first span.
+		maxBounds := []int{0}
+		count := 0
+		for _, result := range expResults {
+			count += len(result)
+			maxBounds = append(maxBounds, count)
+		}
+		rem := bound
+		for i := range expResults {
+			if rem < len(expResults[i]) {
+				expResults[i] = expResults[i][:rem]
+			}
+			rem -= len(expResults[i])
+		}
+		checkDelRangeResults(t, b.Results, expResults, bound, maxBounds, startKeys)
+	}
+}
+
+// Tests a batch of bounded DelRange() requests deleting key ranges that
+// overlap.
+func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+
+	for bound := 1; bound <= 20; bound++ {
+		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "b3", "c1", "c2", "d1", "f1", "f2", "f3"} {
+			if err := db.Put(key, "value"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		b := db.NewBatch()
+		b.Header.MaxSpanRequestKeys = int64(bound)
+
+		b.DelRange("a", "b3", true)
+		b.DelRange("b", "d", true)
+		b.DelRange("c", "g", true)
+		b.DelRange("f1a", "g", true)
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+
+		// These are the expected results if there is no bound; we trim them below.
+		expResults := [][]string{
+			{"a1", "a2", "a3", "b1", "b2"},
+			{"b3", "c1", "c2"},
+			{"d1", "f1", "f2", "f3"},
+			{},
+		}
+		// List all the startKeys from the key spans above.
+		startKeys := []string{"a", "b", "c", "f1a"}
+		// maxBounds marks the boundaries of the different spans. A dmmy value
+		// of 0 is added for the start of the first span.
+		maxBounds := []int{0}
+		count := 0
+		for _, result := range expResults {
+			count += len(result)
+			maxBounds = append(maxBounds, count)
+		}
+		rem := bound
+		for i := range expResults {
+			if rem < len(expResults[i]) {
+				expResults[i] = expResults[i][:rem]
+			}
+			rem -= len(expResults[i])
+		}
+		checkDelRangeResults(t, b.Results, expResults, bound, maxBounds, startKeys)
 	}
 }
 

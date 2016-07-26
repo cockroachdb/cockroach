@@ -52,6 +52,22 @@ message ResponseHeader {
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
   optional Transaction txn = 3;
+  // The batch can be configured with a max_span_request_keys bound
+  // that bounds the number of keys that the span requests in a batch
+  // can operate on. This Completion message is returned on every span
+  // request response within a batch that is bound.
+  message Completion {
+    // The next key to resume from when a bound on the
+    // keys is set through max_span_request_keys in the batch header.
+    // A value greater than the end key is set when the entire span
+    // of keys have been operated on. It is set to the original start
+    // key of the span if the request was ignored because
+    // max_span_request_keys was hit due to another request in the batch.
+    optional bytes resume_key = 1 [(gogoproto.casttype) = "Key"];
+    // The number of keys operated on.
+    optional int64 num_keys = 2 [(gogoproto.nullable) = false];
+  }
+  optional Completion completion = 4;
 }
 
 // A GetRequest is the argument for the Get() method.

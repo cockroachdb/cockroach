@@ -535,16 +535,26 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	}
 
 	if ba.MaxSpanRequestKeys != 0 {
-		// Verify that the batch contains only Scan or ReverseScan requests.
+		// Verify that the batch contains only range requests or the
+		// Begin/EndTransactionRequest. Verify that it cannot contain both
+		// Scan and ReverseScan requests.
 		fwd, rev := false, false
 		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
+			inner := req.GetInner()
+			switch inner.(type) {
 			case *roachpb.ScanRequest:
 				fwd = true
+
 			case *roachpb.ReverseScanRequest:
 				rev = true
+
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+				continue
+
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+				if !roachpb.IsRange(inner) {
+					return nil, roachpb.NewErrorf("batch with limit contains %T request", inner)
+				}
 			}
 		}
 		if fwd && rev {
@@ -828,12 +838,26 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 					union := roachpb.ResponseUnion{}
 					var reply roachpb.Response
-					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
+					switch t := req.GetInner().(type) {
+					case *roachpb.ScanRequest:
 						reply = &roachpb.ScanResponse{}
-					} else {
-						_ = req.GetInner().(*roachpb.ReverseScanRequest)
+
+					case *roachpb.ReverseScanRequest:
 						reply = &roachpb.ReverseScanResponse{}
+
+					case *roachpb.DeleteRangeRequest:
+						reply = &roachpb.DeleteRangeResponse{}
+
+					case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+						continue
+
+					default:
+						panic(fmt.Sprintf("bad type %T", t))
 					}
+					// Set the resume key to the start key
+					hdr := reply.Header()
+					hdr.Completion = &roachpb.ResponseHeader_Completion{ResumeKey: req.GetInner().Header().Key}
+					reply.SetHeader(hdr)
 					union.MustSetInner(reply)
 					br.Responses[i] = union
 				}
