@@ -76,10 +76,11 @@ System.config({
     "enzyme": "npm:enzyme@2.4.1",
     "es6-promise": "npm:es6-promise@3.2.1",
     "fetch-mock": "npm:fetch-mock@5.0.3",
-    "lodash": "npm:lodash@4.13.1",
+    "lodash": "npm:lodash@4.14.0",
     "long": "npm:long@3.2.0",
     "moment": "npm:moment@2.14.1",
     "nvd3": "npm:nvd3@1.8.4",
+    "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
     "react": "npm:react@15.2.1",
     "react-addons-test-utils": "npm:react-addons-test-utils@15.2.1",
@@ -92,15 +93,15 @@ System.config({
     "redux-thunk": "npm:redux-thunk@2.1.0",
     "reselect": "npm:reselect@2.5.3",
     "sinon": "npm:sinon@1.17.4",
-    "ts": "github:frankwallis/plugin-typescript@4.0.16",
+    "ts": "github:frankwallis/plugin-typescript@5.0.8",
     "ts-runtime": "npm:babel-runtime@6.9.2",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
-    "github:frankwallis/plugin-typescript@4.0.16": {
-      "typescript": "npm:typescript@1.8.10"
+    "github:frankwallis/plugin-typescript@5.0.8": {
+      "typescript": "npm:typescript@2.0.0"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
       "assert": "npm:assert@1.4.1"
@@ -370,7 +371,7 @@ System.config({
       "entities": "npm:entities@1.1.1",
       "htmlparser2": "npm:htmlparser2@3.8.3",
       "jsdom": "npm:jsdom@7.2.2",
-      "lodash": "npm:lodash@4.13.1",
+      "lodash": "npm:lodash@4.14.0",
       "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
     "npm:cipher-base@1.0.2": {
@@ -543,7 +544,7 @@ System.config({
     "npm:enzyme@2.4.1": {
       "cheerio": "npm:cheerio@0.20.0",
       "is-subset": "npm:is-subset@0.1.1",
-      "lodash": "npm:lodash@4.13.1",
+      "lodash": "npm:lodash@4.14.0",
       "object-is": "npm:object-is@1.0.1",
       "object.assign": "npm:object.assign@4.0.4",
       "object.values": "npm:object.values@1.0.3",
@@ -779,7 +780,7 @@ System.config({
       "sax": "npm:sax@1.2.1",
       "symbol-tree": "npm:symbol-tree@3.1.4",
       "systemjs-json": "github:systemjs/plugin-json@0.1.2",
-      "tough-cookie": "npm:tough-cookie@2.3.0",
+      "tough-cookie": "npm:tough-cookie@2.3.1",
       "url": "github:jspm/nodelibs-url@0.1.0",
       "util": "github:jspm/nodelibs-util@0.1.0",
       "webidl-conversions": "npm:webidl-conversions@2.0.1",
@@ -804,10 +805,6 @@ System.config({
     "npm:levn@0.3.0": {
       "prelude-ls": "npm:prelude-ls@1.1.2",
       "type-check": "npm:type-check@0.3.2"
-    },
-    "npm:lodash@4.13.1": {
-      "buffer": "github:jspm/nodelibs-buffer@0.1.0",
-      "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:long@3.2.0": {
       "fs": "github:jspm/nodelibs-fs@0.1.2",
@@ -998,7 +995,7 @@ System.config({
     "npm:react-redux@4.4.5": {
       "hoist-non-react-statics": "npm:hoist-non-react-statics@1.2.0",
       "invariant": "npm:invariant@2.2.1",
-      "lodash": "npm:lodash@4.13.1",
+      "lodash": "npm:lodash@4.14.0",
       "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "react": "npm:react@15.2.1",
@@ -1041,8 +1038,8 @@ System.config({
       "util-deprecate": "npm:util-deprecate@1.0.2"
     },
     "npm:redux@3.5.2": {
-      "lodash": "npm:lodash@4.13.1",
-      "lodash-es": "npm:lodash-es@4.13.1",
+      "lodash": "npm:lodash@4.14.0",
+      "lodash-es": "npm:lodash-es@4.14.0",
       "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "symbol-observable": "npm:symbol-observable@0.2.4"
@@ -1079,7 +1076,7 @@ System.config({
       "querystring": "github:jspm/nodelibs-querystring@0.1.0",
       "stream": "github:jspm/nodelibs-stream@0.1.0",
       "stringstream": "npm:stringstream@0.0.5",
-      "tough-cookie": "npm:tough-cookie@2.3.0",
+      "tough-cookie": "npm:tough-cookie@2.3.1",
       "tunnel-agent": "npm:tunnel-agent@0.4.3",
       "url": "github:jspm/nodelibs-url@0.1.0",
       "util": "github:jspm/nodelibs-util@0.1.0",
@@ -1166,7 +1163,7 @@ System.config({
     "npm:timers-browserify@1.4.2": {
       "process": "npm:process@0.11.5"
     },
-    "npm:tough-cookie@2.3.0": {
+    "npm:tough-cookie@2.3.1": {
       "net": "github:jspm/nodelibs-net@0.1.2",
       "punycode": "github:jspm/nodelibs-punycode@0.1.0",
       "systemjs-json": "github:systemjs/plugin-json@0.1.2",
@@ -1193,6 +1190,10 @@ System.config({
       "prelude-ls": "npm:prelude-ls@1.1.2"
     },
     "npm:typescript@1.8.10": {
+      "os": "github:jspm/nodelibs-os@0.1.0"
+    },
+    "npm:typescript@2.0.0": {
+      "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "os": "github:jspm/nodelibs-os@0.1.0"
     },
     "npm:ua-parser-js@0.7.10": {

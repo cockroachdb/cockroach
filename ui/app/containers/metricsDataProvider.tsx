@@ -13,9 +13,7 @@ import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
 
 type TSQueryMessage = cockroach.ts.tspb.QueryMessage;
-type TSQuery = cockroach.ts.tspb.Query;
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 /**
  * TimeSeriesQueryAggregator is an enumeration used by Cockroach's time series
