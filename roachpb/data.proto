@@ -115,12 +115,7 @@ message StoreIdent {
 message SplitTrigger {
   optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
-
-  // initial_leader_store_id designates the replica which should start
-  // a raft election upon processing this split.
-  optional int32 initial_leader_store_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "InitialLeaderStoreID",
-      (gogoproto.casttype) = "StoreID"];
+  reserved 3;
 }
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
