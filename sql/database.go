@@ -108,6 +108,12 @@ type DatabaseAccessor interface {
 	// uses the descriptor cache if possible, otherwise falls back to KV
 	// operations.
 	getDatabaseID(name string) (sqlbase.ID, error)
+
+	// createDatabase attempts to create a database with the provided DatabaseDescriptor.
+	// Returns true if the database is actually created, false if it already existed,
+	// or an error if one was encountered. The ifNotExists flag is used to declare
+	// if the "already existed" state should be an error (false) or a no-op (true).
+	createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error)
 }
 
 var _ DatabaseAccessor = &planner{}
@@ -193,4 +199,9 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 
 	p.databaseCache.setID(name, desc.ID)
 	return desc.ID, nil
+}
+
+// createDatabase implements the DatabaseAccessor interface.
+func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error) {
+	return p.createDescriptor(databaseKey{desc.Name}, desc, ifNotExists)
 }
