@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -279,21 +280,35 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	defer stopper.Stop()
 
 	splitKey := roachpb.Key("a")
-	concurrentCount := int32(10)
-	wg := sync.WaitGroup{}
-	wg.Add(int(concurrentCount))
-	failureCount := int32(0)
-	for i := int32(0); i < concurrentCount; i++ {
+	concurrentCount := 10
+	errCh := make(chan *roachpb.Error, concurrentCount)
+	for i := 0; i < concurrentCount; i++ {
 		go func() {
 			args := adminSplitArgs(roachpb.KeyMin, splitKey)
 			_, pErr := client.SendWrapped(rg1(store), nil, &args)
-			if pErr != nil {
-				atomic.AddInt32(&failureCount, 1)
-			}
-			wg.Done()
+			errCh <- pErr
 		}()
 	}
-	wg.Wait()
+
+	var failureCount int
+	for i := 0; i < concurrentCount; i++ {
+		pErr := <-errCh
+		if pErr != nil {
+			// There are only three expected errors from concurrent splits:
+			// conflicting range descriptors if the splits are initiated
+			// concurrently, the range is already split at the specified key or the
+			// split key is outside of the bounds for the range.
+			expected := strings.Join([]string{
+				"conflict updating range descriptors",
+				"range is already split at key",
+				"key range .* outside of bounds of range",
+			}, "|")
+			if !testutils.IsError(pErr.GoError(), expected) {
+				t.Fatalf("unexpected error: %v", pErr)
+			}
+			failureCount++
+		}
+	}
 	if failureCount != concurrentCount-1 {
 		t.Fatalf("concurrent splits succeeded unexpectedly; failureCount=%d", failureCount)
 	}
