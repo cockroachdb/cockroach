@@ -45,7 +45,9 @@ type DescriptorAccessor interface {
 
 	// createDescriptor takes a Table or Database descriptor and creates it if
 	// needed, incrementing the descriptor counter. Returns true if the descriptor
-	// is actually created, false if it already existed.
+	// is actually created, false if it already existed, or an error if one was encountered.
+	// The ifNotExists flag is used to declare if the "already existed" state should be an
+	// error (false) or a no-op (true).
 	createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error)
 
 	// getDescriptor looks up the descriptor for `plainKey`, validates it,
