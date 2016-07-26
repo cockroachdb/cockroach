@@ -71,7 +71,7 @@ func (n *createDatabaseNode) expandPlan() error {
 func (n *createDatabaseNode) Start() error {
 	desc := makeDatabaseDesc(n.n)
 
-	created, err := n.p.createDescriptor(databaseKey{string(n.n.Name)}, &desc, n.n.IfNotExists)
+	created, err := n.p.createDatabase(&desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}
