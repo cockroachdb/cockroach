@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -98,7 +99,7 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	network := simulation.NewNetwork(3)
+	network := simulation.NewNetwork(3, true)
 	defer network.Stop()
 
 	// Set storage for each of the nodes.
@@ -204,6 +205,57 @@ func TestGossipStorage(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
 			return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
+		}
+		return nil
+	})
+}
+
+// TestGossipStorageCleanup verifies that bad resolvers are purged
+// from the bootstrap info after gossip has successfully connected.
+func TestGossipStorageCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	network := simulation.NewNetwork(3, false)
+	defer network.Stop()
+
+	const invalidAddr = "10.10.10.10.10:3333333"
+	// Set storage for each of the nodes.
+	addresses := make(unresolvedAddrSlice, len(network.Nodes))
+	stores := make([]testStorage, len(network.Nodes))
+	for i, n := range network.Nodes {
+		addresses[i] = util.MakeUnresolvedAddr(n.Addr.Network(), n.Addr.String())
+		// Pre-add an invalid address to each gossip storage.
+		stores[i].WriteBootstrapInfo(&gossip.BootstrapInfo{
+			Addresses: []util.UnresolvedAddr{
+				util.MakeUnresolvedAddr("tcp", network.Nodes[(i+1)%3].Addr.String()), // node i+1 address
+				util.MakeUnresolvedAddr("tcp", invalidAddr),                          // invalid address
+			},
+		})
+		if err := n.Gossip.SetStorage(&stores[i]); err != nil {
+			t.Fatal(err)
+		}
+		n.Gossip.SetStallInterval(1 * time.Millisecond)
+		n.Gossip.SetBootstrapInterval(1 * time.Millisecond)
+	}
+
+	// Wait for the gossip network to connect.
+	network.RunUntilFullyConnected()
+
+	// Wait long enough for storage to get the expected number of
+	// addresses and no pending cleanups.
+	util.SucceedsSoon(t, func() error {
+		for i := range stores {
+			p := &stores[i]
+
+			if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, p.Len(); expected != actual {
+				return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, p.Info().Addresses)
+			}
+			for _, addr := range p.Info().Addresses {
+				if addr.String() == invalidAddr {
+					log.Infof("node %d has invalid address", i)
+					return errors.Errorf("node %d still needs bootstrap cleanup", i)
+				}
+			}
 		}
 		return nil
 	})

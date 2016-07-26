@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -43,6 +45,11 @@ const (
 	// TODO(tamird): make culling of outbound streams more evented, so that we
 	// need not rely on this timeout to shut things down.
 	raftIdleTimeout = time.Minute
+)
+
+var (
+	// Initial retry backoff for resolving node ID -> Address.
+	InitialResolveBackoff = time.Second
 )
 
 type raftMessageHandler func(*RaftMessageRequest) error
@@ -85,8 +92,9 @@ type RaftTransport struct {
 
 	mu struct {
 		syncutil.Mutex
-		handlers map[roachpb.StoreID]raftMessageHandler
-		queues   map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
+		handlers    map[roachpb.StoreID]raftMessageHandler
+		queues      map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
+		addrLookups map[roachpb.NodeID]chan struct{}
 	}
 }
 
@@ -106,6 +114,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
 	t.mu.queues = make(map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
+	t.mu.addrLookups = make(map[roachpb.NodeID]chan struct{})
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -170,6 +179,53 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 	t.mu.Unlock()
 }
 
+// This method handles backoff / retry for nodes which aren't being
+// communicated by gossip (yet -- as in the case of reconstituting a
+// cluster from copied data or after a long downtime)
+func (t *RaftTransport) resolveNodeID(nodeID roachpb.NodeID) (net.Addr, error) {
+	t.mu.Lock()
+	ch, ok := t.mu.addrLookups[nodeID]
+	if !ok {
+		ch = make(chan struct{})
+		t.mu.addrLookups[nodeID] = ch
+	}
+	t.mu.Unlock()
+	if ok {
+		select {
+		case <-ch:
+			return t.resolver(nodeID)
+		case <-t.rpcContext.Stopper.ShouldQuiesce():
+			return nil, errors.Errorf("address resolution for %s stopped before completion", nodeID)
+		}
+	}
+
+	defer func() {
+		t.mu.Lock()
+		delete(t.mu.addrLookups, nodeID)
+		t.mu.Unlock()
+	}()
+
+	opts := retry.Options{
+		InitialBackoff: InitialResolveBackoff,
+		MaxBackoff:     10 * time.Second,
+		Multiplier:     2,
+		Closer:         t.rpcContext.Stopper.ShouldQuiesce(),
+	}
+	for r := retry.Start(opts); r.Next(); {
+		addr, err := t.resolver(nodeID)
+		if err == nil {
+			close(ch)
+			if r.CurrentAttempt() > 0 {
+				log.Infof(context.TODO(), "address resolution for %s succeeded: %s", nodeID, addr)
+			}
+			return addr, nil
+		} else if r.CurrentAttempt() == 0 {
+			log.Warningf(context.TODO(), "failing address resolution for %s: %s", nodeID, err)
+		}
+	}
+	return nil, errors.Errorf("address resolution for %s stopped before completion", nodeID)
+}
+
 // processQueue creates a client and sends messages from its designated queue
 // via that client, exiting when the client fails or when it idles out. All
 // messages remaining in the queue at that point are lost and a new instance of
@@ -178,7 +234,7 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
 func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roachpb.ReplicaDescriptor) error {
-	addr, err := t.resolver(toReplica.NodeID)
+	addr, err := t.resolveNodeID(toReplica.NodeID)
 	if err != nil {
 		return err
 	}

@@ -272,6 +272,35 @@ func TestSendAndReceive(t *testing.T) {
 	}
 }
 
+func sendRaftMessage(t *testing.T, fromNID, toNID roachpb.NodeID, fromSID, toSID roachpb.StoreID,
+	fromRID, toRID roachpb.ReplicaID, idx int, client *storage.RaftTransport) {
+	req := &storage.RaftMessageRequest{
+		RangeID: 1,
+		Message: raftpb.Message{
+			To:     uint64(toNID),
+			From:   uint64(fromNID),
+			Commit: uint64(idx),
+		},
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    toNID,
+			StoreID:   toSID,
+			ReplicaID: toRID,
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:    fromNID,
+			StoreID:   fromSID,
+			ReplicaID: fromRID,
+		},
+	}
+	if !client.MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		if err != nil && !grpcutil.IsClosedConnection(err) {
+			panic(err)
+		}
+	}).SendAsync(req) {
+		t.Errorf("failed to send message %d", idx)
+	}
+}
+
 // TestInOrderDelivery verifies that for a given pair of nodes, raft
 // messages are delivered in order.
 func TestInOrderDelivery(t *testing.T) {
@@ -307,37 +336,73 @@ func TestInOrderDelivery(t *testing.T) {
 	clientTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), nil, nodeRPCContext)
 
 	for i := 0; i < numMessages; i++ {
-		req := &storage.RaftMessageRequest{
-			RangeID: 1,
-			Message: raftpb.Message{
-				To:     uint64(nodeID),
-				From:   uint64(clientNodeID),
-				Commit: uint64(i),
-			},
-			ToReplica: roachpb.ReplicaDescriptor{
-				NodeID:    nodeID,
-				StoreID:   roachpb.StoreID(nodeID),
-				ReplicaID: roachpb.ReplicaID(nodeID),
-			},
-			FromReplica: roachpb.ReplicaDescriptor{
-				NodeID:    clientNodeID,
-				StoreID:   roachpb.StoreID(clientNodeID),
-				ReplicaID: roachpb.ReplicaID(clientNodeID),
-			},
-		}
-		if !clientTransport.MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
-			if err != nil && !grpcutil.IsClosedConnection(err) {
-				panic(err)
-			}
-		}).SendAsync(req) {
-			t.Errorf("failed to send message %d", i)
-		}
+		sendRaftMessage(t, clientNodeID, nodeID, 1, 2, 1, 2, i, clientTransport)
 	}
 
 	for i := 0; i < numMessages; i++ {
 		req := <-serverChannel.ch
 		if req.Message.Commit != uint64(i) {
 			t.Errorf("messages out of order: got %d while expecting %d", req.Message.Commit, i)
+		}
+	}
+}
+
+// TestRaftTransportResolver verifies that messages will queue up
+// waiting for resolver to succeed.
+func TestRaftTransportResolver(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
+	g := gossip.New(nodeRPCContext, nil, stopper)
+
+	oldIRB := storage.InitialResolveBackoff
+	storage.InitialResolveBackoff = 1 * time.Millisecond
+	defer func() {
+		storage.InitialResolveBackoff = oldIRB
+	}()
+
+	grpcServer := rpc.NewServer(nodeRPCContext)
+	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nodeID := roachpb.NodeID(roachpb.NodeID(2))
+	serverTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
+	serverChannel := newChannelServer(10, 10*time.Millisecond)
+	serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage)
+
+	clientNodeID := roachpb.NodeID(2)
+	clientTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), nil, nodeRPCContext)
+
+	// Send two messages from client to two different replicas.
+	sendRaftMessage(t, clientNodeID, nodeID, 1, 2, 1, 2, 0, clientTransport)
+	sendRaftMessage(t, clientNodeID, nodeID, 1, 2, 3, 4, 1, clientTransport)
+
+	// None should go through as the receiving node's address has not been gossiped.
+	select {
+	case req := <-serverChannel.ch:
+		t.Fatalf("should not have received any Raft messages from client: %s", req)
+	case <-time.After(10 * time.Millisecond):
+	}
+
+	// Now, gossip address of server.
+	addr := ln.Addr()
+	g.SetNodeID(nodeID)
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
+		&roachpb.NodeDescriptor{
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		},
+		time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify both messages are sent to the server.
+	for i := 0; i < 2; i++ {
+		req := <-serverChannel.ch
+		if req.Message.Commit != 0 && req.Message.Commit != 1 {
+			t.Errorf("expected message 1 or 2 at index %d; got %s", i, req)
 		}
 	}
 }
