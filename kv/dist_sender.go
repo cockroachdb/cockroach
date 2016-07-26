@@ -554,20 +554,27 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	}
 
 	if ba.MaxSpanRequestKeys != 0 {
-		// Verify that the batch contains only Scan or ReverseScan requests.
-		fwd, rev := false, false
+		// Verify that the batch contains only specific range requests or the
+		// Begin/EndTransactionRequest. Verify that a batch with a ReverseScan
+		// only contains ReverseScan range requests.
+		isReverse := ba.IsReverse()
 		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
-			case *roachpb.ScanRequest:
-				fwd = true
-			case *roachpb.ReverseScanRequest:
-				rev = true
+			inner := req.GetInner()
+			switch inner.(type) {
+			case *roachpb.ScanRequest, *roachpb.DeleteRangeRequest:
+				// Accepted range requests. All other range requests are still
+				// not supported.
+				// TODO(vivek): don't enumerate all range requests.
+				if isReverse {
+					return nil, roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
+				}
+
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
+				continue
+
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+				return nil, roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
-		}
-		if fwd && rev {
-			return nil, roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 		}
 	}
 
@@ -823,45 +830,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 		}
 
-		if ba.MaxSpanRequestKeys > 0 {
-			// Count how many results we received.
-			var numResults int64
-			for _, resp := range curReply.Responses {
-				if cResp, ok := resp.GetInner().(roachpb.Countable); ok {
-					numResults += cResp.Count()
-				}
-			}
-			if numResults > ba.MaxSpanRequestKeys {
-				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
-			}
-			ba.MaxSpanRequestKeys -= numResults
-			if ba.MaxSpanRequestKeys == 0 {
-				// We are done with this batch. Some requests might have NoopResponses; we must
-				// replace them with empty responses of the proper type.
-				for i, req := range ba.Requests {
-					if _, ok := br.Responses[i].GetInner().(*roachpb.NoopResponse); !ok {
-						continue
-					}
-					union := roachpb.ResponseUnion{}
-					var reply roachpb.Response
-					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
-						reply = &roachpb.ScanResponse{}
-					} else {
-						_ = req.GetInner().(*roachpb.ReverseScanRequest)
-						reply = &roachpb.ReverseScanResponse{}
-					}
-					union.MustSetInner(reply)
-					br.Responses[i] = union
-				}
-				return br, nil, false
-			}
-		}
-
-		// If this was the last range accessed by this call, exit loop.
-		if !needAnother {
-			return br, nil, false
-		}
-
 		if isReverse {
 			// In next iteration, query previous range.
 			// We use the StartKey of the current descriptor as opposed to the
@@ -882,12 +850,108 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			return nil, roachpb.NewError(err), false
 		}
 
+		if ba.MaxSpanRequestKeys > 0 {
+			// Count how many results we received.
+			var numResults int64
+			for _, resp := range curReply.Responses {
+				numResults += resp.GetInner().Header().NumKeys
+			}
+			if numResults > ba.MaxSpanRequestKeys {
+				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
+			}
+			ba.MaxSpanRequestKeys -= numResults
+			if ba.MaxSpanRequestKeys == 0 {
+				// prepare the batch response after the max key limit has been
+				// met.
+				prepareBatchResponse(ba, br, rs)
+				// done, exit loop.
+				return br, nil, false
+			}
+		}
+
+		// If this was the last range accessed by this call, exit loop.
+		if !needAnother {
+			return br, nil, false
+		}
+
 		// key cannot be less that the end key.
 		if !rs.Key.Less(rs.EndKey) {
 			panic(fmt.Sprintf("start key %s is less than %s", rs.Key, rs.EndKey))
 		}
 
 		log.Trace(ctx, "querying next range")
+	}
+
+	return br, nil, false
+}
+
+// prepareBatchResponse after batch key max limit has been met.
+func prepareBatchResponse(ba roachpb.BatchRequest, br *roachpb.BatchResponse, rs roachpb.RSpan) {
+	// Some requests might have NoopResponses; we must replace them with empty
+	// responses of the proper type.
+	for i, req := range ba.Requests {
+		if _, ok := br.Responses[i].GetInner().(*roachpb.NoopResponse); !ok {
+			continue
+		}
+		var reply roachpb.Response
+		switch t := req.GetInner().(type) {
+		case *roachpb.ScanRequest:
+			reply = &roachpb.ScanResponse{}
+
+		case *roachpb.ReverseScanRequest:
+			reply = &roachpb.ReverseScanResponse{}
+
+		case *roachpb.DeleteRangeRequest:
+			reply = &roachpb.DeleteRangeResponse{}
+
+		case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+			continue
+
+		default:
+			panic(fmt.Sprintf("bad type %T", t))
+		}
+		union := roachpb.ResponseUnion{}
+		union.MustSetInner(reply)
+		br.Responses[i] = union
+	}
+	// Set the ResumeSpan for future batch requests.
+	isReverse := ba.IsReverse()
+	for i, resp := range br.Responses {
+		req := ba.Requests[i].GetInner()
+		if !roachpb.IsRange(req) {
+			continue
+		}
+		hdr := resp.GetInner().Header()
+		span := req.Header()
+		if isReverse {
+			if hdr.ResumeSpan != nil {
+				// The ResumeSpan.Key might be set to the StartKey of a range;
+				// correctly set it to the Key of the original request span.
+				hdr.ResumeSpan.Key = span.Key
+			} else if roachpb.RKey(span.Key).Less(rs.EndKey) {
+				// Some keys have yet to be processed.
+				hdr.ResumeSpan = &span
+				if rs.EndKey.Less(roachpb.RKey(span.EndKey)) {
+					// The original span has been partially processed.
+					hdr.ResumeSpan.EndKey = rs.EndKey.AsRawKey()
+				}
+			}
+		} else {
+			if hdr.ResumeSpan != nil {
+				// The ResumeSpan.EndKey might be set to the EndKey of a
+				// range; correctly set it to the EndKey of the original
+				// request span.
+				hdr.ResumeSpan.EndKey = span.EndKey
+			} else if rs.Key.Less(roachpb.RKey(span.EndKey)) {
+				// Some keys have yet to be processed.
+				hdr.ResumeSpan = &span
+				if roachpb.RKey(span.Key).Less(rs.Key) {
+					// The original span has been partially processed.
+					hdr.ResumeSpan.Key = rs.Key.AsRawKey()
+				}
+			}
+		}
+		br.Responses[i].GetInner().SetHeader(hdr)
 	}
 }
 
