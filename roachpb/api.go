@@ -150,6 +150,8 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	if rh.Txn != nil && otherRH.Txn == nil {
 		rh.Txn = nil
 	}
+	rh.ResumeSpan = otherRH.ResumeSpan
+	rh.NumKeys += otherRH.NumKeys
 	return nil
 }
 
@@ -175,6 +177,7 @@ func (sr *ReverseScanResponse) combine(c combinable) error {
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
+
 	}
 	return nil
 }
@@ -342,22 +345,6 @@ func (ru *ResponseUnion) MustSetInner(reply Response) {
 	if !ru.SetValue(reply) {
 		panic(fmt.Sprintf("%T excludes %T", ru, reply))
 	}
-}
-
-// Countable is implemented by response types which have a number of
-// result rows, such as Scan.
-type Countable interface {
-	Count() int64
-}
-
-// Count returns the number of rows in ScanResponse.
-func (sr *ScanResponse) Count() int64 {
-	return int64(len(sr.Rows))
-}
-
-// Count returns the number of rows in ReverseScanResponse.
-func (sr *ReverseScanResponse) Count() int64 {
-	return int64(len(sr.Rows))
 }
 
 // Method implements the Request interface.
