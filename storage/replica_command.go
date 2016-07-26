@@ -2647,11 +2647,6 @@ func (r *Replica) splitTrigger(
 	// Preserve stats for presplit range, excluding the current batch.
 	origBothMS := r.GetMVCCStats()
 
-	// Account for MVCCStats' own contribution to the RHS range's statistics.
-	if err := engine.AccountForSelf(deltaMS, split.RightDesc.RangeID); err != nil {
-		return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
-	}
-
 	// TODO(d4l3k): we should check which side of the split is smaller
 	// and compute stats for it instead of having a constraint that the
 	// left hand side is smaller.
@@ -2689,25 +2684,6 @@ func (r *Replica) splitTrigger(
 		return errors.Wrap(err, "unable to copy abort cache to RHS split range")
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
-
-	// TODO(tschottdorf): This is subtle. We are about to commit our batch
-	// and communicate the split to the Store, but we are in fact already
-	// writing to the RHS range's key space (and in particular to the
-	// Raft state) in this batch. Between committing and telling the Store,
-	// we could race with an uninitialized version of our new Replica which
-	// might have been created by an incoming message from another node
-	// which already processed the split. We rely on synchronization provided
-	// at the Store level to avoid this. See #7860 and for history #7600.
-	// Note also that it is crucial that writeInitialState *absorbs* an
-	// existing HardState (which might contain a cast vote).
-	//
-	// The call below will persist some bogus stats for the right-hand side
-	// owing to the contract of writeInitialState, but they are fixed below.
-	// TODO(tschottdorf): might be able to avoid that by moving this down.
-	*deltaMS, err = writeInitialState(batch, *deltaMS, split.RightDesc)
-	if err != nil {
-		return errors.Wrap(err, "unable to write initial state")
-	}
 
 	// Initialize the right-hand lease to be the same as the left-hand lease.
 	// This looks like an innocuous performance improvement, but it's more than
@@ -2780,10 +2756,37 @@ func (r *Replica) splitTrigger(
 		rightMS.Subtract(leftMS)
 		rightMS.Add(*deltaMS)
 	}
-	if err := setMVCCStats(batch, split.RightDesc.RangeID, rightMS); err != nil {
-		return errors.Wrap(err, "unable to write MVCC stats")
+
+	// Now that we've computed the stats for the RHS so far, we persist them.
+	// This looks a bit more complicated than it really is: updating the stats
+	// also changes the stats, and we write not only the stats but a complete
+	// initial state.Additionally, since deltaMS is still tracking writes to
+	// both sides at this point, we need to update it as well.
+	{
+		preRightMS := rightMS // for deltaMS
+
+		// Account for MVCCStats' own contribution to the RHS range's statistics.
+		if err := engine.AccountForSelf(&rightMS, split.RightDesc.RangeID); err != nil {
+			return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
+		}
+
+		// TODO(tschottdorf): Writing the initial state is subtle since this
+		// also seeds the Raft group. We are writing to the right hand side's
+		// Raft group state in this batch. Between committing and telling the
+		// Store, we could race with an uninitialized version of our new
+		// Replica which might have been created by an incoming message from
+		// another node which already processed the split. We rely on
+		// synchronization provided at the Store level to avoid this. See #7860
+		// and for history #7600. Note also that it is crucial that
+		// writeInitialState *absorbs* an existing HardState (which might
+		// contain a cast vote).
+		rightMS, err = writeInitialState(batch, rightMS, split.RightDesc)
+		if err != nil {
+			return errors.Wrap(err, "unable to write initial state")
+		}
+		deltaMS.Subtract(preRightMS)
+		deltaMS.Add(rightMS)
 	}
-	log.Trace(ctx, "computed stats for RHS range")
 
 	bothDeltaMS := *deltaMS
 	// Up to this point, we've tracked the contributions for both halves of the
@@ -2792,9 +2795,9 @@ func (r *Replica) splitTrigger(
 	// We've already recomputed that in absolute terms, so all we need to do is
 	// to turn it into a delta so the upstream machinery can digest it.
 	{
-		*deltaMS = leftMS
+		*deltaMS = leftMS // start with new left-hand side absolute stats
 		r.mu.Lock()
-		deltaMS.Subtract(r.mu.state.Stats)
+		deltaMS.Subtract(r.mu.state.Stats) // subtract pre-split absolute stats
 		r.mu.Unlock()
 		deltaMS.ContainsEstimates = false // if there were any, recomputation removed them
 	}
