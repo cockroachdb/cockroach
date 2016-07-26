@@ -7,9 +7,7 @@ import * as protos from "../js/protos";
 import reducer, * as metrics from "./metrics";
 import { Action } from "../interfaces/action";
 
-type TSRequest = cockroach.ts.tspb.TimeSeriesQueryRequest;
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TSResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 describe("metrics reducer", function() {
   describe("actions", function() {

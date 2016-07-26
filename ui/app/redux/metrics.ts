@@ -13,7 +13,6 @@ import { Action, PayloadAction } from "../interfaces/action";
 import { queryTimeSeries } from "../util/api";
 
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TSResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
 type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 export const REQUEST = "cockroachui/metrics/REQUEST";
