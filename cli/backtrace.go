@@ -58,6 +58,7 @@ func initBacktrace(logDir string) *stop.Stopper {
 	tracer := bcd.New(bcd.NewOptions{
 		IncludeSystemGs: false,
 	})
+	tracer.SetOutputPath(logDir, 0755)
 
 	// Enable WARNING log output from the tracer.
 	tracer.AddOptions(nil, "-L", "WARNING")
