@@ -2336,6 +2336,9 @@ func (r *Replica) AdminSplit(
 			return err
 		}
 		if err := txn.Run(b); err != nil {
+			if _, ok := err.(*roachpb.ConditionFailedError); ok {
+				return errors.Errorf("conflict updating range descriptors")
+			}
 			return err
 		}
 		// Log the split into the range event log.
