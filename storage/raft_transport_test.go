@@ -272,6 +272,36 @@ func TestSendAndReceive(t *testing.T) {
 	}
 }
 
+func sendRaftMessage(t *testing.T,
+	fromNID roachpb.NodeID, fromSID roachpb.StoreID, fromRID roachpb.ReplicaID,
+	toNID roachpb.NodeID, toSID roachpb.StoreID, toRID roachpb.ReplicaID,
+	idx int, client *storage.RaftTransport) bool {
+	req := &storage.RaftMessageRequest{
+		RangeID: 1,
+		Message: raftpb.Message{
+			To:     uint64(toNID),
+			From:   uint64(fromNID),
+			Commit: uint64(idx),
+		},
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    toNID,
+			StoreID:   toSID,
+			ReplicaID: toRID,
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:    fromNID,
+			StoreID:   fromSID,
+			ReplicaID: fromRID,
+		},
+	}
+	sender := client.MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
+		if err != nil && !grpcutil.IsClosedConnection(err) {
+			t.Fatal(err)
+		}
+	})
+	return sender.SendAsync(req)
+}
+
 // TestInOrderDelivery verifies that for a given pair of nodes, raft
 // messages are delivered in order.
 func TestInOrderDelivery(t *testing.T) {
@@ -306,30 +336,12 @@ func TestInOrderDelivery(t *testing.T) {
 	clientNodeID := roachpb.NodeID(2)
 	clientTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), nil, nodeRPCContext)
 
+	fromSID := roachpb.StoreID(1)
+	fromRID := roachpb.ReplicaID(1)
+	toSID := roachpb.StoreID(2)
+	toRID := roachpb.ReplicaID(2)
 	for i := 0; i < numMessages; i++ {
-		req := &storage.RaftMessageRequest{
-			RangeID: 1,
-			Message: raftpb.Message{
-				To:     uint64(nodeID),
-				From:   uint64(clientNodeID),
-				Commit: uint64(i),
-			},
-			ToReplica: roachpb.ReplicaDescriptor{
-				NodeID:    nodeID,
-				StoreID:   roachpb.StoreID(nodeID),
-				ReplicaID: roachpb.ReplicaID(nodeID),
-			},
-			FromReplica: roachpb.ReplicaDescriptor{
-				NodeID:    clientNodeID,
-				StoreID:   roachpb.StoreID(clientNodeID),
-				ReplicaID: roachpb.ReplicaID(clientNodeID),
-			},
-		}
-		if !clientTransport.MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
-			if err != nil && !grpcutil.IsClosedConnection(err) {
-				panic(err)
-			}
-		}).SendAsync(req) {
+		if !sendRaftMessage(t, clientNodeID, fromSID, fromRID, nodeID, toSID, toRID, i, clientTransport) {
 			t.Errorf("failed to send message %d", i)
 		}
 	}
@@ -339,5 +351,73 @@ func TestInOrderDelivery(t *testing.T) {
 		if req.Message.Commit != uint64(i) {
 			t.Errorf("messages out of order: got %d while expecting %d", req.Message.Commit, i)
 		}
+	}
+}
+
+// TestRaftTransportCircuitBreaker verifies that messages will be
+// dropped waiting for raft node connection to be established.
+func TestRaftTransportCircuitBreaker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
+	g := gossip.New(nodeRPCContext, nil, stopper)
+
+	grpcServer := rpc.NewServer(nodeRPCContext)
+	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nodeID := roachpb.NodeID(roachpb.NodeID(2))
+	serverTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
+	serverChannel := newChannelServer(10, 10*time.Millisecond)
+	serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage)
+
+	clientNodeID := roachpb.NodeID(2)
+	clientTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), nil, nodeRPCContext)
+
+	fromSID := roachpb.StoreID(1)
+	fromRID := roachpb.ReplicaID(1)
+	toSID := roachpb.StoreID(2)
+	toRID := roachpb.ReplicaID(2)
+	if sendRaftMessage(t, clientNodeID, fromSID, fromRID, nodeID, toSID, toRID, 1, clientTransport) {
+		t.Errorf("succeeded in sending when message should be dropped")
+	}
+
+	// None should go through as the receiving node's address has not been gossiped.
+	select {
+	case req := <-serverChannel.ch:
+		t.Fatalf("should not have received any Raft messages from client: %s", req)
+	default:
+	}
+
+	// Now, gossip address of server.
+	addr := ln.Addr()
+	g.SetNodeID(nodeID)
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
+		&roachpb.NodeDescriptor{
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		},
+		time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// Message was dropped, not queued, so still shouldn't just appear.
+	select {
+	case req := <-serverChannel.ch:
+		t.Fatalf("should not have received any Raft messages from client: %s", req)
+	default:
+	}
+
+	// Reset the circuit breaker & resend and verify message arrives at server.
+	clientTransport.GetCircuitBreaker(nodeID).Reset()
+	if !sendRaftMessage(t, clientNodeID, fromSID, fromRID, nodeID, toSID, toRID, 1, clientTransport) {
+		t.Errorf("sent raft message was unexpectedly dropped")
+	}
+
+	req := <-serverChannel.ch
+	if req.Message.Commit != 1 {
+		t.Errorf("expected message 1; got %s", req)
 	}
 }
