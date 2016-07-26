@@ -297,7 +297,9 @@ func (m *multiTestContext) Stop() {
 		wg.Wait()
 
 		for _, stopper := range m.stoppers {
-			stopper.Stop()
+			if stopper != nil {
+				stopper.Stop()
+			}
 		}
 		m.transportStopper.Stop()
 
