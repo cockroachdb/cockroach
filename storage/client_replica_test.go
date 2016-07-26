@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -506,14 +507,34 @@ func TestRangeTransferLease(t *testing.T) {
 	replica0 := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
 	replica1 := mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
 	gArgs := getArgs(leftKey)
-	replicaDesc, err := replica0.GetReplicaDescriptor()
+	replica0Desc, err := replica0.GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Check that replica0 can serve reads OK.
 	if _, pErr := client.SendWrappedWith(
-		mtc.senders[0], nil, roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+		mtc.senders[0], nil, roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
 		t.Fatal(pErr)
+	}
+
+	{
+		// Transferring the lease to ourself should be a no-op.
+		origLease, _ := replica0.GetLease()
+		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
+			t.Fatal(err)
+		}
+		newLease, _ := replica0.GetLease()
+		if origLease != newLease {
+			t.Fatalf("expected %+v, but found %+v", origLease, newLease)
+		}
+	}
+
+	{
+		// An invalid target should result in an error.
+		const expected = "unable to find store .* in range"
+		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
+			t.Fatalf("expected %s, but found %v", expected, err)
+		}
 	}
 
 	// Move the lease to store 1.
@@ -524,17 +545,17 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if pErr := replica0.AdminTransferLease(newHolderDesc); pErr != nil {
-		t.Fatal(pErr)
+	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
+		t.Fatal(err)
 	}
 
 	// Check that replica0 doesn't serve reads any more.
-	replicaDesc, err = replica0.GetReplicaDescriptor()
+	replica0Desc, err = replica0.GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, pErr := client.SendWrappedWith(
-		mtc.senders[0], nil, roachpb.Header{Replica: replicaDesc}, &gArgs)
+		mtc.senders[0], nil, roachpb.Header{Replica: replica0Desc}, &gArgs)
 	nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
 		t.Fatalf("Expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
@@ -547,7 +568,7 @@ func TestRangeTransferLease(t *testing.T) {
 	// Check that replica1 now has the lease (or gets it soon).
 	util.SucceedsSoon(t, func() error {
 		if _, pErr := client.SendWrappedWith(
-			mtc.senders[1], nil, roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+			mtc.senders[1], nil, roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -597,7 +618,7 @@ func TestRangeTransferLease(t *testing.T) {
 		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
 		if _, pErr := client.SendWrappedWith(
 			mtc.senders[1], nil,
-			roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+			roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
 			panic(pErr)
 		}
 	}()
@@ -609,8 +630,8 @@ func TestRangeTransferLease(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if pErr := replica1.AdminTransferLease(replicaDesc); pErr != nil {
-			panic(pErr)
+		if err := replica1.AdminTransferLease(replica0Desc.StoreID); err != nil {
+			panic(err)
 		}
 	}()
 	// Wait for the transfer to be blocked by the extension.
@@ -621,7 +642,7 @@ func TestRangeTransferLease(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if _, pErr := client.SendWrappedWith(
 			mtc.senders[0], nil,
-			roachpb.Header{Replica: replicaDesc}, &gArgs); pErr != nil {
+			roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil

@@ -363,6 +363,7 @@ func TestCommonMethods(t *testing.T) {
 		key{batchType, "MustPErr"}:             {},
 		key{dbType, "AdminMerge"}:              {},
 		key{dbType, "AdminSplit"}:              {},
+		key{dbType, "AdminTransferLease"}:      {},
 		key{dbType, "CheckConsistency"}:        {},
 		key{dbType, "NewBatch"}:                {},
 		key{dbType, "Run"}:                     {},
