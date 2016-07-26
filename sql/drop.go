@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
@@ -222,6 +223,11 @@ func (n *dropIndexNode) Start() error {
 					return err
 				}
 			}
+			if len(idx.Interleave.Ancestors) > 0 {
+				if err := n.p.removeInterleaveBackReference(tableDesc, idx); err != nil {
+					return err
+				}
+			}
 
 			for _, ref := range idx.ReferencedBy {
 				fetched, err := n.p.canRemoveFK(idx.Name, ref, n.n.DropBehavior)
@@ -229,6 +235,11 @@ func (n *dropIndexNode) Start() error {
 					return err
 				}
 				if err := n.p.removeFK(ref, fetched); err != nil {
+					return err
+				}
+			}
+			for _, ref := range idx.InterleavedBy {
+				if err := n.p.removeInterleave(ref); err != nil {
 					return err
 				}
 			}
@@ -320,6 +331,11 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 					return nil, err
 				}
 			}
+			for _, ref := range idx.InterleavedBy {
+				if err := p.canRemoveInterleave(droppedDesc.Name, ref, n.DropBehavior); err != nil {
+					return nil, err
+				}
+			}
 		}
 		td = append(td, droppedDesc)
 	}
@@ -350,6 +366,29 @@ func (p *planner) canRemoveFK(
 	return table, nil
 }
 
+func (p *planner) canRemoveInterleave(
+	from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
+) error {
+	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
+	if err != nil {
+		return err
+	}
+	// TODO(dan): It's possible to DROP a table that has a child interleave, but
+	// some loose ends would have to be addresssed. The zone would have to be
+	// kept and deleted when the last table in it is removed. Also, the dropped
+	// table's descriptor would have to be kept around in some Dropped but
+	// non-public state for referential integrity of the `InterleaveDescriptor`
+	// pointers.
+	if behavior != parser.DropCascade {
+		return util.UnimplementedWithIssueErrorf(
+			8036, "%q is interleaved by table %q", from, table.Name)
+	}
+	if err := p.checkPrivilege(table, privilege.CREATE); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *planner) removeFK(ref *sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor) error {
 	if table == nil {
 		var err error
@@ -363,6 +402,19 @@ func (p *planner) removeFK(ref *sqlbase.ForeignKeyReference, table *sqlbase.Tabl
 		return err
 	}
 	idx.ForeignKey = nil
+	return p.saveNonmutationAndNotify(table)
+}
+
+func (p *planner) removeInterleave(ref sqlbase.ForeignKeyReference) error {
+	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
+	if err != nil {
+		return err
+	}
+	idx, err := table.FindIndexByID(ref.Index)
+	if err != nil {
+		return err
+	}
+	idx.Interleave.Ancestors = nil
 	return p.saveNonmutationAndNotify(table)
 }
 
@@ -443,16 +495,26 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	// Remove FK relationships.
+	// Remove FK and interleave relationships.
 	for _, idx := range tableDesc.AllNonDropIndexes() {
 		if idx.ForeignKey != nil {
 			if err := p.removeFKBackReference(tableDesc, idx); err != nil {
 				return err
 			}
 		}
+		if len(idx.Interleave.Ancestors) > 0 {
+			if err := p.removeInterleaveBackReference(tableDesc, idx); err != nil {
+				return err
+			}
+		}
 		for _, ref := range idx.ReferencedBy {
 			// Nil forces re-fetching tables, since they may have been modified.
 			if err := p.removeFK(ref, nil); err != nil {
+				return err
+			}
+		}
+		for _, ref := range idx.InterleavedBy {
+			if err := p.removeInterleave(ref); err != nil {
 				return err
 			}
 		}
@@ -492,6 +554,29 @@ func (p *planner) removeFKBackReference(
 	for k, ref := range targetIdx.ReferencedBy {
 		if ref.Table == tableDesc.ID {
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
+		}
+	}
+	return p.saveNonmutationAndNotify(t)
+}
+
+func (p *planner) removeInterleaveBackReference(
+	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+) error {
+	if len(idx.Interleave.Ancestors) == 0 {
+		return nil
+	}
+	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
+	t, err := sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
+	if err != nil {
+		return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
+	}
+	targetIdx, err := t.FindIndexByID(ancestor.IndexID)
+	if err != nil {
+		return err
+	}
+	for k, ref := range targetIdx.InterleavedBy {
+		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
+			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
 		}
 	}
 	return p.saveNonmutationAndNotify(t)

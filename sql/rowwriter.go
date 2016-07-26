@@ -835,6 +835,26 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 	return nil
 }
 
+// deleteIndexRow adds to the batch the kv operations necessary to delete a
+// table row from the given index.
+func (rd *rowDeleter) deleteIndexRow(
+	b *client.Batch, idx *sqlbase.IndexDescriptor, values []parser.Datum,
+) error {
+	if err := rd.fks.checkAll(values); err != nil {
+		return err
+	}
+	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
+		rd.helper.tableDesc, idx, rd.fetchColIDtoRowIndex, values)
+	if err != nil {
+		return err
+	}
+	if log.V(2) {
+		log.Infof(context.TODO(), "Del %s", secondaryIndexEntry.Key)
+	}
+	b.Del(secondaryIndexEntry.Key)
+	return nil
+}
+
 func colIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.ColumnID]int {
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(cols))
 	for i, col := range cols {

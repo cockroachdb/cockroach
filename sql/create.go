@@ -605,9 +605,15 @@ func (p *planner) finalizeInterleave(
 	}
 	// Only the last ancestor needs the backreference.
 	ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
-	ancestorTable, err := sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
-	if err != nil {
-		return err
+	var ancestorTable *sqlbase.TableDescriptor
+	if ancestor.TableID == desc.ID {
+		ancestorTable = desc
+	} else {
+		var err error
+		ancestorTable, err = sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
+		if err != nil {
+			return err
+		}
 	}
 	ancestorIndex, err := ancestorTable.FindIndexByID(ancestor.IndexID)
 	if err != nil {
