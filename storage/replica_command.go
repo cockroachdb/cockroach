@@ -2365,11 +2365,6 @@ func (r *Replica) AdminSplit(
 				SplitTrigger: &roachpb.SplitTrigger{
 					LeftDesc:  leftDesc,
 					RightDesc: *rightDesc,
-					// Designate this store as the preferred lease holder for the new
-					// range. The choice of store here doesn't matter for
-					// correctness, but for best performance it should be one
-					// that we believe is currently up.
-					InitialLeaderStoreID: r.store.StoreID(),
 				},
 			},
 		})

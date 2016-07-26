@@ -1696,7 +1696,10 @@ func splitTriggerPostCommit(
 	// Note that in multi-node scenarios the async campaign is safe
 	// because it has exactly the same behavior as an incoming message
 	// from another node; the problem here is only with merges.
-	if len(split.RightDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
+	rightRng.mu.Lock()
+	shouldCampaign := rightRng.mu.state.Lease.OwnedBy(r.store.StoreID())
+	rightRng.mu.Unlock()
+	if len(split.RightDesc.Replicas) > 1 && shouldCampaign {
 		// Schedule the campaign a short time in the future. As
 		// followers process the split, they destroy and recreate their
 		// raft groups, which can cause messages to be dropped. In

@@ -775,15 +775,6 @@ getRightDesc?() : RangeDescriptor;
 
 
 
-initial_leader_store_id?: number;
-		
-
-getInitialLeaderStoreId?() : number;
-		setInitialLeaderStoreId?(initialLeaderStoreId : number): void;
-		
-
-
-
 }
 	
 	export interface SplitTriggerMessage extends SplitTrigger {
