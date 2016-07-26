@@ -535,16 +535,24 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	}
 
 	if ba.MaxSpanRequestKeys != 0 {
-		// Verify that the batch contains only Scan or ReverseScan requests.
+		// Verify that the batch contains only Scan, ReverseScan,
+		// DeleteRangeRequest, and Begin/EndTransactionRequest requests.
 		fwd, rev := false, false
 		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
+			switch t := req.GetInner().(type) {
 			case *roachpb.ScanRequest:
 				fwd = true
+
 			case *roachpb.ReverseScanRequest:
 				rev = true
+
+			case *roachpb.DeleteRangeRequest:
+				fwd = true
+
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+				return nil, roachpb.NewErrorf("batch with limit contains %T requests", t)
 			}
 		}
 		if fwd && rev {
@@ -826,12 +834,29 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 					union := roachpb.ResponseUnion{}
 					var reply roachpb.Response
-					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
+					switch t := req.GetInner().(type) {
+					case *roachpb.ScanRequest:
 						reply = &roachpb.ScanResponse{}
-					} else {
-						_ = req.GetInner().(*roachpb.ReverseScanRequest)
+
+					case *roachpb.ReverseScanRequest:
 						reply = &roachpb.ReverseScanResponse{}
+
+					case *roachpb.DeleteRangeRequest:
+						// Add the start key of the DeleteRangeRequest as the
+						// ResumeKey to indicate that this range hasn't been
+						// deleted.
+						reply = &roachpb.DeleteRangeResponse{ResumeKey: req.GetInner().(*roachpb.DeleteRangeRequest).Key}
+
+					case *roachpb.BeginTransactionRequest:
+						reply = &roachpb.BeginTransactionResponse{}
+
+					case *roachpb.EndTransactionRequest:
+						reply = &roachpb.EndTransactionResponse{}
+
+					default:
+						panic(fmt.Sprintf("bad type %T", t))
 					}
+
 					union.MustSetInner(reply)
 					br.Responses[i] = union
 				}

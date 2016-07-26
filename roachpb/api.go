@@ -185,6 +185,11 @@ var _ combinable = &ReverseScanResponse{}
 func (dr *DeleteRangeResponse) combine(c combinable) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
+		if dr.ResumeKey != nil {
+			panic(fmt.Errorf("trying to combine resume keys %q and %q", dr.ResumeKey, otherDR.ResumeKey))
+		}
+		dr.ResumeKey = otherDR.ResumeKey
+		dr.NumKeys += otherDR.NumKeys
 		dr.Keys = append(dr.Keys, otherDR.Keys...)
 		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
 			return err
@@ -358,6 +363,11 @@ func (sr *ScanResponse) Count() int64 {
 // Count returns the number of rows in ReverseScanResponse.
 func (sr *ReverseScanResponse) Count() int64 {
 	return int64(len(sr.Rows))
+}
+
+// Count returns the number of rows in DeleteRangeResponse.
+func (dr *DeleteRangeResponse) Count() int64 {
+	return dr.NumKeys
 }
 
 // Method implements the Request interface.

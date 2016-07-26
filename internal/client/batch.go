@@ -232,6 +232,7 @@ func (b *Batch) fillResults() error {
 
 			case *roachpb.DeleteRangeRequest:
 				if result.Err == nil {
+					result.ResumeKey = reply.(*roachpb.DeleteRangeResponse).ResumeKey
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
