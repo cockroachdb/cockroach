@@ -32,19 +32,21 @@ import (
 )
 
 var allExternalMethods = [...]roachpb.Request{
-	roachpb.Get:              &roachpb.GetRequest{},
-	roachpb.Put:              &roachpb.PutRequest{},
-	roachpb.ConditionalPut:   &roachpb.ConditionalPutRequest{},
-	roachpb.Increment:        &roachpb.IncrementRequest{},
-	roachpb.Delete:           &roachpb.DeleteRequest{},
-	roachpb.DeleteRange:      &roachpb.DeleteRangeRequest{},
-	roachpb.Scan:             &roachpb.ScanRequest{},
-	roachpb.ReverseScan:      &roachpb.ReverseScanRequest{},
-	roachpb.BeginTransaction: &roachpb.BeginTransactionRequest{},
-	roachpb.EndTransaction:   &roachpb.EndTransactionRequest{},
-	roachpb.AdminSplit:       &roachpb.AdminSplitRequest{},
-	roachpb.AdminMerge:       &roachpb.AdminMergeRequest{},
-	roachpb.CheckConsistency: &roachpb.CheckConsistencyRequest{},
+	roachpb.Get:                &roachpb.GetRequest{},
+	roachpb.Put:                &roachpb.PutRequest{},
+	roachpb.ConditionalPut:     &roachpb.ConditionalPutRequest{},
+	roachpb.Increment:          &roachpb.IncrementRequest{},
+	roachpb.Delete:             &roachpb.DeleteRequest{},
+	roachpb.DeleteRange:        &roachpb.DeleteRangeRequest{},
+	roachpb.Scan:               &roachpb.ScanRequest{},
+	roachpb.ReverseScan:        &roachpb.ReverseScanRequest{},
+	roachpb.BeginTransaction:   &roachpb.BeginTransactionRequest{},
+	roachpb.EndTransaction:     &roachpb.EndTransactionRequest{},
+	roachpb.AdminSplit:         &roachpb.AdminSplitRequest{},
+	roachpb.AdminMerge:         &roachpb.AdminMergeRequest{},
+	roachpb.AdminTransferLease: &roachpb.AdminTransferLeaseRequest{},
+	roachpb.CheckConsistency:   &roachpb.CheckConsistencyRequest{},
+	roachpb.RangeLookup:        &roachpb.RangeLookupRequest{},
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.
