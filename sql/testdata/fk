@@ -19,7 +19,7 @@ CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 statement error column "idz" does not exist
 CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 
-statement error foreign key columns \("customer"\) must be the prefix of an index
+statement error foreign key columns \("customer"\) must have an index
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
 statement error foreign key requires table "products" have a unique index on \("vendor"\)
@@ -28,8 +28,15 @@ CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
-statement error unsupported
-CREATE TABLE tabledef (customer INT, CONSTRAINT fk FOREIGN KEY (customer) REFERENCES customers)
+statement error column "product" cannot be used by multiple foreign key constraints
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products,
+  customer INT CONSTRAINT valid_customer REFERENCES customers (id),
+  CONSTRAINT fk FOREIGN KEY (product) REFERENCES products,
+  INDEX (product),
+  INDEX (customer)
+);
 
 statement ok
 CREATE TABLE orders (
@@ -46,9 +53,11 @@ statement ok
 CREATE TABLE reviews (
   id INT PRIMARY KEY,
   product STRING NOT NULL REFERENCES products,
-  customer INT REFERENCES customers,
-  "order" INT REFERENCES orders,
+  customer INT,
+  "order" INT,
   body STRING,
+  CONSTRAINT customerfk FOREIGN KEY (customer) REFERENCES customers,
+  CONSTRAINT orderfk FOREIGN KEY ("order") REFERENCES orders (id),
   INDEX (product),
   INDEX (customer),
   INDEX ("order")
@@ -271,3 +280,44 @@ DELETE FROM employees WHERE id = 2
 
 statement error foreign key violation
 DELETE FROM employees WHERE id > 1
+
+statement ok
+CREATE TABLE pairs1 (id INT PRIMARY KEY, src INT, dest STRING, UNIQUE (src, dest))
+
+statement ok
+INSERT INTO pairs1 VALUES (1, 100, 'one'), (2, 200, 'two')
+
+statement ok
+CREATE TABLE pairs2 (src INT, dest STRING, PRIMARY KEY (src, dest), INDEX (src), UNIQUE (dest))
+
+statement ok
+INSERT INTO pairs2 VALUES (1, 'one'), (2, 'two')
+
+statement error type of "b" \(STRING\) does not match foreign key "pairs2"."src" \(INT\)
+CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (b, a) REFERENCES pairs2)
+
+statement error 2 columns must reference exactly 2 columns in referenced table \(found 1\)
+CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES pairs1)
+
+# TODO(dt): remove ordering constraint on matching index
+statement error foreign key columns \("a", "b"\) must have an index
+CREATE TABLE refpairs (a INT, b STRING, FOREIGN KEY (a, b) REFERENCES pairs2, INDEX (b, a))
+
+# TODO(dt): allow using a strict prefix of an index
+statement error foreign key columns \("a", "b"\) must have an index
+CREATE TABLE refpairs (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs2, INDEX (a, b, c))
+
+statement ok
+CREATE TABLE refpairs (a INT, b STRING, FOREIGN KEY (a, b) REFERENCES pairs1 (src, dest), INDEX (a, b))
+
+statement error foreign key violation: value \[100 'two'\] not found in pairs1@pairs1_src_dest_key \[src dest\]
+INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
+
+statement ok
+INSERT INTO refpairs VALUES (100, 'one'), (200, 'two')
+
+statement error foreign key violation: value\(s\) \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
+UPDATE pairs1 SET dest = 'too' WHERE id = 2
+
+statement error foreign key violation: value\(s\) \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
+DELETE FROM pairs1 WHERE id = 2
