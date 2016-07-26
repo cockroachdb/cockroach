@@ -554,16 +554,25 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	}
 
 	if ba.MaxSpanRequestKeys != 0 {
-		// Verify that the batch contains only Scan or ReverseScan requests.
-		fwd, rev := false, false
+		// Verify that the batch contains only range requests or the
+		// Begin/EndTransactionRequest. Verify that a batch with a ReverseScan
+		// only contains ReverseScan range requests.
+		var fwd, rev bool
 		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
-			case *roachpb.ScanRequest:
+			inner := req.GetInner()
+			switch inner.(type) {
+			case *roachpb.ScanRequest, *roachpb.DeleteRangeRequest:
+				// Accepted range requests.
 				fwd = true
+
 			case *roachpb.ReverseScanRequest:
 				rev = true
+
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+				continue
+
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+				return nil, roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
 		}
 		if fwd && rev {
@@ -827,9 +836,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Count how many results we received.
 			var numResults int64
 			for _, resp := range curReply.Responses {
-				if cResp, ok := resp.GetInner().(roachpb.Countable); ok {
-					numResults += cResp.Count()
-				}
+				numResults += resp.GetInner().Header().NumKeys
 			}
 			if numResults > ba.MaxSpanRequestKeys {
 				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
@@ -844,12 +851,28 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					}
 					union := roachpb.ResponseUnion{}
 					var reply roachpb.Response
-					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
+					switch t := req.GetInner().(type) {
+					case *roachpb.ScanRequest:
 						reply = &roachpb.ScanResponse{}
-					} else {
-						_ = req.GetInner().(*roachpb.ReverseScanRequest)
+
+					case *roachpb.ReverseScanRequest:
 						reply = &roachpb.ReverseScanResponse{}
+
+					case *roachpb.DeleteRangeRequest:
+						reply = &roachpb.DeleteRangeResponse{}
+
+					case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+						continue
+
+					default:
+						panic(fmt.Sprintf("bad type %T", t))
 					}
+					// Set the resume span.
+					hdr := reply.Header()
+					span := req.GetInner().Header()
+					hdr.ResumeSpan = &span
+					reply.SetHeader(hdr)
+
 					union.MustSetInner(reply)
 					br.Responses[i] = union
 				}

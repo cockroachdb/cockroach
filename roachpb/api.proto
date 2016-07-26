@@ -52,6 +52,16 @@ message ResponseHeader {
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
   optional Transaction txn = 3;
+  // The next span to resume from when a bound on the
+  // keys is set through max_span_request_keys in the batch header.
+  // key is set to end_key when the entire span of keys have been
+  // operated on. The span is set to the original span if the request
+  // was ignored because max_span_request_keys was hit due to another
+  // request in the batch. For a reverse scan the end_key is updated,
+  // with the end_key set to key when the reverse scan is complete.
+  optional Span resume_span = 4;
+  // The number of keys operated on.
+  optional int64 num_keys = 5 [(gogoproto.nullable) = false];
 }
 
 // A GetRequest is the argument for the Get() method.
