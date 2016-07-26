@@ -2208,7 +2208,7 @@ func (r *Replica) AdminSplit(
 	leftDesc := *desc
 	leftDesc.EndKey = splitKey
 
-	log.Infof(context.TODO(), "%s: initiating a split of this range at key %s", r, splitKey)
+	log.Infof(ctx, "%s: initiating a split of this range at key %s", r, splitKey)
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
@@ -3085,7 +3085,7 @@ func (r *Replica) ChangeReplicas(
 		// raft operations. Racing with the replica GC queue can still partially
 		// negate the benefits of pre-emptive snapshots, but that is a recoverable
 		// degradation, not a catastrophic failure.
-		snap, err := r.GetSnapshot()
+		snap, err := r.GetSnapshot(ctx)
 		log.Trace(ctx, "generated snapshot")
 		if err != nil {
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
