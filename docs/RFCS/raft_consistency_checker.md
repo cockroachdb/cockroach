@@ -1,19 +1,19 @@
 -   Feature Name: Raft consistency checker
 -   Status: draft
 -   Start Date: 2016-02-10
--   Authors: Ben Darnell, Bram Gruneir, Vivek Menezes
+-   Authors: Ben Darnell, David Eisenstat, Bram Gruneir, Vivek Menezes
 -   RFC PR: (PR \# after acceptance of initial draft)
 -   Cockroach Issue: \#837
 
 Summary
 =======
 
-An online system that periodically collects a SHA on the range replicas
-to check for consistency; a snapshot for a range at a specific point in
-the raft log should have the same SHA on all replicas. An API to be used
-for direct invocation of the checker, to be used in finding consistency
-problems in tests and CLI, will also be developed and used in the
-acceptance tests.
+An online system that periodically compares snapshots of range replicas
+at a specific point in the Raft log. These snapshots should be the same.
+
+An API to be used for direct invocation of the checker, to be used in
+finding consistency problems in tests and CLI, will also be developed
+and used in the acceptance tests.
 
 Motivation
 ==========
@@ -23,50 +23,40 @@ Consistency! Correctness at scale.
 Detailed design
 ===============
 
-The proposal is for each range lease holder to periodically collect a
-SHA of each replica to keep track of consistency problems and report
-them. The consistency checker runs in three phases:
+Each node loops continuously through its local replicas, requesting a
+consistency check on the next replica every 10 seconds.
 
-1.  All replicas agree on the snapshot at which a SHA is to be computed.
-2.  A SHA is computed on all replicas.
-3.  The lease holder collects the SHA from all replicas and reports an
-    error if all SHAs do not match.
+1.  The requester invokes the Raft command `ComputeChecksum` (in
+    `roachpb.RequestUnion`), marking the point at which all replicas
+    take a snapshot and compute its checksum.
+2.  The lease holder invokes `CollectChecksum` (in `service internal`)
+    on the other replicas, thereby exchanging checksums. If there is an
+    inconsistency, both parties log it.
+3.  (optional, flag-controlled) Inconsistent replicas attach their
+    snapshot to their `CollectChecksum` response. The lease holder logs
+    the differently valued keys.
 
-The above is implemented by introducing two raft commands in
-roachpb.RequestUnion:
+Each consistency check has a UUID chosen by the requester. All related
+requests have this UUID in the `checksum_id` field.
 
-1.  ComputeChecksum: A replica on receiving this command will reply
-    immediately and begin computing the SHA asynchronously for the
-    current snapshot. It will continue executing commands while it
-    computes the SHA concurrently. This command will contain a UUID
-    under which the result is to be made available for subsequent
-    querying via CollectChecksum below. A version number is also
-    supplied to identify the method used in computing the SHA, and the
-    version number is checked against the receivers version and an error
-    returned on mismatch. The computed SHA is stored in a map by UUID,
-    and reported back to the lease holder through the next command.
-2.  CollectChecksum: The lease holder collects the SHA via this command
-    from all replicas, citing the UUID identifing the ComputeChecksum
-    command snapshot. The lease holder waits for a short delay (minutes
-    after sending ComputeChecksum) before sending a CollectChecksum to
-    all replicas, to give the replicas plenty of time to compute
-    the SHA. If a replica has not computed the SHA it returns a
-    NOT\_COMPUTED status. In tests this command will block until the
-    checksum is computed. If this command never arrives the computed SHA
-    is deleted via a 30 minute timeout.
+On receiving a `ComputeChecksum` request, replicas reply to Raft
+immediately and begin computing their checksum asynchronously. Replicas
+other than the lease holder store uncollected checksums in a local map
+whose entries expire after 30 minutes.
 
-The periodic consistency checker is run within a scanner that scans
-through all the local replicas and runs the consistency checker for all
-lease holder replicas. The scanner runs in a continuous loop with equal
-time spacing between replicas such that a single iteration spans the
-entire periodicity interval. It will log an error for all consistency
-problems seen.
+`CollectChecksum` requests are blocking in tests (to avoid flakes) and
+nonblocking in production. Before the lease holder makes these requests,
+it sleeps for as long as it took to compute its checksum in order to
+give the other replicas a chance to finish.
 
-The SHA over a range replica is computed over all the KV pairs using
-replicaDataIterator, ignoring the raft HardState and any log entries
-with index greater than the applied index of the ComputeChecksum
-command. If the replica is split or merged before CollectChecksum is
-received, the replica will return a RANGE\_CHANGED error.
+`ComputeChecksum` requests have a `version` field, which specifies the
+checksum algorithm. This allows us to switch algorithms without
+downtime. The current algorithm is to apply SHA-512 to all of the KV
+pairs returned from `replicaDataIterator`, ignoring the Raft `HardState`
+and any log entries with index greater than the applied index of the
+`ComputeChecksum` command. If the replica is split or merged before
+`CollectChecksum` is received, the replica returns a `RANGE_CHANGED`
+error.
 
 Exposing consistency checker through an API for direct invocation:
 
