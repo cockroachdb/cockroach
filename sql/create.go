@@ -311,18 +311,41 @@ func (n *createTableNode) Start() error {
 	// been allocated since the FKs will reference those IDs.
 	var fkTargets []fkTargetUpdate
 	for _, def := range n.n.Defs {
-		if col, ok := def.(*parser.ColumnTableDef); ok {
-			if col.References.Table != nil {
+		switch d := def.(type) {
+		case *parser.ColumnTableDef:
+			if d.References.Table != nil {
 				var targetCol parser.NameList
-				if col.References.Col != "" {
-					targetCol = append(targetCol, string(col.References.Col))
+				if d.References.Col != "" {
+					targetCol = append(targetCol, string(d.References.Col))
 				}
-				modified, err := n.resolveFK(&desc, parser.NameList{string(col.Name)}, col.References.Table, targetCol, col.References.ConstraintName)
+				modified, err := n.resolveFK(&desc, parser.NameList{string(d.Name)}, d.References.Table, targetCol, d.References.ConstraintName)
 				if err != nil {
 					return err
 				}
 				fkTargets = append(fkTargets, modified)
 			}
+		case *parser.ForeignKeyConstraintTableDef:
+			modified, err := n.resolveFK(&desc, d.FromCols, d.Table, d.ToCols, d.Name)
+			if err != nil {
+				return err
+			}
+			fkTargets = append(fkTargets, modified)
+		}
+	}
+
+	// Multiple FKs from the same column would potentially result in ambiguous or
+	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
+	colsInFKs := make(map[sqlbase.ColumnID]struct{})
+	for _, t := range fkTargets {
+		i, err := desc.FindIndexByID(t.srcIdx)
+		if err != nil {
+			return errors.Wrap(err, "could not resolve FK index to check for columns overlaps")
+		}
+		for x := range i.ColumnIDs {
+			if _, ok := colsInFKs[i.ColumnIDs[x]]; ok {
+				return errors.Errorf("column %q cannot be used by multiple foreign key constraints", i.ColumnNames[x])
+			}
+			colsInFKs[i.ColumnIDs[x]] = struct{}{}
 		}
 	}
 
@@ -494,10 +517,12 @@ func (n *createTableNode) resolveFK(
 			}
 		}
 		if !found {
-			return ret, fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
+			return ret, fmt.Errorf("foreign key columns %s must have an index", colNames(srcCols))
 		}
 	}
 
+	// Create the table non-public, since we'll need to ensure the FK back-refs
+	// are in place before we can allow writes.
 	tbl.State = sqlbase.TableDescriptor_ADD
 	return ret, nil
 }
