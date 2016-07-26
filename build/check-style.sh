@@ -150,8 +150,8 @@ runcheck() {
   if output=$(eval "$name"); then
     echo "--- PASS: $name (0.0s)"
   else
-    echo "$output"
     echo "--- FAIL: $name (0.0s)"
+    echo "$output"
     failed=1
   fi
 }
