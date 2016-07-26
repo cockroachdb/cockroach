@@ -303,7 +303,7 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount)
+	n := simulation.NewNetwork(nodeCount, true)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			// Output dot graph.

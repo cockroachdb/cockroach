@@ -53,10 +53,11 @@ type Network struct {
 	nodeIDAllocator roachpb.NodeID // provides unique node IDs
 	rpcContext      *rpc.Context
 	tlsConfig       *tls.Config
+	started         bool
 }
 
 // NewNetwork creates nodeCount gossip nodes.
-func NewNetwork(nodeCount int) *Network {
+func NewNetwork(nodeCount int, createResolvers bool) *Network {
 	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
@@ -76,13 +77,12 @@ func NewNetwork(nodeCount int) *Network {
 			log.Fatal(context.TODO(), err)
 		}
 		// Build a resolver for each instance or we'll get data races.
-		r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr)
-		if err != nil {
-			log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr, err)
-		}
-		node.Gossip.SetResolvers([]resolver.Resolver{r})
-		if err := n.StartNode(node); err != nil {
-			log.Fatal(context.TODO(), err)
+		if createResolvers {
+			r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr)
+			if err != nil {
+				log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr, err)
+			}
+			node.Gossip.SetResolvers([]resolver.Resolver{r})
 		}
 	}
 	return n
@@ -143,6 +143,7 @@ func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 //
 // The simulation callback receives the cycle and the network as arguments.
 func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) bool) {
+	n.Start()
 	nodes := n.Nodes
 	for cycle := 1; simCallback(cycle, n); cycle++ {
 		// Node 0 gossips sentinel & cluster ID every cycle.
@@ -169,6 +170,19 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 		time.Sleep(5 * time.Millisecond)
 	}
 	log.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
+}
+
+// Start starts all gossip nodes.
+func (n *Network) Start() {
+	if n.started {
+		return
+	}
+	n.started = true
+	for _, node := range n.Nodes {
+		if err := n.StartNode(node); err != nil {
+			log.Fatal(context.TODO(), err)
+		}
+	}
 }
 
 // Stop stops all servers and gossip nodes.
