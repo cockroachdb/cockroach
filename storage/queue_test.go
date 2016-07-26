@@ -356,6 +356,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#8001")
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
