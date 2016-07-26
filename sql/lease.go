@@ -849,17 +849,17 @@ type tableNameCache struct {
 // This method handles normalizing the table name.
 // The lease's refcount is incremented before returning, so the caller is
 // responsible for releasing it to the leaseManager.
-func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock,
+func (c *tableNameCache) get(
+	dbID sqlbase.ID, tableName string, clock *hlc.Clock,
 ) *LeaseState {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	lease, ok := c.tables[c.makeCacheKey(dbID, tableName)]
+	lease, ok := c.tables[makeTableNameCacheKey(dbID, tableName)]
+	c.mu.Unlock()
 	if !ok {
 		return nil
 	}
-	if lease == nil {
-		panic("nil lease in name cache")
-	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
 	if !nameMatchesLease(lease, dbID, tableName) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
 			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
@@ -870,8 +870,6 @@ func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock
 		// Expired, or almost expired, lease. Don't hand it out.
 		return nil
 	}
-	lease.mu.Lock()
-	defer lease.mu.Unlock()
 	if lease.released {
 		// This get() raced with a release operation. The leaseManager should remove
 		// this cache entry soon.
@@ -885,7 +883,7 @@ func (c *tableNameCache) insert(lease *LeaseState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := c.makeCacheKey(lease.ParentID, lease.Name)
+	key := makeTableNameCacheKey(lease.ParentID, lease.Name)
 	existing, ok := c.tables[key]
 	if !ok {
 		c.tables[key] = lease
@@ -905,7 +903,7 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := c.makeCacheKey(lease.ParentID, lease.Name)
+	key := makeTableNameCacheKey(lease.ParentID, lease.Name)
 	existing, ok := c.tables[key]
 	if !ok {
 		// Table for lease not found in table name cache. This can happen if we had
@@ -921,7 +919,7 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	}
 }
 
-func (c *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
+func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
 	return tableNameCacheKey{dbID, sqlbase.NormalizeName(tableName)}
 }
 
