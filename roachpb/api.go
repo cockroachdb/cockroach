@@ -406,6 +406,9 @@ func (*AdminSplitRequest) Method() Method { return AdminSplit }
 func (*AdminMergeRequest) Method() Method { return AdminMerge }
 
 // Method implements the Request interface.
+func (*AdminTransferLeaseRequest) Method() Method { return AdminTransferLease }
+
+// Method implements the Request interface.
 func (*HeartbeatTxnRequest) Method() Method { return HeartbeatTxn }
 
 // Method implements the Request interface.
@@ -535,6 +538,12 @@ func (amr *AdminMergeRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
+func (atlr *AdminTransferLeaseRequest) ShallowCopy() Request {
+	shallowCopy := *atlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
 func (htr *HeartbeatTxnRequest) ShallowCopy() Request {
 	shallowCopy := *htr
 	return &shallowCopy
@@ -627,6 +636,7 @@ func (*BeginTransactionRequest) createReply() Response   { return &BeginTransact
 func (*EndTransactionRequest) createReply() Response     { return &EndTransactionResponse{} }
 func (*AdminSplitRequest) createReply() Response         { return &AdminSplitResponse{} }
 func (*AdminMergeRequest) createReply() Response         { return &AdminMergeResponse{} }
+func (*AdminTransferLeaseRequest) createReply() Response { return &AdminTransferLeaseResponse{} }
 func (*HeartbeatTxnRequest) createReply() Response       { return &HeartbeatTxnResponse{} }
 func (*GCRequest) createReply() Response                 { return &GCResponse{} }
 func (*PushTxnRequest) createReply() Response            { return &PushTxnResponse{} }
@@ -797,6 +807,7 @@ func (*BeginTransactionRequest) flags() int   { return isWrite | isTxn }
 func (*EndTransactionRequest) flags() int     { return isWrite | isTxn | isAlone }
 func (*AdminSplitRequest) flags() int         { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int         { return isAdmin | isAlone }
+func (*AdminTransferLeaseRequest) flags() int { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int       { return isWrite | isTxn }
 func (*GCRequest) flags() int                 { return isWrite | isRange }
 func (*PushTxnRequest) flags() int            { return isWrite }
