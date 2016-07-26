@@ -168,7 +168,6 @@ func TestKVDBInternalMethods(t *testing.T) {
 		&roachpb.HeartbeatTxnRequest{},
 		&roachpb.GCRequest{},
 		&roachpb.PushTxnRequest{},
-		&roachpb.RangeLookupRequest{},
 		&roachpb.ResolveIntentRequest{},
 		&roachpb.ResolveIntentRangeRequest{},
 		&roachpb.MergeRequest{},
