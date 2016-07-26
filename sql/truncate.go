@@ -18,13 +18,9 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util/log"
-	"golang.org/x/net/context"
 )
 
 // Truncate deletes all rows from a table.
@@ -65,15 +61,13 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 // It deletes a range of data for the table, which includes the PK and all
 // indexes.
 func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
-	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
-
-	// Delete rows and indexes starting with the table's prefix.
-	tableStartKey := roachpb.Key(tablePrefix)
-	tableEndKey := tableStartKey.PrefixEnd()
-	if log.V(2) {
-		log.Infof(context.TODO(), "DelRange %s - %s", tableStartKey, tableEndKey)
+	rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+	if err != nil {
+		return err
 	}
-	b := client.Batch{}
-	b.DelRange(tableStartKey, tableEndKey, false)
-	return txn.Run(&b)
+	td := tableDeleter{rd: rd}
+	if err := td.init(txn); err != nil {
+		return err
+	}
+	return td.deleteAllRows()
 }
