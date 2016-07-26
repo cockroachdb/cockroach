@@ -46,7 +46,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
   render() {
     let { totalNodes, bytesUsed, availableCapacity } = this.props.clusterInfo;
-    let capacityPercent = (availableCapacity !== 0) ? bytesUsed / availableCapacity : 0.0;
+    let capacityPercent = (availableCapacity !== 0) ? bytesUsed / (bytesUsed + availableCapacity) : 0.0;
     return <div className="section overview">
       <div className="charts half">
 
@@ -96,11 +96,11 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
           <StackedAreaGraph title="CPU Usage"
                      legend={ false }
-                     tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations
+                     tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations
                                (Sys %) across all nodes.`}>
             <Axis format={ d3.format(".2%") }>
-              <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %" />
-              <Metric name="cr.node.sys.cpu.sys.percent" title="CPU Sys %" />
+              <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
+              <Metric name="cr.node.sys.cpu.sys.percent" aggregateAvg title="CPU Sys %" />
             </Axis>
           </StackedAreaGraph>
 

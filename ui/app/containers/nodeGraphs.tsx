@@ -69,9 +69,10 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
-            <LineGraph title="GC Pause Time" sources={sources} tooltip={`The average amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
+            <LineGraph title="GC Pause Time" sources={sources} tooltip={`The ${sources ? "average and maximum" : ""} amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
               <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
-                <Metric name="cr.node.sys.gc.pause.ns" title="Time" nonNegativeRate />
+                <Metric name="cr.node.sys.gc.pause.ns" title={`${sources ? "" : "Avg "}Time`} aggregateAvg nonNegativeRate />
+                { node ? null : <Metric name="cr.node.sys.gc.pause.ns" title="Max Time" aggregateMax nonNegativeRate /> }
               </Axis>
             </LineGraph>
 
@@ -110,10 +111,10 @@ export default class extends React.Component<IInjectedProps, {}> {
         <h2>System Resources</h2>
           <GraphGroup groupId="node.resources">
 
-            <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
+            <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
-                <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %"/>
-                <Metric name="cr.node.sys.cpu.sys.percent" title="CPU Sys %"/>
+                <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
+                <Metric name="cr.node.sys.cpu.sys.percent" aggregateAvg title="CPU Sys %" />
               </Axis>
             </StackedAreaGraph>
 

@@ -86,6 +86,8 @@ function queryFromProps(metricProps: MetricProps,
       sourceAggregator = TimeSeriesQueryAggregator.MAX;
     } else if (metricProps.aggregateMin) {
       sourceAggregator = TimeSeriesQueryAggregator.MIN;
+    } else if (metricProps.aggregateAvg) {
+      sourceAggregator = TimeSeriesQueryAggregator.AVG;
     }
 
     return new protos.cockroach.ts.tspb.Query({
