@@ -1,6 +1,7 @@
 query T
 SHOW DATABASES
 ----
+information_schema
 system
 test
 
@@ -39,6 +40,7 @@ SHOW GRANTS ON DATABASE test
 query T
 SHOW DATABASES
 ----
+information_schema
 system
 u
 
@@ -85,6 +87,7 @@ ALTER DATABASE t RENAME TO v
 query T
 SHOW DATABASES
 ----
+information_schema
 system
 t
 u

@@ -601,8 +601,9 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// 2 rows
+	// 3 rows
 	// Database
+	// information_schema
 	// system
 	// t
 	// sql -e explain select 3

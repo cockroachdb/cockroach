@@ -1,6 +1,7 @@
 query T
 SHOW DATABASES
 ----
+information_schema
 system
 test
 

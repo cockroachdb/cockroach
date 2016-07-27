@@ -4,6 +4,7 @@ CREATE DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+information_schema
 foo-bar
 system
 test
@@ -14,6 +15,7 @@ DROP DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+information_schema
 system
 test
 
@@ -23,6 +25,7 @@ CREATE DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+information_schema
 foo bar
 system
 test
@@ -33,5 +36,6 @@ DROP DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+information_schema
 system
 test
