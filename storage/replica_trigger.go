@@ -31,7 +31,7 @@ type postCommitSplit struct {
 	// right-hand side of the split during the batch which executed it.
 	// The on-disk state of the right-hand side is already correct, but the
 	// Store must learn about this delta to update its counters appropriately.
-	RHSDeltaMS enginepb.MVCCStats
+	RightDeltaMS enginepb.MVCCStats
 }
 
 // PostCommitTrigger is returned from Raft processing as a side effect which
