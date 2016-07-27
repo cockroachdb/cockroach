@@ -638,6 +638,16 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		var pErr *roachpb.Error
 		var finished bool
 		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
+			// If the context was canceled or the deadline exceeded, the operations
+			// we start will fail; end the retry loop.
+			// TODO(radu): should this check be done by retry.Next()?
+			if err := ctx.Err(); err != nil {
+				log.Trace(ctx, "context error: "+err.Error())
+				if log.V(1) {
+					log.Warning(ctx, err)
+				}
+				return nil, roachpb.NewError(err), false
+			}
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
@@ -653,7 +663,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if err != nil {
 				log.Trace(ctx, "range descriptor lookup failed: "+err.Error())
 				if log.V(1) {
-					log.Warning(context.TODO(), err)
+					log.Warning(ctx, err)
 				}
 				pErr = roachpb.NewError(err)
 				continue
@@ -726,7 +736,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 
 			if log.V(1) {
-				log.Warningf(context.TODO(), "failed to invoke %s: %s", ba, pErr)
+				log.Warningf(ctx, "failed to invoke %s: %s", ba, pErr)
 			}
 			log.Trace(ctx, fmt.Sprintf("reply error: %s", pErr))
 
@@ -773,7 +783,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
 				if log.V(1) {
-					log.Warning(context.TODO(), tErr)
+					log.Warning(ctx, tErr)
 				}
 				continue
 			}
@@ -788,7 +798,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			case <-ds.rpcRetryOptions.Closer:
 				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
 			default:
-				log.Fatal(context.TODO(), "exited retry loop with nil error but finished=false")
+				log.Fatal(ctx, "exited retry loop with nil error but finished=false")
 			}
 		}
 
