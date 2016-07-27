@@ -32,7 +32,8 @@ import (
 //       for {
 //           row, err := sd.GetRow(row)
 //           if err != nil { ... }
-//           if decoded != nil {
+//           if row == nil {
+//               // No more rows in this message.
 //               break
 //           }
 //           // Use <row>
@@ -48,6 +49,7 @@ type StreamDecoder struct {
 	trailerReceived bool
 	// trailerErr stores the StreamTrailer.error received in the trailer.
 	trailerErr error
+	rowAlloc   sqlbase.EncDatumRowAlloc
 }
 
 // AddMessage adds the data in a StreamMessage to the decoder.
@@ -105,7 +107,7 @@ func (sd *StreamDecoder) GetRow(rowBuf sqlbase.EncDatumRow) (sqlbase.EncDatumRow
 	if cap(rowBuf) >= rowLen {
 		rowBuf = rowBuf[:rowLen]
 	} else {
-		rowBuf = make(sqlbase.EncDatumRow, rowLen)
+		rowBuf = sd.rowAlloc.AllocRow(rowLen)
 	}
 	for i := range rowBuf {
 		var err error

@@ -32,6 +32,13 @@ message SetupFlowsRequest {
 }
 
 message SimpleResponse {
+  // TODO(radu): we should be using our own error instead of roachpb.Error.
+  // One important error field for distsql is whether the error is
+  // "authoritative": if a query is distributed on multiple nodes and one node
+  // hits an error, the other nodes may hit errors as well as a consequence
+  // (e.g. streams can't connect to the failed flow). The node that started the
+  // flow needs to distinguish which errors are caused by non-availability of
+  // other nodes so they don't obscure the real error.
   optional roachpb.Error error = 1;
 }
 
