@@ -85,6 +85,15 @@ func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
 		p.session.User, descriptor.TypeName(), descriptor.GetName())
 }
 
+type descriptorAlreadyExistsErr struct {
+	desc sqlbase.DescriptorProto
+	name string
+}
+
+func (d descriptorAlreadyExistsErr) Error() string {
+	return fmt.Sprintf("%s %q already exists", d.desc.TypeName(), d.name)
+}
+
 // createDescriptor implements the DescriptorAccessor interface.
 func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error) {
 	idKey := plainKey.Key()
@@ -100,7 +109,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 			return false, nil
 		}
 		// Key exists, but we don't want it to: error out.
-		return false, fmt.Errorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
+		return false, descriptorAlreadyExistsErr{descriptor, plainKey.Name()}
 	}
 
 	// Increment unique descriptor counter.

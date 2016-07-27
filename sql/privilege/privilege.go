@@ -46,6 +46,7 @@ const (
 var (
 	ReadData      = List{GRANT, SELECT}
 	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	VirtualData   = List{SELECT}
 )
 
 // Mask returns the bitmask for a given privilege.
