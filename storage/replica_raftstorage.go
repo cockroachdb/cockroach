@@ -349,6 +349,7 @@ func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
 		Multiplier:     2,
+		Closer:         r.store.Stopper().ShouldQuiesce(),
 	}
 	for retry := retry.Start(retryOptions); retry.Next(); {
 		log.Trace(ctx, fmt.Sprintf("snapshot retry loop pass %d", retry.CurrentAttempt()))
