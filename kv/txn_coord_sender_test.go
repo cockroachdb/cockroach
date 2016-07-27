@@ -597,10 +597,12 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 
 	// Commit the transaction. Note that we cancel the transaction when the
 	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code
-	// path. We'll either succeed or get a "does not exist" error. Anything else
-	// is unexpected.
+	// path. We'll either succeed, get a "does not exist" error, or get a
+	// "context canceled" error. Anything else is unexpected.
 	err := txn.CommitOrCleanup()
-	if err != nil && !testutils.IsError(err, "does not exist") {
+	if err != nil &&
+		!testutils.IsError(err, "does not exist") &&
+		!testutils.IsError(err, "context canceled") {
 		t.Fatal(err)
 	}
 }
