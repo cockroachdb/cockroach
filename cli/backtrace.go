@@ -58,6 +58,10 @@ func initBacktrace(logDir string) *stop.Stopper {
 	tracer := bcd.New(bcd.NewOptions{
 		IncludeSystemGs: false,
 	})
+	if err := tracer.SetOutputPath(logDir, 0755); err != nil {
+		log.Infof(context.TODO(), "unable to set output path: %s", err)
+		// Not a fatal error, continue.
+	}
 
 	// Enable WARNING log output from the tracer.
 	tracer.AddOptions(nil, "-L", "WARNING")
