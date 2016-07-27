@@ -22,7 +22,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -2302,11 +2301,11 @@ func (r *Replica) executeBatch(
 		return nil, nil, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
 	}
 
-	remScanResults := int64(math.MaxInt64)
+	maxKeys := engine.MaxSpanKeys
 	if ba.Header.MaxSpanRequestKeys != 0 {
-		// We have a batch of Scan or ReverseScan requests with a limit. We keep track of how many
-		// remaining results we can return.
-		remScanResults = ba.Header.MaxSpanRequestKeys
+		// We have a batch of requests with a limit. We keep track of how many
+		// remaining keys we can touch.
+		maxKeys = ba.Header.MaxSpanRequestKeys
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
@@ -2321,7 +2320,7 @@ func (r *Replica) executeBatch(
 			ba.Txn.BatchIndex = int32(index)
 		}
 		reply := br.Responses[index].GetInner()
-		curTrigger, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, remScanResults, args, reply)
+		curTrigger, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, maxKeys, args, reply)
 
 		trigger = updateTrigger(trigger, curTrigger)
 
@@ -2380,14 +2379,14 @@ func (r *Replica) executeBatch(
 			}
 		}
 
-		if remScanResults != math.MaxInt64 {
+		if maxKeys != engine.MaxSpanKeys {
 			if cReply, ok := reply.(roachpb.Countable); ok {
 				retResults := cReply.Count()
-				if retResults > remScanResults {
+				if retResults > maxKeys {
 					r.panicf("received %d results, limit was %d",
-						retResults, remScanResults)
+						retResults, maxKeys)
 				}
-				remScanResults -= retResults
+				maxKeys -= retResults
 			}
 		}
 

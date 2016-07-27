@@ -547,7 +547,8 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 				descs = append(descs, desc)
 			}
 			return desc.RangeID == rangeID, nil
-		}); err != nil {
+		},
+		engine.MaxSpanKeys); err != nil {
 		return err
 	}
 
@@ -655,7 +656,8 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 			}
 
 			return false, nil
-		}); err != nil {
+		},
+		engine.MaxSpanKeys); err != nil {
 		return err
 	}
 

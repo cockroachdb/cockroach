@@ -227,7 +227,7 @@ func processTransactionTable(
 		hlc.ZeroTimestamp, true /* consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			return false, handleOne(kv)
-		})
+		}, engine.MaxSpanKeys)
 	return gcKeys, err
 }
 

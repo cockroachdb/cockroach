@@ -540,7 +540,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		true, nil, false, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
-		}); err != nil {
+		}, engine.MaxSpanKeys); err != nil {
 		t.Fatal(err)
 	}
 	if exp := len(testCases); exp != count {

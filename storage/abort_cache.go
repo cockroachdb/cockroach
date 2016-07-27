@@ -124,7 +124,7 @@ func (sc *AbortCache) Iterate(
 			}
 			f(kv.Key, txnID, entry)
 			return false, nil
-		})
+		}, engine.MaxSpanKeys)
 }
 
 func copySeqCache(

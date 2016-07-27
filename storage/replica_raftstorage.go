@@ -172,6 +172,7 @@ func iterateEntries(
 		nil,   /* txn */
 		false, /* !reverse */
 		scanFunc,
+		engine.MaxSpanKeys,
 	)
 	return err
 }

@@ -990,7 +990,7 @@ func IterateRangeDescriptors(
 	}
 
 	_, err := engine.MVCCIterate(context.Background(), eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
-		false /* !reverse */, kvToDesc)
+		false /* !reverse */, kvToDesc, engine.MaxSpanKeys)
 	return err
 }
 

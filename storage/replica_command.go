@@ -24,7 +24,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"reflect"
 	"time"
 
@@ -53,7 +52,7 @@ var errTransactionUnsupported = errors.New("not supported within a transaction")
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
 // command. It returns the response, an error, and a post commit trigger which
 // may be actionable even in the case of an error.
-// remScanResults is the number of scan results remaining for this batch
+// maxKeys is the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func (r *Replica) executeCmd(
 	ctx context.Context,
@@ -62,7 +61,7 @@ func (r *Replica) executeCmd(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
-	remScanResults int64,
+	maxKeys int64,
 	args roachpb.Request,
 	reply roachpb.Response,
 ) (*PostCommitTrigger, *roachpb.Error) {
@@ -121,10 +120,10 @@ func (r *Replica) executeCmd(
 		*resp, err = r.DeleteRange(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ScanRequest:
 		resp := reply.(*roachpb.ScanResponse)
-		*resp, trigger, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
+		*resp, trigger, err = r.Scan(ctx, batch, h, maxKeys, *tArgs)
 	case *roachpb.ReverseScanRequest:
 		resp := reply.(*roachpb.ReverseScanResponse)
-		*resp, trigger, err = r.ReverseScan(ctx, batch, h, remScanResults, *tArgs)
+		*resp, trigger, err = r.ReverseScan(ctx, batch, h, maxKeys, *tArgs)
 	case *roachpb.BeginTransactionRequest:
 		resp := reply.(*roachpb.BeginTransactionResponse)
 		*resp, err = r.BeginTransaction(ctx, batch, ms, h, *tArgs)
@@ -321,7 +320,8 @@ func (r *Replica) DeleteRange(
 	args roachpb.DeleteRangeRequest,
 ) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
-	deleted, err := engine.MVCCDeleteRange(ctx, batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn, args.ReturnKeys)
+	// TODO(vivek): replace MaxSpanKeys with a specific bound passed in.
+	deleted, err := engine.MVCCDeleteRange(ctx, batch, ms, args.Key, args.EndKey, engine.MaxSpanKeys, h.Timestamp, h.Txn, args.ReturnKeys)
 	if err == nil {
 		reply.Keys = deleted
 		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
@@ -334,58 +334,32 @@ func (r *Replica) DeleteRange(
 	return reply, err
 }
 
-// scanMaxResultsValue returns the max results value to pass to a scan or reverse scan request (0
-// for no limit).
-//    remScanResults is the number of remaining results for this batch (MaxInt64 for no
-// limit).
-//    scanMaxResults is the limit in this scan request (0 for no limit)
-func scanMaxResultsValue(remScanResults int64) int64 {
-	if remScanResults == math.MaxInt64 {
-		// Unlimited batch.
-		return 0
-	}
-	// Remaining batch limit is less than scan limit.
-	return remScanResults
-}
-
 // Scan scans the key range specified by start key through end key in ascending order up to some
-// maximum number of results. remScanResults stores the number of scan results remaining for this
+// maximum number of results. maxKeys stores the number of scan results remaining for this
 // batch (MaxInt64 for no limit).
 func (r *Replica) Scan(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	h roachpb.Header,
-	remScanResults int64,
+	maxKeys int64,
 	args roachpb.ScanRequest,
 ) (roachpb.ScanResponse, *PostCommitTrigger, error) {
-	if remScanResults == 0 {
-		// We can't return any more results; skip the scan
-		return roachpb.ScanResponse{}, nil, nil
-	}
-	maxResults := scanMaxResultsValue(remScanResults)
-
-	rows, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxResults, h.Timestamp,
+	rows, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxKeys, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	return roachpb.ScanResponse{Rows: rows}, intentsToTrigger(intents, &args), err
 }
 
 // ReverseScan scans the key range specified by start key through end key in descending order up to
-// some maximum number of results. remScanResults stores the number of scan results remaining for
+// some maximum number of results. maxKeys stores the number of scan results remaining for
 // this batch (MaxInt64 for no limit).
 func (r *Replica) ReverseScan(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	h roachpb.Header,
-	remScanResults int64,
+	maxKeys int64,
 	args roachpb.ReverseScanRequest,
 ) (roachpb.ReverseScanResponse, *PostCommitTrigger, error) {
-	if remScanResults == 0 {
-		// We can't return any more results; skip the scan
-		return roachpb.ReverseScanResponse{}, nil, nil
-	}
-	maxResults := scanMaxResultsValue(remScanResults)
-
-	rows, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxResults,
+	rows, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxKeys,
 		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	return roachpb.ReverseScanResponse{Rows: rows}, intentsToTrigger(intents, &args), err
 }
@@ -1557,7 +1531,7 @@ func (r *Replica) TruncateLog(
 	var diff enginepb.MVCCStats
 	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
 	// but it also computes stats.
-	if _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, 0, /* max */
+	if _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, engine.MaxSpanKeys, /* max */
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
 		return reply, err
 	}
@@ -2899,7 +2873,7 @@ func (r *Replica) mergeTrigger(
 	// keep track of stats here, because we already set the right range's
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
-	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, hlc.ZeroTimestamp, nil, false); err != nil {
+	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), engine.MaxSpanKeys, hlc.ZeroTimestamp, nil, false); err != nil {
 		return errors.Errorf("cannot remove range metadata %s", err)
 	}
 
