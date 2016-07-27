@@ -355,7 +355,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			for j := len(row); j < len(oldValues); j++ {
 				oldValues[j] = parser.DNull
 			}
-			if _, err := ru.updateRow(writeBatch, oldValues, updateValues); err != nil {
+			if _, err := ru.updateRow(context.TODO(), writeBatch, oldValues, updateValues); err != nil {
 				return err
 			}
 		}
@@ -400,7 +400,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			if err := td.init(txn); err != nil {
 				return err
 			}
-			return td.deleteIndex(&desc)
+			return td.deleteIndex(context.TODO(), &desc)
 		}); err != nil {
 			return err
 		}
