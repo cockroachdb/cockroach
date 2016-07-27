@@ -60,7 +60,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"testing"
 	"time"
