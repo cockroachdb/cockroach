@@ -107,9 +107,14 @@ func TestTableReader(t *testing.T) {
 		ts.Table = *td
 
 		txn := client.NewTxn(context.Background(), *kvDB)
+		flowCtx := FlowCtx{
+			Context: context.Background(),
+			evalCtx: &parser.EvalContext{},
+			txn:     txn,
+		}
 
 		out := &RowBuffer{}
-		tr, err := newTableReader(&ts, txn, out, &parser.EvalContext{})
+		tr, err := newTableReader(&flowCtx, &ts, out)
 		if err != nil {
 			t.Fatal(err)
 		}
