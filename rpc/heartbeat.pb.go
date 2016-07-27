@@ -35,7 +35,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
 // remote server. Uncertainty is the maximum error in the reading of this
@@ -98,7 +100,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for Heartbeat service
 
@@ -160,7 +162,8 @@ var _Heartbeat_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Heartbeat_Ping_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: fileDescriptorHeartbeat,
 }
 
 func (m *RemoteOffset) Marshal() (data []byte, err error) {
@@ -766,6 +769,8 @@ var (
 	ErrInvalidLengthHeartbeat = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowHeartbeat   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/rpc/heartbeat.proto", fileDescriptorHeartbeat) }
 
 var fileDescriptorHeartbeat = []byte{
 	// 322 bytes of a gzipped FileDescriptorProto
