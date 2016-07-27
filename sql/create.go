@@ -496,7 +496,7 @@ func (n *createTableNode) resolveFK(
 		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromCols[0], target.Name))
 	}
 
-	ref := &sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
+	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, false) {
 		tbl.PrimaryIndex.ForeignKey = ref
@@ -536,6 +536,8 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 	return s.String()
 }
 
+// matchesIndex checks if an index matches the passed `cols` (in order).
+// `exact` controls whether a strict prefix matching is considered a match.
 func matchesIndex(cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact bool) bool {
 	if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
 		return false
@@ -627,7 +629,7 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 			return err
 		}
 
-		backref := &sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx}
+		backref := sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx}
 		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
 
 		// For self-referencing FKs, the ref was added before the table had an ID

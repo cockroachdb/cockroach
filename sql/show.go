@@ -387,7 +387,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 		} else if index.Unique {
 			appendRow(index.Name, "UNIQUE", fmt.Sprintf("%+v", index.ColumnNames), "")
 		}
-		if index.ForeignKey != nil {
+		if index.ForeignKey.Table != 0 {
 			other, err := p.getTableLeaseByID(index.ForeignKey.Table)
 			if err != nil {
 				return nil, errors.Errorf("error resolving table %d referenced in foreign key",

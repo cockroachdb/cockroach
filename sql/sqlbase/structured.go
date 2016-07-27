@@ -603,7 +603,7 @@ func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
 
 	for _, index := range desc.AllNonDropIndexes() {
 		// Check foreign keys.
-		if index.ForeignKey != nil {
+		if index.ForeignKey.Table != 0 {
 			targetTable, targetIndex, err := findTargetIndex(
 				index.ForeignKey.Table, index.ForeignKey.Index)
 			if err != nil {
@@ -623,10 +623,10 @@ func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
 		}
 		fkBackrefs := make(map[ForeignKeyReference]struct{})
 		for _, backref := range index.ReferencedBy {
-			if _, ok := fkBackrefs[*backref]; ok {
+			if _, ok := fkBackrefs[backref]; ok {
 				return errors.Errorf("duplicated fk backreference %+v", backref)
 			}
-			fkBackrefs[*backref] = struct{}{}
+			fkBackrefs[backref] = struct{}{}
 			targetTable, err := getTable(backref.Table)
 			if err != nil {
 				return errors.Wrapf(err, "invalid fk backreference table=%d index=%d",
@@ -637,7 +637,7 @@ func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
 				return errors.Wrapf(err, "invalid fk backreference table=%s index=%d",
 					targetTable.Name, backref.Index)
 			}
-			if fk := targetIndex.ForeignKey; fk == nil || fk.Table != desc.ID || fk.Index != index.ID {
+			if fk := targetIndex.ForeignKey; fk.Table != desc.ID || fk.Index != index.ID {
 				return errors.Errorf("broken fk backward reference from %s.%s to %s.%s",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
@@ -901,7 +901,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 			}
 		}
 
-		if index.ForeignKey != nil {
+		if index.ForeignKey.Table != 0 {
 			if err := uniqConstraint(index.ForeignKey.Name); err != nil {
 				return err
 			}
