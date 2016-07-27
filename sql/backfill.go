@@ -392,21 +392,15 @@ func (sc *SchemaChanger) truncateIndexes(
 				return nil
 			}
 
-			indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, desc.ID)
-
-			// Delete the index.
-			indexStartKey := roachpb.Key(indexPrefix)
-			indexEndKey := indexStartKey.PrefixEnd()
-			if log.V(2) {
-				log.Infof(context.TODO(), "DelRange %s - %s", indexStartKey, indexEndKey)
-			}
-			b := &client.Batch{}
-			b.DelRange(indexStartKey, indexEndKey, false)
-
-			if err := txn.Run(b); err != nil {
+			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+			if err != nil {
 				return err
 			}
-			return nil
+			td := tableDeleter{rd: rd}
+			if err := td.init(txn); err != nil {
+				return err
+			}
+			return td.deleteIndex(&desc)
 		}); err != nil {
 			return err
 		}
