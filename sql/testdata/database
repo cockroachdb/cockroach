@@ -14,6 +14,7 @@ query T colnames
 SHOW DATABASES
 ----
 Database
+information_schema
 a
 system
 test
@@ -33,6 +34,7 @@ CREATE DATABASE c
 query T
 SHOW DATABASES
 ----
+information_schema
 a
 b
 c
@@ -71,6 +73,7 @@ query T colnames
 SHOW DATABASES
 ----
 Database
+information_schema
 a
 c
 system
