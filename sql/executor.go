@@ -495,11 +495,6 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		txn := txnState.txn // this might be nil if the txn was already aborted.
 		err := txn.Exec(execOpt, txnClosure)
 
-		// Until #7881 fixed.
-		if txnState.State != NoTxn && (txn == nil || txnState.txn == nil) {
-			log.Errorf(context.TODO(), "txnState not cleared while txn == nil: %+v, execOpt %+v, stmts %+v, remaining %+v", txnState, execOpt, stmts, remainingStmts)
-		}
-
 		// Update the Err field of the last result if the error was coming from
 		// auto commit. The error was generated outside of the txn closure, so it was not
 		// set in any result.
