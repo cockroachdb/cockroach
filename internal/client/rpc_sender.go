@@ -24,26 +24,31 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/pkg/errors"
 )
 
 const healthyTimeout = 2 * time.Second
 
 type sender struct {
-	conn   *grpc.ClientConn
-	client roachpb.ExternalClient
+	remoteAddr string
+	conn       *rpc.ClientConn
+	client     roachpb.ExternalClient
+	rpcContext *rpc.Context
 }
 
 // NewSender returns an implementation of Sender which exposes the Key-Value
 // database provided by a Cockroach cluster by connecting via RPC to a
 // Cockroach node.
-func NewSender(ctx *rpc.Context, target string) (Sender, error) {
-	conn, err := ctx.GRPCDial(target)
+func NewSender(ctx *rpc.Context, remoteAddr string) (Sender, error) {
+	conn, err := ctx.GRPCDial(remoteAddr)
 	if err != nil {
 		return nil, err
 	}
 	return &sender{
-		conn:   conn,
-		client: roachpb.NewExternalClient(conn),
+		remoteAddr: remoteAddr,
+		conn:       conn,
+		client:     roachpb.NewExternalClient(conn.ClientConn),
+		rpcContext: ctx,
 	}, nil
 }
 
@@ -53,9 +58,10 @@ func (s *sender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Ba
 	defer cancel()
 
 	c := s.conn
-	for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctxWithTimeout, state) {
+	var err error
+	for state := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctxWithTimeout, state) {
 		if err != nil {
-			return nil, roachpb.NewErrorf("roachpb.Batch RPC failed: %s", err)
+			return nil, roachpb.NewError(errors.Wrap(err, "roachpb.Batch RPC failed"))
 		}
 		if state == grpc.Shutdown {
 			return nil, roachpb.NewErrorf("roachpb.Batch RPC failed as client connection was closed")
@@ -64,7 +70,7 @@ func (s *sender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Ba
 
 	br, err := s.client.Batch(ctx, &ba)
 	if err != nil {
-		return nil, roachpb.NewErrorf("roachpb.Batch RPC failed: %s", err)
+		return nil, roachpb.NewError(errors.Wrap(err, "roachpb.Batch RPC failed"))
 	}
 	pErr := br.Error
 	br.Error = nil

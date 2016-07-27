@@ -187,7 +187,7 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roac
 	if err != nil {
 		return err
 	}
-	client := NewMultiRaftClient(conn)
+	client := NewMultiRaftClient(conn.ClientConn)
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()

@@ -89,7 +89,7 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 		}
 
 		// Start gossiping.
-		if err := c.gossip(g, NewGossipClient(conn), stopper); err != nil {
+		if err := c.gossip(g, NewGossipClient(conn.ClientConn), stopper); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.Lock()
 				peerID := c.peerID

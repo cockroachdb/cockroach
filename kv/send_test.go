@@ -128,28 +128,23 @@ func TestRetryableError(t *testing.T) {
 	s, ln := newTestServer(t, serverContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	grpcConn, err := clientContext.GRPCDial(ln.Addr().String())
+	addr := ln.Addr().String()
+	conn, err := clientContext.GRPCDial(addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
+
 	waitForConnState := func(desiredState grpc.ConnectivityState) {
-		clientState, err := grpcConn.State()
+		clientState := conn.State()
 		for clientState != desiredState {
-			if err != nil {
-				t.Fatal(err)
-			}
-			if clientState == grpc.Shutdown {
-				t.Fatalf("%v has unexpectedly shut down", grpcConn)
-			}
-			clientState, err = grpcConn.WaitForStateChange(ctx, clientState)
+			clientState = <-conn.StateChange()
 		}
 	}
 	// Wait until the client becomes healthy and shut down the server.
 	waitForConnState(grpc.Ready)
 	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
-	waitForConnState(grpc.TransientFailure)
+	waitForConnState(grpc.Shutdown)
 
 	opts := SendOptions{
 		SendNextTimeout: 100 * time.Millisecond,

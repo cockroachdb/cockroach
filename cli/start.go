@@ -34,8 +34,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/build"
@@ -462,7 +460,7 @@ func rerunBackground() error {
 	return sdnotify.Exec(cmd)
 }
 
-func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
+func getRPCConn() (*rpc.ClientConn, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(serverCtx.Context, hlc.NewClock(hlc.UnixNano),
 		stopper)
@@ -474,11 +472,11 @@ func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 }
 
 func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
-	conn, stopper, err := getGRPCConn()
+	conn, stopper, err := getRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
-	return serverpb.NewAdminClient(conn), stopper, nil
+	return serverpb.NewAdminClient(conn.ClientConn), stopper, nil
 }
 
 func stopperContext(stopper *stop.Stopper) context.Context {

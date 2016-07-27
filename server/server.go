@@ -477,7 +477,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
-		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn.ClientConn); err != nil {
 			return err
 		}
 	}

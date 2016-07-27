@@ -22,6 +22,8 @@ import (
 	"sort"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -30,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/opentracing/opentracing-go"
-	"google.golang.org/grpc"
 )
 
 // Allow local calls to be dispatched directly to the local server without
@@ -61,7 +62,7 @@ func (so SendOptions) contextWithTimeout() (context.Context, func()) {
 
 type batchClient struct {
 	remoteAddr string
-	conn       *grpc.ClientConn
+	conn       *rpc.ClientConn
 	client     roachpb.InternalClient
 	args       roachpb.BatchRequest
 	healthy    bool
@@ -127,9 +128,9 @@ func grpcTransportFactory(
 		clients = append(clients, batchClient{
 			remoteAddr: remoteAddr,
 			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
+			client:     roachpb.NewInternalClient(conn.ClientConn),
 			args:       argsCopy,
-			healthy:    rpcContext.IsConnHealthy(remoteAddr),
+			healthy:    conn.State() == grpc.Ready,
 		})
 	}
 
@@ -179,7 +180,8 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		defer cancel()
 
 		c := client.conn
-		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
+		var err error
+		for state := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
 			if err != nil {
 				done <- BatchCall{Err: err}
 				return

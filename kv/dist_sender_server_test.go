@@ -726,7 +726,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raftClient := storage.NewMultiRaftClient(conn)
+	raftClient := storage.NewMultiRaftClient(conn.ClientConn)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	stream, err := raftClient.RaftMessage(ctx)

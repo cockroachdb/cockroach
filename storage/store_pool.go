@@ -452,7 +452,7 @@ func (sp *StorePool) reserve(
 		return err
 	}
 
-	client := roachpb.NewInternalClient(conn)
+	client := roachpb.NewInternalClient(conn.ClientConn)
 	req := &roachpb.ReservationRequest{
 		StoreRequestHeader: roachpb.StoreRequestHeader{
 			NodeID:  detail.desc.Node.NodeID,
