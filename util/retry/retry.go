@@ -20,6 +20,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 // Options provides reusable configuration of Retry objects.
@@ -36,6 +38,7 @@ type Options struct {
 // backoff retry loop.
 type Retry struct {
 	opts           Options
+	ctxDoneChan    <-chan struct{}
 	currentAttempt int
 	isReset        bool
 }
@@ -43,6 +46,13 @@ type Retry struct {
 // Start returns a new Retry initialized to some default values. The Retry can
 // then be used in an exponential-backoff retry loop.
 func Start(opts Options) Retry {
+	return StartWithCtx(nil, opts)
+}
+
+// StartWithCtx returns a new Retry initialized to some default values. The
+// Retry can then be used in an exponential-backoff retry loop. If the provided
+// context is canceled (see Context.Done), the retry loop ends early.
+func StartWithCtx(ctx context.Context, opts Options) Retry {
 	if opts.InitialBackoff == 0 {
 		opts.InitialBackoff = 50 * time.Millisecond
 	}
@@ -57,6 +67,9 @@ func Start(opts Options) Retry {
 	}
 
 	r := Retry{opts: opts}
+	if ctx != nil {
+		r.ctxDoneChan = ctx.Done()
+	}
 	r.Reset()
 	return r
 }
@@ -69,6 +82,9 @@ func (r *Retry) Reset() {
 	select {
 	case <-r.opts.Closer:
 		// When the closer has fired, you can't keep going.
+		return
+	case <-r.ctxDoneChan:
+		// When the context was canceled, you can't keep going.
 		return
 	default:
 	}
@@ -114,6 +130,8 @@ func (r *Retry) Next() bool {
 		r.currentAttempt++
 		return true
 	case <-r.opts.Closer:
+		return false
+	case <-r.ctxDoneChan:
 		return false
 	}
 }
