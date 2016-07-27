@@ -1129,6 +1129,9 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		var reply roachpb.AdminMergeResponse
 		reply, pErr = r.AdminMerge(ctx, *tArgs, r.Desc())
 		resp = &reply
+	case *roachpb.AdminTransferLeaseRequest:
+		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
+		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
 		reply, pErr = r.CheckConsistency(*tArgs, r.Desc())
