@@ -475,13 +475,26 @@ func (n *createTableNode) resolveFK(
 		}
 	}
 
-	if matchesIndex(targetCols, target.PrimaryIndex) {
+	matchesIndex := func(cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact bool) bool {
+		if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
+			return false
+		}
+
+		for i := range cols {
+			if cols[i].ID != idx.ColumnIDs[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	if matchesIndex(targetCols, target.PrimaryIndex, true) {
 		ret.targetIdx = target.PrimaryIndex.ID
 	} else {
 		found := false
 		// Find the index corresponding to the referenced column.
 		for _, idx := range target.Indexes {
-			if idx.Unique && matchesIndex(targetCols, idx) {
+			if idx.Unique && matchesIndex(targetCols, idx, true) {
 				ret.targetIdx = idx.ID
 				found = true
 				break
@@ -498,13 +511,13 @@ func (n *createTableNode) resolveFK(
 
 	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
 
-	if matchesIndex(srcCols, tbl.PrimaryIndex) {
+	if matchesIndex(srcCols, tbl.PrimaryIndex, false) {
 		tbl.PrimaryIndex.ForeignKey = ref
 		ret.srcIdx = tbl.PrimaryIndex.ID
 	} else {
 		found := false
 		for i := range tbl.Indexes {
-			if matchesIndex(srcCols, tbl.Indexes[i]) {
+			if matchesIndex(srcCols, tbl.Indexes[i], false) {
 				tbl.Indexes[i].ForeignKey = ref
 				ret.srcIdx = tbl.Indexes[i].ID
 				found = true
@@ -512,7 +525,7 @@ func (n *createTableNode) resolveFK(
 			}
 		}
 		if !found {
-			return ret, fmt.Errorf("foreign key columns %s must have an index", colNames(srcCols))
+			return ret, fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
 		}
 	}
 
@@ -534,19 +547,6 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 	}
 	s.WriteString(`")`)
 	return s.String()
-}
-
-func matchesIndex(cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor) bool {
-	if len(cols) != len(idx.ColumnIDs) {
-		return false
-	}
-
-	for i := range cols {
-		if cols[i].ID != idx.ColumnIDs[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
@@ -626,9 +626,11 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 		if err != nil {
 			return err
 		}
-		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy,
-			sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx})
+		backref := sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx}
+		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
 
+		// For self-referencing FKs, the ref was added before the table had an ID
+		// assigned so we need to update it now to the assigned value.
 		if t.target == desc {
 			srcIdx, err := desc.FindIndexByID(t.srcIdx)
 			if err != nil {
