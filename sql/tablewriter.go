@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
@@ -577,4 +578,134 @@ func (td *tableDeleter) fastDelete(
 
 	td.b = nil
 	return rowCount, nil
+}
+
+// deleteAllRows runs the kv operations necessary to delete all sql rows in the
+// table passed at construction. This may require a scan.
+func (td *tableDeleter) deleteAllRows() error {
+	if td.rd.helper.tableDesc.IsInterleaved() {
+		if log.V(2) {
+			log.Info(context.TODO(), "delete forced to scan: table is interleaved")
+		}
+		return td.deleteAllRowsScan()
+	}
+	return td.deleteAllRowsFast()
+}
+
+func (td *tableDeleter) deleteAllRowsFast() error {
+	var tablePrefix []byte
+	// TODO(dan): This should be moved into keys.MakeTablePrefix, but updating
+	// all the uses of that will be a pain.
+	if interleave := td.rd.helper.tableDesc.PrimaryIndex.Interleave; len(interleave.Ancestors) > 0 {
+		tablePrefix = encoding.EncodeUvarintAscending(nil, uint64(interleave.Ancestors[0].TableID))
+	}
+	tablePrefix = encoding.EncodeUvarintAscending(nil, uint64(td.rd.helper.tableDesc.ID))
+
+	// Delete rows and indexes starting with the table's prefix.
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	if log.V(2) {
+		log.Infof(context.TODO(), "DelRange %s - %s", tableStartKey, tableEndKey)
+	}
+	td.b.DelRange(tableStartKey, tableEndKey, false)
+	return td.finalize()
+}
+
+func (td *tableDeleter) deleteAllRowsScan() error {
+	tablePrefix := sqlbase.MakeIndexKeyPrefix(
+		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
+	span := sqlbase.Span{Start: roachpb.Key(tablePrefix), End: roachpb.Key(tablePrefix).PrefixEnd()}
+
+	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
+	for _, idx := range td.rd.fetchColIDtoRowIndex {
+		valNeededForCol[idx] = true
+	}
+
+	var rf sqlbase.RowFetcher
+	err := rf.Init(
+		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
+		false, false, td.rd.fetchCols, valNeededForCol)
+	if err != nil {
+		return err
+	}
+	if err := rf.StartScan(td.txn, sqlbase.Spans{span}, 0); err != nil {
+		return err
+	}
+
+	for {
+		row, err := rf.NextRow()
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			// Done deleting rows.
+			break
+		}
+		_, err = td.row(row)
+		if err != nil {
+			return err
+		}
+	}
+	return td.finalize()
+}
+
+// deleteIndex runs the kv operations necessary to delete all kv entries in the
+// given index. This may require a scan.
+func (td *tableDeleter) deleteIndex(idx *sqlbase.IndexDescriptor) error {
+	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
+		if log.V(2) {
+			log.Info(context.TODO(), "delete forced to scan: table is interleaved")
+		}
+		return td.deleteIndexScan(idx)
+	}
+	return td.deleteIndexFast(idx)
+}
+
+func (td *tableDeleter) deleteIndexFast(idx *sqlbase.IndexDescriptor) error {
+	indexPrefix := sqlbase.MakeIndexKeyPrefix(td.rd.helper.tableDesc, idx.ID)
+	indexStartKey := roachpb.Key(indexPrefix)
+	indexEndKey := indexStartKey.PrefixEnd()
+
+	if log.V(2) {
+		log.Infof(context.TODO(), "DelRange %s - %s", indexStartKey, indexEndKey)
+	}
+	td.b.DelRange(indexStartKey, indexEndKey, false)
+	return td.finalize()
+}
+
+func (td *tableDeleter) deleteIndexScan(idx *sqlbase.IndexDescriptor) error {
+	tablePrefix := sqlbase.MakeIndexKeyPrefix(
+		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
+	span := sqlbase.Span{Start: roachpb.Key(tablePrefix), End: roachpb.Key(tablePrefix).PrefixEnd()}
+
+	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
+	for _, idx := range td.rd.fetchColIDtoRowIndex {
+		valNeededForCol[idx] = true
+	}
+
+	var rf sqlbase.RowFetcher
+	err := rf.Init(
+		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
+		false, false, td.rd.fetchCols, valNeededForCol)
+	if err != nil {
+		return err
+	}
+	if err := rf.StartScan(td.txn, sqlbase.Spans{span}, 0); err != nil {
+		return err
+	}
+
+	for {
+		row, err := rf.NextRow()
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			// Done deleting rows.
+			break
+		}
+		if err := td.rd.deleteIndexRow(td.b, idx, row); err != nil {
+			return err
+		}
+	}
+	return td.finalize()
 }
