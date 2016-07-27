@@ -923,6 +923,8 @@ var (
 	ErrIntOverflowInternalRaft   = fmt.Errorf("proto: integer overflow")
 )
 
+func init() { proto.RegisterFile("cockroach/roachpb/internal_raft.proto", fileDescriptorInternalRaft) }
+
 var fileDescriptorInternalRaft = []byte{
 	// 447 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x6c, 0x52, 0xcf, 0x6e, 0xd3, 0x30,

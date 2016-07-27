@@ -18,6 +18,7 @@ package client
 
 import (
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -41,7 +42,7 @@ func NewSender(ctx *rpc.Context, target string) (Sender, error) {
 
 // Send implements the Sender interface.
 func (s sender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	br, err := s.Batch(ctx, &ba)
+	br, err := s.Batch(ctx, &ba, grpc.FailFast(false))
 	if err != nil {
 		return nil, roachpb.NewError(errors.Wrap(err, "roachpb.Batch RPC failed"))
 	}

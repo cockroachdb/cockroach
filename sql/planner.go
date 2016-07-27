@@ -284,7 +284,7 @@ func (p *planner) checkTestingVerifyMetadataOrDie(
 		return
 	}
 	if !p.verifyFnCheckedOnce {
-		panic("intial state of the condition to verify was not checked")
+		panic("initial state of the condition to verify was not checked")
 	}
 
 	for p.testingVerifyMetadataFn(e.systemConfig) != nil {
