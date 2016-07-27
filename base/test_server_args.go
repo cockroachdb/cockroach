@@ -74,9 +74,6 @@ type TestClusterArgs struct {
 	ServerArgs TestServerArgs
 	// ReplicationMode controls how replication is to be done in the cluster.
 	ReplicationMode TestClusterReplicationMode
-	// Stopper can be used to stop the cluster. If not set, a stopper will be
-	// constructed and it can be gotten through TestCluster.Stopper().
-	Stopper *stop.Stopper
 }
 
 // TestClusterReplicationMode represents the replication settings for a TestCluster.

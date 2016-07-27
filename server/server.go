@@ -365,6 +365,12 @@ func (s *Server) Start() error {
 
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
+
+		// GRPC server will stop accept new connections when the anyL listener
+		// is closed, but we must explicitly stop the GRPC server in order to
+		// close outstanding open connections.
+		<-s.stopper.ShouldStop()
+		s.grpc.Stop()
 	})
 
 	s.stopper.RunWorker(func() {
