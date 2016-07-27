@@ -20,7 +20,10 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const outboxBufRows = 16
@@ -30,15 +33,6 @@ const outboxFlushPeriod = 100 * time.Microsecond
 // an encoding available.
 const preferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
 
-// outboxStream is implemented by any protobuf generated type for a stream of
-// StreamMessage, such as DistSQL_RunSimpleFlowServer.
-type outboxStream interface {
-	// Send blocks until it sends the message, the stream is done, or the stream
-	// breaks. Protobuf generated code implements it as a wrapper around
-	// grpc.Steam.SendMsg.
-	Send(*StreamMessage) error
-}
-
 // outbox implements an outgoing mailbox as a RowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
 // when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
@@ -47,9 +41,13 @@ type outbox struct {
 	// RowChannel implements the RowReceiver interface.
 	RowChannel
 
-	outStream outboxStream
+	flowCtx *FlowCtx
+	addr    string
+	stream  DistSQL_FlowStreamClient
 
-	flushTicker *time.Ticker
+	// simpleFlowStream is set if we are outputting to a simple flow stream; in
+	// that case addr and stream will not be set.
+	simpleFlowStream DistSQL_RunSimpleFlowServer
 
 	encoder StreamEncoder
 	// numRows is the number of rows that have been accumulated in the encoder.
@@ -61,8 +59,14 @@ type outbox struct {
 
 var _ RowReceiver = &outbox{}
 
-func newOutbox(stream outboxStream) *outbox {
-	return &outbox{outStream: stream}
+func newOutboxSimpleFlowStream(ctx context.Context, stream DistSQL_RunSimpleFlowServer) *outbox {
+	return &outbox{flowCtx: &FlowCtx{Context: ctx}, simpleFlowStream: stream}
+}
+
+func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) *outbox {
+	m := &outbox{flowCtx: flowCtx, addr: addr}
+	m.encoder.setHeaderFields(flowID, streamID)
+	return m
 }
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated
@@ -86,7 +90,22 @@ func (m *outbox) flush(last bool, err error) error {
 	}
 	msg := m.encoder.FormMessage(last, err)
 
-	sendErr := m.outStream.Send(msg)
+	if log.V(3) {
+		log.Infof(m.flowCtx, "flushing outbox")
+	}
+	var sendErr error
+	if m.stream != nil {
+		sendErr = m.stream.Send(msg)
+	} else {
+		sendErr = m.simpleFlowStream.Send(msg)
+	}
+	if sendErr != nil {
+		if log.V(1) {
+			log.Errorf(m.flowCtx, "outbox flush error: %s", sendErr)
+		}
+	} else if log.V(3) {
+		log.Infof(m.flowCtx, "outbox flushed")
+	}
 	if sendErr != nil {
 		return sendErr
 	}
@@ -95,18 +114,39 @@ func (m *outbox) flush(last bool, err error) error {
 	return nil
 }
 
-func (m *outbox) mainLoop() {
-	var err error
-loop:
+func (m *outbox) mainLoop() error {
+	if m.simpleFlowStream == nil {
+		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
+		if err != nil {
+			return err
+		}
+		client := NewDistSQLClient(conn)
+		if log.V(2) {
+			log.Infof(m.flowCtx, "outbox: calling FlowStream")
+		}
+		m.stream, err = client.FlowStream(context.TODO())
+		if err != nil {
+			if log.V(1) {
+				log.Infof(m.flowCtx, "FlowStream error: %s", err)
+			}
+			return err
+		}
+		if log.V(2) {
+			log.Infof(m.flowCtx, "outbox: FlowStream returned")
+		}
+	}
+
+	flushTicker := time.NewTicker(outboxFlushPeriod)
+	defer flushTicker.Stop()
+
 	for {
 		select {
 		case d, ok := <-m.RowChannel.C:
 			if !ok {
 				// No more data.
-				err = m.flush(true, nil)
-				break loop
+				return m.flush(true, nil)
 			}
-			err = d.Err
+			err := d.Err
 			if err == nil {
 				err = m.addRow(d.Row)
 			}
@@ -114,20 +154,34 @@ loop:
 				// Try to flush to send out the error, but ignore any
 				// send error.
 				_ = m.flush(true, err)
-				break loop
+				return err
 			}
-		case <-m.flushTicker.C:
-			err = m.flush(false, nil)
+		case <-flushTicker.C:
+			err := m.flush(false, nil)
 			if err != nil {
-				break loop
+				return err
 			}
 		}
 	}
-	m.flushTicker.Stop()
+}
+
+func (m *outbox) run() {
+	err := m.mainLoop()
+
 	m.RowChannel.NoMoreRows()
 	if err != nil {
 		// Drain to allow senders to finish.
 		for range m.dataChan {
+		}
+	}
+	if m.stream != nil {
+		resp, recvErr := m.stream.CloseAndRecv()
+		if err == nil {
+			if recvErr != nil {
+				err = recvErr
+			} else if resp.Error != nil {
+				err = resp.Error.GoError()
+			}
 		}
 	}
 	m.err = err
@@ -140,6 +194,5 @@ func (m *outbox) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	m.wg = wg
 	m.RowChannel.Init()
-	m.flushTicker = time.NewTicker(outboxFlushPeriod)
-	go m.mainLoop()
+	go m.run()
 }
