@@ -496,7 +496,7 @@ func (n *createTableNode) resolveFK(
 		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromCols[0], target.Name))
 	}
 
-	ref := &sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
+	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex) {
 		tbl.PrimaryIndex.ForeignKey = ref
@@ -627,7 +627,7 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 			return err
 		}
 		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy,
-			&sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx})
+			sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx})
 
 		if t.target == desc {
 			srcIdx, err := desc.FindIndexByID(t.srcIdx)
