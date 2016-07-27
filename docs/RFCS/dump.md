@@ -1,5 +1,5 @@
 - Feature Name: SQL Backup
-- Status: draft
+- Status: completed
 - Start Date: 2016-04-14
 - Authors: Matt Jibson
 - RFC PR: #6058
@@ -68,12 +68,6 @@ need a way to resume a dump from the last place and time that it started. This
 could be achieved using a time travel query
 ([#5963](https://github.com/cockroachdb/cockroach/issues/5963)) which
 discusses many possible solutions.
-
-TODO: is SNAPSHOT the best isolation level for this? Or do the time travel
-queries fix any time-related problems and we don’t have to use transactions
-at all? We want something that will allow us to read data that won’t change
-and that also won’t abort any other write transactions. I’m not overly
-familiar with our isolation levels so I need some confirmation here.
 
 # Alternatives
 
