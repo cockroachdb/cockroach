@@ -404,7 +404,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}),
 		},
 		"SHOW DATABASES": {
-			baseTest.Results("d").Results("system"),
+			baseTest.Results("information_schema").Results("d").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
 			baseTest.Results("users", security.RootUser, "DELETE,GRANT,INSERT,SELECT,UPDATE"),

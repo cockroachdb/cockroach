@@ -104,6 +104,7 @@ type DatabaseAccessor interface {
 
 	// getCachedDatabaseDesc looks up the database descriptor from
 	// the descriptor cache, given its name.
+	// TODO(nvanbenschoten) This method doesn't belong in the interface.
 	getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
 	// getDatabaseID returns the ID of a database given its name.  It
@@ -127,6 +128,9 @@ var _ DatabaseAccessor = &planner{}
 
 // getDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	if virtual := checkVirtualDatabaseDesc(name); virtual != nil {
+		return virtual, nil
+	}
 	desc := &sqlbase.DatabaseDescriptor{}
 	found, err := p.getDescriptor(databaseKey{name}, desc)
 	if !found {
@@ -185,6 +189,10 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 
 // getDatabaseID implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
+	if virtual := checkVirtualDatabaseDesc(name); virtual != nil {
+		return 0, errors.Errorf("virtual databases (%s) do not have IDs", name)
+	}
+
 	if id := p.databaseCache.getID(name); id != 0 {
 		return id, nil
 	}
@@ -210,11 +218,26 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 
 // createDatabase implements the DatabaseAccessor interface.
 func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error) {
+	if isVirtualDatabase(desc.Name) {
+		if ifNotExists {
+			// Noop.
+			return false, nil
+		}
+		return false, descriptorAlreadyExistsErr{desc, desc.Name}
+	}
 	return p.createDescriptor(databaseKey{desc.Name}, desc, ifNotExists)
 }
 
 // renameDatabase implements the DatabaseAccessor interface.
 func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName string) error {
+	onAlreadyExists := func() error {
+		return fmt.Errorf("the new database name %q already exists", newName)
+	}
+
+	if isVirtualDatabase(newName) {
+		return onAlreadyExists()
+	}
+
 	oldName := oldDesc.Name
 	oldDesc.SetName(newName)
 	if err := oldDesc.Validate(); err != nil {
@@ -234,7 +257,7 @@ func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName st
 
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return fmt.Errorf("the new database name %q already exists", newName)
+			return onAlreadyExists()
 		}
 		return err
 	}
