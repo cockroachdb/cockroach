@@ -24,7 +24,6 @@ import "cockroach/server/status/status.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/storage/storagebase/state.proto";
 import "cockroach/util/unresolved_addr.proto";
-import "cockroach/roachpb/data.proto";
 
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";

@@ -51,10 +51,10 @@ import (
 var errTransactionUnsupported = errors.New("not supported within a transaction")
 
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
-// command. It returns the response, an error, and a slice of intents that were skipped during
-// execution.  If an error is returned, any returned intents should still be resolved.
-// remScanResults is the number of scan results remaining for this batch (MaxInt64 for no
-// limit).
+// command. It returns the response, an error, and a post commit trigger which
+// may be actionable even in the case of an error.
+// remScanResults is the number of scan results remaining for this batch
+// (MaxInt64 for no limit).
 func (r *Replica) executeCmd(
 	ctx context.Context,
 	raftCmdID storagebase.CmdIDKey,
@@ -65,7 +65,7 @@ func (r *Replica) executeCmd(
 	remScanResults int64,
 	args roachpb.Request,
 	reply roachpb.Response,
-) ([]roachpb.Intent, *roachpb.Error) {
+) (*PostCommitTrigger, *roachpb.Error) {
 	ts := h.Timestamp
 
 	if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -92,15 +92,15 @@ func (r *Replica) executeCmd(
 	// op already executed for overlapping keys.
 	r.store.Clock().Update(ts)
 
-	var intents []roachpb.Intent
 	var err error
+	var trigger *PostCommitTrigger
 
 	// Note that responses are populated even when an error is returned.
 	// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 	switch tArgs := args.(type) {
 	case *roachpb.GetRequest:
 		resp := reply.(*roachpb.GetResponse)
-		*resp, intents, err = r.Get(ctx, batch, h, *tArgs)
+		*resp, trigger, err = r.Get(ctx, batch, h, *tArgs)
 	case *roachpb.PutRequest:
 		resp := reply.(*roachpb.PutResponse)
 		*resp, err = r.Put(ctx, batch, ms, h, *tArgs)
@@ -121,19 +121,19 @@ func (r *Replica) executeCmd(
 		*resp, err = r.DeleteRange(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ScanRequest:
 		resp := reply.(*roachpb.ScanResponse)
-		*resp, intents, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
+		*resp, trigger, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
 	case *roachpb.ReverseScanRequest:
 		resp := reply.(*roachpb.ReverseScanResponse)
-		*resp, intents, err = r.ReverseScan(ctx, batch, h, remScanResults, *tArgs)
+		*resp, trigger, err = r.ReverseScan(ctx, batch, h, remScanResults, *tArgs)
 	case *roachpb.BeginTransactionRequest:
 		resp := reply.(*roachpb.BeginTransactionResponse)
 		*resp, err = r.BeginTransaction(ctx, batch, ms, h, *tArgs)
 	case *roachpb.EndTransactionRequest:
 		resp := reply.(*roachpb.EndTransactionResponse)
-		*resp, intents, err = r.EndTransaction(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.EndTransaction(ctx, batch, ms, h, *tArgs)
 	case *roachpb.RangeLookupRequest:
 		resp := reply.(*roachpb.RangeLookupResponse)
-		*resp, intents, err = r.RangeLookup(ctx, batch, h, *tArgs)
+		*resp, trigger, err = r.RangeLookup(ctx, batch, h, *tArgs)
 	case *roachpb.HeartbeatTxnRequest:
 		resp := reply.(*roachpb.HeartbeatTxnResponse)
 		*resp, err = r.HeartbeatTxn(ctx, batch, ms, h, *tArgs)
@@ -189,18 +189,26 @@ func (r *Replica) executeCmd(
 		}
 		pErr = roachpb.NewErrorWithTxn(err, txn)
 	}
-	return intents, pErr
+
+	return trigger, pErr
+}
+
+func intentsToTrigger(intents []roachpb.Intent, args roachpb.Request) *PostCommitTrigger {
+	if len(intents) > 0 {
+		return &PostCommitTrigger{intents: []intentsWithArg{{args: args, intents: intents}}}
+	}
+	return nil
 }
 
 // Get returns the value for a specified key.
 func (r *Replica) Get(
 	ctx context.Context, batch engine.ReadWriter, h roachpb.Header, args roachpb.GetRequest,
-) (roachpb.GetResponse, []roachpb.Intent, error) {
+) (roachpb.GetResponse, *PostCommitTrigger, error) {
 	var reply roachpb.GetResponse
 
 	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	reply.Value = val
-	return reply, intents, err
+	return reply, intentsToTrigger(intents, &args), err
 }
 
 // Put sets the value for a specified key.
@@ -349,7 +357,7 @@ func (r *Replica) Scan(
 	h roachpb.Header,
 	remScanResults int64,
 	args roachpb.ScanRequest,
-) (roachpb.ScanResponse, []roachpb.Intent, error) {
+) (roachpb.ScanResponse, *PostCommitTrigger, error) {
 	if remScanResults == 0 {
 		// We can't return any more results; skip the scan
 		return roachpb.ScanResponse{}, nil, nil
@@ -358,7 +366,7 @@ func (r *Replica) Scan(
 
 	rows, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxResults, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	return roachpb.ScanResponse{Rows: rows}, intents, err
+	return roachpb.ScanResponse{Rows: rows}, intentsToTrigger(intents, &args), err
 }
 
 // ReverseScan scans the key range specified by start key through end key in descending order up to
@@ -370,7 +378,7 @@ func (r *Replica) ReverseScan(
 	h roachpb.Header,
 	remScanResults int64,
 	args roachpb.ReverseScanRequest,
-) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
+) (roachpb.ReverseScanResponse, *PostCommitTrigger, error) {
 	if remScanResults == 0 {
 		// We can't return any more results; skip the scan
 		return roachpb.ReverseScanResponse{}, nil, nil
@@ -379,7 +387,7 @@ func (r *Replica) ReverseScan(
 
 	rows, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxResults,
 		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	return roachpb.ReverseScanResponse{Rows: rows}, intents, err
+	return roachpb.ReverseScanResponse{Rows: rows}, intentsToTrigger(intents, &args), err
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
@@ -465,7 +473,7 @@ func (r *Replica) EndTransaction(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.EndTransactionRequest,
-) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
+) (roachpb.EndTransactionResponse, *PostCommitTrigger, error) {
 	var reply roachpb.EndTransactionResponse
 
 	if err := verifyTransaction(h, &args); err != nil {
@@ -484,8 +492,7 @@ func (r *Replica) EndTransaction(
 		// Return a fresh empty reply because there's an empty Transaction
 		// proto in our existing one.
 		return roachpb.EndTransactionResponse{},
-			nil,
-			roachpb.NewTransactionStatusError("does not exist")
+			nil, roachpb.NewTransactionStatusError("does not exist")
 	}
 
 	// Verify that we can either commit it or abort it (according
@@ -506,7 +513,7 @@ func (r *Replica) EndTransaction(
 			); err != nil {
 				return reply, nil, err
 			}
-			return reply, externalIntents, nil
+			return reply, intentsToTrigger(externalIntents, &args), nil
 		}
 		// If the transaction was previously aborted by a concurrent
 		// writer's push, any intents written are still open. It's only now
@@ -514,7 +521,7 @@ func (r *Replica) EndTransaction(
 		// resolution (we're currently not able to write on error, but
 		// see #1989).
 		return reply,
-			roachpb.AsIntents(args.IntentSpans, reply.Txn),
+			intentsToTrigger(roachpb.AsIntents(args.IntentSpans, reply.Txn), &args),
 			roachpb.NewTransactionAbortedError()
 
 	case roachpb.PENDING:
@@ -568,7 +575,9 @@ func (r *Replica) EndTransaction(
 		// and (b) not able to write on error (see #1989), we can't write
 		// ABORTED into the master transaction record, which remains
 		// PENDING, and that's pretty bad.
-		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
+		return reply,
+			intentsToTrigger(roachpb.AsIntents(args.IntentSpans, reply.Txn), &args),
+			roachpb.NewTransactionAbortedError()
 	}
 
 	// Set transaction status to COMMITTED or ABORTED as per the
@@ -588,8 +597,10 @@ func (r *Replica) EndTransaction(
 	}
 
 	// Run triggers if successfully committed.
+	var trigger *PostCommitTrigger
 	if reply.Txn.Status == roachpb.COMMITTED {
-		if err := r.runCommitTrigger(ctx, batch.(engine.Batch), ms, args, reply.Txn); err != nil {
+		var err error
+		if trigger, err = r.runCommitTrigger(ctx, batch.(engine.Batch), ms, args, reply.Txn); err != nil {
 			// TODO(tschottdorf): should an error here always amount to a
 			// ReplicaCorruptionError?
 			log.Error(ctx, errors.Wrapf(err, "%s: commit trigger", r))
@@ -615,7 +626,8 @@ func (r *Replica) EndTransaction(
 	// will immediately succeed as a missing txn record on push sets the
 	// transaction to aborted. In both cases, the txn will be GC'd on
 	// the slow path.
-	return reply, externalIntents, nil
+	trigger = updateTrigger(trigger, intentsToTrigger(externalIntents, &args))
+	return reply, trigger, nil
 }
 
 // isEndTransactionExceedingDeadline returns true if the transaction
@@ -810,7 +822,8 @@ func (r *Replica) runCommitTrigger(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-) error {
+) (*PostCommitTrigger, error) {
+	var trigger *PostCommitTrigger
 	ct := args.InternalCommitTrigger
 	if ct != nil {
 		// Assert that the on-disk state doesn't diverge from the in-memory
@@ -828,7 +841,8 @@ func (r *Replica) runCommitTrigger(
 
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
-			if err := r.splitTrigger(ctx, batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+			var err error
+			if trigger, err = r.splitTrigger(ctx, batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
 				return err
 			}
 		}
@@ -862,9 +876,9 @@ func (r *Replica) runCommitTrigger(
 		return nil
 	}(); err != nil {
 		r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
-		return err
+		return nil, err
 	}
-	return nil
+	return trigger, nil
 }
 
 // RangeLookup is used to look up RangeDescriptors - a RangeDescriptor
@@ -905,7 +919,7 @@ func (r *Replica) RangeLookup(
 	batch engine.ReadWriter,
 	h roachpb.Header,
 	args roachpb.RangeLookupRequest,
-) (roachpb.RangeLookupResponse, []roachpb.Intent, error) {
+) (roachpb.RangeLookupResponse, *PostCommitTrigger, error) {
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
 	key, err := keys.Addr(args.Key)
@@ -1104,7 +1118,7 @@ func (r *Replica) RangeLookup(
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
 	}
 
-	return reply, intents, nil
+	return reply, intentsToTrigger(intents, &args), nil
 }
 
 // HeartbeatTxn updates the transaction status and heartbeat
@@ -2351,11 +2365,6 @@ func (r *Replica) AdminSplit(
 				SplitTrigger: &roachpb.SplitTrigger{
 					LeftDesc:  leftDesc,
 					RightDesc: *rightDesc,
-					// Designate this store as the preferred lease holder for the new
-					// range. The choice of store here doesn't matter for
-					// correctness, but for best performance it should be one
-					// that we believe is currently up.
-					InitialLeaderStoreID: r.store.StoreID(),
 				},
 			},
 		})
@@ -2366,111 +2375,6 @@ func (r *Replica) AdminSplit(
 	}
 
 	return reply, nil
-}
-
-// splitTriggerPostCommit is the part of the split trigger which coordinates
-// the actual split with the Store.
-func splitTriggerPostCommit(
-	ctx context.Context,
-	deltaMS enginepb.MVCCStats,
-	split *roachpb.SplitTrigger,
-	r *Replica,
-) {
-	// Create the new Replica representing the right side of the split.
-	// Our error handling options at this point are very limited, but
-	// we need to do this after our batch has committed.
-	rightRng, err := NewReplica(&split.RightDesc, r.store, 0)
-	if err != nil {
-		panic(err)
-	}
-
-	// Copy the timestamp cache into the RHS range.
-	r.mu.Lock()
-	rightRng.mu.Lock()
-	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
-	rightRng.mu.Unlock()
-	r.mu.Unlock()
-	log.Trace(ctx, "copied timestamp cache")
-
-	// Add the RHS replica to the store. This step atomically updates
-	// the EndKey of the LHS replica and also adds the RHS replica
-	// to the store's replica map.
-	if err := r.store.SplitRange(r, rightRng); err != nil {
-		// Our in-memory state has diverged from the on-disk state.
-		log.Fatalf(ctx, "%s: failed to update Store after split: %s", r, err)
-	}
-
-	// Update store stats with difference in stats before and after split.
-	r.store.metrics.addMVCCStats(deltaMS)
-
-	// If the range was not properly replicated before the split, the
-	// replicate queue may not have picked it up (due to the need for
-	// a split). Enqueue both left and right halves to speed up a
-	// potentially necessary replication. See #7022 and #7800.
-	now := r.store.Clock().Now()
-	r.store.replicateQueue.MaybeAdd(r, now)
-	r.store.replicateQueue.MaybeAdd(rightRng, now)
-
-	// To avoid leaving the RHS range unavailable as it waits to elect
-	// its leader, one (and only one) of the nodes should start an
-	// election as soon as the split is processed.
-	//
-	// If there is only one replica, raft instantly makes it the leader.
-	// Otherwise, we must trigger a campaign here.
-	//
-	// TODO(bdarnell): The asynchronous campaign can cause a problem
-	// with merges, by recreating a replica that should have been
-	// destroyed. This will probably be addressed as a part of the
-	// general work to be done for merges
-	// (https://github.com/cockroachdb/cockroach/issues/2433), but for
-	// now we're safe because we only perform the asynchronous
-	// campaign when there are multiple replicas, and we only perform
-	// merges in testing scenarios with a single replica.
-	// Note that in multi-node scenarios the async campaign is safe
-	// because it has exactly the same behavior as an incoming message
-	// from another node; the problem here is only with merges.
-	if len(split.RightDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
-		// Schedule the campaign a short time in the future. As
-		// followers process the split, they destroy and recreate their
-		// raft groups, which can cause messages to be dropped. In
-		// general a shorter delay (perhaps all the way down to zero) is
-		// better in production, because the race is rare and the worst
-		// case scenario is that we simply wait for an election timeout.
-		// However, the test for this feature disables election timeouts
-		// and relies solely on this campaign trigger, so it is unacceptably
-		// flaky without a bit of a delay.
-		//
-		// Note: you must not use the context inside of this task since it may
-		// contain a finished trace by the time it runs.
-		if err := r.store.stopper.RunAsyncTask(func() {
-			ctxInner := context.Background()
-			time.Sleep(10 * time.Millisecond)
-			// Make sure that rightRng hasn't been removed.
-			replica, err := r.store.GetReplica(rightRng.RangeID)
-			if err != nil {
-				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-					log.Infof(ctxInner, "%s: RHS replica %d removed before campaigning",
-						r, r.mu.replicaID)
-				} else {
-					log.Infof(ctxInner, "%s: RHS replica %d unable to campaign: %s",
-						r, r.mu.replicaID, err)
-				}
-				return
-			}
-
-			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
-				if err := raftGroup.Campaign(); err != nil {
-					log.Warningf(ctxInner, "%s: error %v", r, err)
-				}
-				return nil
-			}); err != nil {
-				panic(err)
-			}
-		}); err != nil {
-			log.Warningf(ctx, "%s: error %v", r, err)
-			return
-		}
-	}
 }
 
 // splitTrigger is called on a successful commit of a transaction
@@ -2625,7 +2529,7 @@ func (r *Replica) splitTrigger(
 	deltaMS *enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
-) error {
+) (*PostCommitTrigger, error) {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := r.store.Tracer().StartSpan("split")
@@ -2633,7 +2537,7 @@ func (r *Replica) splitTrigger(
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, split.RightDesc.EndKey) {
-		return errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
+		return nil, errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
 			split.LeftDesc.StartKey, split.LeftDesc.EndKey,
 			split.RightDesc.StartKey, split.RightDesc.EndKey, r)
 	}
@@ -2654,7 +2558,7 @@ func (r *Replica) splitTrigger(
 	// to the LHS must happen below this point.
 	leftMS, err := ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
-		return errors.Wrap(err, "unable to compute stats for LHS range after split")
+		return nil, errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
 	log.Trace(ctx, "computed stats for left hand side range")
 
@@ -2663,24 +2567,24 @@ func (r *Replica) splitTrigger(
 	// nil on calls to MVCCPutProto.
 	replicaGCTS, err := r.getLastReplicaGCTimestamp()
 	if err != nil {
-		return errors.Wrap(err, "unable to fetch last replica GC timestamp")
+		return nil, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
-		return errors.Wrap(err, "unable to copy last replica GC timestamp")
+		return nil, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 	verifyTS, err := r.getLastVerificationTimestamp()
 	if err != nil {
-		return errors.Wrap(err, "unable to fetch last verification timestamp")
+		return nil, errors.Wrap(err, "unable to fetch last verification timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
-		return errors.Wrap(err, "unable to copy last verification timestamp")
+		return nil, errors.Wrap(err, "unable to copy last verification timestamp")
 	}
 
 	// Initialize the RHS range's abort cache by copying the LHS's.
 	seqCount, err := r.abortCache.CopyInto(batch, deltaMS, split.RightDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return errors.Wrap(err, "unable to copy abort cache to RHS split range")
+		return nil, errors.Wrap(err, "unable to copy abort cache to RHS split range")
 	}
 	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
@@ -2703,12 +2607,12 @@ func (r *Replica) splitTrigger(
 	{
 		leftLease, err := loadLease(r.store.Engine(), r.RangeID)
 		if err != nil {
-			return errors.Wrap(err, "unable to load lease")
+			return nil, errors.Wrap(err, "unable to load lease")
 		}
 
 		replica, found := split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
 		if !found {
-			return errors.Errorf(
+			return nil, errors.Errorf(
 				"pre-split lease holder %+v not found in post-split descriptor %+v",
 				leftLease.Replica, split.RightDesc,
 			)
@@ -2718,7 +2622,7 @@ func (r *Replica) splitTrigger(
 		if err := setLease(
 			batch, deltaMS, split.RightDesc.RangeID, rightLease,
 		); err != nil {
-			return errors.Wrap(err, "unable to seed right-hand side lease")
+			return nil, errors.Wrap(err, "unable to seed right-hand side lease")
 		}
 	}
 
@@ -2731,7 +2635,7 @@ func (r *Replica) splitTrigger(
 		// over the keys and counting.
 		rightMS, err = ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
 		if err != nil {
-			return errors.Wrap(err, "unable to compute stats for RHS range after split")
+			return nil, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}
 	} else {
 		// Because neither the original stats or the delta stats contain
@@ -2766,7 +2670,7 @@ func (r *Replica) splitTrigger(
 
 		// Account for MVCCStats' own contribution to the RHS range's statistics.
 		if err := engine.AccountForSelf(&rightMS, split.RightDesc.RangeID); err != nil {
-			return errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
+			return nil, errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 		}
 
 		// TODO(tschottdorf): Writing the initial state is subtle since this
@@ -2781,7 +2685,7 @@ func (r *Replica) splitTrigger(
 		// contain a cast vote).
 		rightMS, err = writeInitialState(batch, rightMS, split.RightDesc)
 		if err != nil {
-			return errors.Wrap(err, "unable to write initial state")
+			return nil, errors.Wrap(err, "unable to write initial state")
 		}
 		deltaMS.Subtract(preRightMS)
 		deltaMS.Add(rightMS)
@@ -2814,25 +2718,20 @@ func (r *Replica) splitTrigger(
 		origCopy := origBothMS
 		origCopy.ContainsEstimates = false
 		if err := setMVCCStats(batch, r.RangeID, origCopy); err != nil {
-			return errors.Wrap(err, "unable to write MVCC stats")
+			return nil, errors.Wrap(err, "unable to write MVCC stats")
 		}
 		r.mu.Lock()
 		r.mu.state.Stats.ContainsEstimates = false
 		r.mu.Unlock()
 	}
 
-	// This is the part of the split trigger which coordinates the actual split
-	// with the Store. As such, it tries to avoid using any of the intermediate
-	// results of the code above, the goal being moving it closer to Store's
-	// Raft processing goroutine.
-
-	theTrigger := func() {
-		splitTriggerPostCommit(ctx, rhsDeltaMS, split, r)
+	trigger := &PostCommitTrigger{
+		split: &postCommitSplit{
+			SplitTrigger: *split,
+			RHSDeltaMS:   rhsDeltaMS,
+		},
 	}
-
-	batch.Defer(theTrigger)
-
-	return nil
+	return trigger, nil
 }
 
 // AdminMerge extends this range to subsume the range that comes next
