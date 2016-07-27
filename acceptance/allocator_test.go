@@ -83,6 +83,13 @@ const (
 	StableInterval   = 3 * time.Minute
 )
 
+const (
+	urlStore1s = archivedStoreURL + "/1node-10g-262ranges"
+	urlStore1m = archivedStoreURL + "/1node-2065replicas-108G"
+	urlStore3s = archivedStoreURL + "/3nodes-10g-262ranges"
+	urlStore6m = archivedStoreURL + "/6nodes-1038replicas-56G"
+)
+
 type allocatorTest struct {
 	// StartNodes is the starting number of nodes this cluster will have.
 	StartNodes int
@@ -336,7 +343,7 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   3,
-		StoreURL:   archivedStoreURL + "/1node-10g-262ranges",
+		StoreURL:   urlStore1s,
 		Prefix:     "uprep-1to3s",
 	}
 	at.Run(t)
@@ -348,7 +355,7 @@ func TestRebalance_3To5Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 3,
 		EndNodes:   5,
-		StoreURL:   archivedStoreURL + "/3nodes-10g-262ranges",
+		StoreURL:   urlStore3s,
 		Prefix:     "rebal-3to5s",
 	}
 	at.Run(t)
@@ -360,7 +367,7 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            3,
-		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
+		StoreURL:            urlStore1m,
 		Prefix:              "uprep-1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
@@ -371,7 +378,7 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            6,
-		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
+		StoreURL:            urlStore1m,
 		Prefix:              "uprep-1to6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
@@ -386,7 +393,7 @@ func TestSteady_6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          6,
 		EndNodes:            6,
-		StoreURL:            archivedStoreURL + "/6nodes-1038replicas-56G",
+		StoreURL:            urlStore6m,
 		Prefix:              "steady-6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
