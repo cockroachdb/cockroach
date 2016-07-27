@@ -809,6 +809,8 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 	}
 
+	// TODO(dt): Validate each column only appears at-most-once in any FKs.
+
 	if len(desc.Families) < 1 {
 		return fmt.Errorf("at least 1 column family must be specified")
 	}
@@ -1154,6 +1156,20 @@ func (desc *TableDescriptor) RenameColumn(colID ColumnID, newColName string) {
 			renameColumnInIndex(idx)
 		}
 	}
+}
+
+// FindActiveColumnsByNames finds all requested columns (in the requested order)
+// or returns an error.
+func (desc *TableDescriptor) FindActiveColumnsByNames(names parser.NameList) ([]ColumnDescriptor, error) {
+	cols := make([]ColumnDescriptor, len(names))
+	for i := range names {
+		c, err := desc.FindActiveColumnByName(string(names[i]))
+		if err != nil {
+			return nil, err
+		}
+		cols[i] = c
+	}
+	return cols, nil
 }
 
 // FindColumnByName finds the column with the specified name. It returns
