@@ -57,7 +57,7 @@ export PGPORT=""
 bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
 $bin start --alsologtostderr & &> oldout
-sleep 1
+sleep 2
 
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
 $bin sql -e "CREATE DATABASE old"
