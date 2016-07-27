@@ -70,6 +70,13 @@ func (*SetupFlowsRequest) ProtoMessage()               {}
 func (*SetupFlowsRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{0} }
 
 type SimpleResponse struct {
+	// TODO(radu): we should be using our own error instead of roachpb.Error.
+	// One important error field for distsql is whether the error is
+	// "authoritative": if a query is distributed on multiple nodes and one node
+	// hits an error, the other nodes may hit errors as well as a consequence
+	// (e.g. streams can't connect to the failed flow). The node that started the
+	// flow needs to distinguish which errors are caused by non-availability of
+	// other nodes so they don't obscure the real error.
 	Error *cockroach_roachpb2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 }
 
