@@ -44,6 +44,11 @@ import (
 type TestCluster struct {
 	Servers []*server.TestServer
 	Conns   []*gosql.DB
+	stopper *stop.Stopper
+	mu      struct {
+		syncutil.Mutex
+		serverStoppers []*stop.Stopper
+	}
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -63,9 +68,38 @@ func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
 }
 
+// Stopper returns the stopper for this testcluster.
+func (tc *TestCluster) Stopper() *stop.Stopper {
+	return tc.stopper
+}
+
+// stopServers stops the stoppers for each individual server in the cluster.
+// This method ensures that servers that were previously stopped explicitly are
+// not double-stopped.
+func (tc *TestCluster) stopServers() {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	for i := range tc.mu.serverStoppers {
+		if tc.mu.serverStoppers[i] != nil {
+			tc.mu.serverStoppers[i].Stop()
+			tc.mu.serverStoppers[i] = nil
+		}
+	}
+}
+
+// StopServer stops an individual server in the cluster.
+func (tc *TestCluster) StopServer(idx int) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.serverStoppers[idx] != nil {
+		tc.mu.serverStoppers[idx].Stop()
+		tc.mu.serverStoppers[idx] = nil
+	}
+}
+
 // StartTestCluster starts up a TestCluster made up of `nodes` in-memory testing
 // servers.
-// The cluster should be stopped using cluster.Stopper().Stop().
+// The cluster should be stopped using cluster.Stop().
 func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
@@ -84,11 +118,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			"the cluster controls replication")
 	}
 
-	if args.Stopper == nil {
-		args.Stopper = stop.NewStopper()
-		args.ServerArgs.Stopper = args.Stopper
-	}
-
 	switch args.ReplicationMode {
 	case base.ReplicationAuto:
 	case base.ReplicationManual:
@@ -103,16 +132,26 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	}
 
 	tc := &TestCluster{}
+	tc.stopper = stop.NewStopper()
+
 	args.ServerArgs.PartOfCluster = true
-	first, conn, _ := serverutils.StartServer(t, args.ServerArgs)
-	tc.Servers = append(tc.Servers, first.(*server.TestServer))
-	tc.Conns = append(tc.Conns, conn)
-	args.ServerArgs.JoinAddr = first.ServingAddr()
-	for i := 1; i < nodes; i++ {
-		s, conn, _ := serverutils.StartServer(t, args.ServerArgs)
+	for i := 0; i < nodes; i++ {
+		serverArgs := args.ServerArgs
+		serverArgs.Stopper = stop.NewStopper()
+		if i > 0 {
+			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
+		}
+		s, conn, _ := serverutils.StartServer(t, serverArgs)
 		tc.Servers = append(tc.Servers, s.(*server.TestServer))
 		tc.Conns = append(tc.Conns, conn)
+		tc.mu.Lock()
+		tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
+		tc.mu.Unlock()
 	}
+
+	// Create a closer that will stop the individual server stoppers when the
+	// cluster stopper is stopped.
+	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
 
 	tc.waitForStores(t)
 	return tc
@@ -148,11 +187,6 @@ func (tc *TestCluster) waitForStores(t testing.TB) {
 	if err := <-storesDone; err != nil {
 		t.Fatal(err)
 	}
-}
-
-// Stopper returns a Stopper to be used to stop the TestCluster.
-func (tc *TestCluster) Stopper() *stop.Stopper {
-	return tc.Servers[0].Stopper()
 }
 
 // LookupRange returns the descriptor of the range containing key.

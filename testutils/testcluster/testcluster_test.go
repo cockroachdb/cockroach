@@ -19,13 +19,18 @@ package testcluster
 
 import (
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -171,5 +176,70 @@ func TestWaitForFullReplication(t *testing.T) {
 	defer tc.Stopper().Stop()
 	if err := tc.WaitForFullReplication(); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestStopServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
+	defer tc.Stopper().Stop()
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Connect to server 1, ensure it is answering requests over HTTP and GRPC.
+	server1 := tc.Server(1)
+	var response serverpb.HealthResponse
+
+	httpClient1, err := server1.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := server1.AdminURL() + "/_admin/v1/health"
+	if err := util.GetJSON(httpClient1, url, &response); err != nil {
+		t.Fatal(err)
+	}
+
+	rpcContext := rpc.NewContext(
+		tc.Server(1).RPCContext().Context, tc.Server(1).Clock(), tc.Stopper(),
+	)
+	conn, err := rpcContext.GRPCDial(server1.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminClient1 := serverpb.NewAdminClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := adminClient1.Health(ctx, &serverpb.HealthRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stop server 1.
+	tc.StopServer(1)
+
+	// Verify HTTP and GRPC requests to server now fail.
+	httpErrorText := "connection refused"
+	if err := util.GetJSON(httpClient1, url, &response); err == nil {
+		t.Fatal("Expected HTTP Request to fail after server stopped")
+	} else if !testutils.IsError(err, httpErrorText) {
+		t.Fatalf("Expected error from server with text %q, got error with text %q", httpErrorText, err.Error())
+	}
+
+	grpcErrorText := "rpc error"
+	if _, err := adminClient1.Health(ctx, &serverpb.HealthRequest{}); err == nil {
+		t.Fatal("Expected GRPC Request to fail after server stopped")
+	} else if !testutils.IsError(err, grpcErrorText) {
+		t.Fatalf("Expected error from GRPC with text %q, got error with text %q", grpcErrorText, err.Error())
+	}
+
+	// Verify that request to Server 0 still works.
+	httpClient1, err = tc.Server(0).GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	url = tc.Server(0).AdminURL() + "/_admin/v1/health"
+	if err := util.GetJSON(httpClient1, url, &response); err != nil {
+		t.Fatal(err)
 	}
 }
