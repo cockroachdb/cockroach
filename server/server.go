@@ -185,7 +185,10 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL server
 	distSQLCtx := distsql.ServerContext{
-		DB: s.db,
+		// TODO(radu): set node ID in the context.
+		Context:    context.Background(),
+		DB:         s.db,
+		RPCContext: s.rpcContext,
 	}
 	s.distSQLServer = distsql.NewServer(distSQLCtx)
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)

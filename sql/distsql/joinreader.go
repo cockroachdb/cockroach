@@ -21,9 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
@@ -45,11 +43,7 @@ type joinReader struct {
 var _ processor = &joinReader{}
 
 func newJoinReader(
-	spec *JoinReaderSpec,
-	txn *client.Txn,
-	input RowSource,
-	output RowReceiver,
-	evalCtx *parser.EvalContext,
+	ctx *FlowCtx, spec *JoinReaderSpec, input RowSource, output RowReceiver,
 ) (*joinReader, error) {
 	jr := &joinReader{
 		input:  input,
@@ -61,7 +55,7 @@ func newJoinReader(
 		return nil, errors.Errorf("join with index not implemented")
 	}
 
-	err := jr.readerBase.init(&spec.Table, int(spec.IndexIdx), txn, spec.Filter, evalCtx,
+	err := jr.readerBase.init(ctx, &spec.Table, int(spec.IndexIdx), spec.Filter,
 		spec.OutputColumns, false)
 	if err != nil {
 		return nil, err
@@ -74,10 +68,11 @@ func (jr *joinReader) generateKey(
 	row sqlbase.EncDatumRow, alloc *sqlbase.DatumAlloc, primaryKeyPrefix []byte,
 ) (roachpb.Key, error) {
 	index := jr.index
-	if len(row) != len(index.ColumnIDs) {
-		return nil, errors.Errorf("joinReader input has %d columns, expected %d",
+	if len(row) < len(index.ColumnIDs) {
+		return nil, errors.Errorf("joinReader input has %d columns, expected at least %d",
 			len(row), len(jr.desc.PrimaryIndex.ColumnIDs))
 	}
+	row = row[:len(index.ColumnIDs)]
 
 	// Verify the types.
 	// TODO(radu): not strictly needed, perhaps enable only for tests.
@@ -99,6 +94,12 @@ func (jr *joinReader) mainLoop() error {
 
 	var alloc sqlbase.DatumAlloc
 	spans := make(sqlbase.Spans, 0, joinReaderBatchSize)
+
+	// TODO(radu): add info about the joinreader in the context.
+	if log.V(2) {
+		log.Infof(jr.ctx, "JoinReader starting (filter: %s)", jr.filter)
+		defer log.Infof(jr.ctx, "JoinReader exiting")
+	}
 
 	for {
 		// TODO(radu): figure out how to send smaller batches if the source has
@@ -126,7 +127,7 @@ func (jr *joinReader) mainLoop() error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(jr.txn, spans, 0)
+		err := jr.fetcher.StartScan(jr.ctx.txn, spans, 0)
 		if err != nil {
 			return err
 		}
@@ -143,9 +144,15 @@ func (jr *joinReader) mainLoop() error {
 				// Done.
 				break
 			}
+			if log.V(3) {
+				log.Infof(jr.ctx, "JoinReader pushing row %s\n", outRow)
+			}
 			// Push the row to the output RowReceiver; stop if they don't need more
 			// rows.
 			if !jr.output.PushRow(outRow) {
+				if log.V(2) {
+					log.Infof(jr.ctx, "JoinReader: no more rows required")
+				}
 				return nil
 			}
 		}
@@ -159,10 +166,11 @@ func (jr *joinReader) mainLoop() error {
 
 // Run is part of the processor interface.
 func (jr *joinReader) Run(wg *sync.WaitGroup) {
-	if log.V(2) {
-		log.Infof(context.TODO(), "JoinReader filter: %s\n", jr.filter.expr)
-	}
+	log.Infof(context.TODO(), "JoinReader filter: %s\n", jr.filter.expr)
 	err := jr.mainLoop()
+	if err != nil && log.V(1) {
+		log.Errorf(jr.ctx, "JoinReader error: %s", err)
+	}
 	jr.output.Close(err)
 	if wg != nil {
 		wg.Done()
