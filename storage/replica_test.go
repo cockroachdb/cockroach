@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -152,7 +153,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(nil, nil, tc.stopper)
-		tc.gossip = gossip.New(rpcContext, nil, tc.stopper)
+		tc.gossip = gossip.New(rpcContext, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {

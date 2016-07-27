@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -41,9 +42,10 @@ import (
 // about the node's gossip instance, network address, and underlying
 // server.
 type Node struct {
-	Gossip *gossip.Gossip
-	Server *grpc.Server
-	Addr   net.Addr
+	Gossip   *gossip.Gossip
+	Server   *grpc.Server
+	Addr     net.Addr
+	Registry *metric.Registry
 }
 
 // Network provides access to a test gossip network of nodes.
@@ -95,8 +97,8 @@ func (n *Network) CreateNode() (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := &Node{Server: server, Addr: ln.Addr()}
-	node.Gossip = gossip.New(n.rpcContext, nil, n.Stopper)
+	node := &Node{Server: server, Addr: ln.Addr(), Registry: metric.NewRegistry()}
+	node.Gossip = gossip.New(n.rpcContext, nil, n.Stopper, node.Registry)
 	n.Nodes = append(n.Nodes, node)
 	return node, nil
 }
@@ -211,19 +213,19 @@ func (n *Network) isNetworkConnected() bool {
 // infosSent returns the total count of infos sent from all nodes in
 // the network.
 func (n *Network) infosSent() int {
-	var count int
+	var count int64
 	for _, node := range n.Nodes {
-		count += node.Gossip.InfosSent()
+		count += node.Registry.GetCounter(gossip.InfosSentRatesName + "-count").Count()
 	}
-	return count
+	return int(count)
 }
 
 // infosReceived returns the total count of infos received from all
 // nodes in the network.
 func (n *Network) infosReceived() int {
-	var count int
+	var count int64
 	for _, node := range n.Nodes {
-		count += node.Gossip.InfosReceived()
+		count += node.Registry.GetCounter(gossip.InfosReceivedRatesName + "-count").Count()
 	}
-	return count
+	return int(count)
 }

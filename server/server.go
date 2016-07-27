@@ -134,7 +134,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, s.stopper)
+	gossipRegistry := metric.NewRegistry()
+	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, s.stopper, gossipRegistry)
 	s.storePool = storage.NewStorePool(
 		s.gossip,
 		s.clock,
@@ -237,6 +238,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder.AddNodeRegistry("sql.%s", sqlRegistry)
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 	s.recorder.AddNodeRegistry("clock-offset.%s", s.rpcContext.RemoteClocks.Registry())
+	s.recorder.AddNodeRegistry("gossip.%s", gossipRegistry)
 
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.recorder.AddNodeRegistry("sys.%s", s.runtime.Registry())

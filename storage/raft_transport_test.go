@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -64,7 +65,7 @@ func TestSendAndReceive(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
-	g := gossip.New(nodeRPCContext, nil, stopper)
+	g := gossip.New(nodeRPCContext, nil, stopper, metric.NewRegistry())
 	g.SetNodeID(roachpb.NodeID(1))
 
 	// Create several servers, each of which has two stores (A raft
@@ -279,7 +280,7 @@ func TestInOrderDelivery(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
-	g := gossip.New(nodeRPCContext, nil, stopper)
+	g := gossip.New(nodeRPCContext, nil, stopper, metric.NewRegistry())
 
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
