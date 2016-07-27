@@ -535,7 +535,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); mvcc2 != mvcc {
-			return errors.Errorf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
+			return errors.Errorf("expected stats on new range:\n%+v\not equal old:\n%+v", mvcc2, mvcc)
 		}
 		return nil
 	})

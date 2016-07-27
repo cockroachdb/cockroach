@@ -220,7 +220,15 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				s.mu.Unlock()
 				err := senderFn(reply)
 				s.mu.Lock()
-				return err
+				// Naively, we would return err here unconditionally, but that
+				// introduces a race. Specifically, the client may observe the
+				// end of the connection before it has a chance to receive and
+				// process this message, which instructs it to hang up anyway.
+				// Instead, we send the message and proceed to gossip
+				// normally, depending on the client to end the connection.
+				if err != nil {
+					return err
+				}
 			}
 		}
 

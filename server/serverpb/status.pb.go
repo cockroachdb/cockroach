@@ -289,7 +289,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for Status service
 
@@ -724,7 +724,8 @@ var _Status_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Status_LogFile_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: fileDescriptorStatus,
 }
 
 func (m *DetailsRequest) Marshal() (data []byte, err error) {
@@ -1305,8 +1306,12 @@ func (m *RaftDebugResponse) MarshalTo(data []byte) (int, error) {
 			data[i] = 0xa
 			i++
 			v := m.Ranges[github_com_cockroachdb_cockroach_roachpb.RangeID(k)]
-			msgSize := (&v).Size()
-			mapSize := 1 + sovStatus(uint64(k)) + 1 + msgSize + sovStatus(uint64(msgSize))
+			msgSize := 0
+			if (&v) != nil {
+				msgSize = (&v).Size()
+				msgSize += 1 + sovStatus(uint64(msgSize))
+			}
+			mapSize := 1 + sovStatus(uint64(k)) + msgSize
 			i = encodeVarintStatus(data, i, uint64(mapSize))
 			data[i] = 0x8
 			i++
@@ -3638,55 +3643,60 @@ func (m *RaftDebugResponse) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowStatus
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowStatus
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthStatus
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthStatus
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &RaftRangeStatus{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.Ranges == nil {
 				m.Ranges = make(map[github_com_cockroachdb_cockroach_roachpb.RangeID]RaftRangeStatus)
 			}
-			m.Ranges[github_com_cockroachdb_cockroach_roachpb.RangeID(mapkey)] = *mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowStatus
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowStatus
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthStatus
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthStatus
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &RaftRangeStatus{}
+				if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.Ranges[github_com_cockroachdb_cockroach_roachpb.RangeID(mapkey)] = *mapvalue
+			} else {
+				var mapvalue RaftRangeStatus
+				m.Ranges[github_com_cockroachdb_cockroach_roachpb.RangeID(mapkey)] = mapvalue
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4161,6 +4171,8 @@ var (
 	ErrInvalidLengthStatus = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowStatus   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/server/serverpb/status.proto", fileDescriptorStatus) }
 
 var fileDescriptorStatus = []byte{
 	// 1341 bytes of a gzipped FileDescriptorProto

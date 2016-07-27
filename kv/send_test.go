@@ -477,7 +477,7 @@ func TestClientNotReady(t *testing.T) {
 		_, err := sendBatch(SendOptions{
 			Context: context.Background(),
 		}, addrs, nodeContext)
-		if !testutils.IsError(err, grpc.ErrClientConnClosing.Error()) {
+		if !testutils.IsError(err, "connection is closing") {
 			errCh <- errors.Wrap(err, "unexpected error")
 		} else {
 			close(errCh)

@@ -32,7 +32,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // GCPolicy defines garbage collection policies which apply to MVCC
 // values within a zone.
@@ -657,6 +659,8 @@ var (
 	ErrInvalidLengthConfig = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowConfig   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/config/config.proto", fileDescriptorConfig) }
 
 var fileDescriptorConfig = []byte{
 	// 390 bytes of a gzipped FileDescriptorProto
