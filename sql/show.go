@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/pkg/errors"
@@ -56,12 +57,15 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 }
 
 // ShowColumns of a table.
-// Privileges: None.
+// Privileges: SELECT on table.
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilege(desc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
@@ -111,10 +115,13 @@ func (p *planner) showCreateInterleave(idx *sqlbase.IndexDescriptor) (string, er
 
 // ShowCreateTable returns a CREATE TABLE statement for the specified table in
 // Traditional syntax.
-// Privileges: None.
+// Privileges: SELECT on table.
 func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilege(desc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
@@ -295,12 +302,15 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 }
 
 // ShowIndex returns all the indexes for a table.
-// Privileges: None.
+// Privileges: SELECT on table.
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	desc, err := p.mustGetTableDesc(n.Table)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilege(desc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
