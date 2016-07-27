@@ -215,7 +215,7 @@ func (n *dropIndexNode) Start() error {
 		case sqlbase.DescriptorActive:
 			idx := tableDesc.Indexes[i]
 
-			if idx.ForeignKey != nil {
+			if idx.ForeignKey.IsSet() {
 				if n.n.DropBehavior != parser.DropCascade {
 					return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 				}
@@ -351,7 +351,7 @@ func (n *dropTableNode) expandPlan() error {
 }
 
 func (p *planner) canRemoveFK(
-	from string, ref *sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
+	from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
 	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
 	if err != nil {
@@ -389,7 +389,7 @@ func (p *planner) canRemoveInterleave(
 	return nil
 }
 
-func (p *planner) removeFK(ref *sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor) error {
+func (p *planner) removeFK(ref sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor) error {
 	if table == nil {
 		var err error
 		table, err = sqlbase.GetTableDescFromID(p.txn, ref.Table)
@@ -401,7 +401,7 @@ func (p *planner) removeFK(ref *sqlbase.ForeignKeyReference, table *sqlbase.Tabl
 	if err != nil {
 		return err
 	}
-	idx.ForeignKey = nil
+	idx.ForeignKey = sqlbase.ForeignKeyReference{}
 	return p.saveNonmutationAndNotify(table)
 }
 
@@ -497,7 +497,7 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 
 	// Remove FK and interleave relationships.
 	for _, idx := range tableDesc.AllNonDropIndexes() {
-		if idx.ForeignKey != nil {
+		if idx.ForeignKey.IsSet() {
 			if err := p.removeFKBackReference(tableDesc, idx); err != nil {
 				return err
 			}
