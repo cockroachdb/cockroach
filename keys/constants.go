@@ -222,6 +222,9 @@ const (
 	// cockroach.
 	MaxReservedDescID = 49
 
+	// VirtualDescriptorID is the ID used by all virtual descriptors.
+	VirtualDescriptorID = math.MaxUint32
+
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0
 
