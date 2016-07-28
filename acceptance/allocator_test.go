@@ -110,17 +110,15 @@ type allocatorTest struct {
 	f *terrafarm.Farmer
 }
 
-func (at *allocatorTest) Run(t *testing.T) {
-	at.f = farmer(t, at.Prefix)
-	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
-		t.Fatalf("%s environment variable must be set for Terraform", e)
+func (at *allocatorTest) Cleanup(t *testing.T) {
+	if r := recover(); r != nil {
+		t.Errorf("recovered from panic to destroy cluster: %v", r)
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("recovered from panic to destroy cluster: %v", r)
-		}
-		at.f.MustDestroy(t)
-	}()
+	at.f.MustDestroy(t)
+}
+
+func (at *allocatorTest) RunPrepare(t *testing.T) {
+	at.f = farmer(t, at.Prefix)
 
 	// Pass on overrides to Terraform input variables.
 	if *flagATCockroachBinary != "" {
@@ -175,20 +173,30 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 	}
 	at.f.Assert(t)
+}
 
+func (at *allocatorTest) RunResize(t *testing.T) {
 	log.Infof(context.TODO(), "resizing cluster to %d nodes", at.EndNodes)
 	if err := at.f.Resize(at.EndNodes, 0 /*writers*/); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))
 	at.f.Assert(t)
+}
 
+func (at *allocatorTest) RunWait(t *testing.T) {
 	log.Info(context.TODO(), "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
-
 	at.f.Assert(t)
+}
+
+func (at *allocatorTest) RunAllAndCleanup(t *testing.T) {
+	defer at.Cleanup(t)
+	at.RunPrepare(t)
+	at.RunResize(t)
+	at.RunWait(t)
 }
 
 // printStats prints the time it took for rebalancing to finish and the final
@@ -296,7 +304,7 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
 func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
-	db, err := gosql.Open("postgres", at.f.PGUrl(1))
+	db, err := gosql.Open("postgres", at.f.PGUrl(0))
 	if err != nil {
 		return err
 	}
@@ -346,7 +354,7 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 		StoreURL:   urlStore1s,
 		Prefix:     "uprep-1to3s",
 	}
-	at.Run(t)
+	at.RunAllAndCleanup(t)
 }
 
 // TestRebalance3to5Small tests rebalancing, starting with 3 nodes (each
@@ -358,7 +366,7 @@ func TestRebalance_3To5Small(t *testing.T) {
 		StoreURL:   urlStore3s,
 		Prefix:     "rebal-3to5s",
 	}
-	at.Run(t)
+	at.RunAllAndCleanup(t)
 }
 
 // TestUpreplicate_1To3Medium tests up-replication, starting with 1 node
@@ -371,7 +379,7 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 		Prefix:              "uprep-1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAllAndCleanup(t)
 }
 
 func TestUpreplicate_1To6Medium(t *testing.T) {
@@ -382,7 +390,7 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 		Prefix:              "uprep-1to6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAllAndCleanup(t)
 }
 
 // TestSteady_6Medium is useful for creating a medium-size balanced cluster
@@ -397,5 +405,9 @@ func TestSteady_6Medium(t *testing.T) {
 		Prefix:              "steady-6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	defer at.Cleanup(t)
+	at.RunPrepare(t)
+	at.RunResize(t)
+	// TODO(tschottdorf): now is the time for a chaos agent to start working.
+	at.RunWait(t)
 }
