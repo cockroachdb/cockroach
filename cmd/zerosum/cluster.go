@@ -121,6 +121,7 @@ func (c *cluster) makeNode(nodeIdx int, extraArgs []string) *node {
 		fmt.Sprintf("--http-port=%d", c.httpPort(nodeIdx)),
 		fmt.Sprintf("--store=%s", dir),
 		fmt.Sprintf("--cache=256MiB"),
+		fmt.Sprintf("--logtostderr"),
 	}
 	if nodeIdx > 0 {
 		args = append(args, fmt.Sprintf("--join=localhost:%d", c.rpcPort(0)))
@@ -240,11 +241,26 @@ func (c *cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 	return &resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
 }
 
+func (c *cluster) randNode(f func(int) int) int {
+	for {
+		i := f(len(c.nodes))
+		if c.nodes[i].alive() {
+			return i
+		}
+	}
+}
+
 type node struct {
 	syncutil.Mutex
 	LogDir string
 	Args   []string
 	Cmd    *exec.Cmd
+}
+
+func (n *node) alive() bool {
+	n.Lock()
+	defer n.Unlock()
+	return n.Cmd != nil
 }
 
 func (n *node) start() {
@@ -258,14 +274,16 @@ func (n *node) start() {
 	n.Cmd = exec.Command(n.Args[0], n.Args[1:]...)
 
 	stdoutPath := filepath.Join(n.LogDir, "stdout")
-	stdout, err := os.Create(stdoutPath)
+	stdout, err := os.OpenFile(stdoutPath,
+		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to open file %s: %s", stdoutPath, err)
 	}
 	n.Cmd.Stdout = stdout
 
 	stderrPath := filepath.Join(n.LogDir, "stderr")
-	stderr, err := os.Create(stderrPath)
+	stderr, err := os.OpenFile(stderrPath,
+		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to open file %s: %s", stderrPath, err)
 	}

@@ -17,6 +17,7 @@
 package main
 
 import (
+	"bytes"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -69,6 +70,11 @@ type zeroSum struct {
 		splits    uint64
 		transfers uint64
 	}
+	ranges struct {
+		syncutil.Mutex
+		count    int
+		replicas []int
+	}
 }
 
 func newZeroSum(c *cluster, numAccounts int) *zeroSum {
@@ -88,8 +94,12 @@ func (z *zeroSum) run(workers, monkeys int) {
 	for i := 0; i < monkeys; i++ {
 		go z.monkey(tableID, 2*time.Second)
 	}
-	go z.check(20 * time.Second)
-	go z.verify(10 * time.Second)
+	if workers > 0 || monkeys > 0 {
+		go z.chaos()
+		go z.check(20 * time.Second)
+		go z.verify(10 * time.Second)
+	}
+	go z.rangeStats(time.Second)
 	z.monitor(time.Second)
 }
 
@@ -143,7 +153,7 @@ func (z *zeroSum) worker() {
 			continue
 		}
 
-		db := z.db[r.Intn(len(z.db))]
+		db := z.db[z.randNode(r.Intn)]
 		err := crdb.ExecuteTx(db, func(tx *gosql.Tx) error {
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
@@ -197,7 +207,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 
 		switch r.Intn(2) {
 		case 0:
-			if err := z.split(r.Intn(len(z.nodes)), key); err != nil {
+			if err := z.split(z.randNode(r.Intn), key); err != nil {
 				if strings.Index(err.Error(), "range is already split at key") != -1 ||
 					strings.Index(err.Error(), "conflict updating range descriptors") != -1 {
 					continue
@@ -208,7 +218,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 				atomic.AddUint64(&z.stats.splits, 1)
 			}
 		case 1:
-			if transferred, err := z.transferLease(r.Intn(len(z.nodes)), r, key); err != nil {
+			if transferred, err := z.transferLease(z.randNode(r.Intn), r, key); err != nil {
 				log.Error(context.Background(), err)
 				atomic.AddUint64(&z.stats.errors, 1)
 			} else if transferred {
@@ -218,13 +228,38 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 	}
 }
 
+func (z *zeroSum) chaos() {
+	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+
+	d := time.Duration(15+r.Intn(30)) * time.Second
+	fmt.Printf("chaos: first event in %s\n", d)
+
+	for i := 1; true; i++ {
+		time.Sleep(d)
+
+		// TODO(peter): For now, we're always flapping the first node.
+		// nodeIdx := z.randNode(r.Intn)
+		nodeIdx := 0
+		node := z.nodes[nodeIdx]
+		d = time.Duration(15+r.Intn(30)) * time.Second
+		fmt.Printf("chaos %d: killing node %d for %s\n", i, nodeIdx+1, d)
+		node.kill()
+
+		time.Sleep(d)
+
+		d = time.Duration(15+r.Intn(30)) * time.Second
+		fmt.Printf("chaos %d: starting node %d, next event in %s\n", i, nodeIdx+1, d)
+		node.start()
+	}
+}
+
 func (z *zeroSum) check(d time.Duration) {
 	for {
 		time.Sleep(d)
 
-		client := z.clients[rand.Intn(len(z.clients))]
+		client := z.clients[z.randNode(rand.Intn)]
 		if err := client.CheckConsistency(keys.LocalMax, keys.MaxKey, false); err != nil {
-			log.Fatal(context.Background(), err)
+			log.Error(context.Background(), err)
 		}
 	}
 }
@@ -240,7 +275,7 @@ func (z *zeroSum) verify(d time.Duration) {
 		q := `SELECT count(*), sum(balance) FROM accounts`
 		var accounts uint64
 		var total int64
-		db := z.db[rand.Intn(len(z.db))]
+		db := z.db[z.randNode(rand.Intn)]
 		if err := db.QueryRow(q).Scan(&accounts, &total); err != nil {
 			log.Error(context.Background(), err)
 			atomic.AddUint64(&z.stats.errors, 1)
@@ -256,14 +291,14 @@ func (z *zeroSum) verify(d time.Duration) {
 	}
 }
 
-func (z *zeroSum) replicaInfo() (int, string) {
+func (z *zeroSum) rangeInfo() (int, []int) {
 	replicas := make([]int, len(z.nodes))
-	client := z.clients[rand.Intn(len(z.clients))]
+	client := z.clients[z.randNode(rand.Intn)]
 	rows, err := client.Scan(keys.Meta2Prefix, keys.Meta2KeyMax, 0)
 	if err != nil {
 		log.Error(context.Background(), err)
 		atomic.AddUint64(&z.stats.errors, 1)
-		return -1, ""
+		return -1, replicas
 	}
 	for _, row := range rows {
 		desc := &roachpb.RangeDescriptor{}
@@ -276,8 +311,33 @@ func (z *zeroSum) replicaInfo() (int, string) {
 			replicas[replica.NodeID-1]++
 		}
 	}
-	s := fmt.Sprint(replicas)
-	return len(rows), s[1 : len(s)-1]
+
+	return len(rows), replicas
+}
+
+func (z *zeroSum) rangeStats(d time.Duration) {
+	for {
+		count, replicas := z.rangeInfo()
+		z.ranges.Lock()
+		z.ranges.count, z.ranges.replicas = count, replicas
+		z.ranges.Unlock()
+
+		time.Sleep(d)
+	}
+}
+
+func (z *zeroSum) formatReplicas(replicas []int) string {
+	var buf bytes.Buffer
+	for i := range replicas {
+		if i > 0 {
+			_, _ = buf.WriteString(" ")
+		}
+		fmt.Fprintf(&buf, "%d", replicas[i])
+		if !z.nodes[i].alive() {
+			_, _ = buf.WriteString("*")
+		}
+	}
+	return buf.String()
 }
 
 func (z *zeroSum) monitor(d time.Duration) {
@@ -304,7 +364,10 @@ func (z *zeroSum) monitor(d time.Duration) {
 			now := timeutil.Now()
 			elapsed := now.Sub(lastTime).Seconds()
 			ops := atomic.LoadUint64(&z.stats.ops)
-			ranges, replicas := z.replicaInfo()
+
+			z.ranges.Lock()
+			ranges, replicas := z.ranges.count, z.ranges.replicas
+			z.ranges.Unlock()
 
 			fmt.Printf("%8s %9d %11d %8.1f %8d %8d %8d %8d %20s\n",
 				time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
@@ -312,7 +375,7 @@ func (z *zeroSum) monitor(d time.Duration) {
 				atomic.LoadUint64(&z.stats.errors),
 				atomic.LoadUint64(&z.stats.splits),
 				atomic.LoadUint64(&z.stats.transfers),
-				ranges, replicas)
+				ranges, z.formatReplicas(replicas))
 			lastTime = now
 			lastOps = ops
 
