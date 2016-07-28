@@ -34,11 +34,6 @@ func interestingGoroutines() (gs []string) {
 
 		if stack == "" ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/log.init") ||
-			// TODO(peter): Until https://github.com/grpc/grpc-go/pull/751 or
-			// something similar is done, opening a gRPC client connection does not
-			// timeout properly. See also
-			// https://github.com/cockroachdb/cockroach/issues/7524.
-			strings.Contains(stack, "google.golang.org/grpc.NewConn") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||
