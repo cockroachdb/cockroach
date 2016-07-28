@@ -1,0 +1,29 @@
+# Test is temporarily disabled.
+skip_reason: "#8057"
+
+cluster_size: 5
+
+range_split_size: 32768
+
+run:
+   # First run setup
+   - - file: setup
+
+   # Run txn on all nodes in parallel.
+   - - node: 0
+       file: txn
+
+     - node: 1
+       file: txn
+
+     - node: 2
+       file: txn
+
+     - node: 3
+       file: txn
+
+     - node: 4
+       file: txn
+
+   # Run final.
+   - - file: final
