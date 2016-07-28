@@ -59,6 +59,9 @@ type NemesisFn func(t *testing.T, stop <-chan struct{}, c cluster.Cluster)
 // mode take alternating turns, with random durations of up to 15s.
 func BidirectionalPartitionNemesis(t *testing.T, stop <-chan struct{}, c cluster.Cluster) {
 	randSec := func() time.Duration { return time.Duration(rand.Int63n(15 * int64(time.Second))) }
+	log.Infof(context.Background(), "cleaning up any previous rules")
+	_ = restoreNetwork(t, c) // clean up any potential leftovers
+	log.Infof(context.Background(), "starting partition nemesis")
 	for {
 		ch := make(chan struct{})
 		go func() {
@@ -79,7 +82,24 @@ func BidirectionalPartitionNemesis(t *testing.T, stop <-chan struct{}, c cluster
 
 var _ NemesisFn = BidirectionalPartitionNemesis
 
+func restoreNetwork(t *testing.T, c cluster.Cluster) []error {
+	var errs []error
+	for i := 0; i < c.NumNodes(); i++ {
+		for _, cmd := range iptables.Reset() {
+			if err := c.ExecRoot(i, cmd); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errs
+}
+
 func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partitions ...[]int) {
+	defer func() {
+		if errs := restoreNetwork(t, c); len(errs) > 0 {
+			t.Fatalf("errors restoring the network: %+v", errs)
+		}
+	}()
 	addrs, addrsToNode := mustGetHosts(t, c)
 	ipPartitions := make([][]iptables.IP, 0, len(partitions))
 	for _, partition := range partitions {
@@ -98,12 +118,5 @@ func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partiti
 		}
 	}
 	<-closer
-	for i := 0; i < c.NumNodes(); i++ {
-		for _, cmd := range iptables.Reset() {
-			if err := c.ExecRoot(i, cmd); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
 	log.Warningf(context.TODO(), "resolved all partitions")
 }
