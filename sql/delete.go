@@ -136,11 +136,12 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 }
 
 func (d *deleteNode) Next() (bool, error) {
+	ctx := context.TODO()
 	next, err := d.run.rows.Next()
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = d.tw.finalize()
+			err = d.tw.finalize(ctx)
 		}
 		return false, err
 	}
@@ -151,7 +152,7 @@ func (d *deleteNode) Next() (bool, error) {
 
 	rowVals := d.run.rows.Values()
 
-	_, err = d.tw.row(rowVals)
+	_, err = d.tw.row(ctx, rowVals)
 	if err != nil {
 		return false, err
 	}
@@ -169,18 +170,19 @@ func (d *deleteNode) Next() (bool, error) {
 // i.e. if we do not need to know their values for filtering expressions or a
 // RETURNING clause or for updating secondary indexes.
 func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bool {
-	if !td.fastPathAvailable() {
+	ctx := context.TODO()
+	if !td.fastPathAvailable(ctx) {
 		return false
 	}
 	if n.Returning != nil {
 		if log.V(2) {
-			log.Infof(context.TODO(), "delete forced to scan: values required for RETURNING")
+			log.Infof(ctx, "delete forced to scan: values required for RETURNING")
 		}
 		return false
 	}
 	if scan.filter != nil {
 		if log.V(2) {
-			log.Infof(context.TODO(), "delete forced to scan: values required for filter (%s)", scan.filter)
+			log.Infof(ctx, "delete forced to scan: values required for filter (%s)", scan.filter)
 		}
 		return false
 	}
@@ -198,7 +200,7 @@ func (d *deleteNode) fastDelete(scan *scanNode) error {
 	if err := d.tw.init(d.p.txn); err != nil {
 		return err
 	}
-	rowCount, err := d.tw.fastDelete(scan)
+	rowCount, err := d.tw.fastDelete(context.TODO(), scan)
 	if err != nil {
 		return err
 	}

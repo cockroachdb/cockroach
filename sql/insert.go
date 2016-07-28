@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -250,10 +252,11 @@ func (n *insertNode) Start() error {
 }
 
 func (n *insertNode) Next() (bool, error) {
+	ctx := context.TODO()
 	if next, err := n.run.rows.Next(); !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = n.tw.finalize()
+			err = n.tw.finalize(ctx)
 		}
 		return false, err
 	}
@@ -300,7 +303,7 @@ func (n *insertNode) Next() (bool, error) {
 		return false, err
 	}
 
-	_, err := n.tw.row(rowVals)
+	_, err := n.tw.row(ctx, rowVals)
 	if err != nil {
 		return false, err
 	}
