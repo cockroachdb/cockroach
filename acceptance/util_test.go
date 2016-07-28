@@ -174,7 +174,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 			name += "-"
 		}
 
-		name += "-" + getRandomName()
+		name += getRandomName()
 
 		// Rudimentary collision control.
 		for i := 0; ; i++ {
