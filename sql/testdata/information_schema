@@ -22,6 +22,9 @@ ALTER DATABASE other_db RENAME TO information_schema
 statement error database "information_schema" already exists
 CREATE DATABASE information_schema
 
+statement ok
+DROP DATABASE other_db
+
 
 # Verify information_schema tables handle mutation statements correctly.
 
@@ -92,6 +95,83 @@ SET DATABASE = ''
 # Verify information_schema handles reflection correctly.
 
 query T
-SHOW TABLES FROM information_schema;
+SHOW DATABASES
+----
+information_schema
+system
+test
+
+query T
+SHOW TABLES FROM information_schema
 ----
 tables
+
+query TT colnames
+SHOW CREATE TABLE information_schema.tables
+----
+Table                      CreateTable
+information_schema.tables  CREATE TABLE "information_schema.tables" (
+                               TABLE_CATALOG STRING NOT NULL DEFAULT '',
+                               TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+                               TABLE_NAME STRING NOT NULL DEFAULT '',
+                               TABLE_TYPE STRING NOT NULL DEFAULT '',
+                               ENGINE STRING NULL,
+                               VERSION INT NULL,
+                               ROW_FORMAT STRING NULL,
+                               TABLE_ROWS INT NULL,
+                               AVG_ROW_LENGTH INT NULL,
+                               DATA_LENGTH INT NULL,
+                               MAX_DATA_LENGTH INT NULL,
+                               INDEX_LENGTH INT NULL,
+                               DATA_FREE INT NULL,
+                               AUTO_INCREMENT INT NULL,
+                               CREATE_TIME TIMESTAMP NULL,
+                               UPDATE_TIME TIMESTAMP NULL,
+                               CHECK_TIME TIMESTAMP NULL,
+                               TABLE_COLLATION STRING NULL,
+                               CHECKSUM INT NULL,
+                               CREATE_OPTIONS STRING NULL,
+                               TABLE_COMMENT STRING NOT NULL DEFAULT ''
+                           )
+
+query TTBT colnames
+SHOW COLUMNS FROM information_schema.tables
+----
+Field            Type       Null   Default
+TABLE_CATALOG    STRING     false  ''
+TABLE_SCHEMA     STRING     false  ''
+TABLE_NAME       STRING     false  ''
+TABLE_TYPE       STRING     false  ''
+ENGINE           STRING     true   NULL
+VERSION          INT        true   NULL
+ROW_FORMAT       STRING     true   NULL
+TABLE_ROWS       INT        true   NULL
+AVG_ROW_LENGTH   INT        true   NULL
+DATA_LENGTH      INT        true   NULL
+MAX_DATA_LENGTH  INT        true   NULL
+INDEX_LENGTH     INT        true   NULL
+DATA_FREE        INT        true   NULL
+AUTO_INCREMENT   INT        true   NULL
+CREATE_TIME      TIMESTAMP  true   NULL
+UPDATE_TIME      TIMESTAMP  true   NULL
+CHECK_TIME       TIMESTAMP  true   NULL
+TABLE_COLLATION  STRING     true   NULL
+CHECKSUM         INT        true   NULL
+CREATE_OPTIONS   STRING     true   NULL
+TABLE_COMMENT    STRING     false  ''
+
+query TTTTTTT colnames
+SHOW INDEXES FROM information_schema.tables
+----
+Table  Name  Unique  Seq  Column  Direction  Storing
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM information_schema.tables
+----
+Table   Name     Type  Column(s)  Details
+tables  PRIMARY  KEY   []         NULL
+
+query TTT colnames
+SHOW GRANTS ON information_schema.tables
+----
+Table  User  Privileges
