@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -204,18 +205,40 @@ func (f *Farmer) Exec(i int, cmd string) error {
 
 // NewClient implements the Cluster interface.
 func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
-	panic("unimplemented")
+	stopper := stop.NewStopper()
+	rpcContext := rpc.NewContext(&base.Context{
+		Insecure: true,
+		User:     security.NodeUser,
+	}, nil, stopper)
+	sender, err := client.NewSender(rpcContext, f.Addr(i, base.DefaultPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client.NewDB(sender), stopper
 }
 
 // PGUrl returns a URL string for the given node postgres server.
 func (f *Farmer) PGUrl(i int) string {
-	host := f.Nodes()[i-1]
+	host := f.Nodes()[i]
 	return fmt.Sprintf("postgresql://%s@%s:26257/system?sslmode=disable", security.RootUser, host)
 }
 
 // InternalIP returns the address used for inter-node communication.
 func (f *Farmer) InternalIP(i int) net.IP {
-	panic("unimplemented")
+	// TODO(tschottdorf): This is specific to GCE. On AWS, the following
+	// might do it: `curl http://instance-data/latest/meta-data/public-ipv4`.
+	// See https://flummox-engineering.blogspot.com/2014/01/get-ip-address-of-google-compute-engine.html
+	cmd := `curl -s "http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip" -H "X-Google-Metadata-Request: True"`
+	stdOut, stdErr, err := f.ssh(f.Nodes()[i], f.defaultKeyFile(), cmd)
+	if err != nil {
+		panic(errors.Wrapf(err, stdErr+"\n"+stdOut))
+	}
+	stdOut = strings.TrimSpace(stdOut)
+	ip := net.ParseIP(stdOut)
+	if ip == nil {
+		panic(fmt.Sprintf("'%s' did not parse to an IP", stdOut))
+	}
+	return ip
 }
 
 // WaitReady waits until the infrastructure is in a state that *should* allow
@@ -279,9 +302,9 @@ func (f *Farmer) AssertAndStop(t *testing.T) {
 
 // ExecRoot executes the given command with super-user privileges.
 func (f *Farmer) ExecRoot(i int, cmd []string) error {
-	// We have `f.Exec(i, strings.Join(" ", cmd))`, so this should be
-	// easy to implement once we need it.
-	panic("unimplemented")
+	// TODO(tschottdorf): This doesn't handle escapes properly. May it never
+	// have to.
+	return f.Exec(i, "sudo "+strings.Join(cmd, " "))
 }
 
 // Kill terminates the cockroach process running on the given node number.
@@ -320,8 +343,8 @@ func (f *Farmer) URL(i int) string {
 }
 
 // Addr returns the host and port from the node in the format HOST:PORT.
-func (f *Farmer) Addr(i int) string {
-	return net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
+func (f *Farmer) Addr(i int, port string) string {
+	return net.JoinHostPort(f.Nodes()[i], port)
 }
 
 func (f *Farmer) logf(format string, args ...interface{}) {

@@ -140,9 +140,8 @@ func runTests(m *testing.M) {
 var prefixRE = regexp.MustCompile("^(?:[a-z](?:[-a-z0-9]{0,45}[a-z0-9])?)$")
 
 func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
-	if !*flagRemote {
-		t.Skip("running in docker mode")
-	}
+	SkipUnlessRemote(t)
+
 	if *flagKeyName == "" {
 		t.Fatal("-key-name is required") // saves a lot of trouble
 	}
@@ -334,6 +333,13 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 func SkipUnlessLocal(t *testing.T) {
 	if *flagRemote {
 		t.Skip("skipping since not run against local cluster")
+	}
+}
+
+// SkipUnlessRemote calls t.Skip if not running against a remote cluster.
+func SkipUnlessRemote(t *testing.T) {
+	if !*flagRemote {
+		t.Skip("skipping since not run against remote cluster")
 	}
 }
 

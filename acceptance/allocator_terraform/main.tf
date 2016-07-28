@@ -99,7 +99,7 @@ FILE
       "sudo service supervisor stop",
       "export CLOUD_SDK_REPO=\"cloud-sdk-$(lsb_release -c -s)\"",
       "echo \"deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main\" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list",
-      "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
+      "curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
       "mkdir -p logs",
