@@ -34,6 +34,22 @@ type postCommitSplit struct {
 	RightDeltaMS enginepb.MVCCStats
 }
 
+type proposalResult struct {
+	*PostCommitTrigger
+
+	// The stats delta that the application of the Raft command would cause.
+	// On a split, contains only the contributions to the left-hand side.
+	//
+	// TODO(tschottdorf): we could also not send this along and compute it
+	// from the new stats (which are contained in the write batch). See about
+	// a potential performance penalty (reads forcing an index to be built for
+	// what is initially a slim Go batch) in doing so.
+	//
+	// We are interested in this delta only to report it to the Store, which
+	// keeps a running total of all of its Replicas' stats.
+	delta enginepb.MVCCStats
+}
+
 // PostCommitTrigger is returned from Raft processing as a side effect which
 // signals that further action should be taken as part of the processing of the
 // Raft command.
