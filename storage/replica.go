@@ -1683,11 +1683,11 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.store.mu.Unlock()
 
 	if toErr != nil {
-		log.Warningf(context.TODO(), "failed to look up recipient replica %d in range %d: %s", msg.To, rangeID, toErr)
+		log.Warningf(context.TODO(), "failed to look up recipient replica %d in range %d while sending %s: %s", msg.To, rangeID, msg.Type, toErr)
 		return
 	}
 	if fromErr != nil {
-		log.Warningf(context.TODO(), "failed to look up sender replica %d in range %d: %s", msg.From, rangeID, fromErr)
+		log.Warningf(context.TODO(), "failed to look up sender replica %d in range %d while sending %s: %s", msg.From, rangeID, msg.Type, fromErr)
 		return
 	}
 	if !r.raftSender.SendAsync(&RaftMessageRequest{
