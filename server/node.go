@@ -125,6 +125,8 @@ type Node struct {
 	startedAt   int64
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  *kv.TxnMetrics
+
+	storage.InternalServer
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -249,6 +251,7 @@ func NewNode(
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 	}
+	n.InternalServer = storage.NewInternalServer(&n.Descriptor, n.stores)
 	n.recorder.AddNodeRegistry("exec.%s", n.metrics.registry)
 	return n
 }
@@ -818,44 +821,4 @@ func (n *Node) Batch(
 		return nil, err
 	}
 	return br, nil
-}
-
-func (n *Node) execStoreCommand(
-	h roachpb.StoreRequestHeader, f func(*storage.Store) error,
-) error {
-	if h.NodeID != n.Descriptor.NodeID {
-		return errors.Errorf("request for NodeID %d cannot be served by NodeID %d",
-			h.NodeID, n.Descriptor.NodeID)
-	}
-	store, err := n.stores.GetStore(h.StoreID)
-	if err != nil {
-		return err
-	}
-	return f(store)
-}
-
-// PollFrozen implements the roachpb.InternalServer interface.
-func (n *Node) PollFrozen(
-	ctx context.Context, args *roachpb.PollFrozenRequest,
-) (*roachpb.PollFrozenResponse, error) {
-	resp := &roachpb.PollFrozenResponse{}
-	err := n.execStoreCommand(args.StoreRequestHeader,
-		func(s *storage.Store) error {
-			resp.Results = s.FrozenStatus(args.CollectFrozen)
-			return nil
-		})
-	return resp, err
-}
-
-// Reserve implements the roachpb.InternalServer interface.
-func (n *Node) Reserve(
-	ctx context.Context, req *roachpb.ReservationRequest,
-) (*roachpb.ReservationResponse, error) {
-	resp := &roachpb.ReservationResponse{}
-	err := n.execStoreCommand(req.StoreRequestHeader,
-		func(s *storage.Store) error {
-			*resp = s.Reserve(ctx, *req)
-			return nil
-		})
-	return resp, err
 }

@@ -196,6 +196,7 @@ type StorePool struct {
 	failedReservationsTimeout   time.Duration
 	declinedReservationsTimeout time.Duration
 	reserveRPCTimeout           time.Duration
+	resolver                    NodeAddressResolver
 	mu                          struct {
 		syncutil.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
@@ -226,6 +227,7 @@ func NewStorePool(
 			defaultDeclinedReservationsTimeout),
 		reserveRPCTimeout: envutil.EnvOrDefaultDuration("reserve_rpc_timeout",
 			defaultReserveRPCTimeout),
+		resolver: GossipAddressResolver(g),
 	}
 	sp.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	heap.Init(&sp.mu.queue)
@@ -483,9 +485,13 @@ func (sp *StorePool) reserve(
 	if !ok {
 		return errors.Errorf("store %d does not exist in the store pool", toStoreID)
 	}
-	conn, err := sp.rpcContext.GRPCDial(detail.desc.Node.Address.String())
+	addr, err := sp.resolver(detail.desc.Node.NodeID)
 	if err != nil {
 		return err
+	}
+	conn, err := sp.rpcContext.GRPCDial(addr.String())
+	if err != nil {
+		return errors.Wrapf(err, "failed to dial store %+v, addr %q, node %+v", toStoreID, addr, detail.desc.Node)
 	}
 
 	client := roachpb.NewInternalClient(conn)
