@@ -72,6 +72,9 @@ func (s *stringValue) Type() string {
 }
 
 func (s *stringValue) String() string {
+	if s.val == nil {
+		return ""
+	}
 	return *s.val
 }
 

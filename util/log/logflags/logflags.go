@@ -32,6 +32,9 @@ func (ab *atomicBool) IsBoolFlag() bool {
 }
 
 func (ab *atomicBool) String() string {
+	if ab.Locker == nil {
+		return strconv.FormatBool(false)
+	}
 	ab.Lock()
 	defer ab.Unlock()
 	return strconv.FormatBool(*ab.b)
