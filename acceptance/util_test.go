@@ -146,6 +146,11 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	if *flagKeyName == "" {
 		t.Fatal("-key-name is required") // saves a lot of trouble
 	}
+
+	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
+		t.Fatalf("%s environment variable must be set for Terraform", e)
+	}
+
 	logDir := *flagLogDir
 	if logDir == "" {
 		var err error
