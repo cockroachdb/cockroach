@@ -2003,6 +2003,9 @@ func (r *Replica) processRaftCommand(
 				r,
 			)
 		}
+		if trigger.maybeGossipSystemConfig {
+			r.maybeGossipSystemConfig()
+		}
 
 		// On the replica on which this command originated, resolve skipped intents
 		// asynchronously - even on failure.
