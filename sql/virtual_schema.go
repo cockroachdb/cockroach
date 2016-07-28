@@ -17,9 +17,8 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
@@ -49,32 +48,56 @@ var virtualSchemas = []virtualSchema{
 	informationSchema,
 }
 
-// Statically populated maps which are used to provide access to virtual
+// Statically populated map used to provide convenient access to virtual
 // database and table descriptors.
-var virtualDatabaseDescs map[string]*sqlbase.DatabaseDescriptor
-var virtualTableDescs map[string]map[string]*sqlbase.TableDescriptor
+var virtualSchemaMap map[string]virtualSchemaEntry
+
+type virtualSchemaEntry struct {
+	desc   *sqlbase.DatabaseDescriptor
+	tables map[string]*sqlbase.TableDescriptor
+}
+
+func (e virtualSchemaEntry) tableNames() (parser.QualifiedNames, error) {
+	var qualifiedNames parser.QualifiedNames
+	for tableName := range e.tables {
+		qname, err := parser.NewQualifiedNameFromDBAndTable(e.desc.Name, tableName)
+		if err != nil {
+			return nil, err
+		}
+		qualifiedNames = append(qualifiedNames, qname)
+	}
+	return qualifiedNames, nil
+}
 
 func init() {
-	virtualDatabaseDescs = make(map[string]*sqlbase.DatabaseDescriptor)
-	virtualTableDescs = make(map[string]map[string]*sqlbase.TableDescriptor)
+	virtualSchemaMap = make(map[string]virtualSchemaEntry)
 	for _, schema := range virtualSchemas {
 		dbName := schema.name
-		virtualDatabaseDescs[dbName] = initVirtualDatabaseDesc(dbName)
-		virtualTableDescMap := make(map[string]*sqlbase.TableDescriptor)
+		dbDesc := initVirtualDatabaseDesc(dbName)
+		tables := make(map[string]*sqlbase.TableDescriptor)
 		for _, table := range schema.tables {
 			tableDesc := initVirtualTableDesc(table)
-			virtualTableDescMap[tableDesc.Name] = tableDesc
+			tables[tableDesc.Name] = tableDesc
 		}
-		virtualTableDescs[dbName] = virtualTableDescMap
+		virtualSchemaMap[dbName] = virtualSchemaEntry{
+			desc:   dbDesc,
+			tables: tables,
+		}
 	}
 }
 
+// Virtual databases and tables each have an empty set of privileges. In practice,
+// all users have SELECT privileges on the database/tables, but this is handled
+// separately from normal SELECT privileges, because the virtual schemas need more
+// fine-grained access control. For instance, information_schema will only expose
+// rows to a given user which that user has access to.
+var emptyPrivileges = &sqlbase.PrivilegeDescriptor{}
+
 func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	return &sqlbase.DatabaseDescriptor{
-		Name: name,
-		// TODO(nvanbenschoten) All users should have Read-only access to virtual databases.
-		// Access control will be provided by the population routines.
-		Privileges: sqlbase.NewPrivilegeDescriptor(security.RootUser, privilege.VirtualData),
+		Name:       name,
+		ID:         keys.VirtualDescriptorID,
+		Privileges: emptyPrivileges,
 	}
 }
 
@@ -87,19 +110,46 @@ func initVirtualTableDesc(t virtualSchemaTable) *sqlbase.TableDescriptor {
 	if err != nil {
 		panic(err)
 	}
-	// TODO(nvanbenschoten) All users should have Read-only access to virtual tables.
-	// Access control will be provided by the population routines.
-	desc.Privileges = sqlbase.NewPrivilegeDescriptor(security.RootUser, privilege.VirtualData)
+	desc.ID = keys.VirtualDescriptorID
+	desc.Privileges = emptyPrivileges
 	return &desc
 }
 
-// checkVirtualDatabaseDesc checks if the provided name matches a virtual database,
+// getVirtualSchemaEntry retrieves a virtual schema entry given a database name.
+func getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
+	e, ok := virtualSchemaMap[name]
+	return e, ok
+}
+
+// getVirtualDatabaseDesc checks if the provided name matches a virtual database,
 // and if so, returns that database's descriptor.
-func checkVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	return virtualDatabaseDescs[name]
+func getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+	if e, ok := getVirtualSchemaEntry(name); ok {
+		return e.desc
+	}
+	return nil
 }
 
 // isVirtualDatabase checks if the provided name corresponds to a virtual database.
 func isVirtualDatabase(name string) bool {
-	return checkVirtualDatabaseDesc(name) != nil
+	_, ok := getVirtualSchemaEntry(name)
+	return ok
+}
+
+// checkVirtualTableDesc checks if the provided qname matches a virtual database/table
+// pair. The function will return the table's descriptor if the qname matches a specific
+// table. It will also return a flag signifying if the qname matched a database. This can
+// be used to differentiate if the qname is not referencing a virtual database or if the
+// qname is referencing a non-existent table within an existing virtual database.
+func checkVirtualTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, bool) {
+	if e, ok := getVirtualSchemaEntry(qname.Database()); ok {
+		return e.tables[qname.Table()], true
+	}
+	return nil, false
+}
+
+// isVirtualDescriptor checks if the provided DescriptorProto is an instance of
+// a Virtual Descriptor.
+func isVirtualDescriptor(desc sqlbase.DescriptorProto) bool {
+	return desc.GetID() == keys.VirtualDescriptorID
 }
