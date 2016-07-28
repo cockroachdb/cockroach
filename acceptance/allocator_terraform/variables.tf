@@ -85,12 +85,13 @@ variable "cockroach_machine_type" {
   default = "n1-standard-4"
 }
 
-# Size of disk for CockroachDB nodes.
-variable "cockroach_disk_size" {
-  default = "50" # GB
+# Size of root partition for CockroachDB nodes.
+variable "cockroach_root_disk_size" {
+  default = "10" # GB
 }
 
-variable "cockroach_disk_type" {
+# Controls the disk type for the root partition of CockroachDB nodes.
+variable "cockroach_root_disk_type" {
   default = "pd-standard" # can set this to 'pd-ssd' for persistent SSD
 }
 

@@ -161,9 +161,9 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	if !filepath.IsAbs(logDir) {
 		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
 	}
-	stores := "--store=data0"
+	stores := "--store=/mnt/data0"
 	for j := 1; j < *flagStores; j++ {
-		stores += " --store=data" + strconv.Itoa(j)
+		stores += " --store=/mnt/data" + strconv.Itoa(j)
 	}
 
 	var name string
