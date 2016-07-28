@@ -805,6 +805,10 @@ func (r *Replica) runCommitTrigger(
 		// This makes sure that no reads are happening in parallel;
 		// see #3148.
 		r.readOnlyCmdMu.Lock()
+		// TODO(tschottdorf): this is a batch.Defer which needs special
+		// treatment for proposer-eval'ed KV. We'll know before we start
+		// applying the command a commit trigger is happening, so the read lock
+		// should be acquired and released at the level of applyRaftCommand.
 		batch.Defer(r.readOnlyCmdMu.Unlock)
 	}
 
