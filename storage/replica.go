@@ -1897,7 +1897,7 @@ func (r *Replica) processRaftCommand(
 			}
 			splitTriggerPostCommit(
 				context.Background(),
-				trigger.split.RHSDeltaMS,
+				trigger.split.RightDeltaMS,
 				&trigger.split.SplitTrigger,
 				r,
 			)
