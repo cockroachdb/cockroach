@@ -78,7 +78,7 @@ func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege p
 
 // anyPrivilege implements the DescriptorAccessor interface.
 func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
-	if descriptor.GetPrivileges().AnyPrivilege(p.session.User) {
+	if descriptor.GetPrivileges().AnyPrivilege(p.session.User) || isVirtualDescriptor(descriptor) {
 		return nil
 	}
 	return fmt.Errorf("user %s has no privileges on %s %s",
