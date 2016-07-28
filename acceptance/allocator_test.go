@@ -60,7 +60,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -110,17 +109,17 @@ type allocatorTest struct {
 	f *terrafarm.Farmer
 }
 
+func (at *allocatorTest) Cleanup(t *testing.T) {
+	if r := recover(); r != nil {
+		t.Errorf("recovered from panic to destroy cluster: %v", r)
+	}
+	if at.f != nil {
+		at.f.MustDestroy(t)
+	}
+}
+
 func (at *allocatorTest) Run(t *testing.T) {
 	at.f = farmer(t, at.Prefix)
-	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
-		t.Fatalf("%s environment variable must be set for Terraform", e)
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("recovered from panic to destroy cluster: %v", r)
-		}
-		at.f.MustDestroy(t)
-	}()
 
 	// Pass on overrides to Terraform input variables.
 	if *flagATCockroachBinary != "" {
@@ -187,8 +186,12 @@ func (at *allocatorTest) Run(t *testing.T) {
 	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
-
 	at.f.Assert(t)
+}
+
+func (at *allocatorTest) RunAndCleanup(t *testing.T) {
+	defer at.Cleanup(t)
+	at.Run(t)
 }
 
 // printStats prints the time it took for rebalancing to finish and the final
@@ -296,7 +299,7 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
 func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
-	db, err := gosql.Open("postgres", at.f.PGUrl(1))
+	db, err := gosql.Open("postgres", at.f.PGUrl(0))
 	if err != nil {
 		return err
 	}
@@ -346,7 +349,7 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 		StoreURL:   urlStore1s,
 		Prefix:     "uprep-1to3s",
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
 // TestRebalance3to5Small tests rebalancing, starting with 3 nodes (each
@@ -358,7 +361,7 @@ func TestRebalance_3To5Small(t *testing.T) {
 		StoreURL:   urlStore3s,
 		Prefix:     "rebal-3to5s",
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
 // TestUpreplicate_1To3Medium tests up-replication, starting with 1 node
@@ -371,9 +374,12 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 		Prefix:              "uprep-1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
+// TestUpreplicate_1To6Medium tests up-replication (and, to a lesser extent,
+// rebalancing), starting with 1 node containing 108 GiB of data and growing to
+// 6 nodes.
 func TestUpreplicate_1To6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          1,
@@ -382,7 +388,7 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 		Prefix:              "uprep-1to6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
 // TestSteady_6Medium is useful for creating a medium-size balanced cluster
@@ -397,5 +403,5 @@ func TestSteady_6Medium(t *testing.T) {
 		Prefix:              "steady-6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
