@@ -482,35 +482,25 @@ func Example_max_results() {
 func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
-
 	zone1 := "zone1.yaml"
-	zoneFile1, err := os.Create(zone1)
-	if err != nil {
-		log.Fatalf("Could not create zone config file: %v", err)
-	}
-	if _, err := zoneFile1.WriteString("replicas:\n- attrs: [us-east-1a,ssd]\n"); err != nil {
-		log.Fatalf("Could not write string: %v", err)
-	}
-	zoneFile1.Close()
-
 	zone2 := "zone2.yaml"
-	zoneFile2, err := os.Create(zone2)
-	if err != nil {
-		log.Fatalf("Could not create zone config file: %v", err)
-	}
-	if _, err := zoneFile2.WriteString("range_max_bytes: 134217728\n"); err != nil {
-		log.Fatalf("Could not write string: %v", err)
-	}
-	zoneFile2.Close()
-
 	defer func() {
 		if err := os.Remove(zone1); err != nil {
-			log.Fatalf("Could not remove zone config file: %v", err)
+			log.Fatalf("could not remove zone config file: %v", err)
 		}
 		if err := os.Remove(zone2); err != nil {
-			log.Fatalf("Could not remove zone config file: %v", err)
+			log.Fatalf("could not remove zone config file: %v", err)
 		}
 	}()
+
+	if err := ioutil.WriteFile(zone1, []byte("replicas:\n- attrs: [us-east-1a,ssd]\n"), 0777); err != nil {
+		log.Fatalf("could not write string: %v", err)
+	}
+
+	if err := ioutil.WriteFile(zone2, []byte("range_max_bytes: 134217728\n"), 0777); err != nil {
+		log.Fatalf("could not write string: %v", err)
+	}
+
 	c.Run("zone ls")
 	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
 	c.RunWithArgs([]string{"zone", "set", "system", "--file=" + zone1})

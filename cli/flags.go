@@ -71,7 +71,8 @@ nodes. For example:`) + `
   --attrs=us-west-1b:gpu
 `,
 
-	cliflags.ZoneConfigName: wrapText(`File to read the zone configuration from`),
+	cliflags.ZoneConfigName: wrapText(`
+File to read the zone configuration from. Use "-" to specify read from stdin`),
 
 	cliflags.BackgroundName: wrapText(`
 Start the server in the background. This is similar to appending "&"
