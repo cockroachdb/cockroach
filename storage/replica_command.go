@@ -801,12 +801,6 @@ func (r *Replica) runCommitTrigger(
 	var trigger *PostCommitTrigger
 	ct := args.InternalCommitTrigger
 	if ct != nil {
-		// Assert that the on-disk state doesn't diverge from the in-memory
-		// state as a result of the commit trigger.
-		batch.Defer(func() {
-			r.assertState(r.store.Engine())
-		})
-
 		// Hold readMu across the application of any commit trigger.
 		// This makes sure that no reads are happening in parallel;
 		// see #3148.
