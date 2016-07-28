@@ -794,8 +794,8 @@ func (l *LocalCluster) URL(i int) string {
 }
 
 // Addr returns the host and port from the node in the format HOST:PORT.
-func (l *LocalCluster) Addr(i int) string {
-	return l.Nodes[i].Addr(defaultHTTP).String()
+func (l *LocalCluster) Addr(i int, port string) string {
+	return l.Nodes[i].Addr(nat.Port(port + "/tcp")).String()
 }
 
 // ExecRoot runs a command as root.

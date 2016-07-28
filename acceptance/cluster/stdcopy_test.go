@@ -105,22 +105,22 @@ func TestWriteDoesNotReturnNegativeWrittenBytes(t *testing.T) {
 	}
 }
 
-func getSrcBuffer(stdOutBytes, stdErrBytes []byte) (buffer *bytes.Buffer, err error) {
+func getSrcBuffer(stdoutBytes, stderrBytes []byte) (buffer *bytes.Buffer, err error) {
 	buffer = new(bytes.Buffer)
 	dstOut := NewStdWriter(buffer, Stdout)
-	_, err = dstOut.Write(stdOutBytes)
+	_, err = dstOut.Write(stdoutBytes)
 	if err != nil {
 		return
 	}
 	dstErr := NewStdWriter(buffer, Stderr)
-	_, err = dstErr.Write(stdErrBytes)
+	_, err = dstErr.Write(stderrBytes)
 	return
 }
 
 func TestStdCopyWriteAndRead(t *testing.T) {
-	stdOutBytes := []byte(strings.Repeat("o", startingBufLen))
-	stdErrBytes := []byte(strings.Repeat("e", startingBufLen))
-	buffer, err := getSrcBuffer(stdOutBytes, stdErrBytes)
+	stdoutBytes := []byte(strings.Repeat("o", startingBufLen))
+	stderrBytes := []byte(strings.Repeat("e", startingBufLen))
+	buffer, err := getSrcBuffer(stdoutBytes, stderrBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestStdCopyWriteAndRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedTotalWritten := len(stdOutBytes) + len(stdErrBytes)
+	expectedTotalWritten := len(stdoutBytes) + len(stderrBytes)
 	if written != int64(expectedTotalWritten) {
 		t.Fatalf("Expected to have total of %d bytes written, got %d", expectedTotalWritten, written)
 	}
@@ -165,9 +165,9 @@ func TestStdCopyReturnsErrorReadingHeader(t *testing.T) {
 
 func TestStdCopyReturnsErrorReadingFrame(t *testing.T) {
 	expectedError := errors.New("error")
-	stdOutBytes := []byte(strings.Repeat("o", startingBufLen))
-	stdErrBytes := []byte(strings.Repeat("e", startingBufLen))
-	buffer, err := getSrcBuffer(stdOutBytes, stdErrBytes)
+	stdoutBytes := []byte(strings.Repeat("o", startingBufLen))
+	stderrBytes := []byte(strings.Repeat("e", startingBufLen))
+	buffer, err := getSrcBuffer(stdoutBytes, stderrBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,9 +186,9 @@ func TestStdCopyReturnsErrorReadingFrame(t *testing.T) {
 }
 
 func TestStdCopyDetectsCorruptedFrame(t *testing.T) {
-	stdOutBytes := []byte(strings.Repeat("o", startingBufLen))
-	stdErrBytes := []byte(strings.Repeat("e", startingBufLen))
-	buffer, err := getSrcBuffer(stdOutBytes, stdErrBytes)
+	stdoutBytes := []byte(strings.Repeat("o", startingBufLen))
+	stderrBytes := []byte(strings.Repeat("e", startingBufLen))
+	buffer, err := getSrcBuffer(stdoutBytes, stderrBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,9 +229,9 @@ func TestStdCopyWithCorruptedPrefix(t *testing.T) {
 }
 
 func TestStdCopyReturnsWriteErrors(t *testing.T) {
-	stdOutBytes := []byte(strings.Repeat("o", startingBufLen))
-	stdErrBytes := []byte(strings.Repeat("e", startingBufLen))
-	buffer, err := getSrcBuffer(stdOutBytes, stdErrBytes)
+	stdoutBytes := []byte(strings.Repeat("o", startingBufLen))
+	stderrBytes := []byte(strings.Repeat("e", startingBufLen))
+	buffer, err := getSrcBuffer(stdoutBytes, stderrBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,9 +249,9 @@ func TestStdCopyReturnsWriteErrors(t *testing.T) {
 }
 
 func TestStdCopyDetectsNotFullyWrittenFrames(t *testing.T) {
-	stdOutBytes := []byte(strings.Repeat("o", startingBufLen))
-	stdErrBytes := []byte(strings.Repeat("e", startingBufLen))
-	buffer, err := getSrcBuffer(stdOutBytes, stdErrBytes)
+	stdoutBytes := []byte(strings.Repeat("o", startingBufLen))
+	stderrBytes := []byte(strings.Repeat("e", startingBufLen))
+	buffer, err := getSrcBuffer(stdoutBytes, stderrBytes)
 	if err != nil {
 		t.Fatal(err)
 	}

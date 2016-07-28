@@ -16,7 +16,6 @@ package acceptance
 
 import (
 	"flag"
-	"os"
 	"regexp"
 	"strconv"
 	"testing"
@@ -72,9 +71,6 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 	ctx, err := WithClusterTimeout(context.Background())
 	if err != nil {
 		t.Fatal(err)
-	}
-	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
-		t.Fatalf("%s environment variable must be set for Terraform", e)
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		log.Infof(ctx, "load test will end at %s", deadline)
