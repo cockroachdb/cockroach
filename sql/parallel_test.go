@@ -32,6 +32,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"gopkg.in/yaml.v1"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -53,6 +55,7 @@ var (
 
 type parallelTest struct {
 	*testing.T
+	ctx     context.Context
 	cluster serverutils.TestClusterInterface
 	clients [][]*gosql.DB
 }
@@ -110,6 +113,8 @@ type parTestRunEntry struct {
 }
 
 type parTestSpec struct {
+	SkipReason string `yaml:"skip_reason"`
+
 	// ClusterSize is the number of nodes in the cluster. If 0, single node.
 	ClusterSize int `yaml:"cluster_size"`
 
@@ -121,18 +126,26 @@ type parTestSpec struct {
 }
 
 func (t *parallelTest) run(dir string) {
-	fmt.Printf("Running test %s\n", dir)
-
 	// Process the spec file.
 	mainFile := filepath.Join(dir, "test.yaml")
 	yamlData, err := ioutil.ReadFile(mainFile)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%s: %s", mainFile, err.Error())
 	}
 	var spec parTestSpec
 	err = yaml.Unmarshal(yamlData, &spec)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%s: %s", mainFile, err.Error())
+	}
+
+	if spec.SkipReason != "" {
+		log.Warningf(t.ctx, "Skipping test %s: %s", dir, spec.SkipReason)
+		return
+	}
+
+	log.Infof(t.ctx, "Running test %s", dir)
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "spec: %+v", spec)
 	}
 
 	t.setup(&spec)
@@ -144,7 +157,8 @@ func (t *parallelTest) run(dir string) {
 			for _, re := range runList {
 				descr = append(descr, fmt.Sprintf("%d:%s", re.Node, re.File))
 			}
-			fmt.Printf("%s: run list %d: %s\n", mainFile, runListIdx, strings.Join(descr, ", "))
+			log.Infof(t.ctx, "%s: run list %d: %s", mainFile, runListIdx,
+				strings.Join(descr, ", "))
 		}
 		// Store the number of clients used so far (per node).
 		numClients := make([]int, spec.ClusterSize)
@@ -167,7 +181,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 	}
 
 	if testing.Verbose() || log.V(1) {
-		fmt.Printf("Cluster Size: %d\n", spec.ClusterSize)
+		log.Infof(t.ctx, "Cluster Size: %d", spec.ClusterSize)
 	}
 
 	args := base.TestClusterArgs{
@@ -190,7 +204,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 
 	if spec.RangeSplitSize != 0 {
 		if testing.Verbose() || log.V(1) {
-			fmt.Printf("Setting range split size: %d\n", spec.RangeSplitSize)
+			log.Infof(t.ctx, "Setting range split size: %d", spec.RangeSplitSize)
 		}
 		zoneCfg := config.DefaultZoneConfig()
 		zoneCfg.RangeMaxBytes = int64(spec.RangeSplitSize)
@@ -203,15 +217,25 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		r0.Exec(`UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf)
 	}
 
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "Creating database")
+	}
+
 	r0.Exec("CREATE DATABASE test")
 	for i := range t.clients {
 		sqlutils.MakeSQLRunner(t, t.clients[i][0]).Exec("SET DATABASE = test")
 	}
 
 	if spec.ClusterSize >= 3 {
+		if testing.Verbose() || log.V(1) {
+			log.Infof(t.ctx, "Waiting for full replication")
+		}
 		if err := t.cluster.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "Test setup done")
 	}
 }
 
@@ -228,9 +252,9 @@ func TestParallel(t *testing.T) {
 	}
 	total := 0
 	for _, p := range paths {
-		pt := parallelTest{T: t}
+		pt := parallelTest{T: t, ctx: context.Background()}
 		pt.run(p)
 		total++
 	}
-	fmt.Printf("%d parallel tests passed\n", total)
+	log.Infof(context.Background(), "%d parallel tests passed", total)
 }
