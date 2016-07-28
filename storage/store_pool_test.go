@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"net"
 	"reflect"
 	"sort"
 	"testing"
@@ -500,6 +501,11 @@ func TestStorePoolReserve(t *testing.T) {
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
+	storePool.resolver = func(nodeID roachpb.NodeID) (net.Addr, error) {
+		return &util.UnresolvedAddr{
+			AddressField: address,
+		}, nil
+	}
 	sg := gossiputil.NewStoreGossiper(g)
 
 	// Gossip a fake store descriptor into the store pool so we can redirect
@@ -509,9 +515,6 @@ func TestStorePoolReserve(t *testing.T) {
 			StoreID: 2,
 			Node: roachpb.NodeDescriptor{
 				NodeID: 2,
-				Address: util.UnresolvedAddr{
-					AddressField: address,
-				},
 			},
 		},
 	}
