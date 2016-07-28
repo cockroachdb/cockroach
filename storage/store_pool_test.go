@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"net"
 	"reflect"
 	"sort"
 	"testing"
@@ -437,29 +438,27 @@ func TestStorePoolDefaultState(t *testing.T) {
 	}
 }
 
-// fakeNodeServer implements the InternalServer interface. Specifically, this
-// is used for testing the Reserve() RPC.
-type fakeNodeServer struct {
+// fakeStoresServer implements the InternalStoresServer interface. Specifically,
+// this is used for testing the Reserve() RPC.
+type fakeStoresServer struct {
 	reservationResponse bool
 	reservationErr      error
 }
 
-func (f *fakeNodeServer) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+var _ roachpb.InternalStoresServer = fakeStoresServer{}
+
+func (f fakeStoresServer) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
-func (f *fakeNodeServer) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
-	panic("unimplemented")
-}
-
-func (f *fakeNodeServer) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
+func (f fakeStoresServer) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
 	return &roachpb.ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
 }
 
-// newFakeNodeServer returns a fakeNodeServer designed to handle internal
+// newFakeNodeServer returns a fakeStoresServer designed to handle internal
 // node server RPCs, an rpc context used for the server and the fake server's
 // address.
-func newFakeNodeServer(stopper *stop.Stopper) (*fakeNodeServer, *rpc.Context, string, error) {
+func newFakeNodeServer(stopper *stop.Stopper) (*fakeStoresServer, *rpc.Context, string, error) {
 	ctx := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
 	s := rpc.NewServer(ctx)
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
@@ -467,8 +466,8 @@ func newFakeNodeServer(stopper *stop.Stopper) (*fakeNodeServer, *rpc.Context, st
 		return nil, nil, "", err
 	}
 	stopper.AddCloser(stop.CloserFn(func() { _ = ln.Close() }))
-	f := &fakeNodeServer{}
-	roachpb.RegisterInternalServer(s, f)
+	f := &fakeStoresServer{}
+	roachpb.RegisterInternalStoresServer(s, f)
 	return f, ctx, ln.Addr().String(), nil
 }
 
@@ -500,6 +499,11 @@ func TestStorePoolReserve(t *testing.T) {
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
+	storePool.resolver = func(_ roachpb.NodeID) (net.Addr, error) {
+		return &util.UnresolvedAddr{
+			AddressField: address,
+		}, nil
+	}
 	sg := gossiputil.NewStoreGossiper(g)
 
 	// Gossip a fake store descriptor into the store pool so we can redirect
@@ -509,9 +513,6 @@ func TestStorePoolReserve(t *testing.T) {
 			StoreID: 2,
 			Node: roachpb.NodeDescriptor{
 				NodeID: 2,
-				Address: util.UnresolvedAddr{
-					AddressField: address,
-				},
 			},
 		},
 	}
