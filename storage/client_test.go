@@ -162,6 +162,8 @@ type multiTestContext struct {
 	manualClock  *hlc.ManualClock
 	clock        *hlc.Clock
 	rpcContext   *rpc.Context
+	// This enables the reservation system which by default is disabled.
+	reservationsEnabled bool
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
@@ -222,6 +224,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		mCopy.clocks = nil
 		mCopy.clock = nil
 		mCopy.timeUntilStoreDead = 0
+		mCopy.reservationsEnabled = false
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -512,7 +515,7 @@ func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
 		m.gossips[idx],
 		m.clock,
 		m.rpcContext,
-		/* reservationsEnabled */ false,
+		m.reservationsEnabled,
 		m.timeUntilStoreDead,
 		stopper,
 	)
@@ -538,8 +541,9 @@ func (m *multiTestContext) addStore(idx int) {
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
 	}
-	m.grpcServers[idx] = rpc.NewServer(m.rpcContext)
-	m.transports[idx] = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext)
+	grpcServer := rpc.NewServer(m.rpcContext)
+	m.grpcServers[idx] = grpcServer
+	m.transports[idx] = storage.NewRaftTransport(m.getNodeIDAddress, grpcServer, m.rpcContext)
 
 	stopper := stop.NewStopper()
 
@@ -589,8 +593,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	ln, err := netutil.ListenAndServeGRPC(m.transportStopper,
-		m.grpcServers[idx], util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -603,7 +606,12 @@ func (m *multiTestContext) addStore(idx int) {
 	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
-	m.gossips[idx].Start(m.grpcServers[idx], ln.Addr())
+	m.gossips[idx].Start(grpcServer, ln.Addr())
+
+	stores := storage.NewStores(clock)
+	stores.AddStore(store)
+	roachpb.RegisterInternalStoresServer(grpcServer, storage.MakeInternalStoresServer(m.nodeDesc(nodeID), stores))
+
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
 	// FirstRange() can find the sender)
@@ -626,15 +634,18 @@ func (m *multiTestContext) addStore(idx int) {
 	store.WaitForInit()
 }
 
-// gossipNodeDesc adds the node descriptor to the gossip network.
-// Mostly makes sure that we don't see a warning per request.
-func (m *multiTestContext) gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
+func (m *multiTestContext) nodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 	addr := m.nodeIDtoAddr[nodeID]
-	nodeDesc := &roachpb.NodeDescriptor{
+	return &roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 	}
-	return g.SetNodeDescriptor(nodeDesc)
+}
+
+// gossipNodeDesc adds the node descriptor to the gossip network.
+// Mostly makes sure that we don't see a warning per request.
+func (m *multiTestContext) gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
+	return g.SetNodeDescriptor(m.nodeDesc(nodeID))
 }
 
 // StopStore stops a store but leaves the engine intact.
