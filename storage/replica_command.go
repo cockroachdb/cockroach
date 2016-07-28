@@ -838,7 +838,9 @@ func (r *Replica) runCommitTrigger(
 						"modification trigger is executing on a non-system range. "+
 						"Configuration changes will not be gossiped.")
 				} else {
-					batch.Defer(r.maybeGossipSystemConfig)
+					trigger = updateTrigger(trigger, &PostCommitTrigger{
+						maybeGossipSystemConfig: true,
+					})
 				}
 			}
 		}
