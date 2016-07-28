@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"golang.org/x/net/context"
 )
 
 // Truncate deletes all rows from a table.
@@ -69,5 +70,5 @@ func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	if err := td.init(txn); err != nil {
 		return err
 	}
-	return td.deleteAllRows()
+	return td.deleteAllRows(context.TODO())
 }
