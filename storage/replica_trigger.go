@@ -63,6 +63,8 @@ type PostCommitTrigger struct {
 	intents []intentsWithArg
 	// split contains a postCommitSplit trigger emitted on a split.
 	split *postCommitSplit
+	// whether to call r.maybeGossipSystemConfig after commit.
+	maybeGossipSystemConfig bool
 }
 
 // updateTrigger takes a previous and new commit trigger and combines their
