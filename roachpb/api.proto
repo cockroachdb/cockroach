@@ -921,10 +921,15 @@ message ReservationResponse {
 
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
-  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
-  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
 
 service External {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
+}
+
+// InternalStores is a wrapper for internal RPCs that operate only on the stores
+// of a node.
+service InternalStores {
+  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
+  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
