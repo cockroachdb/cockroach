@@ -1983,6 +1983,11 @@ func (r *Replica) processRaftCommand(
 
 	// Handle all returned side effects. This must happen after commit but
 	// before returning to the client.
+
+	// Update store-level MVCC stats with merged range stats.
+	r.store.metrics.addMVCCStats(propResult.delta)
+
+	// Handle commit triggers.
 	//
 	// TODO(tschottdorf): we currently propagate *PostCommitTrigger. Consider
 	// using PostCommitTrigger instead.
@@ -2005,6 +2010,7 @@ func (r *Replica) processRaftCommand(
 			r.store.intentResolver.processIntentsAsync(r, trigger.intents)
 		}
 	}
+
 	// On successful write commands handle write-related triggers including
 	// splitting and raft log truncation.
 	if pErr == nil && raftCmd.Cmd.IsWrite() {
@@ -2099,8 +2105,6 @@ func (r *Replica) applyRaftCommand(
 	if err := setMVCCStats(writer, r.RangeID, newMS); err != nil {
 		log.Fatalf(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
-	// Update store-level MVCC stats with merged range stats.
-	r.store.metrics.addMVCCStats(propResult.delta)
 
 	// TODO(petermattis): We did not close the writer in an earlier version of
 	// the code, which went undetected even though we used the batch after
@@ -2130,7 +2134,6 @@ func (r *Replica) applyRaftCommand(
 			// state as a result of the trigger.
 			r.assertStateLocked(r.store.Engine())
 		}
-
 		r.mu.Unlock()
 	}
 
@@ -2712,6 +2715,11 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // range from participating in progress, trigger a rebalance operation and
 // decide on an error-by-error basis whether the corruption is limited to the
 // range, store, node or cluster with corresponding actions taken.
+//
+// TODO(d4l3k): when marking a Replica corrupt, must subtract its stats from
+// r.store.metrics. Errors which happen between committing a batch and sending
+// a stats delta from the store are going to be particularly tricky and the
+// best bet is to not have any of those.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		log.Errorf(context.TODO(), "%s: stalling replica due to: %s", r, cErr.ErrorMsg)
