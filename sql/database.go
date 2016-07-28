@@ -128,7 +128,7 @@ var _ DatabaseAccessor = &planner{}
 
 // getDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if virtual := checkVirtualDatabaseDesc(name); virtual != nil {
+	if virtual := getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual, nil
 	}
 	desc := &sqlbase.DatabaseDescriptor{}
@@ -189,8 +189,8 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 
 // getDatabaseID implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
-	if virtual := checkVirtualDatabaseDesc(name); virtual != nil {
-		return 0, errors.Errorf("virtual databases (%s) do not have IDs", name)
+	if virtual := getVirtualDatabaseDesc(name); virtual != nil {
+		return virtual.GetID(), nil
 	}
 
 	if id := p.databaseCache.getID(name); id != 0 {

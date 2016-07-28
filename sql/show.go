@@ -237,7 +237,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 		return nil, err
 	}
 	v := &valuesNode{columns: []ResultColumn{{Name: "Database", Typ: parser.TypeString}}}
-	for db := range virtualDatabaseDescs {
+	for db := range virtualSchemaMap {
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(db)})
 	}
 	for _, row := range sr {

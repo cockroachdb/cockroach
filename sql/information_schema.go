@@ -17,6 +17,35 @@
 package sql
 
 var informationSchema = virtualSchema{
-	name:   "information_schema",
-	tables: []virtualSchemaTable{},
+	name: "information_schema",
+	tables: []virtualSchemaTable{
+		informationSchemaTablesTable,
+	},
+}
+
+var informationSchemaTablesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.tables (
+  TABLE_CATALOG STRING NOT NULL DEFAULT '',
+  TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+  TABLE_NAME STRING NOT NULL DEFAULT '',
+  TABLE_TYPE STRING NOT NULL DEFAULT '',
+  ENGINE STRING,
+  VERSION INT,
+  ROW_FORMAT STRING,
+  TABLE_ROWS INT,
+  AVG_ROW_LENGTH INT,
+  DATA_LENGTH INT,
+  MAX_DATA_LENGTH INT,
+  INDEX_LENGTH INT,
+  DATA_FREE INT,
+  AUTO_INCREMENT INT,
+  CREATE_TIME TIMESTAMP,
+  UPDATE_TIME TIMESTAMP,
+  CHECK_TIME TIMESTAMP,
+  TABLE_COLLATION STRING,
+  CHECKSUM INT,
+  CREATE_OPTIONS STRING,
+  TABLE_COMMENT STRING NOT NULL DEFAULT ''
+);`,
 }
