@@ -76,7 +76,7 @@ const (
 	// reloaded from disk as needed) don't crowd out the
 	// message/snapshot descriptors (whose necessity is short-lived but
 	// cannot be recovered through other means if evicted)?
-	maxReplicaDescCacheSize = 1000
+	maxReplicaDescCacheSize = 10000
 
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
