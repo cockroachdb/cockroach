@@ -136,7 +136,7 @@ func (rq *replicateQueue) process(
 	switch action {
 	case AllocatorAdd:
 		log.Trace(ctx, "adding a new replica")
-		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
+		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true)
 		if err != nil {
 			return err
 		}

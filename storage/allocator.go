@@ -188,12 +188,12 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 // required attributes. Nodes already accommodating existing replicas are ruled
 // out as targets. If relaxConstraints is true, then the required attributes
 // will be relaxed as necessary, from least specific to most specific, in order
-// to allocate a target. If needed, a filter function can be added that further
-// filter the results. The function will be passed the storeDesc and the used
-// and new counts. It returns a bool indicating inclusion or exclusion from the
-// set of stores being considered.
-func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
-	filter func(storeDesc *roachpb.StoreDescriptor, count, used *stat) bool) (*roachpb.StoreDescriptor, error) {
+// to allocate a target.
+func (a *Allocator) AllocateTarget(
+	required roachpb.Attributes,
+	existing []roachpb.ReplicaDescriptor,
+	relaxConstraints bool,
+) (*roachpb.StoreDescriptor, error) {
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
 		existingNodes[repl.NodeID] = struct{}{}
