@@ -38,23 +38,23 @@ func TestLogContext(t *testing.T) {
 		},
 		{
 			value:    makeMessage(ctxA, "test", nil),
-			expected: "[NodeID: 5] test",
+			expected: "[NodeID=5] test",
 		},
 		{
 			value:    makeMessage(ctxB, "test", nil),
-			expected: "[NodeID: 5] [ReqID: 123] test",
+			expected: "[NodeID=5,ReqID=123] test",
 		},
 		{
 			value:    makeMessage(ctxC, "test", nil),
-			expected: "[NodeID: 5] [ReqID: 123] [aborted] test",
+			expected: "[NodeID=5,ReqID=123,aborted] test",
 		},
 		{
 			value:    makeMessage(ctxD, "test", nil),
-			expected: "[NodeID: 5] [ReqID: 123] [aborted] [slice: [1 2 3]] test",
+			expected: "[NodeID=5,ReqID=123,aborted,slice=[1 2 3]] test",
 		},
 		{
 			value:    makeMessage(ctxB1, "test", nil),
-			expected: "[NodeID: 5] [branch: meh] test",
+			expected: "[NodeID=5,branch=meh] test",
 		},
 	}
 

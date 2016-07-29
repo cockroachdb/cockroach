@@ -29,12 +29,17 @@ import (
 func makeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf bytes.Buffer
 	tags := contextLogTags(ctx)
-	for _, t := range tags {
+	if len(tags) > 0 {
 		buf.WriteString("[")
-		buf.WriteString(t.name)
-		if value := t.value(); value != nil {
-			buf.WriteString(": ")
-			fmt.Fprint(&buf, value)
+		for i, t := range tags {
+			if i > 0 {
+				buf.WriteString(",")
+			}
+			buf.WriteString(t.name)
+			if value := t.value(); value != nil {
+				buf.WriteString("=")
+				fmt.Fprint(&buf, value)
+			}
 		}
 		buf.WriteString("] ")
 	}
