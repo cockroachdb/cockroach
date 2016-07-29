@@ -175,3 +175,30 @@ query TTT colnames
 SHOW GRANTS ON information_schema.tables
 ----
 Table  User  Privileges
+
+
+# Verify selecting from information_schema.
+
+statement ok
+SET DATABASE = system
+
+query T
+SELECT table_name FROM information_schema.tables;
+----
+descriptor
+eventlog
+lease
+namespace
+rangelog
+ui
+users
+zones
+
+query T
+SELECT table_name FROM information_schema.tables WHERE table_name > 'n' ORDER BY 1 DESC;
+----
+zones
+users
+ui
+rangelog
+namespace

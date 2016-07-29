@@ -16,6 +16,8 @@
 
 package sql
 
+import "github.com/cockroachdb/cockroach/sql/parser"
+
 var informationSchema = virtualSchema{
 	name: "information_schema",
 	tables: []virtualSchemaTable{
@@ -48,4 +50,46 @@ CREATE TABLE information_schema.tables (
   CREATE_OPTIONS STRING,
   TABLE_COMMENT STRING NOT NULL DEFAULT ''
 );`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		// TODO(nvanbenschoten) This isn't actually the correct implementation
+		// for this table. Fixing this will come later.
+		if p.session.Database == "" {
+			return errNoDatabase
+		}
+		dbDesc, err := p.mustGetDatabaseDesc(p.session.Database)
+		if err != nil {
+			return err
+		}
+
+		tableNames, err := p.getTableNames(dbDesc)
+		if err != nil {
+			return err
+		}
+		for _, name := range tableNames {
+			addRow(
+				parser.DNull,
+				parser.DNull,
+				parser.NewDString(name.Table()),
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+			)
+		}
+		return nil
+	},
 }

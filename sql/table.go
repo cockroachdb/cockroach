@@ -124,14 +124,9 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 		return nil, err
 	}
 
-	virtual, foundDB := checkVirtualTableDesc(qname)
-	if virtual != nil {
-		return virtual, nil
-	}
-	if foundDB {
-		// The database referenced was a virtual database, but it does not
-		// contain the desired table.
-		return nil, nil
+	virtual, err := getVirtualTableDesc(qname)
+	if err != nil || virtual != nil {
+		return virtual, err
 	}
 
 	dbDesc, err := p.mustGetDatabaseDesc(qname.Database())

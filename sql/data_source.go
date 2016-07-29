@@ -197,6 +197,27 @@ func (p *planner) getDataSource(
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *parser.QualifiedName:
+		if err := t.NormalizeTableName(p.session.Database); err != nil {
+			return planDataSource{}, err
+		}
+
+		// Check for a virtual table.
+		virtual, err := getVirtualTableEntry(t)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		if virtual.desc != nil {
+			v, err := virtual.getValuesNode(p)
+			if err != nil {
+				return planDataSource{}, err
+			}
+
+			return planDataSource{
+				info: newSourceInfoForSingleTable(virtual.desc.Name, v.Columns()),
+				plan: v,
+			}, nil
+		}
+
 		// Usual case: a table.
 		scan := p.Scan()
 		tableName, err := scan.initTable(p, t, hints, scanVisibility)
