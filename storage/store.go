@@ -795,18 +795,18 @@ func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
 	// We do not grab a lock here, because it's not possible to get a point-in-
 	// time snapshot of RocksDB stats. Retrieving RocksDB stats doesn't grab any
 	// locks, and there's no way to retrieve multiple stats in a single operation.
-	sm.rdbBlockCacheHits.Update(int64(stats.BlockCacheHits))
-	sm.rdbBlockCacheMisses.Update(int64(stats.BlockCacheMisses))
-	sm.rdbBlockCacheUsage.Update(int64(stats.BlockCacheUsage))
-	sm.rdbBlockCachePinnedUsage.Update(int64(stats.BlockCachePinnedUsage))
-	sm.rdbBloomFilterPrefixUseful.Update(int64(stats.BloomFilterPrefixUseful))
-	sm.rdbBloomFilterPrefixChecked.Update(int64(stats.BloomFilterPrefixChecked))
-	sm.rdbMemtableHits.Update(int64(stats.MemtableHits))
-	sm.rdbMemtableMisses.Update(int64(stats.MemtableMisses))
-	sm.rdbMemtableTotalSize.Update(int64(stats.MemtableTotalSize))
-	sm.rdbFlushes.Update(int64(stats.Flushes))
-	sm.rdbCompactions.Update(int64(stats.Compactions))
-	sm.rdbTableReadersMemEstimate.Update(int64(stats.TableReadersMemEstimate))
+	sm.rdbBlockCacheHits.Update(stats.BlockCacheHits)
+	sm.rdbBlockCacheMisses.Update(stats.BlockCacheMisses)
+	sm.rdbBlockCacheUsage.Update(stats.BlockCacheUsage)
+	sm.rdbBlockCachePinnedUsage.Update(stats.BlockCachePinnedUsage)
+	sm.rdbBloomFilterPrefixUseful.Update(stats.BloomFilterPrefixUseful)
+	sm.rdbBloomFilterPrefixChecked.Update(stats.BloomFilterPrefixChecked)
+	sm.rdbMemtableHits.Update(stats.MemtableHits)
+	sm.rdbMemtableMisses.Update(stats.MemtableMisses)
+	sm.rdbMemtableTotalSize.Update(stats.MemtableTotalSize)
+	sm.rdbFlushes.Update(stats.Flushes)
+	sm.rdbCompactions.Update(stats.Compactions)
+	sm.rdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
 }
 
 func (sm *storeMetrics) leaseRequestComplete(err error) {

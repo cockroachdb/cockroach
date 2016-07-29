@@ -1083,11 +1083,11 @@ revoke_stmt:
 privilege_target:
   indirect_name_or_glob_list
   {
-    $$.val = TargetList{Tables: QualifiedNames($1.qnames())}
+    $$.val = TargetList{Tables: $1.qnames()}
   }
 | TABLE indirect_name_or_glob_list
   {
-    $$.val = TargetList{Tables: QualifiedNames($2.qnames())}
+    $$.val = TargetList{Tables: $2.qnames()}
   }
 |  DATABASE name_list
   {

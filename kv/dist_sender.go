@@ -450,7 +450,7 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if leaseHolder, ok := ds.leaseHolderCache.Lookup(roachpb.RangeID(desc.RangeID)); ok {
+		if leaseHolder, ok := ds.leaseHolderCache.Lookup(desc.RangeID); ok {
 			if i := replicas.FindReplica(leaseHolder.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 			}

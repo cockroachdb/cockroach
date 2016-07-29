@@ -409,7 +409,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	var aliveStoreCount int
 	var throttledStoreCount int
 	for _, storeID := range storeIDs {
-		detail := sp.mu.stores[roachpb.StoreID(storeID)]
+		detail := sp.mu.stores[storeID]
 		matched := detail.match(now, required)
 		switch matched {
 		case storeMatchAlive:

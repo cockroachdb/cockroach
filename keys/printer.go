@@ -294,7 +294,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 		// 	return "", nil, err
 		// }
 		remainder = ""
-		key = maker(roachpb.RangeID(rangeID), suffix, roachpb.RKey(detail))
+		key = maker(roachpb.RangeID(rangeID), suffix, detail)
 		return
 	}
 	panic(&errUglifyUnsupported{errors.New("unhandled general range key")})

@@ -122,7 +122,7 @@ func (rs *replicaScanner) Count() int64 {
 func (rs *replicaScanner) avgScan() time.Duration {
 	rs.completedScan.L.Lock()
 	defer rs.completedScan.L.Unlock()
-	return time.Duration(rs.total.Nanoseconds() / int64(rs.count))
+	return time.Duration(rs.total.Nanoseconds() / rs.count)
 }
 
 // RemoveReplica removes a replica from any replica queues the scanner may

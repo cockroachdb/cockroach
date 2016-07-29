@@ -271,7 +271,7 @@ func (p *planner) getDataSource(
 				if src.info.sourceColumns[colIdx].hidden {
 					continue
 				}
-				src.info.sourceColumns[colIdx].Name = string(colAlias[aliasIdx])
+				src.info.sourceColumns[colIdx].Name = colAlias[aliasIdx]
 				aliasIdx++
 			}
 		}

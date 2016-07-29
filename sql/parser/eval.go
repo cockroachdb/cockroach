@@ -998,7 +998,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(!*left.(*DBool) && *right.(*DBool)), nil
+				return !*left.(*DBool) && *right.(*DBool), nil
 			},
 		},
 		CmpOp{
@@ -1131,7 +1131,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(!*left.(*DBool) || *right.(*DBool)), nil
+				return !*left.(*DBool) || *right.(*DBool), nil
 			},
 		},
 		CmpOp{
