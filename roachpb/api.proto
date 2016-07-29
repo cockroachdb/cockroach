@@ -908,6 +908,9 @@ message ReservationRequest {
 // A ReservationResponse is the repoonse returned from a ReservationRequest.
 message ReservationResponse {
   optional bool reserved = 1 [(gogoproto.nullable) = false];
+  // The current number of ranges and reservations on the target
+  // store. This is returned even if the reservation isn't filled.
+  optional int32 range_count = 2;
 }
 
 // The two Batch services below are identical, except that some internal

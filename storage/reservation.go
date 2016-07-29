@@ -17,6 +17,7 @@ package storage
 import (
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -113,6 +114,13 @@ func newBookie(
 func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	resp := roachpb.ReservationResponse{
+		Reserved: false,
+		RangeCount: proto.Int32(int32(b.metrics.replicaCount.Count()) +
+			int32(len(b.mu.reservationsByRangeID))),
+	}
+
 	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
 		// If the reservation is a repeat of an already existing one, just
 		// update it. This can occur when an RPC repeats.
@@ -129,7 +137,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 				log.Infof(context.TODO(), "there is pre-existing reservation %+v, can't update with %+v",
 					olderReservation, req)
 			}
-			return roachpb.ReservationResponse{Reserved: false}
+			return resp
 		}
 	}
 
@@ -139,7 +147,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			log.Infof(context.TODO(), "could not book reservation %+v, too many reservations already (current:%d, max:%d)",
 				req, len(b.mu.reservationsByRangeID), b.maxReservations)
 		}
-		return roachpb.ReservationResponse{Reserved: false}
+		return resp
 	}
 
 	// Can we accommodate the requested number of bytes (doubled for safety) on
@@ -152,7 +160,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			log.Infof(context.TODO(), "could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
 				req, req.RangeSize, b.mu.size, available)
 		}
-		return roachpb.ReservationResponse{Reserved: false}
+		return resp
 	}
 
 	// Do we have enough reserved space free for the reservation?
@@ -161,7 +169,7 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			log.Infof(context.TODO(), "could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
 				req, req.RangeSize, b.mu.size, b.maxReservedBytes)
 		}
-		return roachpb.ReservationResponse{Reserved: false}
+		return resp
 	}
 
 	newReservation := &reservation{
@@ -181,7 +189,8 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 		log.Infof(context.TODO(), "new reservation added: %+v", newReservation)
 	}
 
-	return roachpb.ReservationResponse{Reserved: true}
+	resp.Reserved = true
+	return resp
 }
 
 // Fill removes a reservation. Returns true when the reservation has been
