@@ -612,7 +612,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID: 51,
 				PrimaryIndex: IndexDescriptor{
 					ID:         1,
-					ForeignKey: &ForeignKeyReference{Table: 52, Index: 2},
+					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
 				},
 			},
 			referenced: nil,
@@ -623,7 +623,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID: 51,
 				PrimaryIndex: IndexDescriptor{
 					ID:         1,
-					ForeignKey: &ForeignKeyReference{Table: 52, Index: 2},
+					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
 				},
 			},
 			referenced: []TableDescriptor{{
@@ -639,7 +639,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				PrimaryIndex: IndexDescriptor{
 					ID:         1,
 					Name:       "bar",
-					ForeignKey: &ForeignKeyReference{Table: 52, Index: 2},
+					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
 				},
 			},
 			referenced: []TableDescriptor{{
@@ -657,7 +657,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID: 51,
 				PrimaryIndex: IndexDescriptor{
 					ID:           1,
-					ReferencedBy: []*ForeignKeyReference{{Table: 52, Index: 2}},
+					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
 		},
@@ -667,7 +667,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID: 51,
 				PrimaryIndex: IndexDescriptor{
 					ID:           1,
-					ReferencedBy: []*ForeignKeyReference{{Table: 52, Index: 2}},
+					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
 			referenced: []TableDescriptor{{
@@ -683,7 +683,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				PrimaryIndex: IndexDescriptor{
 					ID:           1,
 					Name:         "bar",
-					ReferencedBy: []*ForeignKeyReference{{Table: 52, Index: 2}},
+					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
 			referenced: []TableDescriptor{{

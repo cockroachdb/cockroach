@@ -49,7 +49,7 @@ const (
 func TablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) TablesByID {
 	var ret TablesByID
 	for _, idx := range table.AllNonDropIndexes() {
-		if usage != CheckDeletes && idx.ForeignKey != nil {
+		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
 			if ret == nil {
 				ret = make(TablesByID)
 			}
@@ -78,7 +78,7 @@ func makeFKInsertHelper(
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
-		if idx.ForeignKey != nil {
+		if idx.ForeignKey.IsSet() {
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap)
 			if err == errSkipUnsedFK {
 				continue
@@ -227,7 +227,7 @@ func makeBaseFKHelper(
 	txn *client.Txn,
 	otherTables TablesByID,
 	writeIdx sqlbase.IndexDescriptor,
-	ref *sqlbase.ForeignKeyReference,
+	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx}
