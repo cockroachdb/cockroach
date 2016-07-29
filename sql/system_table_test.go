@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -42,7 +43,8 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	ms.AddTable(keys.MaxSystemConfigDescID+1, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)")
+	desc := sql.CreateTableDescriptor(keys.MaxSystemConfigDescID+1, keys.SystemDatabaseID, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sqlbase.NewDefaultPrivilegeDescriptor())
+	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
 	kv = ms.GetInitialValues()
 	expected = nonDescKeys + keysPerDesc*ms.DescriptorCount()
 	if actual := len(kv); actual != expected {
@@ -73,20 +75,46 @@ func TestInitialKeys(t *testing.T) {
 	}
 }
 
-func TestSystemTables(t *testing.T) {
+// TestSystemTableLiterals compares the result of evaluating the `CREATE TABLE`
+// statement strings that describe each system table with the TableDescriptor
+// literals that are actually used at runtime. This ensures we can use the hand-
+// written literals instead of having to evaluate the `CREATE TABLE` statements
+// before initialization and with limited SQL machinery bootstraped, while still
+// confident that the result is the same as if `CREATE TABLE` had been run.
+//
+// This test may also be useful when writing a new system table:
+// adding the new schema along with a trivial, empty TableDescriptor literal
+// will print the expected proto which can then be used to replace the empty
+// one (though pruning the explicit zero values may make it more readable).
+func TestSystemTableLiterals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	type testcase struct {
 		id     sqlbase.ID
 		schema string
 		pkg    sqlbase.TableDescriptor
 	}
+
+	// test the tables with specific permissions
 	for _, test := range []testcase{
 		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable},
 		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable},
 		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
 		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
 	} {
-		gen := sqlbase.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
+		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
 			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]))
+		if !proto.Equal(&test.pkg, &gen) {
+			t.Fatalf(
+				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
+				test.pkg.Name, test.pkg, gen)
+		}
+	}
+	// test the tables with non-specific NewDefaultPrivilegeDescriptor
+	for _, test := range []testcase{
+		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
+		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
+	} {
+		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema, sqlbase.NewDefaultPrivilegeDescriptor())
 		if !proto.Equal(&test.pkg, &gen) {
 			t.Fatalf(
 				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
