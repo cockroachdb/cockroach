@@ -73,12 +73,12 @@ func getTableID(p *planner, qname *parser.QualifiedName) (sqlbase.ID, error) {
 		return 0, err
 	}
 
-	virtual, foundDB := checkVirtualTableDesc(qname)
+	virtual, err := getVirtualTableDesc(qname)
+	if err != nil {
+		return 0, err
+	}
 	if virtual != nil {
 		return virtual.GetID(), nil
-	}
-	if foundDB {
-		return 0, sqlbase.NewUndefinedTableError(qname.String())
 	}
 
 	dbID, err := p.getDatabaseID(qname.Database())
