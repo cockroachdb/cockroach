@@ -68,7 +68,7 @@ var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if i
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
-var maxRangeBytes = int64(config.DefaultZoneConfig().RangeMaxBytes)
+var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
 
 // keyLen is the length (in bits) of the generated CA and node certs.
 const keyLen = 1024
@@ -722,7 +722,7 @@ func (l *LocalCluster) stop() {
 
 	if l.networkID != "" {
 		maybePanic(
-			l.client.NetworkRemove(context.Background(), string(l.networkID)))
+			l.client.NetworkRemove(context.Background(), l.networkID))
 		l.networkID = ""
 	}
 }

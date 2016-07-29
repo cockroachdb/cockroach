@@ -138,6 +138,13 @@ TestGoimports() {
   ! goimports -l . | grep -vF 'No Exceptions'
 }
 
+TestUnconvert() {
+  # TODO(tamird): use upstream when
+  # https://github.com/mdempsky/unconvert/issues/3 is fixed. See
+  # https://github.com/mdempsky/unconvert/pull/12.
+  ! unconvert "$PKG" | grep -vF '.pb.go:' | grep -vF 'github.com/cockroachdb/cockroach/storage/engine/rocksdb'
+}
+
 TestUnused() {
   ! unused -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|pgerror/codes.go)'
 }
@@ -164,7 +171,7 @@ runcheck() {
 # "declare -F" lists all the defined functions, in the form
 # declare -f runcheck
 # declare -f TestUnused
-for i in $(declare -F|cut -d' ' -f3|grep '^Test'); do
+for i in $(declare -F|cut -d' ' -f3|grep '^Test'|grep "${TESTS-.}"); do
   runcheck $i
 done
 

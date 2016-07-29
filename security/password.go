@@ -61,7 +61,7 @@ func promptForPassword() ([]byte, error) {
 	if !bytes.Equal(one, two) {
 		return nil, errors.Errorf("password mismatch")
 	}
-	return []byte(one), nil
+	return one, nil
 }
 
 // HashPassword takes a raw password and returns a bcrypt hashed password.

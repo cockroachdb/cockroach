@@ -75,7 +75,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 	}
 
 	for i, col := range desc.Columns {
-		defaultExpr := parser.Datum(parser.DNull)
+		defaultExpr := parser.DNull
 		if e := desc.Columns[i].DefaultExpr; e != nil {
 			defaultExpr = parser.NewDString(*e)
 		}

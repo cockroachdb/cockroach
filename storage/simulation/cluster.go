@@ -463,7 +463,7 @@ func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
 
 	for _, storeID := range c.storeIDs {
-		store := c.stores[roachpb.StoreID(storeID)]
+		store := c.stores[storeID]
 		capacity := store.getCapacity(len(c.rangeIDsByStore[storeID]))
 		fmt.Fprintf(c.epochWriter, "%d/%.0f%%\t", len(c.rangeIDsByStore[storeID]), float64(capacity.Available)/float64(capacity.Capacity)*100)
 	}
