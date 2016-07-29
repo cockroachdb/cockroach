@@ -268,5 +268,5 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 func (ctx *Context) heartbeat(heartbeatClient HeartbeatClient, request PingRequest) (*PingResponse, error) {
 	goCtx, cancel := context.WithTimeout(context.Background(), ctx.HeartbeatTimeout)
 	defer cancel()
-	return heartbeatClient.Ping(goCtx, &request)
+	return heartbeatClient.Ping(goCtx, &request, grpc.FailFast(false))
 }

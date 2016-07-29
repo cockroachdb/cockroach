@@ -444,6 +444,8 @@ var (
 	ErrIntOverflowPrivilege   = fmt.Errorf("proto: integer overflow")
 )
 
+func init() { proto.RegisterFile("cockroach/sql/sqlbase/privilege.proto", fileDescriptorPrivilege) }
+
 var fileDescriptorPrivilege = []byte{
 	// 203 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0x52, 0x4d, 0xce, 0x4f, 0xce,

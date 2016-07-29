@@ -76,7 +76,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 		StartNanos: nowNanos - 10*time.Second.Nanoseconds(),
 		EndNanos:   nowNanos,
 		Queries: []tspb.Query{
-			{Name: "doesnt_matter", Sources: []string{}},
+			{Name: "doesn't_matter", Sources: []string{}},
 		},
 	}
 	var queryResponse tspb.TimeSeriesQueryResponse

@@ -271,7 +271,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	txn.UpdateDeadlineMaybe(et)
 
 	if p.removeLeaseIfExpiring(l1) {
-		t.Error("expected false wih a non-expiring lease")
+		t.Error("expected false with a non-expiring lease")
 	}
 	if !p.txn.GetDeadline().Equal(et) {
 		t.Errorf("expected deadline %s but got %s", et, p.txn.GetDeadline())

@@ -315,13 +315,6 @@ func (s *Server) Start() error {
 	s.ctx.Addr = unresolvedAddr.String()
 	s.rpcContext.SetLocalInternalServer(s.node)
 
-	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldQuiesce()
-		if err := ln.Close(); err != nil {
-			log.Fatal(context.TODO(), err)
-		}
-	})
-
 	m := cmux.New(ln)
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
@@ -361,6 +354,11 @@ func (s *Server) Start() error {
 
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(httpServer.Serve(httpLn))
+	})
+
+	s.stopper.RunWorker(func() {
+		<-s.stopper.ShouldQuiesce()
+		s.grpc.Stop()
 	})
 
 	s.stopper.RunWorker(func() {
