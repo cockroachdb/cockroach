@@ -72,19 +72,13 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
 	descs   []metadataDescriptor
-	tables  []metadataTable
+	configs int
 	otherKV []roachpb.KeyValue
 }
 
 type metadataDescriptor struct {
 	parentID ID
 	desc     DescriptorProto
-}
-
-type metadataTable struct {
-	id         ID
-	definition string
-	privileges *PrivilegeDescriptor
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -96,44 +90,38 @@ func MakeMetadataSchema() MetadataSchema {
 }
 
 // AddDescriptor adds a new descriptor to the system schema. Used only for
-// SystemConfig tables and databases. Prefer AddTable for most uses.
+// SystemConfig tables and databases.
 func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
+	if id := desc.GetID(); id > keys.MaxReservedDescID {
+		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
+	}
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }
 
-// AddTable adds a new table to the system database.
-func (ms *MetadataSchema) AddTable(id ID, definition string) {
-	if id > keys.MaxReservedDescID {
-		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
-	}
-	ms.tables = append(ms.tables, metadataTable{
-		id:         id,
-		definition: definition,
-		privileges: NewDefaultPrivilegeDescriptor(),
-	})
+func (ms *MetadataSchema) AddConfigDescriptor(parentID ID, desc DescriptorProto) {
+	ms.AddDescriptor(parentID, desc)
+	ms.configs++
 }
 
 // DescriptorCount returns the number of descriptors that will be created by
 // this schema. This value is needed to automate certain tests.
 func (ms MetadataSchema) DescriptorCount() int {
-	count := len(ms.descs)
-	count += len(ms.tables)
-	return count
+	return len(ms.descs)
 }
 
-// TableCount returns the number of non-system config tables in the system
-// database. This value is needed to automate certain tests.
-func (ms MetadataSchema) TableCount() int {
-	return len(ms.tables)
+// DescriptorCount returns the number of descriptors that will be created by
+// this schema. This value is needed to automate certain tests.
+func (ms MetadataSchema) ConfigDescriptorCount() int {
+	return ms.configs
 }
 
 // MaxTableID returns the highest table ID of any system table. This value is
 // needed to automate certain tests.
 func (ms MetadataSchema) MaxTableID() ID {
 	var maxID ID
-	for _, tbl := range ms.tables {
-		if maxID < tbl.id {
-			maxID = tbl.id
+	for _, tbl := range ms.descs {
+		if maxID < tbl.desc.GetID() {
+			maxID = tbl.desc.GetID()
 		}
 	}
 	return maxID
@@ -181,12 +169,6 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	// static descriptors that were generated elsewhere.
 	for _, sysObj := range ms.descs {
 		addDescriptor(sysObj.parentID, sysObj.desc)
-	}
-
-	for _, tbl := range ms.tables {
-		dbID := ID(keys.SystemDatabaseID)
-		desc := CreateTableDescriptor(tbl.id, dbID, tbl.definition, tbl.privileges)
-		addDescriptor(dbID, &desc)
 	}
 
 	// Other key/value generation that doesn't fit into databases and
