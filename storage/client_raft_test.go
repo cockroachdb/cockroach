@@ -733,7 +733,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	mtc.expireLeases()
 }
 
-// TestChangeReplicasDuplicateError tests that a replica change aborts if
+// TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
