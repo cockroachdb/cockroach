@@ -210,7 +210,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -237,7 +237,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 			StoreID: result1.StoreID,
 		},
 	}
-	result2, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false, nil)
+	result2, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []roachpb.ReplicaDescriptor{}, false, nil)
+	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -274,11 +274,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{}, false, nil)
+	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
 		},
-	}, false, nil)
+	}, false)
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores")
 	}
@@ -307,7 +307,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 			NodeID:  2,
 			StoreID: 2,
 		},
-	}, false, nil)
+	}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 		for _, id := range test.existing {
 			existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 		}
-		result, err := a.AllocateTarget(roachpb.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
+		result, err := a.AllocateTarget(roachpb.Attributes{Attrs: test.required}, existing, test.relaxConstraints)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
 		} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
@@ -1033,9 +1033,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err := a.AllocateTarget(
 		simpleZoneConfig.ReplicaAttrs[0],
 		[]roachpb.ReplicaDescriptor{},
-		false,
-		nil,
-	)
+		false)
 	if _, ok := err.(purgatoryError); !ok {
 		t.Fatalf("expected a purgatory error, got: %v", err)
 	}
@@ -1045,9 +1043,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	result, err := a.AllocateTarget(
 		simpleZoneConfig.ReplicaAttrs[0],
 		[]roachpb.ReplicaDescriptor{},
-		false,
-		nil,
-	)
+		false)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %v", err)
 	}
@@ -1067,9 +1063,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err = a.AllocateTarget(
 		simpleZoneConfig.ReplicaAttrs[0],
 		[]roachpb.ReplicaDescriptor{},
-		false,
-		nil,
-	)
+		false)
 	if _, ok := err.(purgatoryError); ok {
 		t.Fatalf("expected a non purgatory error, got: %v", err)
 	}
