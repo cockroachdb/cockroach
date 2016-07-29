@@ -31,7 +31,7 @@ github.com/chzyer/logex 96a4d311aa9ba1c5f9f2abda8039671de20f6aa5
 github.com/chzyer/readline c144c8dde4996a05f596bd5acb730d172968e26c
 github.com/chzyer/test bea8f082b6fd8382588bf6fdc6af9217078af151
 github.com/client9/misspell b31ae726a3daae256dc74c6b4a87be79cea05be8
-github.com/cockroachdb/c-jemalloc 9716a86928311cee3633f1773035ce9f0cf9f9e9
+github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 3bef67ea4cc857224fced66f98578362bc892f37
 github.com/cockroachdb/c-rocksdb ab57b321a358f4c93fb639331ac3e10911649492
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
@@ -106,7 +106,7 @@ golang.org/x/text 2910a502d2bf9e43193af9d68ca516529614eed3
 golang.org/x/tools 9e7459099f9afd6a15464d69d93c6eed49bb545d
 google.golang.org/appengine 267c27e7492265b84fc6719503b14a1e17975d79
 google.golang.org/cloud 30fab6304c9888af49f1884cf4eddad7027e2e7b
-google.golang.org/grpc f5118cfac7217f3fb6b427cef211383c84974379
+google.golang.org/grpc 5a547ed72c09faf4050739d54caea1d51f4d276d
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
