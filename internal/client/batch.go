@@ -459,9 +459,9 @@ func (b *Batch) scan(s, e interface{}, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.appendReqs(roachpb.NewScan(roachpb.Key(begin), roachpb.Key(end)))
+		b.appendReqs(roachpb.NewScan(begin, end))
 	} else {
-		b.appendReqs(roachpb.NewReverseScan(roachpb.Key(begin), roachpb.Key(end)))
+		b.appendReqs(roachpb.NewReverseScan(begin, end))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -502,7 +502,7 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
+	b.appendReqs(roachpb.NewCheckConsistency(begin, end, withDiff))
 	b.initResult(1, 0, notRaw, nil)
 }
 
@@ -543,7 +543,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
+	b.appendReqs(roachpb.NewDeleteRange(begin, end, returnKeys))
 	b.initResult(1, 0, notRaw, nil)
 }
 

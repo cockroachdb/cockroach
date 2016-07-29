@@ -659,7 +659,7 @@ func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
 
 		for i := len(interleaves) - 1; i >= 0; i-- {
 			if len(interleaves[i].Interleave.Ancestors) <= component ||
-				interleaves[i].Interleave.Ancestors[component].TableID != ID(tableID) ||
+				interleaves[i].Interleave.Ancestors[component].TableID != tableID ||
 				interleaves[i].Interleave.Ancestors[component].IndexID != indexID {
 
 				// This component, and thus this interleave, doesn't match what was

@@ -494,7 +494,7 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	// Lyymmdd hh:mm:ss.uuuuuu file:line
 	tmp[n] = severityChar[s]
 	n++
-	n += buf.twoDigits(n, int(year)-2000)
+	n += buf.twoDigits(n, year-2000)
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
 	if colors != nil {
@@ -517,7 +517,7 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	buf.Write(tmp[:n])
 	buf.WriteString(file)
 	tmp[0] = ':'
-	n = buf.someDigits(1, int(line))
+	n = buf.someDigits(1, line)
 	n++
 	// Extra space between the header and the actual message for scannability.
 	tmp[n] = ' '

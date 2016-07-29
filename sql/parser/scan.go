@@ -171,7 +171,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		return
 	}
 
-	lval.id = int(ch)
+	lval.id = ch
 	lval.pos = s.pos - 1
 	lval.str = s.in[lval.pos:s.pos]
 

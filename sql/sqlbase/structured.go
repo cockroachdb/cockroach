@@ -1161,7 +1161,7 @@ func (desc *TableDescriptor) RenameColumn(colID ColumnID, newColName string) {
 func (desc *TableDescriptor) FindActiveColumnsByNames(names parser.NameList) ([]ColumnDescriptor, error) {
 	cols := make([]ColumnDescriptor, len(names))
 	for i := range names {
-		c, err := desc.FindActiveColumnByName(string(names[i]))
+		c, err := desc.FindActiveColumnByName(names[i])
 		if err != nil {
 			return nil, err
 		}

@@ -127,7 +127,7 @@ type Histogram struct {
 // See the documentation for hdrhistogram.WindowedHistogram for details.
 func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram {
 	h := &Histogram{}
-	h.maxVal = int64(maxVal)
+	h.maxVal = maxVal
 	h.nextT = now()
 	h.duration = duration
 

@@ -5254,13 +5254,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1085
 		{
-			sqlVAL.union.val = TargetList{Tables: QualifiedNames(sqlDollar[1].union.qnames())}
+			sqlVAL.union.val = TargetList{Tables: sqlDollar[1].union.qnames()}
 		}
 	case 99:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:1089
 		{
-			sqlVAL.union.val = TargetList{Tables: QualifiedNames(sqlDollar[2].union.qnames())}
+			sqlVAL.union.val = TargetList{Tables: sqlDollar[2].union.qnames()}
 		}
 	case 100:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]

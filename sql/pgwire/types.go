@@ -280,7 +280,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 				digit *= 10
 				digit += int16(decDigit - '0')
 			}
-			b.putInt16(int16(digit))
+			b.putInt16(digit)
 			decDigits = decDigits[pgDecDigits:]
 		}
 
