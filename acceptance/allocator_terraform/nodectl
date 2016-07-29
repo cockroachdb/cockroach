@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # TODO(cuongdo): add support for multiple stores on the same node
-DATA_DIR="${DATA_DIR:-./data0}"
+DATA_DIR="${DATA_DIR:-/mnt/data0}"
 
 usage() {
     echo "usage: $0 [upload|download] google_cloud_storage_url"
@@ -34,13 +34,15 @@ upload)
     tar zcvf - * --exclude='logs' | gsutil cp - ${store_url}
     ;;
 download)
-    if [ -d ${DATA_DIR} ]; then
-        backup_dir="${DATA_DIR}.$(date +%Y%m%d-%H%M%S)"
-        echo "Backing up ${DATA_DIR} to ${backup_dir}"
-        mv "${DATA_DIR}" "${backup_dir}"
+    if [[ ! -d "${DATA_DIR}" ]]; then
+        echo "${DATA_DIR} doesn't exist"
+        exit 1
+    fi
+    if [[ ! -z $(compgen -G "${DATA_DIR}/*.sst" 2>/dev/null) ]]; then
+        echo "sstables already exist in the destination"
+        exit 1
     fi
     echo "Downloading ${store_url} to store ${DATA_DIR}"
-    mkdir "${DATA_DIR}"
     cd "${DATA_DIR}"
     gsutil cat ${store_url} | tar zxf -
     ;;

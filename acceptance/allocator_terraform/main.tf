@@ -13,8 +13,18 @@ resource "google_compute_instance" "cockroach" {
 
   disk {
     image = "${var.gce_image}"
-    size = "${var.cockroach_disk_size}" # GB
-    type    = "${var.cockroach_disk_type}"
+    size = "${var.cockroach_root_disk_size}" # GB
+    type = "${var.cockroach_root_disk_type}"
+  }
+
+  # Add a local SSD for CockroachDB files. Under sustained I/O, something seems
+  # to throttle performance when using persistent storage types. So, we have to
+  # use local SSDs.
+  disk {
+    # Local SSDs are always 375 GB:
+    # https://cloud.google.com/compute/docs/disks/local-ssd#create_local_ssd
+    type = "local-ssd"
+    scratch = true
   }
 
   network_interface {
@@ -94,6 +104,12 @@ FILE
   # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
+      # Create file system on local SSD for the CockroachDB store and mount it.
+      "sudo mkdir /mnt/data0",
+      "sudo mkfs.ext4 -qF /dev/disk/by-id/google-local-ssd-0",
+      "sudo mount -o discard,defaults /dev/disk/by-id/google-local-ssd-0 /mnt/data0",
+      "sudo chown ubuntu:ubuntu /mnt/data0",
+      # Install software.
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy install supervisor nethogs pv >/dev/null",
       "sudo service supervisor stop",
@@ -102,7 +118,8 @@ FILE
       "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
-      "mkdir -p logs",
+      "mkdir /mnt/data0/logs",
+      "ln -sf /mnt/data0/logs logs",
       "chmod 755 cockroach nodectl",
       "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
