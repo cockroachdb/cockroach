@@ -39,7 +39,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
@@ -92,7 +94,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for MultiRaft service
 
@@ -189,6 +191,7 @@ var _MultiRaft_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
+	Metadata: fileDescriptorRaft,
 }
 
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
@@ -816,6 +819,8 @@ var (
 	ErrInvalidLengthRaft = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowRaft   = fmt.Errorf("proto: integer overflow")
 )
+
+func init() { proto.RegisterFile("cockroach/storage/raft.proto", fileDescriptorRaft) }
 
 var fileDescriptorRaft = []byte{
 	// 420 bytes of a gzipped FileDescriptorProto

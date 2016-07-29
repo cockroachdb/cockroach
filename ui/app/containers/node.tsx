@@ -7,7 +7,7 @@ import { IndexListLink, ListLink } from "../components/listLink";
 import TimeScaleSelector from "./timescale";
 
 /**
- * Renders teh main content of the single node page.
+ * Renders the main content of the single node page.
  */
 export default class extends React.Component<IInjectedProps, {}> {
   static title(routes: IInjectedProps) {
