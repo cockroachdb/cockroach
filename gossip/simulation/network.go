@@ -151,19 +151,24 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 		if err := nodes[0].Gossip.AddInfo(
 			gossip.KeySentinel,
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
-			time.Hour); err != nil {
+			time.Hour,
+		); err != nil {
 			log.Fatal(context.TODO(), err)
 		}
-		if err := nodes[0].Gossip.AddInfo(gossip.KeyClusterID,
-			encoding.EncodeUint64Ascending(nil, uint64(cycle)), 0*time.Second); err != nil {
+		if err := nodes[0].Gossip.AddInfo(
+			gossip.KeyClusterID,
+			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
+			0*time.Second,
+		); err != nil {
 			log.Fatal(context.TODO(), err)
 		}
-		// Every node gossips cycle.
+		// Every node gossips every cycle.
 		for _, node := range nodes {
 			if err := node.Gossip.AddInfo(
 				node.Addr.String(),
 				encoding.EncodeUint64Ascending(nil, uint64(cycle)),
-				time.Hour); err != nil {
+				time.Hour,
+			); err != nil {
 				log.Fatal(context.TODO(), err)
 			}
 			node.Gossip.SimulationCycle()

@@ -70,8 +70,9 @@ func newClient(addr net.Addr, nodeMetrics metrics) *client {
 // start dials the remote addr and commences gossip once connected. Upon exit,
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
-func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, stopper *stop.Stopper) {
-	log.Infof(context.TODO(), "starting client to %s", c.addr)
+func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper) {
+	ctx := context.TODO()
+	log.Infof(ctx, "starting client to %s", c.addr)
 
 	stopper.RunWorker(func() {
 		defer func() {
@@ -82,22 +83,22 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 		// asynchronous from the caller's perspective, so the only effect of
 		// `WithBlock` here is blocking shutdown - at the time of this writing,
 		// that ends ups up making `kv` tests take twice as long.
-		conn, err := ctx.GRPCDial(c.addr.String())
+		conn, err := rpcCtx.GRPCDial(c.addr.String())
 		if err != nil {
-			log.Errorf(context.TODO(), "failed to dial: %v", err)
+			log.Errorf(ctx, "failed to dial: %s", err)
 			return
 		}
 
 		// Start gossiping.
-		if err := c.gossip(g, NewGossipClient(conn), stopper); err != nil {
+		if err := c.gossip(ctx, g, NewGossipClient(conn), stopper); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.Lock()
 				peerID := c.peerID
 				g.mu.Unlock()
 				if peerID != 0 {
-					log.Infof(context.TODO(), "closing client to node %d (%s): %s", peerID, c.addr, err)
+					log.Infof(ctx, "closing client to node %d (%s): %s", peerID, c.addr, err)
 				} else {
-					log.Infof(context.TODO(), "closing client to %s: %s", c.addr, err)
+					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
 			}
 		}
@@ -224,14 +225,14 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stopper) error {
+func (c *client) gossip(ctx context.Context, g *Gossip, gossipClient GossipClient, stopper *stop.Stopper) error {
 	// For un-bootstrapped node, g.is.NodeID is 0 when client start gossip,
 	// so it's better to get nodeID from g.is every time.
 	g.mu.Lock()
 	addr := g.is.NodeAddr
 	g.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := gossipClient.Gossip(ctx)
 	if err != nil {
