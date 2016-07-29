@@ -238,6 +238,48 @@ type Replica struct {
 		// Raft group). The replica ID will be non-zero whenever the replica is
 		// part of a Raft group.
 		replicaID roachpb.ReplicaID
+
+		// The last seen replica descriptors from incoming Raft messages. These are
+		// stored so that the replica still knows the replica descriptors for itself
+		// and for its message recipients in the circumstances when its RangeDescriptor
+		// is out of date.
+		//
+		// Normally, a replica knows about the other replica descriptors for a
+		// range via the RangeDescriptor stored in Replica.mu.state.Desc. But that
+		// descriptor is only updated during a Split or ChangeReplicas operation.
+		// There are periods during a Replica's lifetime when that information is
+		// out of date:
+		//
+		// 1. When a replica is being newly created as the result of an incoming
+		// Raft message for it. This is the common case for ChangeReplicas and an
+		// uncommon case for Splits. The leader will be sending the replica
+		// messages and the replica needs to be able to respond before it can
+		// receive an updated range descriptor (via a snapshot,
+		// changeReplicasTrigger, or splitTrigger).
+		//
+		// 2. If the node containing a replica is partitioned or down while the
+		// replicas for the range are updated. When the node comes back up, other
+		// replicas may begin communicating with it and it needs to be able to
+		// respond. Unlike 1 where there is no range descriptor, in this situation
+		// the replica has a range descriptor but it is out of date. Note that a
+		// replica being removed from a node and then quickly re-added before the
+		// replica has been GC'd will also use the last seen descriptors. In
+		// effect, this is another path for which the replica's local range
+		// descriptor is out of date.
+		//
+		// The last seen replica descriptors are updated on receipt of every raft
+		// message via Replica.setLastReplicaDescriptors (see
+		// Store.handleRaftMessage). These last seen descriptors are used when
+		// the replica's RangeDescriptor contains missing or out of date descriptors
+		// for a replica (see Replica.sendRaftMessage).
+		//
+		// Removing a replica from Store.mu.replicas is not a problem because
+		// when a replica is completely removed, it won't be recreated until
+		// there is another event that will repopulate the replicas map in the
+		// range descriptor. When it is temporarily dropped and recreated, the
+		// newly recreated replica will have a complete range descriptor.
+		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
+
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
 		// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -672,6 +714,15 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 		return repDesc, nil
 	}
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
+}
+
+// setLastReplicaDescriptors sets the the most recently seen replica descriptors to those
+// contained in the *RaftMessageRequest, acquiring r.mu to do so.
+func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
+	r.mu.Lock()
+	r.mu.lastFromReplica = req.FromReplica
+	r.mu.lastToReplica = req.ToReplica
+	r.mu.Unlock()
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
@@ -1674,22 +1725,39 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
 	return nil
 }
 
+func (r *Replica) getReplicaDescriptorByIDLocked(
+	replicaID roachpb.ReplicaID,
+	fallback roachpb.ReplicaDescriptor,
+) (roachpb.ReplicaDescriptor, error) {
+	if repDesc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(replicaID); ok {
+		return repDesc, nil
+	}
+	var err error
+	if fallback.ReplicaID != replicaID {
+		err = errors.Errorf("fallback replica %+v doesn't match input replica id %v", fallback, replicaID)
+	}
+	return fallback, err
+}
+
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	rangeID := r.RangeID
 
-	r.store.mu.Lock()
-	toReplica, toErr := r.store.replicaDescriptorLocked(rangeID, roachpb.ReplicaID(msg.To))
-	fromReplica, fromErr := r.store.replicaDescriptorLocked(rangeID, roachpb.ReplicaID(msg.From))
-	r.store.mu.Unlock()
+	r.mu.Lock()
+	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
+	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	r.mu.Unlock()
 
-	if toErr != nil {
-		log.Warningf(context.TODO(), "failed to look up recipient replica %d in range %d while sending %s: %s", msg.To, rangeID, msg.Type, toErr)
-		return
-	}
 	if fromErr != nil {
-		log.Warningf(context.TODO(), "failed to look up sender replica %d in range %d while sending %s: %s", msg.From, rangeID, msg.Type, fromErr)
+		log.Warningf(context.TODO(),
+			"failed to look up sender replica %d in range %d while sending %s: %s", msg.From, rangeID, msg.Type, fromErr)
 		return
 	}
+	if toErr != nil {
+		log.Warningf(context.TODO(),
+			"failed to look up recipient replica %d in range %d while sending %s: %s", msg.To, rangeID, msg.Type, toErr)
+		return
+	}
+
 	if !r.raftSender.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   toReplica,
