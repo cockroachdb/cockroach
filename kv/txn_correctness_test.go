@@ -862,10 +862,7 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry int, c *cmd, t 
 	hv.mu.Lock()
 	hv.mu.actual = append(hv.mu.actual, cmdStr)
 	hv.mu.Unlock()
-	if err != nil {
-		return cmdStr, err
-	}
-	return cmdStr, nil
+	return cmdStr, err
 }
 
 // checkConcurrency creates a history verifier, starts a new database

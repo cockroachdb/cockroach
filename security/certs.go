@@ -130,12 +130,7 @@ func RunCreateNodeCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int,
 
 	// TODO(marc): we fail if files already exist. At this point, we're checking four
 	// different files, and should really make this more atomic (or at least check for existence first).
-	err = writeCertificateAndKey(sslCert, sslCertKey, serverCert, serverKey)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return writeCertificateAndKey(sslCert, sslCertKey, serverCert, serverKey)
 }
 
 // RunCreateClientCert is the entry-point from the command-line interface

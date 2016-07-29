@@ -118,7 +118,7 @@ func main() {
 	fmt.Printf("\nRunning Simulation:\n")
 	c.OutputEpochHeader()
 	c.flush()
-	for c.runEpoch() != true {
+	for !c.runEpoch() {
 	}
 	fmt.Println(c)
 }

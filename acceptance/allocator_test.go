@@ -323,10 +323,7 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 			}
 			if stable {
 				host := at.f.Nodes()[0]
-				if err := at.printRebalanceStats(db, host, 8080); err != nil {
-					return err
-				}
-				return nil
+				return at.printRebalanceStats(db, host, 8080)
 			}
 			statsTimer.Reset(10 * time.Second)
 		case <-assertTimer.C:

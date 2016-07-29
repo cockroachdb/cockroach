@@ -768,11 +768,7 @@ func (t *logicTest) processTestFile(path string) error {
 		}
 	}
 
-	if err := s.Err(); err != nil {
-		return err
-	}
-
-	return nil
+	return s.Err()
 }
 
 // verifyError checks that either no error was found where none was

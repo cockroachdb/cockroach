@@ -291,10 +291,7 @@ func (a Allocator) RebalanceTarget(
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
 	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
-	if replacement := a.improve(storeDesc, sl, existingNodes); replacement != nil {
-		return replacement
-	}
-	return nil
+	return a.improve(storeDesc, sl, existingNodes)
 }
 
 // ShouldRebalance returns whether the specified store should attempt to

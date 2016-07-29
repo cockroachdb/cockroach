@@ -578,10 +578,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			// Wait for txnB notify us to put(b).
 			<-ch
 			// Write now to keyB.
-			if err := txn.Put(keyB, "value2"); err != nil {
-				return err
-			}
-			return nil
+			return txn.Put(keyB, "value2")
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -654,10 +651,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			// Wait for txnB notify us to put(c).
 			<-ch
 			// Write now to keyC, which will keep timestamp.
-			if err := txn.Put(keyC, "value2"); err != nil {
-				return err
-			}
-			return nil
+			return txn.Put(keyC, "value2")
 		})
 		if err != nil {
 			t.Fatal(err)

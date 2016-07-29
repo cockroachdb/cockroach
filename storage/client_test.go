@@ -634,10 +634,7 @@ func (m *multiTestContext) gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeI
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 	}
-	if err := g.SetNodeDescriptor(nodeDesc); err != nil {
-		return err
-	}
-	return nil
+	return g.SetNodeDescriptor(nodeDesc)
 }
 
 // StopStore stops a store but leaves the engine intact.
