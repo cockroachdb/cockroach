@@ -1029,7 +1029,10 @@ var substringImpls = []Builtin{
 			}
 
 			end := start + length
-			if end < 0 {
+			// Check for integer overflow.
+			if end < start {
+				end = len(runes)
+			} else if end < 0 {
 				end = 0
 			} else if end > len(runes) {
 				end = len(runes)
