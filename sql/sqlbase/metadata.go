@@ -185,7 +185,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 
 	for _, tbl := range ms.tables {
 		dbID := ID(keys.SystemDatabaseID)
-		desc := createTableDescriptor(tbl.id, dbID, tbl.definition, tbl.privileges)
+		desc := CreateTableDescriptor(tbl.id, dbID, tbl.definition, tbl.privileges)
 		addDescriptor(dbID, &desc)
 	}
 
