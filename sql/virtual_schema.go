@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -37,7 +39,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(*planner) planNode
+	populate func(p *planner, addRow func(...parser.Datum)) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -54,7 +56,7 @@ var virtualSchemaMap map[string]virtualSchemaEntry
 
 type virtualSchemaEntry struct {
 	desc   *sqlbase.DatabaseDescriptor
-	tables map[string]*sqlbase.TableDescriptor
+	tables map[string]virtualTableEntry
 }
 
 func (e virtualSchemaEntry) tableNames() (parser.QualifiedNames, error) {
@@ -69,15 +71,46 @@ func (e virtualSchemaEntry) tableNames() (parser.QualifiedNames, error) {
 	return qualifiedNames, nil
 }
 
+type virtualTableEntry struct {
+	virtualSchemaTable
+	desc *sqlbase.TableDescriptor
+}
+
+// getPlanNode returns a new planNode for the virtual table using the
+// provided planner.
+func (e virtualTableEntry) getPlanNode(p *planner) (planNode, error) {
+	v := &valuesNode{}
+	for _, col := range e.desc.Columns {
+		v.columns = append(v.columns, ResultColumn{
+			Name: col.Name,
+			Typ:  col.Type.ToDatumType(),
+		})
+	}
+
+	err := e.populate(p, func(datum ...parser.Datum) {
+		if r, c := len(datum), len(v.columns); r != c {
+			panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
+		}
+		v.rows = append(v.rows, datum)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
 func init() {
 	virtualSchemaMap = make(map[string]virtualSchemaEntry)
 	for _, schema := range virtualSchemas {
 		dbName := schema.name
 		dbDesc := initVirtualDatabaseDesc(dbName)
-		tables := make(map[string]*sqlbase.TableDescriptor)
+		tables := make(map[string]virtualTableEntry)
 		for _, table := range schema.tables {
 			tableDesc := initVirtualTableDesc(table)
-			tables[tableDesc.Name] = tableDesc
+			tables[tableDesc.Name] = virtualTableEntry{
+				virtualSchemaTable: table,
+				desc:               tableDesc,
+			}
 		}
 		virtualSchemaMap[dbName] = virtualSchemaEntry{
 			desc:   dbDesc,
@@ -136,16 +169,28 @@ func isVirtualDatabase(name string) bool {
 	return ok
 }
 
-// checkVirtualTableDesc checks if the provided qname matches a virtual database/table
-// pair. The function will return the table's descriptor if the qname matches a specific
-// table. It will also return a flag signifying if the qname matched a database. This can
-// be used to differentiate if the qname is not referencing a virtual database or if the
-// qname is referencing a non-existent table within an existing virtual database.
-func checkVirtualTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, bool) {
-	if e, ok := getVirtualSchemaEntry(qname.Database()); ok {
-		return e.tables[qname.Table()], true
+// getVirtualTableEntry checks if the provided qname matches a virtual database/table
+// pair. The function will return the table's virtual table entry if the qname matches
+// a specific table. It will return an error if the qname references a virtual database
+// but the table is non-existent.
+func getVirtualTableEntry(qname *parser.QualifiedName) (virtualTableEntry, error) {
+	if db, ok := getVirtualSchemaEntry(qname.Database()); ok {
+		if t, ok := db.tables[qname.Table()]; ok {
+			return t, nil
+		}
+		return virtualTableEntry{}, sqlbase.NewUndefinedTableError(qname.String())
 	}
-	return nil, false
+	return virtualTableEntry{}, nil
+}
+
+// getVirtualTableDesc checks if the provided qname matches a virtual database/table
+// pair, and returns its descriptor if it does.
+func getVirtualTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
+	t, err := getVirtualTableEntry(qname)
+	if err != nil {
+		return nil, err
+	}
+	return t.desc, nil
 }
 
 // isVirtualDescriptor checks if the provided DescriptorProto is an instance of
