@@ -81,7 +81,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
                      subtitle="(Max Per Percentile)"
                      tooltip={`The latency between query requests and responses over a 1 minute period.
                                Percentiles are first calculated on each node.
-                               For Each percentile, the maximum latency across all nodes is then shown.`}>
+                               For each percentile, the maximum latency across all nodes is then shown.`}>
             <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
               <Metric name="cr.node.exec.latency-1m-max" title="Max Latency"
                       aggregateMax downsampleMax />
