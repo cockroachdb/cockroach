@@ -14,14 +14,17 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sqlbase
+package sql_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestInitialKeys(t *testing.T) {
@@ -31,9 +34,9 @@ func TestInitialKeys(t *testing.T) {
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
-	ms := MakeMetadataSchema()
+	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+NumSystemDescriptors)
+	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+sqlbase.NumSystemDescriptors)
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
@@ -67,5 +70,27 @@ func TestInitialKeys(t *testing.T) {
 	}
 	if a, e := i, int64(keys.MaxReservedDescID+1); a != e {
 		t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
+	}
+}
+
+func TestSystemTables(t *testing.T) {
+	type testcase struct {
+		id     sqlbase.ID
+		schema string
+		pkg    sqlbase.TableDescriptor
+	}
+	for _, test := range []testcase{
+		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable},
+		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable},
+		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
+		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
+	} {
+		gen := sqlbase.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
+			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]))
+		if !proto.Equal(&test.pkg, &gen) {
+			t.Fatalf(
+				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
+				test.pkg.Name, test.pkg, gen)
+		}
 	}
 }
