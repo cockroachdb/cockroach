@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
 	"golang.org/x/net/context"
@@ -81,7 +80,24 @@ CREATE TABLE system.ui (
 );`
 )
 
+func pk(name string) IndexDescriptor {
+	return IndexDescriptor{
+		Name:             "primary",
+		ID:               1,
+		Unique:           true,
+		ColumnNames:      []string{name},
+		ColumnDirections: singleASC,
+		ColumnIDs:        singleID1,
+	}
+}
+
 var (
+	colTypeInt    = ColumnType{Kind: ColumnType_INT}
+	colTypeString = ColumnType{Kind: ColumnType_STRING}
+	colTypeBytes  = ColumnType{Kind: ColumnType_BYTES}
+	singleASC     = []IndexDescriptor_Direction{IndexDescriptor_ASC}
+	singleID1     = []ColumnID{1}
+
 	// SystemDB is the descriptor for the system database.
 	SystemDB = DatabaseDescriptor{
 		Name: "system",
@@ -92,16 +108,160 @@ var (
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
-	NamespaceTable = CreateSystemConfigTable(keys.NamespaceTableID, NamespaceTableSchema)
+	NamespaceTable = TableDescriptor{
+		Name:     "namespace",
+		ID:       keys.NamespaceTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "parentID", ID: 1, Type: colTypeInt},
+			{Name: "name", ID: 2, Type: colTypeString},
+			{Name: "id", ID: 3, Type: colTypeInt, Nullable: true},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "name"}, ColumnIDs: []ColumnID{1, 2}},
+			{Name: "fam_3_id", ID: 3, ColumnNames: []string{"id"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+		},
+		NextFamilyID: 4,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"parentID", "name"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[2]),
+		FormatVersion:  FamilyFormatVersion,
+		NextMutationID: 1,
+	}
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = CreateSystemConfigTable(keys.DescriptorTableID, DescriptorTableSchema)
+	DescriptorTable = TableDescriptor{
+		Name:       "descriptor",
+		ID:         keys.DescriptorTableID,
+		Privileges: NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[3]),
+		ParentID:   1,
+		Version:    1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: colTypeInt},
+			{Name: "descriptor", ID: 2, Type: colTypeBytes, Nullable: true},
+		},
+		NextColumnID: 3,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
+			{Name: "fam_2_descriptor", ID: 2, ColumnNames: []string{"descriptor"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+		},
+		PrimaryIndex:   pk("id"),
+		NextFamilyID:   3,
+		NextIndexID:    2,
+		FormatVersion:  FamilyFormatVersion,
+		NextMutationID: 1,
+	}
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = CreateSystemConfigTable(keys.UsersTableID, UsersTableSchema)
+	UsersTable = TableDescriptor{
+		Name:     "users",
+		ID:       keys.UsersTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "username", ID: 1, Type: colTypeString},
+			{Name: "hashedPassword", ID: 2, Type: colTypeBytes, Nullable: true},
+		},
+		NextColumnID: 3,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
+			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+		},
+		PrimaryIndex:   pk("username"),
+		NextFamilyID:   3,
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[4]),
+		FormatVersion:  FamilyFormatVersion,
+		NextMutationID: 1,
+	}
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = CreateSystemConfigTable(keys.ZonesTableID, ZonesTableSchema)
+	ZonesTable = TableDescriptor{
+		Name:     "zones",
+		ID:       keys.ZonesTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: colTypeInt},
+			{Name: "config", ID: 2, Type: colTypeBytes, Nullable: true},
+		},
+		NextColumnID: 3,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
+			{Name: "fam_2_config", ID: 2, ColumnNames: []string{"config"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+		},
+		PrimaryIndex:   pk("id"),
+		NextFamilyID:   3,
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[5]),
+		FormatVersion:  FamilyFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// LeaseTable is the descriptor for the leases table.
+	LeaseTable = TableDescriptor{
+		Name:     "lease",
+		ID:       keys.LeaseTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "descID", ID: 1, Type: colTypeInt},
+			{Name: "version", ID: 2, Type: colTypeInt},
+			{Name: "nodeID", ID: 3, Type: colTypeInt},
+			{Name: "expiration", ID: 4, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []ColumnID{1, 2, 3, 4}},
+		},
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2, 4, 3},
+		},
+		NextFamilyID:   1,
+		NextIndexID:    2,
+		Privileges:     NewDefaultPrivilegeDescriptor(),
+		FormatVersion:  FamilyFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// UITable is the descriptor for the ui table.
+	UITable = TableDescriptor{
+		Name:     "ui",
+		ID:       keys.UITableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "key", ID: 1, Type: colTypeString},
+			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
+			{Name: "lastUpdated", ID: 3, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+		},
+		NextFamilyID:   4,
+		PrimaryIndex:   pk("key"),
+		NextIndexID:    2,
+		Privileges:     NewDefaultPrivilegeDescriptor(),
+		FormatVersion:  FamilyFormatVersion,
+		NextMutationID: 1,
+	}
 
 	// SystemConfigAllowedPrivileges describes the privileges allowed for each
 	// system config object. No user may have more than those privileges, and
@@ -120,40 +280,8 @@ var (
 	// to know the number of system descriptors intended for installation; it starts at
 	// 1 for the SystemDB descriptor created above, and is incremented by every
 	// call to createSystemTable().
-	NumSystemDescriptors = 1
+	NumSystemDescriptors = 5
 )
-
-// CreateSystemConfigTable wraps transforming a CREATE stmt to a descriptor.
-func CreateSystemConfigTable(id ID, schema string) TableDescriptor {
-	NumSystemDescriptors++
-
-	// System tables have the system database as a parent, with privileges
-	// from the SystemAllowedPrivileges table assigned to the root user.
-	return CreateTableDescriptor(id, keys.SystemDatabaseID, schema,
-		NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[id]))
-}
-
-// CreateTableDescriptor transforms a CREATE stmt into a descriptor.
-func CreateTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
-	stmt, err := parser.ParseOneTraditional(schema)
-	if err != nil {
-		log.Fatal(context.TODO(), err)
-	}
-
-	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), parentID)
-	if err != nil {
-		log.Fatal(context.TODO(), err)
-	}
-
-	desc.Privileges = privileges
-
-	desc.ID = id
-	if err := desc.AllocateIDs(); err != nil {
-		log.Fatalf(context.TODO(), "%s: %v", desc.Name, err)
-	}
-
-	return desc
-}
 
 // Create the key/value pairs for the default zone config entry.
 func createDefaultZoneConfig() []roachpb.KeyValue {
@@ -185,8 +313,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
 
 	// Add other system tables.
-	target.AddTable(keys.LeaseTableID, LeaseTableSchema)
-	target.AddTable(keys.UITableID, UITableSchema)
+	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }

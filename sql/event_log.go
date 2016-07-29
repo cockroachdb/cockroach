@@ -77,7 +77,13 @@ CREATE TABLE system.eventlog (
 // AddEventLogToMetadataSchema adds the event log table to the supplied
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	schema.AddTable(keys.EventLogTableID, eventTableSchema)
+	desc := CreateTableDescriptor(
+		keys.EventLogTableID,
+		keys.SystemDatabaseID,
+		eventTableSchema,
+		sqlbase.NewDefaultPrivilegeDescriptor(),
+	)
+	schema.AddDescriptor(keys.SystemDatabaseID, &desc)
 }
 
 // An EventLogger exposes methods used to record events to the event table.

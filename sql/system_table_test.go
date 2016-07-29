@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -42,7 +43,8 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	ms.AddTable(keys.MaxSystemConfigDescID+1, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)")
+	desc := sql.CreateTableDescriptor(keys.MaxSystemConfigDescID+1, keys.SystemDatabaseID, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sqlbase.NewDefaultPrivilegeDescriptor())
+	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
 	kv = ms.GetInitialValues()
 	expected = nonDescKeys + keysPerDesc*ms.DescriptorCount()
 	if actual := len(kv); actual != expected {
@@ -79,14 +81,28 @@ func TestSystemTables(t *testing.T) {
 		schema string
 		pkg    sqlbase.TableDescriptor
 	}
+
+	// test the tables with specific permissions
 	for _, test := range []testcase{
 		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable},
 		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable},
 		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
 		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
 	} {
-		gen := sqlbase.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
+		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
 			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]))
+		if !reflect.DeepEqual(test.pkg, gen) {
+			t.Fatalf(
+				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%+v\ngenerated\n\t%+v",
+				test.pkg.Name, test.pkg, gen)
+		}
+	}
+	// test the tables with non-specific NewDefaultPrivilegeDescriptor
+	for _, test := range []testcase{
+		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
+		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
+	} {
+		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema, sqlbase.NewDefaultPrivilegeDescriptor())
 		if !reflect.DeepEqual(test.pkg, gen) {
 			t.Fatalf(
 				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%+v\ngenerated\n\t%+v",
