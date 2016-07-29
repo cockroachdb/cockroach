@@ -667,9 +667,7 @@ func (l *LocalCluster) AssertAndStop(t *testing.T) {
 func (l *LocalCluster) stop() {
 	if *waitOnStop {
 		log.Infof(context.TODO(), "waiting for interrupt")
-		select {
-		case <-l.stopper:
-		}
+		<-l.stopper
 	}
 
 	log.Infof(context.TODO(), "stopping")

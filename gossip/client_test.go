@@ -475,10 +475,8 @@ func TestClientRetryBootstrap(t *testing.T) {
 	local.manage()
 
 	util.SucceedsSoon(t, func() error {
-		if _, err := remote.GetInfo("local-key"); err != nil {
-			return err
-		}
-		return nil
+		_, err := remote.GetInfo("local-key")
+		return err
 	})
 }
 

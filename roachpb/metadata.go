@@ -134,10 +134,7 @@ func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescripto
 // uninitialized range.
 // TODO(bdarnell): unify this with Validate().
 func (r RangeDescriptor) IsInitialized() bool {
-	if len(r.EndKey) == 0 {
-		return false
-	}
-	return true
+	return len(r.EndKey) != 0
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.

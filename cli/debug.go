@@ -402,10 +402,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
 	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
 
-	if err := db.Iterate(start, end, printRangeDescriptor); err != nil {
-		return err
-	}
-	return nil
+	return db.Iterate(start, end, printRangeDescriptor)
 }
 
 var debugRaftLogCmd = &cobra.Command{
@@ -482,10 +479,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
 
-	if err := db.Iterate(start, end, printRaftLogEntry); err != nil {
-		return err
-	}
-	return nil
+	return db.Iterate(start, end, printRaftLogEntry)
 }
 
 var debugGCCmd = &cobra.Command{

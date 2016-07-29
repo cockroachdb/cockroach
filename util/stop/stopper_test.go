@@ -158,10 +158,7 @@ func TestStopperRunWorker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	s.RunWorker(func() {
-		select {
-		case <-s.ShouldStop():
-			return
-		}
+		<-s.ShouldStop()
 	})
 	closer := make(chan struct{})
 	go func() {
@@ -247,7 +244,7 @@ func TestStopperClosers(t *testing.T) {
 	s.AddCloser(&tc1)
 	s.AddCloser(&tc2)
 	s.Stop()
-	if bool(tc1) != true || bool(tc2) != true {
+	if !bool(tc1) || !bool(tc2) {
 		t.Errorf("expected true & true; got %t & %t", tc1, tc2)
 	}
 }
