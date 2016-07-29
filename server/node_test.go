@@ -208,7 +208,7 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	// Check whether all stores are started properly.
 	if err := node.stores.VisitStores(func(s *storage.Store) error {
-		if s.IsStarted() == false {
+		if !s.IsStarted() {
 			return errors.Errorf("fail to start store: %s", s)
 		}
 		return nil

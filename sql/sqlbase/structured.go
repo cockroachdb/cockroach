@@ -145,11 +145,9 @@ func GetTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
 func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
-	segments := make([]string, 0, len(desc.ColumnIDs)+2)
+	segments := make([]string, 0, len(desc.ColumnNames)+2)
 	segments = append(segments, tableDesc.Name)
-	for _, columnName := range desc.ColumnNames {
-		segments = append(segments, columnName)
-	}
+	segments = append(segments, desc.ColumnNames...)
 	if desc.Unique {
 		segments = append(segments, "key")
 	} else {

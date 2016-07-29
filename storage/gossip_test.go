@@ -73,7 +73,7 @@ func TestGossipFirstRange(t *testing.T) {
 	select {
 	case err := <-errors:
 		t.Fatal(err)
-	case _ = <-descs:
+	case <-descs:
 	}
 
 	// Add two replicas. The first range descriptor should be gossiped after each

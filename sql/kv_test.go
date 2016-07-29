@@ -109,10 +109,7 @@ func (kv *kvNative) update(rows, run int) error {
 			v := result.Rows[0].ValueInt()
 			wb.Put(fmt.Sprintf("%s%06d", kv.prefix, perm[i]), v+1)
 		}
-		if err := txn.CommitInBatch(wb); err != nil {
-			return err
-		}
-		return nil
+		return txn.CommitInBatch(wb)
 	})
 	return err
 }

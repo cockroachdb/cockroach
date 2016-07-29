@@ -261,10 +261,10 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	// CONFLICT exprs.
 	requestedCols := tu.tableDesc.Columns
 
-	var err error
 	if len(tu.updateCols) == 0 {
 		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
+		var err error
 		tu.ru, err = makeRowUpdater(
 			txn, tu.tableDesc, tu.fkTables, tu.updateCols, requestedCols, rowUpdaterDefault,
 		)
@@ -285,14 +285,9 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 			valNeededForCol[i] = true
 		}
 	}
-	err = tu.fetcher.Init(
+	return tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
 		tu.tableDesc.Columns, valNeededForCol)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {

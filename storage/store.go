@@ -1570,10 +1570,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	*ms = updatedMS
 
-	if err := batch.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return batch.Commit()
 }
 
 // ClusterID accessor.
@@ -1832,11 +1829,7 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
-	if err := subsumingRng.setDesc(&copy); err != nil {
-		return err
-	}
-
-	return nil
+	return subsumingRng.setDesc(&copy)
 }
 
 // AddReplicaTest adds the replica to the store's replica map and to the sorted
