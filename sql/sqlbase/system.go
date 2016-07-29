@@ -29,7 +29,9 @@ import (
 
 const (
 	// sql CREATE commands and full schema for each system table.
-	namespaceTableSchema = `
+
+	// NamespaceTableSchema is checked in TestSystemTables.
+	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
   parentID INT,
   name     STRING,
@@ -37,13 +39,15 @@ CREATE TABLE system.namespace (
   PRIMARY KEY (parentID, name)
 );`
 
-	descriptorTableSchema = `
+	// DescriptorTableSchema is checked in TestSystemTables.
+	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
   id         INT PRIMARY KEY,
   descriptor BYTES
 );`
 
-	leaseTableSchema = `
+	// LeaseTableSchema is checked in TestSystemTables.
+	LeaseTableSchema = `
 CREATE TABLE system.lease (
   descID     INT,
   version    INT,
@@ -52,21 +56,24 @@ CREATE TABLE system.lease (
   PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
-	usersTableSchema = `
+	// UsersTableSchema is checked in TestSystemTables.
+	UsersTableSchema = `
 CREATE TABLE system.users (
   username       STRING PRIMARY KEY,
   hashedPassword BYTES
 );`
 
+	// ZonesTableSchema is checked in TestSystemTables.
 	// Zone settings per DB/Table.
-	zonesTableSchema = `
+	ZonesTableSchema = `
 CREATE TABLE system.zones (
   id     INT PRIMARY KEY,
   config BYTES
 );`
 
+	// UITableSchema is checked in TestSystemTables.
 	// blobs based on unique keys.
-	uiTableSchema = `
+	UITableSchema = `
 CREATE TABLE system.ui (
 	key         STRING PRIMARY KEY,
 	value       BYTES,
@@ -81,26 +88,26 @@ var (
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
 		Privileges: NewPrivilegeDescriptor(security.RootUser,
-			systemConfigAllowedPrivileges[keys.SystemDatabaseID]),
+			SystemConfigAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
-	// namespaceTable is the descriptor for the namespace table.
-	namespaceTable = createSystemConfigTable(keys.NamespaceTableID, namespaceTableSchema)
+	// NamespaceTable is the descriptor for the namespace table.
+	NamespaceTable = CreateSystemConfigTable(keys.NamespaceTableID, NamespaceTableSchema)
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = createSystemConfigTable(keys.DescriptorTableID, descriptorTableSchema)
+	DescriptorTable = CreateSystemConfigTable(keys.DescriptorTableID, DescriptorTableSchema)
 
-	// usersTable is the descriptor for the users table.
-	usersTable = createSystemConfigTable(keys.UsersTableID, usersTableSchema)
+	// UsersTable is the descriptor for the users table.
+	UsersTable = CreateSystemConfigTable(keys.UsersTableID, UsersTableSchema)
 
-	// zonesTable is the descriptor for the zones table.
-	zonesTable = createSystemConfigTable(keys.ZonesTableID, zonesTableSchema)
+	// ZonesTable is the descriptor for the zones table.
+	ZonesTable = CreateSystemConfigTable(keys.ZonesTableID, ZonesTableSchema)
 
 	// SystemConfigAllowedPrivileges describes the privileges allowed for each
 	// system config object. No user may have more than those privileges, and
 	// the root user must have exactly those privileges. CREATE|DROP|ALL
 	// should always be denied.
-	systemConfigAllowedPrivileges = map[ID]privilege.List{
+	SystemConfigAllowedPrivileges = map[ID]privilege.List{
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
@@ -116,16 +123,18 @@ var (
 	NumSystemDescriptors = 1
 )
 
-func createSystemConfigTable(id ID, schema string) TableDescriptor {
+// CreateSystemConfigTable wraps transforming a CREATE stmt to a descriptor.
+func CreateSystemConfigTable(id ID, schema string) TableDescriptor {
 	NumSystemDescriptors++
 
 	// System tables have the system database as a parent, with privileges
 	// from the SystemAllowedPrivileges table assigned to the root user.
-	return createTableDescriptor(id, keys.SystemDatabaseID, schema,
-		NewPrivilegeDescriptor(security.RootUser, systemConfigAllowedPrivileges[id]))
+	return CreateTableDescriptor(id, keys.SystemDatabaseID, schema,
+		NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[id]))
 }
 
-func createTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
+// CreateTableDescriptor transforms a CREATE stmt into a descriptor.
+func CreateTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
 	stmt, err := parser.ParseOneTraditional(schema)
 	if err != nil {
 		log.Fatal(context.TODO(), err)
@@ -170,14 +179,14 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
 	// Add system config tables.
-	target.AddDescriptor(keys.SystemDatabaseID, &namespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &usersTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
 
 	// Add other system tables.
-	target.AddTable(keys.LeaseTableID, leaseTableSchema)
-	target.AddTable(keys.UITableID, uiTableSchema)
+	target.AddTable(keys.LeaseTableID, LeaseTableSchema)
+	target.AddTable(keys.UITableID, UITableSchema)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
