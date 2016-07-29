@@ -682,6 +682,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	}
 
 	if req.Shutdown {
+		s.server.grpc.Stop()
 		go s.server.stopper.Stop()
 	}
 
