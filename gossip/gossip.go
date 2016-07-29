@@ -927,7 +927,7 @@ func (g *Gossip) doDisconnected(c *client) {
 // If the sentinel gossip is missing, log and signal bootstrapper to
 // try another resolver.
 func (g *Gossip) maybeSignalStalledLocked() {
-	if g.is.getInfo(KeySentinel) == nil {
+	if g.is.getInfo(KeySentinel) == nil || g.outgoing.len()+g.incoming.len() == 0 {
 		g.warnAboutStall()
 		g.signalStalled()
 	}

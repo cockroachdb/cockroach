@@ -152,6 +152,10 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 		c.nodeMetrics.bytesSent.Add(bytesSent)
 		c.nodeMetrics.infosSent.Add(infosSent)
 
+		if log.V(1) {
+			log.Infof(context.TODO(), "node %d sending %s", g.is.NodeID, extractKeys(args.Delta))
+		}
+
 		g.mu.Unlock()
 		return stream.Send(&args)
 	}
