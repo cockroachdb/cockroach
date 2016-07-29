@@ -21,12 +21,15 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -708,4 +711,28 @@ func (p *planner) finalizeInterleave(
 	}
 
 	return nil
+}
+
+// CreateTableDescriptor turns a schema string into a TableDescriptor.
+func CreateTableDescriptor(
+	id, parentID sqlbase.ID, schema string, privileges *sqlbase.PrivilegeDescriptor,
+) sqlbase.TableDescriptor {
+	stmt, err := parser.ParseOneTraditional(schema)
+	if err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+
+	desc, err := sqlbase.MakeTableDesc(stmt.(*parser.CreateTable), parentID)
+	if err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+
+	desc.Privileges = privileges
+
+	desc.ID = id
+	if err := desc.AllocateIDs(); err != nil {
+		log.Fatalf(context.TODO(), "%s: %v", desc.Name, err)
+	}
+
+	return desc
 }

@@ -160,7 +160,13 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // AddEventLogToMetadataSchema adds the range event log table to the supplied
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	schema.AddTable(keys.RangeEventTableID, storage.RangeEventTableSchema)
+	desc := sql.CreateTableDescriptor(
+		keys.RangeEventTableID,
+		keys.SystemDatabaseID,
+		storage.RangeEventTableSchema,
+		sqlbase.NewDefaultPrivilegeDescriptor(),
+	)
+	schema.AddDescriptor(keys.SystemDatabaseID, &desc)
 }
 
 // bootstrapCluster bootstraps a multiple stores using the provided
