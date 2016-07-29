@@ -678,7 +678,7 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	}
 
 	for _, format := range dateFormats {
-		if t, err := time.Parse(format, string(s)); err == nil {
+		if t, err := time.Parse(format, s); err == nil {
 			return NewDDateFromTime(t, loc), nil
 		}
 	}

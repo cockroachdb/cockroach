@@ -1048,7 +1048,7 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = time.Time(s.Time)
+		*d = s.Time
 
 	case *[]byte:
 		if dst == nil {

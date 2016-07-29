@@ -378,7 +378,7 @@ func (n *scanNode) IndexedVarReturnType(idx int) parser.Datum {
 }
 
 func (n *scanNode) IndexedVarString(idx int) string {
-	return string(n.resultColumns[idx].Name)
+	return n.resultColumns[idx].Name
 }
 
 // scanVisibility represents which table columns should be included in a scan.

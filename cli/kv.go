@@ -358,9 +358,7 @@ func showResult(rows []client.KeyValue) {
 			fmt.Printf("%s\n", row.Key)
 			continue
 		}
-
-		key := roachpb.Key(row.Key)
-		fmt.Printf("%s\t%s\n", key, row.PrettyValue())
+		fmt.Printf("%s\t%s\n", row.Key, row.PrettyValue())
 	}
 	fmt.Printf("%d result(s)\n", len(rows))
 }

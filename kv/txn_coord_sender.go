@@ -575,7 +575,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 		tc.Lock()
 		duration, restarts, status := tc.unregisterTxnLocked(txnID)
 		tc.Unlock()
-		tc.updateStats(duration, int64(restarts), status, false)
+		tc.updateStats(duration, restarts, status, false)
 	}()
 
 	var closer <-chan struct{}

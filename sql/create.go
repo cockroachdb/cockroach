@@ -252,7 +252,7 @@ func hoistConstraints(n *parser.CreateTable) {
 			if col.CheckExpr.Expr != nil {
 				def := &parser.CheckConstraintTableDef{Expr: col.CheckExpr.Expr}
 				if col.CheckExpr.ConstraintName != "" {
-					def.Name = parser.Name(col.CheckExpr.ConstraintName)
+					def.Name = col.CheckExpr.ConstraintName
 				}
 				n.Defs = append(n.Defs, def)
 				col.CheckExpr.Expr = nil
@@ -594,7 +594,7 @@ func (p *planner) addInterleave(
 		if err != nil {
 			return err
 		}
-		if sqlbase.NormalizeName(interleave.Fields[i]) != sqlbase.NormalizeName(string(col.Name)) {
+		if sqlbase.NormalizeName(interleave.Fields[i]) != sqlbase.NormalizeName(col.Name) {
 			return fmt.Errorf("declared columns must match index being interleaved")
 		}
 		if col.Type != targetCol.Type ||
@@ -612,7 +612,7 @@ func (p *planner) addInterleave(
 		SharedPrefixLen: uint32(len(parentIndex.ColumnIDs)),
 	}
 	for _, ancestor := range ancestorPrefix {
-		intl.SharedPrefixLen -= uint32(ancestor.SharedPrefixLen)
+		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
 	}
 	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
 

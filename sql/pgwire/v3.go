@@ -582,7 +582,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		}
 		fmtCode := formatCode(c)
 		for i := range columnFormatCodes {
-			columnFormatCodes[i] = formatCode(fmtCode)
+			columnFormatCodes[i] = fmtCode
 		}
 	case numColumns:
 		// Read one format code for each column and apply it to that column.
