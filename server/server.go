@@ -358,6 +358,8 @@ func (s *Server) Start() error {
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldQuiesce()
+		s.grpc.GracefulStop()
+		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
 	})
 
