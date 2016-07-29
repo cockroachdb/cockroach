@@ -22,12 +22,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
@@ -263,60 +260,68 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor, leaseStore
 	return roachpb.ReplicaDescriptor{}, errors.Errorf("RemoveTarget() could not select an appropriate replica to be remove")
 }
 
-// RebalanceTarget returns a suitable store for a rebalance target
-// with required attributes. Rebalance targets are selected via the
-// same mechanism as AllocateTarget(), except the chosen target must
-// follow some additional criteria. Namely, if chosen, it must further
-// the goal of balancing the cluster.
+// RebalanceTarget returns a suitable store for a rebalance target with
+// required attributes. Rebalance targets are selected via the same mechanism
+// as AllocateTarget(), except the chosen target must follow some additional
+// criteria. Namely, if chosen, it must further the goal of balancing the
+// cluster.
 //
-// The supplied parameters are the StoreID of the replica being rebalanced, the
-// required attributes for the replica being rebalanced, and a list of the
-// existing replicas of the range (which must include the replica being
-// rebalanced).
+// The supplied parameters are the required attributes for the range, a list of
+// the existing replicas of the range and the store ID of the lease-holder
+// replica. The existing replicas modulo the lease-holder replica are
+// candidates for rebalancing. Note that rebalancing is accomplished by first
+// adding a new replica to the range, then removing the most undesirable
+// replica.
 //
-// Simply ignoring a rebalance opportunity in the event that the
-// target chosen by AllocateTarget() doesn't fit balancing criteria
-// is perfectly fine, as other stores in the cluster will also be
-// doing their probabilistic best to rebalance. This helps prevent
-// a stampeding herd targeting an abnormally under-utilized store.
+// Simply ignoring a rebalance opportunity in the event that the target chosen
+// by AllocateTarget() doesn't fit balancing criteria is perfectly fine, as
+// other stores in the cluster will also be doing their probabilistic best to
+// rebalance. This helps prevent a stampeding herd targeting an abnormally
+// under-utilized store.
 func (a Allocator) RebalanceTarget(
-	storeID roachpb.StoreID, required roachpb.Attributes, existing []roachpb.ReplicaDescriptor,
+	required roachpb.Attributes,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
 ) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil
 	}
+
+	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
+
+	var shouldRebalance bool
+	for _, repl := range existing {
+		if leaseStoreID == repl.StoreID {
+			continue
+		}
+		storeDesc := a.storePool.getStoreDescriptor(repl.StoreID)
+		if storeDesc != nil && a.shouldRebalance(storeDesc, sl) {
+			shouldRebalance = true
+			break
+		}
+	}
+	if !shouldRebalance {
+		return nil
+	}
+
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
 		existingNodes[repl.NodeID] = struct{}{}
 	}
-	storeDesc := a.storePool.getStoreDescriptor(storeID)
-	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
-	return a.improve(storeDesc, sl, existingNodes)
+	return a.improve(sl, existingNodes)
 }
 
 // ShouldRebalance returns whether the specified store should attempt to
 // rebalance a replica to another store.
+//
+// TODO(bram): This is only used by the simulator and should be removed.
 func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !a.options.AllowRebalance {
 		return false
 	}
-	if log.V(2) {
-		log.Infof(context.TODO(), "ShouldRebalance from store %d", storeID)
-	}
-	storeDesc := a.storePool.getStoreDescriptor(storeID)
-	if storeDesc == nil {
-		if log.V(2) {
-			log.Warningf(context.TODO(),
-				"ShouldRebalance couldn't find store with id %d in StorePool",
-				storeID)
-		}
-		return false
-	}
-
-	sl, _, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
-
-	// ShouldRebalance is true if a suitable replacement can be found.
-	return a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
+	desc := a.storePool.getStoreDescriptor(storeID)
+	sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+	return a.shouldRebalance(desc, sl)
 }
 
 // selectGood attempts to select a store from the supplied store list that it
@@ -341,10 +346,19 @@ func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 // will be disqualified from selection. Returns the selected store, or nil if
 // no such store can be found.
 func (a Allocator) improve(
-	store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet,
+	sl StoreList, excluded nodeIDSet,
 ) *roachpb.StoreDescriptor {
 	rcb := rangeCountBalancer{a.randGen}
-	return rcb.improve(store, sl, excluded)
+	return rcb.improve(sl, excluded)
+}
+
+// shouldRebalance returns whether the specified store is a candidate for
+// having a replica removed from it given the candidate store list.
+func (a Allocator) shouldRebalance(
+	store *roachpb.StoreDescriptor, sl StoreList,
+) bool {
+	rcb := rangeCountBalancer{a.randGen}
+	return rcb.shouldRebalance(store, sl)
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
