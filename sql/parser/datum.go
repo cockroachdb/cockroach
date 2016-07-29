@@ -186,12 +186,12 @@ func (*DBool) Next() Datum {
 
 // IsMax implements the Datum interface.
 func (d *DBool) IsMax() bool {
-	return *d == true
+	return bool(*d)
 }
 
 // IsMin implements the Datum interface.
 func (d *DBool) IsMin() bool {
-	return *d == false
+	return !bool(*d)
 }
 
 // Format implements the NodeFormatter interface.

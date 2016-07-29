@@ -218,10 +218,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 		return nil, err
 	}
 	if next, err := plan.Next(); !next {
-		if err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, err
 	}
 	values := plan.Values()
 	next, err := plan.Next()

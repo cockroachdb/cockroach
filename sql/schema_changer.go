@@ -265,10 +265,7 @@ func (sc SchemaChanger) exec(
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
 				b.Del(tbKey)
 			}
-			if err := txn.Run(&b); err != nil {
-				return err
-			}
-			return nil
+			return txn.Run(&b)
 		})
 		if err != nil {
 			return err

@@ -729,7 +729,7 @@ func DecodeIndexKey(
 			// We reuse NotNullDescending as the interleave sentinel, consume it.
 			var ok bool
 			key, ok = encoding.DecodeIfNotNull(key)
-			if ok != true {
+			if !ok {
 				return nil, false, nil
 			}
 		}

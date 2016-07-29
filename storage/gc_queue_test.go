@@ -526,7 +526,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (abortExists == false) != sp.expAbortGC {
+			if abortExists == sp.expAbortGC {
 				return fmt.Errorf("%s: expected abort cache gc: %t, found %+v", strKey, sp.expAbortGC, entry)
 			}
 		}

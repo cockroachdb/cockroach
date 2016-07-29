@@ -1786,7 +1786,7 @@ func TestCheckInconsistent(t *testing.T) {
 			t.Errorf("diff length = %d, diff = %v", len(diff), diff)
 		}
 		d := diff[0]
-		if d.LeaseHolder != false || !bytes.Equal([]byte("e"), d.Key) || !timestamp.Equal(d.Timestamp) {
+		if d.LeaseHolder || !bytes.Equal(key, d.Key) || !timestamp.Equal(d.Timestamp) {
 			t.Errorf("diff = %v", d)
 		}
 		notify <- struct{}{}

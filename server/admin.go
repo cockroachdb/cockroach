@@ -966,7 +966,7 @@ func (q *sqlQuery) Append(s string, params ...parser.Datum) {
 		if r == '$' {
 			q.pidx++
 			placeholders++
-			q.buf.WriteString(strconv.FormatInt(int64(q.pidx), 10)) // SQL placeholders are 1-based
+			q.buf.WriteString(strconv.Itoa(q.pidx)) // SQL placeholders are 1-based
 		}
 	}
 
