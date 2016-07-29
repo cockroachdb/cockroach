@@ -270,7 +270,7 @@ func (n *createTableNode) expandPlan() error {
 
 func (n *createTableNode) Start() error {
 	hoistConstraints(n.n)
-	desc, err := sqlbase.MakeTableDesc(n.n, n.dbDesc.ID)
+	desc, err := MakeTableDesc(n.n, n.dbDesc.ID)
 	if err != nil {
 		return err
 	}
@@ -722,7 +722,7 @@ func CreateTableDescriptor(
 		log.Fatal(context.TODO(), err)
 	}
 
-	desc, err := sqlbase.MakeTableDesc(stmt.(*parser.CreateTable), parentID)
+	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), parentID)
 	if err != nil {
 		log.Fatal(context.TODO(), err)
 	}
@@ -735,4 +735,158 @@ func CreateTableDescriptor(
 	}
 
 	return desc
+}
+
+// MakeTableDesc creates a table descriptor from a CreateTable statement.
+func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDescriptor, error) {
+	desc := sqlbase.TableDescriptor{}
+	if err := p.Table.NormalizeTableName(""); err != nil {
+		return desc, err
+	}
+	desc.Name = p.Table.Table()
+	desc.ParentID = parentID
+	desc.FormatVersion = sqlbase.FamilyFormatVersion
+	// We don't use version 0.
+	desc.Version = 1
+
+	var primaryIndexColumnSet map[parser.Name]struct{}
+	for _, def := range p.Defs {
+		switch d := def.(type) {
+		case *parser.ColumnTableDef:
+			col, idx, err := sqlbase.MakeColumnDefDescs(d)
+			if err != nil {
+				return desc, err
+			}
+			desc.AddColumn(*col)
+			if idx != nil {
+				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
+					return desc, err
+				}
+			}
+			if d.Family.Create || len(d.Family.Name) > 0 {
+				// Pass true for `create` and `ifNotExists` because when we're creating
+				// a table, we always want to create the specified family if it doesn't
+				// exist.
+				err := desc.AddColumnToFamilyMaybeCreate(col.Name, string(d.Family.Name), true, true)
+				if err != nil {
+					return desc, err
+				}
+			}
+
+		case *parser.IndexTableDef:
+			idx := sqlbase.IndexDescriptor{
+				Name:             string(d.Name),
+				StoreColumnNames: d.Storing,
+			}
+			if err := idx.FillColumns(d.Columns); err != nil {
+				return desc, err
+			}
+			if err := desc.AddIndex(idx, false); err != nil {
+				return desc, err
+			}
+			if d.Interleave != nil {
+				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
+			}
+		case *parser.UniqueConstraintTableDef:
+			idx := sqlbase.IndexDescriptor{
+				Name:             string(d.Name),
+				Unique:           true,
+				StoreColumnNames: d.Storing,
+			}
+			if err := idx.FillColumns(d.Columns); err != nil {
+				return desc, err
+			}
+			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
+				return desc, err
+			}
+			if d.PrimaryKey {
+				primaryIndexColumnSet = make(map[parser.Name]struct{})
+				for _, c := range d.Columns {
+					primaryIndexColumnSet[c.Column] = struct{}{}
+				}
+			}
+			if d.Interleave != nil {
+				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
+			}
+		case *parser.CheckConstraintTableDef:
+			// CHECK expressions seem to vary across databases. Wikipedia's entry on
+			// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
+			// that if the constraint refers to a single column only, it is possible to
+			// specify the constraint as part of the column definition. Postgres allows
+			// specifying them anywhere about any columns, but it moves all constraints to
+			// the table level (i.e., columns never have a check constraint themselves). We
+			// will adhere to the stricter definition.
+
+			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+				qname, ok := expr.(*parser.QualifiedName)
+				if !ok {
+					// Not a qname, don't do anything to this node.
+					return nil, true, expr
+				}
+
+				if err := qname.NormalizeColumnName(); err != nil {
+					return err, false, nil
+				}
+
+				if qname.IsStar() {
+					return fmt.Errorf("* not allowed in constraint %q", d.Expr.String()), false, nil
+				}
+				col, err := desc.FindActiveColumnByName(qname.Column())
+				if err != nil {
+					return fmt.Errorf("column %q not found for constraint %q", qname.String(), d.Expr.String()), false, nil
+				}
+				// Convert to a dummy datum of the correct type.
+				return nil, false, col.Type.ToDatumType()
+			}
+
+			expr, err := parser.SimpleVisit(d.Expr, preFn)
+			if err != nil {
+				return desc, err
+			}
+
+			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+				return desc, err
+			}
+
+			var p parser.Parser
+			if p.AggregateInExpr(expr) {
+				return desc, fmt.Errorf("Aggregate functions are not allowed in CHECK expressions")
+			}
+
+			check := &sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
+			if len(d.Name) > 0 {
+				check.Name = string(d.Name)
+			}
+			desc.Checks = append(desc.Checks, check)
+
+		case *parser.FamilyTableDef:
+			names := make([]string, len(d.Columns))
+			for i, col := range d.Columns {
+				names[i] = string(col.Column)
+			}
+			fam := sqlbase.ColumnFamilyDescriptor{
+				Name:        string(d.Name),
+				ColumnNames: names,
+			}
+			desc.AddFamily(fam)
+
+		case *parser.ForeignKeyConstraintTableDef:
+			// Pass for now since FKs can reference other elements and thus are
+			// resolved only after the rest of the desc is constructed.
+
+		default:
+			return desc, errors.Errorf("unsupported table def: %T", def)
+		}
+	}
+
+	if primaryIndexColumnSet != nil {
+		// Primary index columns are not nullable.
+		for i := range desc.Columns {
+			if _, ok := primaryIndexColumnSet[parser.Name(desc.Columns[i].Name)]; ok {
+				desc.Columns[i].Nullable = false
+			}
+		}
+	}
+
+	return desc, nil
 }
