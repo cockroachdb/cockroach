@@ -208,8 +208,8 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 		switch r.Intn(2) {
 		case 0:
 			if err := z.split(z.randNode(r.Intn), key); err != nil {
-				if strings.Index(err.Error(), "range is already split at key") != -1 ||
-					strings.Index(err.Error(), "conflict updating range descriptors") != -1 {
+				if strings.Contains(err.Error(), "range is already split at key") ||
+					strings.Contains(err.Error(), "conflict updating range descriptors") {
 					continue
 				}
 				log.Error(context.Background(), err)
@@ -341,47 +341,34 @@ func (z *zeroSum) formatReplicas(replicas []int) string {
 }
 
 func (z *zeroSum) monitor(d time.Duration) {
-	var timer timeutil.Timer
-	defer timer.Stop()
-	timer.Reset(d)
-
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	start := timeutil.Now()
 	lastTime := start
 	var lastOps uint64
 
 	for ticks := 0; true; ticks++ {
-		select {
-		case s := <-signalCh:
-			log.Infof(context.Background(), "signal received: %v", s)
-			return
-		case <-timer.C:
-			if ticks%20 == 0 {
-				fmt.Printf("_elapsed__accounts_________ops__ops/sec___errors___splits____xfers___ranges_____________replicas\n")
-			}
+		time.Sleep(d)
 
-			now := timeutil.Now()
-			elapsed := now.Sub(lastTime).Seconds()
-			ops := atomic.LoadUint64(&z.stats.ops)
-
-			z.ranges.Lock()
-			ranges, replicas := z.ranges.count, z.ranges.replicas
-			z.ranges.Unlock()
-
-			fmt.Printf("%8s %9d %11d %8.1f %8d %8d %8d %8d %20s\n",
-				time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
-				z.accountsLen(), ops, float64(ops-lastOps)/elapsed,
-				atomic.LoadUint64(&z.stats.errors),
-				atomic.LoadUint64(&z.stats.splits),
-				atomic.LoadUint64(&z.stats.transfers),
-				ranges, z.formatReplicas(replicas))
-			lastTime = now
-			lastOps = ops
-
-			timer.Read = true
-			timer.Reset(d)
+		if ticks%20 == 0 {
+			fmt.Printf("_elapsed__accounts_________ops__ops/sec___errors___splits____xfers___ranges_____________replicas\n")
 		}
+
+		now := timeutil.Now()
+		elapsed := now.Sub(lastTime).Seconds()
+		ops := atomic.LoadUint64(&z.stats.ops)
+
+		z.ranges.Lock()
+		ranges, replicas := z.ranges.count, z.ranges.replicas
+		z.ranges.Unlock()
+
+		fmt.Printf("%8s %9d %11d %8.1f %8d %8d %8d %8d %20s\n",
+			time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
+			z.accountsLen(), ops, float64(ops-lastOps)/elapsed,
+			atomic.LoadUint64(&z.stats.errors),
+			atomic.LoadUint64(&z.stats.splits),
+			atomic.LoadUint64(&z.stats.transfers),
+			ranges, z.formatReplicas(replicas))
+		lastTime = now
+		lastOps = ops
 	}
 }
 
@@ -390,6 +377,21 @@ func main() {
 
 	c := newCluster(*numNodes)
 	defer c.close()
+
+	log.SetExitFunc(func(code int) {
+		c.close()
+		os.Exit(code)
+	})
+
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	go func() {
+		s := <-signalCh
+		log.Infof(context.Background(), "signal received: %v", s)
+		c.close()
+		os.Exit(1)
+	}()
 
 	c.start("zerosum", flag.Args())
 	c.waitForFullReplication()
