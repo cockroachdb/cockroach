@@ -135,7 +135,7 @@ testslow:
 .PHONY: testraceslow
 testraceslow: TESTFLAGS += -v
 testraceslow:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
+	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the

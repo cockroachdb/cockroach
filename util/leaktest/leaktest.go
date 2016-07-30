@@ -14,8 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
+
+var ignorestdlibleaks = envutil.EnvOrDefaultBool("ignorestdlibleaks", true)
 
 // interestingGoroutines returns all goroutines we care about for the purpose
 // of leak checking. It excludes testing or runtime ones.
@@ -34,6 +37,16 @@ func interestingGoroutines() (gs []string) {
 
 		if stack == "" ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/log.init") ||
+			// It appears that the standard library TLS handshake code
+			// contains a bug that can cause handshaking to deadlock. See
+			// https://github.com/cockroachdb/cockroach/issues/8136.
+			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).clientHandshake") ||
+			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).serverHandshake") ||
+			// GRPC's credentials do not properly cancel, so during shutdown
+			// this goroutine leaks due to the standard library bug described
+			// above. See https://github.com/grpc/grpc-go/pull/796 for a
+			// possible solution to the cancellation problem in GRPC.
+			ignorestdlibleaks && strings.Contains(stack, "google.golang.org/grpc/credentials.(*tlsCreds).ClientHandshake") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||
