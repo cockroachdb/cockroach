@@ -111,13 +111,20 @@ func (ls *Stores) RemoveStore(s *Store) {
 	delete(ls.storeMap, s.Ident.StoreID)
 }
 
-// VisitStores implements a visitor pattern over stores in the storeMap.
-// The specified function is invoked with each store in turn. Stores are
-// visited in a random order.
+// VisitStores implements a visitor pattern over stores in the
+// storeMap. The specified function is invoked with each store in
+// turn. Care is taken to invoke the visitor func without the lock
+// held to avoid inconsistent lock orderings, as some visitor
+// functions may call back into the Stores object. Stores are visited
+// in random order.
 func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	ls.mu.RLock()
-	defer ls.mu.RUnlock()
+	stores := make([]*Store, 0, len(ls.storeMap))
 	for _, s := range ls.storeMap {
+		stores = append(stores, s)
+	}
+	ls.mu.RUnlock()
+	for _, s := range stores {
 		if err := visitor(s); err != nil {
 			return err
 		}
