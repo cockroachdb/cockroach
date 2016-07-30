@@ -27,6 +27,7 @@ github.com/VividCortex/ewma 8b9f1311551e712ea8a06b494238b8a2351e1c33
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/backtrace-labs/go-bcd c5383e2df7004f8b2fb2f10a33167d757bb0fbfb
 github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
+github.com/cenk/backoff cdf48bbc1eb78d1349cbda326a4a037f7ba565c6
 github.com/chzyer/logex 96a4d311aa9ba1c5f9f2abda8039671de20f6aa5
 github.com/chzyer/readline c144c8dde4996a05f596bd5acb730d172968e26c
 github.com/chzyer/test bea8f082b6fd8382588bf6fdc6af9217078af151
@@ -50,6 +51,7 @@ github.com/docker/go-units f2d77a61e3c169b43402a0a1e84f06daf29b8190
 github.com/dustin/go-humanize 2fcb5204cdc65b4bec9fd0a87606bb0d0e3c54e8
 github.com/elastic/gosigar 1d5bcdfbb4e5b8b5982f1e87ee6f13a806dd9aa0
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
+github.com/facebookgo/clock 600d898af40aa09a7a93ecb9265d87b0504b6f03
 github.com/go-ole/go-ole 7dfdcf409020452e29b4babcbb22f984d2aa308a
 github.com/go-sql-driver/mysql 3654d25ec346ee8ce71a68431025458d52a38ac0
 github.com/gogo/protobuf e33835a643a970c11ac74f6333f5f6866387a101
@@ -81,11 +83,13 @@ github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
 github.com/opentracing/basictracer-go a39552bda9584ab9ab465f6462f23f7ed1aa0d15
 github.com/opentracing/opentracing-go ce84834b482d236a829419f99eb78866b58751fd
 github.com/pborman/uuid c55201b036063326c5b1b89ccfe45a184973d073
+github.com/peterbourgon/g2s 5767a0b2078638d14800683fd0fe425604883f63
 github.com/pkg/errors 1d2e60385a13aaa66134984235061c2f9302520e
 github.com/prometheus/client_model fa8ad6fec33561be4280a8f0514318c79d7f6cb6
 github.com/prometheus/common bc0a4460d0fc2693fcdebafafbf07c6d18913b97
 github.com/rcrowley/go-metrics bdb33529eca3e55eac7328e07c57012a797af602
 github.com/robfig/glock c7fb89f56fbead624f7424f81f70af3a742433c5
+github.com/rubyist/circuitbreaker 434e9dfaa002281310291f4042827d0940526785
 github.com/russross/blackfriday 93622da34e54fb6529bfb7c57e710f37a8d9cbd8
 github.com/sasha-s/go-deadlock 09aefc0ac06ad74d91ca31acdb11fc981c159149
 github.com/satori/go.uuid 0aa62d5ddceb50dbcb909d790b5345affd3669b6

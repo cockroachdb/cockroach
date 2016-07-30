@@ -109,7 +109,8 @@ func (*legacyTransportAdapter) Close() {
 }
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
-	n := simulation.NewNetwork(1)
+	n := simulation.NewNetwork(1, true)
+	n.Start()
 	g := n.Nodes[0].Gossip
 
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
@@ -792,7 +793,8 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	n := simulation.NewNetwork(3)
+	n := simulation.NewNetwork(3, true)
+	n.Start()
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	if _, err := ds.FirstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
