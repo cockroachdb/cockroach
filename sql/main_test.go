@@ -22,6 +22,8 @@ import (
 	"os"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -37,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
+
+var testCtx = context.Background()
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 

@@ -247,7 +247,8 @@ func (scc *schemaChangerCollection) queueSchemaChanger(
 //    schema changes we're about to execute. Results corresponding to the
 //    schema change statements will be changed in case an error occurs.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	e *Executor, planMaker *planner, results ResultList) {
+	e *Executor, planMaker *planner, results ResultList,
+) {
 	if planMaker.txn != nil {
 		panic("trying to execute schema changes while still in a transaction")
 	}
@@ -263,7 +264,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.db = *e.ctx.DB
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
-				log.Warning(context.TODO(), err)
+				log.Warning(e.ctx.Context, err)
 				break
 			} else if done {
 				break
@@ -287,7 +288,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{Err: err}
 				}
-				log.Warningf(context.TODO(), "Error executing schema change: %s", err)
+				log.Warningf(e.ctx.Context, "Error executing schema change: %s", err)
 			}
 			break
 		}
