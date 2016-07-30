@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -138,7 +136,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		for _, f := range group.funcs {
 			strs = append(strs, f.String())
 		}
-		log.Infof(context.TODO(), "Group: %s", strings.Join(strs, ", "))
+		log.Infof(p.ctx(), "Group: %s", strings.Join(strs, ", "))
 	}
 
 	// Replace the render expressions in the scanNode with expressions that

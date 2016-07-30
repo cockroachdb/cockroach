@@ -117,7 +117,7 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
 				return errExistingSchemaChangeLease
 			}
-			log.Infof(context.TODO(), "Overriding existing expired lease %v", tableDesc.Lease)
+			log.Infof(txn.Context, "Overriding existing expired lease %v", tableDesc.Lease)
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease

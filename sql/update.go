@@ -20,8 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -282,7 +280,7 @@ func (u *updateNode) Start() error {
 }
 
 func (u *updateNode) Next() (bool, error) {
-	ctx := context.TODO()
+	ctx := u.p.ctx()
 	next, err := u.run.rows.Next()
 	if !next {
 		if err == nil {

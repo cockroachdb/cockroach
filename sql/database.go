@@ -19,8 +19,6 @@ package sql
 import (
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -195,7 +193,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 	desc, err := p.getCachedDatabaseDesc(name)
 	if err != nil {
 		if log.V(3) {
-			log.Infof(context.TODO(), "%v", err)
+			log.Infof(p.ctx(), "%v", err)
 		}
 		var err error
 		desc, err = p.mustGetDatabaseDesc(name)

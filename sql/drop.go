@@ -19,8 +19,6 @@ package sql
 import (
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -108,9 +106,9 @@ func (n *dropDatabaseNode) Start() error {
 
 	b := &client.Batch{}
 	if log.V(2) {
-		log.Infof(context.TODO(), "Del %s", descKey)
-		log.Infof(context.TODO(), "Del %s", nameKey)
-		log.Infof(context.TODO(), "Del %s", zoneKey)
+		log.Infof(n.p.ctx(), "Del %s", descKey)
+		log.Infof(n.p.ctx(), "Del %s", nameKey)
+		log.Infof(n.p.ctx(), "Del %s", zoneKey)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
