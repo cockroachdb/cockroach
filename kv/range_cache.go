@@ -475,10 +475,6 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey
 }
 
 func (rdc *rangeDescriptorCache) evictCachedRangeDescriptorLocked(descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inclusive bool) error {
-	if seenDesc == nil {
-		log.Warningf(context.TODO(), "compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
-	}
-
 	rngKey, cachedDesc, err := rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
 	if err != nil {
 		return err
