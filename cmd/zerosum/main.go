@@ -45,6 +45,11 @@ var workers = flag.Int("w", 2*runtime.NumCPU(), "number of workers")
 var monkeys = flag.Int("m", 3, "number of monkeys")
 var numNodes = flag.Int("n", 4, "number of nodes")
 var numAccounts = flag.Int("a", 1e5, "number of accounts")
+var chaosType = flag.String("c", "simple", "chaos type [none|simple|flappy]")
+
+func newRand() *rand.Rand {
+	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+}
 
 // zeroSum is a bank-like simulation that tests correctness in the face of
 // aggressive splits and lease transfers. A pool of workers chooses two random
@@ -60,6 +65,7 @@ var numAccounts = flag.Int("a", 1e5, "number of accounts")
 type zeroSum struct {
 	*cluster
 	numAccounts int
+	chaosType   string
 	accounts    struct {
 		syncutil.Mutex
 		m map[uint64]struct{}
@@ -77,10 +83,11 @@ type zeroSum struct {
 	}
 }
 
-func newZeroSum(c *cluster, numAccounts int) *zeroSum {
+func newZeroSum(c *cluster, numAccounts int, chaosType string) *zeroSum {
 	z := &zeroSum{
 		cluster:     c,
 		numAccounts: numAccounts,
+		chaosType:   chaosType,
 	}
 	z.accounts.m = make(map[uint64]struct{})
 	return z
@@ -95,7 +102,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 		go z.monkey(tableID, 2*time.Second)
 	}
 	if workers > 0 || monkeys > 0 {
-		go z.chaos()
+		z.chaos()
 		go z.check(20 * time.Second)
 		go z.verify(10 * time.Second)
 	}
@@ -143,7 +150,7 @@ func (z *zeroSum) accountsLen() int {
 }
 
 func (z *zeroSum) worker() {
-	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	r := newRand()
 	zipf := z.accountDistribution(r)
 
 	for {
@@ -195,7 +202,7 @@ func (z *zeroSum) worker() {
 }
 
 func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
-	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	r := newRand()
 	zipf := z.accountDistribution(r)
 
 	for {
@@ -228,11 +235,26 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 	}
 }
 
-func (z *zeroSum) chaos() {
-	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+func (z *zeroSum) chaosSimple() {
+	d := 15 * time.Second
+	fmt.Printf("chaos(simple): first event in %s\n", d)
+	time.Sleep(d)
 
+	nodeIdx := 0
+	node := z.nodes[nodeIdx]
+	d = 20 * time.Second
+	fmt.Printf("chaos: killing node %d for %s\n", nodeIdx+1, d)
+	node.kill()
+
+	time.Sleep(d)
+	fmt.Printf("chaos: starting node %d\n", nodeIdx+1)
+	node.start()
+}
+
+func (z *zeroSum) chaosFlappy() {
+	r := newRand()
 	d := time.Duration(15+r.Intn(30)) * time.Second
-	fmt.Printf("chaos: first event in %s\n", d)
+	fmt.Printf("chaos(flappy): first event in %s\n", d)
 
 	for i := 1; true; i++ {
 		time.Sleep(d)
@@ -250,6 +272,19 @@ func (z *zeroSum) chaos() {
 		d = time.Duration(15+r.Intn(30)) * time.Second
 		fmt.Printf("chaos %d: starting node %d, next event in %s\n", i, nodeIdx+1, d)
 		node.start()
+	}
+}
+
+func (z *zeroSum) chaos() {
+	switch z.chaosType {
+	case "none":
+		// nothing to do
+	case "simple":
+		go z.chaosSimple()
+	case "flappy":
+		go z.chaosFlappy()
+	default:
+		log.Fatalf(context.Background(), "unknown chaos type: %s", z.chaosType)
 	}
 }
 
@@ -396,6 +431,6 @@ func main() {
 	c.start("zerosum", flag.Args())
 	c.waitForFullReplication()
 
-	z := newZeroSum(c, *numAccounts)
+	z := newZeroSum(c, *numAccounts, *chaosType)
 	z.run(*workers, *monkeys)
 }
