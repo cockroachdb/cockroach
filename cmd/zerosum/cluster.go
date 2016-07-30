@@ -218,7 +218,13 @@ func (c *cluster) transferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 		return false, nil
 	}
 
-	target := desc.Replicas[r.Intn(len(desc.Replicas))].StoreID
+	var target roachpb.StoreID
+	for {
+		target = desc.Replicas[r.Intn(len(desc.Replicas))].StoreID
+		if c.nodes[target-1].alive() {
+			break
+		}
+	}
 	if err := c.clients[nodeIdx].AdminTransferLease(key, target); err != nil {
 		return false, errors.Errorf("%s: transfer lease: %s", key, err)
 	}
