@@ -248,6 +248,9 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if log.V(3) {
+		t.Skip("Test only works with low verbosity levels")
+	}
 	dir, err := ioutil.TempDir("", "local_log_test")
 	if err != nil {
 		t.Fatal(err)
