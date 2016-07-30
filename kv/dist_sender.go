@@ -140,7 +140,7 @@ type DistSenderContext struct {
 // Cockroach cluster via the supplied gossip instance. Supplying a
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
-func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
+func NewDistSender(ctx *DistSenderContext, g *gossip.Gossip) *DistSender {
 	if ctx == nil {
 		ctx = &DistSenderContext{}
 	}
@@ -150,7 +150,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	}
 	ds := &DistSender{
 		clock:  clock,
-		gossip: gossip,
+		gossip: g,
 	}
 	if ctx.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(ctx.nodeDescriptor))
@@ -196,6 +196,25 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		ds.sendNextTimeout = defaultSendNextTimeout
 	}
 
+	if g != nil {
+		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
+			func(_ string, value roachpb.Value) {
+				ctx := context.Background()
+				if log.V(1) {
+					var desc roachpb.RangeDescriptor
+					if err := value.GetProto(&desc); err != nil {
+						log.Errorf(ctx, "unable to parse gossipped first range descriptor: %s", err)
+					} else {
+						log.Infof(ctx,
+							"gossipped first range descriptor: %+v", desc.Replicas)
+					}
+				}
+				err := ds.rangeCache.EvictCachedRangeDescriptor(roachpb.RKeyMin, nil, false)
+				if err != nil {
+					log.Warningf(ctx, "failed to evict first range descriptor: %s", err)
+				}
+			})
+	}
 	return ds
 }
 
