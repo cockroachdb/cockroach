@@ -197,6 +197,9 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 		// intervals between successive attempts to resolve a node address
 		// and connect via GRPC.
 		expBO := backoff.NewExponentialBackOff()
+		expBO.InitialInterval = 250 * time.Millisecond
+		expBO.RandomizationFactor = 0.25
+		expBO.Multiplier = 2
 		expBO.MaxInterval = 1 * time.Second
 		expBO.MaxElapsedTime = 0 * time.Second
 
