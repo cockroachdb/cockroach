@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -61,6 +63,10 @@ func makeTraceNode(plan planNode, txn *client.Txn) planNode {
 			txn:  txn,
 		},
 		sort: &sortNode{
+			// Don't use the planner context: this sort node is sorting the
+			// trace events themselves; we don't want any events from this sort
+			// node to show up in the EXPLAIN TRACE output.
+			ctx:      context.Background(),
 			ordering: traceOrdering,
 			columns:  traceColumns,
 		},

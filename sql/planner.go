@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -142,6 +144,15 @@ type queryRunner interface {
 }
 
 var _ queryRunner = &planner{}
+
+// ctx returns a context suitable for logging/tracing - either the txn's context
+// (if there is one), or the executor context.
+func (p *planner) ctx() context.Context {
+	if p.txn != nil {
+		return p.txn.Context
+	}
+	return p.execCtx.Context
+}
 
 // setTxn implements the queryRunner interface.
 func (p *planner) setTxn(txn *client.Txn) {
