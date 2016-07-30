@@ -17,6 +17,8 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"math"
 
 	"golang.org/x/net/context"
@@ -25,14 +27,27 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const allocatorRandomCount = 10
+
 type nodeIDSet map[roachpb.NodeID]struct{}
 
-func makeNodeIDSet(nodeIDs ...roachpb.NodeID) nodeIDSet {
-	nodeSet := make(nodeIDSet, len(nodeIDs))
-	for _, id := range nodeIDs {
-		nodeSet[id] = struct{}{}
+func formatCandidates(
+	selected *roachpb.StoreDescriptor,
+	candidates []*roachpb.StoreDescriptor,
+) string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("[")
+	for i, candidate := range candidates {
+		if i > 0 {
+			_, _ = buf.WriteString(" ")
+		}
+		fmt.Fprintf(&buf, "%d:%d", candidate.StoreID, candidate.Capacity.RangeCount)
+		if candidate == selected {
+			_, _ = buf.WriteString("*")
+		}
 	}
-	return nodeSet
+	_, _ = buf.WriteString("]")
+	return buf.String()
 }
 
 // rangeCountBalancer attempts to balance ranges across the cluster while
@@ -41,13 +56,9 @@ type rangeCountBalancer struct {
 	rand allocatorRand
 }
 
-func (rcb rangeCountBalancer) selectGood(
-	sl StoreList, excluded nodeIDSet,
-) *roachpb.StoreDescriptor {
-	// Consider a random sample of stores from the store list.
-	candidates := selectRandom(rcb.rand, 3, sl, excluded)
+func (rcb rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor {
 	var best *roachpb.StoreDescriptor
-	for _, candidate := range candidates {
+	for _, candidate := range sl.stores {
 		if best == nil {
 			best = candidate
 			continue
@@ -56,7 +67,24 @@ func (rcb rangeCountBalancer) selectGood(
 			best = candidate
 		}
 	}
+
+	// NB: logging of the best candidate is performed by the caller (selectGood
+	// or improve).
 	return best
+}
+
+func (rcb rangeCountBalancer) selectGood(
+	sl StoreList, excluded nodeIDSet,
+) *roachpb.StoreDescriptor {
+	// Consider a random sample of stores from the store list.
+	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
+	good := rcb.selectBest(sl)
+
+	if log.V(2) {
+		log.Infof(context.TODO(), "selected good: mean=%.1f %s",
+			sl.candidateCount.mean, formatCandidates(good, sl.stores))
+	}
+	return good
 }
 
 func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
@@ -70,6 +98,11 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 			worst = candidate
 		}
 	}
+
+	if log.V(2) {
+		log.Infof(context.TODO(), "selected bad: mean=%.1f %s",
+			sl.candidateCount.mean, formatCandidates(worst, sl.stores))
+	}
 	return worst
 }
 
@@ -77,25 +110,15 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 // strategy is to always converge on the mean range count. If that isn't
 // possible, we don't return any candidate.
 func (rcb rangeCountBalancer) improve(
-	store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet,
+	sl StoreList, excluded nodeIDSet,
 ) *roachpb.StoreDescriptor {
-	// Moving a replica from the given store makes its range count converge on
-	// the mean range count.
-	if store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
-		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
-			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean)) {
-		if log.V(2) {
-			log.Infof(context.TODO(), "not rebalancing: source store %d wouldn't converge on the mean",
-				store.StoreID)
-		}
-		return nil
-	}
-
 	// Attempt to select a better candidate from the supplied list.
-	candidate := rcb.selectGood(sl, excluded)
+	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
+	candidate := rcb.selectBest(sl)
 	if candidate == nil {
 		if log.V(2) {
-			log.Infof(context.TODO(), "not rebalancing: no candidate targets (all stores nearly full?)")
+			log.Infof(context.TODO(), "not rebalancing: no valid candidate targets: %s",
+				formatCandidates(nil, sl.stores))
 		}
 		return nil
 	}
@@ -105,17 +128,34 @@ func (rcb rangeCountBalancer) improve(
 	if math.Abs(float64(candidate.Capacity.RangeCount+1)-sl.candidateCount.mean) >=
 		math.Abs(float64(candidate.Capacity.RangeCount)-sl.candidateCount.mean) {
 		if log.V(2) {
-			log.Infof(context.TODO(), "not rebalancing: candidate store %d wouldn't converge on the mean",
-				candidate.StoreID)
+			log.Infof(context.TODO(), "not rebalancing: %s wouldn't converge on the mean %.1f",
+				formatCandidates(candidate, sl.stores), sl.candidateCount.mean)
 		}
 		return nil
 	}
 
 	if log.V(2) {
-		log.Infof(context.TODO(), "found candidate store %d", candidate.StoreID)
+		log.Infof(context.TODO(), "rebalancing: mean=%.1f %s",
+			sl.candidateCount.mean, formatCandidates(candidate, sl.stores))
 	}
-
 	return candidate
+}
+
+func (rcb rangeCountBalancer) shouldRebalance(
+	store *roachpb.StoreDescriptor, sl StoreList,
+) bool {
+	// Moving a replica from the given store makes its range count converge on
+	// the mean range count.
+	//
+	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
+	// node becomes fuller than maxFractionUsedThreshold we will always select it
+	// for rebalancing. This is currently utilized by tests.
+	if store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
+		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
+			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean)) {
+		return false
+	}
+	return true
 }
 
 // selectRandom chooses up to count random store descriptors from the given
