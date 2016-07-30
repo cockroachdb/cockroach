@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const allocatorRandomCount = 10
+
 type nodeIDSet map[roachpb.NodeID]struct{}
 
 func formatCandidates(
@@ -75,7 +77,7 @@ func (rcb rangeCountBalancer) selectGood(
 	sl StoreList, excluded nodeIDSet,
 ) *roachpb.StoreDescriptor {
 	// Consider a random sample of stores from the store list.
-	sl.stores = selectRandom(rcb.rand, 3, sl, excluded)
+	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
 	good := rcb.selectBest(sl)
 
 	if log.V(2) {
@@ -111,7 +113,7 @@ func (rcb rangeCountBalancer) improve(
 	sl StoreList, excluded nodeIDSet,
 ) *roachpb.StoreDescriptor {
 	// Attempt to select a better candidate from the supplied list.
-	sl.stores = selectRandom(rcb.rand, 3, sl, excluded)
+	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
 	candidate := rcb.selectBest(sl)
 	if candidate == nil {
 		if log.V(2) {
@@ -144,6 +146,10 @@ func (rcb rangeCountBalancer) shouldRebalance(
 ) bool {
 	// Moving a replica from the given store makes its range count converge on
 	// the mean range count.
+	//
+	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
+	// node becomes fuller than maxFractionUsedThreshold we will always select it
+	// for rebalancing. This is currently utilized by tests.
 	if store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
 		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
 			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean)) {
