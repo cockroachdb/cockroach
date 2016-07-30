@@ -106,8 +106,13 @@ func (rq *replicateQueue) shouldQueue(
 		return true, priority
 	}
 	// See if there is a rebalancing opportunity present.
-	shouldRebalance := rq.allocator.ShouldRebalance(repl.store.StoreID())
-	return shouldRebalance, 0
+	leaseStoreID := repl.store.StoreID()
+	if lease, _ := repl.getLease(); lease != nil {
+		leaseStoreID = lease.Replica.StoreID
+	}
+	target := rq.allocator.RebalanceTarget(
+		zone.ReplicaAttrs[0], desc.Replicas, leaseStoreID)
+	return target != nil, 0
 }
 
 func (rq *replicateQueue) process(
@@ -136,7 +141,7 @@ func (rq *replicateQueue) process(
 	switch action {
 	case AllocatorAdd:
 		log.Trace(ctx, "adding a new replica")
-		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true, nil)
+		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true)
 		if err != nil {
 			return err
 		}
@@ -146,7 +151,7 @@ func (rq *replicateQueue) process(
 		}
 
 		if log.V(1) {
-			log.Infof(context.TODO(), "%s: adding replica to %+v due to under-replication", repl, newReplica)
+			log.Infof(ctx, "%s: adding replica to %+v due to under-replication", repl, newReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("adding replica to %+v due to under-replication", newReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
@@ -154,17 +159,14 @@ func (rq *replicateQueue) process(
 		}
 	case AllocatorRemove:
 		log.Trace(ctx, "removing a replica")
-		// Get the current lease holder so we don't try to remove it.
-		lease, _ := repl.getLease()
-		if lease == nil {
-			return errors.Errorf("%s: could not get current lease", repl)
-		}
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, lease.Replica.StoreID)
+		// We require the lease in order to process replicas, so
+		// repl.store.StoreID() corresponds to the lease-holder's store ID.
+		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
 		if err != nil {
 			return err
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "%s: removing replica %+v due to over-replication", repl, removeReplica)
+			log.Infof(ctx, "%s: removing replica %+v due to over-replication", repl, removeReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("removing replica %+v due to over-replication", removeReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
@@ -178,13 +180,13 @@ func (rq *replicateQueue) process(
 		log.Trace(ctx, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
-				log.Warningf(context.TODO(), "Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
+				log.Warningf(ctx, "Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
 			}
 			break
 		}
 		deadReplica := deadReplicas[0]
 		if log.V(1) {
-			log.Infof(context.TODO(), "%s: removing replica %+v from dead store", repl, deadReplica)
+			log.Infof(ctx, "%s: removing replica %+v from dead store", repl, deadReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
@@ -194,10 +196,14 @@ func (rq *replicateQueue) process(
 		log.Trace(ctx, "considering a rebalance")
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
+		//
+		// We require the lease in order to process replicas, so
+		// repl.store.StoreID() corresponds to the lease-holder's store ID.
+		rebalanceStore := rq.allocator.RebalanceTarget(
+			zone.ReplicaAttrs[0], desc.Replicas, repl.store.StoreID())
 		if rebalanceStore == nil {
 			if log.V(1) {
-				log.Infof(context.TODO(), "%s: no suitable rebalance target", repl)
+				log.Infof(ctx, "%s: no suitable rebalance target", repl)
 			}
 			log.Trace(ctx, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
@@ -209,7 +215,7 @@ func (rq *replicateQueue) process(
 			StoreID: rebalanceStore.StoreID,
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "%s: rebalancing to %+v", repl, rebalanceReplica)
+			log.Infof(ctx, "%s: rebalancing to %+v", repl, rebalanceReplica)
 		}
 		log.Trace(ctx, fmt.Sprintf("rebalancing to %+v", rebalanceReplica))
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
