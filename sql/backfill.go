@@ -36,7 +36,7 @@ func makeColIDtoRowIndex(row planNode, desc *sqlbase.TableDescriptor) (
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(columns))
 	for i, column := range columns {
-		s, idx, err := desc.FindColumnByName(column.Name)
+		s, idx, err := desc.FindColumnByNormalizedName(sqlbase.ReNormalizeName(column.Name))
 		if err != nil {
 			return nil, err
 		}

@@ -55,7 +55,12 @@ type insertNode struct {
 func (p *planner) Insert(
 	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
 ) (planNode, error) {
-	en, err := p.makeEditNode(n.Table, autoCommit, privilege.INSERT)
+	tn, err := p.getAliasedTableName(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	en, err := p.makeEditNode(tn, autoCommit, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +182,7 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
+			helper, err := p.makeUpsertHelper(tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
 			if err != nil {
 				return nil, err
 			}
@@ -200,7 +205,7 @@ func (p *planner) Insert(
 		tw: tw,
 	}
 
-	if err := in.checkHelper.init(p, en.tableDesc); err != nil {
+	if err := in.checkHelper.init(p, tn, en.tableDesc); err != nil {
 		return nil, err
 	}
 
@@ -336,23 +341,22 @@ func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
 	cols := make([]sqlbase.ColumnDescriptor, len(node))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
 	for i, n := range node {
-		// Qualified names in the column list for INSERT and for the LHS
-		// in UPDATE ... SET statements work differently than qualified
-		// column names elsewhere:
-		// - they always start with the column name,
-		// - notation X.Y means access field Y when column X has composite type,
-		// - notation X.* is never allowed.
-		// So NormalizeColumnName() cannot be used here.
-		col, err := tableDesc.FindActiveColumnByName(string(n.Base))
+		c, err := n.NormalizeUnqualifiedColumnItem()
 		if err != nil {
 			return nil, err
 		}
-		if len(n.Indirect) != 0 {
-			// We do not support anything but simple column names yet.
-			return nil, fmt.Errorf("column name \"%s\" cannot be assigned to", n)
+
+		if len(c.Selector) > 0 {
+			return nil, fmt.Errorf("compound types not supported yet: %q", n)
 		}
+
+		col, err := tableDesc.FindActiveColumnByName(c.ColumnName)
+		if err != nil {
+			return nil, err
+		}
+
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Base)
+			return nil, fmt.Errorf("multiple assignments to the same column %q", n)
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col

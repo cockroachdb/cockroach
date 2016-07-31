@@ -128,7 +128,7 @@ SELECT kv.* FROM kv
 ----
 a NULL
 
-query error table "foo" not found
+query error source name "foo" not found in FROM clause
 SELECT foo.* FROM kv
 
 query error cannot use "\*" without a FROM clause
@@ -145,8 +145,12 @@ SELECT 1, * FROM nocols
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 
-query error invalid column name: bar.kv.*
+query error table "bar.kv" not selected in FROM clause
 SELECT bar.kv.* FROM kv
+
+# Don't panic with invalid names (#8024)
+query error invalid column name: "kv.*"
+SELECT kv.*[1] FROM kv
 
 query T colnames
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'

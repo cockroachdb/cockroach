@@ -31,22 +31,24 @@ import (
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+
 	"github.com/pkg/errors"
 )
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
 	desc := TableDescriptor{}
-	if err := p.Table.NormalizeTableName(""); err != nil {
+	t, err := p.Table.NormalizeTableName()
+	if err != nil {
 		return desc, err
 	}
-	desc.Name = p.Table.Table()
+	desc.Name = string(t.TableName)
 	desc.ParentID = parentID
 	desc.FormatVersion = FamilyFormatVersion
 	// We don't use version 0.
 	desc.Version = 1
 
-	var primaryIndexColumnSet map[parser.Name]struct{}
+	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -73,7 +75,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 		case *parser.IndexTableDef:
 			idx := IndexDescriptor{
 				Name:             string(d.Name),
-				StoreColumnNames: d.Storing,
+				StoreColumnNames: d.Storing.ToStrings(),
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -88,7 +90,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			idx := IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
-				StoreColumnNames: d.Storing,
+				StoreColumnNames: d.Storing.ToStrings(),
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -97,9 +99,9 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				return desc, err
 			}
 			if d.PrimaryKey {
-				primaryIndexColumnSet = make(map[parser.Name]struct{})
+				primaryIndexColumnSet = make(map[string]struct{})
 				for _, c := range d.Columns {
-					primaryIndexColumnSet[c.Column] = struct{}{}
+					primaryIndexColumnSet[NormalizeName(c.Column)] = struct{}{}
 				}
 			}
 			if d.Interleave != nil {
@@ -121,16 +123,18 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 					return nil, true, expr
 				}
 
-				if err := qname.NormalizeColumnName(); err != nil {
+				if err := qname.NormalizeNameInExpr(); err != nil {
 					return err, false, nil
 				}
 
-				if qname.IsStar() {
-					return fmt.Errorf("* not allowed in constraint %q", d.Expr.String()), false, nil
+				c, ok := qname.Target.(*parser.ColumnItem)
+				if !ok {
+					return nil, true, expr
 				}
-				col, err := desc.FindActiveColumnByName(qname.Column())
+
+				col, err := desc.FindActiveColumnByName(c.ColumnName)
 				if err != nil {
-					return fmt.Errorf("column %q not found for constraint %q", qname.String(), d.Expr.String()), false, nil
+					return fmt.Errorf("column %q not found for constraint %q", c.ColumnName, d.Expr.String()), false, nil
 				}
 				// Convert to a dummy datum of the correct type.
 				return nil, false, col.Type.ToDatumType()
@@ -141,13 +145,13 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				return desc, err
 			}
 
-			if err := SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
-				return desc, err
-			}
-
 			var p parser.Parser
 			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("Aggregate functions are not allowed in CHECK expressions")
+				return desc, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
+			}
+
+			if err := SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+				return desc, err
 			}
 
 			check := &TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
@@ -157,13 +161,9 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			desc.Checks = append(desc.Checks, check)
 
 		case *parser.FamilyTableDef:
-			names := make([]string, len(d.Columns))
-			for i, col := range d.Columns {
-				names[i] = string(col.Column)
-			}
 			fam := ColumnFamilyDescriptor{
 				Name:        string(d.Name),
-				ColumnNames: names,
+				ColumnNames: d.Columns.ToStrings(),
 			}
 			desc.AddFamily(fam)
 
@@ -179,7 +179,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	if primaryIndexColumnSet != nil {
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[parser.Name(desc.Columns[i].Name)]; ok {
+			if _, ok := primaryIndexColumnSet[ReNormalizeName(desc.Columns[i].Name)]; ok {
 				desc.Columns[i].Nullable = false
 			}
 		}

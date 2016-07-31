@@ -184,7 +184,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 		}
 		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.mustGetDatabaseDesc(database)
+			descriptor, err := p.mustGetDatabaseDesc(string(database))
 			if err != nil {
 				return nil, err
 			}
@@ -197,7 +197,11 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 		return nil, errNoTable
 	}
 	descs := make([]sqlbase.DescriptorProto, 0, len(targets.Tables))
-	for _, tableGlob := range targets.Tables {
+	for _, tableTarget := range targets.Tables {
+		tableGlob, err := tableTarget.NormalizeTablePattern()
+		if err != nil {
+			return nil, err
+		}
 		tables, err := p.expandTableGlob(tableGlob)
 		if err != nil {
 			return nil, err

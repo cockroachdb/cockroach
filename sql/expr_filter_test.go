@@ -126,7 +126,7 @@ func TestSplitFilter(t *testing.T) {
 				if colName == col {
 					// Convert to a QualifiedName (to check that conversion happens correctly). It
 					// will print the same.
-					return true, &parser.QualifiedName{Base: parser.Name(colName)}
+					return true, &parser.QualifiedName{Target: parser.UnresolvedName{parser.Name(colName)}}
 				}
 			}
 			return false, nil

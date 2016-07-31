@@ -306,6 +306,7 @@ func (e *Executor) Prepare(
 	} else if traceSQL {
 		log.Tracef(session.Context(), "preparing: %s", query)
 	}
+
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err

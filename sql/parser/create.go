@@ -106,7 +106,9 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
 	if node.Storing != nil {
-		fmt.Fprintf(buf, " STORING (%s)", node.Storing)
+		buf.WriteString(" STORING (")
+		FormatNode(buf, f, node.Storing)
+		buf.WriteByte(')')
 	}
 	if node.Interleave != nil {
 		FormatNode(buf, f, node.Interleave)
@@ -364,7 +366,7 @@ type ColumnFamilyConstraint struct {
 func NameListToIndexElems(lst NameList) IndexElemList {
 	elems := make(IndexElemList, 0, len(lst))
 	for _, n := range lst {
-		elems = append(elems, IndexElem{Column: Name(n), Direction: DefaultDirection})
+		elems = append(elems, IndexElem{Column: n, Direction: DefaultDirection})
 	}
 	return elems
 }
@@ -500,35 +502,11 @@ func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 }
 
-// FamilyElem represents a column in a FAMILY constraint.
-type FamilyElem struct {
-	Column Name
-}
-
-// Format implements the NodeFormatter interface.
-func (node FamilyElem) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Column)
-}
-
-// FamilyElemList is list of FamilyElem.
-type FamilyElemList []FamilyElem
-
-// Format pretty-prints the contained names separated by commas.
-// Format implements the NodeFormatter interface.
-func (l FamilyElemList) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, FamilyElem := range l {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		FormatNode(buf, f, FamilyElem)
-	}
-}
-
 // FamilyTableDef represents a family definition within a CREATE TABLE
 // statement.
 type FamilyTableDef struct {
 	Name    Name
-	Columns FamilyElemList
+	Columns NameList
 }
 
 func (node *FamilyTableDef) setName(name Name) {
@@ -551,7 +529,7 @@ func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 // or CREATE INDEX statement.
 type InterleaveDef struct {
 	Parent       *QualifiedName
-	Fields       []string
+	Fields       NameList
 	DropBehavior DropBehavior
 }
 
@@ -564,7 +542,7 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(field)
+		FormatNode(buf, f, field)
 	}
 	buf.WriteString(")")
 	if node.DropBehavior != DropDefault {

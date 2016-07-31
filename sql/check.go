@@ -27,14 +27,14 @@ type checkHelper struct {
 	cols  []sqlbase.ColumnDescriptor
 }
 
-func (c *checkHelper) init(p *planner, tableDesc *sqlbase.TableDescriptor) error {
+func (c *checkHelper) init(p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil
 	}
 
 	c.qvals = make(qvalMap)
 	c.cols = tableDesc.Columns
-	sourceInfo := newSourceInfoForSingleTable(tableDesc.Name, makeResultColumns(tableDesc.Columns))
+	sourceInfo := newSourceInfoForSingleTable(tn, makeResultColumns(tableDesc.Columns))
 
 	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))
 	exprStrings := make([]string, len(tableDesc.Checks))
@@ -84,7 +84,7 @@ func (c *checkHelper) check(ctx *parser.EvalContext) error {
 			return err
 		} else if !res && d != parser.DNull {
 			// Failed to satisfy CHECK constraint.
-			return fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr.String())
+			return fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr)
 		}
 	}
 	return nil

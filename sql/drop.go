@@ -171,7 +171,12 @@ type dropIndexNode struct {
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 	for _, index := range n.IndexList {
-		tableDesc, err := p.mustGetTableDesc(index.Table)
+		tn, err := index.Table.NormalizeTableNameWithDatabaseName(p.session.Database)
+		if err != nil {
+			return nil, err
+		}
+
+		tableDesc, err := p.mustGetTableDesc(tn)
 		if err != nil {
 			return nil, err
 		}
@@ -193,14 +198,14 @@ func (n *dropIndexNode) Start() error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := n.p.getTableDesc(index.Table)
+		tableDesc, err := n.p.getTableDesc(index.Table.TableName())
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we
 			// must have it here too.
 			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.Table))
 		}
-		idxName := string(index.Index)
+		idxName := index.Index
 		status, i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
 			if n.n.IfExists {
@@ -279,7 +284,7 @@ func (n *dropIndexNode) Start() error {
 				Statement  string
 				User       string
 				MutationID uint32
-			}{tableDesc.Name, idxName, n.n.String(), n.p.session.User, uint32(mutationID)},
+			}{tableDesc.Name, string(idxName), n.n.String(), n.p.session.User, uint32(mutationID)},
 		); err != nil {
 			return err
 		}
@@ -313,7 +318,12 @@ type dropTableNode struct {
 func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
-		droppedDesc, err := p.dropTablePrepare(name)
+		tn, err := name.NormalizeTableNameWithDatabaseName(p.session.Database)
+		if err != nil {
+			return nil, err
+		}
+
+		droppedDesc, err := p.dropTablePrepare(tn)
 		if err != nil {
 			return nil, err
 		}
@@ -469,7 +479,7 @@ func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 // the deleted bit set, meaning the lease manager will not hand out
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTablePrepare(name *parser.QualifiedName,
+func (p *planner) dropTablePrepare(name *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	tableDesc, err := p.getTableDesc(name)
 	if err != nil {

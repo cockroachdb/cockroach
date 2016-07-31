@@ -489,15 +489,18 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
-		if len(t.Name.Indirect) > 0 {
-			break
+		fn, err := t.Name.Normalize()
+		if err != nil {
+			v.err = err
+			return false, expr
 		}
-		if impl, ok := parser.Aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+
+		if impl, ok := parser.Aggregates[strings.ToLower(fn.Function())]; ok {
 			if len(t.Exprs) != 1 {
 				// Type checking has already run on these expressions thus
 				// if an aggregate function of the wrong arity gets here,
 				// something has gone really wrong.
-				panic(fmt.Sprintf("%s has %d arguments (expected 1)", t.Name.Base, len(t.Exprs)))
+				panic(fmt.Sprintf("%q has %d arguments (expected 1)", fn, len(t.Exprs)))
 			}
 
 			defer v.subAggregateVisitor.Reset()

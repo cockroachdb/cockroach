@@ -110,9 +110,6 @@ func TestMakeTableDescColumns(t *testing.T) {
 			t.Fatalf("%d: %v", i, err)
 		}
 		create := stmt.(*parser.CreateTable)
-		if err := create.Table.NormalizeTableName(""); err != nil {
-			t.Fatalf("%d: %v", i, err)
-		}
 		schema, err := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
@@ -208,21 +205,18 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	for i, d := range testData {
 		stmt, err := parser.ParseOneTraditional("CREATE TABLE foo.test (" + d.sql + ")")
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
 		create := stmt.(*parser.CreateTable)
-		if err := create.Table.NormalizeTableName(""); err != nil {
-			t.Fatalf("%d: %v", i, err)
-		}
 		schema, err := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
+			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.PrimaryIndex)
 		}
 		if !reflect.DeepEqual(d.indexes, append([]sqlbase.IndexDescriptor{}, schema.Indexes...)) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.indexes, schema.Indexes)
+			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, schema.Indexes)
 		}
 
 	}
@@ -236,9 +230,6 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 		t.Fatal(err)
 	}
 	create := stmt.(*parser.CreateTable)
-	if err := create.Table.NormalizeTableName(""); err != nil {
-		t.Fatal(err)
-	}
 	desc, err := sqlbase.MakeTableDesc(create, 1)
 	if err != nil {
 		t.Fatal(err)

@@ -299,12 +299,17 @@ func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, e
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
-	if len(expr.Name.Indirect) > 0 {
-		// We don't support qualified function names (yet).
-		return nil, fmt.Errorf("unknown function: %s", expr.Name)
+	fname, err := expr.Name.Normalize()
+	if err != nil {
+		return nil, err
 	}
 
-	name := string(expr.Name.Base)
+	if len(fname.Context) > 0 {
+		// We don't support qualified function names (yet).
+		return nil, fmt.Errorf("unknown function: %s", fname)
+	}
+
+	name := string(fname.FunctionName)
 	// Optimize for the case where name is already normalized to upper/lower
 	// case. Note that the Builtins map contains duplicate entries for
 	// upper/lower case names.

@@ -124,10 +124,10 @@ SELECT * FROM abc ORDER BY (a, b, c)
 statement ok
 CREATE TABLE excluded (a INT PRIMARY KEY, b INT)
 
-statement error column reference "excluded.b" is ambiguous
+statement error ambiguous source name: "excluded"
 INSERT INTO excluded VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 
-statement error column reference "excluded.b" is ambiguous
+statement error ambiguous source name: "excluded"
 UPSERT INTO excluded VALUES (1, 1)
 
 # For #6710. Add an unused column to disable the fast path which doesn't have this bug.
