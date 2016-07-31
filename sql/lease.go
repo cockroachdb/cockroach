@@ -191,7 +191,9 @@ func (s LeaseStore) Acquire(
 	// there is no harm in that as no other transaction will be attempting to
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
+	ctx := txn.Context // propagate context/trace to new transaction
 	err = s.db.Txn(func(txn *client.Txn) error {
+		txn.Context = ctx
 		p := makeInternalPlanner(txn, security.RootUser)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
