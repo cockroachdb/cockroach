@@ -77,12 +77,6 @@ func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest
 			Query:      q,
 			Datapoints: datapoints,
 		}
-		// TODO(tamird): Remove this (and all other) explicit setting of defaults.
-		// It is currently required because the client side doesn't know about
-		// proto defaults.
-		result.SourceAggregator = q.GetSourceAggregator().Enum()
-		result.Downsampler = q.GetDownsampler().Enum()
-		result.Derivative = q.GetDerivative().Enum()
 
 		result.Sources = sources
 		response.Results = append(response.Results, result)
