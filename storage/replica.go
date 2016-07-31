@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -333,10 +334,21 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 		RangeID:    desc.RangeID,
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
-		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
-			log.Warningf(context.TODO(), "range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
-		}),
 	}
+
+	r.raftSender = store.ctx.Transport.MakeSender(
+		func(err error, toReplica roachpb.ReplicaDescriptor) {
+			log.Warningf(context.TODO(),
+				"%s: outgoing raft transport stream to %s closed by the remote: %v",
+				r, toReplica, err)
+			// TODO(peter): Find a better way of determining that this replica is
+			// likely no longer a member of the range.
+			if err != nil && strings.Contains(err.Error(), "older than NextReplicaID") {
+				if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
+					log.Errorf(context.TODO(), "%s: unable to add to GC queue: %s", r, err)
+				}
+			}
+		})
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
