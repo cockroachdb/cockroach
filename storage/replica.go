@@ -2000,6 +2000,22 @@ func (r *Replica) processRaftCommand(
 				r,
 			)
 		}
+		if trigger.merge != nil {
+			if pErr != nil {
+				panic("merge trigger emitted but error returned")
+			}
+
+			r.mu.Lock()
+			r.mu.tsCache.Clear(r.store.Clock())
+			r.mu.Unlock()
+
+			if err := r.store.MergeRange(r, trigger.merge.LeftDesc.EndKey,
+				trigger.merge.RightDesc.RangeID,
+			); err != nil {
+				// Our in-memory state has diverged from the on-disk state.
+				log.Fatalf(ctx, "%s: failed to update store after merging range: %s", r, err)
+			}
+		}
 
 		if trigger.gcThreshold != nil {
 			r.mu.Lock()
@@ -2070,6 +2086,13 @@ func (r *Replica) processRaftCommand(
 
 		// On the replica on which this command originated, resolve skipped intents
 		// asynchronously - even on failure.
+		//
+		// TODO(tschottdorf): EndTransaction will use this pathway to return
+		// intents which should immediately be resolved. However, there's
+		// a slight chance that an error between the origin of that intents
+		// slice and here still results in that intent slice arriving here
+		// without the EndTransaction having committed. We should clearly
+		// separate the part of the trigger which also applies on errors.
 		if raftCmd.OriginReplica.StoreID == r.store.StoreID() {
 			r.store.intentResolver.processIntentsAsync(r, trigger.intents)
 		}
@@ -2170,7 +2193,10 @@ func (r *Replica) applyRaftCommand(
 	// The only remaining use of the batch is for range-local keys which we know
 	// have not been previously written within this batch. Currently the only
 	// remaining writes are the raft applied index and the updated MVCC stats.
-	writer := batch.Distinct()
+	//
+	// TODO(tschottdorf): Considered too dangerous for now.
+	// writer := batch.Distinct()
+	writer := batch
 
 	// Advance the last applied index.
 	if err := setAppliedIndex(writer, &propResult.delta, r.RangeID, index, leaseIndex); err != nil {
@@ -2191,7 +2217,9 @@ func (r *Replica) applyRaftCommand(
 	// the code, which went undetected even though we used the batch after
 	// (though only to commit it). We should add an assertion to prevent that in
 	// the future.
-	writer.Close()
+	//
+	// TODO(tschottdorf): disabled for now.
+	// writer.Close()
 
 	// TODO(tschottdorf): with proposer-eval'ed KV, the batch would not be
 	// committed at this point. Instead, it would be added to propResult.

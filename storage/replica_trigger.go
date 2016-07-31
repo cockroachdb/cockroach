@@ -35,6 +35,10 @@ type postCommitSplit struct {
 	RightDeltaMS enginepb.MVCCStats
 }
 
+type postCommitMerge struct {
+	roachpb.MergeTrigger
+}
+
 type proposalResult struct {
 	*PostCommitTrigger
 
@@ -69,6 +73,8 @@ type PostCommitTrigger struct {
 	intents []intentsWithArg
 	// split contains a postCommitSplit trigger emitted on a split.
 	split *postCommitSplit
+	// merge is emitted on merge.
+	merge *postCommitMerge
 	desc  *roachpb.RangeDescriptor
 
 	gossipFirstRange        bool
@@ -107,6 +113,11 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 			old.split = new.split
 		} else if new.split != nil {
 			panic("more than one split trigger")
+		}
+		if old.merge == nil {
+			old.merge = new.merge
+		} else if new.merge != nil {
+			panic("more than one merge trigger")
 		}
 		if old.desc == nil {
 			old.desc = new.desc
