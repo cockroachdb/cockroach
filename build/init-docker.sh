@@ -2,10 +2,6 @@
 
 set -eu
 
-# TODO(tamird): remove this when https://github.com/docker/engine-api/pull/320
-# is merged.
-export DOCKER_HOST=unix:///var/run/docker.sock
-
 # Verify that Docker is installed.
 DOCKER="docker"
 if [[ ! $(type -P "$DOCKER") ]]; then
