@@ -775,7 +775,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 
 			// Send CommandComplete.
 			tag = append(tag, ' ')
-			tag = appendUint(tag, uint(len(result.Rows)))
+			tag = strconv.AppendUint(tag, uint64(len(result.Rows)), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -820,26 +820,4 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 		}
 	}
 	return c.writeBuf.finishMsg(c.wr)
-}
-
-func appendUint(in []byte, u uint) []byte {
-	var buf []byte
-	if cap(in)-len(in) >= 10 {
-		buf = in[len(in) : len(in)+10]
-	} else {
-		buf = make([]byte, 10)
-	}
-	i := len(buf)
-
-	for u >= 10 {
-		i--
-		q := u / 10
-		buf[i] = byte(u - q*10 + '0')
-		u = q
-	}
-	// u < 10
-	i--
-	buf[i] = byte(u + '0')
-
-	return append(in, buf[i:]...)
 }

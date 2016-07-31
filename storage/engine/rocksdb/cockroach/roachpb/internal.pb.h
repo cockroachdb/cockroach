@@ -40,7 +40,7 @@ class InternalTimeSeriesSample;
 
 // ===================================================================
 
-class InternalTimeSeriesData : public ::google::protobuf::MessageLite {
+class InternalTimeSeriesData : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.InternalTimeSeriesData) */ {
  public:
   InternalTimeSeriesData();
   virtual ~InternalTimeSeriesData();
@@ -168,7 +168,7 @@ class InternalTimeSeriesData : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class InternalTimeSeriesSample : public ::google::protobuf::MessageLite {
+class InternalTimeSeriesSample : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.InternalTimeSeriesSample) */ {
  public:
   InternalTimeSeriesSample();
   virtual ~InternalTimeSeriesSample();
