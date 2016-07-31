@@ -95,7 +95,7 @@ const int TransactionStatus_ARRAYSIZE = TransactionStatus_MAX + 1;
 
 // ===================================================================
 
-class Span : public ::google::protobuf::MessageLite {
+class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Span) */ {
  public:
   Span();
   virtual ~Span();
@@ -220,7 +220,7 @@ class Span : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class Value : public ::google::protobuf::MessageLite {
+class Value : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Value) */ {
  public:
   Value();
   virtual ~Value();
@@ -342,7 +342,7 @@ class Value : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class KeyValue : public ::google::protobuf::MessageLite {
+class KeyValue : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.KeyValue) */ {
  public:
   KeyValue();
   virtual ~KeyValue();
@@ -464,7 +464,7 @@ class KeyValue : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class StoreIdent : public ::google::protobuf::MessageLite {
+class StoreIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.StoreIdent) */ {
  public:
   StoreIdent();
   virtual ~StoreIdent();
@@ -594,7 +594,7 @@ class StoreIdent : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class SplitTrigger : public ::google::protobuf::MessageLite {
+class SplitTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.SplitTrigger) */ {
  public:
   SplitTrigger();
   virtual ~SplitTrigger();
@@ -713,7 +713,7 @@ class SplitTrigger : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class MergeTrigger : public ::google::protobuf::MessageLite {
+class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.MergeTrigger) */ {
  public:
   MergeTrigger();
   virtual ~MergeTrigger();
@@ -832,7 +832,7 @@ class MergeTrigger : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class ChangeReplicasTrigger : public ::google::protobuf::MessageLite {
+class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ChangeReplicasTrigger) */ {
  public:
   ChangeReplicasTrigger();
   virtual ~ChangeReplicasTrigger();
@@ -972,7 +972,7 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class ModifiedSpanTrigger : public ::google::protobuf::MessageLite {
+class ModifiedSpanTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ModifiedSpanTrigger) */ {
  public:
   ModifiedSpanTrigger();
   virtual ~ModifiedSpanTrigger();
@@ -1077,7 +1077,7 @@ class ModifiedSpanTrigger : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class InternalCommitTrigger : public ::google::protobuf::MessageLite {
+class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.InternalCommitTrigger) */ {
  public:
   InternalCommitTrigger();
   virtual ~InternalCommitTrigger();
@@ -1220,7 +1220,7 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class Transaction : public ::google::protobuf::MessageLite {
+class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Transaction) */ {
  public:
   Transaction();
   virtual ~Transaction();
@@ -1452,7 +1452,7 @@ class Transaction : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class Intent : public ::google::protobuf::MessageLite {
+class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Intent) */ {
  public:
   Intent();
   virtual ~Intent();
@@ -1581,7 +1581,7 @@ class Intent : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class Lease : public ::google::protobuf::MessageLite {
+class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Lease) */ {
  public:
   Lease();
   virtual ~Lease();
@@ -1724,7 +1724,7 @@ class Lease : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class AbortCacheEntry : public ::google::protobuf::MessageLite {
+class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.AbortCacheEntry) */ {
  public:
   AbortCacheEntry();
   virtual ~AbortCacheEntry();

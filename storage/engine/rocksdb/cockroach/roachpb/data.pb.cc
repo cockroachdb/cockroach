@@ -38,6 +38,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #else
+void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() GOOGLE_ATTRIBUTE_COLD;
 void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
   static bool already_here = false;
   if (already_here) return;
@@ -131,16 +132,6 @@ bool TransactionStatus_IsValid(int value) {
       return false;
   }
 }
-
-
-namespace {
-
-static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD;
-static void MergeFromFail(int line) {
-  GOOGLE_CHECK(false) << __FILE__ << ":" << line;
-}
-
-}  // namespace
 
 
 // ===================================================================
@@ -356,7 +347,9 @@ void Span::CheckTypeAndMergeFrom(
 
 void Span::MergeFrom(const Span& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Span)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_key()) {
       set_has_key();
@@ -732,7 +725,9 @@ void Value::CheckTypeAndMergeFrom(
 
 void Value::MergeFrom(const Value& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Value)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_raw_bytes()) {
       set_has_raw_bytes();
@@ -1101,7 +1096,9 @@ void KeyValue::CheckTypeAndMergeFrom(
 
 void KeyValue::MergeFrom(const KeyValue& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.KeyValue)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_key()) {
       set_has_key();
@@ -1511,7 +1508,9 @@ void StoreIdent::CheckTypeAndMergeFrom(
 
 void StoreIdent::MergeFrom(const StoreIdent& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.StoreIdent)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_cluster_id()) {
       set_has_cluster_id();
@@ -1890,7 +1889,9 @@ void SplitTrigger::CheckTypeAndMergeFrom(
 
 void SplitTrigger::MergeFrom(const SplitTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.SplitTrigger)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_left_desc()) {
       mutable_left_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.left_desc());
@@ -2258,7 +2259,9 @@ void MergeTrigger::CheckTypeAndMergeFrom(
 
 void MergeTrigger::MergeFrom(const MergeTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.MergeTrigger)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_left_desc()) {
       mutable_left_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.left_desc());
@@ -2706,7 +2709,9 @@ void ChangeReplicasTrigger::CheckTypeAndMergeFrom(
 
 void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.ChangeReplicasTrigger)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   updated_replicas_.MergeFrom(from.updated_replicas_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_change_type()) {
@@ -3059,7 +3064,9 @@ void ModifiedSpanTrigger::CheckTypeAndMergeFrom(
 
 void ModifiedSpanTrigger::MergeFrom(const ModifiedSpanTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.ModifiedSpanTrigger)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_system_config_span()) {
       set_system_config_span(from.system_config_span());
@@ -3427,7 +3434,9 @@ void InternalCommitTrigger::CheckTypeAndMergeFrom(
 
 void InternalCommitTrigger::MergeFrom(const InternalCommitTrigger& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalCommitTrigger)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_split_trigger()) {
       mutable_split_trigger()->::cockroach::roachpb::SplitTrigger::MergeFrom(from.split_trigger());
@@ -3952,10 +3961,14 @@ bool Transaction::MergePartialFromCodedStream(
          parse_observed_timestamps:
           DO_(input->IncrementRecursionDepth());
          parse_loop_observed_timestamps:
-          ::google::protobuf::scoped_ptr<Transaction_ObservedTimestampsEntry> entry(observed_timestamps_.NewEntry());
+          Transaction_ObservedTimestampsEntry::Parser< ::google::protobuf::internal::MapFieldLite<
+              ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
+              ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+              0 >,
+            ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp > > parser(&observed_timestamps_);
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-              input, entry.get()));
-          (*mutable_observed_timestamps())[entry->key()].Swap(entry->mutable_value());
+              input, &parser));
         } else {
           goto handle_unusual;
         }
@@ -4089,14 +4102,41 @@ void Transaction::SerializeWithCachedSizes(
   }
 
   // map<int32, .cockroach.util.hlc.Timestamp> observed_timestamps = 8;
-  {
-    ::google::protobuf::scoped_ptr<Transaction_ObservedTimestampsEntry> entry;
-    for (::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >::const_iterator
-        it = this->observed_timestamps().begin();
-        it != this->observed_timestamps().end(); ++it) {
-      entry.reset(observed_timestamps_.NewEntryWrapper(it->first, it->second));
-      ::google::protobuf::internal::WireFormatLite::WriteMessage(
-          8, *entry, output);
+  if (!this->observed_timestamps().empty()) {
+    typedef ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >::const_pointer
+        ConstPtr;
+    typedef ::google::protobuf::internal::SortItem< ::google::protobuf::int32, ConstPtr > SortItem;
+    typedef ::google::protobuf::internal::CompareByFirstField<SortItem> Less;
+
+    if (output->IsSerializationDeterminstic() &&
+        this->observed_timestamps().size() > 1) {
+      ::google::protobuf::scoped_array<SortItem> items(
+          new SortItem[this->observed_timestamps().size()]);
+      typedef ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >::const_iterator
+          it = this->observed_timestamps().begin();
+          it != this->observed_timestamps().end(); ++it, ++n) {
+        items[n] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[n], Less());
+      ::google::protobuf::scoped_ptr<Transaction_ObservedTimestampsEntry> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(observed_timestamps_.NewEntryWrapper(
+            items[i].second->first, items[i].second->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            8, *entry, output);
+      }
+    } else {
+      ::google::protobuf::scoped_ptr<Transaction_ObservedTimestampsEntry> entry;
+      for (::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >::const_iterator
+          it = this->observed_timestamps().begin();
+          it != this->observed_timestamps().end(); ++it) {
+        entry.reset(observed_timestamps_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            8, *entry, output);
+      }
     }
   }
 
@@ -4226,7 +4266,9 @@ void Transaction::CheckTypeAndMergeFrom(
 
 void Transaction::MergeFrom(const Transaction& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Transaction)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   observed_timestamps_.MergeFrom(from.observed_timestamps_);
   intents_.MergeFrom(from.intents_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
@@ -4960,7 +5002,9 @@ void Intent::CheckTypeAndMergeFrom(
 
 void Intent::MergeFrom(const Intent& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Intent)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_span()) {
       mutable_span()->::cockroach::roachpb::Span::MergeFrom(from.span());
@@ -5433,7 +5477,9 @@ void Lease::CheckTypeAndMergeFrom(
 
 void Lease::MergeFrom(const Lease& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Lease)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_start()) {
       mutable_start()->::cockroach::util::hlc::Timestamp::MergeFrom(from.start());
@@ -5929,7 +5975,9 @@ void AbortCacheEntry::CheckTypeAndMergeFrom(
 
 void AbortCacheEntry::MergeFrom(const AbortCacheEntry& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AbortCacheEntry)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_key()) {
       set_has_key();
