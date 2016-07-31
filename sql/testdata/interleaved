@@ -215,7 +215,7 @@ all_interleaves   CREATE TABLE all_interleaves (
                     FAMILY "primary" (b, c, d)
                   ) INTERLEAVE IN PARENT p1_1 (b)
 
-statement error table \"missing\" does not exist
+statement error table "missing" does not exist
 CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
 
 statement error interleaved columns must match parent

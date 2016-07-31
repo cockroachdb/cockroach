@@ -313,12 +313,12 @@ true
 query ITTTT
 EXPLAIN(VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 ----
-0 select                                    (x)        +x,unique
-1 render/filter  from (xyz.x, xyz.y, xyz.z) (x)        +x,unique
-2 scan           xyz@primary  -             (x, y, z)  +x,unique
-3 select                                    (x)        +x,unique
-4 render/filter  from (xyz.x, xyz.y, xyz.z) (x)        +x,unique
-5 scan           xyz@primary                (x, y, z)  +x,unique
+0 select                                                   (x)        +x,unique
+1 render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z) (x)        +x,unique
+2 scan           xyz@primary  -                            (x, y, z)  +x,unique
+3 select                                                   (x)        +x,unique
+4 render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z) (x)        +x,unique
+5 scan           xyz@primary                               (x, y, z)  +x,unique
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not

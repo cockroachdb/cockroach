@@ -50,7 +50,11 @@ type IsAggregateVisitor struct {
 func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *FuncExpr:
-		if _, ok := Aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+		fn, err := t.Name.Normalize()
+		if err != nil {
+			return false, expr
+		}
+		if _, ok := Aggregates[strings.ToLower(fn.Function())]; ok {
 			v.Aggregated = true
 			return false, expr
 		}
