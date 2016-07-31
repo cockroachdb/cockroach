@@ -41,3 +41,13 @@ func IsClosedConnection(err error) bool {
 	}
 	return netutil.IsClosedConnection(err)
 }
+
+// ErrorEqual checks two grpc errors for equality. We check structural
+// equality, not pointer equality as you would get by comparing the error
+// interface.
+func ErrorEqual(err1, err2 error) bool {
+	if err1 == nil || err2 == nil {
+		return err1 == err2
+	}
+	return err1.Error() == err2.Error()
+}

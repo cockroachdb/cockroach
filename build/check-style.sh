@@ -108,7 +108,7 @@ TestVet() {
     grep -vE '^vet: cannot process directory \.git' | \
     grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | \
     grep -vE 'declaration of "?(pE|e)rr"? shadows' | \
-    grep -vE '^(server/(serverpb/admin|serverpb/status|admin|status)|(ts|ts/tspb)/(server|timeseries))\..*\go:[0-9]+: constant [0-9]+ not a string in call to Errorf'
+    grep -vE '^(server/(serverpb/admin|serverpb/status|admin|status)|(ts|ts/tspb)/(server|timeseries)|storage/replica)\..*\go:[0-9]+: constant [0-9]+ not a string in call to Errorf'
   # To return proper HTTP error codes (e.g. 404 Not Found), we need to use
   # grpc.Errorf, which has an error code as its first parameter. 'go vet'
   # doesn't like that the first parameter isn't a format string.

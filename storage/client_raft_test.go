@@ -1565,7 +1565,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		},
 	})
 
-	if err := <-errChan; !testutils.IsError(err, "older than NextReplicaID") {
+	if err := <-errChan; !testutils.IsError(err, "sender replica too old, discarding message") {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
@@ -1575,6 +1575,54 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	if term != newTerm {
 		t.Errorf("expected term to be constant, but changed from %v to %v", term, newTerm)
 	}
+}
+
+func TestReplicaTooOldGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := startMultiTestContext(t, 4)
+	defer mtc.Stop()
+
+	// Replicate the first range onto all of the nodes.
+	const rangeID = 1
+	mtc.replicateRange(rangeID, 1, 2, 3)
+
+	// Put some data in the range so we'll have something to test for.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	// Wait for all nodes to catch up.
+	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5, 5})
+
+	// Verify store 3 has the replica.
+	if _, err := mtc.stores[3].GetReplica(rangeID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stop node 3; while it is down remove the range from it. Since the ndoe is
+	// down it won't see the removal and clean up its replica.
+	mtc.stopStore(3)
+	mtc.unreplicateRange(rangeID, 3)
+
+	// Perform another write.
+	incArgs = incrementArgs([]byte("a"), 11)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 16, 5})
+
+	// Restart the node 3. The removed range will start talking to the other
+	// replicas and determine it needs to be GC'd.
+	mtc.restartStore(3)
+
+	util.SucceedsSoon(t, func() error {
+		replica, err := mtc.stores[3].GetReplica(rangeID)
+		if err != nil {
+			return nil
+		}
+		return errors.Errorf("found %s", replica)
+	})
 }
 
 func TestReplicateReAddAfterDown(t *testing.T) {
