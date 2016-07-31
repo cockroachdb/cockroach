@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -45,25 +44,22 @@ const matchNone = "^$"
 
 // Retrieve the IP address of docker itself.
 func dockerIP() net.IP {
-	localhost := net.IPv4(127, 0, 0, 1)
-	if host := os.Getenv("DOCKER_HOST"); host != "" {
-		u, err := url.Parse(host)
-		if err != nil {
-			panic(err)
-		}
-		if u.Scheme == "unix" {
-			return localhost
-		}
-		h, _, err := net.SplitHostPort(u.Host)
-		if err != nil {
-			panic(err)
-		}
-		return net.ParseIP(h)
+	host := os.Getenv("DOCKER_HOST")
+	if host == "" {
+		host = client.DefaultDockerHost
 	}
-	if runtime.GOOS == "linux" {
-		return localhost
+	u, err := url.Parse(host)
+	if err != nil {
+		panic(err)
 	}
-	panic("unable to determine docker ip address")
+	if u.Scheme == "unix" {
+		return net.IPv4(127, 0, 0, 1)
+	}
+	h, _, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		panic(err)
+	}
+	return net.ParseIP(h)
 }
 
 // Container provides the programmatic interface for a single docker
