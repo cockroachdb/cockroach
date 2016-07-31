@@ -48,6 +48,13 @@ message ReplicaDescriptor {
       (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
+// ReplicaIdent uniquely identifies a specific replica.
+message ReplicaIdent {
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
+}
+
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
