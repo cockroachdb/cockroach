@@ -178,7 +178,10 @@ func (c *cluster) isReplicated() (bool, string) {
 	db := c.clients[0]
 	rows, err := db.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
 	if err != nil {
-		log.Fatalf(context.Background(), "scan failed: %s\n", err)
+		if log.V(1) {
+			log.Infof(context.Background(), "scan failed: %s", err)
+		}
+		return false, ""
 	}
 
 	var buf bytes.Buffer
