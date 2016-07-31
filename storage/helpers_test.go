@@ -22,8 +22,6 @@
 package storage
 
 import (
-	"sync/atomic"
-
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
@@ -139,16 +137,6 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.LastIndex()
-}
-
-// SetDisabled turns replica scanning off or on as directed. Note that while
-// disabled, removals are still processed.
-func (rs *replicaScanner) SetDisabled(disabled bool) {
-	if disabled {
-		atomic.StoreInt32(&rs.disabled, 1)
-	} else {
-		atomic.StoreInt32(&rs.disabled, 0)
-	}
 }
 
 // GetLease exposes replica.getLease for tests.
