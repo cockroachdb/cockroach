@@ -96,7 +96,7 @@ func (f *Farmer) apply(args ...string) error {
 func (f *Farmer) output(key string) []string {
 	o, _, err := f.run("terraform", "output", "-state="+f.StateFile, "-no-color", key)
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
-		f.logf("%s", err)
+		f.logf("%s\n", err)
 		return nil
 	}
 	o = strings.TrimSpace(o)
