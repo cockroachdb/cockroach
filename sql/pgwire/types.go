@@ -140,7 +140,6 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		// TODO(tamird): @petermattis sez this allocates. Investigate.
 		s := strconv.AppendInt(b.putbuf[4:4], int64(*v), 10)
 		b.putInt32(int32(len(s)))
 		b.write(s)
