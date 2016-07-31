@@ -77,7 +77,8 @@ func (r *Replica) executeCmd(
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
+	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil &&
+		raftCmdID != storagebase.CmdIDKey(hackIgnore) {
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
@@ -139,7 +140,7 @@ func (r *Replica) executeCmd(
 		*resp, err = r.HeartbeatTxn(ctx, batch, ms, h, *tArgs)
 	case *roachpb.GCRequest:
 		resp := reply.(*roachpb.GCResponse)
-		*resp, err = r.GC(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.GC(ctx, batch, ms, h, *tArgs)
 	case *roachpb.PushTxnRequest:
 		resp := reply.(*roachpb.PushTxnResponse)
 		*resp, err = r.PushTxn(ctx, batch, ms, h, *tArgs)
@@ -154,14 +155,14 @@ func (r *Replica) executeCmd(
 		*resp, err = r.Merge(ctx, batch, ms, h, *tArgs)
 	case *roachpb.TruncateLogRequest:
 		resp := reply.(*roachpb.TruncateLogResponse)
-		*resp, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
 	case *roachpb.RequestLeaseRequest:
 		resp := reply.(*roachpb.RequestLeaseResponse)
-		*resp, err = r.RequestLease(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.RequestLease(ctx, batch, ms, h, *tArgs)
 		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.TransferLeaseRequest:
 		resp := reply.(*roachpb.RequestLeaseResponse)
-		*resp, err = r.TransferLease(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.TransferLease(ctx, batch, ms, h, *tArgs)
 		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
@@ -171,7 +172,7 @@ func (r *Replica) executeCmd(
 		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
-		*resp, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
 	default:
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
@@ -800,17 +801,6 @@ func (r *Replica) runCommitTrigger(
 ) (*PostCommitTrigger, error) {
 	var trigger *PostCommitTrigger
 	ct := args.InternalCommitTrigger
-	if ct != nil {
-		// Hold readMu across the application of any commit trigger.
-		// This makes sure that no reads are happening in parallel;
-		// see #3148.
-		r.readOnlyCmdMu.Lock()
-		// TODO(tschottdorf): this is a batch.Defer which needs special
-		// treatment for proposer-eval'ed KV. We'll know before we start
-		// applying the command a commit trigger is happening, so the read lock
-		// should be acquired and released at the level of applyRaftCommand.
-		batch.Defer(r.readOnlyCmdMu.Unlock)
-	}
 
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
@@ -850,7 +840,6 @@ func (r *Replica) runCommitTrigger(
 		}
 		return nil
 	}(); err != nil {
-		r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
 		return nil, err
 	}
 	return trigger, nil
@@ -1149,7 +1138,7 @@ func (r *Replica) GC(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.GCRequest,
-) (roachpb.GCResponse, error) {
+) (roachpb.GCResponse, *PostCommitTrigger, error) {
 	// All keys must be inside the current replica range. Keys outside
 	// of this range in the GC request are dropped silently, which is
 	// safe because they can simply be re-collected later on the correct
@@ -1166,7 +1155,7 @@ func (r *Replica) GC(
 	// Garbage collect the specified keys by expiration timestamps.
 	err := engine.MVCCGarbageCollect(ctx, batch, ms, keys, h.Timestamp)
 	if err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 
 	r.mu.Lock()
@@ -1174,12 +1163,10 @@ func (r *Replica) GC(
 	newThreshold.Forward(args.Threshold)
 	r.mu.Unlock()
 
-	batch.(engine.Batch).Defer(func() {
-		r.mu.Lock()
-		r.mu.state.GCThreshold = newThreshold
-		r.mu.Unlock()
-	})
-	return reply, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
+	trigger := &PostCommitTrigger{
+		gcThreshold: &newThreshold,
+	}
+	return reply, trigger, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1494,7 +1481,7 @@ func (r *Replica) TruncateLog(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.TruncateLogRequest,
-) (roachpb.TruncateLogResponse, error) {
+) (roachpb.TruncateLogResponse, *PostCommitTrigger, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var reply roachpb.TruncateLogResponse
@@ -1505,13 +1492,13 @@ func (r *Replica) TruncateLog(
 	if r.RangeID != args.RangeID {
 		log.Infof(ctx, "%s: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
 			r, args.RangeID)
-		return reply, nil
+		return reply, nil, nil
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
 	firstIndex, err := r.FirstIndex()
 	if err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 
 	if firstIndex >= args.Index {
@@ -1519,13 +1506,13 @@ func (r *Replica) TruncateLog(
 			log.Infof(ctx, "%s: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
 				r, firstIndex, args.Index)
 		}
-		return reply, nil
+		return reply, nil, nil
 	}
 
 	// args.Index is the first index to keep.
 	term, err := r.Term(args.Index - 1)
 	if err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 	start := keys.RaftLogKey(r.RangeID, 0)
 	end := keys.RaftLogKey(r.RangeID, args.Index)
@@ -1534,7 +1521,7 @@ func (r *Replica) TruncateLog(
 	// but it also computes stats.
 	if _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, math.MaxInt64, /* max */
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 	raftLogSize := r.mu.raftLogSize + diff.SysBytes
 	// Check raftLogSize since it isn't persisted between server restarts.
@@ -1547,13 +1534,11 @@ func (r *Replica) TruncateLog(
 		Term:  term,
 	}
 
-	batch.(engine.Batch).Defer(func() {
-		r.mu.Lock()
-		r.mu.state.TruncatedState = tState
-		r.mu.raftLogSize = raftLogSize
-		r.mu.Unlock()
-	})
-	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
+	trigger := &PostCommitTrigger{
+		truncatedState: tState,
+		raftLogSize:    &raftLogSize,
+	}
+	return reply, trigger, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
 }
 
 // RequestLease sets the range lease for this range. The command fails
@@ -1569,7 +1554,7 @@ func (r *Replica) RequestLease(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.RequestLeaseRequest,
-) (roachpb.RequestLeaseResponse, error) {
+) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
 	// maybeGossipSystemConfig cannot be called while the replica is locked,
 	// so we defer it here so it is called once the replica lock is released.
 	r.mu.Lock()
@@ -1614,12 +1599,12 @@ func (r *Replica) RequestLease(
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
 			rErr.Message = "extension moved start timestamp backwards"
-			return roachpb.RequestLeaseResponse{}, rErr
+			return roachpb.RequestLeaseResponse{}, nil, rErr
 		}
 		args.Lease.Expiration.Forward(prevLease.Expiration)
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
-		return roachpb.RequestLeaseResponse{}, rErr
+		return roachpb.RequestLeaseResponse{}, nil, rErr
 	}
 	args.Lease.Start = effectiveStart
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
@@ -1636,7 +1621,7 @@ func (r *Replica) TransferLease(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.TransferLeaseRequest,
-) (roachpb.RequestLeaseResponse, error) {
+) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if log.V(2) {
@@ -1660,13 +1645,13 @@ func (r *Replica) applyNewLeaseLocked(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
-) (roachpb.RequestLeaseResponse, error) {
+) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
 	prevLease := r.mu.state.Lease
 	// Ensure Start < StartStasis <= Expiration.
 	if !lease.Start.Less(lease.StartStasis) ||
 		lease.Expiration.Less(lease.StartStasis) {
 		// This amounts to a bug.
-		return roachpb.RequestLeaseResponse{}, &roachpb.LeaseRejectedError{
+		return roachpb.RequestLeaseResponse{}, nil, &roachpb.LeaseRejectedError{
 			Existing:  *prevLease,
 			Requested: lease,
 			Message: fmt.Sprintf("illegal lease interval: [%s, %s, %s]",
@@ -1676,7 +1661,7 @@ func (r *Replica) applyNewLeaseLocked(
 
 	// Verify that requesting replica is part of the current replica set.
 	if _, ok := r.mu.state.Desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
-		return roachpb.RequestLeaseResponse{}, &roachpb.LeaseRejectedError{
+		return roachpb.RequestLeaseResponse{}, nil, &roachpb.LeaseRejectedError{
 			Existing:  *prevLease,
 			Requested: lease,
 			Message:   "replica not found",
@@ -1686,18 +1671,12 @@ func (r *Replica) applyNewLeaseLocked(
 	var reply roachpb.RequestLeaseResponse
 	// Store the lease to disk & in-memory.
 	if err := setLease(batch, ms, r.RangeID, &lease); err != nil {
-		return reply, err
+		return reply, nil, err
 	}
+
+	// TODO(tschottdorf) move everything below into trigger. In fact, this
+	// method shouldn't hold the lock throughout.
 	r.mu.state.Lease = &lease
-
-	// maybeGossipSystemConfig cannot be called while the replica is locked,
-	// so we defer it here so it is called once the replica lock is released.
-	//
-	// TODO(tschottdorf): this upcast is unidiomatic, but with #6286 (isolate
-	// Raft side effects) this will go away, and this is a good place to move
-	// it away from.
-	batch.(engine.Batch).Defer(r.maybeGossipSystemConfig)
-
 	if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
 		// The lease is changing hands. Is this replica the new lease holder?
 		if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {
@@ -1738,11 +1717,15 @@ func (r *Replica) applyNewLeaseLocked(
 				// while lacking the necessary synchronization (or even worse, it
 				// fails spuriously - could be a storage error), and so we avoid
 				// sweeping that under the rug.
-				return roachpb.RequestLeaseResponse{}, newReplicaCorruptionError(err)
+				return roachpb.RequestLeaseResponse{}, nil, newReplicaCorruptionError(err)
 			}
 		}
 	}
-	return reply, nil
+	trigger := &PostCommitTrigger{
+		maybeGossipSystemConfig: true,
+	}
+
+	return reply, trigger, nil
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies
@@ -2068,15 +2051,15 @@ func (r *Replica) ChangeFrozen(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.ChangeFrozenRequest,
-) (roachpb.ChangeFrozenResponse, error) {
+) (roachpb.ChangeFrozenResponse, *PostCommitTrigger, error) {
 	var resp roachpb.ChangeFrozenResponse
 	resp.MinStartKey = roachpb.RKeyMax
 	curStart, err := keys.Addr(args.Key)
 	if err != nil {
-		return resp, err
+		return resp, nil, err
 	}
 	if !bytes.Equal(curStart, args.Key) {
-		return resp, errors.Errorf("unsupported range-local key")
+		return resp, nil, errors.Errorf("unsupported range-local key")
 	}
 
 	desc := r.Desc()
@@ -2088,11 +2071,11 @@ func (r *Replica) ChangeFrozen(
 		// might actually not be the same version of the code (picture a couple
 		// of freeze requests lined up, but not all of them applied between
 		// version changes).
-		return resp, err
+		return resp, nil, err
 	}
 
 	if args.MustVersion == "" {
-		return resp, errors.Errorf("empty version tag")
+		return resp, nil, errors.Errorf("empty version tag")
 	} else if bi := build.GetInfo(); !frozen && args.Frozen && args.MustVersion != bi.Tag {
 		// Some earlier version tried to freeze but we never applied it until
 		// someone restarted this node with another version. No bueno - have to
@@ -2114,7 +2097,7 @@ func (r *Replica) ChangeFrozen(
 	if !desc.StartKey.Less(curStart) {
 		resp.RangesAffected++
 	} else if locMax, err := keys.Addr(keys.LocalMax); err != nil {
-		return resp, err
+		return resp, nil, err
 	} else if !locMax.Less(curStart) {
 		resp.RangesAffected++
 	}
@@ -2127,17 +2110,15 @@ func (r *Replica) ChangeFrozen(
 	}
 
 	if resp.RangesAffected == 0 {
-		return resp, nil
+		return resp, nil, nil
 	}
 
 	resp.MinStartKey = desc.StartKey
 
-	batch.(engine.Batch).Defer(func() {
-		r.mu.Lock()
-		r.mu.state.Frozen = args.Frozen
-		r.mu.Unlock()
-	})
-	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
+	trigger := &PostCommitTrigger{
+		frozen: &args.Frozen,
+	}
+	return resp, trigger, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between

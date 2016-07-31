@@ -586,7 +586,7 @@ func TestReplicaLease(t *testing.T) {
 		{Start: one, StartStasis: one},
 		{Start: one, StartStasis: one.Next(), Expiration: one},
 	} {
-		if _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
+		if _, _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
 			roachpb.Header{}, roachpb.RequestLeaseRequest{
 				Lease: lease,
 			}); !testutils.IsError(err, "illegal lease interval") {
@@ -6166,18 +6166,12 @@ func TestCommandTimeThreshold(t *testing.T) {
 	}
 
 	// Do a GC.
-	b := tc.store.Engine().NewBatch()
-	var h roachpb.Header
 	gcr := roachpb.GCRequest{
 		Threshold: ts2,
 	}
-	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
+	if _, err := tc.SendWrapped(&gcr); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	b.Close()
 
 	// Do the same Get, which should now fail.
 	if _, err := tc.SendWrappedWith(roachpb.Header{
