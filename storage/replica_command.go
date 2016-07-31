@@ -2934,14 +2934,11 @@ func (r *Replica) changeReplicasTrigger(
 		})
 	}
 
-	batch.Defer(func() {
-		cpy := *r.Desc()
-		cpy.Replicas = change.UpdatedReplicas
-		cpy.NextReplicaID = change.NextReplicaID
-		if err := r.setDesc(&cpy); err != nil {
-			// Log the error. There's not much we can do because the commit may have already occurred at this point.
-			log.Fatalf(ctx, "%s: failed to update range descriptor to %+v: %s", r, cpy, err)
-		}
+	cpy := *r.Desc()
+	cpy.Replicas = change.UpdatedReplicas
+	cpy.NextReplicaID = change.NextReplicaID
+	trigger = updateTrigger(trigger, &PostCommitTrigger{
+		desc: &cpy,
 	})
 
 	return trigger
