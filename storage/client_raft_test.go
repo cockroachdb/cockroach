@@ -1565,7 +1565,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		},
 	})
 
-	if err := <-errChan; !testutils.IsError(err, "older than NextReplicaID") {
+	if err := <-errChan; !testutils.IsError(err, "replica too old, discarding message") {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
