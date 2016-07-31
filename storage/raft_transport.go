@@ -89,7 +89,7 @@ type RaftTransport struct {
 	mu struct {
 		syncutil.Mutex
 		handlers     map[roachpb.StoreID]raftMessageHandler
-		queues       map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
+		queues       map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest
 		connBreakers map[roachpb.NodeID]*circuit.Breaker
 	}
 }
@@ -109,7 +109,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
-	t.mu.queues = make(map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
+	t.mu.queues = make(map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest)
 	t.mu.connBreakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
 	if grpcServer != nil {
@@ -318,6 +318,10 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 	}
 	isSnap := req.Message.Type == raftpb.MsgSnap
 	toReplica := req.ToReplica
+	toReplicaIdent := roachpb.ReplicaIdent{
+		RangeID: req.RangeID,
+		Replica: toReplica,
+	}
 	// Get a connection to the node specified by the replica's node
 	// ID. If no connection can be made, return false to indicate caller
 	// should drop the Raft message.
@@ -331,13 +335,13 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 	// traffic. This is done to prevent snapshots from blocking other traffic.
 	queues, ok := s.transport.mu.queues[isSnap]
 	if !ok {
-		queues = make(map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
+		queues = make(map[roachpb.ReplicaIdent]chan *RaftMessageRequest)
 		s.transport.mu.queues[isSnap] = queues
 	}
-	ch, ok := queues[toReplica]
+	ch, ok := queues[toReplicaIdent]
 	if !ok {
 		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
-		queues[toReplica] = ch
+		queues[toReplicaIdent] = ch
 	}
 	s.transport.mu.Unlock()
 
@@ -348,7 +352,7 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 				s.onError(s.transport.processQueue(ch, conn), toReplica)
 
 				s.transport.mu.Lock()
-				delete(queues, toReplica)
+				delete(queues, toReplicaIdent)
 				s.transport.mu.Unlock()
 			})
 		}); err != nil {

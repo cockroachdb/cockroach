@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -38,9 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const channelServerBrokenRangeMessage = "channelServer broken range"
+
 type channelServer struct {
 	ch       chan *storage.RaftMessageRequest
 	maxSleep time.Duration
+
+	// If non-zero, all messages to this range will return errors
+	brokenRange roachpb.RangeID
 }
 
 func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
@@ -56,6 +62,9 @@ func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
 		// result in messages being processed out of order (in previous
 		// transport implementations).
 		time.Sleep(time.Duration(rand.Int63n(int64(s.maxSleep))))
+	}
+	if s.brokenRange != 0 && s.brokenRange == req.RangeID {
+		return errors.Errorf(channelServerBrokenRangeMessage)
 	}
 	s.ch <- req
 	return nil
@@ -152,7 +161,8 @@ func (rttc *raftTransportTestContext) Send(
 	}
 	sender := rttc.transports[from.NodeID].MakeSender(
 		func(err error, _ roachpb.ReplicaDescriptor) {
-			if err != nil && !grpcutil.IsClosedConnection(err) {
+			if err != nil && !grpcutil.IsClosedConnection(err) &&
+				!testutils.IsError(err, channelServerBrokenRangeMessage) {
 				rttc.t.Fatal(err)
 			}
 		})
@@ -439,5 +449,50 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	req := <-serverChannel.ch
 	if req.Message.Commit != 1 {
 		t.Errorf("expected message 1; got %s", req)
+	}
+}
+
+// TestRaftTransportIndependentRanges ensures that errors from one
+// range do not interfere with messages to another range on the same
+// store.
+func TestRaftTransportIndependentRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rttc := newRaftTransportTestContext(t)
+	defer rttc.Stop()
+
+	server := roachpb.ReplicaDescriptor{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}
+	serverTransport := rttc.AddNode(server.NodeID)
+	client := roachpb.ReplicaDescriptor{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rttc.AddNode(client.NodeID)
+
+	const numMessages = 50
+	channelServer := newChannelServer(numMessages*2, 10*time.Millisecond)
+	channelServer.brokenRange = 13
+	serverTransport.Listen(server.StoreID, channelServer.RaftMessage)
+
+	for i := 0; i < numMessages; i++ {
+		for _, rangeID := range []roachpb.RangeID{1, 13} {
+			if !rttc.Send(client, server, rangeID, raftpb.Message{Commit: uint64(i)}) {
+				t.Errorf("failed to send message %d to range %s", i, rangeID)
+			}
+		}
+	}
+	for i := 0; i < numMessages; i++ {
+		select {
+		case msg := <-channelServer.ch:
+			if msg.Message.Commit != uint64(i) {
+				t.Errorf("got message %d while expecting %d", msg.Message.Commit, i)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timeout waiting for message %d", i)
+		}
 	}
 }
