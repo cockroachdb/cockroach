@@ -1907,6 +1907,28 @@ func (r *Replica) processRaftCommand(
 				r,
 			)
 		}
+
+		if trigger.gcThreshold != nil {
+			r.mu.Lock()
+			r.mu.state.GCThreshold = *trigger.gcThreshold
+			r.mu.Unlock()
+		}
+		if trigger.truncatedState != nil {
+			r.mu.Lock()
+			r.mu.state.TruncatedState = trigger.truncatedState
+			r.mu.Unlock()
+		}
+		if trigger.raftLogSize != nil {
+			r.mu.Lock()
+			r.mu.raftLogSize = *trigger.raftLogSize
+			r.mu.Unlock()
+		}
+		if trigger.frozen != nil {
+			r.mu.Lock()
+			r.mu.state.Frozen = *trigger.frozen
+			r.mu.Unlock()
+		}
+
 		if trigger.maybeGossipSystemConfig {
 			r.maybeGossipSystemConfig()
 		}
@@ -1916,6 +1938,10 @@ func (r *Replica) processRaftCommand(
 		if raftCmd.OriginReplica.StoreID == r.store.StoreID() {
 			r.store.intentResolver.processIntentsAsync(r, trigger.intents)
 		}
+
+		// Assert that the on-disk state doesn't diverge from the in-memory
+		// state as a result of the trigger.
+		r.assertState(r.store.Engine())
 	}
 
 	// On successful write commands handle write-related triggers including
@@ -1934,6 +1960,8 @@ func (r *Replica) processRaftCommand(
 
 	return pErr
 }
+
+const hackIgnore = "hack-ignore"
 
 // applyRaftCommand applies a raft command from the replicated log to the
 // underlying state machine (i.e. the engine).
@@ -1983,6 +2011,17 @@ func (r *Replica) applyRaftCommand(
 	} else {
 		batch, propResult.delta, br, propResult.PostCommitTrigger, rErr = r.applyRaftCommandInBatch(ctx, idKey,
 			originReplica, ba)
+		if propResult.PostCommitTrigger != nil {
+			// Provisionally double-execute the command, but only applying it
+			// once. This is a preliminary step towards proposer-eval'ed KV
+			// for side effects which need to be known before executing.
+
+			r.readOnlyCmdMu.Lock()
+			defer r.readOnlyCmdMu.Unlock()
+			batch, propResult.delta, br, propResult.PostCommitTrigger, rErr = r.applyRaftCommandInBatch(ctx, storagebase.CmdIDKey(hackIgnore),
+				originReplica, ba)
+		}
+
 	}
 
 	// TODO(tschottdorf): remove when #7224 is cleared.
@@ -2034,11 +2073,6 @@ func (r *Replica) applyRaftCommand(
 		r.mu.state.LeaseAppliedIndex = leaseIndex
 		r.mu.state.Stats = newMS
 		if forcedError != nil {
-			r.assertStateLocked(r.store.Engine())
-		}
-		if propResult.PostCommitTrigger != nil {
-			// Assert that the on-disk state doesn't diverge from the in-memory
-			// state as a result of the trigger.
 			r.assertStateLocked(r.store.Engine())
 		}
 		r.mu.Unlock()
