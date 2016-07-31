@@ -815,7 +815,7 @@ func (r *Replica) runCommitTrigger(
 			}
 		}
 		if crt := ct.GetChangeReplicasTrigger(); crt != nil {
-			r.changeReplicasTrigger(ctx, batch, crt)
+			trigger = updateTrigger(trigger, r.changeReplicasTrigger(ctx, batch, crt))
 		}
 		if ct.GetModifiedSpanTrigger() != nil {
 			if ct.ModifiedSpanTrigger.SystemConfigSpan {
@@ -2899,29 +2899,26 @@ func (r *Replica) changeReplicasTrigger(
 	ctx context.Context,
 	batch engine.Batch,
 	change *roachpb.ChangeReplicasTrigger,
-) {
+) *PostCommitTrigger {
+	var trigger *PostCommitTrigger
 	// If we're removing the current replica, add it to the range GC queue.
 	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
-		// Defer this to make it run as late as possible, maximizing the chances
+		// This wants to run as late as possible, maximizing the chances
 		// that the other nodes have finished this command as well (since
 		// processing the removal from the queue looks up the Range at the
 		// lease holder, being too early here turns this into a no-op).
-		batch.Defer(func() {
-			if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
-				// Log the error; this shouldn't prevent the commit; the range
-				// will be GC'd eventually.
-				log.Errorf(ctx, "%s: unable to add to GC queue: %s", r, err)
-			}
+		trigger = updateTrigger(trigger, &PostCommitTrigger{
+			addToReplicaGCQueue: true,
 		})
 	} else {
-		// After a successful replica addition or removal check to see if the range
-		// needs to be split. Splitting usually takes precedence over replication
-		// via configuration of the split and replicate queues, but if the split
-		// occurs concurrently with the replicas change the split can fail and
-		// won't retry until the next scanner cycle. Re-queuing the replica here
-		// removes that latency.
-		batch.Defer(func() {
-			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		// After a successful replica addition or removal check to see if the
+		// range needs to be split. Splitting usually takes precedence over
+		// replication via configuration of the split and replicate queues, but
+		// if the split occurs concurrently with the replicas change the split
+		// can fail and won't retry until the next scanner cycle. Re-queuing
+		// the replica here removes that latency.
+		trigger = updateTrigger(trigger, &PostCommitTrigger{
+			maybeAddToSplitQueue: true,
 		})
 	}
 
@@ -2932,27 +2929,8 @@ func (r *Replica) changeReplicasTrigger(
 	// the removed replica in case it was the lease-holder and it is still
 	// holding the lease.
 	if r.IsFirstRange() {
-		batch.Defer(func() {
-			// We need to run the gossip in an async task because gossiping requires
-			// the range lease and we'll deadlock if we try to acquire it while
-			// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
-			// blocks waiting for the lease acquisition to finish but it can't finish
-			// because we're not processing raft messages due to holding
-			// processRaftMu (and running on the processRaft goroutine).
-			if err := r.store.Stopper().RunAsyncTask(func() {
-				// Create a new context because this is an asynchronous task and we
-				// don't want to share the trace.
-				ctxInner := context.Background()
-				if hasLease, pErr := r.getLeaseForGossip(ctxInner); hasLease {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					r.gossipFirstRangeLocked(ctxInner)
-				} else {
-					log.Infof(ctxInner, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
-				}
-			}); err != nil {
-				log.Errorf(ctx, "unable to gossip first range: %v", err)
-			}
+		trigger = updateTrigger(trigger, &PostCommitTrigger{
+			gossipFirstRange: true,
 		})
 	}
 
@@ -2965,6 +2943,8 @@ func (r *Replica) changeReplicasTrigger(
 			log.Fatalf(ctx, "%s: failed to update range descriptor to %+v: %s", r, cpy, err)
 		}
 	})
+
+	return trigger
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed

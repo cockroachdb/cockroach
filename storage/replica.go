@@ -1929,6 +1929,40 @@ func (r *Replica) processRaftCommand(
 			r.mu.Unlock()
 		}
 
+		if trigger.gossipFirstRange {
+			// We need to run the gossip in an async task because gossiping requires
+			// the range lease and we'll deadlock if we try to acquire it while
+			// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
+			// blocks waiting for the lease acquisition to finish but it can't finish
+			// because we're not processing raft messages due to holding
+			// processRaftMu (and running on the processRaft goroutine).
+			if err := r.store.Stopper().RunAsyncTask(func() {
+				// Create a new context because this is an asynchronous task and we
+				// don't want to share the trace.
+				ctxInner := context.Background()
+				if hasLease, pErr := r.getLeaseForGossip(ctxInner); hasLease {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					r.gossipFirstRangeLocked(ctxInner)
+				} else {
+					log.Infof(ctxInner, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
+				}
+			}); err != nil {
+				log.Errorf(ctx, "unable to gossip first range: %+v", err)
+			}
+		}
+
+		if trigger.addToReplicaGCQueue {
+			if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
+				// Log the error; the range should still be GC'd eventually.
+				log.Errorf(ctx, "%s: unable to add to GC queue: %s", r, err)
+			}
+		}
+
+		if trigger.maybeAddToSplitQueue {
+			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
+
 		if trigger.maybeGossipSystemConfig {
 			r.maybeGossipSystemConfig()
 		}
