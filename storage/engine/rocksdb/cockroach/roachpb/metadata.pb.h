@@ -40,6 +40,7 @@ class Attributes;
 class NodeDescriptor;
 class RangeDescriptor;
 class ReplicaDescriptor;
+class ReplicaIdent;
 class StoreCapacity;
 class StoreDescriptor;
 
@@ -279,6 +280,123 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   void InitAsDefaultInstance();
   static ReplicaDescriptor* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class ReplicaIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ReplicaIdent) */ {
+ public:
+  ReplicaIdent();
+  virtual ~ReplicaIdent();
+
+  ReplicaIdent(const ReplicaIdent& from);
+
+  inline ReplicaIdent& operator=(const ReplicaIdent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _unknown_fields_.GetNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _unknown_fields_.MutableNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  static const ReplicaIdent& default_instance();
+
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  // Returns the internal default instance pointer. This function can
+  // return NULL thus should not be used by the user. This is intended
+  // for Protobuf internal code. Please use default_instance() declared
+  // above instead.
+  static inline const ReplicaIdent* internal_default_instance() {
+    return default_instance_;
+  }
+  #endif
+
+  void Swap(ReplicaIdent* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ReplicaIdent* New() const { return New(NULL); }
+
+  ReplicaIdent* New(::google::protobuf::Arena* arena) const;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from);
+  void CopyFrom(const ReplicaIdent& from);
+  void MergeFrom(const ReplicaIdent& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  void DiscardUnknownFields();
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ReplicaIdent* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _arena_ptr_;
+  }
+  inline ::google::protobuf::Arena* MaybeArenaPtr() const {
+    return _arena_ptr_;
+  }
+  public:
+
+  ::std::string GetTypeName() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int64 range_id = 1;
+  bool has_range_id() const;
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 1;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
+
+  // optional .cockroach.roachpb.ReplicaDescriptor replica = 2;
+  bool has_replica() const;
+  void clear_replica();
+  static const int kReplicaFieldNumber = 2;
+  const ::cockroach::roachpb::ReplicaDescriptor& replica() const;
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_replica();
+  ::cockroach::roachpb::ReplicaDescriptor* release_replica();
+  void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReplicaIdent)
+ private:
+  inline void set_has_range_id();
+  inline void clear_has_range_id();
+  inline void set_has_replica();
+  inline void clear_has_replica();
+
+  ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
+  ::google::protobuf::Arena* _arena_ptr_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int64 range_id_;
+  ::cockroach::roachpb::ReplicaDescriptor* replica_;
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto_impl();
+  #else
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto();
+  #endif
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fmetadata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fmetadata_2eproto();
+
+  void InitAsDefaultInstance();
+  static ReplicaIdent* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -974,6 +1092,82 @@ inline void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
 
 // -------------------------------------------------------------------
 
+// ReplicaIdent
+
+// optional int64 range_id = 1;
+inline bool ReplicaIdent::has_range_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ReplicaIdent::set_has_range_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ReplicaIdent::clear_has_range_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ReplicaIdent::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
+}
+inline ::google::protobuf::int64 ReplicaIdent::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicaIdent.range_id)
+  return range_id_;
+}
+inline void ReplicaIdent::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaIdent.range_id)
+}
+
+// optional .cockroach.roachpb.ReplicaDescriptor replica = 2;
+inline bool ReplicaIdent::has_replica() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ReplicaIdent::set_has_replica() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ReplicaIdent::clear_has_replica() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ReplicaIdent::clear_replica() {
+  if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
+  clear_has_replica();
+}
+inline const ::cockroach::roachpb::ReplicaDescriptor& ReplicaIdent::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicaIdent.replica)
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  return replica_ != NULL ? *replica_ : *default_instance().replica_;
+#else
+  return replica_ != NULL ? *replica_ : *default_instance_->replica_;
+#endif
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ReplicaIdent::mutable_replica() {
+  set_has_replica();
+  if (replica_ == NULL) {
+    replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReplicaIdent.replica)
+  return replica_;
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ReplicaIdent::release_replica() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ReplicaIdent.replica)
+  clear_has_replica();
+  ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
+  replica_ = NULL;
+  return temp;
+}
+inline void ReplicaIdent::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
+  delete replica_;
+  replica_ = replica;
+  if (replica) {
+    set_has_replica();
+  } else {
+    clear_has_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ReplicaIdent.replica)
+}
+
+// -------------------------------------------------------------------
+
 // RangeDescriptor
 
 // optional int64 range_id = 1;
@@ -1535,6 +1729,8 @@ inline void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreC
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
