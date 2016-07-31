@@ -1488,14 +1488,6 @@ func (r *Replica) handleRaftReady() error {
 		if lastIndex, raftLogSize, err = r.append(writer, lastIndex, raftLogSize, rd.Entries); err != nil {
 			return err
 		}
-		batch.Defer(func() {
-			// Update last index on commit.
-			r.mu.Lock()
-			r.mu.lastIndex = lastIndex
-			r.mu.raftLogSize = raftLogSize
-			r.mu.Unlock()
-		})
-
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := setHardState(writer, r.RangeID, rd.HardState); err != nil {
@@ -1505,6 +1497,11 @@ func (r *Replica) handleRaftReady() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+	// Update last index.
+	r.mu.Lock()
+	r.mu.lastIndex = lastIndex
+	r.mu.raftLogSize = raftLogSize
+	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(msg)
@@ -2151,9 +2148,8 @@ func (r *Replica) applyRaftCommandInBatch(
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
 
-	// Execute the commands. If this returns without an error, the batch must
-	// be committed (EndTransaction with a CommitTrigger may unlock
-	// readOnlyCmdMu via a batch.Defer).
+	// Execute the commands. If this returns without an error, the batch should
+	// be committed.
 	btch, ms, br, trigger, pErr := r.executeWriteBatch(ctx, idKey, ba)
 
 	if ba.IsWrite() {
