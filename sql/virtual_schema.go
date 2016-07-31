@@ -73,16 +73,16 @@ type virtualSchemaEntry struct {
 	orderedTableNames []string
 }
 
-func (e virtualSchemaEntry) tableNames() (parser.QualifiedNames, error) {
-	var qualifiedNames parser.QualifiedNames
+func (e virtualSchemaEntry) tableNames() parser.TableNames {
+	var res parser.TableNames
 	for _, tableName := range e.orderedTableNames {
-		qname, err := parser.NewQualifiedNameFromDBAndTable(e.desc.Name, tableName)
-		if err != nil {
-			return nil, err
+		tn := &parser.TableName{
+			DatabaseName: parser.Name(e.desc.Name),
+			TableName:    parser.Name(tableName),
 		}
-		qualifiedNames = append(qualifiedNames, qname)
+		res = append(res, tn)
 	}
-	return qualifiedNames, nil
+	return res
 }
 
 type virtualTableEntry struct {
@@ -191,20 +191,20 @@ func isVirtualDatabase(name string) bool {
 // pair. The function will return the table's virtual table entry if the qname matches
 // a specific table. It will return an error if the qname references a virtual database
 // but the table is non-existent.
-func getVirtualTableEntry(qname *parser.QualifiedName) (virtualTableEntry, error) {
-	if db, ok := getVirtualSchemaEntry(qname.Database()); ok {
-		if t, ok := db.tables[qname.Table()]; ok {
+func getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
+	if db, ok := getVirtualSchemaEntry(tn.Database()); ok {
+		if t, ok := db.tables[sqlbase.NormalizeName(tn.TableName)]; ok {
 			return t, nil
 		}
-		return virtualTableEntry{}, sqlbase.NewUndefinedTableError(qname.String())
+		return virtualTableEntry{}, sqlbase.NewUndefinedTableError(tn.String())
 	}
 	return virtualTableEntry{}, nil
 }
 
 // getVirtualTableDesc checks if the provided qname matches a virtual database/table
 // pair, and returns its descriptor if it does.
-func getVirtualTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
-	t, err := getVirtualTableEntry(qname)
+func getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	t, err := getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}

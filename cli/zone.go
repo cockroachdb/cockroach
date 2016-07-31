@@ -140,7 +140,7 @@ func queryDescriptors(conn *sqlConn) (map[sqlbase.ID]*sqlbase.Descriptor, error)
 func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID, error) {
 	rows, err := makeQuery(
 		`SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`,
-		parentID, sqlbase.NormalizeName(name))(conn)
+		parentID, sqlbase.NormalizeName(parser.Name(name)))(conn)
 	if err != nil {
 		return 0, err
 	}
@@ -180,24 +180,21 @@ func parseZoneName(s string) ([]string, error) {
 	if strings.ToLower(s) == ".default" {
 		return nil, nil
 	}
-	expr, err := parser.ParseExprTraditional(s)
+	tn, err := parser.ParseTableNameTraditional(s)
 	if err != nil {
 		return nil, fmt.Errorf("malformed name: %s", s)
 	}
-	qname, ok := expr.(*parser.QualifiedName)
-	if !ok {
-		return nil, fmt.Errorf("malformed name: %s", s)
-	}
-	// This is a bit of a hack: "." is not a valid database name which we use as
-	// a placeholder in order to normalize the qualified name.
-	if err := qname.NormalizeTableName("."); err != nil {
+	// This is a bit of a hack: "." is not a valid database name.
+	// We use this to detect when a database name was not specified, in
+	// which case we interpret the table name as a database name below.
+	if err := tn.QualifyWithDatabase("."); err != nil {
 		return nil, err
 	}
 	var names []string
-	if n := qname.Database(); n != "." {
+	if n := tn.Database(); n != "." {
 		names = append(names, n)
 	}
-	names = append(names, qname.Table())
+	names = append(names, tn.Table())
 	return names, nil
 }
 

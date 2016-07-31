@@ -299,12 +299,17 @@ func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, e
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error) {
-	if len(expr.Name.Indirect) > 0 {
-		// We don't support qualified function names (yet).
-		return nil, fmt.Errorf("unknown function: %s", expr.Name)
+	fname, err := expr.Name.Normalize()
+	if err != nil {
+		return nil, err
 	}
 
-	name := string(expr.Name.Base)
+	if len(fname.Context) > 0 {
+		// We don't support qualified function names (yet).
+		return nil, fmt.Errorf("unknown function: %s", fname)
+	}
+
+	name := string(fname.FunctionName)
 	// Optimize for the case where name is already normalized to upper/lower
 	// case. Note that the Builtins map contains duplicate entries for
 	// upper/lower case names.
@@ -447,13 +452,35 @@ func mockQualifiedNameTypes(types map[string]Datum) func() {
 	}
 }
 
-// TypeCheck implements the Expr interface.
-func (expr *QualifiedName) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
+// TypeCheck implements the Expr interface.  This function has a valid
+// implementation only for testing within this package. During query
+// execution, ColumnItems are replaced to qvalues prior to type
+// checking.
+func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
 	name := expr.String()
 	if _, ok := qualifiedNameTypes[name]; ok {
 		return expr, nil
 	}
 	return nil, fmt.Errorf("qualified name \"%s\" not found", name)
+}
+
+// TypeCheck implements the Expr interface.
+func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
+	return nil, errors.New("cannot use \"*\" in this context")
+}
+
+// TypeCheck implements the Expr interface.
+func (expr UnresolvedName) TypeCheck(s *SemaContext, desired Datum) (TypedExpr, error) {
+	v, err := expr.NormalizeVarName()
+	if err != nil {
+		return nil, err
+	}
+	return v.TypeCheck(s, desired)
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
+	return nil, fmt.Errorf("cannot use %q in this context", expr)
 }
 
 // TypeCheck implements the Expr interface.
@@ -470,7 +497,7 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, er
 
 // TypeCheck implements the Expr interface.
 func (expr *Subquery) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
-	panic("Subquery nodes must be replaced before type checking")
+	panic("subquery nodes must be replaced before type checking")
 }
 
 // TypeCheck implements the Expr interface.
