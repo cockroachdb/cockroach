@@ -810,9 +810,11 @@ func (r *Replica) runCommitTrigger(
 			}
 		}
 		if ct.GetMergeTrigger() != nil {
-			if err := r.mergeTrigger(ctx, batch, ms, ct.MergeTrigger, txn.Timestamp); err != nil {
+			postMerge, err := r.mergeTrigger(ctx, batch, ms, ct.MergeTrigger, txn.Timestamp)
+			if err != nil {
 				return err
 			}
+			trigger = updateTrigger(trigger, postMerge)
 		}
 		if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 			trigger = updateTrigger(trigger, r.changeReplicasTrigger(ctx, batch, crt))
@@ -2814,21 +2816,21 @@ func (r *Replica) mergeTrigger(
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
-) error {
+) (*PostCommitTrigger, error) {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
-		return errors.Errorf("LHS range start keys do not match: %s != %s",
+		return nil, errors.Errorf("LHS range start keys do not match: %s != %s",
 			desc.StartKey, merge.LeftDesc.StartKey)
 	}
 
 	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
-		return errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
+		return nil, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
 	rightRangeID := merge.RightDesc.RangeID
 	if rightRangeID <= 0 {
-		return errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
+		return nil, errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
 	}
 
 	// Compute stats for premerged range, including current transaction.
@@ -2842,7 +2844,7 @@ func (r *Replica) mergeTrigger(
 	// stats, which will need to be recomputed.
 	var rightMS enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID, &rightMS); err != nil {
-		return err
+		return nil, err
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
@@ -2850,7 +2852,7 @@ func (r *Replica) mergeTrigger(
 	// Copy the RHS range's abort cache to the new LHS one.
 	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID)
 	if err != nil {
-		return errors.Errorf("unable to copy abort cache to new split range: %s", err)
+		return nil, errors.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 
 	// Remove the RHS range's metadata. Note that we don't need to
@@ -2858,7 +2860,7 @@ func (r *Replica) mergeTrigger(
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
 	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.ZeroTimestamp, nil, false); err != nil {
-		return errors.Errorf("cannot remove range metadata %s", err)
+		return nil, errors.Errorf("cannot remove range metadata %s", err)
 	}
 
 	// Add in the stats for the RHS range's range keys.
@@ -2868,31 +2870,34 @@ func (r *Replica) mergeTrigger(
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.EndKey))
 	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
-		return errors.Errorf("unable to compute RHS range's local stats: %s", err)
+		return nil, errors.Errorf("unable to compute RHS range's local stats: %s", err)
 	}
 	mergedMS.Add(msRange)
 
-	// Set stats for updated range (in-memory updated under lock below).
+	// Set stats for updated range.
 	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
-		return errors.Errorf("unable to write MVCC stats: %s", err)
+		return nil, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
 	// Clear the timestamp cache. In case both the LHS and RHS replicas
 	// held their respective range leases, we could merge the timestamp
 	// caches for efficiency. But it's unlikely and not worth the extra
 	// logic and potential for error.
+
+	*ms = r.GetMVCCStats()
+	mergedMS.Subtract(r.GetMVCCStats())
+	*ms = mergedMS
+
 	r.mu.Lock()
-	r.mu.state.Stats = mergedMS
 	r.mu.tsCache.Clear(r.store.Clock())
 	r.mu.Unlock()
 
-	batch.Defer(func() {
-		if err := r.store.MergeRange(r, merge.LeftDesc.EndKey, rightRangeID); err != nil {
-			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf(ctx, "%s: failed to update store after merging range: %s", r, err)
-		}
-	})
-	return nil
+	trigger := &PostCommitTrigger{
+		merge: &postCommitMerge{
+			MergeTrigger: *merge,
+		},
+	}
+	return trigger, nil
 }
 
 func (r *Replica) changeReplicasTrigger(
